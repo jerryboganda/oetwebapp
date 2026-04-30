@@ -44,7 +44,10 @@ public record UploadCompleteRequest(
     long? SizeBytes,
     int? DurationSeconds,
     string? CaptureMethod,
-    string? ContentType);
+    string? ContentType,
+    bool? ConsentAccepted,
+    string? ConsentText,
+    DateTimeOffset? ConsentAcceptedAt);
 
 public record AnswersUpdateRequest(Dictionary<string, string?> Answers);
 

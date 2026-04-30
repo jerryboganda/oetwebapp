@@ -66,7 +66,7 @@ already in place. The plan therefore extends, never duplicates.
   `/v1/speaking/attempts/{id}/audio/complete`, `/v1/speaking/attempts/{id}/submit`,
   `/v1/speaking/evaluations/{id}/summary`, `/v1/speaking/evaluations/{id}/review`.
 - **Private (1:1) speaking sessions** — `Endpoints/PrivateSpeakingEndpoints.cs`
-  + admin/expert routes (`/v1/private-speaking/*`,
+  - admin/expert routes (`/v1/private-speaking/*`,
   `/v1/expert/private-speaking/*`, `/v1/admin/private-speaking/*`) covering
   config, tutor profiles, availability, slots, bookings, Zoom integration,
   cancellation, rating, stats. Notification flows for booked / 24h / 30m /

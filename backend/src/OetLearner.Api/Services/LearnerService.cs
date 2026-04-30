@@ -1629,7 +1629,7 @@ public partial class LearnerService(
 
     public async Task<object> GetSpeakingTaskAsync(string contentId, CancellationToken cancellationToken)
     {
-        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "speaking", cancellationToken)
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "speaking" && x.Status == ContentStatus.Published, cancellationToken)
                    ?? throw ApiException.NotFound("content_not_found", "Speaking task not found.");
         return BuildLearnerSpeakingTaskPayload(item);
     }
@@ -1723,6 +1723,13 @@ public partial class LearnerService(
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         var upload = await GetUploadSessionForCompletionAsync(userId, attemptId, request, cancellationToken);
+        if (request.ConsentAccepted != true)
+        {
+            throw ApiException.Validation(
+                "speaking_recording_consent_required",
+                "Confirm recording consent before uploading speaking audio.",
+                [new ApiFieldError("consent", "required", "Accept the speaking recording consent before submitting audio.")]);
+        }
         if (upload.State != UploadState.Uploaded || !mediaStorage.Exists(upload.StorageKey))
         {
             throw ApiException.Validation(
@@ -1742,7 +1749,13 @@ public partial class LearnerService(
             reportedSizeBytes = request.SizeBytes,
             durationSeconds = request.DurationSeconds,
             captureMethod = request.CaptureMethod ?? "browser-recording",
-            contentType = resolvedContentType
+            contentType = resolvedContentType,
+            consent = new
+            {
+                accepted = true,
+                acceptedAt = request.ConsentAcceptedAt ?? DateTimeOffset.UtcNow,
+                consentText = request.ConsentText
+            }
         });
 
         var existingTranscriptionJobs = await db.BackgroundJobs
@@ -3907,6 +3920,18 @@ public partial class LearnerService(
     {
         await EnsureUserAsync(userId, cancellationToken);
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
+        var contentForAttempt = await db.ContentItems
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == request.ContentId, cancellationToken)
+            ?? throw ApiException.NotFound("content_not_found", "Practice content not found.");
+        if (!string.Equals(contentForAttempt.SubtestCode, subtest, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.NotFound("content_not_found", "Practice content not found.");
+        }
+        if (contentForAttempt.Status != ContentStatus.Published)
+        {
+            throw ApiException.Conflict("content_not_available", "This practice content is not currently available.");
+        }
         var context = request.Context ?? "practice";
         var mode = request.Mode ?? (subtest is "reading" or "listening" ? "exam" : "practice");
         var existingAttempts = await db.Attempts

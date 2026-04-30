@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
+import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
 import {
   fetchSpeakingMockSession,
   startSpeakingMockSet,
@@ -54,6 +55,7 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
   const [mockSetId, setMockSetId] = useState<string>('');
   const [session, setSession] = useState<SpeakingMockSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bridgeAck, setBridgeAck] = useState(false);
 
@@ -67,9 +69,9 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
     return fresh;
   }, []);
 
-  // Bootstrap: either resume an existing session via ?session=… or start a
-  // new one. Cap-exceeded errors land here as a fail-loud message rather
-  // than silently looping.
+  // Bootstrap: resume an existing session via ?session=… only. Starting a
+  // fresh mock set now requires an explicit learner click so the weekly
+  // entitlement is never consumed by merely opening the page.
   useEffect(() => {
     if (!mockSetId) return;
     let active = true;
@@ -79,20 +81,10 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
           const fresh = await fetchSpeakingMockSession(sessionParam);
           if (!active) return;
           setSession(fresh);
-        } else {
-          const started = await startSpeakingMockSet(mockSetId, 'exam');
-          if (!active) return;
-          setSession(started);
-          analytics.track('speaking_mock_set_started_orchestrator', {
-            mockSetId,
-            sessionId: started.mockSessionId,
-          });
-          // Pin the session id into the URL so refresh resumes.
-          router.replace(`/speaking/mocks/${mockSetId}?session=${started.mockSessionId}`);
         }
       } catch (e: unknown) {
         if (!active) return;
-        setError(e instanceof Error ? e.message : 'Could not start the mock set.');
+        setError(e instanceof Error ? e.message : 'Could not load the mock set.');
       } finally {
         if (active) setLoading(false);
       }
@@ -111,6 +103,25 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
   }, [refreshSession, session]);
 
   const stage = useMemo(() => deriveStage(session), [session]);
+
+  const beginMockSet = useCallback(async () => {
+    if (!mockSetId || starting) return;
+    setStarting(true);
+    setError(null);
+    try {
+      const started = await startSpeakingMockSet(mockSetId, 'exam');
+      setSession(started);
+      analytics.track('speaking_mock_set_started_orchestrator', {
+        mockSetId,
+        sessionId: started.mockSessionId,
+      });
+      router.replace(`/speaking/mocks/${mockSetId}?session=${started.mockSessionId}`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not start the mock set.');
+    } finally {
+      setStarting(false);
+    }
+  }, [mockSetId, router, starting]);
 
   if (loading) {
     return (
@@ -139,8 +150,20 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
   if (!session) {
     return (
       <LearnerDashboardShell pageTitle="Speaking mock set">
-        <div className="mx-auto max-w-3xl p-6">
-          <EmptyState title="Session not found" description="Try starting a fresh mock set." />
+        <div className="mx-auto max-w-3xl space-y-4 p-6">
+          <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+            <Badge variant="info" className="text-[10px] uppercase tracking-wider">Mock set</Badge>
+            <h1 className="mt-3 text-3xl font-black">Ready to begin</h1>
+            <p className="mt-2 text-sm text-muted">
+              This will create your two-role-play mock session and consume one weekly mock-set allowance on the free plan. You can still go back without using an allowance.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button variant="primary" onClick={() => void beginMockSet()} disabled={starting}>
+                {starting ? 'Starting...' : 'Start timed mock set'}
+              </Button>
+              <Link href="/speaking/mocks"><Button variant="outline">Back</Button></Link>
+            </div>
+          </section>
         </div>
       </LearnerDashboardShell>
     );
@@ -205,11 +228,14 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
           <section className="rounded-2xl border border-info/30 bg-info/5 p-5">
             <h2 className="text-lg font-black">Role-play 1 in progress</h2>
             <p className="mt-1 text-sm text-muted">
-              Finish the recording on the task page. We&apos;ll bring you back here automatically when grading completes.
+              Start with the AI patient for the interactive role-play, then submit the recorded evaluation when you are ready for scoring.
             </p>
-            <Link href={role1Url} className="mt-3 inline-block">
-              <Button variant="primary">Open role-play 1</Button>
-            </Link>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <SpeakingSelfPracticeButton taskId={session.rolePlay1.contentId} label="Start AI patient role-play 1" />
+              <Link href={role1Url} className="inline-block">
+                <Button variant="outline">Record for evaluation</Button>
+              </Link>
+            </div>
           </section>
         )}
 
@@ -229,9 +255,14 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
               <span>I&apos;ve read the case notes for role-play 2 and I&apos;m ready.</span>
             </label>
             <div className="mt-4">
-              <Link href={role2Url}>
-                <Button variant="primary" disabled={!bridgeAck}>Begin role-play 2</Button>
-              </Link>
+              <div className="flex flex-wrap gap-2">
+                {bridgeAck ? (
+                  <SpeakingSelfPracticeButton taskId={session.rolePlay2.contentId} label="Start AI patient role-play 2" />
+                ) : null}
+                <Link href={role2Url}>
+                  <Button variant="outline" disabled={!bridgeAck}>Record for evaluation</Button>
+                </Link>
+              </div>
             </div>
           </section>
         )}
@@ -240,11 +271,14 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
           <section className="rounded-2xl border border-info/30 bg-info/5 p-5">
             <h2 className="text-lg font-black">Role-play 2 in progress</h2>
             <p className="mt-1 text-sm text-muted">
-              Finish the recording on the task page. We&apos;ll show your combined readiness band as soon as both are graded.
+              Complete the AI-patient interaction first, then submit the timed recording so the combined readiness band can be calculated.
             </p>
-            <Link href={role2Url} className="mt-3 inline-block">
-              <Button variant="primary">Open role-play 2</Button>
-            </Link>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <SpeakingSelfPracticeButton taskId={session.rolePlay2.contentId} label="Start AI patient role-play 2" />
+              <Link href={role2Url} className="inline-block">
+                <Button variant="outline">Record for evaluation</Button>
+              </Link>
+            </div>
           </section>
         )}
 

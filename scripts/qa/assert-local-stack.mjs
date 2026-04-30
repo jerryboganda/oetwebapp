@@ -1,5 +1,7 @@
 const frontendBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
 const apiBaseUrl = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:5198';
+const readinessTimeoutMs = Number.parseInt(process.env.PLAYWRIGHT_READY_TIMEOUT_MS ?? '180000', 10);
+const readinessIntervalMs = Number.parseInt(process.env.PLAYWRIGHT_READY_INTERVAL_MS ?? '3000', 10);
 
 async function check(url, expectation, options = {}) {
   const { readBody = true } = options;
@@ -30,15 +32,42 @@ async function check(url, expectation, options = {}) {
   }
 }
 
+async function verifyStack() {
+  await check(`${frontendBaseUrl}/sign-in`, () => true, { readBody: false });
+  await check(`${apiBaseUrl}/health/ready`, (body) => /"status":"ok"/i.test(body));
+}
+
+async function waitForStack() {
+  const startedAt = Date.now();
+  let attempt = 0;
+  let lastError;
+
+  while (Date.now() - startedAt <= readinessTimeoutMs) {
+    attempt += 1;
+    try {
+      await verifyStack();
+      return { attempt, elapsedMs: Date.now() - startedAt };
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`Stack readiness attempt ${attempt} failed: ${message}`);
+      await new Promise((resolve) => setTimeout(resolve, readinessIntervalMs));
+    }
+  }
+
+  throw lastError ?? new Error('Timed out waiting for local learner stack readiness.');
+}
+
 async function readResponseSnippet(response) {
   const text = await response.text();
   return text.slice(0, 32_000);
 }
 
 try {
-  await check(`${frontendBaseUrl}/sign-in`, () => true, { readBody: false });
-  await check(`${apiBaseUrl}/health/ready`, (body) => /"status":"ok"/i.test(body));
-  console.log(`Playwright readiness check passed for ${frontendBaseUrl} and ${apiBaseUrl}.`);
+  const result = await waitForStack();
+  console.log(
+    `Playwright readiness check passed for ${frontendBaseUrl} and ${apiBaseUrl} after ${result.attempt} attempt(s) in ${result.elapsedMs}ms.`,
+  );
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error('Playwright readiness check failed.');

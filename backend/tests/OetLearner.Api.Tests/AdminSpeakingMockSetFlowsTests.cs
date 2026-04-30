@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -11,10 +14,12 @@ namespace OetLearner.Api.Tests;
 [Collection("AuthFlows")]
 public class AdminSpeakingMockSetFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFactory>
 {
+    private readonly FirstPartyAuthTestWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
     public AdminSpeakingMockSetFlowsTests(FirstPartyAuthTestWebApplicationFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateAuthenticatedClient(SeedData.AdminEmail, SeedData.LocalSeedPassword, expectedRole: "admin");
     }
 
@@ -87,19 +92,28 @@ public class AdminSpeakingMockSetFlowsTests : IClassFixture<FirstPartyAuthTestWe
     [Fact]
     public async Task Create_RejectsNonSpeakingContent()
     {
-        // Find a non-speaking content id (the seeded writing/listening data
-        // includes plenty). We assert the publish gate refuses with the right
-        // code rather than fabricating one — guarantees the SubtestCode check
-        // is wired even after future seed changes.
-        var listingResponse = await _client.GetAsync("/v1/admin/content?subtest=writing&pageSize=1");
-        listingResponse.EnsureSuccessStatusCode();
-        using var listing = JsonDocument.Parse(await listingResponse.Content.ReadAsStringAsync());
-        var items = listing.RootElement.GetProperty("items");
-        if (items.GetArrayLength() == 0)
+        var nonSpeakingId = $"wt-speaking-mock-reject-{Guid.NewGuid():N}";
+        using (var scope = _factory.Services.CreateScope())
         {
-            return; // no writing seed in this minimal fixture; skip implicitly.
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.ContentItems.Add(new ContentItem
+            {
+                Id = nonSpeakingId,
+                ContentType = "writing_task",
+                SubtestCode = "writing",
+                ProfessionId = "nursing",
+                Title = "Published writing task",
+                Difficulty = "core",
+                EstimatedDurationMinutes = 45,
+                PublishedRevisionId = $"{nonSpeakingId}-r1",
+                Status = ContentStatus.Published,
+                CaseNotes = "A published writing item should still be rejected for speaking mock sets.",
+                DetailJson = "{}",
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
         }
-        var nonSpeakingId = items[0].GetProperty("id").GetString()!;
 
         var response = await _client.PostAsJsonAsync("/v1/admin/speaking/mock-sets", new
         {
@@ -109,6 +123,48 @@ public class AdminSpeakingMockSetFlowsTests : IClassFixture<FirstPartyAuthTestWe
         });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("SPEAKING_MOCK_SET_NOT_SPEAKING", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Create_RejectsDraftSpeakingContent()
+    {
+        var draftId = $"st-draft-{Guid.NewGuid():N}";
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.ContentItems.Add(new ContentItem
+            {
+                Id = draftId,
+                ContentType = "speaking_task",
+                SubtestCode = "speaking",
+                ProfessionId = "nursing",
+                Title = "Draft speaking card",
+                Difficulty = "core",
+                EstimatedDurationMinutes = 20,
+                PublishedRevisionId = $"{draftId}-r1",
+                Status = ContentStatus.Draft,
+                CaseNotes = "Draft case notes should not be exposed to learners.",
+                DetailJson = JsonSupport.Serialize(new
+                {
+                    setting = "Clinic",
+                    patient = "Patient",
+                    brief = "Explain the care plan.",
+                    background = "Draft background"
+                }),
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _client.PostAsJsonAsync("/v1/admin/speaking/mock-sets", new
+        {
+            title = "Draft content mock set",
+            rolePlay1ContentId = "st-001",
+            rolePlay2ContentId = draftId,
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("SPEAKING_MOCK_SET_CONTENT_NOT_PUBLISHED", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]

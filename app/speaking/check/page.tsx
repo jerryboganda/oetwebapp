@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
-import { postSpeakingDeviceCheck } from '@/lib/api';
+import { fetchSpeakingCompliance, postSpeakingDeviceCheck, type SpeakingComplianceCopy } from '@/lib/api';
 import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
 
 declare global {
@@ -44,6 +44,8 @@ function MicEnvironmentCheckContent() {
   // RULE_59..RULE_62 / RULE_73..RULE_76) before the readiness gate unlocks.
   const [cbtEnvConfirmed, setCbtEnvConfirmed] = useState(false);
   const [cbtPaperAcknowledged, setCbtPaperAcknowledged] = useState(false);
+  const [recordingConsentAccepted, setRecordingConsentAccepted] = useState(false);
+  const [compliance, setCompliance] = useState<SpeakingComplianceCopy | null>(null);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -70,6 +72,12 @@ function MicEnvironmentCheckContent() {
     };
     checkCompatibility();
   }, [isNativePlatform]);
+
+  useEffect(() => {
+    fetchSpeakingCompliance()
+      .then(setCompliance)
+      .catch(() => setCompliance(null));
+  }, []);
 
   // --- Noise Monitoring ---
   const startNoiseMonitoring = (stream: MediaStream) => {
@@ -280,7 +288,7 @@ function MicEnvironmentCheckContent() {
     };
   }, [isNativePlatform]);
 
-  const allChecksPassed = permissionStatus === 'success' && recordingStatus === 'finished' && !isNoisy && isCompatible && cbtEnvConfirmed && cbtPaperAcknowledged;
+  const allChecksPassed = permissionStatus === 'success' && recordingStatus === 'finished' && !isNoisy && isCompatible && cbtEnvConfirmed && cbtPaperAcknowledged && recordingConsentAccepted;
   const heroHighlights = [
     { icon: Home, label: 'Location', value: 'At-home exam' },
     { icon: Mic, label: 'Check type', value: 'Microphone setup' },
@@ -406,6 +414,36 @@ function MicEnvironmentCheckContent() {
                 </label>
               </div>
             </div>
+          </section>
+
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${recordingConsentAccepted ? 'border-success/30' : 'border-border'}`}>
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-4">
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${recordingConsentAccepted ? 'bg-success/10' : 'bg-primary/10'}`}>
+                  <ShieldCheck className={`h-6 w-6 ${recordingConsentAccepted ? 'text-success' : 'text-primary'}`} />
+                </div>
+                <div>
+                  <h2 className="font-bold text-navy">Recording consent</h2>
+                  <p className="text-sm text-muted">Required before any Speaking recording can be submitted.</p>
+                </div>
+              </div>
+              {recordingConsentAccepted && <CheckCircle2 className="w-6 h-6 text-success" />}
+            </div>
+            <label className="flex items-start gap-3 cursor-pointer rounded-2xl border border-border bg-background-light p-4">
+              <input
+                type="checkbox"
+                checked={recordingConsentAccepted}
+                onChange={(e) => {
+                  setRecordingConsentAccepted(e.target.checked);
+                  if (e.target.checked) analytics.track('speaking_recording_consent_accepted', { taskId });
+                }}
+                className="mt-0.5 h-4 w-4 rounded border-border-hover text-primary focus:ring-primary"
+                aria-label="I accept speaking recording consent"
+              />
+              <span className="text-sm text-navy">
+                {compliance?.consentText ?? 'I consent to this speaking recording being stored and processed for transcription, feedback, tutor review, and quality assurance.'}
+              </span>
+            </label>
           </section>
 
           {/* Step 1: Permission */}

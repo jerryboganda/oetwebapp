@@ -214,7 +214,9 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
             sizeBytes = audioPayload.Length,
             durationSeconds = 42,
             captureMethod = "browser-recording",
-            contentType = "audio/webm"
+            contentType = "audio/webm",
+            consentAccepted = true,
+            consentText = "Test consent accepted"
         });
         uploadCompleteResponse.EnsureSuccessStatusCode();
 

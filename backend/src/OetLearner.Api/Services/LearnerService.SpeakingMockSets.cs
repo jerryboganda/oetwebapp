@@ -71,16 +71,27 @@ public partial class LearnerService
                 "This mock set is not yet published.");
         }
 
-        // Validate underlying content papers exist and are speaking.
+        // Validate underlying role-play content remains published and safe
+        // for learner exposure. Admin publish gates catch this earlier, but
+        // this guard protects existing sessions if content is later archived
+        // or rights status changes.
         var rolePlay1 = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == mockSet.RolePlay1ContentId, cancellationToken);
         var rolePlay2 = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == mockSet.RolePlay2ContentId, cancellationToken);
         if (rolePlay1 is null || rolePlay2 is null
             || !string.Equals(rolePlay1.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(rolePlay2.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+            || !string.Equals(rolePlay2.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
+            || rolePlay1.Status != ContentStatus.Published
+            || rolePlay2.Status != ContentStatus.Published
+            || string.IsNullOrWhiteSpace(rolePlay1.PublishedRevisionId)
+            || string.IsNullOrWhiteSpace(rolePlay2.PublishedRevisionId)
+            || string.IsNullOrWhiteSpace(rolePlay1.SourceProvenance)
+            || string.IsNullOrWhiteSpace(rolePlay2.SourceProvenance)
+            || string.Equals(rolePlay1.RightsStatus, "recall_unverified", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(rolePlay2.RightsStatus, "recall_unverified", StringComparison.OrdinalIgnoreCase))
         {
             throw ApiException.Conflict(
                 "speaking_mock_set_invalid",
-                "This mock set references content that is missing or not a speaking role-play.");
+                "This mock set references content that is missing, unpublished, or not cleared for learner use.");
         }
 
         // Free-tier rolling-window cap (Q1 of plan §6, locked).

@@ -206,6 +206,43 @@ public class SpeakingMockSetTests : IClassFixture<TestWebApplicationFactory>
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetSpeakingTask_DraftContent_Returns404()
+    {
+        var draftId = $"st-learner-draft-{Guid.NewGuid():N}";
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.ContentItems.Add(new ContentItem
+            {
+                Id = draftId,
+                ContentType = "speaking_task",
+                SubtestCode = "speaking",
+                ProfessionId = "nursing",
+                Title = "Learner-hidden draft speaking task",
+                Difficulty = "core",
+                EstimatedDurationMinutes = 20,
+                PublishedRevisionId = $"{draftId}-r1",
+                Status = ContentStatus.Draft,
+                CaseNotes = "Draft case notes should stay hidden.",
+                DetailJson = JsonSerializer.Serialize(new
+                {
+                    setting = "Clinic",
+                    patient = "Patient",
+                    brief = "Explain the care plan.",
+                    background = "Draft background"
+                }),
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var client = await CreateLearnerClientAsync("speaking-draft-task-hidden");
+        var response = await client.GetAsync($"/v1/speaking/tasks/{draftId}");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     private async Task<HttpClient> CreateLearnerClientAsync(string userId)
     {
         await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);

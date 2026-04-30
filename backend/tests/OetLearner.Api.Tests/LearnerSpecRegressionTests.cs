@@ -221,7 +221,9 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             sizeBytes = uploadBytes.Length,
             durationSeconds = 75,
             captureMethod = "browser-recording",
-            contentType = "audio/webm"
+            contentType = "audio/webm",
+            consentAccepted = true,
+            consentText = "Test consent accepted"
         });
         uploadComplete.EnsureSuccessStatusCode();
 

@@ -59,6 +59,10 @@ public class SpeakingSelfPracticeFlowsTests : IClassFixture<FirstPartyAuthTestWe
         Assert.Equal("speaking", session!.SubtestCode);
         Assert.Equal("oet-roleplay", session.TaskTypeCode);
         Assert.Equal("st-001", session.ContentId);
+        using var scenario = JsonDocument.Parse(session.ScenarioJson);
+        Assert.Equal("st-001", scenario.RootElement.GetProperty("contentId").GetString());
+        Assert.Equal("Patient Handover - Post-Op Recovery", scenario.RootElement.GetProperty("title").GetString());
+        Assert.Contains("handover", scenario.RootElement.GetProperty("candidateBrief").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

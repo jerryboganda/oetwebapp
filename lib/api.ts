@@ -1561,6 +1561,21 @@ export async function fetchSpeakingMockSession(sessionId: string): Promise<Speak
   return mapSpeakingMockSession(json);
 }
 
+export interface SpeakingComplianceCopy {
+  consentText: string;
+  scoreDisclaimer: string;
+  audioRetentionDays: number;
+}
+
+export async function fetchSpeakingCompliance(): Promise<SpeakingComplianceCopy> {
+  const json = await apiRequest<ApiRecord>('/v1/speaking/compliance');
+  return {
+    consentText: typeof json.consentText === 'string' ? json.consentText : 'I consent to this speaking recording being stored and processed for feedback.',
+    scoreDisclaimer: typeof json.scoreDisclaimer === 'string' ? json.scoreDisclaimer : 'Estimated score only. This is not an official OET score or result.',
+    audioRetentionDays: typeof json.audioRetentionDays === 'number' ? json.audioRetentionDays : 365,
+  };
+}
+
 function mapRoleCardPayload(item: ApiRecord): RoleCard {
   const candidateCard = asRecord(item.candidateCard);
   const tasks = toStringArray(candidateCard.tasks).length > 0
@@ -1757,6 +1772,7 @@ export async function submitSpeakingRecording(
   recording: Blob,
   durationSeconds = 120,
   mode: 'self' | 'exam' | 'practice' = 'self',
+  consent?: { accepted: boolean; text?: string },
 ): Promise<{ uploadUrl: string; submissionId: string }> {
   const attempt = await ensureAttempt('speaking', taskId, mode);
   const upload = await apiRequest<ApiRecord>(`/v1/speaking/attempts/${attempt.attemptId}/audio/upload-session`, { method: 'POST' });
@@ -1771,6 +1787,9 @@ export async function submitSpeakingRecording(
       durationSeconds,
       captureMethod: 'browser-recording',
       contentType: recording.type || 'audio/webm',
+      consentAccepted: consent?.accepted === true,
+      consentText: consent?.text,
+      consentAcceptedAt: new Date().toISOString(),
     }),
   });
   const submitted = await apiRequest<ApiRecord>(`/v1/speaking/attempts/${attempt.attemptId}/submit`, { method: 'POST' });
@@ -4439,11 +4458,13 @@ export async function archiveAdminSpeakingMockSet(mockSetId: string): Promise<Ad
 export async function fetchAdminSpeakingContentOptions(): Promise<Array<{ id: string; title: string; status: string }>> {
   const json = await apiRequest<ApiRecord>('/v1/admin/content?subtest=speaking&pageSize=200');
   const items = Array.isArray(json.items) ? json.items.map(asRecord) : [];
-  return items.map((it) => ({
-    id: typeof it.id === 'string' ? it.id : '',
-    title: typeof it.title === 'string' ? it.title : '',
-    status: typeof it.status === 'string' ? it.status : 'draft',
-  }));
+  return items
+    .filter((it) => typeof it.status === 'string' && it.status.toLowerCase() === 'published')
+    .map((it) => ({
+      id: typeof it.id === 'string' ? it.id : '',
+      title: typeof it.title === 'string' ? it.title : '',
+      status: typeof it.status === 'string' ? it.status : 'draft',
+    }));
 }
 
 // ── Wave 4 of docs/SPEAKING-MODULE-PLAN.md - tutor calibration drift +

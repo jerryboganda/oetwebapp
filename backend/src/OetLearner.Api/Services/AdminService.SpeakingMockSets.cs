@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services;
 
@@ -15,6 +16,8 @@ namespace OetLearner.Api.Services;
 // Publish gate (mirrors `IContentPaperService.RequiredRolesFor` philosophy):
 //   - Both referenced ContentItem ids must exist and have
 //     SubtestCode == "speaking".
+//   - Both role-play cards must already be published, revisioned, sourced,
+//     rights-cleared, and contain the minimum learner-facing role-card shape.
 //   - Title must be non-empty (already enforced by request validation).
 //
 // Permissions reuse the existing `AdminContentRead` / `AdminContentWrite`
@@ -279,7 +282,6 @@ public partial class AdminService
         var contents = await db.ContentItems
             .AsNoTracking()
             .Where(x => x.Id == r1 || x.Id == r2)
-            .Select(x => new { x.Id, x.SubtestCode })
             .ToListAsync(ct);
         if (contents.Count != 2)
         {
@@ -293,6 +295,51 @@ public partial class AdminService
                 throw ApiException.Validation("SPEAKING_MOCK_SET_NOT_SPEAKING",
                     $"Content '{c.Id}' is not a speaking role-play.");
             }
+            ValidatePublishedSpeakingMockContent(c);
+        }
+    }
+
+    private static void ValidatePublishedSpeakingMockContent(ContentItem content)
+    {
+        if (content.Status != ContentStatus.Published)
+        {
+            throw ApiException.Validation("SPEAKING_MOCK_SET_CONTENT_NOT_PUBLISHED",
+                $"Content '{content.Id}' must be published before it can be used in a speaking mock set.");
+        }
+        if (string.IsNullOrWhiteSpace(content.PublishedRevisionId))
+        {
+            throw ApiException.Validation("SPEAKING_MOCK_SET_CONTENT_NOT_REVISIONED",
+                $"Content '{content.Id}' must have a published revision before it can be used in a speaking mock set.");
+        }
+        if (string.IsNullOrWhiteSpace(content.SourceProvenance))
+        {
+            throw ApiException.Validation("SPEAKING_MOCK_SET_CONTENT_SOURCE_REQUIRED",
+                $"Content '{content.Id}' needs source provenance before it can be used in a speaking mock set.");
+        }
+        if (string.Equals(content.RightsStatus, "recall_unverified", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation("SPEAKING_MOCK_SET_CONTENT_RIGHTS_UNVERIFIED",
+                $"Content '{content.Id}' has unverified rights and cannot be used in a speaking mock set.");
+        }
+
+        var detail = SpeakingContentStructure.ExtractStructure(content.DetailJson);
+        var candidate = SpeakingContentStructure.ToDictionary(SpeakingContentStructure.ReadValue(detail, "candidateCard"));
+        var setting = SpeakingContentStructure.ReadString(candidate, "setting")
+                      ?? SpeakingContentStructure.ReadString(detail, "setting");
+        var patient = SpeakingContentStructure.ReadString(candidate, "patientRole", "patient")
+                      ?? SpeakingContentStructure.ReadString(detail, "patientRole", "patient");
+        var task = SpeakingContentStructure.ReadString(candidate, "task", "brief")
+                   ?? SpeakingContentStructure.ReadString(detail, "task", "brief");
+        var background = SpeakingContentStructure.ReadString(candidate, "background")
+                         ?? SpeakingContentStructure.ReadString(detail, "background", "caseNotes")
+                         ?? content.CaseNotes;
+        if (string.IsNullOrWhiteSpace(setting)
+            || string.IsNullOrWhiteSpace(patient)
+            || string.IsNullOrWhiteSpace(task)
+            || string.IsNullOrWhiteSpace(background))
+        {
+            throw ApiException.Validation("SPEAKING_MOCK_SET_CONTENT_INCOMPLETE",
+                $"Content '{content.Id}' must include setting, patient role, task, and background before it can be used in a speaking mock set.");
         }
     }
 

@@ -13,7 +13,7 @@ import {
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
 import { Timer } from '@/components/ui/timer';
-import { fetchRoleCard, submitSpeakingRecording } from '@/lib/api';
+import { fetchRoleCard, fetchSpeakingCompliance, submitSpeakingRecording, type SpeakingComplianceCopy } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
 import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
@@ -55,6 +55,8 @@ function LiveSpeakingTaskContent() {
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [compliance, setCompliance] = useState<SpeakingComplianceCopy | null>(null);
+  const [recordingConsentAccepted, setRecordingConsentAccepted] = useState(false);
   // CBT at-home rule: candidate must destroy (tear/cut) any scratch paper in view of the camera
   // before submission. Enforced in exam mode; optional acknowledgement in self-study mode.
   const [paperDestroyed, setPaperDestroyed] = useState(false);
@@ -62,6 +64,12 @@ function LiveSpeakingTaskContent() {
   const [audioLevels, setAudioLevels] = useState<number[]>([10, 10, 10, 10, 10]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [prepNotes, setPrepNotes] = useState('');
+
+  useEffect(() => {
+    fetchSpeakingCompliance()
+      .then(setCompliance)
+      .catch(() => setCompliance(null));
+  }, []);
 
   // --- Refs ---
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -308,6 +316,11 @@ function LiveSpeakingTaskContent() {
   const handleStartRecording = async () => {
     setSubmitError(null);
 
+    if (!recordingConsentAccepted) {
+      setSubmitError('Please accept the recording consent before starting.');
+      return;
+    }
+
     if (recordingState === 'paused' && (isNativeRecorder || mediaRecorderRef.current)) {
       if (isNativeRecorder) {
         await SpeakingRecorder.resume();
@@ -489,6 +502,10 @@ function LiveSpeakingTaskContent() {
 
   const confirmSubmit = async () => {
     if (isSubmitting) return;
+    if (!recordingConsentAccepted) {
+      setSubmitError('Please accept the recording consent before submitting.');
+      return;
+    }
     if (paperRuleRequired && !paperDestroyed) {
       setSubmitError('Please confirm you have destroyed your scratch paper on camera before submitting.');
       return;
@@ -508,7 +525,10 @@ function LiveSpeakingTaskContent() {
         throw new Error('No speaking audio was captured.');
       }
 
-      const { submissionId } = await submitSpeakingRecording(id, recording, durationSeconds, mode);
+      const { submissionId } = await submitSpeakingRecording(id, recording, durationSeconds, mode, {
+        accepted: recordingConsentAccepted,
+        text: compliance?.consentText,
+      });
       const resultUrl = `/speaking/results/${submissionId}`;
       setShowSubmitConfirm(false);
       router.replace(resultUrl);
@@ -666,6 +686,18 @@ function LiveSpeakingTaskContent() {
             <p className="mt-2 text-xs font-semibold leading-relaxed text-muted">
               {card?.disclaimer ?? 'Practice estimate only. This is not an official OET score or result.'}
             </p>
+            <label className="mt-4 flex items-start gap-3 rounded-2xl border border-border bg-white p-4 text-left text-xs leading-relaxed text-muted">
+              <input
+                type="checkbox"
+                checked={recordingConsentAccepted}
+                onChange={(event) => setRecordingConsentAccepted(event.target.checked)}
+                disabled={recordingState !== 'idle'}
+                className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span>
+                {compliance?.consentText ?? 'I consent to this speaking recording being stored and processed for transcription, feedback, tutor review, and quality assurance.'}
+              </span>
+            </label>
             <p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted">Captured duration: {elapsedSeconds}s</p>
           </div>
           
@@ -674,6 +706,7 @@ function LiveSpeakingTaskContent() {
             {recordingState === 'idle' ? (
               <button
                 onClick={handleStartRecording}
+                disabled={!recordingConsentAccepted}
                 className="w-16 h-16 rounded-full bg-danger hover:bg-danger/90 flex items-center justify-center transition-all shadow-lg shadow-danger/20"
                 aria-label="Start recording"
               >
@@ -682,6 +715,7 @@ function LiveSpeakingTaskContent() {
             ) : recordingState === 'paused' ? (
               <button
                 onClick={handleStartRecording}
+                disabled={!recordingConsentAccepted}
                 className="w-16 h-16 rounded-full bg-danger hover:bg-danger/90 flex items-center justify-center transition-all shadow-lg shadow-danger/20"
                 aria-label="Resume recording"
               >
@@ -939,6 +973,21 @@ function LiveSpeakingTaskContent() {
                 </div>
               </div>
 
+              <div className="mb-6 rounded-2xl border border-border bg-background-light p-4">
+                <label className="flex items-start gap-3 text-xs leading-relaxed text-muted">
+                  <input
+                    type="checkbox"
+                    checked={recordingConsentAccepted}
+                    onChange={(event) => setRecordingConsentAccepted(event.target.checked)}
+                    disabled={isSubmitting || recordingState !== 'finished'}
+                    className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  />
+                  <span>
+                    {compliance?.consentText ?? 'I consent to this speaking recording being stored and processed for transcription, feedback, tutor review, and quality assurance.'}
+                  </span>
+                </label>
+              </div>
+
               {submitError && (
                 <p role="alert" className="mb-4 rounded-xl bg-danger/10 p-3 text-xs font-semibold text-danger">
                   {submitError}
@@ -946,7 +995,7 @@ function LiveSpeakingTaskContent() {
               )}
 
               <div className="flex flex-col gap-3">
-                <Button ref={submitPrimaryActionRef} fullWidth onClick={confirmSubmit} disabled={isSubmitting || (paperRuleRequired && !paperDestroyed)} className="py-4 rounded-2xl font-black">
+                <Button ref={submitPrimaryActionRef} fullWidth onClick={confirmSubmit} disabled={isSubmitting || !recordingConsentAccepted || (paperRuleRequired && !paperDestroyed)} className="py-4 rounded-2xl font-black">
                   {isSubmitting ? 'Submitting...' : 'Submit for Evaluation'}
                 </Button>
                 <Button variant="outline" fullWidth onClick={() => setShowSubmitConfirm(false)} disabled={isSubmitting} className="py-4 rounded-2xl">
