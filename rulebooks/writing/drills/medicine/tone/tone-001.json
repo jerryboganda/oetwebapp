@@ -1,0 +1,52 @@
+{
+  "id": "writing-drill-tone-001",
+  "type": "tone",
+  "profession": "medicine",
+  "letterType": "referral",
+  "title": "Formal Tone — Lift Casual Phrasing into Clinical Register",
+  "brief": "Each sentence below is written in casual or conversational English. Rewrite each using a professional clinical register suitable for an OET letter.",
+  "difficulty": "core",
+  "estimatedMinutes": 6,
+  "rulebookRefs": ["R12.1", "R12.3"],
+  "items": [
+    {
+      "id": "i1",
+      "informal": "The patient is doing okay-ish lately and his sugars are not too bad.",
+      "acceptableFormal": [
+        "remained stable",
+        "clinically stable",
+        "blood glucose has been adequately controlled",
+        "glycaemic control has improved"
+      ],
+      "forbidden": ["okay", "okay-ish", "not too bad", "a bit"],
+      "exemplar": "The patient has remained clinically stable, and his blood glucose has been adequately controlled.",
+      "rationale": "Replace colloquial hedges ('okay-ish', 'not too bad') with neutral clinical phrasing."
+    },
+    {
+      "id": "i2",
+      "informal": "He's been feeling pretty rough since the op and can't really get out of bed much.",
+      "acceptableFormal": [
+        "his recovery has been slow",
+        "limited mobility",
+        "reports significant fatigue",
+        "remained largely bed-bound"
+      ],
+      "forbidden": ["pretty rough", "can't really", "much"],
+      "exemplar": "Since surgery his recovery has been slow, and he reports limited mobility with significant fatigue.",
+      "rationale": "Avoid contractions and vague intensifiers; use precise clinical vocabulary."
+    },
+    {
+      "id": "i3",
+      "informal": "Could you guys have a look and let us know what's going on?",
+      "acceptableFormal": [
+        "kindly assess",
+        "your assessment would be appreciated",
+        "please review",
+        "I would appreciate your opinion"
+      ],
+      "forbidden": ["you guys", "what's", "going on"],
+      "exemplar": "I would appreciate your assessment and any further recommendations regarding ongoing management.",
+      "rationale": "Closure must be polite and professional; address the recipient as a single specialist, not a group."
+    }
+  ]
+}

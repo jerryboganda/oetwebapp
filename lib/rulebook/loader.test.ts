@@ -36,8 +36,10 @@ describe('rulebook loader — medicine rulebooks load cleanly', () => {
     expect(book.rules.length).toBeGreaterThanOrEqual(55);
   });
 
-  it('throws RulebookNotFoundError for unregistered profession', () => {
-    expect(() => loadRulebook('writing', 'nursing')).toThrow(RulebookNotFoundError);
+  it('throws RulebookNotFoundError for unregistered (kind, profession)', () => {
+    // All 12 writing professions are registered (Phase D). Use a (kind, profession)
+    // pair that intentionally has no rulebook on disk yet to exercise the error path.
+    expect(() => loadRulebook('speaking', 'veterinary')).toThrow(RulebookNotFoundError);
   });
 
   it('finds a specific rule by id', () => {

@@ -38,10 +38,19 @@ public class RulebookLoaderTests
     }
 
     [Fact]
-    public void Throws_For_Unregistered_Profession()
+    public void Throws_For_Unregistered_Profession_Combination()
     {
+        var registered = _loader.All()
+            .Select(book => (book.Kind, book.Profession))
+            .ToHashSet();
+
+        var missing = Enum.GetValues<RuleKind>()
+            .SelectMany(kind => Enum.GetValues<ExamProfession>().Select(profession => (kind, profession)))
+            .FirstOrDefault(pair => !registered.Contains(pair));
+
+        Assert.DoesNotContain(registered, pair => pair == missing);
         Assert.Throws<RulebookNotFoundException>(() =>
-            _loader.Load(RuleKind.Writing, ExamProfession.Nursing));
+            _loader.Load(missing.kind, missing.profession));
     }
 
     [Theory]

@@ -122,6 +122,17 @@ const TRACKED_EVENTS = [
   'writing_coach_suggestion_dismissed',
   // Writing module phase events
   'writing_reading_window_ended',
+  // Writing drills (case-note selection trainer + letter-building practice)
+  'writing_drill_index_viewed',
+  'writing_drill_type_viewed',
+  'writing_drill_started',
+  'writing_drill_graded',
+  // Writing revision — rewrite improvement scoring
+  'writing_revision_score_computed',
+  // Writing expert review — criterion-tagged inline annotations
+  'writing_expert_annotation_added',
+  // Writing weakness analytics dashboard
+  'writing_analytics_viewed',
   // Speaking module — CBT at-home exam environment events
   'speaking_cbt_environment_confirmed',
   'speaking_cbt_paper_acknowledged',

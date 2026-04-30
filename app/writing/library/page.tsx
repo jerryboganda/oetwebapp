@@ -68,7 +68,9 @@ export default function WritingTaskLibrary() {
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold">Writing Task Library</h1>
           </div>
-          <p className="text-muted/40 text-lg">Browse and select practice tasks to improve your clinical writing.</p>
+          <p className="text-muted/40 text-lg">
+            Choose strict exam simulation for the 5-minute reading + 40-minute writing workflow, or learning mode for guided planning and rulebook support.
+          </p>
         </div>
       </header>
 
@@ -95,10 +97,16 @@ export default function WritingTaskLibrary() {
                   profession={task.profession}
                   duration={task.time}
                   difficulty={task.difficulty}
-                  description={`Focus: ${task.criteriaFocus}`}
+                  description={`${task.letterType ?? task.scenarioType} task${task.criteriaFocus ? ` · Focus: ${task.criteriaFocus}` : ''}`}
+                  startLabel="Start Exam"
                   onStart={() => {
-                    analytics.track('task_started', { taskId: task.id, subtest: 'writing' });
-                    router.push(`/writing/player?taskId=${task.id}`);
+                    analytics.track('task_started', { taskId: task.id, subtest: 'writing', mode: 'exam' });
+                    router.push(`/writing/player?taskId=${task.id}&mode=exam`);
+                  }}
+                  secondaryActionLabel="Learning Mode"
+                  onSecondaryAction={() => {
+                    analytics.track('task_started', { taskId: task.id, subtest: 'writing', mode: 'learning' });
+                    router.push(`/writing/player?taskId=${task.id}&mode=learning`);
                   }}
                 />
               </MotionItem>

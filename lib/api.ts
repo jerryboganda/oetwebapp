@@ -51,6 +51,10 @@ import type {
   SettingsSectionId,
   SpeakingTranscriptReview,
 } from './mock-data';
+import {
+  WRITING_CRITERION_MAX_SCORES,
+  type WritingCriterionCode,
+} from './scoring';
 import type {
   BillingData,
   BillingChangePreview,
@@ -89,6 +93,7 @@ import type {
   SpeakingAuditInput,
   WritingLintInput,
 } from './rulebook';
+import { DEFAULT_WRITING_TARGET_WORD_RANGE } from './writing/workflow';
 import type {
   VideoLessonDetail,
   VideoLessonListItem,
@@ -715,8 +720,8 @@ function cacheRemove(key: string) {
   window.localStorage.removeItem(key);
 }
 
-function attemptCacheKey(subtest: string, contentId: string) {
-  return `oet.${subtest}.attempt.${contentId}`;
+function attemptCacheKey(subtest: string, contentId: string, mode = 'default') {
+  return `oet.${subtest}.attempt.${mode}.${contentId}`;
 }
 
 function evaluationCacheKey(subtest: string, contentId: string) {
@@ -724,7 +729,7 @@ function evaluationCacheKey(subtest: string, contentId: string) {
 }
 
 async function ensureAttempt(subtest: 'writing' | 'speaking' | 'reading' | 'listening', contentId: string, mode: string) {
-  const key = attemptCacheKey(subtest, contentId);
+  const key = attemptCacheKey(subtest, contentId, mode);
   const cached = cacheGet(key);
 
   if (cached) {
@@ -746,7 +751,7 @@ async function ensureAttempt(subtest: 'writing' | 'speaking' | 'reading' | 'list
 
   const created = await apiRequest<ApiRecord>(`/v1/${subtest}/attempts`, {
     method: 'POST',
-    body: JSON.stringify({ contentId, context: 'practice', mode, deviceType: 'web', parentAttemptId: null }),
+    body: JSON.stringify({ contentId, context: mode === 'exam' ? 'exam' : 'practice', mode, deviceType: 'web', parentAttemptId: null }),
   });
   cacheSet(key, created.attemptId);
   return created;
@@ -794,6 +799,12 @@ async function resolveReviewTarget(submissionId: string): Promise<{ attemptId: s
 }
 
 function mapWritingTask(item: ApiRecord): WritingTask {
+  const targetWordRange = asRecord(item.targetWordRange ?? item.wordCount ?? item.targetBodyWordRange);
+  const targetMin = Number(targetWordRange.min ?? targetWordRange.minimum ?? item.targetWordMin ?? DEFAULT_WRITING_TARGET_WORD_RANGE.min);
+  const targetMax = Number(targetWordRange.max ?? targetWordRange.maximum ?? item.targetWordMax ?? DEFAULT_WRITING_TARGET_WORD_RANGE.max);
+  const warningMin = Number(targetWordRange.warningMin ?? item.wordWarningMin ?? DEFAULT_WRITING_TARGET_WORD_RANGE.warningMin);
+  const warningMax = Number(targetWordRange.warningMax ?? item.wordWarningMax ?? DEFAULT_WRITING_TARGET_WORD_RANGE.warningMax);
+
   return {
     id: item.contentId,
     title: item.title,
@@ -803,6 +814,19 @@ function mapWritingTask(item: ApiRecord): WritingTask {
     criteriaFocus: Array.isArray(item.criteriaFocus) ? item.criteriaFocus.map(normalizeCriterionName).join(', ') : '',
     scenarioType: titleCase(item.scenarioType),
     caseNotes: item.caseNotes ?? '',
+    letterType: titleCase(item.letterType ?? item.taskType ?? item.scenarioType),
+    scenario: typeof item.scenario === 'string' ? item.scenario : undefined,
+    taskDate: typeof item.taskDate === 'string' ? item.taskDate : typeof item.date === 'string' ? item.date : undefined,
+    writerRole: typeof item.writerRole === 'string' ? item.writerRole : undefined,
+    recipient: typeof item.recipient === 'string' ? item.recipient : typeof item.recipientName === 'string' ? item.recipientName : undefined,
+    purpose: typeof item.purpose === 'string' ? item.purpose : undefined,
+    status: typeof item.status === 'string' ? titleCase(item.status) : undefined,
+    targetWordRange: {
+      min: Number.isFinite(targetMin) ? targetMin : DEFAULT_WRITING_TARGET_WORD_RANGE.min,
+      max: Number.isFinite(targetMax) ? targetMax : DEFAULT_WRITING_TARGET_WORD_RANGE.max,
+      warningMin: Number.isFinite(warningMin) ? warningMin : DEFAULT_WRITING_TARGET_WORD_RANGE.warningMin,
+      warningMax: Number.isFinite(warningMax) ? warningMax : DEFAULT_WRITING_TARGET_WORD_RANGE.warningMax,
+    },
   };
 }
 
@@ -829,13 +853,16 @@ function mapSpeakingTask(item: ApiRecord): SpeakingTask {
 function mapCriterionFeedback(criterionScores: ApiRecord[], feedbackItems: ApiRecord[]): CriterionFeedback[] {
   return criterionScores.map((criterion) => {
     const score = parseCriterionScore(criterion.scoreRange);
-    const criterionCode = criterion.criterionCode;
+    const criterionCode = String(criterion.criterionCode ?? '').toLowerCase();
+    const maxScore = Object.prototype.hasOwnProperty.call(WRITING_CRITERION_MAX_SCORES, criterionCode)
+      ? WRITING_CRITERION_MAX_SCORES[criterionCode as WritingCriterionCode]
+      : 7;
     const relatedFeedback = feedbackItems.filter((item) => item.criterionCode === criterionCode);
 
     return {
       name: normalizeCriterionName(criterionCode),
       score,
-      maxScore: 6,
+      maxScore,
       grade: scoreToGrade(score),
       explanation: criterion.explanation ?? '',
       anchoredComments: relatedFeedback.map((item, index) => ({
@@ -1273,8 +1300,8 @@ export async function fetchWritingChecklist(): Promise<ChecklistItem[]> {
   return criteria.map((criterion, index) => ({ id: index + 1, text: criterion.label, completed: false }));
 }
 
-export async function submitWritingDraft(taskId: string, content: string): Promise<{ saved: boolean }> {
-  const attempt = await ensureAttempt('writing', taskId, 'timed');
+export async function submitWritingDraft(taskId: string, content: string, mode: 'exam' | 'learning' = 'exam'): Promise<{ saved: boolean }> {
+  const attempt = await ensureAttempt('writing', taskId, mode);
   const saved = await apiRequest<ApiRecord>(`/v1/writing/attempts/${attempt.attemptId}/draft`, {
     method: 'PATCH',
     body: JSON.stringify({ content, scratchpad: null, checklist: null, draftVersion: attempt.draftVersion ?? 1 }),
@@ -1282,8 +1309,8 @@ export async function submitWritingDraft(taskId: string, content: string): Promi
   return { saved: Boolean(saved.saved) };
 }
 
-export async function submitWritingTask(taskId: string, content: string): Promise<WritingSubmission> {
-  const attempt = await ensureAttempt('writing', taskId, 'timed');
+export async function submitWritingTask(taskId: string, content: string, mode: 'exam' | 'learning' = 'exam'): Promise<WritingSubmission> {
+  const attempt = await ensureAttempt('writing', taskId, mode);
   await apiRequest(`/v1/writing/attempts/${attempt.attemptId}/draft`, {
     method: 'PATCH',
     body: JSON.stringify({ content, scratchpad: null, checklist: null, draftVersion: attempt.draftVersion ?? 1 }),
@@ -1294,7 +1321,7 @@ export async function submitWritingTask(taskId: string, content: string): Promis
     body: JSON.stringify({ content, idempotencyKey: crypto.randomUUID?.() ?? String(Date.now()) }),
   });
 
-  cacheRemove(attemptCacheKey('writing', taskId));
+  cacheRemove(attemptCacheKey('writing', taskId, mode));
   cacheSet(evaluationCacheKey('writing', taskId), submitted.evaluationId);
   const task = await fetchWritingTask(taskId);
 
@@ -1798,7 +1825,7 @@ export async function submitSpeakingRecording(
     throw new Error('Speaking evaluation was not queued. Please try again.');
   }
 
-  cacheRemove(attemptCacheKey('speaking', taskId));
+  cacheRemove(attemptCacheKey('speaking', taskId, mode));
   cacheSet(evaluationCacheKey('speaking', taskId), evaluationId);
   return { uploadUrl: upload.uploadUrl, submissionId: evaluationId };
 }
@@ -1826,7 +1853,7 @@ export async function submitReadingAnswers(taskId: string, answers: Record<strin
   const attempt = await ensureAttempt('reading', taskId, 'exam');
   await apiRequest(`/v1/reading/attempts/${attempt.attemptId}/answers`, { method: 'PATCH', body: JSON.stringify({ answers }) });
   const submitted = await apiRequest<ApiRecord>(`/v1/reading/attempts/${attempt.attemptId}/submit`, { method: 'POST' });
-  cacheRemove(attemptCacheKey('reading', taskId));
+  cacheRemove(attemptCacheKey('reading', taskId, 'exam'));
   cacheSet(evaluationCacheKey('reading', taskId), submitted.evaluationId);
   return fetchReadingResult(taskId);
 }
@@ -1903,7 +1930,7 @@ export async function submitListeningAnswers(taskId: string, answers: Record<str
   const attempt = await ensureAttempt('listening', taskId, 'exam');
   await apiRequest(`/v1/listening/attempts/${attempt.attemptId}/answers`, { method: 'PATCH', body: JSON.stringify({ answers }) });
   const submitted = await apiRequest<ApiRecord>(`/v1/listening/attempts/${attempt.attemptId}/submit`, { method: 'POST' });
-  cacheRemove(attemptCacheKey('listening', taskId));
+  cacheRemove(attemptCacheKey('listening', taskId, 'exam'));
   cacheSet(evaluationCacheKey('listening', taskId), submitted.evaluationId);
   return fetchListeningResult(taskId);
 }

@@ -1,0 +1,43 @@
+{
+  "id": "writing-drill-expansion-001",
+  "type": "expansion",
+  "profession": "medicine",
+  "letterType": "referral",
+  "title": "Sentence Expansion — Note Form to Full Clinical Sentences",
+  "brief": "Expand each note-form line into a complete, professional sentence. Replace abbreviations, add subject + verb, and use full words for durations.",
+  "difficulty": "core",
+  "estimatedMinutes": 8,
+  "rulebookRefs": ["R10.1", "R12.2", "R12.4"],
+  "targets": [
+    {
+      "id": "t1",
+      "noteForm": "Pt c/o cough x 3/52, productive, no haemoptysis.",
+      "mustInclude": ["cough", "three weeks"],
+      "mustNotInclude": ["c/o", "3/52", "x 3"],
+      "minWords": 12,
+      "maxWords": 35,
+      "exemplar": "The patient reports a productive cough that has persisted for three weeks, with no associated haemoptysis.",
+      "rationale": "Convert 'c/o' and '3/52' to full words; add subject + verb."
+    },
+    {
+      "id": "t2",
+      "noteForm": "BP 172/98, HR 88 reg, sats 96% RA, afebrile.",
+      "mustInclude": ["blood pressure", "172", "98"],
+      "mustNotInclude": ["BP ", "RA"],
+      "minWords": 10,
+      "maxWords": 40,
+      "exemplar": "On examination, his blood pressure was 172/98 mmHg with a regular pulse of 88 beats per minute, oxygen saturations of 96% on room air, and he was afebrile.",
+      "rationale": "Spell out 'blood pressure' and 'room air'; introduce with 'On examination'."
+    },
+    {
+      "id": "t3",
+      "noteForm": "Tx: started ramipril 2.5 mg OD, lifestyle advice given.",
+      "mustInclude": ["ramipril", "once daily"],
+      "mustNotInclude": ["Tx:", "OD"],
+      "minWords": 10,
+      "maxWords": 30,
+      "exemplar": "He was commenced on ramipril 2.5 mg once daily, and lifestyle advice was provided regarding diet, exercise, and weight reduction.",
+      "rationale": "Replace 'Tx:' and 'OD'; use passive clinical voice."
+    }
+  ]
+}

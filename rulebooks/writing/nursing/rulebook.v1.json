@@ -1,0 +1,1884 @@
+{
+  "version": "1.0.0",
+  "kind": "writing",
+  "profession": "nursing",
+  "publishedAt": "2026-04-18T00:00:00Z",
+  "authoritySource": "Dr. Ahmed Hesham — The Tutor Book — OET Writing Comprehensive Rulebook (Sessions 1–10) — adapted for Nursing (Phase D v1)",
+  "sections": [
+    {
+      "id": "01",
+      "title": "Letter Types & Identification",
+      "order": 1
+    },
+    {
+      "id": "02",
+      "title": "Exam Structure & Case Notes",
+      "order": 2
+    },
+    {
+      "id": "03",
+      "title": "Content & Data Selection",
+      "order": 3
+    },
+    {
+      "id": "04",
+      "title": "Page Layout & Structure",
+      "order": 4
+    },
+    {
+      "id": "05",
+      "title": "Address & Date",
+      "order": 5
+    },
+    {
+      "id": "06",
+      "title": "Salutation & Re: Line",
+      "order": 6
+    },
+    {
+      "id": "07",
+      "title": "Introduction",
+      "order": 7
+    },
+    {
+      "id": "08",
+      "title": "Body Paragraphs & Visit Structure",
+      "order": 8
+    },
+    {
+      "id": "09",
+      "title": "Closure",
+      "order": 9
+    },
+    {
+      "id": "10",
+      "title": "Tenses",
+      "order": 10
+    },
+    {
+      "id": "11",
+      "title": "Medications & Investigations",
+      "order": 11
+    },
+    {
+      "id": "12",
+      "title": "Grammar, Vocabulary & Linkers",
+      "order": 12
+    },
+    {
+      "id": "13",
+      "title": "Urgent Referral",
+      "order": 13
+    },
+    {
+      "id": "14",
+      "title": "Discharge Letter",
+      "order": 14
+    },
+    {
+      "id": "15",
+      "title": "Referral to Non-Medical Professionals",
+      "order": 15
+    },
+    {
+      "id": "16",
+      "title": "Assessment Criteria",
+      "order": 16
+    }
+  ],
+  "rules": [
+    {
+      "id": "R01.1",
+      "section": "01",
+      "severity": "info",
+      "title": "Six OET letter types",
+      "body": "Six OET letter types: Routine Referral, Urgent Referral, Discharge Letter, Transfer Letter, Referral to Non-Medical Professional, and Referral to GP.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R01.2",
+      "section": "01",
+      "severity": "info",
+      "title": "Default is Routine Referral",
+      "body": "Any referral task without the word 'urgent' = Routine Referral by default.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R01.3",
+      "section": "01",
+      "severity": "info",
+      "title": "Assessment / management requests are routine",
+      "body": "Case notes requesting 'assessment' or 'management from a specialist' without 'urgent' = Routine Referral.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R01.4",
+      "section": "01",
+      "severity": "info",
+      "title": "Urgent identifiers",
+      "body": "Urgent identifiers: 'urgent referral/assessment', 'admit to hospital', 'hospital admission', 'request acute management', 'as soon as possible (ASAP)', 'acutely unwell', 'for immediate assessment'.",
+      "appliesTo": "all",
+      "params": {
+        "urgentMarkers": [
+          "urgent",
+          "admit to hospital",
+          "hospital admission",
+          "acute management",
+          "ASAP",
+          "as soon as possible",
+          "acutely unwell",
+          "immediate assessment"
+        ]
+      }
+    },
+    {
+      "id": "R01.5",
+      "section": "01",
+      "severity": "critical",
+      "title": "Suspected cancer = urgent",
+      "body": "Suspected cancer ALWAYS applies Urgent Referral rules, even if the word 'urgent' is absent.",
+      "appliesTo": "all",
+      "params": {
+        "cancerMarkers": [
+          "suspected cancer",
+          "suspicious lesion",
+          "?malignancy",
+          "query malignancy",
+          "rule out malignancy",
+          "abnormal mass",
+          "biopsy suspicious"
+        ]
+      }
+    },
+    {
+      "id": "R01.6",
+      "section": "01",
+      "severity": "info",
+      "title": "Discharge letter identifiers",
+      "body": "Discharge letter identifiers: 'write a discharge letter', patient described as in hospital or being discharged, you are writing from hospital to GP.",
+      "appliesTo": [
+        "discharge"
+      ]
+    },
+    {
+      "id": "R01.7",
+      "section": "01",
+      "severity": "info",
+      "title": "Non-medical professional list",
+      "body": "Non-medical professionals: OT, physiotherapist, social worker, psychologist, dietitian, speech pathologist, pharmacist, care facility manager. Nurse is classified as medical, not non-medical.",
+      "appliesTo": [
+        "non_medical_referral"
+      ]
+    },
+    {
+      "id": "R01.8",
+      "section": "01",
+      "severity": "major",
+      "title": "Cancer screening vs suspected cancer",
+      "body": "Do not confuse routine cancer screening referrals with urgent referrals for suspected cancer.",
+      "appliesTo": [
+        "routine_referral",
+        "urgent_referral"
+      ]
+    },
+    {
+      "id": "R02.1",
+      "section": "02",
+      "severity": "info",
+      "title": "Total exam time 45 minutes",
+      "body": "Total exam time: 45 minutes.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R02.2",
+      "section": "02",
+      "severity": "critical",
+      "title": "Five-minute reading-only window",
+      "body": "First 5 minutes = reading time only. No writing is permitted; pen must remain down.",
+      "appliesTo": "all",
+      "params": {
+        "readOnlyPhaseMinutes": 5
+      }
+    },
+    {
+      "id": "R02.3",
+      "section": "02",
+      "severity": "info",
+      "title": "Target 30 minutes writing + 10 minutes review",
+      "body": "Remaining 40 minutes = writing time. Practice target: finish in 30 minutes, leaving 10 minutes for review.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R02.4",
+      "section": "02",
+      "severity": "info",
+      "title": "Paper layout",
+      "body": "Paper 1 = case notes (usually 2 pages). Paper 2 / Booklet = writing answer sheet.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R02.5",
+      "section": "02",
+      "severity": "info",
+      "title": "Written task elements",
+      "body": "The written task (bottom of case notes) states: letter type, recipient name + address, request, and sometimes the diagnosis.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R02.6",
+      "section": "02",
+      "severity": "info",
+      "title": "Diagnosis location fallback",
+      "body": "If diagnosis is absent from the written task, check the 'plan' section immediately above it.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R02.7",
+      "section": "02",
+      "severity": "info",
+      "title": "Today's date = letter date",
+      "body": "'Today's date' at the top of case notes = the date of the letter.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R02.8",
+      "section": "02",
+      "severity": "info",
+      "title": "Diagnosis types treated identically",
+      "body": "Diagnosis types — provisional, preliminary, evaluatory, confirmatory — are treated identically in OET letters.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R03.1",
+      "section": "03",
+      "severity": "info",
+      "title": "Three data categories",
+      "body": "All data falls into one of three categories: Relevant (must include), Irrelevant (must exclude), Semi-relevant (include if letter is short; exclude if long).",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R03.2",
+      "section": "03",
+      "severity": "critical",
+      "title": "Marks for inclusion AND exclusion",
+      "body": "Marks are awarded for INCLUDING relevant data AND for EXCLUDING irrelevant data. Content selection is the single most important OET writing skill.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R03.3",
+      "section": "03",
+      "severity": "info",
+      "title": "Recipient specialty drives relevance",
+      "body": "The recipient specialty determines relevance. Ask: 'Would this specialist need this to manage the patient?'",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R03.4",
+      "section": "03",
+      "severity": "critical",
+      "title": "Smoking and drinking always included (except OT)",
+      "body": "Smoking and drinking: ALWAYS include (positive or negative), EXCEPT when writing to an occupational therapist.",
+      "appliesTo": "all",
+      "checkId": "content_requires_smoking_drinking",
+      "params": {
+        "excludeRecipientSpecialties": [
+          "occupational therapist",
+          "OT"
+        ]
+      }
+    },
+    {
+      "id": "R03.5",
+      "section": "03",
+      "severity": "major",
+      "title": "Divorce / living situation — conditional",
+      "body": "Divorce, living situation, number of children: include only if directly relevant to the specialty.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R03.6",
+      "section": "03",
+      "severity": "critical",
+      "title": "Allergy always included for atopic conditions",
+      "body": "Allergy: ALWAYS include (positive or negative) for atopic conditions (asthma, eczema, hay fever). For non-atopic conditions, include allergy only if relevant to the condition or its medication.",
+      "appliesTo": "all",
+      "checkId": "content_requires_allergy_for_atopic",
+      "params": {
+        "atopicMarkers": [
+          "asthma",
+          "eczema",
+          "hay fever",
+          "atopic",
+          "allergic rhinitis"
+        ]
+      }
+    },
+    {
+      "id": "R03.7",
+      "section": "03",
+      "severity": "major",
+      "title": "Family history — conditional",
+      "body": "Family history: include only if a family member has a related condition.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R03.8",
+      "section": "03",
+      "severity": "major",
+      "title": "Letter length guide 180–200 words",
+      "body": "Letter length guide: 180–200 words (body only). Too long = semi-relevant data included. Too short = relevant data missing.",
+      "appliesTo": "all",
+      "checkId": "letter_body_length",
+      "params": {
+        "minWords": 160,
+        "idealMin": 180,
+        "idealMax": 200,
+        "maxWords": 230
+      }
+    },
+    {
+      "id": "R03.9",
+      "section": "03",
+      "severity": "major",
+      "title": "Max 4 body paragraphs",
+      "body": "Maximum 4 body paragraphs. Typical: 2–3 body paragraphs. Paper-based: fills to approx two-thirds of second page.",
+      "appliesTo": "all",
+      "checkId": "letter_paragraph_count",
+      "params": {
+        "min": 2,
+        "max": 4
+      }
+    },
+    {
+      "id": "R04.1",
+      "section": "04",
+      "severity": "major",
+      "title": "Letter structure order",
+      "body": "Letter structure order: Address → [blank] → Date → [blank] → Salutation → Re: line → Introduction → [blank] → Body paragraphs (each separated by blank line) → [blank] → Closure → [blank] → Yours sincerely/faithfully → [1–2 blank lines] → Doctor.",
+      "appliesTo": "all",
+      "checkId": "letter_structure_order"
+    },
+    {
+      "id": "R04.2",
+      "section": "04",
+      "severity": "critical",
+      "title": "No blank line between Salutation and Re: line",
+      "body": "NO blank line between the Salutation and the Re: line. They are on consecutive lines. Salutation and Re: line are the ONLY two consecutive lines with no blank line between them.",
+      "appliesTo": "all",
+      "checkId": "salutation_re_adjacent"
+    },
+    {
+      "id": "R04.3",
+      "section": "04",
+      "severity": "info",
+      "title": "Computer-based Enter convention",
+      "body": "Computer-based exam: two Enter presses = one blank line. 'Space' or 'blank line' throughout this rulebook means 1–2 Enters on the keyboard.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R04.4",
+      "section": "04",
+      "severity": "major",
+      "title": "One blank line between body paragraphs",
+      "body": "Each body paragraph is separated from the next by exactly one blank line.",
+      "appliesTo": "all",
+      "checkId": "blank_line_between_paragraphs"
+    },
+    {
+      "id": "R05.1",
+      "section": "05",
+      "severity": "info",
+      "title": "Address components",
+      "body": "Address components: recipient name, specialty, clinic name, street, city/town. Number of lines varies; not always five.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R05.2",
+      "section": "05",
+      "severity": "critical",
+      "title": "Address capitalisation and punctuation",
+      "body": "Address: first letter of each component = CAPITAL. No commas or full stops. Use Enter (not comma) between components.",
+      "appliesTo": "all",
+      "checkId": "address_punctuation"
+    },
+    {
+      "id": "R05.3",
+      "section": "05",
+      "severity": "info",
+      "title": "Address copied from case notes",
+      "body": "Address is always copied directly from the written task in the case notes.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R05.4",
+      "section": "05",
+      "severity": "info",
+      "title": "Date = today's visit date",
+      "body": "Date of the letter = date of today's visit (at top of case notes).",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R05.5",
+      "section": "05",
+      "severity": "major",
+      "title": "Date format consistency",
+      "body": "Date format must be consistent throughout the letter. Acceptable formats: DD/MM/YYYY, 1 January 2024, 01/01/2024, 1st January 2024.",
+      "appliesTo": "all",
+      "checkId": "date_format_consistent"
+    },
+    {
+      "id": "R05.6",
+      "section": "05",
+      "severity": "major",
+      "title": "Never abbreviate the year",
+      "body": "Never abbreviate the year (write 2024, not '24).",
+      "appliesTo": "all",
+      "checkId": "year_not_abbreviated"
+    },
+    {
+      "id": "R05.7",
+      "section": "05",
+      "severity": "minor",
+      "title": "Leading zero for single-digit dates",
+      "body": "Numbers 1–9 in dates: always add a leading zero (01, 02 … 09).",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R05.8",
+      "section": "05",
+      "severity": "critical",
+      "title": "No 'Date:' prefix",
+      "body": "Do NOT write the word 'Date:' before the date.",
+      "appliesTo": "all",
+      "checkId": "no_date_prefix",
+      "forbiddenPatterns": [
+        "^\\s*Date\\s*:"
+      ]
+    },
+    {
+      "id": "R05.9",
+      "section": "05",
+      "severity": "major",
+      "title": "One blank line above and below date",
+      "body": "The date has exactly ONE blank line above it and ONE blank line below it.",
+      "appliesTo": "all",
+      "checkId": "date_blank_line_sandwich"
+    },
+    {
+      "id": "R06.1",
+      "section": "06",
+      "severity": "critical",
+      "title": "Standard salutation form",
+      "body": "Standard: Dear Dr. [Last Name], — capital D, lowercase r. Always use LAST name, never first name.",
+      "appliesTo": "all",
+      "checkId": "salutation_last_name_only"
+    },
+    {
+      "id": "R06.2",
+      "section": "06",
+      "severity": "info",
+      "title": "Optional comma / dot",
+      "body": "Comma after salutation: optional. Dot after Dr/Mr/Ms: optional.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R06.3",
+      "section": "06",
+      "severity": "critical",
+      "title": "No blank line between salutation and Re:",
+      "body": "No blank line between salutation and Re: line.",
+      "appliesTo": "all",
+      "checkId": "salutation_re_adjacent"
+    },
+    {
+      "id": "R06.4",
+      "section": "06",
+      "severity": "major",
+      "title": "Special salutations",
+      "body": "Special salutations: No name given → Dear Doctor. Nurse/OT/Radiographer without name → Dear Sir/Madam. Admissions Officer → Dear Admissions Officer. Emergency Registrar → Dear Emergency Registrar. Assistant Professor → Dear Assistant Professor. UK surgeon → 'Mr [Last Name]' acceptable.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R06.5",
+      "section": "06",
+      "severity": "major",
+      "title": "Non-medical salutation rules",
+      "body": "Non-medical professional — no name: Dear Sir/Madam. Name given: Dear Mr/Ms [Last Name].",
+      "appliesTo": [
+        "non_medical_referral"
+      ]
+    },
+    {
+      "id": "R06.6",
+      "section": "06",
+      "severity": "info",
+      "title": "Re: line format",
+      "body": "Re: line format: Re: [Title] [Full Name] D.O.B: [date]. Both 'Re:' and 'RE:' are acceptable.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R06.7",
+      "section": "06",
+      "severity": "critical",
+      "title": "Re: line full name; body last name only",
+      "body": "Re: line = full name (first + last). In body: LAST NAME + TITLE only (e.g., Ms Miller). Never repeat full name in body.",
+      "appliesTo": "all",
+      "checkId": "body_uses_last_name_only"
+    },
+    {
+      "id": "R06.8",
+      "section": "06",
+      "severity": "major",
+      "title": "Age / DOB handling in Re: line",
+      "body": "When only DOB is given → write DOB in Re: line. When only age is given → write 'aged [X]' (lowercase, no colon) after the full name. Do NOT write the age again in the introduction. When both are given → use DOB in Re: line; age is optional in the introduction.",
+      "appliesTo": "all",
+      "checkId": "re_line_age_dob"
+    },
+    {
+      "id": "R06.9",
+      "section": "06",
+      "severity": "minor",
+      "title": "Age forms in running text",
+      "body": "Age in running text (three acceptable forms): 'Age: 25' / '25 years old' / '25 years of age'.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R06.10",
+      "section": "06",
+      "severity": "critical",
+      "title": "Children: no title; first name in body",
+      "body": "Children (Day 1 of life up to and including 17 years old): NO title in Re: line — write full name only. In the body: use FIRST NAME only. At 18 years old the patient becomes an adult and receives a title (Mr/Ms/Miss). Never write 'Master' for boys.",
+      "appliesTo": "all",
+      "checkId": "minor_naming_convention"
+    },
+    {
+      "id": "R06.11",
+      "section": "06",
+      "severity": "critical",
+      "title": "Yours sincerely vs faithfully",
+      "body": "'Yours sincerely' when recipient name is known. 'Yours faithfully' when no name (Dear Sir/Madam, Dear Doctor).",
+      "appliesTo": "all",
+      "checkId": "yours_sincerely_vs_faithfully"
+    },
+    {
+      "id": "R06.12",
+      "section": "06",
+      "severity": "minor",
+      "title": "Yours sincerely capitalisation",
+      "body": "Capitalisation: Yours (capital Y), sincerely (lowercase s). Spelling: S-I-N-C-E-R-E-L-Y.",
+      "appliesTo": "all",
+      "checkId": "yours_sincerely_capitalisation"
+    },
+    {
+      "id": "R06.13",
+      "section": "06",
+      "severity": "minor",
+      "title": "Signature 'Doctor' line",
+      "body": "Write 'Doctor' (capital D) below closing phrase. Allow 1–2 blank lines between closing phrase and 'Doctor'.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R07.1",
+      "section": "07",
+      "severity": "major",
+      "title": "Introduction concise",
+      "body": "Introduction must be concise: 2–3 sentences maximum, fewest words possible.",
+      "appliesTo": "all",
+      "checkId": "intro_sentence_count",
+      "params": {
+        "maxSentences": 3
+      }
+    },
+    {
+      "id": "R07.2",
+      "section": "07",
+      "severity": "major",
+      "title": "Intro must contain identity + purpose",
+      "body": "Introduction must contain: (a) Unique Identity of the patient, and (b) Purpose / Request.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R07.3",
+      "section": "07",
+      "severity": "critical",
+      "title": "Purpose/Request mandatory",
+      "body": "Purpose/Request = MOST IMPORTANT element. Never omit it.",
+      "appliesTo": "all",
+      "checkId": "intro_contains_purpose"
+    },
+    {
+      "id": "R07.4",
+      "section": "07",
+      "severity": "minor",
+      "title": "Unique identity elements",
+      "body": "Unique identity elements: name, age (if not in header), occupation, summary of main condition.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R07.5",
+      "section": "07",
+      "severity": "info",
+      "title": "Routine referral intro template",
+      "body": "Routine referral template: 'I am writing to refer [Title Last Name], a [age]-year-old [occupation], for [specialist] assessment and management of [condition].'",
+      "appliesTo": [
+        "routine_referral"
+      ],
+      "exemplarPhrases": [
+        "I am writing to refer {title} {lastName}, a {age}-year-old {occupation}, for {specialist} assessment and management of {condition}."
+      ]
+    },
+    {
+      "id": "R07.6",
+      "section": "07",
+      "severity": "critical",
+      "title": "Urgent intro must contain 'urgent'",
+      "body": "Urgent referral: MUST contain the word 'urgent' — 'I am writing to urgently refer...' / 'I am writing to request urgent assessment of...'",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "checkId": "urgent_intro_contains_urgent"
+    },
+    {
+      "id": "R07.7",
+      "section": "07",
+      "severity": "critical",
+      "title": "Discharge: no patient identity in intro",
+      "body": "Discharge letter to GP: Do NOT describe patient identity in introduction — GP knows the patient.",
+      "appliesTo": [
+        "discharge"
+      ],
+      "checkId": "discharge_intro_no_identity"
+    },
+    {
+      "id": "R07.8",
+      "section": "07",
+      "severity": "info",
+      "title": "Discharge intro template",
+      "body": "Discharge introduction template: 'I am writing to update you regarding Mr Jones, who underwent [procedure] at [hospital] and is now ready for discharge, for whom I am requesting your ongoing care.'",
+      "appliesTo": [
+        "discharge"
+      ],
+      "exemplarPhrases": [
+        "I am writing to update you regarding {title} {lastName}, who underwent {procedure} at {hospital} and is now ready for discharge, for whom I am requesting your ongoing care."
+      ]
+    },
+    {
+      "id": "R07.9",
+      "section": "07",
+      "severity": "minor",
+      "title": "Appositive uses gentleman/lady",
+      "body": "Appositive clause: 'Ms Miller, a 25-year-old teacher, presented with...' — use 'gentleman' for males, 'lady' for females (not man/woman).",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R08.1",
+      "section": "08",
+      "severity": "critical",
+      "title": "Minimum 2 body paragraphs",
+      "body": "Minimum 2 body paragraphs. NEVER write the entire letter in one paragraph.",
+      "appliesTo": "all",
+      "checkId": "min_body_paragraphs",
+      "params": {
+        "min": 2
+      }
+    },
+    {
+      "id": "R08.2",
+      "section": "08",
+      "severity": "major",
+      "title": "Today's visit has its own paragraph",
+      "body": "Today's visit must always have its own paragraph. Exception: only one item of information today → may combine with adjacent visit.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R08.3",
+      "section": "08",
+      "severity": "critical",
+      "title": "Previous visits combined or summarised",
+      "body": "Previous visits may be combined or summarised. Do NOT give every visit its own paragraph.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R08.4",
+      "section": "08",
+      "severity": "info",
+      "title": "Subjective + Objective + Management",
+      "body": "Visit structure: Subjective (symptoms) + Objective (examination) + Management.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R08.5",
+      "section": "08",
+      "severity": "critical",
+      "title": "Urgent referral: body starts with today's visit",
+      "body": "Urgent referral: ALWAYS begin body with TODAY'S VISIT (most acute presentation), then background chronologically.",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "checkId": "urgent_body_starts_today"
+    },
+    {
+      "id": "R08.6",
+      "section": "08",
+      "severity": "minor",
+      "title": "Prefer elapsed time over exact dates",
+      "body": "Visit referencing: prefer elapsed time over exact dates — '3 months ago' preferred over the exact date.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R08.7",
+      "section": "08",
+      "severity": "critical",
+      "title": "Never 'next visit'",
+      "body": "Next visit reference: 'on the following visit' / 'later on' / 'later that month'. NEVER 'next visit'.",
+      "appliesTo": "all",
+      "checkId": "body_forbidden_phrase_next_visit",
+      "forbiddenPatterns": [
+        "\\bnext visit\\b"
+      ]
+    },
+    {
+      "id": "R08.8",
+      "section": "08",
+      "severity": "critical",
+      "title": "Never write today's date in body",
+      "body": "NEVER write today's date in the body. Use 'On today's visit' or 'On today's presentation' instead.",
+      "appliesTo": "all",
+      "checkId": "body_no_todays_date"
+    },
+    {
+      "id": "R08.9",
+      "section": "08",
+      "severity": "major",
+      "title": "No 'Yesterday'",
+      "body": "'Yesterday' never used in a medical letter. Write 'one day prior' or 'one day ago' instead.",
+      "appliesTo": "all",
+      "checkId": "body_forbidden_phrase_yesterday",
+      "forbiddenPatterns": [
+        "\\byesterday\\b"
+      ]
+    },
+    {
+      "id": "R08.10",
+      "section": "08",
+      "severity": "minor",
+      "title": "'Over the last X' starts a paragraph",
+      "body": "'Over the last [X time]': summarises multiple visits with the same complaint. Requires present perfect. Use only to START a paragraph.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R08.11",
+      "section": "08",
+      "severity": "major",
+      "title": "Duration adjective hyphenation",
+      "body": "Duration as adjective (before noun): hyphenate, no plural: 'a 6-month history of acne'. Duration standalone: plural: 'For 6 months, she has had acne.'",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R08.12",
+      "section": "08",
+      "severity": "minor",
+      "title": "Condition change vocabulary",
+      "body": "Condition unchanged: 'persisted' / 'remained unchanged'. Improved: 'there was partial improvement'. Worsened: 'deteriorated' / 'worsened'.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R08.13",
+      "section": "08",
+      "severity": "minor",
+      "title": "Advice vocabulary",
+      "body": "Advice: 'She was advised to adopt lifestyle changes.' / 'She was counselled regarding...' (never 'instructed to adopt').",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R08.14",
+      "section": "08",
+      "severity": "critical",
+      "title": "Never 'the patient'",
+      "body": "In body: last name + title only (Ms Miller). Never use full name again. Never use 'the patient'.",
+      "appliesTo": "all",
+      "checkId": "body_forbidden_phrase_the_patient",
+      "forbiddenPatterns": [
+        "\\bthe patient\\b"
+      ]
+    },
+    {
+      "id": "R08.15",
+      "section": "08",
+      "severity": "major",
+      "title": "Name vs pronoun pattern",
+      "body": "Name vs. Pronoun within paragraphs: Use the patient's name (title + last name for adults; first name for children) at the FIRST mention in each paragraph. For ALL subsequent mentions within the SAME paragraph, use a pronoun. At the start of EVERY new paragraph, use the name again.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R09.1",
+      "section": "09",
+      "severity": "info",
+      "title": "Standard closure phrases",
+      "body": "Standard phrases: 'I trust this information will be of use.' / 'Please do not hesitate to contact me should you require further information.'",
+      "appliesTo": "all",
+      "exemplarPhrases": [
+        "I trust this information will be of use.",
+        "Please do not hesitate to contact me should you require further information."
+      ]
+    },
+    {
+      "id": "R09.2",
+      "section": "09",
+      "severity": "critical",
+      "title": "Urgent closure: 'at your earliest convenience'",
+      "body": "Urgent closure MUST include 'at your earliest convenience.' Spelling: C-O-N-V-E-N-I-E-N-C-E.",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "checkId": "urgent_closure_phrase"
+    },
+    {
+      "id": "R09.3",
+      "section": "09",
+      "severity": "major",
+      "title": "Use 'urgent' once",
+      "body": "Use 'urgent' once in introduction only; use 'at your earliest convenience' in closure to imply urgency — do not repeat 'urgent' throughout.",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "checkId": "urgent_token_not_repeated"
+    },
+    {
+      "id": "R09.4",
+      "section": "09",
+      "severity": "critical",
+      "title": "Follow-up / review date must appear",
+      "body": "Follow-up / review date stated in case notes → ALWAYS mention in closure.",
+      "appliesTo": "all",
+      "checkId": "closure_mentions_review_if_required"
+    },
+    {
+      "id": "R09.5",
+      "section": "09",
+      "severity": "critical",
+      "title": "Enclosed results instead of dumping values",
+      "body": "Copy of results/imaging stated as enclosed → write 'Please find enclosed a copy of Mr [Name]'s pathology/imaging results.' Do NOT also list the values in the letter.",
+      "appliesTo": "all",
+      "checkId": "enclosure_results_phrase"
+    },
+    {
+      "id": "R09.6",
+      "section": "09",
+      "severity": "major",
+      "title": "Medication list attachment",
+      "body": "Copy of medication list attached → list medication names only (no doses).",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R09.7",
+      "section": "09",
+      "severity": "major",
+      "title": "Patient-initiated referral",
+      "body": "Patient-initiated referral → 'upon his/her request' or 'at Mr Jones' request' in introduction or closure.",
+      "appliesTo": "all",
+      "checkId": "closure_mentions_patient_request_if_flagged"
+    },
+    {
+      "id": "R09.8",
+      "section": "09",
+      "severity": "major",
+      "title": "Consent statement",
+      "body": "Consent in case notes → 'Please note that Mr Jones has been fully informed of his diagnosis and management.'",
+      "appliesTo": "all",
+      "checkId": "closure_mentions_consent_if_flagged"
+    },
+    {
+      "id": "R09.9",
+      "section": "09",
+      "severity": "major",
+      "title": "Blank line before closing phrase",
+      "body": "Always leave ONE blank line before 'Yours sincerely,' / 'Yours faithfully,'. The last body paragraph and the closing phrase must be separated by a blank line.",
+      "appliesTo": "all",
+      "checkId": "blank_before_closing_phrase"
+    },
+    {
+      "id": "R10.1",
+      "section": "10",
+      "severity": "info",
+      "title": "Intro tense options",
+      "body": "Introduction: present simple or present perfect (both acceptable).",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R10.2",
+      "section": "10",
+      "severity": "critical",
+      "title": "Visits = past simple",
+      "body": "All visits (today and previous): PAST SIMPLE. Safest choice; never wrong for visit content.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R10.3",
+      "section": "10",
+      "severity": "major",
+      "title": "Present perfect only if symptom persists",
+      "body": "Present perfect for a visit: acceptable only if the symptom is still present at time of writing. CANNOT use present perfect for vital signs.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R10.4",
+      "section": "10",
+      "severity": "major",
+      "title": "Ongoing facts = present simple",
+      "body": "Medical/social/family history — ongoing facts: present simple. 'She has hypertension.'",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R10.5",
+      "section": "10",
+      "severity": "critical",
+      "title": "'Since' + starting point = present perfect",
+      "body": "'Since' + starting point → present perfect: 'She has had hypertension since 2010.'",
+      "appliesTo": "all",
+      "checkId": "since_requires_present_perfect"
+    },
+    {
+      "id": "R10.6",
+      "section": "10",
+      "severity": "critical",
+      "title": "'For' + duration = present perfect",
+      "body": "'For' + duration → present perfect: 'She has had hypertension for 5 years.'",
+      "appliesTo": "all",
+      "checkId": "for_duration_requires_present_perfect"
+    },
+    {
+      "id": "R10.7",
+      "section": "10",
+      "severity": "major",
+      "title": "Smoking/drinking tense",
+      "body": "Smoking/drinking with duration → present perfect continuous: 'She has been smoking for 20 years.' Without duration → present simple: 'She smokes.'",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R10.8",
+      "section": "10",
+      "severity": "critical",
+      "title": "Surgery = past simple",
+      "body": "Resolved conditions and surgery → PAST SIMPLE. 'She had a cholecystectomy in 2018.' Never use present perfect for surgery.",
+      "appliesTo": "all",
+      "checkId": "surgery_past_simple"
+    },
+    {
+      "id": "R10.9",
+      "section": "10",
+      "severity": "minor",
+      "title": "'Over the last X' first sentence = present perfect",
+      "body": "'Over the last [X]': first sentence → present perfect; remaining sentences in same paragraph → past simple acceptable.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R10.10",
+      "section": "10",
+      "severity": "critical",
+      "title": "'X ago' = past simple",
+      "body": "'[X] ago' → always past simple. 'She has presented 3 weeks ago' = WRONG. 'She presented 3 weeks ago' = CORRECT.",
+      "appliesTo": "all",
+      "checkId": "ago_requires_past_simple"
+    },
+    {
+      "id": "R10.11",
+      "section": "10",
+      "severity": "minor",
+      "title": "Medical records present simple",
+      "body": "Medical records: 'Mr Jones' medical records reveal/show that he has [condition].' Use present simple for reveal/show.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R10.12",
+      "section": "10",
+      "severity": "major",
+      "title": "Avoid past perfect",
+      "body": "Past perfect (had + past participle): AVOID in OET. Alternative: ING form or noun.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R10.13",
+      "section": "10",
+      "severity": "major",
+      "title": "Reported speech uses ING or noun",
+      "body": "After reported/mentioned/stated/described: use ING or noun. 'She reported having headaches.' NOT '...that she had had headaches.'",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R10.14",
+      "section": "10",
+      "severity": "critical",
+      "title": "'Next visit' → 'on the following visit'",
+      "body": "'Next visit' in past narrative → 'on the following visit.' Never use 'next.'",
+      "appliesTo": "all",
+      "checkId": "body_forbidden_phrase_next_visit"
+    },
+    {
+      "id": "R11.1",
+      "section": "11",
+      "severity": "critical",
+      "title": "Translate Latin abbreviations",
+      "body": "Latin abbreviations MUST be translated: od/om → once a day; bd/bid → twice a day; tds/tid → three times a day; qds/qid → four times a day; stat → immediately; prn → as needed.",
+      "appliesTo": "all",
+      "checkId": "latin_abbreviations_translated",
+      "params": {
+        "map": {
+          "od": "once a day",
+          "om": "once a day",
+          "bd": "twice a day",
+          "bid": "twice a day",
+          "tds": "three times a day",
+          "tid": "three times a day",
+          "qds": "four times a day",
+          "qid": "four times a day",
+          "stat": "immediately",
+          "prn": "as needed"
+        }
+      }
+    },
+    {
+      "id": "R11.2",
+      "section": "11",
+      "severity": "minor",
+      "title": "Single medication format",
+      "body": "Single medication: Drug, dose. Example: 'Panadol, 500 mg.'",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R11.3",
+      "section": "11",
+      "severity": "minor",
+      "title": "Multiple medications format",
+      "body": "Multiple medications: Drug, dose; Drug, dose; and Drug, dose. (comma: drug-dose; semicolon: between pairs; 'and' before last drug.)",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R11.4",
+      "section": "11",
+      "severity": "minor",
+      "title": "Trade vs generic capitalisation",
+      "body": "Trade name: Capitalise (Panadol, Augmentin). Generic: lowercase (paracetamol, amoxicillin). Use one type consistently.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R11.5",
+      "section": "11",
+      "severity": "minor",
+      "title": "Routes conventions",
+      "body": "Routes: 'oral' in full (never 'PO'); IM, IV, SC, SL abbreviations acceptable. Route before drug: 'oral Panadol, 500 mg.'",
+      "appliesTo": "all",
+      "forbiddenPatterns": [
+        "\\bPO\\b"
+      ]
+    },
+    {
+      "id": "R11.6",
+      "section": "11",
+      "severity": "minor",
+      "title": "Elevated / reduced phrasing",
+      "body": "Elevated values: 'an elevation in glucose' / 'an increased glucose level' / 'elevated glucose.' Reduced: 'a reduction in glucose' / 'a decreased glucose level.' Do not write 'a glucose' alone.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R11.7",
+      "section": "11",
+      "severity": "minor",
+      "title": "Level article rules",
+      "body": "'Glucose level' can take article: 'an increased glucose level.' Plural modifier: no article: 'increased white cell counts.'",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R11.8",
+      "section": "11",
+      "severity": "critical",
+      "title": "Include numerical values with units",
+      "body": "Always include numerical values with units when given. Example: 'glucose of 7.8 mmol/L.' Never write the reference range.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R11.9",
+      "section": "11",
+      "severity": "minor",
+      "title": "'an MRI' / 'an X-ray'",
+      "body": "'an MRI' and 'an X-ray' — both take 'an' (initial vowel sound from letter name).",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R11.10",
+      "section": "11",
+      "severity": "minor",
+      "title": "Numerals with units",
+      "body": "Numerals with units always: '38.5°C', '180/110 mmHg', '500 mg.'",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R11.11",
+      "section": "11",
+      "severity": "minor",
+      "title": "Clinic scheduling fractions",
+      "body": "Clinic scheduling fractions: 1/4 = once a week; 1/12 = once a year; 3/52 = three times a year; 3/7 = three times a week; 8/24 = eight-hourly; 12/24 = twice a day.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.1",
+      "section": "12",
+      "severity": "critical",
+      "title": "No contractions",
+      "body": "NO contractions: 'do not' not 'don't'; 'I am' not 'I'm'; 'cannot' not 'can't'.",
+      "appliesTo": "all",
+      "checkId": "no_contractions"
+    },
+    {
+      "id": "R12.2",
+      "section": "12",
+      "severity": "critical",
+      "title": "Never 'patient' in body",
+      "body": "Never use the word 'patient' in the body. Use last name + title, or a pronoun.",
+      "appliesTo": "all",
+      "checkId": "body_forbidden_phrase_the_patient"
+    },
+    {
+      "id": "R12.3",
+      "section": "12",
+      "severity": "major",
+      "title": "No 'smoker/drinker' labels",
+      "body": "Never use 'smoker/drinker' as labels. Write 'she smokes' / 'she drinks alcohol.'",
+      "appliesTo": "all",
+      "forbiddenPatterns": [
+        "\\b(smoker|drinker)\\b"
+      ]
+    },
+    {
+      "id": "R12.4",
+      "section": "12",
+      "severity": "minor",
+      "title": "Replace colloquial terms",
+      "body": "Replace 'tired' with 'fatigue.' Replace 'bad' with 'poor' or 'inadequate.' No colloquial language.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.5",
+      "section": "12",
+      "severity": "critical",
+      "title": "Conditions lowercase",
+      "body": "Medical conditions: LOWERCASE. bronchial asthma, myocardial infarction, hypertension, gastroenteritis. Capitalising these is an error.",
+      "appliesTo": "all",
+      "checkId": "conditions_lowercase"
+    },
+    {
+      "id": "R12.6",
+      "section": "12",
+      "severity": "minor",
+      "title": "Eponymous diseases capitalised",
+      "body": "Named (eponymous) diseases: CAPITALS. Parkinson's, Crohn's, Alzheimer's, Graves', Doppler.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.7",
+      "section": "12",
+      "severity": "minor",
+      "title": "Trade names and abbreviations",
+      "body": "Trade medication names: capitalise. Bacteria: first word capital, second lowercase (Staphylococcus aureus). Abbreviations: all capitals (MRI, CT, ECG, A&E).",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.8",
+      "section": "12",
+      "severity": "minor",
+      "title": "Numbers 1–9 as words",
+      "body": "Numbers 1–9 in running text: write as words. Numbers 10+: numerals. Exception: always numerals with units ('500 mg').",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.9",
+      "section": "12",
+      "severity": "critical",
+      "title": "'However' punctuation",
+      "body": "'However': always preceded by semicolon; comma follows. Pattern: '[clause]; however, [clause].'",
+      "appliesTo": "all",
+      "checkId": "linker_however_punctuation"
+    },
+    {
+      "id": "R12.10",
+      "section": "12",
+      "severity": "major",
+      "title": "'Therefore' / 'Thus' punctuation",
+      "body": "'Therefore' / 'Thus': preceded by semicolon; comma follows. Pattern: '[clause]; therefore, [clause].'",
+      "appliesTo": "all",
+      "checkId": "linker_therefore_punctuation"
+    },
+    {
+      "id": "R12.11",
+      "section": "12",
+      "severity": "major",
+      "title": "'In addition' punctuation",
+      "body": "'In addition' (joining two complete clauses): semicolon before + comma after.",
+      "appliesTo": "all",
+      "checkId": "linker_in_addition_punctuation"
+    },
+    {
+      "id": "R12.12",
+      "section": "12",
+      "severity": "minor",
+      "title": "'In addition to' takes noun/ING",
+      "body": "'In addition to' / 'together with' / 'along with' / 'as well as': NO preceding punctuation; followed by noun or ING.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.13",
+      "section": "12",
+      "severity": "minor",
+      "title": "Proximity rule",
+      "body": "Proximity rule (negative sentence with 'or'): verb agrees with CLOSEST subject.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.14",
+      "section": "12",
+      "severity": "minor",
+      "title": "Reverse rule",
+      "body": "Reverse rule ('along with' / 'together with' / 'in addition to'): verb agrees with word BEFORE the linker.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.15",
+      "section": "12",
+      "severity": "minor",
+      "title": "Despite vs although",
+      "body": "'Despite' + noun/ING (not a full clause). 'Although' + full clause. Both acceptable.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.16",
+      "section": "12",
+      "severity": "minor",
+      "title": "'As' (because) comma",
+      "body": "'As' (meaning because) in mid-sentence: comma before.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.17",
+      "section": "12",
+      "severity": "minor",
+      "title": "'For which' comma",
+      "body": "'For which': comma before.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.18",
+      "section": "12",
+      "severity": "minor",
+      "title": "Coordinating adjectives",
+      "body": "Coordinating adjectives (same noun): comma between them.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.19",
+      "section": "12",
+      "severity": "major",
+      "title": "Sentence length 15–25 words",
+      "body": "Sentence length: 15–25 words target. Do not chain 3+ clauses. No comma splices.",
+      "appliesTo": "all",
+      "checkId": "sentence_length_guard",
+      "params": {
+        "minWords": 8,
+        "maxWords": 30
+      }
+    },
+    {
+      "id": "R12.20",
+      "section": "12",
+      "severity": "major",
+      "title": "Max 1–2 linkers per paragraph",
+      "body": "Max 1–2 linkers per paragraph. Excessive linkers reduce Conciseness and Clarity score.",
+      "appliesTo": "all",
+      "checkId": "linker_density",
+      "params": {
+        "maxPerParagraph": 2
+      }
+    },
+    {
+      "id": "R12.21",
+      "section": "12",
+      "severity": "minor",
+      "title": "Appositive commas",
+      "body": "Appositive: between two commas. Use 'gentleman' / 'lady' (not man/woman).",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R12.22",
+      "section": "12",
+      "severity": "major",
+      "title": "No patient labels",
+      "body": "Never label patients: 'anxious', 'non-compliant.' Write: 'she expressed concern about...' / 'he reported difficulty adhering to...'",
+      "appliesTo": "all",
+      "forbiddenPatterns": [
+        "\\b(non-compliant|noncompliant)\\b"
+      ]
+    },
+    {
+      "id": "R13.1",
+      "section": "13",
+      "severity": "info",
+      "title": "Three elements change for urgent",
+      "body": "Three elements change in an urgent referral: (1) Introduction contains 'urgent', (2) Closure contains 'at your earliest convenience', (3) Body starts with today's visit.",
+      "appliesTo": [
+        "urgent_referral"
+      ]
+    },
+    {
+      "id": "R13.2",
+      "section": "13",
+      "severity": "critical",
+      "title": "Urgent intro must contain 'urgent'",
+      "body": "Introduction MUST contain 'urgent'.",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "checkId": "urgent_intro_contains_urgent"
+    },
+    {
+      "id": "R13.3",
+      "section": "13",
+      "severity": "critical",
+      "title": "Urgent closure phrase",
+      "body": "Closure MUST include 'at your earliest convenience.' Do not repeat 'urgent' after the introduction.",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "checkId": "urgent_closure_phrase"
+    },
+    {
+      "id": "R13.4",
+      "section": "13",
+      "severity": "critical",
+      "title": "Urgent body starts today",
+      "body": "Body: ALWAYS start with TODAY'S VISIT (acute presentation), then background chronologically.",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "checkId": "urgent_body_starts_today"
+    },
+    {
+      "id": "R13.5",
+      "section": "13",
+      "severity": "major",
+      "title": "Urgent structure",
+      "body": "Structure: P1 = today's emergency. P2+ = background history. Final paragraph = active medical conditions + current medications.",
+      "appliesTo": [
+        "urgent_referral"
+      ]
+    },
+    {
+      "id": "R13.6",
+      "section": "13",
+      "severity": "critical",
+      "title": "Ongoing conditions on active meds must be mentioned",
+      "body": "Any ongoing medical condition with active medications MUST be mentioned, even if unrelated to the urgent issue.",
+      "appliesTo": [
+        "urgent_referral"
+      ]
+    },
+    {
+      "id": "R13.7",
+      "section": "13",
+      "severity": "major",
+      "title": "Exclude resolved conditions",
+      "body": "Fully resolved conditions with no current medications: do NOT include.",
+      "appliesTo": [
+        "urgent_referral"
+      ]
+    },
+    {
+      "id": "R13.8",
+      "section": "13",
+      "severity": "major",
+      "title": "Penicillin allergy conditional",
+      "body": "Penicillin allergy: include only if patient is receiving or needs antibiotics.",
+      "appliesTo": [
+        "urgent_referral"
+      ]
+    },
+    {
+      "id": "R13.9",
+      "section": "13",
+      "severity": "info",
+      "title": "Omit empty PMH paragraph",
+      "body": "No past medical history? Simply omit that paragraph.",
+      "appliesTo": [
+        "urgent_referral"
+      ]
+    },
+    {
+      "id": "R13.10",
+      "section": "13",
+      "severity": "critical",
+      "title": "'ASAP' → 'at your earliest convenience'",
+      "body": "'ASAP' in case notes → write 'at your earliest convenience' in the letter. Never write 'ASAP.'",
+      "appliesTo": "all",
+      "checkId": "no_asap_in_letter",
+      "forbiddenPatterns": [
+        "\\bASAP\\b"
+      ]
+    },
+    {
+      "id": "R13.11",
+      "section": "13",
+      "severity": "minor",
+      "title": "A&E and ED capitalised",
+      "body": "A&E and ED: always capitalised (A&E, ED, Emergency Department).",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R14.1",
+      "section": "14",
+      "severity": "info",
+      "title": "Hospital doctor → GP",
+      "body": "Written by hospital doctor to GP; updates GP on admission and discharge.",
+      "appliesTo": [
+        "discharge"
+      ]
+    },
+    {
+      "id": "R14.2",
+      "section": "14",
+      "severity": "critical",
+      "title": "Discharge intro template",
+      "body": "Introduction: 'I am writing to update you regarding Mr Jones, who underwent [procedure] at [hospital] and is now ready for discharge, for whom I am requesting your ongoing care.' NEVER use routine referral language.",
+      "appliesTo": [
+        "discharge"
+      ],
+      "checkId": "discharge_intro_template"
+    },
+    {
+      "id": "R14.3",
+      "section": "14",
+      "severity": "critical",
+      "title": "Discharge: no identity in intro",
+      "body": "Do NOT describe patient identity in introduction — GP knows the patient.",
+      "appliesTo": [
+        "discharge"
+      ],
+      "checkId": "discharge_intro_no_identity"
+    },
+    {
+      "id": "R14.4",
+      "section": "14",
+      "severity": "critical",
+      "title": "Discharge omits FH/SH/smoking/PMH/occupation",
+      "body": "Do NOT include: family history, social history, smoking/drinking, previous medical history, occupation. GP knows all of this.",
+      "appliesTo": [
+        "discharge"
+      ],
+      "checkId": "discharge_omits_knownto_gp"
+    },
+    {
+      "id": "R14.5",
+      "section": "14",
+      "severity": "major",
+      "title": "Discharge allergy exception",
+      "body": "Mention allergy only if it directly influenced treatment.",
+      "appliesTo": [
+        "discharge"
+      ]
+    },
+    {
+      "id": "R14.6",
+      "section": "14",
+      "severity": "critical",
+      "title": "Admission phrasing",
+      "body": "Admission: 'Mr Jones was admitted to [hospital] with [symptoms/condition].' Past simple. NEVER 'was presented' (incorrect passive).",
+      "appliesTo": [
+        "discharge"
+      ],
+      "checkId": "discharge_admitted_with_past_simple",
+      "forbiddenPatterns": [
+        "\\bwas presented\\b"
+      ]
+    },
+    {
+      "id": "R14.7",
+      "section": "14",
+      "severity": "critical",
+      "title": "Discharge plan is most important",
+      "body": "Discharge plan paragraph = most important. Must include: discharge medications with doses + post-discharge instructions.",
+      "appliesTo": [
+        "discharge"
+      ],
+      "checkId": "discharge_plan_present"
+    },
+    {
+      "id": "R14.8",
+      "section": "14",
+      "severity": "minor",
+      "title": "Discharge meds format",
+      "body": "Discharge medications: same format — Drug, dose; Drug, dose and Drug, dose.",
+      "appliesTo": [
+        "discharge"
+      ]
+    },
+    {
+      "id": "R14.9",
+      "section": "14",
+      "severity": "critical",
+      "title": "List all admission investigations (incl. normal)",
+      "body": "All investigations performed during admission (including normal results) MUST be listed with values.",
+      "appliesTo": [
+        "discharge"
+      ]
+    },
+    {
+      "id": "R14.10",
+      "section": "14",
+      "severity": "critical",
+      "title": "Follow-up dates mandatory in discharge",
+      "body": "Follow-up / review dates: ALWAYS include if stated in case notes.",
+      "appliesTo": [
+        "discharge"
+      ],
+      "checkId": "closure_mentions_review_if_required"
+    },
+    {
+      "id": "R14.11",
+      "section": "14",
+      "severity": "major",
+      "title": "Discharge consent",
+      "body": "Consent: 'Please note that Mr Jones has been fully informed of his diagnosis and management.'",
+      "appliesTo": [
+        "discharge"
+      ]
+    },
+    {
+      "id": "R14.12",
+      "section": "14",
+      "severity": "critical",
+      "title": "Treatment FOR, not FROM",
+      "body": "'Treatment FOR' not 'Treatment FROM.' Always: treated for, admitted for, referred for, managed for.",
+      "appliesTo": "all",
+      "checkId": "treatment_for_not_from",
+      "forbiddenPatterns": [
+        "\\b(treated|admitted|referred|managed) from\\b"
+      ]
+    },
+    {
+      "id": "R14.13",
+      "section": "14",
+      "severity": "major",
+      "title": "Discharge past tense throughout",
+      "body": "Past tense throughout (all events occurred during admission).",
+      "appliesTo": [
+        "discharge"
+      ]
+    },
+    {
+      "id": "R14.14",
+      "section": "14",
+      "severity": "major",
+      "title": "Enclose results reference",
+      "body": "Copy of results stated as enclosed → 'Please find enclosed a copy of Mr [Name]'s pathology results.' Do not list values.",
+      "appliesTo": [
+        "discharge"
+      ],
+      "checkId": "enclosure_results_phrase"
+    },
+    {
+      "id": "R15.1",
+      "section": "15",
+      "severity": "info",
+      "title": "Non-medical list",
+      "body": "Non-medical professionals: OT, physiotherapist, social worker, psychologist, dietitian, speech pathologist, pharmacist, care facility manager. Nurse is medical.",
+      "appliesTo": [
+        "non_medical_referral"
+      ]
+    },
+    {
+      "id": "R15.2",
+      "section": "15",
+      "severity": "critical",
+      "title": "Translate all jargon",
+      "body": "Do NOT use medical jargon. Translate: 'hypertension' → 'high blood pressure'; avoid abbreviations like 'BP' unless previously spelled out.",
+      "appliesTo": [
+        "non_medical_referral"
+      ],
+      "checkId": "non_medical_no_jargon"
+    },
+    {
+      "id": "R15.3",
+      "section": "15",
+      "severity": "major",
+      "title": "Non-medical salutation",
+      "body": "Salutation: Dear Sir/Madam (no name). Dear Mr/Ms [Last Name] (name given).",
+      "appliesTo": [
+        "non_medical_referral"
+      ]
+    },
+    {
+      "id": "R15.4",
+      "section": "15",
+      "severity": "major",
+      "title": "Non-medical content",
+      "body": "Include: condition in plain language, functional impact, specific professional request, relevant social context.",
+      "appliesTo": [
+        "non_medical_referral"
+      ]
+    },
+    {
+      "id": "R15.5",
+      "section": "15",
+      "severity": "minor",
+      "title": "Exclude out-of-scope details",
+      "body": "Exclude: medical details irrelevant to the professional's scope.",
+      "appliesTo": [
+        "non_medical_referral"
+      ]
+    },
+    {
+      "id": "R15.6",
+      "section": "15",
+      "severity": "minor",
+      "title": "Family dentist = specialist-style",
+      "body": "Family dentist: does NOT know the patient — treat like a specialist; include relevant background.",
+      "appliesTo": [
+        "non_medical_referral"
+      ]
+    },
+    {
+      "id": "R15.7",
+      "section": "15",
+      "severity": "critical",
+      "title": "Imperative plan items = for GP",
+      "body": "Imperative items in the plan = for GP. Items on the referral request line = for the specialist. Never ask the specialist to perform GP tasks.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R15.8",
+      "section": "15",
+      "severity": "major",
+      "title": "Mental health referral conventions",
+      "body": "Mental health referrals: correlate symptoms across visits; include review date; include consent statement if mentioned; include 'upon his/her request' if patient initiated.",
+      "appliesTo": [
+        "non_medical_referral"
+      ]
+    },
+    {
+      "id": "R16.1",
+      "section": "16",
+      "severity": "info",
+      "title": "Six marking criteria",
+      "body": "Six marking criteria: (1) Purpose — max 3 marks; (2) Content — max 7; (3) Conciseness & Clarity — max 7; (4) Genre & Style — max 7; (5) Organisation & Layout — max 7; (6) Language — max 7.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R16.2",
+      "section": "16",
+      "severity": "critical",
+      "title": "Purpose 0–3 scale only",
+      "body": "Purpose is the ONLY criterion scored 0–3. All others are scored 0–7.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R16.3",
+      "section": "16",
+      "severity": "critical",
+      "title": "Content + Conciseness dominate pass/fail",
+      "body": "Most heavily weighted for pass/fail: Content and Conciseness & Clarity.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R16.4",
+      "section": "16",
+      "severity": "major",
+      "title": "Genre and Style significant",
+      "body": "Genre and Style has significant impact on the overall result.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R16.5",
+      "section": "16",
+      "severity": "critical",
+      "title": "Language does not need to be perfect",
+      "body": "Language does not need to be perfect. Most OET failures result from poor content selection, not grammar errors.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R16.6",
+      "section": "16",
+      "severity": "info",
+      "title": "Target Band 6+",
+      "body": "Required score: approximately Band 6+ in most criteria; at least Band 2 out of 3 in Purpose.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R16.7",
+      "section": "16",
+      "severity": "critical",
+      "title": "Real-clinic test",
+      "body": "Examiner standard: 'Could this letter be sent in a real clinical setting?' Yes = pass. No = fail.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "R16.8",
+      "section": "16",
+      "severity": "info",
+      "title": "Assessment is holistic",
+      "body": "Assessment is holistic. Do not attempt to calculate an exact score.",
+      "appliesTo": "all"
+    }
+  ],
+  "tables": {
+    "letterTypes": [
+      "routine_referral",
+      "urgent_referral",
+      "discharge",
+      "transfer",
+      "non_medical_referral",
+      "specialist_to_gp"
+    ],
+    "urgentMarkers": [
+      "urgent",
+      "admit to hospital",
+      "hospital admission",
+      "acute management",
+      "ASAP",
+      "as soon as possible",
+      "acutely unwell",
+      "immediate assessment"
+    ],
+    "cancerMarkers": [
+      "suspected cancer",
+      "suspicious lesion",
+      "?malignancy",
+      "query malignancy",
+      "rule out malignancy",
+      "abnormal mass",
+      "biopsy suspicious"
+    ],
+    "atopicMarkers": [
+      "asthma",
+      "eczema",
+      "hay fever",
+      "atopic",
+      "allergic rhinitis"
+    ],
+    "latinAbbreviations": {
+      "od": "once a day",
+      "om": "once a day",
+      "bd": "twice a day",
+      "bid": "twice a day",
+      "tds": "three times a day",
+      "tid": "three times a day",
+      "qds": "four times a day",
+      "qid": "four times a day",
+      "stat": "immediately",
+      "prn": "as needed",
+      "ASAP": "at your earliest convenience"
+    },
+    "namingMatrix": {
+      "adult": {
+        "reLine": "Title + full name (e.g. Re: Ms Sara Miller D.O.B: 01/01/1984)",
+        "bodyFirstMention": "Title + last name (e.g. Ms Miller presented with...)",
+        "bodySameParagraph": "Pronoun (she/he/her/his)",
+        "bodyNextParagraph": "Title + last name again"
+      },
+      "child": {
+        "ageRange": "Day 1 – 17 years",
+        "reLine": "Full name only, NO title (e.g. Re: Sara Miller D.O.B: 01/01/2015)",
+        "bodyFirstMention": "First name only (e.g. Sara presented with...)",
+        "bodySameParagraph": "Pronoun (she/he/her/his)",
+        "bodyNextParagraph": "First name again",
+        "never": "Never write 'Master' for boys."
+      }
+    },
+    "ageHandling": {
+      "dobOnly": {
+        "reLine": "Re: Ms Sara Miller D.O.B: 01/01/1984",
+        "intro": "Age optional"
+      },
+      "ageOnly": {
+        "reLine": "Re: Ms Sara Miller, aged 40 (lowercase 'aged', no colon, no 'Age:' prefix)",
+        "intro": "Do NOT repeat age"
+      },
+      "both": {
+        "reLine": "Re: Ms Sara Miller D.O.B: 01/01/1984",
+        "intro": "Age optional"
+      }
+    },
+    "letterSkeleton": [
+      "Address",
+      "[blank line]",
+      "Date",
+      "[blank line]",
+      "Salutation",
+      "Re: line (no blank line above)",
+      "[blank line]",
+      "Introduction",
+      "[blank line]",
+      "Body paragraphs (one blank line between each, 2–4 total)",
+      "[blank line]",
+      "Closure",
+      "[blank line]",
+      "Yours sincerely, / Yours faithfully,",
+      "[1–2 blank lines]",
+      "Doctor"
+    ],
+    "linkerPunctuation": {
+      "however": {
+        "preceding": ";",
+        "following": ","
+      },
+      "therefore": {
+        "preceding": ";",
+        "following": ","
+      },
+      "thus": {
+        "preceding": ";",
+        "following": ","
+      },
+      "in addition": {
+        "preceding": ";",
+        "following": ","
+      },
+      "in addition to": {
+        "preceding": null,
+        "following": "noun/ING"
+      },
+      "together with": {
+        "preceding": null,
+        "following": "noun/ING"
+      },
+      "along with": {
+        "preceding": null,
+        "following": "noun/ING"
+      },
+      "as well as": {
+        "preceding": null,
+        "following": "noun/ING"
+      },
+      "as (=because)": {
+        "preceding": ",",
+        "following": null
+      },
+      "for which": {
+        "preceding": ",",
+        "following": null
+      }
+    }
+  },
+  "professionSpecific": {
+    "label": "Nursing",
+    "typicalRecipients": [
+      "Charge Nurse",
+      "Nurse Manager",
+      "Nurse Unit Manager",
+      "GP",
+      "Specialist Nurse"
+    ],
+    "primaryLetterTypes": [
+      "referral",
+      "transfer",
+      "discharge"
+    ],
+    "notes": "Letters are typically nurse-to-nurse handovers, transfers, or referrals to GP. Handover detail and care plan continuity are weighted heavily."
+  }
+}

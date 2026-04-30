@@ -1,0 +1,61 @@
+{
+  "id": "writing-drill-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "medicine",
+  "letterType": "referral",
+  "title": "Abbreviations — Expand or Keep for the Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "a1",
+      "abbreviation": "PRN",
+      "context": "Writing to a community pharmacist",
+      "expected": "keep",
+      "expansion": "as needed",
+      "rationale": "PRN is universally understood by pharmacists."
+    },
+    {
+      "id": "a2",
+      "abbreviation": "COPD",
+      "context": "Writing a letter directly to the patient",
+      "expected": "expand",
+      "expansion": "chronic obstructive pulmonary disease",
+      "rationale": "Patient may not recognise the abbreviation."
+    },
+    {
+      "id": "a3",
+      "abbreviation": "NKDA",
+      "context": "Writing to a school nurse with no medical training",
+      "expected": "expand",
+      "expansion": "no known drug allergies",
+      "rationale": "School nurse role is lay; expand for clarity."
+    },
+    {
+      "id": "a4",
+      "abbreviation": "MI",
+      "context": "Writing to a cardiology specialist",
+      "expected": "keep",
+      "expansion": "myocardial infarction",
+      "rationale": "MI is standard between medical professionals."
+    },
+    {
+      "id": "a5",
+      "abbreviation": "BD",
+      "context": "Writing to a non-medical occupational therapist",
+      "expected": "expand",
+      "expansion": "twice daily",
+      "rationale": "Latin dose abbreviations should be expanded for non-medical readers."
+    },
+    {
+      "id": "a6",
+      "abbreviation": "Hx",
+      "context": "Writing to a hospital social worker",
+      "expected": "expand",
+      "expansion": "history",
+      "rationale": "Casual clinical shorthand — never appropriate in formal OET letters."
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "id": "writing-drill-opening-001",
+  "type": "opening",
+  "profession": "medicine",
+  "letterType": "referral",
+  "title": "Opening — Routine Referral to Cardiologist",
+  "brief": "Pick the strongest opening sentence for a routine referral of Mr James Patel (58) with newly diagnosed atrial fibrillation to Dr Sara Kim, consultant cardiologist.",
+  "difficulty": "core",
+  "estimatedMinutes": 3,
+  "rulebookRefs": ["R07.1", "R07.2"],
+  "scenario": {
+    "patient": "Mr James Patel, 58",
+    "writerRole": "General Practitioner",
+    "recipientRole": "Consultant Cardiologist",
+    "purpose": "Routine referral for assessment and management of newly diagnosed atrial fibrillation"
+  },
+  "choices": [
+    {
+      "id": "c1",
+      "text": "I am writing to refer Mr James Patel, a 58-year-old man with newly diagnosed atrial fibrillation, for your assessment and management.",
+      "quality": "best",
+      "rationale": "States the purpose immediately, identifies patient, names the diagnosis, and tells the cardiologist what is requested.",
+      "flags": []
+    },
+    {
+      "id": "c2",
+      "text": "Mr James Patel is a 58-year-old gentleman who has been registered at this practice for many years and recently developed an irregular heartbeat.",
+      "quality": "acceptable",
+      "rationale": "Patient-first opening; the purpose is delayed and the practice-history detail is irrelevant.",
+      "flags": ["unclear_purpose"]
+    },
+    {
+      "id": "c3",
+      "text": "Hi Sara, hope you are well — could you take a quick look at this patient when you get a moment?",
+      "quality": "weak",
+      "rationale": "Informal salutation, no patient identification, no diagnosis, no clear request.",
+      "flags": ["informal_tone", "unclear_purpose", "wrong_reader"]
+    },
+    {
+      "id": "c4",
+      "text": "Pt 58M new AF. Plz assess + start anticoag.",
+      "quality": "weak",
+      "rationale": "Note form is forbidden in OET letters; abbreviations and missing articles fail Genre/Style and Language.",
+      "flags": ["note_form", "informal_tone"]
+    }
+  ]
+}

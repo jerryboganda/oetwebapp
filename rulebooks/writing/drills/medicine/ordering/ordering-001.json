@@ -1,0 +1,39 @@
+{
+  "id": "writing-drill-ordering-001",
+  "type": "ordering",
+  "profession": "medicine",
+  "letterType": "referral",
+  "title": "Ordering — Discharge Letter to GP (Pneumonia)",
+  "brief": "Drag the paragraphs into the order a GP would expect when receiving a discharge letter following a hospital admission for community-acquired pneumonia.",
+  "difficulty": "core",
+  "estimatedMinutes": 4,
+  "rulebookRefs": ["R04.1", "R08.1", "R09.1"],
+  "items": [
+    {
+      "id": "open",
+      "text": "I am writing to update you on Mr Daniel Owens, a 71-year-old gentleman who was discharged from our care today following treatment for community-acquired pneumonia.",
+      "role": "opening"
+    },
+    {
+      "id": "current",
+      "text": "On admission, Mr Owens reported a five-day history of productive cough, fever, and increasing breathlessness. Examination revealed coarse crackles in the right base, oxygen saturation of 91% on air, and a CRP of 184 mg/L. A chest X-ray confirmed right lower-lobe consolidation, and he was admitted for intravenous antibiotic therapy.",
+      "role": "current"
+    },
+    {
+      "id": "history",
+      "text": "His relevant background includes hypertension and well-controlled type 2 diabetes. He is a lifelong non-smoker, drinks alcohol within recommended limits, and lives independently with his wife.",
+      "role": "history"
+    },
+    {
+      "id": "request",
+      "text": "Please review Mr Owens at one week to ensure ongoing clinical improvement and to repeat his FBC, U&E, and CRP. He has been discharged on oral amoxicillin to complete a seven-day course; antihypertensive and diabetic medications are unchanged.",
+      "role": "request"
+    },
+    {
+      "id": "closing",
+      "text": "Should you require any further information, please do not hesitate to contact me. Thank you for your continued care of Mr Owens.",
+      "role": "closing"
+    }
+  ],
+  "expectedOrder": ["open", "current", "history", "request", "closing"]
+}

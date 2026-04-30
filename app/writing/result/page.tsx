@@ -135,6 +135,41 @@ export default function WritingResultSummary() {
         ) : null}
 
         <MotionSection delayIndex={3}>
+          <Card className="border-border bg-surface p-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-primary">Correction workflow</p>
+                <h2 className="mt-2 text-xl font-black text-navy">Use feedback as a rewrite cycle, not as a final score</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
+                  The writing module follows the intended teacher-correction path: review the six criteria, inspect anchored comments, rewrite the letter in learning mode, then request tutor review for final readiness decisions.
+                </p>
+              </div>
+              <Badge variant={result.isOfficialScore ? 'success' : 'warning'} size="sm">
+                {result.isOfficialScore ? 'Official score' : 'Practice estimate'}
+              </Badge>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-border bg-background-light p-4">
+                <BarChart3 className="h-5 w-5 text-primary" />
+                <h3 className="mt-3 text-sm font-bold text-navy">1. Inspect criteria</h3>
+                <p className="mt-1 text-xs leading-5 text-muted">Read the criterion breakdown before changing the letter, especially Purpose, Content, and Conciseness.</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-background-light p-4">
+                <Edit3 className="h-5 w-5 text-primary" />
+                <h3 className="mt-3 text-sm font-bold text-navy">2. Rewrite in learning mode</h3>
+                <p className="mt-1 text-xs leading-5 text-muted">Use guided drafting, word-count warnings, and rulebook support to produce a better second version.</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-background-light p-4">
+                <Star className="h-5 w-5 text-primary" />
+                <h3 className="mt-3 text-sm font-bold text-navy">3. Request tutor review</h3>
+                <p className="mt-1 text-xs leading-5 text-muted">Use human review for borderline readiness, paid corrections, and final academy decisions.</p>
+              </div>
+            </div>
+          </Card>
+        </MotionSection>
+
+        <MotionSection delayIndex={4}>
           <Card className="border-border bg-surface p-8 text-center">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-border">
               <div className="flex flex-col items-center justify-center pt-4 md:pt-0">
@@ -167,7 +202,7 @@ export default function WritingResultSummary() {
         />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <MotionSection delayIndex={4}>
+          <MotionSection delayIndex={5}>
             <Card className="border-border bg-surface p-6">
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-8 h-8 rounded-full bg-success/10 flex items-center justify-center shrink-0">
@@ -185,7 +220,7 @@ export default function WritingResultSummary() {
               </ul>
             </Card>
           </MotionSection>
-          <MotionSection delayIndex={5}>
+          <MotionSection delayIndex={6}>
             <Card className="border-border bg-surface p-6">
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-8 h-8 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
@@ -205,16 +240,16 @@ export default function WritingResultSummary() {
           </MotionSection>
         </div>
 
-        <MotionSection delayIndex={6} className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-8">
+        <MotionSection delayIndex={7} className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-8">
           <Link href={`/writing/feedback?id=${resultId}`} className="group rounded-2xl border border-primary/20 bg-primary px-4 py-5 text-center text-white transition-all shadow-sm hover:bg-primary/90 hover:shadow-md">
             <BarChart3 className="w-6 h-6 mb-2 opacity-80 group-hover:opacity-100 transition-opacity" />
             <span className="font-bold">View Detailed Feedback</span>
             <span className="text-xs text-info mt-1">See criterion breakdown</span>
           </Link>
-          <Link href={`/writing/player?taskId=${result.taskId}`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-all shadow-sm hover:border-primary/30 hover:shadow-md">
+          <Link href={`/writing/player?taskId=${result.taskId}&mode=learning`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-all shadow-sm hover:border-primary/30 hover:shadow-md">
             <Edit3 className="w-6 h-6 mb-2 text-muted/60 group-hover:text-primary transition-colors" />
             <span className="font-bold group-hover:text-primary transition-colors">Revise Submission</span>
-            <span className="text-xs text-muted mt-1">Try improving your response</span>
+            <span className="text-xs text-muted mt-1">Rewrite with learning support</span>
           </Link>
           <Link href={`/writing/expert-request?id=${resultId}`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-all shadow-sm hover:border-warning/30 hover:shadow-md">
             <Star className="w-6 h-6 mb-2 text-muted/60 group-hover:text-warning transition-colors" />

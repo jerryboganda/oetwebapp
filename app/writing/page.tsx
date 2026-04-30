@@ -359,6 +359,49 @@ export default function WritingHome() {
 
               {activeTab === 'drills' && (
                 <motion.div key="drills" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-border">
+                  <Link
+                    href="/writing/drills"
+                    className="block p-5 hover:bg-background-light transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Layers className="w-4 h-4 text-primary" />
+                          <h3 className="font-bold text-navy group-hover:text-primary transition-colors">
+                            Skill drills library
+                          </h3>
+                          <Badge variant="info" size="sm">New</Badge>
+                        </div>
+                        <p className="text-sm text-muted max-w-2xl">
+                          Practice the underlying writing skills — case-note selection, opening
+                          purpose, paragraph order, sentence expansion, formal tone, and
+                          abbreviations.
+                        </p>
+                      </div>
+                      <ArrowRight className="w-5 h-5 text-muted group-hover:text-primary" aria-hidden />
+                    </div>
+                  </Link>
+                  <Link
+                    href="/writing/analytics"
+                    className="block p-5 hover:bg-background-light transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Target className="w-4 h-4 text-amber-500" />
+                          <h3 className="font-bold text-navy group-hover:text-primary transition-colors">
+                            Weakness analytics
+                          </h3>
+                          <Badge variant="info" size="sm">New</Badge>
+                        </div>
+                        <p className="text-sm text-muted max-w-2xl">
+                          See exactly where you keep losing marks across drills, rewrites and
+                          expert feedback — pick the next thing to practise.
+                        </p>
+                      </div>
+                      <ArrowRight className="w-5 h-5 text-muted group-hover:text-primary" aria-hidden />
+                    </div>
+                  </Link>
                   {criterionDrillLibrary.length > 0 ? (
                     criterionDrillLibrary.map((drill, index) => (
                       <div

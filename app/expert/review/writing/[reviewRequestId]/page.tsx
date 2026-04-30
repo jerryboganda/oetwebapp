@@ -14,6 +14,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchWritingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertWritingReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useExpertStore } from '@/lib/stores/expert-store';
+import { paletteFor, WRITING_CRITERIA_ORDER } from '@/lib/writing-criterion-colors';
 import type { AnchoredComment, ExpertChecklistItem, ExpertLearnerReviewContext, ExpertReviewHistory, ExpertSavedDraft, WritingCriterionKey, WritingReviewDetail } from '@/lib/types/expert';
 
 type AsyncStatus = 'loading' | 'error' | 'partial' | 'success';
@@ -122,6 +123,7 @@ export default function WritingReviewWorkspace() {
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
   const [anchoredComments, setAnchoredComments] = useState<AnchoredComment[]>([]);
   const [selectedText, setSelectedText] = useState<{ text: string; start: number; end: number } | null>(null);
+  const [pendingCriterion, setPendingCriterion] = useState<WritingCriterionKey | undefined>(undefined);
   const [draftVersion, setDraftVersion] = useState<number | undefined>(undefined);
   const [isDirty, setIsDirty] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
@@ -396,7 +398,7 @@ export default function WritingReviewWorkspace() {
     setSelectedText({ text: selection.toString(), start: startOffset, end: endOffset });
   };
 
-  const addAnchoredComment = (commentText: string) => {
+  const addAnchoredComment = (commentText: string, criterion?: WritingCriterionKey) => {
     if (!selectedText || !commentText.trim()) return;
     const comment: AnchoredComment = {
       id: `ac-${Date.now()}`,
@@ -404,9 +406,16 @@ export default function WritingReviewWorkspace() {
       startOffset: selectedText.start,
       endOffset: selectedText.end,
       createdAt: new Date().toISOString(),
+      ...(criterion ? { criterion } : {}),
     };
     setAnchoredComments((current) => [...current, comment]);
+    analytics.track('writing_expert_annotation_added', {
+      reviewRequestId,
+      criterion: criterion ?? 'general',
+      length: comment.text.length,
+    });
     setSelectedText(null);
+    setPendingCriterion(undefined);
     setIsDirty(true);
     window.getSelection()?.removeAllRanges();
   };
@@ -450,6 +459,24 @@ export default function WritingReviewWorkspace() {
                 <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-xs text-blue-700 mb-2 flex items-center gap-1"><MessageSquare className="w-3 h-3" /> Add comment for selected text:</p>
                   <p className="text-xs text-muted italic mb-2 truncate">&ldquo;{selectedText.text.slice(0, 80)}{selectedText.text.length > 80 ? '...' : ''}&rdquo;</p>
+                  <div className="mb-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Tag this comment with an OET criterion">
+                    {WRITING_CRITERIA_ORDER.map((key) => {
+                      const palette = paletteFor(key);
+                      const active = pendingCriterion === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => setPendingCriterion(active ? undefined : key)}
+                          className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${palette.bgClass} ${palette.borderClass} ${palette.textClass} ${active ? 'ring-2 ring-primary/40 shadow-sm' : 'opacity-80 hover:opacity-100'}`}
+                        >
+                          {palette.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -457,14 +484,14 @@ export default function WritingReviewWorkspace() {
                       className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/30"
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') {
-                          addAnchoredComment((event.target as HTMLInputElement).value);
+                          addAnchoredComment((event.target as HTMLInputElement).value, pendingCriterion);
                           (event.target as HTMLInputElement).value = '';
                         }
                       }}
                       aria-label="Anchored comment text"
                     />
-                    <Button size="sm" onClick={(event) => { const input = (event.currentTarget.previousElementSibling as HTMLInputElement | null); addAnchoredComment(input?.value ?? ''); if (input) input.value = ''; }}>Add</Button>
-                    <Button size="sm" variant="outline" onClick={() => setSelectedText(null)}>Cancel</Button>
+                    <Button size="sm" onClick={(event) => { const input = (event.currentTarget.previousElementSibling as HTMLInputElement | null); addAnchoredComment(input?.value ?? '', pendingCriterion); if (input) input.value = ''; }}>Add</Button>
+                    <Button size="sm" variant="outline" onClick={() => { setSelectedText(null); setPendingCriterion(undefined); }}>Cancel</Button>
                   </div>
                 </div>
               )}
@@ -472,14 +499,27 @@ export default function WritingReviewWorkspace() {
               {anchoredComments.length > 0 && (
                 <div className="mt-4 space-y-2">
                   <h4 className="text-xs font-semibold text-muted uppercase tracking-wide">Anchored Comments ({anchoredComments.length})</h4>
-                  {anchoredComments.map((comment) => (
-                    <div key={comment.id} className="p-2 bg-yellow-50 border border-yellow-200 rounded text-sm flex justify-between items-start gap-3">
-                      <p className="text-navy">{comment.text}</p>
-                      {!workspaceMeta?.isReadOnly && (
-                        <button onClick={() => { setAnchoredComments((current) => current.filter((item) => item.id !== comment.id)); setIsDirty(true); }} className="text-muted hover:text-error text-xs shrink-0" aria-label="Remove comment">&times;</button>
-                      )}
-                    </div>
-                  ))}
+                  {anchoredComments.map((comment) => {
+                    const palette = paletteFor(comment.criterion);
+                    return (
+                      <div
+                        key={comment.id}
+                        className={`p-2 rounded text-sm flex justify-between items-start gap-3 border ${palette.bgClass} ${palette.borderClass}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-1 flex items-center gap-2">
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${palette.bgClass} ${palette.borderClass} ${palette.textClass}`}>
+                              {palette.label}
+                            </span>
+                          </div>
+                          <p className="text-navy">{comment.text}</p>
+                        </div>
+                        {!workspaceMeta?.isReadOnly && (
+                          <button onClick={() => { setAnchoredComments((current) => current.filter((item) => item.id !== comment.id)); setIsDirty(true); }} className="text-muted hover:text-error text-xs shrink-0" aria-label="Remove comment">&times;</button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </TabPanel>

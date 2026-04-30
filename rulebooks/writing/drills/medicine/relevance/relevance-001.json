@@ -1,0 +1,117 @@
+{
+  "id": "writing-drill-relevance-001",
+  "type": "relevance",
+  "profession": "medicine",
+  "letterType": "referral",
+  "title": "Relevance — Routine Referral to Gastroenterologist",
+  "brief": "You are a GP referring Mrs Helen Carr (62) to a gastroenterologist for assessment and management of suspected IBS with possible bile-acid diarrhoea. Decide which case notes the specialist actually needs.",
+  "difficulty": "core",
+  "estimatedMinutes": 6,
+  "rulebookRefs": ["R03.2", "R03.3", "R03.4", "R03.6", "R03.8"],
+  "scenario": {
+    "patient": "Mrs Helen Carr, 62",
+    "writerRole": "General Practitioner",
+    "recipientRole": "Gastroenterologist",
+    "purpose": "Further investigation and definitive diagnosis of suspected IBS / bile-acid diarrhoea"
+  },
+  "notes": [
+    {
+      "id": "n01",
+      "category": "Presenting complaint",
+      "text": "6-month history of intermittent loose stools, post-prandial cramping, urgency.",
+      "expected": "relevant",
+      "rationale": "Core presenting complaint — defines the referral question."
+    },
+    {
+      "id": "n02",
+      "category": "Presenting complaint",
+      "text": "No PR bleeding, no nocturnal diarrhoea, no weight loss.",
+      "expected": "relevant",
+      "rationale": "Negative red-flag screen — gastroenterologist needs this to triage."
+    },
+    {
+      "id": "n03",
+      "category": "PMH",
+      "text": "Cholecystectomy 2019.",
+      "expected": "relevant",
+      "rationale": "Surgical history directly relevant to suspected bile-acid diarrhoea."
+    },
+    {
+      "id": "n04",
+      "category": "PMH",
+      "text": "Childhood tonsillectomy age 8.",
+      "expected": "irrelevant",
+      "rationale": "Distant, unrelated paediatric surgery — exclude."
+    },
+    {
+      "id": "n05",
+      "category": "Medications",
+      "text": "Metformin 500 mg BD; loperamide PRN.",
+      "expected": "relevant",
+      "rationale": "Loperamide is symptom-modifying; metformin can cause diarrhoea — both must be stated."
+    },
+    {
+      "id": "n06",
+      "category": "Allergy",
+      "text": "Penicillin — rash.",
+      "expected": "optional",
+      "rationale": "Allergy is required for atopic conditions; here it is borderline — either choice is defensible."
+    },
+    {
+      "id": "n07",
+      "category": "Social",
+      "text": "Smokes 5 cigarettes/day; drinks 2 units wine on weekends.",
+      "expected": "relevant",
+      "rationale": "Smoking and drinking are always included for medical recipients (Rule R03.4)."
+    },
+    {
+      "id": "n08",
+      "category": "Social",
+      "text": "Owns a Persian cat called Whiskers.",
+      "expected": "irrelevant",
+      "rationale": "Pet name is irrelevant to a gastroenterology referral."
+    },
+    {
+      "id": "n09",
+      "category": "Social",
+      "text": "Married, 3 adult children, lives independently.",
+      "expected": "irrelevant",
+      "rationale": "Family/living situation irrelevant unless directly affecting management."
+    },
+    {
+      "id": "n10",
+      "category": "Family history",
+      "text": "Father — type 2 diabetes; mother — hypertension.",
+      "expected": "irrelevant",
+      "rationale": "No GI family history — not relevant to this referral."
+    },
+    {
+      "id": "n11",
+      "category": "Examination",
+      "text": "Abdomen soft, non-tender, no masses, normal bowel sounds.",
+      "expected": "relevant",
+      "rationale": "Reassuring abdominal exam — relevant to triage."
+    },
+    {
+      "id": "n12",
+      "category": "Investigations",
+      "text": "FBC, U&E, LFTs, TFTs, coeliac screen, FIT — all normal.",
+      "expected": "relevant",
+      "rationale": "Already-completed work-up the specialist must not duplicate."
+    },
+    {
+      "id": "n13",
+      "category": "Investigations",
+      "text": "Random urinalysis 2014 — trace protein, repeat normal.",
+      "expected": "irrelevant",
+      "rationale": "Old, irrelevant urine result — exclude."
+    },
+    {
+      "id": "n14",
+      "category": "Plan",
+      "text": "Refer for further investigation; consider SeHCAT scan and colonoscopy.",
+      "expected": "relevant",
+      "rationale": "States the referral request — must be in the closing paragraph."
+    }
+  ]
+}

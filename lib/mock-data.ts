@@ -56,6 +56,19 @@ export interface WritingTask {
   criteriaFocus: string;
   scenarioType: string;
   caseNotes: string;
+  letterType?: string;
+  scenario?: string;
+  taskDate?: string;
+  writerRole?: string;
+  recipient?: string;
+  purpose?: string;
+  status?: string;
+  targetWordRange?: {
+    min: number;
+    max: number;
+    warningMin: number;
+    warningMax: number;
+  };
 }
 
 export interface ChecklistItem {

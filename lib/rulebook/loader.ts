@@ -9,6 +9,17 @@
  */
 
 import writingMedicineV1 from '../../rulebooks/writing/medicine/rulebook.v1.json';
+import writingNursingV1 from '../../rulebooks/writing/nursing/rulebook.v1.json';
+import writingDentistryV1 from '../../rulebooks/writing/dentistry/rulebook.v1.json';
+import writingPharmacyV1 from '../../rulebooks/writing/pharmacy/rulebook.v1.json';
+import writingPhysiotherapyV1 from '../../rulebooks/writing/physiotherapy/rulebook.v1.json';
+import writingVeterinaryV1 from '../../rulebooks/writing/veterinary/rulebook.v1.json';
+import writingOptometryV1 from '../../rulebooks/writing/optometry/rulebook.v1.json';
+import writingRadiographyV1 from '../../rulebooks/writing/radiography/rulebook.v1.json';
+import writingOccupationalTherapyV1 from '../../rulebooks/writing/occupational-therapy/rulebook.v1.json';
+import writingSpeechPathologyV1 from '../../rulebooks/writing/speech-pathology/rulebook.v1.json';
+import writingPodiatryV1 from '../../rulebooks/writing/podiatry/rulebook.v1.json';
+import writingDieteticsV1 from '../../rulebooks/writing/dietetics/rulebook.v1.json';
 import speakingMedicineV1 from '../../rulebooks/speaking/medicine/rulebook.v1.json';
 import grammarMedicineV1 from '../../rulebooks/grammar/medicine/rulebook.v1.json';
 import grammarNursingV1 from '../../rulebooks/grammar/nursing/rulebook.v1.json';
@@ -30,6 +41,17 @@ type RulebookKey = `${RuleKind}:${ExamProfession}`;
 // profession's rulebook (e.g. writing/nursing/rulebook.v1.json).
 const RULEBOOKS: Record<string, Rulebook> = {
   'writing:medicine': writingMedicineV1 as unknown as Rulebook,
+  'writing:nursing': writingNursingV1 as unknown as Rulebook,
+  'writing:dentistry': writingDentistryV1 as unknown as Rulebook,
+  'writing:pharmacy': writingPharmacyV1 as unknown as Rulebook,
+  'writing:physiotherapy': writingPhysiotherapyV1 as unknown as Rulebook,
+  'writing:veterinary': writingVeterinaryV1 as unknown as Rulebook,
+  'writing:optometry': writingOptometryV1 as unknown as Rulebook,
+  'writing:radiography': writingRadiographyV1 as unknown as Rulebook,
+  'writing:occupational-therapy': writingOccupationalTherapyV1 as unknown as Rulebook,
+  'writing:speech-pathology': writingSpeechPathologyV1 as unknown as Rulebook,
+  'writing:podiatry': writingPodiatryV1 as unknown as Rulebook,
+  'writing:dietetics': writingDieteticsV1 as unknown as Rulebook,
   'speaking:medicine': speakingMedicineV1 as unknown as Rulebook,
   'grammar:medicine': grammarMedicineV1 as unknown as Rulebook,
   'grammar:nursing': grammarNursingV1 as unknown as Rulebook,

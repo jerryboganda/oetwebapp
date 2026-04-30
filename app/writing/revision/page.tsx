@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   ChevronLeft,
   ArrowRight,
@@ -13,6 +13,7 @@ import { useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { RevisionDiffViewer } from '@/components/domain/revision-diff-viewer';
+import { WritingImprovementBanner } from '@/components/domain/writing-improvement-banner';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,6 +21,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { fetchWritingRevisionData } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { CriteriaDelta } from '@/lib/mock-data';
+import { computeImprovementScore } from '@/lib/writing-revision/improvement-score';
 
 export default function WritingRevisionMode() {
   const searchParams = useSearchParams();
@@ -30,6 +32,11 @@ export default function WritingRevisionMode() {
   const [unresolvedIssues, setUnresolvedIssues] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const improvement = useMemo(
+    () => computeImprovementScore({ deltas, unresolvedIssuesCount: unresolvedIssues.length }),
+    [deltas, unresolvedIssues],
+  );
 
   useEffect(() => {
     analytics.track('content_view', { content: 'revision', resultId, subtest: 'writing' });
@@ -43,6 +50,18 @@ export default function WritingRevisionMode() {
       .catch(() => setError('Failed to load revision data. Please try again.'))
       .finally(() => setLoading(false));
   }, [resultId]);
+
+  useEffect(() => {
+    if (loading || error || deltas.length === 0) return;
+    analytics.track('writing_revision_score_computed', {
+      resultId,
+      score: improvement.score,
+      band: improvement.band,
+      criteriaImproved: improvement.criteriaImproved,
+      criteriaRegressed: improvement.criteriaRegressed,
+      unresolvedIssuesCount: unresolvedIssues.length,
+    });
+  }, [loading, error, deltas.length, improvement.score, improvement.band, improvement.criteriaImproved, improvement.criteriaRegressed, unresolvedIssues.length, resultId]);
 
   if (loading) {
     return (
@@ -90,6 +109,10 @@ export default function WritingRevisionMode() {
             </div>
           }
         />
+
+        <MotionSection>
+          <WritingImprovementBanner result={improvement} />
+        </MotionSection>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <MotionSection className="lg:col-span-2">

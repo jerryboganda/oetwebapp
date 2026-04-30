@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import type { Transition } from 'motion/react';
-import { ChevronLeft, Maximize, Minimize, BookOpen } from 'lucide-react';
+import { BookOpen, ChevronLeft, ClipboardCheck, GraduationCap, Maximize, Minimize } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { InlineAlert } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
 import { Timer } from '@/components/ui/timer';
 import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
@@ -18,6 +20,13 @@ import { analytics } from '@/lib/analytics';
 import type { WritingTask } from '@/lib/mock-data';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { deriveWritingCaseNotesMarkers, inferWritingLetterType, lintWritingLetter } from '@/lib/rulebook';
+import {
+  getWritingWordCountStatus,
+  normalizeWritingPracticeMode,
+  WRITING_CRITERIA,
+  WRITING_READING_WINDOW_SECONDS,
+  WRITING_WINDOW_SECONDS,
+} from '@/lib/writing/workflow';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
 
@@ -29,15 +38,14 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
  * annotation, or copying. After 5 minutes both unlock for the full 40-minute
  * writing period. Applies to ALL OET professions (Medicine, Nursing, etc.).
  */
-const READING_WINDOW_SECONDS = 5 * 60;
-const WRITING_WINDOW_SECONDS = 40 * 60;
-
 export default function WritingPlayer() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const isMobile = useIsMobile();
   const prefersReducedMotion = useReducedMotion();
   const taskId = searchParams?.get('taskId') ?? 'wt-001';
+  const practiceMode = normalizeWritingPracticeMode(searchParams?.get('mode'));
+  const isExamMode = practiceMode === 'exam';
 
   const [task, setTask] = useState<WritingTask | null>(null);
   const [checklist, setChecklist] = useState<{ id: string; label: string; checked: boolean }[]>([]);
@@ -60,8 +68,8 @@ export default function WritingPlayer() {
    *
    * Source: Dr. Ahmed Hesham corrections (applies to ALL OET professions).
    */
-  const [phase, setPhase] = useState<'reading' | 'writing'>('reading');
-  const isReadingPhase = phase === 'reading';
+  const [phase, setPhase] = useState<'reading' | 'writing'>(() => (isExamMode ? 'reading' : 'writing'));
+  const isReadingPhase = isExamMode && phase === 'reading';
   const saveTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const hasUnsavedChanges = useRef(false);
   const latestContentRef = useRef('');
@@ -72,6 +80,10 @@ export default function WritingPlayer() {
     : { type: 'spring', stiffness: 420, damping: 38 };
 
   const wordCount = useMemo(() => content.trim().split(/\s+/).filter(Boolean).length, [content]);
+  const wordCountStatus = useMemo(
+    () => getWritingWordCountStatus(wordCount, task?.targetWordRange),
+    [task?.targetWordRange, wordCount],
+  );
 
   const inferredLetterType = useMemo(() => inferWritingLetterType(task ?? {}), [task]);
   const caseNotesMarkers = useMemo(() => deriveWritingCaseNotesMarkers(task?.caseNotes), [task?.caseNotes]);
@@ -131,7 +143,7 @@ export default function WritingPlayer() {
       }
 
       try {
-        await submitWritingDraft(taskId, nextContent);
+        await submitWritingDraft(taskId, nextContent, practiceMode);
         if (isSubmittingRef.current || autosaveSequenceRef.current !== saveSequence) {
           return;
         }
@@ -148,7 +160,7 @@ export default function WritingPlayer() {
         }
       }
     }, 3000);
-  }, [taskId]);
+  }, [practiceMode, taskId]);
 
   const handleContentChange = useCallback((val: string) => {
     latestContentRef.current = val;
@@ -181,8 +193,8 @@ export default function WritingPlayer() {
     setSubmitting(true);
     setSaveStatus('saving');
     try {
-      const result = await submitWritingTask(taskId, submittedContent);
-      analytics.track('task_submitted', { taskId, subtest: 'writing', wordCount: submittedWordCount });
+      const result = await submitWritingTask(taskId, submittedContent, practiceMode);
+      analytics.track('task_submitted', { taskId, subtest: 'writing', mode: practiceMode, wordCount: submittedWordCount, wordCountState: wordCountStatus.state });
       hasUnsavedChanges.current = false;
       setSaveStatus('saved');
       setTimerRunning(false);
@@ -211,23 +223,36 @@ export default function WritingPlayer() {
    * Idempotent so rapid duplicate fires from the Timer cannot reset progress.
    */
   const handleReadingWindowComplete = useCallback(() => {
+    if (!isExamMode) return;
     setPhase(prev => {
       if (prev !== 'reading') return prev;
-      analytics.track('writing_reading_window_ended', { taskId });
+      analytics.track('writing_reading_window_ended', { taskId, mode: practiceMode });
       return 'writing';
     });
     // When the reading window ends we auto-surface the editor on mobile so
     // the learner immediately sees where to start writing.
     setMobileView(prev => (prev === 'notes' ? 'editor' : prev));
-  }, [taskId]);
+  }, [isExamMode, practiceMode, taskId]);
 
   const handleWritingWindowComplete = useCallback(() => {
     // Writing window expired — auto-submit so the learner does not lose work.
-    if (!submitting && !isSubmittingRef.current) {
+    if (isExamMode && !submitting && !isSubmittingRef.current) {
       void handleSubmit();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitting]);
+  }, [isExamMode, submitting]);
+
+  const taskMetadata = useMemo(() => {
+    if (!task) return [];
+    return [
+      { label: 'Profession', value: task.profession },
+      { label: 'Letter type', value: task.letterType ?? task.scenarioType },
+      { label: 'Writer role', value: task.writerRole },
+      { label: 'Recipient', value: task.recipient },
+      { label: 'Purpose', value: task.purpose },
+      { label: 'Task date', value: task.taskDate },
+    ].filter((item): item is { label: string; value: string } => typeof item.value === 'string' && item.value.length > 0);
+  }, [task]);
 
   if (loading || !task) {
     return (
@@ -269,8 +294,11 @@ export default function WritingPlayer() {
                   <div className="min-w-0 flex-1">
                     <h1 className="truncate text-base font-bold leading-tight text-navy sm:text-lg">{task.title}</h1>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted sm:text-xs">
-                      <span className="rounded bg-info/10 px-1.5 py-0.5 text-info">{task.profession}</span>
-                      <span>{task.scenarioType}</span>
+                      <Badge variant="info" size="sm">{task.profession}</Badge>
+                      <Badge variant="muted" size="sm">{task.letterType ?? task.scenarioType}</Badge>
+                      <Badge variant={isExamMode ? 'warning' : 'success'} size="sm">
+                        {isExamMode ? 'Exam mode' : 'Learning mode'}
+                      </Badge>
                     </div>
                   </div>
                 </div>
@@ -278,12 +306,12 @@ export default function WritingPlayer() {
                 <div className="flex items-center gap-2 self-end sm:gap-3 sm:self-auto sm:justify-end">
                   <Timer
                     key={`writing-timer-${phase}`}
-                    mode="countdown"
-                    initialSeconds={isReadingPhase ? READING_WINDOW_SECONDS : WRITING_WINDOW_SECONDS}
+                    initialSeconds={isExamMode ? (isReadingPhase ? WRITING_READING_WINDOW_SECONDS : WRITING_WINDOW_SECONDS) : 0}
                     running={timerRunning}
+                    mode={isExamMode ? 'countdown' : 'elapsed'}
                     size={isMobile ? 'sm' : 'md'}
-                    showWarning={!isReadingPhase}
-                    onComplete={isReadingPhase ? handleReadingWindowComplete : handleWritingWindowComplete}
+                    showWarning={isExamMode && !isReadingPhase}
+                    onComplete={isExamMode ? (isReadingPhase ? handleReadingWindowComplete : handleWritingWindowComplete) : undefined}
                   />
                   <button
                     onClick={() => setIsDistractionFree(true)}
@@ -327,6 +355,62 @@ export default function WritingPlayer() {
           )}
         </AnimatePresence>
 
+        <AnimatePresence initial={false}>
+          {!isDistractionFree ? (
+            <motion.section
+              key="writing-workflow-guidance"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={panelTransition}
+              className="border-b border-border bg-surface/95 px-4 py-3"
+            >
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1.25fr)]">
+                <div className="rounded-2xl border border-border bg-background-light p-3">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-navy">
+                    <ClipboardCheck className="h-4 w-4 text-primary" /> Task brief
+                  </div>
+                  <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                    {taskMetadata.map((item) => (
+                      <div key={item.label}>
+                        <dt className="font-bold text-muted">{item.label}</dt>
+                        <dd className="mt-0.5 text-navy">{item.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-background-light p-3">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-navy">
+                    <BookOpen className="h-4 w-4 text-primary" /> Word count guidance
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={wordCountStatus.variant} size="sm">{wordCount} words</Badge>
+                    <Badge variant={wordCountStatus.variant} size="sm">{wordCountStatus.label}</Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-muted">{wordCountStatus.message}</p>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-background-light p-3">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-navy">
+                    <GraduationCap className="h-4 w-4 text-primary" /> Rubric workflow
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {WRITING_CRITERIA.map((criterion) => (
+                      <Badge key={criterion.code} variant="outline" size="sm" title={criterion.guidance}>
+                        {criterion.label} /{criterion.maxScore}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-muted">
+                    AI support is practice-only; final readiness decisions should use criterion-based tutor review.
+                  </p>
+                </div>
+              </div>
+            </motion.section>
+          ) : null}
+        </AnimatePresence>
+
         {/* Distraction Free Floating Toolbar */}
         <AnimatePresence initial={false}>
           {isDistractionFree && (
@@ -340,12 +424,12 @@ export default function WritingPlayer() {
             >
               <Timer
                 key={`writing-timer-df-${phase}`}
-                mode="countdown"
-                initialSeconds={isReadingPhase ? READING_WINDOW_SECONDS : WRITING_WINDOW_SECONDS}
+                initialSeconds={isExamMode ? (isReadingPhase ? WRITING_READING_WINDOW_SECONDS : WRITING_WINDOW_SECONDS) : 0}
                 running={timerRunning}
+                mode={isExamMode ? 'countdown' : 'elapsed'}
                 size="sm"
-                showWarning={!isReadingPhase}
-                onComplete={isReadingPhase ? handleReadingWindowComplete : handleWritingWindowComplete}
+                showWarning={isExamMode && !isReadingPhase}
+                onComplete={isExamMode ? (isReadingPhase ? handleReadingWindowComplete : handleWritingWindowComplete) : undefined}
               />
               <button
                 onClick={() => setIsDistractionFree(false)}
@@ -426,21 +510,25 @@ export default function WritingPlayer() {
                         value={content}
                         onChange={handleContentChange}
                         saveStatus={saveStatus === 'idle' ? 'idle' : saveStatus}
+                        wordCountStatus={wordCountStatus}
                         fontSize={fontSize}
                         onFontSizeChange={setFontSize}
                         showFontSizeControls={false}
                         placeholder={isReadingPhase ? 'Writing is locked for the 5-minute reading window\u2026' : 'Begin writing your response...'}
                         disabled={isReadingPhase}
+                        spellCheck={!isExamMode}
                         className="min-h-0 flex-1"
                       />
-                      <RulebookFindingsPanel
-                        title="Rulebook Review"
-                        subtitle={`Live checks grounded in Dr. Hesham's Writing rulebook. Inferred letter type: ${inferredLetterType.replace(/_/g, ' ')}.`}
-                        findings={lintFindings}
-                        inactiveMessage={lintInactiveMessage}
-                        className="shrink-0 rounded-none rounded-b-[24px] border-t border-border"
-                        ruleHref={(ruleId) => `/writing/rulebook/${ruleId}`}
-                      />
+                      {!isExamMode ? (
+                        <RulebookFindingsPanel
+                          title="Rulebook Review"
+                          subtitle={`Live checks grounded in Dr. Hesham's Writing rulebook. Inferred letter type: ${inferredLetterType.replace(/_/g, ' ')}.`}
+                          findings={lintFindings}
+                          inactiveMessage={lintInactiveMessage}
+                          className="shrink-0 rounded-none rounded-b-[24px] border-t border-border"
+                          ruleHref={(ruleId) => `/writing/rulebook/${ruleId}`}
+                        />
+                      ) : null}
                     </div>
                   </motion.div>
                 )}
@@ -476,21 +564,25 @@ export default function WritingPlayer() {
                   value={content}
                   onChange={handleContentChange}
                   saveStatus={saveStatus === 'idle' ? 'idle' : saveStatus}
+                  wordCountStatus={wordCountStatus}
                   fontSize={fontSize}
                   onFontSizeChange={setFontSize}
                   showFontSizeControls={!isMobile}
                   placeholder={isReadingPhase ? 'Writing is locked for the 5-minute reading window\u2026' : 'Begin writing your response...'}
                   disabled={isReadingPhase}
+                  spellCheck={!isExamMode}
                   className="min-h-0 flex-1"
                 />
-                <RulebookFindingsPanel
-                  title="Rulebook Review"
-                  subtitle={`Live checks grounded in Dr. Hesham's Writing rulebook. Inferred letter type: ${inferredLetterType.replace(/_/g, ' ')}.`}
-                  findings={lintFindings}
-                  inactiveMessage={lintInactiveMessage}
-                  className="shrink-0 rounded-none rounded-b-[24px] border-t border-border"
-                  ruleHref={(ruleId) => `/writing/rulebook/${ruleId}`}
-                />
+                {!isExamMode ? (
+                  <RulebookFindingsPanel
+                    title="Rulebook Review"
+                    subtitle={`Live checks grounded in Dr. Hesham's Writing rulebook. Inferred letter type: ${inferredLetterType.replace(/_/g, ' ')}.`}
+                    findings={lintFindings}
+                    inactiveMessage={lintInactiveMessage}
+                    className="shrink-0 rounded-none rounded-b-[24px] border-t border-border"
+                    ruleHref={(ruleId) => `/writing/rulebook/${ruleId}`}
+                  />
+                ) : null}
               </div>
             </motion.div>
           </div>
@@ -498,8 +590,13 @@ export default function WritingPlayer() {
 
         {/* Submit Confirmation Modal */}
         <Modal open={showSubmitModal} onClose={() => setShowSubmitModal(false)} title="Submit Your Response?">
-          <p className="mb-4 text-sm text-muted">Once submitted, your response will be evaluated by our AI engine. You can request a tutor human review later.</p>
-          <p className="mb-6 text-sm font-semibold text-navy">Word count: {wordCount}</p>
+          <p className="mb-3 text-sm text-muted">
+            Once submitted, your response enters the writing correction workflow. Automated checks are practice estimates only; tutor review remains the final academy marking path.
+          </p>
+          <InlineAlert variant={wordCountStatus.variant === 'warning' ? 'warning' : 'info'} className="mb-4">
+            {wordCountStatus.message}
+          </InlineAlert>
+          <p className="mb-6 text-sm font-semibold text-navy">Word count: {wordCount} · {wordCountStatus.label}</p>
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button variant="secondary" onClick={() => setShowSubmitModal(false)}>Cancel</Button>
             <Button loading={submitting} onClick={handleSubmit}>Confirm Submit</Button>
