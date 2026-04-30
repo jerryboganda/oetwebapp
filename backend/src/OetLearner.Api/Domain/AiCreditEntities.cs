@@ -53,7 +53,7 @@ public class AiCreditLedgerEntry
 
     /// <summary>Optional reference to another table (e.g. stripe payment id,
     /// audit event id, usage record id).</summary>
-    [MaxLength(64)]
+    [MaxLength(128)]
     public string? ReferenceId { get; set; }
 
     /// <summary>When this grant expires. Null = no expiration.</summary>

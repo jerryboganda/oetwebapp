@@ -119,10 +119,11 @@ public class AiCreditServiceTests
                 Name = "Premium Monthly",
                 EntitlementsJson = "{}",
             });
+            var longUserId = "auth_learner_" + new string('a', 32);
             db.Subscriptions.Add(new Subscription
             {
                 Id = "sub-premium",
-                UserId = "learner-premium",
+                UserId = longUserId,
                 PlanId = "plan-premium-monthly",
                 Status = SubscriptionStatus.Active,
                 StartedAt = now.AddMonths(-1),
@@ -142,10 +143,24 @@ public class AiCreditServiceTests
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             var entry = await db.AiCreditLedger.SingleAsync();
             Assert.Equal((1, 0), result);
-            Assert.Equal("learner-premium", entry.UserId);
+            Assert.Equal("auth_learner_" + new string('a', 32), entry.UserId);
             Assert.Equal(1_000_000, entry.TokensDelta);
             Assert.Contains("pro", entry.Description, StringComparison.OrdinalIgnoreCase);
+            Assert.True(entry.ReferenceId?.Length > 64);
         }
+    }
+
+    [Fact]
+    public void AiCreditLedger_ReferenceId_AllowsLongRenewalKeys()
+    {
+        var (db, _) = Build();
+        var entity = db.Model.FindEntityType(typeof(AiCreditLedgerEntry));
+
+        Assert.NotNull(entity);
+        var reference = entity!.FindProperty(nameof(AiCreditLedgerEntry.ReferenceId));
+        Assert.NotNull(reference);
+        Assert.Equal(128, reference!.GetMaxLength());
+        db.Dispose();
     }
 
     [Fact]
