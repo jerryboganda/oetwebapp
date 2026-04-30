@@ -17,6 +17,23 @@ import { env } from './env';
 export type ListeningPartCode = 'A1' | 'A2' | 'B' | 'C1' | 'C2';
 export type ListeningQuestionType = 'short_answer' | 'multiple_choice_3';
 
+/** Phase 4: per-option distractor category for Part B/C MCQ analysis. */
+export type ListeningDistractorCategory =
+  | 'too_strong'
+  | 'too_weak'
+  | 'wrong_speaker'
+  | 'opposite_meaning'
+  | 'reused_keyword';
+
+/** Phase 4: speaker attitude tag for Part C extracts. */
+export type ListeningSpeakerAttitude =
+  | 'concerned'
+  | 'optimistic'
+  | 'doubtful'
+  | 'critical'
+  | 'neutral'
+  | 'other';
+
 export interface ListeningAuthoredQuestion {
   id: string;
   number: number;
@@ -31,6 +48,16 @@ export interface ListeningAuthoredQuestion {
   transcriptExcerpt: string | null;
   distractorExplanation: string | null;
   points: number;
+  // Phase 4: parallel arrays aligned with `options` (length matches options).
+  // `null` means "not authored yet" for that option.
+  optionDistractorWhy?: (string | null)[];
+  optionDistractorCategory?: (ListeningDistractorCategory | null)[];
+  // Phase 4: Part C only — the speaker's attitude in the extract.
+  speakerAttitude?: ListeningSpeakerAttitude | null;
+  // Phase 5: time-coded transcript evidence (start/end ms in section audio)
+  // for jump-to-evidence in the post-attempt review player.
+  transcriptEvidenceStartMs?: number | null;
+  transcriptEvidenceEndMs?: number | null;
 }
 
 export interface ListeningValidationCounts {
@@ -169,6 +196,82 @@ export interface ListeningPathwaySnapshot {
 export const getListeningPathway = () =>
   api<ListeningPathwaySnapshot>('/v1/listening-papers/me/pathway');
 
+// ── Phase 6: per-learner Listening analytics ───────────────────────────
+//
+// Mirrors `ListeningStudentAnalyticsDto` in
+// `backend/src/OetLearner.Api/Services/Listening/ListeningAnalyticsService.cs`.
+// Surfaced at GET /v1/listening-papers/me/analytics.
+
+export interface ListeningPartBreakdown {
+  partCode: string;        // "A" | "B" | "C"
+  earned: number;
+  max: number;
+  accuracyPercent: number;
+}
+
+export interface ListeningTopWeakness {
+  errorType: string;
+  label: string;
+  count: number;
+}
+
+export interface ListeningActionPlanItem {
+  headline: string;
+  detail: string;
+  route: string | null;
+}
+
+export interface ListeningStudentAnalytics {
+  completedAttempts: number;
+  bestScaledScore: number | null;
+  averageScaledScore: number | null;
+  likelyPassing: boolean;
+  partBreakdown: ListeningPartBreakdown[];
+  weaknesses: ListeningTopWeakness[];
+  actionPlan: ListeningActionPlanItem[];
+}
+
+export const getListeningStudentAnalytics = () =>
+  api<ListeningStudentAnalytics>('/v1/listening-papers/me/analytics');
+
+// ── Phase 7: admin-side Listening analytics ────────────────────────────
+
+export interface ListeningHardestQuestion {
+  paperId: string;
+  paperTitle: string;
+  questionNumber: number;
+  partCode: string;
+  attemptCount: number;
+  accuracyPercent: number;
+}
+
+export interface ListeningDistractorHeat {
+  paperId: string;
+  questionNumber: number;
+  correctAnswer: string;
+  wrongAnswerHistogram: Record<string, number>;
+}
+
+export interface ListeningCommonMisspelling {
+  correctAnswer: string;
+  wrongSpelling: string;
+  count: number;
+}
+
+export interface ListeningAdminAnalytics {
+  days: number;
+  completedAttempts: number;
+  averageScaledScore: number | null;
+  percentLikelyPassing: number;
+  classPartAverages: ListeningPartBreakdown[];
+  hardestQuestions: ListeningHardestQuestion[];
+  distractorHeat: ListeningDistractorHeat[];
+  commonMisspellings: ListeningCommonMisspelling[];
+}
+
+export const getListeningAdminAnalytics = (days: number = 30) =>
+  api<ListeningAdminAnalytics>(`/v1/admin/listening/analytics?days=${days}`);
+
 // ── Canonical scaffold ─────────────────────────────────────────────────────
 
 export const LISTENING_CANONICAL_TOTAL = 42;
@@ -200,6 +303,11 @@ export function buildCanonicalListeningSkeleton(): ListeningAuthoredQuestion[] {
     transcriptExcerpt: null,
     distractorExplanation: null,
     points: 1,
+    optionDistractorWhy: type === 'multiple_choice_3' ? [null, null, null] : [],
+    optionDistractorCategory: type === 'multiple_choice_3' ? [null, null, null] : [],
+    speakerAttitude: null,
+    transcriptEvidenceStartMs: null,
+    transcriptEvidenceEndMs: null,
   });
   for (let i = 1; i <= 12; i++) items.push(blank(i, 'A1', 'short_answer'));
   for (let i = 13; i <= 24; i++) items.push(blank(i, 'A2', 'short_answer'));

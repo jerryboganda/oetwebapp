@@ -556,9 +556,9 @@ public sealed class ListeningLearnerService(
     private ListeningReviewDto BuildReview(Attempt attempt, ListeningSource source, Evaluation? evaluation = null)
     {
         var answers = DeserializeAnswers(attempt.AnswersJson);
-        var items = source.Questions
-            .OrderBy(q => q.Number)
-            .Select(q => ReviewItemDto(q, answers.GetValueOrDefault(q.Id)))
+        var orderedQuestions = source.Questions.OrderBy(q => q.Number).ToList();
+        var items = orderedQuestions
+            .Select(q => ReviewItemDto(q, answers.GetValueOrDefault(q.Id), orderedQuestions))
             .ToList();
         var raw = Math.Clamp(items.Sum(i => i.PointsEarned), 0, CanonicalRawMax);
         var score = OetScoring.GradeListeningReading(Subtest, raw);
@@ -597,16 +597,17 @@ public sealed class ListeningLearnerService(
             GeneratedAt: evaluation?.GeneratedAt ?? attempt.CompletedAt ?? attempt.SubmittedAt);
     }
 
-    private static ListeningReviewItemDto ReviewItemDto(ListeningQuestion q, string? learnerAnswer)
+    private static ListeningReviewItemDto ReviewItemDto(ListeningQuestion q, string? learnerAnswer, IReadOnlyList<ListeningQuestion> allQuestions)
     {
         var isCorrect = q.AcceptedAnswers.Any(answer => MatchesObjectiveAnswer(learnerAnswer, answer));
-        var errorType = isCorrect ? null : ObjectiveErrorType(q);
+        var errorType = isCorrect ? null : ObjectiveErrorType(q, learnerAnswer, allQuestions);
         var transcript = q.AllowTranscriptReveal
             ? new ListeningTranscriptSnippetDto(
                 Allowed: true,
                 Excerpt: q.TranscriptExcerpt,
                 DistractorExplanation: q.DistractorExplanation)
             : null;
+        var optionAnalysis = BuildOptionAnalysis(q);
         return new ListeningReviewItemDto(
             QuestionId: q.Id,
             Number: q.Number,
@@ -622,7 +623,42 @@ public sealed class ListeningLearnerService(
             ErrorType: errorType,
             Options: q.Options,
             Transcript: transcript,
-            DistractorExplanation: q.DistractorExplanation);
+            DistractorExplanation: q.DistractorExplanation,
+            OptionAnalysis: optionAnalysis,
+            SpeakerAttitude: q.SpeakerAttitude,
+            TranscriptEvidenceStartMs: q.TranscriptEvidenceStartMs,
+            TranscriptEvidenceEndMs: q.TranscriptEvidenceEndMs);
+    }
+
+    /// <summary>
+    /// Build per-option analysis for MCQ items (Part B/C). Returns null when
+    /// the question has no options or no per-option metadata is authored.
+    /// </summary>
+    private static IReadOnlyList<ListeningOptionAnalysisDto>? BuildOptionAnalysis(ListeningQuestion q)
+    {
+        if (q.Options is null || q.Options.Count == 0) return null;
+        var hasAny = (q.OptionDistractorWhy?.Any(s => !string.IsNullOrWhiteSpace(s)) ?? false)
+            || (q.OptionDistractorCategory?.Any(s => !string.IsNullOrWhiteSpace(s)) ?? false);
+        if (!hasAny) return null;
+
+        var labels = new[] { "A", "B", "C", "D", "E", "F" };
+        var result = new List<ListeningOptionAnalysisDto>(q.Options.Count);
+        for (var i = 0; i < q.Options.Count; i++)
+        {
+            var label = i < labels.Length ? labels[i] : (i + 1).ToString();
+            var optionText = q.Options[i] ?? string.Empty;
+            var why = i < (q.OptionDistractorWhy?.Count ?? 0) ? q.OptionDistractorWhy![i] : null;
+            var cat = i < (q.OptionDistractorCategory?.Count ?? 0) ? q.OptionDistractorCategory![i] : null;
+            var isCorrect = string.Equals(label, q.CorrectAnswer?.Trim(), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(optionText, q.CorrectAnswer, StringComparison.OrdinalIgnoreCase);
+            result.Add(new ListeningOptionAnalysisDto(
+                OptionLabel: label,
+                OptionText: optionText,
+                IsCorrect: isCorrect,
+                DistractorCategory: string.IsNullOrWhiteSpace(cat) ? null : cat,
+                WhyMarkdown: string.IsNullOrWhiteSpace(why) ? null : why));
+        }
+        return result;
     }
 
     private static List<ListeningErrorClusterDto> BuildErrorClusters(IReadOnlyCollection<ListeningReviewItemDto> items)
@@ -695,7 +731,16 @@ public sealed class ListeningLearnerService(
                 AllowTranscriptReveal: ReadBool(question.GetValueOrDefault("allowTranscriptReveal")) ?? true,
                 TranscriptExcerpt: ReadString(question.GetValueOrDefault("transcriptExcerpt")),
                 DistractorExplanation: ReadString(question.GetValueOrDefault("distractorExplanation")),
-                Points: Math.Max(1, ReadInt(question.GetValueOrDefault("points")) ?? 1));
+                Points: Math.Max(1, ReadInt(question.GetValueOrDefault("points")) ?? 1),
+                OptionDistractorWhy: ReadStringList(question.GetValueOrDefault("optionDistractorWhy"))
+                    ?? ReadStringList(question.GetValueOrDefault("perOptionWhy"))
+                    ?? new List<string>(),
+                OptionDistractorCategory: ReadStringList(question.GetValueOrDefault("optionDistractorCategory"))
+                    ?? ReadStringList(question.GetValueOrDefault("perOptionDistractorCategory"))
+                    ?? new List<string>(),
+                SpeakerAttitude: ReadString(question.GetValueOrDefault("speakerAttitude")),
+                TranscriptEvidenceStartMs: ReadInt(question.GetValueOrDefault("transcriptEvidenceStartMs")),
+                TranscriptEvidenceEndMs: ReadInt(question.GetValueOrDefault("transcriptEvidenceEndMs")));
             fallbackNumber++;
         }
     }
@@ -850,6 +895,72 @@ public sealed class ListeningLearnerService(
                     "Lock onto frequency phrases such as once daily and every second day.",
                     "Use replay snippets to verify quantities, not whole conversations."
                 }),
+            "spelling" => (
+                "Medical Spelling Drill",
+                "Part A spelling accuracy",
+                "Train precise spelling of medical and clinical vocabulary you commonly hear in consultations.",
+                10,
+                new[]
+                {
+                    "Compare your written form against the canonical spelling.",
+                    "Build a mental list of high-risk medical roots and endings.",
+                    "Slow down on the final two letters — that's where most marks are lost."
+                }),
+            "grammar_number" => (
+                "Grammar and Number Drill",
+                "Singular vs plural and article accuracy",
+                "Lock onto whether the audio uses a singular or plural noun, and which article precedes it.",
+                8,
+                new[]
+                {
+                    "Listen for the determiner: a, an, the, some, any.",
+                    "Separate countable from uncountable nouns.",
+                    "Match the plural marker exactly as the speaker used it."
+                }),
+            "paraphrase" => (
+                "Use the Speaker's Words Drill",
+                "Part A exact-words requirement",
+                "Stop rewriting what you heard. Train yourself to write the speaker's exact words inside the gap.",
+                10,
+                new[]
+                {
+                    "If the audio said 'sleep apnoea', do not write 'breathing problem'.",
+                    "Predict the answer type, then capture the speaker's phrase verbatim.",
+                    "After review, mark down where you paraphrased and why."
+                }),
+            "wrong_section" => (
+                "Right Word, Right Gap Drill",
+                "Note-completion section discipline",
+                "Train your eye to lock the right detail to the right note heading before the audio drifts.",
+                12,
+                new[]
+                {
+                    "Read each gap heading aloud before the audio starts.",
+                    "Predict which section the next answer belongs to.",
+                    "Avoid front-loading: a word may belong to the next bullet, not this one."
+                }),
+            "extra_info" => (
+                "Concise Answers Drill",
+                "Avoid extra-words deductions",
+                "Keep your gap answers minimal — the audio's exact phrase, nothing more.",
+                8,
+                new[]
+                {
+                    "Do not add explanatory phrases the audio never used.",
+                    "Strip leading articles unless the speaker used them.",
+                    "Stop when the gap is full; one word too many can lose a mark."
+                }),
+            "empty" => (
+                "Don't Leave Gaps Drill",
+                "Coverage and educated guessing",
+                "Practise filling every gap, even when uncertain — there's no negative marking.",
+                8,
+                new[]
+                {
+                    "Keep moving — never freeze on one gap.",
+                    "Predict the answer type early so your guess is plausible.",
+                    "Cross-check the gap heading: type matters more than wording."
+                }),
             _ => (
                 "Exact Detail Capture Drill",
                 "Referral detail and key-clue accuracy",
@@ -955,20 +1066,131 @@ public sealed class ListeningLearnerService(
             ? string.Empty
             : new string(value.Trim().ToLowerInvariant().Where(ch => char.IsLetterOrDigit(ch) || char.IsWhiteSpace(ch)).ToArray());
 
-    private static string? ObjectiveErrorType(ListeningQuestion question)
+    /// <summary>
+    /// Categorise a wrong answer into one of the spec-defined error types.
+    /// Part A (gap fill / short_answer): we run a smart classification on the
+    /// learner answer vs the correct answer, with `wrong_section` detected by
+    /// checking whether the learner's answer matches any *other* question's
+    /// correct answer in the same paper.
+    /// Part B / Part C (MCQ): always "distractor_confusion" unless empty.
+    /// </summary>
+    private static string? ObjectiveErrorType(
+        ListeningQuestion question,
+        string? learnerAnswer,
+        IReadOnlyList<ListeningQuestion> allQuestions)
     {
-        if (!string.IsNullOrWhiteSpace(question.DistractorExplanation)) return "distractor_confusion";
-        if (string.Equals(question.SkillTag, "numbers", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(question.SkillTag, "frequency", StringComparison.OrdinalIgnoreCase))
+        var trimmed = (learnerAnswer ?? string.Empty).Trim();
+        if (trimmed.Length == 0) return "empty";
+
+        var partUpper = (question.PartCode ?? "A").ToUpperInvariant();
+        var isShortAnswer = string.Equals(question.Type, "short_answer", StringComparison.OrdinalIgnoreCase)
+            || partUpper.StartsWith("A", StringComparison.Ordinal);
+
+        if (!isShortAnswer)
         {
-            return "numbers_and_frequencies";
+            return "distractor_confusion";
         }
+
+        var normalizedLearner = NormalizeObjectiveAnswer(trimmed);
+        var normalizedCorrect = NormalizeObjectiveAnswer(question.CorrectAnswer);
+
+        if (normalizedLearner.Length == 0) return "empty";
+        if (normalizedCorrect.Length == 0) return "detail_capture";
+
+        // Wrong-section: did the learner type the correct answer for a *different* question?
+        var matchedAnotherQuestion = allQuestions.Any(other =>
+            other.Id != question.Id
+            && (other.PartCode ?? string.Empty).StartsWith("A", StringComparison.OrdinalIgnoreCase)
+            && other.AcceptedAnswers.Any(ans => MatchesObjectiveAnswer(trimmed, ans)));
+        if (matchedAnotherQuestion) return "wrong_section";
+
+        // Grammar / number: differs only by trailing 's' or 'es' (singular/plural)
+        // or only by an article (a/an/the).
+        if (DiffersByPluralOrArticle(normalizedLearner, normalizedCorrect))
+            return "grammar_number";
+
+        // Extra info: learner answer contains the full correct answer plus extra tokens.
+        var learnerTokens = normalizedLearner.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var correctTokens = normalizedCorrect.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (learnerTokens.Length > correctTokens.Length
+            && correctTokens.All(t => learnerTokens.Contains(t)))
+        {
+            return "extra_info";
+        }
+
+        // Spelling: small Levenshtein distance (≤ 2 edits, or ≤ 25% of length).
+        var distance = LevenshteinDistance(normalizedLearner, normalizedCorrect);
+        var threshold = Math.Max(2, normalizedCorrect.Length / 4);
+        if (distance > 0 && distance <= threshold) return "spelling";
+
+        // Fallback: very different word — treat as paraphrase (learner heard the
+        // meaning but wrote their own words) when token sets barely overlap.
+        var overlap = correctTokens.Count(t => learnerTokens.Contains(t));
+        if (overlap == 0 && learnerTokens.Length > 0) return "paraphrase";
 
         return "detail_capture";
     }
 
+    /// <summary>True when the only difference is a trailing 's'/'es' or a leading article.</summary>
+    private static bool DiffersByPluralOrArticle(string learner, string correct)
+    {
+        if (string.Equals(learner, correct, StringComparison.Ordinal)) return false;
+
+        // Articles
+        string Strip(string s)
+        {
+            foreach (var article in new[] { "the ", "a ", "an " })
+            {
+                if (s.StartsWith(article, StringComparison.Ordinal)) return s[article.Length..];
+            }
+            return s;
+        }
+        var l = Strip(learner);
+        var c = Strip(correct);
+        if (string.Equals(l, c, StringComparison.Ordinal)) return true;
+
+        // Plural
+        bool PluralEqual(string a, string b)
+        {
+            if (a.Length > b.Length && (a.EndsWith("s", StringComparison.Ordinal) || a.EndsWith("es", StringComparison.Ordinal)))
+            {
+                var trimmed = a.EndsWith("es", StringComparison.Ordinal) ? a[..^2] : a[..^1];
+                if (string.Equals(trimmed, b, StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
+        return PluralEqual(l, c) || PluralEqual(c, l);
+    }
+
+    private static int LevenshteinDistance(string a, string b)
+    {
+        if (a.Length == 0) return b.Length;
+        if (b.Length == 0) return a.Length;
+        if (a.Length > 64 || b.Length > 64) return int.MaxValue; // cap
+        var prev = new int[b.Length + 1];
+        var curr = new int[b.Length + 1];
+        for (var j = 0; j <= b.Length; j++) prev[j] = j;
+        for (var i = 1; i <= a.Length; i++)
+        {
+            curr[0] = i;
+            for (var j = 1; j <= b.Length; j++)
+            {
+                var cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                curr[j] = Math.Min(Math.Min(curr[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+            }
+            (prev, curr) = (curr, prev);
+        }
+        return prev[b.Length];
+    }
+
     private static string ObjectiveErrorTypeLabel(string? errorType) => errorType switch
     {
+        "spelling" => "Spelling",
+        "grammar_number" => "Grammar / number",
+        "paraphrase" => "Paraphrase (use exact words from audio)",
+        "wrong_section" => "Right answer, wrong gap",
+        "extra_info" => "Extra information",
+        "empty" => "Unanswered",
         "distractor_confusion" => "Distractor confusion",
         "numbers_and_frequencies" => "Numbers and frequencies",
         "detail_capture" => "Exact detail capture",
@@ -1115,7 +1337,19 @@ public sealed class ListeningLearnerService(
         bool AllowTranscriptReveal,
         string? TranscriptExcerpt,
         string? DistractorExplanation,
-        int Points);
+        int Points,
+        // Phase 4: per-option "why wrong" explanation (Part B/C). Same length as
+        // Options when populated; missing entries fall back to DistractorExplanation.
+        IReadOnlyList<string?> OptionDistractorWhy,
+        // Phase 4: per-option distractor category enum: too_strong | too_weak |
+        // wrong_speaker | opposite_meaning | reused_keyword. Same length as Options.
+        IReadOnlyList<string?> OptionDistractorCategory,
+        // Phase 4: speaker attitude on Part C: concerned | optimistic | doubtful |
+        // critical | neutral | other. Null on Part A/B.
+        string? SpeakerAttitude,
+        // Phase 5: time-coded transcript evidence (start/end ms in the section audio).
+        int? TranscriptEvidenceStartMs,
+        int? TranscriptEvidenceEndMs);
 
     private sealed record ListeningAssetReadiness(bool Audio, bool QuestionPaper, bool AnswerKey, bool AudioScript);
 
@@ -1138,7 +1372,21 @@ public sealed class ListeningLearnerService(
         string? ErrorType,
         IReadOnlyList<string> Options,
         ListeningTranscriptSnippetDto? Transcript,
-        string? DistractorExplanation);
+        string? DistractorExplanation,
+        // Phase 4: surface per-option distractor analysis to the learner.
+        IReadOnlyList<ListeningOptionAnalysisDto>? OptionAnalysis,
+        string? SpeakerAttitude,
+        // Phase 5: time-coded transcript evidence (ms) so the learner UI can
+        // jump directly to the proof segment in the section audio.
+        int? TranscriptEvidenceStartMs,
+        int? TranscriptEvidenceEndMs);
+
+    private sealed record ListeningOptionAnalysisDto(
+        string OptionLabel,                 // "A" | "B" | "C"
+        string OptionText,
+        bool IsCorrect,
+        string? DistractorCategory,         // too_strong | too_weak | wrong_speaker | opposite_meaning | reused_keyword
+        string? WhyMarkdown);
 
     private sealed record ListeningErrorClusterDto(string ErrorType, string Label, int Count, IReadOnlyList<string> AffectedQuestionIds);
 

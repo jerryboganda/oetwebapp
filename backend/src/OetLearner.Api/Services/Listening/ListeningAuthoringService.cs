@@ -50,7 +50,17 @@ public sealed record ListeningAuthoredQuestion(
     string? SkillTag,
     string? TranscriptExcerpt,
     string? DistractorExplanation,
-    int Points);
+    int Points,
+    // Phase 4: per-option (Part B/C) "why wrong" + distractor category enum
+    // (too_strong | too_weak | wrong_speaker | opposite_meaning | reused_keyword).
+    IReadOnlyList<string?>? OptionDistractorWhy = null,
+    IReadOnlyList<string?>? OptionDistractorCategory = null,
+    // Phase 4: speaker attitude tag for Part C
+    // (concerned | optimistic | doubtful | critical | neutral | other).
+    string? SpeakerAttitude = null,
+    // Phase 5: time-coded transcript evidence (start/end ms in section audio).
+    int? TranscriptEvidenceStartMs = null,
+    int? TranscriptEvidenceEndMs = null);
 
 public sealed record ListeningAuthoredQuestionList(
     IReadOnlyList<ListeningAuthoredQuestion> Questions,
@@ -170,6 +180,22 @@ public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningA
             }
             catch (JsonException) { return []; }
         }
+        IReadOnlyList<string?> ReadNullableList(string key)
+        {
+            var raw = q.GetValueOrDefault(key);
+            if (raw is null) return [];
+            try
+            {
+                var list = JsonSerializer.Deserialize<List<string?>>(JsonSerializer.Serialize(raw));
+                return list ?? [];
+            }
+            catch (JsonException) { return []; }
+        }
+        int? ReadInt(string key)
+        {
+            var s = Read(key);
+            return int.TryParse(s, out var v) ? v : (int?)null;
+        }
 
         var number = int.TryParse(Read("number"), out var n) ? n : 0;
         var points = int.TryParse(Read("points"), out var p) ? Math.Max(1, p) : 1;
@@ -187,7 +213,12 @@ public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningA
             SkillTag: Read("skillTag"),
             TranscriptExcerpt: Read("transcriptExcerpt"),
             DistractorExplanation: Read("distractorExplanation"),
-            Points: points);
+            Points: points,
+            OptionDistractorWhy: ReadNullableList("optionDistractorWhy"),
+            OptionDistractorCategory: ReadNullableList("optionDistractorCategory"),
+            SpeakerAttitude: Read("speakerAttitude"),
+            TranscriptEvidenceStartMs: ReadInt("transcriptEvidenceStartMs"),
+            TranscriptEvidenceEndMs: ReadInt("transcriptEvidenceEndMs"));
     }
 
     private static ListeningAuthoredQuestion NormalizeForStorage(ListeningAuthoredQuestion q)
@@ -221,7 +252,55 @@ public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningA
             TranscriptExcerpt = string.IsNullOrWhiteSpace(q.TranscriptExcerpt) ? null : q.TranscriptExcerpt.Trim(),
             DistractorExplanation = string.IsNullOrWhiteSpace(q.DistractorExplanation) ? null : q.DistractorExplanation.Trim(),
             Points = Math.Max(1, q.Points),
+            OptionDistractorWhy = NormalizeNullableStringList(q.OptionDistractorWhy, options.Count),
+            OptionDistractorCategory = NormalizeDistractorCategoryList(q.OptionDistractorCategory, options.Count),
+            SpeakerAttitude = NormalizeSpeakerAttitude(q.SpeakerAttitude),
+            TranscriptEvidenceStartMs = q.TranscriptEvidenceStartMs is int s && s >= 0 ? s : null,
+            TranscriptEvidenceEndMs = q.TranscriptEvidenceEndMs is int e && e >= 0 ? e : null,
         };
+    }
+
+    private static readonly HashSet<string> AllowedDistractorCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "too_strong", "too_weak", "wrong_speaker", "opposite_meaning", "reused_keyword",
+    };
+
+    private static readonly HashSet<string> AllowedSpeakerAttitudes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "concerned", "optimistic", "doubtful", "critical", "neutral", "other",
+    };
+
+    private static IReadOnlyList<string?> NormalizeNullableStringList(IReadOnlyList<string?>? list, int targetLength)
+    {
+        if (list is null || list.Count == 0) return [];
+        var result = new List<string?>(targetLength);
+        for (var i = 0; i < targetLength; i++)
+        {
+            var v = i < list.Count ? list[i] : null;
+            result.Add(string.IsNullOrWhiteSpace(v) ? null : v!.Trim());
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<string?> NormalizeDistractorCategoryList(IReadOnlyList<string?>? list, int targetLength)
+    {
+        if (list is null || list.Count == 0) return [];
+        var result = new List<string?>(targetLength);
+        for (var i = 0; i < targetLength; i++)
+        {
+            var v = i < list.Count ? list[i] : null;
+            if (string.IsNullOrWhiteSpace(v)) { result.Add(null); continue; }
+            var normalized = v!.Trim().ToLowerInvariant();
+            result.Add(AllowedDistractorCategories.Contains(normalized) ? normalized : null);
+        }
+        return result;
+    }
+
+    private static string? NormalizeSpeakerAttitude(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var normalized = raw.Trim().ToLowerInvariant();
+        return AllowedSpeakerAttitudes.Contains(normalized) ? normalized : null;
     }
 
     private static string NormalizePartCode(string raw)

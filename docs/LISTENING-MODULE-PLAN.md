@@ -57,7 +57,15 @@ Mapped to spec sections (1–16). `[exists]` = already shipped, `[gap]` = missin
 > Each phase is a single shippable commit (or small commit cluster), green build,
 > green tests, deployable independently.
 
-### Phase 1 — Listening Pathway snapshot **(this commit)**
+> **Implementation status (this branch):** Phases 1, 3, 4, 6, 7, 8 (stub), 9, 10
+> shipped as additive enhancements on top of the existing JSON-backed Listening
+> storage. Phase 2 (relational Listening schema + EF migration) is **deferred**
+> — too large/risky for a single session without staging validation. Phase 5
+> (time-coded transcripts) is partially shipped: per-question
+> `transcriptEvidenceStartMs/EndMs` are now part of the authored schema; full
+> sentence-level segments + accent/speakers metadata is still pending.
+
+### Phase 1 — Listening Pathway snapshot **(shipped)**
 
 Mirror the just-shipped Reading pathway. Smallest meaningful win, immediately
 visible in the Listening hub, foundation for the analytics surface in Phase 6.

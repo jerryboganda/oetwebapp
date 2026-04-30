@@ -22,6 +22,26 @@ public static class ListeningLearnerEndpoints
             .WithName("GetListeningPathway")
             .WithSummary("Get the learner's Listening course pathway snapshot");
 
+        // ── Phase 6: per-learner Listening analytics ──
+        group.MapGet("/me/analytics", async (
+            IListeningAnalyticsService analytics, HttpContext http, CancellationToken ct) =>
+        {
+            var data = await analytics.GetMyAnalyticsAsync(http.UserId(), ct);
+            return Results.Ok(data);
+        })
+            .WithName("GetListeningStudentAnalytics")
+            .WithSummary("Per-learner Listening analytics: per-part accuracy, top weaknesses, action plan");
+
+        // ── Phase 10: 12-stage Listening curriculum metadata ──
+        group.MapGet("/me/curriculum", async (
+            IListeningCurriculumService curriculum, HttpContext http, CancellationToken ct) =>
+        {
+            var data = await curriculum.GetCurriculumAsync(http.UserId(), ct);
+            return Results.Ok(data);
+        })
+            .WithName("GetListeningCurriculum")
+            .WithSummary("12-stage Listening curriculum + per-stage completion");
+
         group.MapGet("/papers/{paperId}/session", async (
             string paperId,
             string? mode,

@@ -788,6 +788,12 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningStructure
     OetLearner.Api.Services.Listening.ListeningStructureService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAuthoringService,
     OetLearner.Api.Services.Listening.ListeningAuthoringService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAnalyticsService,
+    OetLearner.Api.Services.Listening.ListeningAnalyticsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningCurriculumService,
+    OetLearner.Api.Services.Listening.ListeningCurriculumService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionService,
+    OetLearner.Api.Services.Listening.ListeningExtractionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentEntitlementService,
     OetLearner.Api.Services.Content.ContentEntitlementService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.RulebookAdminService>();
@@ -1091,6 +1097,7 @@ app.MapContentPapersLearnerEndpoints();
 app.MapReadingAnalyticsAdminEndpoints();
 app.MapReadingAuthoringAdminEndpoints();
 app.MapListeningAuthoringAdminEndpoints();
+app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
 app.MapListeningLearnerEndpoints();
 app.MapReadingPolicyAdminEndpoints();
