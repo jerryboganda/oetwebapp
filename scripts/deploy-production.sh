@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 
 # --------------------------------------
 # deploy-production.sh - bullet-proof version
