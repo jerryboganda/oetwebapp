@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using OetLearner.Api.Services.Listening;
 
 namespace OetLearner.Api.Endpoints;
@@ -27,6 +28,30 @@ public static class ListeningAdminAnalyticsEndpoints
         })
             .WithName("GetListeningAdminAnalytics")
             .WithSummary("Class-wide Listening analytics over a rolling window");
+
+        // Phase 2 follow-up: bulk JSON→relational backfill across every
+        // Listening paper. Gated separately under AdminContentWrite +
+        // PerUserWrite because it mutates the relational tables.
+        var write = app.MapGroup("/v1/admin/listening")
+            .RequireAuthorization("AdminContentWrite")
+            .RequireRateLimiting("PerUserWrite");
+
+        write.MapPost("/backfill", async (
+            IListeningBackfillService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var reports = await svc.BackfillAllAsync(adminId, ct);
+            return Results.Ok(new
+            {
+                count = reports.Count,
+                successCount = reports.Count(r => r.Success),
+                reports,
+            });
+        })
+            .WithName("BackfillListeningRelationalAll")
+            .WithSummary("Project the JSON blob into ListeningPart/Extract/Question/Option for every Listening paper");
 
         return app;
     }

@@ -32,6 +32,24 @@ public interface IListeningAuthoringService
         IReadOnlyList<ListeningAuthoredQuestion> questions,
         string adminId,
         CancellationToken ct);
+
+    /// <summary>
+    /// Phase 5 tail: read paper-level extract metadata
+    /// (<c>listeningExtracts</c>) — accent code, speakers, extract title /
+    /// kind / audio window. Empty list when not yet authored.
+    /// </summary>
+    Task<IReadOnlyList<ListeningAuthoredExtract>> GetExtractsAsync(string paperId, CancellationToken ct);
+
+    /// <summary>
+    /// Phase 5 tail: replace paper-level extract metadata
+    /// (<c>listeningExtracts</c>) atomically. Preserves sibling JSON keys
+    /// (e.g. <c>listeningQuestions</c>, <c>listeningTranscriptSegments</c>).
+    /// </summary>
+    Task<IReadOnlyList<ListeningAuthoredExtract>> ReplaceExtractsAsync(
+        string paperId,
+        IReadOnlyList<ListeningAuthoredExtract> extracts,
+        string adminId,
+        CancellationToken ct);
 }
 
 /// <summary>Server-side admin DTO for an authored Listening item. Carries the
@@ -65,6 +83,27 @@ public sealed record ListeningAuthoredQuestion(
 public sealed record ListeningAuthoredQuestionList(
     IReadOnlyList<ListeningAuthoredQuestion> Questions,
     ListeningValidationCounts Counts);
+
+/// <summary>
+/// Phase 5 tail: paper-level extract metadata. One row per extract
+/// (A1, A2, B clip, C1, C2). Drives accent / speakers / audio-window UI
+/// surfaces in the player + review.
+/// </summary>
+public sealed record ListeningAuthoredExtract(
+    string PartCode,                                   // A1 | A2 | B | C1 | C2
+    int DisplayOrder,
+    string Kind,                                       // consultation | workplace | presentation
+    string Title,
+    string? AccentCode,                                // e.g. en-GB | en-AU | en-IE | en-US
+    IReadOnlyList<ListeningAuthoredSpeaker> Speakers,
+    int? AudioStartMs,
+    int? AudioEndMs);
+
+public sealed record ListeningAuthoredSpeaker(
+    string Id,
+    string Role,
+    string? Gender,                                    // m | f | nb | null
+    string? Accent);
 
 public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningAuthoringService
 {
@@ -146,6 +185,234 @@ public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningA
 
         return new ListeningAuthoredQuestionList(normalized, Tally(normalized));
     }
+
+    // ── Phase 5 tail: extract metadata (accent + speakers) ──────────────
+
+    private const string ExtractsKey = "listeningExtracts";
+
+    public async Task<IReadOnlyList<ListeningAuthoredExtract>> GetExtractsAsync(string paperId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == paperId, ct)
+            ?? throw new InvalidOperationException("Paper not found.");
+
+        return ReadExtractsArray(paper.ExtractedTextJson)
+            .Select((e, i) => NormalizeExtractFromStorage(e, i))
+            .OrderBy(e => PartCodeOrder(e.PartCode))
+            .ThenBy(e => e.DisplayOrder)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<ListeningAuthoredExtract>> ReplaceExtractsAsync(
+        string paperId,
+        IReadOnlyList<ListeningAuthoredExtract> extracts,
+        string adminId,
+        CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct)
+            ?? throw new InvalidOperationException("Paper not found.");
+
+        Dictionary<string, JsonElement> root;
+        if (string.IsNullOrWhiteSpace(paper.ExtractedTextJson))
+        {
+            root = new Dictionary<string, JsonElement>();
+        }
+        else
+        {
+            try
+            {
+                root = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(paper.ExtractedTextJson)
+                       ?? new Dictionary<string, JsonElement>();
+            }
+            catch (JsonException)
+            {
+                root = new Dictionary<string, JsonElement>();
+            }
+        }
+
+        var normalized = extracts
+            .Select(NormalizeExtractForStorage)
+            .OrderBy(e => PartCodeOrder(e.PartCode))
+            .ThenBy(e => e.DisplayOrder)
+            .ToList();
+
+        // Persist with camelCase JSON property names so the read-back path
+        // (which inspects keys like "partCode", "accentCode", etc.) sees the
+        // same shape an external author or AI extractor would write.
+        var camelOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        var serialized = JsonSerializer.SerializeToElement(normalized, camelOptions);
+        root[ExtractsKey] = serialized;
+
+        paper.ExtractedTextJson = JsonSerializer.Serialize(root);
+        paper.UpdatedAt = DateTimeOffset.UtcNow;
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit_{Guid.NewGuid():N}",
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = adminId,
+            ActorAuthAccountId = adminId,
+            ActorName = adminId,
+            Action = "ListeningExtractsUpdated",
+            ResourceType = "ContentPaper",
+            ResourceId = paper.Id,
+            Details = JsonSerializer.Serialize(new
+            {
+                count = normalized.Count,
+                accents = normalized.Where(e => !string.IsNullOrWhiteSpace(e.AccentCode))
+                                    .Select(e => e.AccentCode!).Distinct().ToList(),
+            }),
+        });
+
+        await db.SaveChangesAsync(ct);
+        return normalized;
+    }
+
+    private static List<Dictionary<string, object?>> ReadExtractsArray(string? extractedTextJson)
+    {
+        if (string.IsNullOrWhiteSpace(extractedTextJson)) return [];
+        try
+        {
+            var root = JsonSerializer.Deserialize<Dictionary<string, object?>>(extractedTextJson);
+            var raw = root?.GetValueOrDefault(ExtractsKey);
+            if (raw is null) return [];
+            return JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(JsonSerializer.Serialize(raw))
+                   ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static ListeningAuthoredExtract NormalizeExtractFromStorage(Dictionary<string, object?> e, int index)
+    {
+        string? Read(string key) => e.GetValueOrDefault(key)?.ToString();
+        int? ReadInt(string key)
+        {
+            var s = Read(key);
+            return int.TryParse(s, out var v) && v >= 0 ? v : (int?)null;
+        }
+
+        var partCode = NormalizeExtractPartCode(Read("partCode")) ?? "A1";
+        var displayOrder = ReadInt("displayOrder") ?? index;
+        var kind = NormalizeExtractKind(Read("kind"), partCode);
+
+        var speakersRaw = e.GetValueOrDefault("speakers");
+        var speakers = ParseAuthoredSpeakers(speakersRaw);
+
+        return new ListeningAuthoredExtract(
+            PartCode: partCode,
+            DisplayOrder: displayOrder,
+            Kind: kind,
+            Title: Read("title") ?? $"Extract {index + 1}",
+            AccentCode: Read("accentCode"),
+            Speakers: speakers,
+            AudioStartMs: ReadInt("audioStartMs"),
+            AudioEndMs: ReadInt("audioEndMs"));
+    }
+
+    private static ListeningAuthoredExtract NormalizeExtractForStorage(ListeningAuthoredExtract e)
+    {
+        var partCode = NormalizeExtractPartCode(e.PartCode) ?? "A1";
+        var kind = NormalizeExtractKind(e.Kind, partCode);
+        var displayOrder = Math.Max(0, e.DisplayOrder);
+        var title = (e.Title ?? string.Empty).Trim();
+        if (title.Length == 0) title = $"{partCode} extract";
+        var accentCode = string.IsNullOrWhiteSpace(e.AccentCode) ? null : e.AccentCode.Trim();
+
+        var speakers = (e.Speakers ?? [])
+            .Select((s, idx) => new ListeningAuthoredSpeaker(
+                Id: string.IsNullOrWhiteSpace(s.Id) ? $"s{idx + 1}" : s.Id.Trim(),
+                Role: string.IsNullOrWhiteSpace(s.Role) ? "speaker" : s.Role.Trim(),
+                Gender: NormalizeSpeakerGender(s.Gender),
+                Accent: string.IsNullOrWhiteSpace(s.Accent) ? null : s.Accent.Trim()))
+            .ToList();
+
+        var audioStart = e.AudioStartMs is int sv && sv >= 0 ? sv : (int?)null;
+        var audioEnd = e.AudioEndMs is int ev && ev >= 0 ? ev : (int?)null;
+        if (audioStart is int s && audioEnd is int en && en < s)
+        {
+            audioEnd = null;
+        }
+
+        return new ListeningAuthoredExtract(
+            PartCode: partCode,
+            DisplayOrder: displayOrder,
+            Kind: kind,
+            Title: title,
+            AccentCode: accentCode,
+            Speakers: speakers,
+            AudioStartMs: audioStart,
+            AudioEndMs: audioEnd);
+    }
+
+    private static IReadOnlyList<ListeningAuthoredSpeaker> ParseAuthoredSpeakers(object? raw)
+    {
+        if (raw is null) return [];
+        try
+        {
+            var list = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(JsonSerializer.Serialize(raw));
+            if (list is null) return [];
+            var output = new List<ListeningAuthoredSpeaker>(list.Count);
+            for (var i = 0; i < list.Count; i++)
+            {
+                var s = list[i];
+                output.Add(new ListeningAuthoredSpeaker(
+                    Id: s.GetValueOrDefault("id")?.ToString() ?? $"s{i + 1}",
+                    Role: s.GetValueOrDefault("role")?.ToString() ?? "speaker",
+                    Gender: NormalizeSpeakerGender(s.GetValueOrDefault("gender")?.ToString()),
+                    Accent: s.GetValueOrDefault("accent")?.ToString()));
+            }
+            return output;
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static string? NormalizeSpeakerGender(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var n = raw.Trim().ToLowerInvariant();
+        return n is "m" or "f" or "nb" ? n : null;
+    }
+
+    private static string NormalizeExtractKind(string? raw, string partCode)
+    {
+        var n = (raw ?? string.Empty).Trim().ToLowerInvariant();
+        if (n is "consultation" or "workplace" or "presentation") return n;
+        return partCode switch
+        {
+            "B" => "workplace",
+            "C1" or "C2" => "presentation",
+            _ => "consultation",
+        };
+    }
+
+    private static string? NormalizeExtractPartCode(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var n = raw.Trim().ToUpperInvariant();
+        return n switch
+        {
+            "A1" or "A2" or "B" or "C1" or "C2" => n,
+            "A" => "A1",
+            "C" => "C1",
+            _ => null,
+        };
+    }
+
+    private static int PartCodeOrder(string partCode) => partCode switch
+    {
+        "A1" => 1,
+        "A2" => 2,
+        "B" => 3,
+        "C1" => 4,
+        "C2" => 5,
+        _ => 99,
+    };
 
     // ── Helpers ──────────────────────────────────────────────────────────
 

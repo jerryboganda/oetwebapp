@@ -794,6 +794,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningCurriculu
     OetLearner.Api.Services.Listening.ListeningCurriculumService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionService,
     OetLearner.Api.Services.Listening.ListeningExtractionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningBackfillService,
+    OetLearner.Api.Services.Listening.ListeningBackfillService>();
 // Grounded AI extraction is the production default once an AI provider is
 // configured (AI__ApiKey or AI__BaseUrl). Otherwise we fall back to the
 // deterministic stub so the admin UI works end-to-end on dev machines and

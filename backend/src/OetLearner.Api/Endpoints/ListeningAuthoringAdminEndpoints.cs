@@ -22,6 +22,7 @@ namespace OetLearner.Api.Endpoints;
 public static class ListeningAuthoringAdminEndpoints
 {
     public sealed record ReplaceStructureBody(IReadOnlyList<ListeningAuthoredQuestion> Questions);
+    public sealed record ReplaceExtractsBody(IReadOnlyList<ListeningAuthoredExtract> Extracts);
 
     public static IEndpointRouteBuilder MapListeningAuthoringAdminEndpoints(this IEndpointRouteBuilder app)
     {
@@ -69,6 +70,47 @@ public static class ListeningAuthoringAdminEndpoints
         {
             var draft = await svc.ProposeStructureAsync(paperId, ct);
             return Results.Ok(draft);
+        });
+
+        // Phase 5 tail: admin CRUD for paper-level extract metadata
+        // (accent / speakers / audio window / extract title). Persisted under
+        // ContentPaper.ExtractedTextJson["listeningExtracts"] so it ships
+        // additively next to the questions blob.
+        group.MapGet("/extracts", async (
+            string paperId,
+            IListeningAuthoringService svc,
+            CancellationToken ct) =>
+        {
+            var doc = await svc.GetExtractsAsync(paperId, ct);
+            return Results.Ok(new { extracts = doc });
+        });
+
+        group.MapPut("/extracts", async (
+            string paperId,
+            ReplaceExtractsBody body,
+            IListeningAuthoringService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var doc = await svc.ReplaceExtractsAsync(paperId, body.Extracts ?? [], adminId, ct);
+            return Results.Ok(new { extracts = doc });
+        });
+
+        // Phase 2 follow-up: project the JSON-blob authored shape into the
+        // relational ListeningPart / Extract / Question / Option entities.
+        // Idempotent — wipes existing relational rows for the paper before
+        // re-inserting. The JSON blob remains the runtime source of truth
+        // until a separate "switch reads to relational" slice ships.
+        group.MapPost("/backfill", async (
+            string paperId,
+            IListeningBackfillService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var report = await svc.BackfillPaperAsync(paperId, adminId, ct);
+            return Results.Ok(report);
         });
 
         return app;

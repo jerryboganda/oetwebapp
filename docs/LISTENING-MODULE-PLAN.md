@@ -57,13 +57,19 @@ Mapped to spec sections (1–16). `[exists]` = already shipped, `[gap]` = missin
 > Each phase is a single shippable commit (or small commit cluster), green build,
 > green tests, deployable independently.
 
-> **Implementation status (this branch):** Phases 1, 3, 4, 5, 6, 7, 8, 9, 10
-> all shipped as additive enhancements on top of the existing JSON-backed
-> Listening storage. Phase 2 (relational Listening schema + EF migration) is
-> deferred to a dedicated branch \u2014 staged ground-truth migration is too risky
-> to bundle with feature work. Phase 5 ships per-question evidence ms + a
-> paper-level `listeningTranscriptSegments` array surfaced on the review DTO;
-> first-class accent/speakers metadata still rides inside the JSON blob.
+> **Implementation status (this branch):** Phases 1–10 all shipped, including
+> the three close-out follow-up slices: (a) Phase 2 follow-up —
+> `ListeningBackfillService` projects historical `listeningQuestions` JSON into
+> relational `ListeningPart` / `ListeningExtract` / `ListeningQuestion` /
+> `ListeningQuestionOption`, exposed at
+> `POST /v1/admin/papers/{paperId}/listening/backfill` (per-paper) and
+> `POST /v1/admin/listening/backfill` (bulk); idempotent rewrite-on-rerun.
+> (b) Phase 5 tail — first-class `listeningExtracts` metadata (accent code +
+> speakers + audio window) surfaced via
+> `GET/PUT /v1/admin/papers/{paperId}/listening/extracts` and on the learner
+> session DTO. (c) Phase 9 tail — `paper` and `home` (OET@Home) modes wired
+> through `NormalizeMode` + `modePolicy` + player UI: integrity-lock banner for
+> `home`, printable-booklet hint for `paper`.
 > Phase 8 ships the `IListeningExtractionAi` seam + `StubListeningExtractionAi`
 > + admin "Propose with AI" path **and** the grounded-gateway impl
 > (`GroundedListeningExtractionAi`) wired through `IAiGatewayService` with
@@ -94,7 +100,7 @@ Stage decision (no relational error bank yet):
 - `mock_ready` — best scaled `>= 350` + 0 listening mocks submitted.
 - `exam_ready` — `>= 1` listening (or full) mock submitted.
 
-### Phase 2 — Relational Listening schema (entities + migration) **(shipped — entities + DbSets + migration `AddListeningModuleEntities` + `ListeningAttemptExpireWorker`; JSON blob remains the runtime read source until a follow-up backfill slice ports historical papers)**
+### Phase 2 — Relational Listening schema (entities + migration) **(shipped — entities + DbSets + migration `AddListeningModuleEntities` + `ListeningAttemptExpireWorker` + `ListeningBackfillService` projecting JSON→entity at `POST /v1/admin/papers/{paperId}/listening/backfill` and bulk `POST /v1/admin/listening/backfill`; the JSON blob remains the runtime read source for backwards-compat, with relational rows now available for analytics + future reads)**
 
 Lift `ContentPaper.ExtractedTextJson["listeningQuestions"]` into:
 
@@ -125,7 +131,7 @@ fallback for one release. Ship `ListeningAttemptExpireWorker`.
 - Add `speakerAttitude` enum on Part C questions
   (`concerned | optimistic | doubtful | critical | neutral | other`).
 
-### Phase 5 — Time-coded transcripts + audio metadata **(shipped — per-question evidence ms + paper-level transcriptSegments; accent/speakers metadata still in JSON)**
+### Phase 5 — Time-coded transcripts + audio metadata **(shipped — per-question evidence ms + paper-level `listeningTranscriptSegments`, plus first-class `listeningExtracts` accent + speakers + audio window via `GET/PUT /v1/admin/papers/{paperId}/listening/extracts` and surfaced on the learner session DTO)**
 
 - First-class authored fields: `accentCode`, `speakersJson`, sentence-level
   `transcriptSegmentsJson` (start/end ms + speakerId + text).
@@ -161,7 +167,7 @@ Admin uploads Question-Paper PDF + Audio Script PDF + Answer Key PDF →
 AI extraction proposes 42 items via `IAiGatewayService` with a strict JSON
 schema for `ListeningAuthoredQuestion`. Mirrors Reading Phase 6.
 
-### Phase 9 — Test-rules lesson + paper/home modes **(shipped — `/listening/test-rules`; paper/home modes deferred)**
+### Phase 9 — Test-rules lesson + paper/home modes **(shipped — `/listening/test-rules`; `paper` + `home` modes wired via `NormalizeMode` + `modePolicy` + player UI: integrity-lock banner for `home`, printable-booklet hint for `paper`)**
 
 - Pre-flight "Listening Test Rules" lesson surface (one-play, no negative
   marking, MCQ vs gap-fill, exam integrity).

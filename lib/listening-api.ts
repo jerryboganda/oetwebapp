@@ -121,6 +121,26 @@ export interface ListeningSessionQuestionDto {
   points: number;
 }
 
+/** Phase 5 tail — speaker descriptor inside an extract metadata row. */
+export interface ListeningSpeakerDto {
+  id: string;
+  role: string;
+  gender?: 'm' | 'f' | 'nb' | null;
+  accent?: string | null;
+}
+
+/** Phase 5 tail — paper-level extract metadata. One row per extract. */
+export interface ListeningExtractMetadataDto {
+  partCode: 'A1' | 'A2' | 'B' | 'C1' | 'C2';
+  displayOrder: number;
+  kind: 'consultation' | 'workplace' | 'presentation';
+  title: string;
+  accentCode: string | null;
+  speakers: ListeningSpeakerDto[];
+  audioStartMs: number | null;
+  audioEndMs: number | null;
+}
+
 export interface ListeningSessionDto {
   paper: {
     id: string;
@@ -141,16 +161,27 @@ export interface ListeningSessionDto {
       audioScript: boolean;
     };
     transcriptPolicy: string;
+    /** Phase 5 tail — paper-level extract metadata. One row per extract:
+     * A1, A2, B (one per workplace clip), C1, C2. Empty list when not
+     * yet authored. */
+    extracts?: ListeningExtractMetadataDto[];
   };
   attempt: ListeningAttemptDto | null;
   questions: ListeningSessionQuestionDto[];
   modePolicy: {
-    mode: 'practice' | 'exam';
+    mode: 'practice' | 'exam' | 'home' | 'paper';
     canPause: boolean;
     canScrub: boolean;
     onePlayOnly: boolean;
     autosave: boolean;
     transcriptPolicy: string;
+    /** Phase 9 tail — UI hint. Server is the source of truth for integrity
+     * invariants (onePlayOnly / canScrub / canPause). */
+    presentationStyle?: 'practice' | 'exam_standard' | 'kiosk_fullscreen' | 'printable_booklet';
+    /** OET@Home kiosk: full-screen + integrity prompt before audio plays. */
+    integrityLockRequired?: boolean;
+    /** Paper-simulation: render a printable booklet alongside the player. */
+    printableBooklet?: boolean;
   };
   scoring: {
     maxRawScore: number;
@@ -266,9 +297,11 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 export const getListeningHome = () =>
   api<ListeningHomeDto>('/v1/listening/home');
 
+export type ListeningSessionMode = 'practice' | 'exam' | 'home' | 'paper';
+
 export function getListeningSession(
   paperId: string,
-  options: { mode?: 'practice' | 'exam'; attemptId?: string | null } = {},
+  options: { mode?: ListeningSessionMode; attemptId?: string | null } = {},
 ) {
   const params = new URLSearchParams();
   if (options.mode) params.set('mode', options.mode);
@@ -277,7 +310,7 @@ export function getListeningSession(
   return api<ListeningSessionDto>(`/v1/listening-papers/papers/${encodeURIComponent(paperId)}/session${suffix}`);
 }
 
-export const startListeningAttempt = (paperId: string, mode: 'practice' | 'exam') =>
+export const startListeningAttempt = (paperId: string, mode: ListeningSessionMode) =>
   api<ListeningAttemptDto>(`/v1/listening-papers/papers/${encodeURIComponent(paperId)}/attempts`, {
     method: 'POST',
     body: JSON.stringify({ mode }),

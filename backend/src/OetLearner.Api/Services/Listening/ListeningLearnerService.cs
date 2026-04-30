@@ -228,11 +228,24 @@ public sealed class ListeningLearnerService(
             modePolicy = new
             {
                 mode = attempt?.Mode ?? normalizedMode,
-                canPause = normalizedMode == "practice",
-                canScrub = normalizedMode == "practice",
-                onePlayOnly = normalizedMode == "exam",
+                canPause = !IsExamMode(normalizedMode),
+                canScrub = !IsExamMode(normalizedMode),
+                onePlayOnly = IsExamMode(normalizedMode),
                 autosave = true,
-                transcriptPolicy = "per_item_post_attempt"
+                transcriptPolicy = "per_item_post_attempt",
+                // Phase 9 tail: presentation hints so the player can render
+                // the correct chrome (kiosk on home, printable booklet on
+                // paper). The graded-integrity invariants stay encoded in
+                // onePlayOnly / canScrub / canPause above.
+                presentationStyle = normalizedMode switch
+                {
+                    "home" => "kiosk_fullscreen",
+                    "paper" => "printable_booklet",
+                    "exam" => "exam_standard",
+                    _ => "practice"
+                },
+                integrityLockRequired = normalizedMode == "home",
+                printableBooklet = normalizedMode == "paper"
             },
             scoring = new
             {
@@ -509,6 +522,7 @@ public sealed class ListeningLearnerService(
                 : questionMap.GetValueOrDefault("questions"))
             .ToList();
         var segments = ExtractTranscriptSegments(questionMap.GetValueOrDefault("listeningTranscriptSegments"));
+        var extracts = ExtractExtractMetadata(questionMap.GetValueOrDefault("listeningExtracts"));
 
         return new ListeningSource(
             Id: paper.Id,
@@ -528,7 +542,8 @@ public sealed class ListeningLearnerService(
                 QuestionPaper: assetByRole.ContainsKey(PaperAssetRole.QuestionPaper),
                 AnswerKey: assetByRole.ContainsKey(PaperAssetRole.AnswerKey),
                 AudioScript: assetByRole.ContainsKey(PaperAssetRole.AudioScript)),
-            TranscriptSegments: segments);
+            TranscriptSegments: segments,
+            Extracts: extracts);
     }
 
     private static ListeningSource BuildLegacySource(ContentItem item)
@@ -536,6 +551,7 @@ public sealed class ListeningLearnerService(
         var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(item.DetailJson, new Dictionary<string, object?>());
         var questions = ExtractQuestions(detail.GetValueOrDefault("questions")).ToList();
         var segments = ExtractTranscriptSegments(detail.GetValueOrDefault("listeningTranscriptSegments"));
+        var extracts = ExtractExtractMetadata(detail.GetValueOrDefault("listeningExtracts"));
         return new ListeningSource(
             Id: item.Id,
             SourceKind: "legacy_content_item",
@@ -554,7 +570,8 @@ public sealed class ListeningLearnerService(
                 QuestionPaper: false,
                 AnswerKey: true,
                 AudioScript: questions.Any(q => !string.IsNullOrWhiteSpace(q.TranscriptExcerpt))),
-            TranscriptSegments: segments);
+            TranscriptSegments: segments,
+            Extracts: extracts);
     }
 
     /// <summary>
@@ -599,6 +616,128 @@ public sealed class ListeningLearnerService(
         if (raw is long l) return (int)l;
         if (raw is double d) return (int)d;
         return int.TryParse(raw.ToString(), out var v) ? v : -1;
+    }
+
+    /// <summary>
+    /// Phase 5 tail: parse paper-level extract metadata
+    /// (<c>listeningExtracts</c>) into typed DTOs. One row per extract:
+    ///   A1, A2, B (one per workplace clip), C1, C2.
+    /// Each row carries accent + speakers + audio window + extract kind/title.
+    /// Defensive: any malformed payload yields an empty list rather than
+    /// poisoning the session/review response.
+    /// </summary>
+    private static IReadOnlyList<ListeningExtractMetaDto> ExtractExtractMetadata(object? raw)
+    {
+        if (raw is null) return [];
+        try
+        {
+            var list = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(
+                System.Text.Json.JsonSerializer.Serialize(raw), new List<Dictionary<string, object?>>());
+            if (list.Count == 0) return [];
+            var output = new List<ListeningExtractMetaDto>(list.Count);
+            for (var i = 0; i < list.Count; i++)
+            {
+                var seg = list[i];
+                var partCode = NormalizePartCode(ReadString(seg.GetValueOrDefault("partCode")));
+                if (partCode is null) continue;
+                var kind = NormalizeExtractKind(ReadString(seg.GetValueOrDefault("kind")), partCode);
+                var title = ReadString(seg.GetValueOrDefault("title")) ?? $"Extract {i + 1}";
+                var accentCode = ReadString(seg.GetValueOrDefault("accentCode"));
+                var displayOrder = ReadIntField(seg, "displayOrder");
+                if (displayOrder < 0) displayOrder = i;
+                int? audioStartMs = ReadIntField(seg, "audioStartMs") is var s and >= 0 ? s : null;
+                int? audioEndMs = ReadIntField(seg, "audioEndMs") is var e and >= 0 ? e : null;
+                if (audioStartMs is int sv && audioEndMs is int ev && ev < sv)
+                {
+                    audioEndMs = null;
+                }
+                var speakers = ParseSpeakers(seg.GetValueOrDefault("speakers"));
+                output.Add(new ListeningExtractMetaDto(
+                    PartCode: partCode,
+                    DisplayOrder: displayOrder,
+                    Kind: kind,
+                    Title: title,
+                    AccentCode: accentCode,
+                    Speakers: speakers,
+                    AudioStartMs: audioStartMs,
+                    AudioEndMs: audioEndMs));
+            }
+            return output
+                .OrderBy(e => PartCodeOrder(e.PartCode))
+                .ThenBy(e => e.DisplayOrder)
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<ListeningSpeakerDto> ParseSpeakers(object? raw)
+    {
+        if (raw is null) return [];
+        try
+        {
+            var list = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(
+                System.Text.Json.JsonSerializer.Serialize(raw), new List<Dictionary<string, object?>>());
+            var output = new List<ListeningSpeakerDto>(list.Count);
+            for (var i = 0; i < list.Count; i++)
+            {
+                var s = list[i];
+                var id = ReadString(s.GetValueOrDefault("id")) ?? $"s{i + 1}";
+                var role = ReadString(s.GetValueOrDefault("role")) ?? "speaker";
+                var gender = NormalizeGender(ReadString(s.GetValueOrDefault("gender")));
+                var accent = ReadString(s.GetValueOrDefault("accent"));
+                output.Add(new ListeningSpeakerDto(id, role, gender, accent));
+            }
+            return output;
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static string? NormalizePartCode(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var normalized = raw.Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "A1" or "A2" or "B" or "C1" or "C2" => normalized,
+            "A" => "A1",
+            "C" => "C1",
+            _ => null,
+        };
+    }
+
+    private static int PartCodeOrder(string partCode) => partCode switch
+    {
+        "A1" => 1,
+        "A2" => 2,
+        "B" => 3,
+        "C1" => 4,
+        "C2" => 5,
+        _ => 99,
+    };
+
+    private static string NormalizeExtractKind(string? raw, string partCode)
+    {
+        var normalized = (raw ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized is "consultation" or "workplace" or "presentation") return normalized;
+        return partCode switch
+        {
+            "B" => "workplace",
+            "C1" or "C2" => "presentation",
+            _ => "consultation",
+        };
+    }
+
+    private static string? NormalizeGender(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var normalized = raw.Trim().ToLowerInvariant();
+        return normalized is "m" or "f" or "nb" ? normalized : null;
     }
 
     private ListeningReviewDto BuildReview(Attempt attempt, ListeningSource source, Evaluation? evaluation = null)
@@ -821,7 +960,21 @@ public sealed class ListeningLearnerService(
             ? "Audio is not available for this Listening paper yet."
             : null,
         source.AssetReadiness,
-        transcriptPolicy = "per_item_post_attempt"
+        transcriptPolicy = "per_item_post_attempt",
+        // Phase 5 tail: paper-level extract metadata (accent + speakers +
+        // audio window + extract kind/title). Empty list when the authored
+        // paper has no metadata yet.
+        extracts = source.Extracts.Select(e => new
+        {
+            partCode = e.PartCode,
+            displayOrder = e.DisplayOrder,
+            kind = e.Kind,
+            title = e.Title,
+            accentCode = e.AccentCode,
+            speakers = e.Speakers,
+            audioStartMs = e.AudioStartMs,
+            audioEndMs = e.AudioEndMs,
+        }).ToList()
     };
 
     private static object AttemptDto(Attempt attempt, Dictionary<string, string?> answers) => new
@@ -1098,11 +1251,37 @@ public sealed class ListeningLearnerService(
     private static Dictionary<string, string?> DeserializeAnswers(string json)
         => JsonSupport.Deserialize<Dictionary<string, string?>>(json, new Dictionary<string, string?>());
 
+    /// <summary>
+    /// Phase 9 tail: accept the four learner-visible Listening modes.
+    ///
+    ///   <c>practice</c> — default. Free replay, scrubbable, pause allowed.
+    ///   <c>exam</c>     — one-play, no scrub, no pause. Standard CBT-style.
+    ///   <c>home</c>     — OET@Home: kiosk full-screen + integrity prompt;
+    ///                     timer + one-play behave like <c>exam</c>.
+    ///   <c>paper</c>    — paper-simulation: printable booklet UI; timer +
+    ///                     one-play behave like <c>exam</c>.
+    ///
+    /// Anything else collapses to <c>practice</c> so a malformed query
+    /// param can never accidentally promote a learner into a high-stakes
+    /// integrity flow.
+    /// </summary>
     private static string NormalizeMode(string? mode)
     {
         var normalized = (mode ?? "practice").Trim().ToLowerInvariant();
-        return normalized == "exam" ? "exam" : "practice";
+        return normalized switch
+        {
+            "exam" => "exam",
+            "home" => "home",
+            "paper" => "paper",
+            _ => "practice",
+        };
     }
+
+    /// <summary>True for any mode that is graded under exam-integrity rules
+    /// (one-play, no pause, no scrub). <c>practice</c> is the only non-exam
+    /// mode.</summary>
+    private static bool IsExamMode(string normalizedMode)
+        => normalizedMode is "exam" or "home" or "paper";
 
     private static string? AssetDownloadPath(ContentPaperAsset? asset)
         => asset?.MediaAsset is null ? null : $"/v1/media/{asset.MediaAsset.Id}/content";
@@ -1373,7 +1552,27 @@ public sealed class ListeningLearnerService(
         ListeningAssetReadiness AssetReadiness,
         // Phase 5: paper-level time-coded transcript segments. Empty list when
         // the authored paper has no segment metadata yet.
-        IReadOnlyList<ListeningTranscriptSegmentDto> TranscriptSegments);
+        IReadOnlyList<ListeningTranscriptSegmentDto> TranscriptSegments,
+        // Phase 5 tail: paper-level extract metadata (accent + speakers +
+        // audio window + extract kind/title). One row per extract: A1, A2,
+        // B (one per workplace clip), C1, C2. Empty list when not authored.
+        IReadOnlyList<ListeningExtractMetaDto> Extracts);
+
+    private sealed record ListeningExtractMetaDto(
+        string PartCode,                     // A1 | A2 | B | C1 | C2
+        int DisplayOrder,
+        string Kind,                          // consultation | workplace | presentation
+        string Title,
+        string? AccentCode,                   // e.g. en-GB | en-AU | en-IE | en-US
+        IReadOnlyList<ListeningSpeakerDto> Speakers,
+        int? AudioStartMs,
+        int? AudioEndMs);
+
+    private sealed record ListeningSpeakerDto(
+        string Id,
+        string Role,                          // e.g. doctor | patient | nurse | presenter
+        string? Gender,                       // m | f | nb | null
+        string? Accent);                      // optional override of extract accentCode
 
     private sealed record ListeningTranscriptSegmentDto(
         int StartMs,

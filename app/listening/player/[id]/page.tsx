@@ -59,7 +59,11 @@ function PlayerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = firstParam(params?.id);
-  const mode = searchParams?.get('mode') === 'exam' ? 'exam' : 'practice';
+  // Phase 9 tail: accept practice | exam | home | paper from the URL.
+  // Anything else collapses to practice (mirrors backend NormalizeMode).
+  const rawMode = searchParams?.get('mode') ?? '';
+  const mode: 'practice' | 'exam' | 'home' | 'paper' =
+    rawMode === 'exam' || rawMode === 'home' || rawMode === 'paper' ? rawMode : 'practice';
   const attemptIdFromRoute = searchParams?.get('attemptId');
   const drillId = searchParams?.get('drill');
 
@@ -341,7 +345,15 @@ function PlayerContent() {
             <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
               <Volume2 className="h-10 w-10 text-primary" />
             </div>
-            <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted">{isExam ? 'Exam Mode' : 'Practice Mode'}</p>
+            <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted">
+              {session.modePolicy.mode === 'home'
+                ? 'OET@Home Mode'
+                : session.modePolicy.mode === 'paper'
+                  ? 'Paper-Simulation Mode'
+                  : isExam
+                    ? 'Exam Mode'
+                    : 'Practice Mode'}
+            </p>
             <h2 className="mb-4 text-2xl font-black text-navy">{session.paper.title}</h2>
             {drillId ? (
               <p className="mx-auto mb-4 max-w-lg text-sm text-muted">
@@ -383,6 +395,22 @@ function PlayerContent() {
                     <span>Practice mode allows pause and scrubbing while you build accuracy.</span>
                   </li>
                 )}
+                {session.modePolicy.integrityLockRequired ? (
+                  <li className="flex items-start gap-2">
+                    <Lock className="h-5 w-5 shrink-0 text-danger" />
+                    <span className="font-bold text-danger">
+                      OET@Home: stay in full-screen for the entire test. Leaving full-screen flags an integrity event.
+                    </span>
+                  </li>
+                ) : null}
+                {session.modePolicy.printableBooklet ? (
+                  <li className="flex items-start gap-2">
+                    <FileText className="h-5 w-5 shrink-0 text-warning" />
+                    <span>
+                      Paper-simulation: open the printable booklet alongside the player and write your answers there before transcribing them online.
+                    </span>
+                  </li>
+                ) : null}
               </ul>
             </div>
 
