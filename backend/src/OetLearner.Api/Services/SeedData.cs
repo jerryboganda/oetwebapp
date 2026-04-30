@@ -94,6 +94,10 @@ public static partial class SeedData
             SeedContentPrograms(db);
             hasChanges = true;
         }
+        else if (await EnsureSeededPublishedContentCompatibilityAsync(db, cancellationToken))
+        {
+            hasChanges = true;
+        }
 
         if (!await db.GrammarLessons.AnyAsync(cancellationToken))
         {
@@ -144,6 +148,136 @@ public static partial class SeedData
         {
             await db.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private static async Task<bool> EnsureSeededPublishedContentCompatibilityAsync(
+        LearnerDbContext db,
+        CancellationToken cancellationToken)
+    {
+        // Some early production databases stored the seeded learner catalogue
+        // with integer status value 1 when the enum meant "Published". The
+        // workflow enum later gained review states before Published, so those
+        // same rows now hydrate as InReview and learners cannot start attempts
+        // from the public diagnostic/reading, writing, speaking, listening, or
+        // course-entry routes. Repair only the known platform-seeded IDs; do
+        // not change administrator-authored draft/review content.
+        var hasChanges = false;
+        var now = DateTimeOffset.UtcNow;
+
+        static bool Publish(ContentStatus status) => status != ContentStatus.Published;
+
+        var seededContentItemIds = new[]
+        {
+            "wt-001", "wt-002",
+            "st-001", "st-002",
+            "rt-001", "lt-001",
+            "sd-phrasing-001", "sd-intonation-001", "sd-pronunciation-001",
+            "sd-vocabulary-001", "sd-chunking-001", "sd-empathy-001"
+        };
+        var contentItems = await db.ContentItems
+            .Where(item => seededContentItemIds.Contains(item.Id))
+            .ToListAsync(cancellationToken);
+        foreach (var item in contentItems.Where(item => Publish(item.Status)))
+        {
+            item.Status = ContentStatus.Published;
+            item.PublishedAt ??= now;
+            item.UpdatedAt = now;
+            hasChanges = true;
+        }
+
+        var seededPackageIds = new[]
+        {
+            "pkg-full-en-2026", "pkg-full-ar-nursing-2026", "pkg-full-ar-medicine-2026",
+            "pkg-crash-en-general", "pkg-crash-ar-general", "pkg-crash-en-pharmacy",
+            "pkg-foundation-basic-en", "pkg-combo-lr-recalls"
+        };
+        var packages = await db.ContentPackages
+            .Where(package => seededPackageIds.Contains(package.Id))
+            .ToListAsync(cancellationToken);
+        foreach (var package in packages.Where(package => Publish(package.Status)))
+        {
+            package.Status = ContentStatus.Published;
+            package.PublishedAt ??= now;
+            package.UpdatedAt = now;
+            hasChanges = true;
+        }
+
+        var seededProgramIds = new[]
+        {
+            "prg-full-en-2026", "prg-full-ar-nursing-2026", "prg-full-ar-medicine-2026",
+            "prg-crash-en-general", "prg-crash-ar-general", "prg-crash-en-pharmacy",
+            "prg-foundation-basic-en"
+        };
+        var programs = await db.ContentPrograms
+            .Where(program => seededProgramIds.Contains(program.Id))
+            .ToListAsync(cancellationToken);
+        foreach (var program in programs.Where(program => Publish(program.Status)))
+        {
+            program.Status = ContentStatus.Published;
+            program.PublishedAt ??= now;
+            program.UpdatedAt = now;
+            hasChanges = true;
+        }
+
+        var seededTrackIds = new[]
+        {
+            "trk-full-en-writing", "trk-full-en-speaking", "trk-full-en-reading", "trk-full-en-listening",
+            "trk-ar-nursing-writing", "trk-ar-nursing-speaking", "trk-ar-nursing-reading", "trk-ar-nursing-listening",
+            "trk-foundation-core"
+        };
+        var tracks = await db.ContentTracks
+            .Where(track => seededTrackIds.Contains(track.Id))
+            .ToListAsync(cancellationToken);
+        foreach (var track in tracks.Where(track => Publish(track.Status)))
+        {
+            track.Status = ContentStatus.Published;
+            hasChanges = true;
+        }
+
+        var seededModuleIds = new[]
+        {
+            "mod-full-en-wr-01", "mod-full-en-wr-02", "mod-full-en-wr-03",
+            "mod-full-en-sp-01", "mod-full-en-sp-02", "mod-full-en-rd-01", "mod-full-en-lt-01",
+            "mod-foundation-grammar", "mod-foundation-vocab", "mod-foundation-reading"
+        };
+        var modules = await db.ContentModules
+            .Where(module => seededModuleIds.Contains(module.Id))
+            .ToListAsync(cancellationToken);
+        foreach (var module in modules.Where(module => Publish(module.Status)))
+        {
+            module.Status = ContentStatus.Published;
+            hasChanges = true;
+        }
+
+        var seededLessonIds = new[]
+        {
+            "lsn-wr-01-task", "lsn-wr-02-task", "lsn-sp-01-task",
+            "lsn-sp-02-task", "lsn-rd-01-task", "lsn-lt-01-task"
+        };
+        var lessons = await db.ContentLessons
+            .Where(lesson => seededLessonIds.Contains(lesson.Id))
+            .ToListAsync(cancellationToken);
+        foreach (var lesson in lessons.Where(lesson => Publish(lesson.Status)))
+        {
+            lesson.Status = ContentStatus.Published;
+            hasChanges = true;
+        }
+
+        var seededPreviewIds = new[]
+        {
+            "fp-grammar-sample", "fp-writing-sample", "fp-speaking-sample",
+            "fp-reading-sample", "fp-listening-sample"
+        };
+        var previewAssets = await db.FreePreviewAssets
+            .Where(asset => seededPreviewIds.Contains(asset.Id))
+            .ToListAsync(cancellationToken);
+        foreach (var asset in previewAssets.Where(asset => Publish(asset.Status)))
+        {
+            asset.Status = ContentStatus.Published;
+            hasChanges = true;
+        }
+
+        return hasChanges;
     }
 
     public static async Task EnsureDemoDataAsync(LearnerDbContext db, CancellationToken cancellationToken = default)
