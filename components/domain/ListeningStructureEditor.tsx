@@ -11,11 +11,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   buildCanonicalListeningSkeleton,
   getListeningStructure,
+  proposeListeningStructure,
   replaceListeningStructure,
   validateListeningStructure,
   type ListeningAuthoredQuestion,
+  type ListeningDistractorCategory,
   type ListeningPartCode,
   type ListeningQuestionType,
+  type ListeningSpeakerAttitude,
   type ListeningValidationCounts,
   type ListeningValidationReport,
   LISTENING_PART_A_COUNT,
@@ -23,6 +26,25 @@ import {
   LISTENING_PART_C_COUNT,
   LISTENING_CANONICAL_TOTAL,
 } from '@/lib/listening-authoring-api';
+
+const DISTRACTOR_CATEGORY_OPTIONS: { value: ListeningDistractorCategory | ''; label: string }[] = [
+  { value: '',                  label: '— not authored —' },
+  { value: 'too_strong',        label: 'Too strong (always / definitely)' },
+  { value: 'too_weak',          label: 'Too weak (rarely / unlikely)' },
+  { value: 'wrong_speaker',     label: 'Wrong speaker held the view' },
+  { value: 'opposite_meaning',  label: 'Opposite meaning / negation flip' },
+  { value: 'reused_keyword',    label: 'Re-used keyword from the audio' },
+];
+
+const SPEAKER_ATTITUDE_OPTIONS: { value: ListeningSpeakerAttitude | ''; label: string }[] = [
+  { value: '',           label: '— not authored —' },
+  { value: 'concerned',  label: 'Concerned' },
+  { value: 'optimistic', label: 'Optimistic' },
+  { value: 'doubtful',   label: 'Doubtful' },
+  { value: 'critical',   label: 'Critical' },
+  { value: 'neutral',    label: 'Neutral' },
+  { value: 'other',      label: 'Other' },
+];
 
 /**
  * Admin authoring UI for the OET Listening 42-item question map.
@@ -102,6 +124,32 @@ export function ListeningStructureEditor({ paperId }: { paperId: string }) {
     setDirty(true);
   };
 
+  // Phase 4: per-option distractor authoring helpers.
+  const updateOptionDistractorWhy = (n: number, idx: number, value: string) => {
+    setQuestions((prev) => prev.map((q) => {
+      if (q.number !== n) return q;
+      const arr = [...(q.optionDistractorWhy ?? [null, null, null])];
+      while (arr.length < 3) arr.push(null);
+      arr[idx] = value.trim() === '' ? null : value;
+      return { ...q, optionDistractorWhy: arr.slice(0, 3) };
+    }));
+    setDirty(true);
+  };
+  const updateOptionDistractorCategory = (
+    n: number,
+    idx: number,
+    value: ListeningDistractorCategory | '',
+  ) => {
+    setQuestions((prev) => prev.map((q) => {
+      if (q.number !== n) return q;
+      const arr = [...(q.optionDistractorCategory ?? [null, null, null])];
+      while (arr.length < 3) arr.push(null);
+      arr[idx] = value === '' ? null : value;
+      return { ...q, optionDistractorCategory: arr.slice(0, 3) };
+    }));
+    setDirty(true);
+  };
+
   const bootstrapSkeleton = () => {
     if (questions.length > 0 && !confirm(
       'This will replace the current question list with a blank 42-item OET skeleton. Unsaved edits will be lost. Continue?',
@@ -109,6 +157,32 @@ export function ListeningStructureEditor({ paperId }: { paperId: string }) {
     setQuestions(buildCanonicalListeningSkeleton());
     setDirty(true);
     setReport(null);
+  };
+
+  // Phase 8: ask the AI extraction service for a 42-item proposal. Today
+  // returns a deterministic stub; a grounded-gateway impl plugs in via DI.
+  const proposeWithAi = async () => {
+    if (questions.length > 0 && !confirm(
+      'This will replace the current question list with the AI-proposed 42-item structure. Unsaved edits will be lost. Continue?',
+    )) return;
+    try {
+      const draft = await proposeListeningStructure(paperId);
+      if (draft.status === 'Failed') {
+        setToast({ variant: 'error', message: `Extraction failed: ${draft.message}` });
+        return;
+      }
+      setQuestions(draft.questions);
+      setDirty(true);
+      setReport(null);
+      setToast({
+        variant: 'success',
+        message: draft.isStub
+          ? 'Loaded deterministic 24/6/12 placeholder (AI gateway not yet wired).'
+          : 'AI-proposed structure loaded.',
+      });
+    } catch (e) {
+      setToast({ variant: 'error', message: `Extraction failed: ${(e as Error).message}` });
+    }
   };
 
   const save = async () => {
@@ -151,6 +225,9 @@ export function ListeningStructureEditor({ paperId }: { paperId: string }) {
             <Button variant="ghost" size="sm" onClick={bootstrapSkeleton} disabled={saving}>
               <Sparkles className="w-4 h-4 mr-1" /> Bootstrap blank skeleton
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => void proposeWithAi()} disabled={saving}>
+              <Sparkles className="w-4 h-4 mr-1" /> Propose with AI
+            </Button>
             <Button variant="secondary" size="sm" onClick={() => void validate()} loading={validating}>
               Validate
             </Button>
@@ -187,6 +264,8 @@ export function ListeningStructureEditor({ paperId }: { paperId: string }) {
                     items={items}
                     onUpdate={updateQuestion}
                     onUpdateOption={updateOption}
+                    onUpdateOptionDistractorWhy={updateOptionDistractorWhy}
+                    onUpdateOptionDistractorCategory={updateOptionDistractorCategory}
                   />
                 );
               })}
@@ -255,12 +334,15 @@ function ValidationReportPanel({ report }: { report: ListeningValidationReport }
 
 function SectionBlock({
   label, expectedCount, items, onUpdate, onUpdateOption,
+  onUpdateOptionDistractorWhy, onUpdateOptionDistractorCategory,
 }: {
   label: string;
   expectedCount: number;
   items: ListeningAuthoredQuestion[];
   onUpdate: (n: number, patch: Partial<ListeningAuthoredQuestion>) => void;
   onUpdateOption: (n: number, idx: number, value: string) => void;
+  onUpdateOptionDistractorWhy: (n: number, idx: number, value: string) => void;
+  onUpdateOptionDistractorCategory: (n: number, idx: number, value: ListeningDistractorCategory | '') => void;
 }) {
   const ok = items.length === expectedCount;
   return (
@@ -279,6 +361,8 @@ function SectionBlock({
               q={q}
               onUpdate={(patch) => onUpdate(q.number, patch)}
               onUpdateOption={(idx, value) => onUpdateOption(q.number, idx, value)}
+              onUpdateOptionDistractorWhy={(idx, value) => onUpdateOptionDistractorWhy(q.number, idx, value)}
+              onUpdateOptionDistractorCategory={(idx, value) => onUpdateOptionDistractorCategory(q.number, idx, value)}
             />
           ))}
         </ul>
@@ -289,12 +373,16 @@ function SectionBlock({
 
 function QuestionRow({
   q, onUpdate, onUpdateOption,
+  onUpdateOptionDistractorWhy, onUpdateOptionDistractorCategory,
 }: {
   q: ListeningAuthoredQuestion;
   onUpdate: (patch: Partial<ListeningAuthoredQuestion>) => void;
   onUpdateOption: (idx: number, value: string) => void;
+  onUpdateOptionDistractorWhy: (idx: number, value: string) => void;
+  onUpdateOptionDistractorCategory: (idx: number, value: ListeningDistractorCategory | '') => void;
 }) {
   const isMcq = q.type === 'multiple_choice_3';
+  const isPartC = q.partCode === 'C1' || q.partCode === 'C2';
   return (
     <li className="rounded-lg bg-gray-50 p-3">
       <div className="flex items-center gap-3 mb-2">
@@ -379,6 +467,74 @@ function QuestionRow({
           placeholder="Why the wrong options are tempting"
         />
       </div>
+
+      {/* Phase 5: time-coded transcript evidence (jump-to-evidence in review). */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+        <Input
+          label="Evidence start (ms in section audio)"
+          type="number"
+          value={q.transcriptEvidenceStartMs ?? ''}
+          onChange={(e) => {
+            const v = e.target.value === '' ? null : Math.max(0, Number(e.target.value) || 0);
+            onUpdate({ transcriptEvidenceStartMs: v });
+          }}
+          placeholder="e.g. 42500"
+        />
+        <Input
+          label="Evidence end (ms in section audio)"
+          type="number"
+          value={q.transcriptEvidenceEndMs ?? ''}
+          onChange={(e) => {
+            const v = e.target.value === '' ? null : Math.max(0, Number(e.target.value) || 0);
+            onUpdate({ transcriptEvidenceEndMs: v });
+          }}
+          placeholder="e.g. 48000"
+        />
+      </div>
+
+      {/* Phase 4: per-option distractor analysis (MCQ only). */}
+      {isMcq && (
+        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-2">
+            Per-option distractor analysis
+          </p>
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <Select
+                  label={`Option ${String.fromCharCode(65 + i)} category`}
+                  value={q.optionDistractorCategory?.[i] ?? ''}
+                  onChange={(e) => onUpdateOptionDistractorCategory(
+                    i,
+                    e.target.value as ListeningDistractorCategory | '',
+                  )}
+                  options={DISTRACTOR_CATEGORY_OPTIONS}
+                />
+                <Input
+                  label={`Why ${String.fromCharCode(65 + i)} is wrong`}
+                  value={q.optionDistractorWhy?.[i] ?? ''}
+                  onChange={(e) => onUpdateOptionDistractorWhy(i, e.target.value)}
+                  placeholder="Short explanation surfaced in the post-attempt review"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Phase 4: speaker attitude (Part C only). */}
+      {isPartC && (
+        <div className="mt-3">
+          <Select
+            label="Speaker attitude (Part C)"
+            value={q.speakerAttitude ?? ''}
+            onChange={(e) => onUpdate({
+              speakerAttitude: e.target.value === '' ? null : (e.target.value as ListeningSpeakerAttitude),
+            })}
+            options={SPEAKER_ATTITUDE_OPTIONS}
+          />
+        </div>
+      )}
     </li>
   );
 }

@@ -59,6 +59,18 @@ public static class ListeningAuthoringAdminEndpoints
             return Results.Ok(doc);
         });
 
+        // Phase 8: AI-assisted structure proposal. Today this delegates to the
+        // deterministic `StubListeningExtractionAi` so admins always get a
+        // 24/6/12 placeholder. A grounded gateway impl plugs in via DI.
+        group.MapPost("/extract", async (
+            string paperId,
+            IListeningExtractionService svc,
+            CancellationToken ct) =>
+        {
+            var draft = await svc.ProposeStructureAsync(paperId, ct);
+            return Results.Ok(draft);
+        });
+
         return app;
     }
 }

@@ -508,6 +508,7 @@ public sealed class ListeningLearnerService(
                 ? listeningQuestions
                 : questionMap.GetValueOrDefault("questions"))
             .ToList();
+        var segments = ExtractTranscriptSegments(questionMap.GetValueOrDefault("listeningTranscriptSegments"));
 
         return new ListeningSource(
             Id: paper.Id,
@@ -526,13 +527,15 @@ public sealed class ListeningLearnerService(
                 Audio: assetByRole.ContainsKey(PaperAssetRole.Audio),
                 QuestionPaper: assetByRole.ContainsKey(PaperAssetRole.QuestionPaper),
                 AnswerKey: assetByRole.ContainsKey(PaperAssetRole.AnswerKey),
-                AudioScript: assetByRole.ContainsKey(PaperAssetRole.AudioScript)));
+                AudioScript: assetByRole.ContainsKey(PaperAssetRole.AudioScript)),
+            TranscriptSegments: segments);
     }
 
     private static ListeningSource BuildLegacySource(ContentItem item)
     {
         var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(item.DetailJson, new Dictionary<string, object?>());
         var questions = ExtractQuestions(detail.GetValueOrDefault("questions")).ToList();
+        var segments = ExtractTranscriptSegments(detail.GetValueOrDefault("listeningTranscriptSegments"));
         return new ListeningSource(
             Id: item.Id,
             SourceKind: "legacy_content_item",
@@ -550,7 +553,52 @@ public sealed class ListeningLearnerService(
                 Audio: !string.IsNullOrWhiteSpace(ReadString(detail.GetValueOrDefault("audioUrl"))),
                 QuestionPaper: false,
                 AnswerKey: true,
-                AudioScript: questions.Any(q => !string.IsNullOrWhiteSpace(q.TranscriptExcerpt))));
+                AudioScript: questions.Any(q => !string.IsNullOrWhiteSpace(q.TranscriptExcerpt))),
+            TranscriptSegments: segments);
+    }
+
+    /// <summary>
+    /// Phase 5: parse a paper-level transcript-segments array from the
+    /// authored JSON. Defensive: any malformed payload yields an empty list
+    /// rather than poisoning the review response.
+    /// </summary>
+    private static IReadOnlyList<ListeningTranscriptSegmentDto> ExtractTranscriptSegments(object? raw)
+    {
+        if (raw is null) return [];
+        try
+        {
+            var list = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(
+                System.Text.Json.JsonSerializer.Serialize(raw), new List<Dictionary<string, object?>>());
+            var output = new List<ListeningTranscriptSegmentDto>(list.Count);
+            foreach (var seg in list)
+            {
+                var startMs = ReadIntField(seg, "startMs");
+                var endMs = ReadIntField(seg, "endMs");
+                var text = ReadString(seg.GetValueOrDefault("text")) ?? string.Empty;
+                if (startMs < 0 || endMs < startMs || string.IsNullOrWhiteSpace(text)) continue;
+                output.Add(new ListeningTranscriptSegmentDto(
+                    StartMs: startMs,
+                    EndMs: endMs,
+                    PartCode: ReadString(seg.GetValueOrDefault("partCode")),
+                    SpeakerId: ReadString(seg.GetValueOrDefault("speakerId")),
+                    Text: text));
+            }
+            return output;
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static int ReadIntField(Dictionary<string, object?> map, string key)
+    {
+        var raw = map.GetValueOrDefault(key);
+        if (raw is null) return -1;
+        if (raw is int i) return i;
+        if (raw is long l) return (int)l;
+        if (raw is double d) return (int)d;
+        return int.TryParse(raw.ToString(), out var v) ? v : -1;
     }
 
     private ListeningReviewDto BuildReview(Attempt attempt, ListeningSource source, Evaluation? evaluation = null)
@@ -592,6 +640,7 @@ public sealed class ListeningLearnerService(
                 State: allowedTranscriptIds.Count == 0 ? "restricted" : allowedTranscriptIds.Count == items.Count ? "available" : "partial",
                 AllowedQuestionIds: allowedTranscriptIds,
                 Reason: "Transcript snippets and answer evidence are revealed only after submit and only for items whose authored policy allows it."),
+            TranscriptSegments: source.TranscriptSegments,
             Strengths: BuildStrengths(score.RawCorrect, items),
             Issues: BuildIssues(items),
             GeneratedAt: evaluation?.GeneratedAt ?? attempt.CompletedAt ?? attempt.SubmittedAt);
@@ -1321,7 +1370,17 @@ public sealed class ListeningLearnerService(
         string? AnswerKeyUrl,
         string? AudioScriptUrl,
         IReadOnlyList<ListeningQuestion> Questions,
-        ListeningAssetReadiness AssetReadiness);
+        ListeningAssetReadiness AssetReadiness,
+        // Phase 5: paper-level time-coded transcript segments. Empty list when
+        // the authored paper has no segment metadata yet.
+        IReadOnlyList<ListeningTranscriptSegmentDto> TranscriptSegments);
+
+    private sealed record ListeningTranscriptSegmentDto(
+        int StartMs,
+        int EndMs,
+        string? PartCode,        // optional: A1 | A2 | B | C1 | C2
+        string? SpeakerId,        // optional: free-form (e.g. "doctor", "patient", "presenter")
+        string Text);
 
     private sealed record ListeningQuestion(
         string Id,
@@ -1420,6 +1479,9 @@ public sealed class ListeningLearnerService(
         IReadOnlyList<ListeningErrorClusterDto> ErrorClusters,
         ListeningDrillDto RecommendedNextDrill,
         ListeningTranscriptAccessDto TranscriptAccess,
+        // Phase 5: paper-level time-coded transcript segments to power the
+        // post-attempt review player's jump-to-evidence UI.
+        IReadOnlyList<ListeningTranscriptSegmentDto> TranscriptSegments,
         IReadOnlyList<string> Strengths,
         IReadOnlyList<string> Issues,
         DateTimeOffset? GeneratedAt);

@@ -143,6 +143,23 @@ export const replaceListeningStructure = (
 export const validateListeningStructure = (paperId: string) =>
   api<ListeningValidationReport>(`/v1/admin/papers/${paperId}/listening/validate`);
 
+// ── Phase 8: AI extraction (admin) ─────────────────────────────────────
+
+export type ListeningExtractionStatus = 'Pending' | 'Ready' | 'Failed';
+
+export interface ListeningExtractionDraft {
+  status: ListeningExtractionStatus;
+  message: string;
+  questions: ListeningAuthoredQuestion[];
+  isStub: boolean;
+}
+
+export const proposeListeningStructure = (paperId: string) =>
+  api<ListeningExtractionDraft>(`/v1/admin/papers/${paperId}/listening/extract`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+
 // ── Learner: course pathway snapshot ───────────────────────────────────
 //
 // Mirrors `ListeningPathwaySnapshot` from

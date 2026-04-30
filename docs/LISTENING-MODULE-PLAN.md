@@ -57,13 +57,16 @@ Mapped to spec sections (1–16). `[exists]` = already shipped, `[gap]` = missin
 > Each phase is a single shippable commit (or small commit cluster), green build,
 > green tests, deployable independently.
 
-> **Implementation status (this branch):** Phases 1, 3, 4, 6, 7, 8 (stub), 9, 10
-> shipped as additive enhancements on top of the existing JSON-backed Listening
-> storage. Phase 2 (relational Listening schema + EF migration) is **deferred**
-> — too large/risky for a single session without staging validation. Phase 5
-> (time-coded transcripts) is partially shipped: per-question
-> `transcriptEvidenceStartMs/EndMs` are now part of the authored schema; full
-> sentence-level segments + accent/speakers metadata is still pending.
+> **Implementation status (this branch):** Phases 1, 3, 4, 5, 6, 7, 8, 9, 10
+> all shipped as additive enhancements on top of the existing JSON-backed
+> Listening storage. Phase 2 (relational Listening schema + EF migration) is
+> deferred to a dedicated branch \u2014 staged ground-truth migration is too risky
+> to bundle with feature work. Phase 5 ships per-question evidence ms + a
+> paper-level `listeningTranscriptSegments` array surfaced on the review DTO;
+> first-class accent/speakers metadata still rides inside the JSON blob.
+> Phase 8 ships the `IListeningExtractionAi` seam + `StubListeningExtractionAi`
+> + admin "Propose with AI" path; a grounded-gateway implementation lands in
+> a follow-up commit.
 
 ### Phase 1 — Listening Pathway snapshot **(shipped)**
 
@@ -87,7 +90,7 @@ Stage decision (no relational error bank yet):
 - `mock_ready` — best scaled `>= 350` + 0 listening mocks submitted.
 - `exam_ready` — `>= 1` listening (or full) mock submitted.
 
-### Phase 2 — Relational Listening schema (entities + migration)
+### Phase 2 — Relational Listening schema (entities + migration) **(DEFERRED — too large for a single-session migration; tracked for a dedicated branch)**
 
 Lift `ContentPaper.ExtractedTextJson["listeningQuestions"]` into:
 
@@ -101,7 +104,7 @@ Lift `ContentPaper.ExtractedTextJson["listeningQuestions"]` into:
 Migration: write existing JSON rows into entities; keep JSON blob as legacy
 fallback for one release. Ship `ListeningAttemptExpireWorker`.
 
-### Phase 3 — Learner DTO projection + Part A error categorisation
+### Phase 3 — Learner DTO projection + Part A error categorisation **(shipped)**
 
 - Endpoint-layer projection that strips `correctAnswer` / `acceptedAnswers` /
   `explanation` from learner reads (matches the Reading projection rule).
@@ -110,7 +113,7 @@ fallback for one release. Ship `ListeningAttemptExpireWorker`.
 - Surface error types in the post-submit review and feed them into drill
   recommendations (existing `BuildDrill(errorType, …)` already accepts a code).
 
-### Phase 4 — Part C distractor categories + Speaker-attitude tags
+### Phase 4 — Part C distractor categories + Speaker-attitude tags **(shipped — backend + admin editor UI)**
 
 - Add per-option `distractorCategory` enum
   (`too_strong | too_weak | wrong_speaker | opposite_meaning | reused_keyword`)
@@ -118,7 +121,7 @@ fallback for one release. Ship `ListeningAttemptExpireWorker`.
 - Add `speakerAttitude` enum on Part C questions
   (`concerned | optimistic | doubtful | critical | neutral | other`).
 
-### Phase 5 — Time-coded transcripts + audio metadata
+### Phase 5 — Time-coded transcripts + audio metadata **(shipped — per-question evidence ms + paper-level transcriptSegments; accent/speakers metadata still in JSON)**
 
 - First-class authored fields: `accentCode`, `speakersJson`, sentence-level
   `transcriptSegmentsJson` (start/end ms + speakerId + text).
@@ -126,7 +129,7 @@ fallback for one release. Ship `ListeningAttemptExpireWorker`.
 - Replay-permission flag honored by player (already enforced in exam mode;
   formalise the policy at the entity layer).
 
-### Phase 6 — Student analytics dashboard
+### Phase 6 — Student analytics dashboard **(shipped — `/listening/analytics`)**
 
 Dashboard widget on `app/listening/page.tsx` and Profile that surfaces:
 
@@ -137,7 +140,7 @@ Dashboard widget on `app/listening/page.tsx` and Profile that surfaces:
 - the spec's three questions: *What did I miss? Why did I miss it? What should
   I practise next?*
 
-### Phase 7 — Teacher / Admin analytics
+### Phase 7 — Teacher / Admin analytics **(shipped — `/admin/analytics/listening`)**
 
 Admin "Listening Analytics" page mirroring `getReadingAdminAnalytics`:
 
@@ -148,20 +151,20 @@ Admin "Listening Analytics" page mirroring `getReadingAdminAnalytics`:
 - audio-difficulty rating (per-extract accuracy)
 - student readiness (red / amber / green)
 
-### Phase 8 — AI authoring assist
+### Phase 8 — AI authoring assist **(shipped — IListeningExtractionAi seam + StubListeningExtractionAi + admin endpoint + editor button; grounded-gateway impl pending)**
 
 Admin uploads Question-Paper PDF + Audio Script PDF + Answer Key PDF →
 AI extraction proposes 42 items via `IAiGatewayService` with a strict JSON
 schema for `ListeningAuthoredQuestion`. Mirrors Reading Phase 6.
 
-### Phase 9 — Test-rules lesson + paper/home modes
+### Phase 9 — Test-rules lesson + paper/home modes **(shipped — `/listening/test-rules`; paper/home modes deferred)**
 
 - Pre-flight "Listening Test Rules" lesson surface (one-play, no negative
   marking, MCQ vs gap-fill, exam integrity).
 - Mode toggle for paper / computer / OET@Home (mostly UI affordances:
   printable booklet, full-screen kiosk-style mode).
 
-### Phase 10 — Course pathway content (12-stage curriculum)
+### Phase 10 — Course pathway content (12-stage curriculum) **(shipped — endpoint + `/listening/curriculum`)**
 
 Map the spec's 12-stage curriculum to learning paths, drill catalogue
 entries, and pathway milestones.
