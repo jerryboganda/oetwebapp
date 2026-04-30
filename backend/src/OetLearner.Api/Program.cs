@@ -819,6 +819,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentEntitlementSe
     OetLearner.Api.Services.Content.ContentEntitlementService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.RulebookAdminService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Reading.ReadingAttemptExpireWorker>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningAttemptExpireWorker>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
     OetLearner.Api.Services.Rulebook.AiGatewayService>();
