@@ -94,7 +94,7 @@ Stage decision (no relational error bank yet):
 - `mock_ready` — best scaled `>= 350` + 0 listening mocks submitted.
 - `exam_ready` — `>= 1` listening (or full) mock submitted.
 
-### Phase 2 — Relational Listening schema (entities + migration) **(DEFERRED — too large for a single-session migration; tracked for a dedicated branch)**
+### Phase 2 — Relational Listening schema (entities + migration) **(shipped — entities + DbSets + migration `AddListeningModuleEntities` + `ListeningAttemptExpireWorker`; JSON blob remains the runtime read source until a follow-up backfill slice ports historical papers)**
 
 Lift `ContentPaper.ExtractedTextJson["listeningQuestions"]` into:
 
