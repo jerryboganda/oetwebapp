@@ -187,6 +187,36 @@ public class ListeningBackfillServiceTests
     }
 
     [Fact]
+    public async Task Backfill_RefusesWhenRelationalAttemptsExist()
+    {
+        var (db, svc) = Build();
+        var paper = await AddPaperAsync(db, BuildCanonicalJson());
+        var first = await svc.BackfillPaperAsync(paper.Id, "admin-1", default);
+        Assert.True(first.Success);
+        var questionCountBefore = await db.ListeningQuestions.CountAsync(q => q.PaperId == paper.Id);
+        var now = DateTimeOffset.UtcNow;
+        db.ListeningAttempts.Add(new ListeningAttempt
+        {
+            Id = "attempt-protect-backfill",
+            UserId = "learner-1",
+            PaperId = paper.Id,
+            StartedAt = now,
+            LastActivityAt = now,
+            Status = ListeningAttemptStatus.InProgress,
+            Mode = ListeningAttemptMode.Home,
+            MaxRawScore = 42,
+            PolicySnapshotJson = "{}",
+        });
+        await db.SaveChangesAsync();
+
+        var second = await svc.BackfillPaperAsync(paper.Id, "admin-1", default);
+
+        Assert.False(second.Success);
+        Assert.Contains("learner attempts", second.Reason);
+        Assert.Equal(questionCountBefore, await db.ListeningQuestions.CountAsync(q => q.PaperId == paper.Id));
+    }
+
+    [Fact]
     public async Task Backfill_EmptyJson_ReturnsFailure_NoRowsWritten()
     {
         var (db, svc) = Build();

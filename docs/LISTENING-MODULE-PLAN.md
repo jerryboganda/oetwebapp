@@ -2,7 +2,7 @@
 
 This plan audits the existing Listening implementation against the OET
 Listening Module spec (the "Listening intelligence system" requirements),
-identifies the remaining gaps, and sequences them into shippable phases.
+records the shipped workflow, and keeps the phase history readable.
 
 > Companion roadmap (legacy notes): `/memories/repo/listening-authoring-roadmap.md`
 
@@ -11,65 +11,56 @@ identifies the remaining gaps, and sequences them into shippable phases.
 | Capability | Status | Source |
 | ---------- | ------ | ------ |
 | 5-section forward-only player (A1, A2, B, C1, C2) with review windows | ✅ | `app/listening/player/[id]/`, `lib/listening-sections.ts` |
-| One-play exam mode + practice mode | ✅ | `ListeningLearnerService.GetSessionAsync` |
+| Practice, exam, OET@Home, and paper-simulation modes | ✅ | `ListeningLearnerService.GetSessionAsync`, `app/listening/player/[id]/page.tsx` |
 | Admin authoring of 42-item map (12+12 / 6 / 6+6) | ✅ Phase 1 | `Services/Listening/ListeningAuthoringService.cs`, `components/domain/ListeningStructureEditor.tsx` |
 | Publish-gate validator (canonical shape + Part B 3-option MCQ) | ✅ | `Services/Listening/ListeningStructureService.cs` |
 | Subscription / entitlement gating | ✅ Phase 3 | `IContentEntitlementService` |
-| Server-grading + Evaluation + raw/scaled (anchored 30/42 ≡ 350/500) | ✅ | `ListeningLearnerService.SubmitAsync`, `OetScoring` |
+| Relational authored-paper runtime + server-grading + raw/scaled (anchored 30/42 ≡ 350/500) | ✅ | `ListeningLearnerService`, `ListeningAttempt`, `ListeningAnswer`, `OetScoring` |
 | Drills surface (post-attempt error clusters → drill) | ✅ | `ListeningLearnerService.BuildDrill`, `app/listening/drills/[id]` |
-| Transcript-backed review after submit | ✅ | `app/listening/review/`, `GetReviewAsync` |
+| Transcript-backed review after submit with option analysis and evidence jumps | ✅ | `app/listening/review/`, `GetReviewAsync` |
 | Hub: papers, resume, recent results, drill groups, part collections, mock sets | ✅ | `app/listening/page.tsx`, `ListeningLearnerService.GetHomeAsync` |
 | Diagnostic surface (Listening) | ✅ | `app/diagnostic/listening/` |
 | Result card + scoring (`350` anchor, grade letter) | ✅ | `OetStatementOfResultsCard`, `OetScoring.OetGradeLetterFromScaled` |
+| Admin extract metadata authoring + relational backfill | ✅ | `ListeningExtractMetadataEditor`, `ListeningBackfillService` |
+| Student/admin analytics + pathway/curriculum include relational attempts | ✅ | `ListeningAnalyticsService`, `ListeningPathwayService`, `ListeningCurriculumService` |
 
-## Gaps vs spec
+## Status vs spec
 
-Mapped to spec sections (1–16). `[exists]` = already shipped, `[gap]` = missing.
+Mapped to spec sections (1-16). Engineering workflow gaps identified in the audit are closed; remaining items are content production, taxonomy tuning, or future training-depth enhancements.
 
-1. **Module overview** — `[exists]` 42-item canonical shape, three parts, generic profession. ✅
-2. **Real-time presentation** — `[exists]` exam vs learning split. ✅
-3. **Part A consultation extracts** — mostly `[exists]`. Specific gaps:
-   - `[gap]` *Prediction-before-listening drill* mode (gap clue → expected answer-type tag).
-   - `[gap]` *Error-type categorisation* on Part A wrong answers (spelling vs grammar/number vs paraphrase vs wrong-section vs extra-info). Today only "incorrect" is recorded.
-   - `[gap]` UK/US spelling variant tooling at the *answer key* level (today single-string + acceptedAnswers list — fine, but no automated generator).
-4. **Part B workplace extracts** — mostly `[exists]`. Gaps:
-   - `[gap]` Skill-tag enum at authoring time (warning / purpose / opinion / detail / gist / cause). Today free-text `skillTag` string.
-   - `[gap]` Per-distractor "why wrong" explanation surfaced post-submit (today only one `explanation` per Q).
-5. **Part C long audio** — mostly `[exists]`. Gaps:
-   - `[gap]` 90-second preview timer formalised (player has section preview; verify exact 90 s for C1 + C2).
-   - `[gap]` Speaker-attitude tag enum + distractor-category enum on each option (too-strong / too-weak / wrong-speaker / opposite-meaning).
-6. **Scoring & marking** — `[exists]` raw, scaled, grade, pass anchor. ✅
-7. **Test rules lesson** — `[gap]` no learner-facing "test rules" pre-flight surface.
-8. **Paper / Computer / OET@Home modes** — partially `[exists]`. Today only practice + exam. `[gap]` paper-simulation (printable booklet) and OET@Home full-screen mode are not separated.
-9. **Platform modules** — full mock simulator `[exists]`; Part A trainer `[exists, partial]`; Part B/C trainers exist as drills `[exists, partial]`.
-10. **Admin data-entry system** — `[exists]` 42-item editor. Gaps:
-    - `[gap]` Audio fields beyond a single MP3: accent, speakers list, time-coded transcript (sentence-level timestamps), beep markers, replay-permission flag are not first-class authored fields.
-    - `[gap]` "Transcript evidence" timestamp per question — spec calls for `evidence_timestamp + sentence`; today only free-text `transcriptExcerpt`.
-11. **Student analytics dashboard** — `[gap]` no part-by-part breakdown card with weakness diagnosis ("you lost 6 marks in Part A due to spelling…"); only raw + scaled.
-12. **Teacher dashboard (Listening)** — `[gap]` doesn't exist. Reading has admin analytics; Listening doesn't.
-13. **Course pathway** — `[gap]` no Listening pathway snapshot (Reading just shipped one; mirror it).
-14. **Content quantity targets** — `[meta]` ops/content-side, not engineering.
-15. **Technical design / DB structure** — `[gap]` Phase 2 still pending: lift JSON `listeningQuestions` into relational `ListeningPart`/`ListeningExtract`/`ListeningQuestion`/`ListeningAttempt`/`ListeningAnswer`/`ListeningPolicy`. Unblocks 4-7 above (skill enums, per-option distractor explanations, time-coded transcripts, accent metadata, attempt-expire worker, learner DTO projection that strips answer keys).
-16. **"Build a Listening intelligence system"** — emergent goal of all the above.
+1. **Module overview** — 42-item canonical shape, three parts, generic profession. ✅
+2. **Real-time presentation** — practice, exam, OET@Home, and paper-simulation policies. ✅
+3. **Part A consultation extracts** — A1/A2 sections, answer variants, Part A error classification, evidence timestamps, and transcript-backed review. ✅
+4. **Part B workplace extracts** — 3-option MCQ authoring, per-option distractor category/why-wrong metadata, review surfacing, and analytics heat. ✅
+5. **Part C long audio** — C1/C2 sections, speaker-attitude tagging, option distractor tagging, and evidence jumps. ✅
+6. **Scoring & marking** — raw, scaled, grade, pass anchor. ✅
+7. **Test rules lesson** — `/listening/test-rules` plus player pre-flight rules. ✅
+8. **Paper / Computer / OET@Home modes** — computer/exam mode, OET@Home full-screen integrity telemetry, and printable paper-mode booklet/answer sheet. ✅
+9. **Platform modules** — hub, drills, mocks, review, pathway, and curriculum. ✅
+10. **Admin data-entry system** — 42-item editor, extract metadata editor, validation, AI extraction, and JSON-to-relational backfill. ✅
+11. **Student analytics dashboard** — per-part breakdown, weaknesses, and action plan. ✅
+12. **Teacher dashboard (Listening)** — class averages, hardest questions, distractor heat, and misspellings. ✅
+13. **Course pathway** — Listening pathway snapshot mirrors Reading and includes relational attempts. ✅
+14. **Content quantity targets** — content/ops target, not a code blocker. 🟡
+15. **Technical design / DB structure** — relational `ListeningPart`/`ListeningExtract`/`ListeningQuestion`/`ListeningAttempt`/`ListeningAnswer` runtime with JSON fallback for non-backfilled content. ✅
+16. **"Build a Listening intelligence system"** — shipped as an integrated authored-paper workflow with review, analytics, progression, and delivery-mode controls. ✅
 
 ## Phasing
 
 > Each phase is a single shippable commit (or small commit cluster), green build,
 > green tests, deployable independently.
 
-> **Implementation status (this branch):** Phases 1–10 all shipped, including
-> the three close-out follow-up slices: (a) Phase 2 follow-up —
-> `ListeningBackfillService` projects historical `listeningQuestions` JSON into
-> relational `ListeningPart` / `ListeningExtract` / `ListeningQuestion` /
-> `ListeningQuestionOption`, exposed at
-> `POST /v1/admin/papers/{paperId}/listening/backfill` (per-paper) and
-> `POST /v1/admin/listening/backfill` (bulk); idempotent rewrite-on-rerun.
-> (b) Phase 5 tail — first-class `listeningExtracts` metadata (accent code +
-> speakers + audio window) surfaced via
-> `GET/PUT /v1/admin/papers/{paperId}/listening/extracts` and on the learner
-> session DTO. (c) Phase 9 tail — `paper` and `home` (OET@Home) modes wired
-> through `NormalizeMode` + `modePolicy` + player UI: integrity-lock banner for
-> `home`, printable-booklet hint for `paper`.
+> **Implementation status (this branch):** Phases 1-10 all shipped, including
+> the final business-workflow close-out. Authored `ContentPaper` Listening now
+> prefers relational `ListeningPart` / `ListeningExtract` / `ListeningQuestion`
+> source rows and writes learner work into `ListeningAttempt` / `ListeningAnswer`,
+> with JSON fallback retained for legacy/unbackfilled content. Analytics,
+> pathway, curriculum, home resume/recent-results, review, and integrity events
+> all include relational attempts. Admins can author extract metadata in the UI,
+> save it through `GET/PUT /v1/admin/papers/{paperId}/listening/extracts`, and
+> project JSON into relational rows through per-paper or bulk backfill. The
+> learner player exposes OET@Home full-screen integrity telemetry and a real
+> paper-mode printable booklet/answer sheet.
 > Phase 8 ships the `IListeningExtractionAi` seam + `StubListeningExtractionAi`
 > + admin "Propose with AI" path **and** the grounded-gateway impl
 > (`GroundedListeningExtractionAi`) wired through `IAiGatewayService` with
@@ -91,7 +82,7 @@ visible in the Listening hub, foundation for the analytics surface in Phase 6.
 - Client: `getListeningPathway()` + types in `lib/listening-authoring-api.ts`.
 - UI: pathway card mounted at the top of `app/listening/page.tsx`.
 
-Stage decision (no relational error bank yet):
+Stage decision:
 
 - `not_started` — 0 completed Listening attempts.
 - `diagnostic` — exactly 1 completed attempt with no scaled score.
@@ -100,7 +91,7 @@ Stage decision (no relational error bank yet):
 - `mock_ready` — best scaled `>= 350` + 0 listening mocks submitted.
 - `exam_ready` — `>= 1` listening (or full) mock submitted.
 
-### Phase 2 — Relational Listening schema (entities + migration) **(shipped — entities + DbSets + migration `AddListeningModuleEntities` + `ListeningAttemptExpireWorker` + `ListeningBackfillService` projecting JSON→entity at `POST /v1/admin/papers/{paperId}/listening/backfill` and bulk `POST /v1/admin/listening/backfill`; the JSON blob remains the runtime read source for backwards-compat, with relational rows now available for analytics + future reads)**
+### Phase 2 — Relational Listening schema (entities + migration) **(shipped — entities + DbSets + migration `AddListeningModuleEntities` + `ListeningAttemptExpireWorker` + `ListeningBackfillService` projecting JSON→entity at `POST /v1/admin/papers/{paperId}/listening/backfill` and bulk `POST /v1/admin/listening/backfill`; authored papers now use relational source/attempt/answer rows at runtime, with JSON fallback for legacy and unbackfilled content)**
 
 Lift `ContentPaper.ExtractedTextJson["listeningQuestions"]` into:
 
@@ -167,7 +158,7 @@ Admin uploads Question-Paper PDF + Audio Script PDF + Answer Key PDF →
 AI extraction proposes 42 items via `IAiGatewayService` with a strict JSON
 schema for `ListeningAuthoredQuestion`. Mirrors Reading Phase 6.
 
-### Phase 9 — Test-rules lesson + paper/home modes **(shipped — `/listening/test-rules`; `paper` + `home` modes wired via `NormalizeMode` + `modePolicy` + player UI: integrity-lock banner for `home`, printable-booklet hint for `paper`)**
+### Phase 9 — Test-rules lesson + paper/home modes **(shipped — `/listening/test-rules`; `paper` + `home` modes wired via `NormalizeMode` + `modePolicy` + player UI: full-screen integrity telemetry for `home`, printable booklet/answer sheet for `paper`)**
 
 - Pre-flight "Listening Test Rules" lesson surface (one-play, no negative
   marking, MCQ vs gap-fill, exam integrity).

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
@@ -15,6 +15,7 @@ import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 import {
   getListeningSession,
   heartbeatListeningAttempt,
+  recordListeningIntegrityEvent,
   saveListeningAnswer,
   startListeningAttempt,
   submitListeningAttempt,
@@ -54,6 +55,17 @@ function handleAudioPlaybackError(error: unknown, onVisibleError: (message: stri
   onVisibleError('Audio could not start. Check the device output, reload the audio, and try again.');
 }
 
+function formatMilliseconds(value: number | null | undefined) {
+  if (value == null) return null;
+  const seconds = Math.floor(value / 1000);
+  return formatTime(seconds);
+}
+
+function describeSpeakers(extract: NonNullable<ListeningSessionDto['paper']['extracts']>[number]) {
+  if (!extract.speakers?.length) return 'Speakers not specified';
+  return extract.speakers.map((speaker) => [speaker.role, speaker.accent ?? extract.accentCode].filter(Boolean).join(' · ')).join(', ');
+}
+
 function PlayerContent() {
   const params = useParams<{ id?: string | string[] }>();
   const router = useRouter();
@@ -67,6 +79,7 @@ function PlayerContent() {
   const attemptIdFromRoute = searchParams?.get('attemptId');
   const drillId = searchParams?.get('drill');
 
+  const rootRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [session, setSession] = useState<ListeningSessionDto | null>(null);
@@ -76,6 +89,7 @@ function PlayerContent() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [contentLockedMessage, setContentLockedMessage] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [integrityWarning, setIntegrityWarning] = useState<string | null>(null);
   const [audioState, setAudioState] = useState<'idle' | 'buffering' | 'ready' | 'error'>('idle');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -132,6 +146,39 @@ function PlayerContent() {
     return () => window.clearInterval(interval);
   }, [attempt?.attemptId, hasStarted, progress]);
 
+  const logIntegrityEvent = useCallback((eventType: string, details?: string) => {
+    if (!attempt?.attemptId || !session?.modePolicy.integrityLockRequired) return;
+    void recordListeningIntegrityEvent(attempt.attemptId, eventType, details).catch(() => undefined);
+  }, [attempt?.attemptId, session?.modePolicy.integrityLockRequired]);
+
+  useEffect(() => {
+    if (!attempt?.attemptId || !hasStarted || !session?.modePolicy.integrityLockRequired) return;
+
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIntegrityWarning('Full-screen was exited. This has been recorded for the OET@Home attempt.');
+        logIntegrityEvent('fullscreen_exit');
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') logIntegrityEvent('page_hidden');
+      if (document.visibilityState === 'visible') logIntegrityEvent('page_visible');
+    };
+    const onBlur = () => logIntegrityEvent('window_blur');
+    const onFocus = () => logIntegrityEvent('window_focus');
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [attempt?.attemptId, hasStarted, logIntegrityEvent, session?.modePolicy.integrityLockRequired]);
+
   const ensureAttempt = async () => {
     if (!session) throw new Error('Listening session is not ready.');
     if (attempt) return attempt;
@@ -144,6 +191,15 @@ function PlayerContent() {
     if (!session?.paper.audioAvailable || !session.readiness.objectiveReady) return;
     try {
       const started = await ensureAttempt();
+      if (session.modePolicy.integrityLockRequired && rootRef.current && !document.fullscreenElement) {
+        try {
+          await rootRef.current.requestFullscreen();
+          void recordListeningIntegrityEvent(started.attemptId, 'fullscreen_enter', 'entered_before_audio').catch(() => undefined);
+        } catch {
+          setIntegrityWarning('Full-screen could not be started by this browser. This has been recorded for the OET@Home attempt.');
+          void recordListeningIntegrityEvent(started.attemptId, 'fullscreen_request_failed').catch(() => undefined);
+        }
+      }
       setHasStarted(true);
       router.replace(`/listening/player/${session.paper.id}?attemptId=${started.attemptId}&mode=${started.mode}${drillId ? `&drill=${encodeURIComponent(drillId)}` : ''}`);
       await audioRef.current?.play().catch((err) => handleAudioPlaybackError(err, setAudioError));
@@ -208,11 +264,15 @@ function PlayerContent() {
     () => (session ? groupQuestionsBySection(session.questions) : null),
     [session],
   );
+  const extracts = session?.paper.extracts ?? [];
   const sectionsInPaper = useMemo<ListeningSectionCode[]>(() => {
     if (!sectionGroups) return [];
     return LISTENING_SECTION_SEQUENCE.filter((code) => sectionGroups[code].length > 0);
   }, [sectionGroups]);
   const currentSection: ListeningSectionCode | null = sectionsInPaper[currentSectionIndex] ?? null;
+  const currentExtracts = currentSection
+    ? extracts.filter((extract) => extract.partCode === currentSection || (currentSection === 'B' && extract.partCode === 'B'))
+    : [];
   const isLastSection = currentSection !== null && currentSectionIndex >= sectionsInPaper.length - 1;
   const currentSectionReviewSeconds = currentSection ? LISTENING_REVIEW_SECONDS[currentSection] : 0;
 
@@ -336,7 +396,7 @@ function PlayerContent() {
         />
       ) : null}
 
-      <div className="mx-auto max-w-3xl px-4 py-8 pb-24 sm:px-6 lg:px-8">
+      <div ref={rootRef} className="mx-auto max-w-3xl px-4 py-8 pb-24 sm:px-6 lg:px-8">
         {!hasStarted ? (
           <motion.div
             {...sectionMotion}
@@ -414,6 +474,49 @@ function PlayerContent() {
               </ul>
             </div>
 
+            {extracts.length > 0 ? (
+              <div className="mx-auto mb-8 max-w-2xl rounded-2xl border border-border bg-surface p-5 text-left">
+                <h3 className="text-sm font-black uppercase tracking-widest text-muted">Extract metadata</h3>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {extracts.map((extract) => (
+                    <div key={`${extract.partCode}-${extract.displayOrder}`} className="rounded-xl border border-border bg-background-light p-3 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-navy">{extract.partCode} · {extract.title}</span>
+                        <span className="text-xs font-semibold uppercase text-muted">{extract.kind}</span>
+                      </div>
+                      <p className="mt-2 text-xs text-muted">{extract.accentCode ?? 'Accent not specified'} · {describeSpeakers(extract)}</p>
+                      {extract.audioStartMs != null || extract.audioEndMs != null ? (
+                        <p className="mt-1 text-xs text-muted">
+                          Audio window {formatMilliseconds(extract.audioStartMs) ?? '00:00'} - {formatMilliseconds(extract.audioEndMs) ?? 'end'}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {session.modePolicy.printableBooklet ? (
+              <div className="mx-auto mb-8 max-w-2xl rounded-2xl border border-border bg-surface p-5 text-left">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-widest text-muted">Printable booklet</h3>
+                    <p className="mt-1 text-sm text-muted">Print the answer sheet before starting, then transcribe final answers into the online boxes.</p>
+                  </div>
+                  <Button variant="outline" onClick={() => window.print()} className="gap-2">
+                    <FileText className="h-4 w-4" /> Print
+                  </Button>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted sm:grid-cols-4">
+                  {session.questions.map((question) => (
+                    <div key={`print-preview-${question.id}`} className="rounded-lg border border-border bg-background-light px-3 py-2">
+                      Q{question.number} <span className="text-muted/70">{question.partCode}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             {!session.paper.audioAvailable ? (
               <InlineAlert variant="warning" className="mx-auto mb-6 max-w-lg text-left">
                 {session.paper.audioUnavailableReason ?? 'Audio is not available for this task yet.'}
@@ -484,6 +587,24 @@ function PlayerContent() {
 
             {audioError ? <InlineAlert variant="error">{audioError}</InlineAlert> : null}
             {saveState === 'error' ? <InlineAlert variant="warning">One answer did not autosave. Keep working; submit will retry saving all answers.</InlineAlert> : null}
+            {integrityWarning ? <InlineAlert variant="warning">{integrityWarning}</InlineAlert> : null}
+
+            {currentExtracts.length > 0 ? (
+              <div className="rounded-2xl border border-border bg-surface p-4">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+                  {currentExtracts.map((extract) => (
+                    <span key={`${extract.partCode}-${extract.displayOrder}`} className="inline-flex items-center gap-2 rounded-lg bg-background-light px-3 py-2">
+                      <Volume2 className="h-4 w-4" />
+                      <span className="font-semibold text-navy">{extract.title}</span>
+                      <span>{extract.accentCode ?? 'accent not set'}</span>
+                      {extract.audioStartMs != null || extract.audioEndMs != null ? (
+                        <span>{formatMilliseconds(extract.audioStartMs) ?? '00:00'} - {formatMilliseconds(extract.audioEndMs) ?? 'end'}</span>
+                      ) : null}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {/* Section stepper — forward only. Completed sections are permanently locked. */}
             <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3 text-xs font-black uppercase tracking-widest">
@@ -724,6 +845,21 @@ function PlayerContent() {
             </Modal>
           </motion.div>
         )}
+
+        {session.modePolicy.printableBooklet ? (
+          <div className="hidden print:block print:p-6">
+            <h1 className="text-2xl font-bold text-navy">{session.paper.title}</h1>
+            <p className="mt-2 text-sm text-muted">Listening paper-mode answer sheet</p>
+            <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3">
+              {session.questions.map((question) => (
+                <div key={`print-${question.id}`} className="flex items-end gap-3 border-b border-border pb-2 text-sm">
+                  <span className="w-12 font-bold">Q{question.number}</span>
+                  <span className="flex-1 text-muted">{question.partCode}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </AppShell>
   );

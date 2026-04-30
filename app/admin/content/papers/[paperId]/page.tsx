@@ -14,6 +14,7 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { ReadingStructureEditor } from '@/components/domain/ReadingStructureEditor';
 import { ListeningStructureEditor } from '@/components/domain/ListeningStructureEditor';
+import { ListeningExtractMetadataEditor } from '@/components/domain/ListeningExtractMetadataEditor';
 import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
 import {
   attachPaperAsset,
@@ -312,7 +313,10 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
             )}
 
             {canWriteContent && paper.subtestCode === 'listening' && (
-              <ListeningStructureEditor paperId={paper.id} />
+              <>
+                <ListeningExtractMetadataEditor paperId={paper.id} />
+                <ListeningStructureEditor paperId={paper.id} />
+              </>
             )}
           </>
         )}

@@ -24,10 +24,9 @@ namespace OetLearner.Api.Domain;
 // auto-expire window, etc.). ListeningUserPolicyOverride mirrors the Reading
 // override pattern so accessibility extra-time grants port across.
 //
-// Phase 2 is shipped ADDITIVELY: the existing JSON-blob runtime
-// (ContentPaper.ExtractedTextJson["listeningQuestions"]) keeps grading
-// learners while these entities back the next-generation authoring/grading
-// path. The expire worker for Listening attempts ships in this slice.
+// Authored ContentPaper listening now prefers these relational source and
+// attempt tables at runtime. JSON authoring/backfill remains supported as a
+// migration fallback for legacy and not-yet-backfilled papers.
 // ═════════════════════════════════════════════════════════════════════════════
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -81,6 +80,8 @@ public enum ListeningAttemptMode
     Drill = 2,
     MiniTest = 3,
     ErrorBank = 4,
+    Home = 5,
+    Paper = 6,
 }
 
 /// <summary>

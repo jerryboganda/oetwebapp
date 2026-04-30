@@ -12,12 +12,10 @@ namespace OetLearner.Api.Endpoints;
 ///   PUT  /v1/admin/papers/{id}/listening/structure   — replace authored 42-item map
 ///   GET  /v1/admin/papers/{id}/listening/validate    — publish-gate report
 ///
-/// All routes require <c>AdminContentWrite</c>. Until the relational
-/// <c>ListeningPart</c>/<c>ListeningQuestion</c> tables ship (Phase 2), the
-/// authored question list is persisted under <c>ContentPaper.ExtractedTextJson["listeningQuestions"]</c> —
-/// which is exactly what <c>ListeningLearnerService.ExtractQuestions</c> reads
-/// at runtime, so authoring through this endpoint immediately drives the
-/// learner player + grader.
+/// All routes require <c>AdminContentWrite</c>. Structure/extract writes remain
+/// JSON-compatible for admin editing and can be projected into the relational
+/// Listening tables through the backfill endpoint. Authored learner attempts
+/// prefer relational rows when present and keep JSON fallback for migration.
 /// </summary>
 public static class ListeningAuthoringAdminEndpoints
 {
@@ -100,8 +98,8 @@ public static class ListeningAuthoringAdminEndpoints
         // Phase 2 follow-up: project the JSON-blob authored shape into the
         // relational ListeningPart / Extract / Question / Option entities.
         // Idempotent — wipes existing relational rows for the paper before
-        // re-inserting. The JSON blob remains the runtime source of truth
-        // until a separate "switch reads to relational" slice ships.
+        // re-inserting. Authored learner attempts read those relational rows
+        // when present, with JSON fallback for not-yet-backfilled content.
         group.MapPost("/backfill", async (
             string paperId,
             IListeningBackfillService svc,

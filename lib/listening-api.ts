@@ -26,6 +26,7 @@ export interface ListeningHomePaperDto {
     status: string;
     startedAt: string;
     submittedAt: string | null;
+    mode?: ListeningSessionMode;
     route: string;
   } | null;
 }
@@ -48,7 +49,7 @@ export interface ListeningHomeAttemptDto {
   paperId: string;
   paperTitle: string;
   status: string;
-  mode: 'practice' | 'exam';
+  mode: ListeningSessionMode;
   startedAt: string;
   lastClientSyncAt: string | null;
   answeredCount: number;
@@ -200,7 +201,7 @@ export interface ListeningAttemptDto {
   attemptId: string;
   paperId: string;
   state: string;
-  mode: 'practice' | 'exam';
+  mode: ListeningSessionMode;
   startedAt: string;
   submittedAt: string | null;
   completedAt: string | null;
@@ -229,6 +230,16 @@ export interface ListeningReviewItemDto {
     distractorExplanation: string | null;
   } | null;
   distractorExplanation: string | null;
+  optionAnalysis?: Array<{
+    optionLabel: string;
+    optionText: string;
+    isCorrect: boolean;
+    distractorCategory: string | null;
+    whyMarkdown: string | null;
+  }> | null;
+  speakerAttitude?: string | null;
+  transcriptEvidenceStartMs?: number | null;
+  transcriptEvidenceEndMs?: number | null;
 }
 
 export interface ListeningReviewDto {
@@ -253,6 +264,13 @@ export interface ListeningReviewDto {
     allowedQuestionIds: string[];
     reason: string;
   };
+  transcriptSegments: Array<{
+    startMs: number;
+    endMs: number;
+    partCode: string | null;
+    speakerId: string | null;
+    text: string;
+  }>;
   strengths: string[];
   issues: string[];
   generatedAt: string | null;
@@ -330,6 +348,17 @@ export const heartbeatListeningAttempt = (attemptId: string, elapsedSeconds: num
       body: JSON.stringify({ elapsedSeconds, deviceType }),
     },
   );
+
+export const recordListeningIntegrityEvent = (
+  attemptId: string,
+  eventType: string,
+  details?: string,
+  occurredAt = new Date().toISOString(),
+) =>
+  api<void>(`/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/integrity-events`, {
+    method: 'POST',
+    body: JSON.stringify({ eventType, details, occurredAt }),
+  });
 
 export const submitListeningAttempt = (attemptId: string) =>
   api<ListeningReviewDto>(`/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/submit`, {

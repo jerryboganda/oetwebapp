@@ -57,16 +57,23 @@ public sealed class ListeningCurriculumService(LearnerDbContext db) : IListening
 
     public async Task<ListeningCurriculumDto> GetCurriculumAsync(string userId, CancellationToken ct)
     {
-        var attempts = await db.Attempts.AsNoTracking()
-            .Where(a => a.UserId == userId && a.SubtestCode == Subtest && a.State == AttemptState.Submitted)
+        var genericAttempts = await db.Attempts.AsNoTracking()
+            .Where(a => a.UserId == userId
+                && a.SubtestCode == Subtest
+                && (a.State == AttemptState.Submitted || a.State == AttemptState.Completed))
             .CountAsync(ct);
+        var relationalAttempts = await db.ListeningAttempts.AsNoTracking()
+            .Where(a => a.UserId == userId && a.Status == ListeningAttemptStatus.Submitted)
+            .CountAsync(ct);
+        var attempts = genericAttempts + relationalAttempts;
 
         var stages = new List<ListeningCurriculumStageDto>(Catalog.Length);
         for (var i = 0; i < Catalog.Length; i++)
         {
             var c = Catalog[i];
-            // Heuristic progress until the relational schema lands: each
-            // submitted attempt unlocks one stage as "completed".
+            // Heuristic progress: each submitted Listening attempt unlocks one
+            // stage as completed while the drill catalogue is still being tied
+            // to concrete authored skill tags.
             var completed = attempts > i;
             // Lock stages that come after the next not-completed one + 1.
             var locked = i > attempts + 1;

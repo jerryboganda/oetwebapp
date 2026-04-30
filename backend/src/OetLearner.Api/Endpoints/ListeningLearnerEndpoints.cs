@@ -100,6 +100,20 @@ public static class ListeningLearnerEndpoints
             .WithName("HeartbeatListeningPaperAttempt")
             .WithSummary("Persist Listening attempt playback/activity heartbeat");
 
+        group.MapPost("/attempts/{attemptId}/integrity-events", async (
+            string attemptId,
+            ListeningIntegrityEventRequest request,
+            HttpContext http,
+            ListeningLearnerService service,
+            CancellationToken ct) =>
+        {
+            await service.RecordIntegrityEventAsync(http.UserId(), attemptId, request, ct);
+            return Results.NoContent();
+        })
+            .RequireRateLimiting("PerUserWrite")
+            .WithName("RecordListeningIntegrityEvent")
+            .WithSummary("Record an OET@Home Listening integrity event");
+
         group.MapPost("/attempts/{attemptId}/submit", async (
             string attemptId,
             HttpContext http,

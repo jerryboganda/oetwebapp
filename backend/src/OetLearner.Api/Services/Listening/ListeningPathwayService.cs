@@ -13,10 +13,10 @@ namespace OetLearner.Api.Services.Listening;
 // into a single readiness "stage" + one structured next-action that the FE
 // can route straight to an existing launcher.
 //
-// Listening today uses the generic `Attempt` entity (SubtestCode = "listening")
-// — there is no relational `ListeningQuestion` / `ListeningErrorBank` yet
-// (Phase 2 of the Listening roadmap). So the stage decision uses only the
-// score signals available today:
+// Listening supports both the legacy generic `Attempt` path for demo/legacy
+// tasks and the relational `ListeningAttempt` path for authored papers. The
+// pathway merges both so progress remains continuous while old content is
+// migrated.
 //
 //   • Completed (`AttemptState.Completed`) Listening attempts.
 //   • Best scaled score across those attempts, read from
@@ -81,6 +81,13 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
             .Select(a => new { a.Id, a.SubmittedAt })
             .ToListAsync(ct);
 
+        var relationalAttempts = await db.ListeningAttempts.AsNoTracking()
+            .Where(a => a.UserId == userId && a.Status == ListeningAttemptStatus.Submitted)
+            .OrderByDescending(a => a.SubmittedAt)
+            .Take(50)
+            .Select(a => new { a.Id, a.SubmittedAt, a.ScaledScore })
+            .ToListAsync(ct);
+
         // ── Best scaled across those attempts via Evaluation.CriterionScoresJson ──
         int? bestScaled = null;
         if (completedAttempts.Count > 0)
@@ -99,6 +106,14 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
             }
         }
 
+        foreach (var relationalAttempt in relationalAttempts)
+        {
+            if (relationalAttempt.ScaledScore is int scaled && (bestScaled is null || scaled > bestScaled.Value))
+                bestScaled = scaled;
+        }
+
+        var submittedAttemptCount = completedAttempts.Count + relationalAttempts.Count;
+
         // ── Listening (or full) mock attempts ─────────────────────────────
         var listeningMockCount = await db.MockAttempts.AsNoTracking()
             .CountAsync(m => m.UserId == userId
@@ -116,7 +131,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
         string stage;
         ListeningPathwayAction nextAction;
 
-        if (completedAttempts.Count == 0)
+        if (submittedAttemptCount == 0)
         {
             stage = "not_started";
             nextAction = new ListeningPathwayAction(
@@ -126,7 +141,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
                 PaperId: anchorPaperId,
                 Route: "/diagnostic/listening");
         }
-        else if (completedAttempts.Count == 1 && bestScaled is null)
+        else if (submittedAttemptCount == 1 && bestScaled is null)
         {
             stage = "diagnostic";
             nextAction = new ListeningPathwayAction(
@@ -194,9 +209,9 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
         var milestones = new List<ListeningPathwayMilestone>
         {
             new("first_attempt", "First Listening attempt",
-                completedAttempts.Count >= 1, completedAttempts.Count, 1),
+                submittedAttemptCount >= 1, submittedAttemptCount, 1),
             new("practice_streak_5", "Complete 5 Listening attempts",
-                completedAttempts.Count >= 5, Math.Min(completedAttempts.Count, 5), 5),
+                submittedAttemptCount >= 5, Math.Min(submittedAttemptCount, 5), 5),
             new("scaled_300", "Reach 300 scaled",
                 bestScaled is int s1 && s1 >= 300, bestScaled, 300),
             new("scaled_350", "Reach 350 scaled (Grade B)",
@@ -209,7 +224,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
             Stage: stage,
             Headline: headline,
             BestScaledScore: bestScaled,
-            SubmittedAttempts: completedAttempts.Count,
+            SubmittedAttempts: submittedAttemptCount,
             SubmittedListeningMockAttempts: listeningMockCount,
             NextAction: nextAction,
             Milestones: milestones);

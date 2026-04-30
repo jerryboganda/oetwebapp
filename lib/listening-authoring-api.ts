@@ -2,12 +2,10 @@
  * Listening authoring API client (admin-side).
  *
  * Mirrors lib/reading-authoring-api.ts for the Listening 42-item question map.
- * Until the relational ListeningPart/ListeningQuestion entities ship (Phase 2),
- * the authored structure is persisted as a JSON document at
- * `ContentPaper.ExtractedTextJson["listeningQuestions"]` — exactly what the
- * learner runtime (`ListeningLearnerService.ExtractQuestions`) reads to drive
- * the player + grader. This client is the only path admins should use to write
- * that document.
+ * Structure and extract metadata are authored through JSON-compatible admin
+ * endpoints, then projected into the relational Listening tables by backfill.
+ * The learner runtime prefers relational rows when present and keeps JSON as a
+ * migration fallback.
  */
 
 import { ensureFreshAccessToken } from './auth-client';
@@ -16,6 +14,7 @@ import { env } from './env';
 
 export type ListeningPartCode = 'A1' | 'A2' | 'B' | 'C1' | 'C2';
 export type ListeningQuestionType = 'short_answer' | 'multiple_choice_3';
+export type ListeningExtractKind = 'consultation' | 'workplace' | 'presentation';
 
 /** Phase 4: per-option distractor category for Part B/C MCQ analysis. */
 export type ListeningDistractorCategory =
@@ -58,6 +57,38 @@ export interface ListeningAuthoredQuestion {
   // for jump-to-evidence in the post-attempt review player.
   transcriptEvidenceStartMs?: number | null;
   transcriptEvidenceEndMs?: number | null;
+}
+
+export interface ListeningAuthoredSpeaker {
+  id: string;
+  role: string;
+  gender?: 'm' | 'f' | 'nb' | null;
+  accent?: string | null;
+}
+
+export interface ListeningAuthoredExtract {
+  partCode: ListeningPartCode;
+  displayOrder: number;
+  kind: ListeningExtractKind;
+  title: string;
+  accentCode: string | null;
+  speakers: ListeningAuthoredSpeaker[];
+  audioStartMs: number | null;
+  audioEndMs: number | null;
+}
+
+export interface ListeningAuthoredExtractList {
+  extracts: ListeningAuthoredExtract[];
+}
+
+export interface ListeningBackfillReport {
+  success: boolean;
+  paperId: string;
+  reason: string;
+  partsCreated: number;
+  extractsCreated: number;
+  questionsCreated: number;
+  optionsCreated: number;
 }
 
 export interface ListeningValidationCounts {
@@ -142,6 +173,24 @@ export const replaceListeningStructure = (
 
 export const validateListeningStructure = (paperId: string) =>
   api<ListeningValidationReport>(`/v1/admin/papers/${paperId}/listening/validate`);
+
+export const getListeningExtracts = (paperId: string) =>
+  api<ListeningAuthoredExtractList>(`/v1/admin/papers/${paperId}/listening/extracts`);
+
+export const replaceListeningExtracts = (
+  paperId: string,
+  extracts: ListeningAuthoredExtract[],
+) =>
+  api<ListeningAuthoredExtractList>(`/v1/admin/papers/${paperId}/listening/extracts`, {
+    method: 'PUT',
+    body: JSON.stringify({ extracts }),
+  });
+
+export const backfillListeningPaper = (paperId: string) =>
+  api<ListeningBackfillReport>(`/v1/admin/papers/${paperId}/listening/backfill`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 
 // ── Phase 8: AI extraction (admin) ─────────────────────────────────────
 

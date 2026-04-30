@@ -40,6 +40,7 @@ public sealed class ListeningLearnerService(
             .Concat(legacyTasks.Select(t => t.Id))
             .Distinct(StringComparer.Ordinal)
             .ToList();
+        var paperIds = papers.Select(p => p.Id).ToList();
 
         var attempts = contentIds.Count == 0
             ? new List<Attempt>()
@@ -48,10 +49,37 @@ public sealed class ListeningLearnerService(
                 .OrderByDescending(a => a.LastClientSyncAt ?? a.SubmittedAt ?? a.StartedAt)
                 .ToListAsync(ct);
 
-        var evaluations = attempts.Count == 0
+        var relationalAttempts = paperIds.Count == 0
+            ? new List<ListeningAttempt>()
+            : await db.ListeningAttempts.AsNoTracking()
+                .Where(a => a.UserId == userId && paperIds.Contains(a.PaperId))
+                .OrderByDescending(a => a.LastActivityAt)
+                .ToListAsync(ct);
+
+        var relationalAttemptIds = relationalAttempts.Select(a => a.Id).ToList();
+        var relationalAnswerCounts = relationalAttemptIds.Count == 0
+            ? new Dictionary<string, int>(StringComparer.Ordinal)
+            : await db.ListeningAnswers.AsNoTracking()
+                .Where(answer => relationalAttemptIds.Contains(answer.ListeningAttemptId))
+                .GroupBy(answer => answer.ListeningAttemptId)
+                .ToDictionaryAsync(group => group.Key, group => group.Count(), StringComparer.Ordinal, ct);
+
+        var relationalQuestionCounts = paperIds.Count == 0
+            ? new Dictionary<string, int>(StringComparer.Ordinal)
+            : await db.ListeningQuestions.AsNoTracking()
+                .Where(q => paperIds.Contains(q.PaperId))
+                .GroupBy(q => q.PaperId)
+                .ToDictionaryAsync(group => group.Key, group => group.Count(), StringComparer.Ordinal, ct);
+
+        var evaluationAttemptIds = attempts.Select(a => a.Id)
+            .Concat(relationalAttempts.Select(a => a.Id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var evaluations = evaluationAttemptIds.Count == 0
             ? new List<Evaluation>()
             : await db.Evaluations.AsNoTracking()
-                .Where(e => attempts.Select(a => a.Id).Contains(e.AttemptId))
+                .Where(e => evaluationAttemptIds.Contains(e.AttemptId))
                 .OrderByDescending(e => e.GeneratedAt)
                 .ToListAsync(ct);
 
@@ -63,24 +91,38 @@ public sealed class ListeningLearnerService(
 
         var activeAttempts = attempts
             .Where(a => a.State == AttemptState.InProgress)
-            .Take(3)
             .Select(a => new
             {
                 attemptId = a.Id,
                 paperId = a.ContentId,
                 paperTitle = titleByContentId.GetValueOrDefault(a.ContentId, "Listening paper"),
                 status = ToApiState(a.State),
-                a.Mode,
+                mode = a.Mode,
                 a.StartedAt,
                 a.LastClientSyncAt,
                 answeredCount = DeserializeAnswers(a.AnswersJson).Count(kv => !string.IsNullOrWhiteSpace(kv.Value)),
                 route = $"/listening/player/{Uri.EscapeDataString(a.ContentId)}?attemptId={Uri.EscapeDataString(a.Id)}&mode={Uri.EscapeDataString(a.Mode)}"
             })
+            .Concat(relationalAttempts
+                .Where(a => a.Status == ListeningAttemptStatus.InProgress)
+                .Select(a => new
+                {
+                    attemptId = a.Id,
+                    paperId = a.PaperId,
+                    paperTitle = titleByContentId.GetValueOrDefault(a.PaperId, "Listening paper"),
+                    status = ToApiState(a.Status),
+                    mode = ToApiMode(a.Mode),
+                    a.StartedAt,
+                    LastClientSyncAt = (DateTimeOffset?)a.LastActivityAt,
+                    answeredCount = relationalAnswerCounts.GetValueOrDefault(a.Id),
+                    route = $"/listening/player/{Uri.EscapeDataString(a.PaperId)}?attemptId={Uri.EscapeDataString(a.Id)}&mode={Uri.EscapeDataString(ToApiMode(a.Mode))}"
+                }))
+            .OrderByDescending(a => a.LastClientSyncAt ?? a.StartedAt)
+            .Take(3)
             .ToList();
 
         var recentResults = attempts
             .Where(a => a.State == AttemptState.Completed)
-            .Take(5)
             .Select(a =>
             {
                 var evaluation = evaluations.FirstOrDefault(e => e.AttemptId == a.Id);
@@ -100,17 +142,60 @@ public sealed class ListeningLearnerService(
                     route = $"/listening/results/{Uri.EscapeDataString(a.Id)}"
                 };
             })
+            .Concat(relationalAttempts
+                .Where(a => a.Status == ListeningAttemptStatus.Submitted)
+                .Select(a =>
+                {
+                    var evaluation = evaluations.FirstOrDefault(e => e.AttemptId == a.Id);
+                    var score = ResolveScoreFromRelationalAttempt(a, evaluation);
+                    return new
+                    {
+                        attemptId = a.Id,
+                        paperId = a.PaperId,
+                        paperTitle = titleByContentId.GetValueOrDefault(a.PaperId, "Listening paper"),
+                        rawScore = score.RawScore,
+                        maxRawScore = score.MaxRawScore,
+                        scaledScore = score.ScaledScore,
+                        grade = score.Grade,
+                        passed = score.Passed,
+                        submittedAt = a.SubmittedAt,
+                        scoreDisplay = FormatScoreDisplay(score),
+                        route = $"/listening/results/{Uri.EscapeDataString(a.Id)}"
+                    };
+                }))
+            .OrderByDescending(result => result.submittedAt)
+            .Take(5)
             .ToList();
 
         var latestCompletedAttempt = attempts.FirstOrDefault(a => a.State == AttemptState.Completed);
+        var latestRelationalAttempt = relationalAttempts.FirstOrDefault(a => a.Status == ListeningAttemptStatus.Submitted);
+        if (latestCompletedAttempt is not null && latestRelationalAttempt is not null
+            && (latestCompletedAttempt.CompletedAt ?? latestCompletedAttempt.SubmittedAt ?? DateTimeOffset.MinValue)
+                < (latestRelationalAttempt.SubmittedAt ?? DateTimeOffset.MinValue))
+        {
+            latestCompletedAttempt = null;
+        }
         var latestEvaluation = latestCompletedAttempt is null
-            ? null
+            ? latestRelationalAttempt is null ? null : evaluations.FirstOrDefault(e => e.AttemptId == latestRelationalAttempt.Id)
             : evaluations.FirstOrDefault(e => e.AttemptId == latestCompletedAttempt.Id);
 
         // Hardening: a completed attempt may reference a paper that was later unpublished or whose
         // ExtractedTextJson is malformed. Never let that bubble a 500 through the Listening home endpoint.
         IReadOnlyList<ListeningErrorClusterDto> latestClusters = new List<ListeningErrorClusterDto>();
-        if (latestCompletedAttempt is not null)
+        if (latestRelationalAttempt is not null && latestCompletedAttempt is null)
+        {
+            try
+            {
+                var source = await ResolveSourceAsync(latestRelationalAttempt.PaperId, ct);
+                var answers = await LoadRelationalAnswersAsync(latestRelationalAttempt.Id, ct);
+                latestClusters = BuildReview(latestRelationalAttempt, source, answers, latestEvaluation).ErrorClusters;
+            }
+            catch (Exception)
+            {
+                latestClusters = new List<ListeningErrorClusterDto>();
+            }
+        }
+        else if (latestCompletedAttempt is not null)
         {
             try
             {
@@ -124,11 +209,11 @@ public sealed class ListeningLearnerService(
         }
 
         var drillGroups = latestClusters.Count > 0
-            ? latestClusters.Select(c => BuildDrill(c.ErrorType, latestCompletedAttempt?.ContentId, latestCompletedAttempt?.Id)).ToList()
+            ? latestClusters.Select(c => BuildDrill(c.ErrorType, latestCompletedAttempt?.ContentId ?? latestRelationalAttempt?.PaperId, latestCompletedAttempt?.Id ?? latestRelationalAttempt?.Id)).ToList()
             : new List<ListeningDrillDto>
             {
-                BuildDrill("distractor_confusion", legacyTasks.FirstOrDefault()?.Id, latestCompletedAttempt?.Id),
-                BuildDrill("numbers_and_frequencies", legacyTasks.FirstOrDefault()?.Id, latestCompletedAttempt?.Id)
+                BuildDrill("distractor_confusion", legacyTasks.FirstOrDefault()?.Id, latestCompletedAttempt?.Id ?? latestRelationalAttempt?.Id),
+                BuildDrill("numbers_and_frequencies", legacyTasks.FirstOrDefault()?.Id, latestCompletedAttempt?.Id ?? latestRelationalAttempt?.Id)
             };
 
         // Hardening: individual paper DTO extraction reads free-form ExtractedTextJson; one malformed
@@ -138,7 +223,12 @@ public sealed class ListeningLearnerService(
         {
             try
             {
-                paperDtos.Add(PaperHomeDto(paper, attempts.FirstOrDefault(a => a.ContentId == paper.Id)));
+                var lastGeneric = attempts.FirstOrDefault(a => a.ContentId == paper.Id);
+                var lastRelational = relationalAttempts.FirstOrDefault(a => a.PaperId == paper.Id);
+                paperDtos.Add(PaperHomeDto(
+                    paper,
+                    BuildPaperLastAttemptDto(paper.Id, lastGeneric, lastRelational),
+                    relationalQuestionCounts.GetValueOrDefault(paper.Id)));
             }
             catch (Exception)
             {
@@ -163,17 +253,19 @@ public sealed class ListeningLearnerService(
             transcriptBackedReview = new
             {
                 title = "Transcript-backed review",
-                route = latestCompletedAttempt is null ? null : $"/listening/review/{latestCompletedAttempt.Id}",
+                route = latestCompletedAttempt is null && latestRelationalAttempt is null ? null : $"/listening/review/{latestCompletedAttempt?.Id ?? latestRelationalAttempt?.Id}",
                 availableAfterAttempt = true,
-                latestAttemptId = latestCompletedAttempt?.Id,
-                latestScoreDisplay = latestEvaluation is null ? null : FormatScoreDisplay(ResolveScoreFromEvaluation(latestEvaluation))
+                latestAttemptId = latestCompletedAttempt?.Id ?? latestRelationalAttempt?.Id,
+                latestScoreDisplay = latestEvaluation is not null
+                    ? FormatScoreDisplay(ResolveScoreFromEvaluation(latestEvaluation))
+                    : latestRelationalAttempt is null ? null : FormatScoreDisplay(ResolveScoreFromRelationalAttempt(latestRelationalAttempt, null))
             },
             distractorDrills = drillGroups,
             drillGroups,
             accessPolicyHints = new
             {
                 policy = "per_item_post_attempt",
-                state = latestCompletedAttempt is null ? "deferred" : "available",
+                state = latestCompletedAttempt is null && latestRelationalAttempt is null ? "deferred" : "available",
                 rationale = "Use transcript-backed review after an attempt so you can diagnose distractor patterns with real evidence instead of replaying blindly.",
                 availableAfterAttempt = true
             },
@@ -197,55 +289,90 @@ public sealed class ListeningLearnerService(
         await RequirePaperAccessIfAuthoredAsync(userId, paperId, ct);
         var source = await ResolveSourceAsync(paperId, ct);
         var normalizedMode = NormalizeMode(mode);
+        ListeningAttempt? relationalAttempt = null;
         Attempt? attempt = null;
 
         if (!string.IsNullOrWhiteSpace(attemptId))
         {
-            attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
-            if (!string.Equals(attempt.ContentId, source.Id, StringComparison.Ordinal))
+            relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: true, ct);
+            if (relationalAttempt is not null)
             {
-                throw ApiException.Validation("listening_attempt_mismatch", "This attempt does not belong to the requested Listening paper.");
+                if (!string.Equals(relationalAttempt.PaperId, source.Id, StringComparison.Ordinal))
+                {
+                    throw ApiException.Validation("listening_attempt_mismatch", "This attempt does not belong to the requested Listening paper.");
+                }
+            }
+            else
+            {
+                attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
+                if (!string.Equals(attempt.ContentId, source.Id, StringComparison.Ordinal))
+                {
+                    throw ApiException.Validation("listening_attempt_mismatch", "This attempt does not belong to the requested Listening paper.");
+                }
             }
         }
         else
         {
-            attempt = await db.Attempts.AsNoTracking()
-                .Where(a => a.UserId == userId
-                    && a.SubtestCode == Subtest
-                    && a.ContentId == source.Id
-                    && a.State == AttemptState.InProgress)
-                .OrderByDescending(a => a.LastClientSyncAt ?? a.StartedAt)
-                .FirstOrDefaultAsync(ct);
+            var requestedRelationalMode = ToRelationalMode(normalizedMode);
+            if (source.UsesRelationalStructure)
+            {
+                relationalAttempt = await db.ListeningAttempts.AsNoTracking()
+                    .Where(a => a.UserId == userId
+                        && a.PaperId == source.Id
+                        && a.Mode == requestedRelationalMode
+                        && a.Status == ListeningAttemptStatus.InProgress)
+                    .OrderByDescending(a => a.LastActivityAt)
+                    .FirstOrDefaultAsync(ct);
+            }
+
+            if (relationalAttempt is null)
+            {
+                attempt = await db.Attempts.AsNoTracking()
+                    .Where(a => a.UserId == userId
+                        && a.SubtestCode == Subtest
+                        && a.ContentId == source.Id
+                        && a.Mode == normalizedMode
+                        && a.State == AttemptState.InProgress)
+                    .OrderByDescending(a => a.LastClientSyncAt ?? a.StartedAt)
+                    .FirstOrDefaultAsync(ct);
+            }
         }
 
         var questions = source.Questions.Select(LearnerQuestionDto).ToList();
-        var answers = attempt is null ? new Dictionary<string, string?>() : DeserializeAnswers(attempt.AnswersJson);
+        var answers = relationalAttempt is not null
+            ? await LoadRelationalAnswersAsync(relationalAttempt.Id, ct)
+            : attempt is null ? new Dictionary<string, string?>() : DeserializeAnswers(attempt.AnswersJson);
+        var effectiveMode = relationalAttempt is not null
+            ? ToApiMode(relationalAttempt.Mode)
+            : attempt?.Mode ?? normalizedMode;
         return new
         {
             paper = SourceDto(source),
-            attempt = attempt is null ? null : AttemptDto(attempt, answers),
+            attempt = relationalAttempt is not null
+                ? RelationalAttemptDto(relationalAttempt, answers)
+                : attempt is null ? null : AttemptDto(attempt, answers),
             questions,
             modePolicy = new
             {
-                mode = attempt?.Mode ?? normalizedMode,
-                canPause = !IsExamMode(normalizedMode),
-                canScrub = !IsExamMode(normalizedMode),
-                onePlayOnly = IsExamMode(normalizedMode),
+                mode = effectiveMode,
+                canPause = !IsExamMode(effectiveMode),
+                canScrub = !IsExamMode(effectiveMode),
+                onePlayOnly = IsExamMode(effectiveMode),
                 autosave = true,
                 transcriptPolicy = "per_item_post_attempt",
                 // Phase 9 tail: presentation hints so the player can render
                 // the correct chrome (kiosk on home, printable booklet on
                 // paper). The graded-integrity invariants stay encoded in
                 // onePlayOnly / canScrub / canPause above.
-                presentationStyle = normalizedMode switch
+                presentationStyle = effectiveMode switch
                 {
                     "home" => "kiosk_fullscreen",
                     "paper" => "printable_booklet",
                     "exam" => "exam_standard",
                     _ => "practice"
                 },
-                integrityLockRequired = normalizedMode == "home",
-                printableBooklet = normalizedMode == "paper"
+                integrityLockRequired = effectiveMode == "home",
+                printableBooklet = effectiveMode == "paper"
             },
             scoring = new
             {
@@ -280,6 +407,11 @@ public sealed class ListeningLearnerService(
         }
 
         var normalizedMode = NormalizeMode(mode);
+        if (source.UsesRelationalStructure)
+        {
+            return await StartRelationalAttemptAsync(userId, source, normalizedMode, ct);
+        }
+
         var existing = await db.Attempts
             .Where(a => a.UserId == userId
                 && a.ContentId == source.Id
@@ -314,6 +446,12 @@ public sealed class ListeningLearnerService(
 
     public async Task<object> GetAttemptAsync(string userId, string attemptId, CancellationToken ct)
     {
+        var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: true, ct);
+        if (relationalAttempt is not null)
+        {
+            return RelationalAttemptDto(relationalAttempt, await LoadRelationalAnswersAsync(relationalAttempt.Id, ct));
+        }
+
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
         return AttemptDto(attempt, DeserializeAnswers(attempt.AnswersJson));
     }
@@ -321,6 +459,13 @@ public sealed class ListeningLearnerService(
     public async Task SaveAnswerAsync(string userId, string attemptId, string questionId, ListeningAnswerSaveRequest request, CancellationToken ct)
     {
         await EnsureLearnerMutationAllowedAsync(userId, ct);
+        var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
+        if (relationalAttempt is not null)
+        {
+            await SaveRelationalAnswerAsync(userId, relationalAttempt, questionId, request.UserAnswer, ct);
+            return;
+        }
+
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
         EnsureAttemptCanMutate(attempt);
         var source = await ResolveSourceAsync(attempt.ContentId, ct);
@@ -339,6 +484,15 @@ public sealed class ListeningLearnerService(
     public async Task<object> HeartbeatAsync(string userId, string attemptId, HeartbeatRequest request, CancellationToken ct)
     {
         await EnsureLearnerMutationAllowedAsync(userId, ct);
+        var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
+        if (relationalAttempt is not null)
+        {
+            EnsureRelationalAttemptCanMutate(relationalAttempt);
+            relationalAttempt.LastActivityAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return new { attemptId = relationalAttempt.Id, elapsedSeconds = request.ElapsedSeconds, lastClientSyncAt = relationalAttempt.LastActivityAt };
+        }
+
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
         EnsureAttemptCanMutate(attempt);
         attempt.ElapsedSeconds = request.ElapsedSeconds;
@@ -351,6 +505,12 @@ public sealed class ListeningLearnerService(
     public async Task<object> SubmitAsync(string userId, string attemptId, CancellationToken ct)
     {
         await EnsureLearnerMutationAllowedAsync(userId, ct);
+        var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
+        if (relationalAttempt is not null)
+        {
+            return await SubmitRelationalAttemptAsync(userId, relationalAttempt, ct);
+        }
+
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
         var source = await ResolveSourceAsync(attempt.ContentId, ct);
 
@@ -430,6 +590,25 @@ public sealed class ListeningLearnerService(
 
     public async Task<object> GetReviewAsync(string userId, string attemptId, CancellationToken ct)
     {
+        var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: true, ct);
+        if (relationalAttempt is not null)
+        {
+            if (relationalAttempt.Status != ListeningAttemptStatus.Submitted)
+            {
+                throw ApiException.Validation(
+                    "listening_review_unavailable",
+                    "Transcript-backed review is available after the Listening attempt is submitted.");
+            }
+
+            var relationalSource = await ResolveSourceAsync(relationalAttempt.PaperId, ct);
+            var relationalEvaluation = await db.Evaluations.AsNoTracking()
+                .Where(e => e.AttemptId == relationalAttempt.Id)
+                .OrderByDescending(e => e.GeneratedAt)
+                .FirstOrDefaultAsync(ct);
+            var answers = await LoadRelationalAnswersAsync(relationalAttempt.Id, ct);
+            return BuildReview(relationalAttempt, relationalSource, answers, relationalEvaluation);
+        }
+
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
         if (attempt.State != AttemptState.Completed)
         {
@@ -452,6 +631,324 @@ public sealed class ListeningLearnerService(
         return Task.FromResult<object>(BuildDrill(normalized.Replace("listening-drill-", string.Empty, StringComparison.Ordinal), paperId, attemptId));
     }
 
+    public async Task RecordIntegrityEventAsync(
+        string userId,
+        string attemptId,
+        ListeningIntegrityEventRequest request,
+        CancellationToken ct)
+    {
+        await EnsureLearnerMutationAllowedAsync(userId, ct);
+        var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
+        var attempt = relationalAttempt is null
+            ? await GetAttemptOwnedByUserAsync(userId, attemptId, ct)
+            : null;
+
+        var eventType = string.IsNullOrWhiteSpace(request.EventType)
+            ? "unknown"
+            : request.EventType.Trim();
+        if (eventType.Length > 64) eventType = eventType[..64];
+
+        var now = DateTimeOffset.UtcNow;
+        if (relationalAttempt is not null)
+        {
+            relationalAttempt.LastActivityAt = now;
+        }
+        else if (attempt is not null)
+        {
+            attempt.LastClientSyncAt = now;
+        }
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = request.OccurredAt ?? now,
+            ActorId = userId,
+            ActorName = userId,
+            Action = "ListeningIntegrityEvent",
+            ResourceType = relationalAttempt is not null ? "ListeningAttempt" : "Attempt",
+            ResourceId = relationalAttempt?.Id ?? attempt!.Id,
+            Details = JsonSupport.Serialize(new
+            {
+                eventType,
+                mode = relationalAttempt is not null ? ToApiMode(relationalAttempt.Mode) : attempt!.Mode,
+                request.Details,
+                serverRecordedAt = now,
+            }),
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task<object> StartRelationalAttemptAsync(string userId, ListeningSource source, string normalizedMode, CancellationToken ct)
+    {
+        var relationalMode = ToRelationalMode(normalizedMode);
+        var existing = await db.ListeningAttempts
+            .Where(a => a.UserId == userId
+                && a.PaperId == source.Id
+                && a.Mode == relationalMode
+                && a.Status == ListeningAttemptStatus.InProgress)
+            .OrderByDescending(a => a.LastActivityAt)
+            .FirstOrDefaultAsync(ct);
+        if (existing is not null)
+        {
+            return RelationalAttemptDto(existing, await LoadRelationalAnswersAsync(existing.Id, ct));
+        }
+
+        var policy = await ResolveListeningPolicyAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+        var isExamLike = IsExamMode(normalizedMode);
+        var attempt = new ListeningAttempt
+        {
+            Id = $"lat-{Guid.NewGuid():N}",
+            UserId = userId,
+            PaperId = source.Id,
+            StartedAt = now,
+            LastActivityAt = now,
+            DeadlineAt = isExamLike ? now.AddMinutes(Math.Max(1, policy.FullPaperTimerMinutes)).AddSeconds(policy.GracePeriodSeconds) : null,
+            Status = ListeningAttemptStatus.InProgress,
+            Mode = relationalMode,
+            MaxRawScore = Math.Clamp(source.Questions.Sum(q => q.Points), 1, CanonicalRawMax),
+            PolicySnapshotJson = JsonSupport.Serialize(new
+            {
+                policy.Id,
+                policy.FullPaperTimerMinutes,
+                policy.GracePeriodSeconds,
+                mode = normalizedMode,
+                onePlayOnly = IsExamMode(normalizedMode),
+                presentationStyle = normalizedMode == "home"
+                    ? "kiosk_fullscreen"
+                    : normalizedMode == "paper" ? "printable_booklet" : normalizedMode,
+            }),
+            ScopeJson = JsonSupport.Serialize(new { mode = normalizedMode, sourceKind = source.SourceKind }),
+        };
+
+        db.ListeningAttempts.Add(attempt);
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = now,
+            ActorId = userId,
+            ActorName = userId,
+            Action = $"ListeningAttemptStarted_{normalizedMode}",
+            ResourceType = "ListeningAttempt",
+            ResourceId = attempt.Id,
+            Details = $"paper={source.Id}; mode={normalizedMode}; structure=relational",
+        });
+        await db.SaveChangesAsync(ct);
+        return RelationalAttemptDto(attempt, new Dictionary<string, string?>());
+    }
+
+    private async Task SaveRelationalAnswerAsync(
+        string userId,
+        ListeningAttempt attempt,
+        string questionId,
+        string? userAnswer,
+        CancellationToken ct)
+    {
+        EnsureRelationalAttemptCanMutate(attempt);
+        var question = await db.ListeningQuestions.AsNoTracking()
+            .Where(q => q.Id == questionId && q.PaperId == attempt.PaperId)
+            .Select(q => new { q.Id })
+            .FirstOrDefaultAsync(ct)
+            ?? throw ApiException.Validation("listening_question_not_found", "This question does not belong to the Listening attempt.");
+
+        var now = DateTimeOffset.UtcNow;
+        var row = await db.ListeningAnswers
+            .FirstOrDefaultAsync(answer => answer.ListeningAttemptId == attempt.Id && answer.ListeningQuestionId == question.Id, ct);
+        if (row is null)
+        {
+            row = new ListeningAnswer
+            {
+                Id = $"laa-{Guid.NewGuid():N}",
+                ListeningAttemptId = attempt.Id,
+                ListeningQuestionId = question.Id,
+                UserAnswerJson = JsonSerializer.Serialize(userAnswer ?? string.Empty),
+                AnsweredAt = now,
+            };
+            db.ListeningAnswers.Add(row);
+        }
+        else
+        {
+            row.UserAnswerJson = JsonSerializer.Serialize(userAnswer ?? string.Empty);
+            row.AnsweredAt = now;
+            row.IsCorrect = null;
+            row.PointsEarned = 0;
+            row.SelectedDistractorCategory = null;
+        }
+
+        attempt.LastActivityAt = now;
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task<object> SubmitRelationalAttemptAsync(string userId, ListeningAttempt attempt, CancellationToken ct)
+    {
+        var source = await ResolveSourceAsync(attempt.PaperId, ct);
+        if (source.Questions.Count == 0)
+        {
+            throw ApiException.Validation("listening_questions_missing", "This Listening attempt has no structured questions to grade.");
+        }
+
+        var existing = await db.Evaluations.FirstOrDefaultAsync(e => e.AttemptId == attempt.Id, ct);
+        var answers = await LoadRelationalAnswersAsync(attempt.Id, ct);
+        if (attempt.Status == ListeningAttemptStatus.Submitted && existing is not null)
+        {
+            return BuildReview(attempt, source, answers, existing);
+        }
+
+        EnsureRelationalAttemptCanMutate(attempt);
+        var review = BuildReview(attempt, source, answers);
+        var itemByQuestionId = review.ItemReview.ToDictionary(item => item.QuestionId, StringComparer.Ordinal);
+        var answerRows = await db.ListeningAnswers
+            .Where(answer => answer.ListeningAttemptId == attempt.Id)
+            .ToListAsync(ct);
+        foreach (var row in answerRows)
+        {
+            if (!itemByQuestionId.TryGetValue(row.ListeningQuestionId, out var item)) continue;
+            row.IsCorrect = item.IsCorrect;
+            row.PointsEarned = item.PointsEarned;
+            row.SelectedDistractorCategory = ResolveSelectedDistractorCategory(item);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        attempt.Status = ListeningAttemptStatus.Submitted;
+        attempt.SubmittedAt = now;
+        attempt.LastActivityAt = now;
+        attempt.RawScore = review.RawScore;
+        attempt.ScaledScore = review.ScaledScore;
+
+        var score = new ListeningScoreDto(
+            review.RawScore,
+            review.MaxRawScore,
+            review.ScaledScore,
+            review.Grade,
+            review.Passed);
+        var evaluation = CreateEvaluation(attempt.Id, score, review);
+        db.Evaluations.Add(evaluation);
+        await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, userId, ct);
+        await db.SaveChangesAsync(ct);
+        return BuildReview(attempt, source, answers, evaluation);
+    }
+
+    private async Task<Dictionary<string, string?>> LoadRelationalAnswersAsync(string attemptId, CancellationToken ct)
+    {
+        var rows = await db.ListeningAnswers.AsNoTracking()
+            .Where(answer => answer.ListeningAttemptId == attemptId)
+            .Select(answer => new { answer.ListeningQuestionId, answer.UserAnswerJson })
+            .ToListAsync(ct);
+        return rows.ToDictionary(
+            row => row.ListeningQuestionId,
+            row => DecodeRelationalAnswer(row.UserAnswerJson),
+            StringComparer.Ordinal);
+    }
+
+    private static string? DecodeRelationalAnswer(string? json)
+        => ReadJsonString(json);
+
+    private async Task<ListeningPolicy> ResolveListeningPolicyAsync(CancellationToken ct)
+        => await db.ListeningPolicies.AsNoTracking().FirstOrDefaultAsync(policy => policy.Id == "global", ct)
+            ?? new ListeningPolicy { Id = "global", FullPaperTimerMinutes = 45, GracePeriodSeconds = 30 };
+
+    private async Task<ListeningAttempt?> TryGetRelationalAttemptOwnedByUserAsync(
+        string userId,
+        string attemptId,
+        bool asNoTracking,
+        CancellationToken ct)
+    {
+        var query = db.ListeningAttempts.Where(a => a.Id == attemptId && a.UserId == userId);
+        if (asNoTracking) query = query.AsNoTracking();
+        return await query.FirstOrDefaultAsync(ct);
+    }
+
+    private static void EnsureRelationalAttemptCanMutate(ListeningAttempt attempt)
+    {
+        if (attempt.Status != ListeningAttemptStatus.InProgress)
+        {
+            throw ApiException.Validation(
+                "listening_attempt_locked",
+                "This Listening attempt is already submitted or expired and can no longer be changed.");
+        }
+    }
+
+    private static ListeningAttemptMode ToRelationalMode(string mode) => mode switch
+    {
+        "home" => ListeningAttemptMode.Home,
+        "paper" => ListeningAttemptMode.Paper,
+        "practice" => ListeningAttemptMode.Learning,
+        _ => ListeningAttemptMode.Exam,
+    };
+
+    private static string ToApiMode(ListeningAttemptMode mode) => mode switch
+    {
+        ListeningAttemptMode.Home => "home",
+        ListeningAttemptMode.Paper => "paper",
+        ListeningAttemptMode.Learning => "practice",
+        ListeningAttemptMode.Drill => "practice",
+        ListeningAttemptMode.MiniTest => "practice",
+        ListeningAttemptMode.ErrorBank => "practice",
+        _ => "exam",
+    };
+
+    private static ListeningDistractorCategory? ResolveSelectedDistractorCategory(ListeningReviewItemDto item)
+    {
+        if (item.IsCorrect || item.OptionAnalysis is null || string.IsNullOrWhiteSpace(item.LearnerAnswer)) return null;
+        var selected = item.OptionAnalysis.FirstOrDefault(option =>
+            string.Equals(option.OptionText, item.LearnerAnswer, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(option.OptionLabel, item.LearnerAnswer, StringComparison.OrdinalIgnoreCase));
+        return selected?.DistractorCategory switch
+        {
+            "too_strong" => ListeningDistractorCategory.TooStrong,
+            "too_weak" => ListeningDistractorCategory.TooWeak,
+            "wrong_speaker" => ListeningDistractorCategory.WrongSpeaker,
+            "opposite_meaning" => ListeningDistractorCategory.OppositeMeaning,
+            "reused_keyword" => ListeningDistractorCategory.ReusedKeyword,
+            _ => null,
+        };
+    }
+
+    private static Evaluation CreateEvaluation(string attemptId, ListeningScoreDto score, ListeningReviewDto review)
+        => new()
+        {
+            Id = $"le-{Guid.NewGuid():N}",
+            AttemptId = attemptId,
+            SubtestCode = Subtest,
+            State = AsyncState.Completed,
+            ScoreRange = FormatScoreDisplay(score),
+            GradeRange = $"Grade {score.Grade}",
+            ConfidenceBand = ConfidenceBand.High,
+            StrengthsJson = JsonSupport.Serialize(review.Strengths),
+            IssuesJson = JsonSupport.Serialize(review.Issues),
+            CriterionScoresJson = JsonSupport.Serialize(new[]
+            {
+                new
+                {
+                    criterionCode = "listening_accuracy",
+                    rawScore = score.RawScore,
+                    maxRawScore = score.MaxRawScore,
+                    scaledScore = score.ScaledScore,
+                    grade = score.Grade,
+                    passed = score.Passed,
+                    scoreDisplay = FormatScoreDisplay(score)
+                }
+            }),
+            FeedbackItemsJson = JsonSupport.Serialize(review.ItemReview
+                .Where(item => !item.IsCorrect)
+                .Select(item => new
+                {
+                    feedbackItemId = $"{attemptId}-{item.QuestionId}",
+                    criterionCode = item.ErrorType ?? "detail_capture",
+                    type = "answer_feedback",
+                    anchor = new { questionId = item.QuestionId },
+                    message = item.Explanation,
+                    severity = "medium",
+                    suggestedFix = item.DistractorExplanation ?? "Review the transcript evidence and repeat the same error type as a short drill."
+                })),
+            GeneratedAt = DateTimeOffset.UtcNow,
+            ModelExplanationSafe = "Listening result is graded deterministically from the authored answer key.",
+            LearnerDisclaimer = "Practice result only. This is not an official OET Statement of Results.",
+            StatusReasonCode = "completed",
+            StatusMessage = "Result ready.",
+            LastTransitionAt = DateTimeOffset.UtcNow
+        };
+
     private async Task<ListeningSource> ResolveSourceAsync(string id, CancellationToken ct)
     {
         var paper = await db.ContentPapers.AsNoTracking()
@@ -460,7 +957,7 @@ public sealed class ListeningLearnerService(
             .FirstOrDefaultAsync(p => p.Id == id && p.SubtestCode == Subtest && p.Status == ContentStatus.Published, ct);
         if (paper is not null)
         {
-            return BuildPaperSource(paper);
+            return await BuildPaperSourceAsync(paper, ct);
         }
 
         var legacy = await db.ContentItems.AsNoTracking()
@@ -510,19 +1007,61 @@ public sealed class ListeningLearnerService(
             .Select(user => user.ActiveProfessionId)
             .SingleOrDefaultAsync(ct);
 
-    private static ListeningSource BuildPaperSource(ContentPaper paper)
+    private async Task<ListeningSource> BuildPaperSourceAsync(ContentPaper paper, CancellationToken ct)
     {
         var assets = paper.Assets.Where(a => a.IsPrimary).ToList();
         var assetByRole = assets
             .GroupBy(a => a.Role)
             .ToDictionary(g => g.Key, g => g.OrderBy(a => a.DisplayOrder).First());
-        var questionMap = JsonSupport.Deserialize<Dictionary<string, object?>>(paper.ExtractedTextJson, new Dictionary<string, object?>());
-        var questions = ExtractQuestions(questionMap.TryGetValue("listeningQuestions", out var listeningQuestions)
-                ? listeningQuestions
-                : questionMap.GetValueOrDefault("questions"))
-            .ToList();
-        var segments = ExtractTranscriptSegments(questionMap.GetValueOrDefault("listeningTranscriptSegments"));
-        var extracts = ExtractExtractMetadata(questionMap.GetValueOrDefault("listeningExtracts"));
+
+        var relationalQuestions = await db.ListeningQuestions.AsNoTracking()
+            .Include(q => q.Part)
+            .Include(q => q.Options)
+            .Where(q => q.PaperId == paper.Id)
+            .OrderBy(q => q.QuestionNumber)
+            .ToListAsync(ct);
+
+        IReadOnlyList<ListeningQuestion> questions;
+        IReadOnlyList<ListeningTranscriptSegmentDto> segments;
+        IReadOnlyList<ListeningExtractMetaDto> extracts;
+        var usesRelationalStructure = relationalQuestions.Count > 0;
+
+        if (usesRelationalStructure)
+        {
+            var parts = await db.ListeningParts.AsNoTracking()
+                .Where(part => part.PaperId == paper.Id)
+                .ToDictionaryAsync(part => part.Id, part => part.PartCode, ct);
+            var partIds = parts.Keys.ToList();
+            var relationalExtracts = partIds.Count == 0
+                ? new List<ListeningExtract>()
+                : await db.ListeningExtracts.AsNoTracking()
+                    .Where(extract => partIds.Contains(extract.ListeningPartId))
+                    .OrderBy(extract => extract.DisplayOrder)
+                    .ToListAsync(ct);
+
+            questions = relationalQuestions.Select(MapRelationalQuestion).ToList();
+            extracts = relationalExtracts
+                .Select((extract, index) => MapRelationalExtract(extract, parts.GetValueOrDefault(extract.ListeningPartId), index))
+                .OrderBy(extract => PartCodeOrder(extract.PartCode))
+                .ThenBy(extract => extract.DisplayOrder)
+                .ToList();
+            segments = relationalExtracts
+                .SelectMany(extract => ExtractTranscriptSegmentsFromJson(
+                    extract.TranscriptSegmentsJson,
+                    PartCodeString(parts.GetValueOrDefault(extract.ListeningPartId))))
+                .OrderBy(segment => segment.StartMs)
+                .ToList();
+        }
+        else
+        {
+            var questionMap = JsonSupport.Deserialize<Dictionary<string, object?>>(paper.ExtractedTextJson, new Dictionary<string, object?>());
+            questions = ExtractQuestions(questionMap.TryGetValue("listeningQuestions", out var listeningQuestions)
+                    ? listeningQuestions
+                    : questionMap.GetValueOrDefault("questions"))
+                .ToList();
+            segments = ExtractTranscriptSegments(questionMap.GetValueOrDefault("listeningTranscriptSegments"));
+            extracts = ExtractExtractMetadata(questionMap.GetValueOrDefault("listeningExtracts"));
+        }
 
         return new ListeningSource(
             Id: paper.Id,
@@ -543,7 +1082,8 @@ public sealed class ListeningLearnerService(
                 AnswerKey: assetByRole.ContainsKey(PaperAssetRole.AnswerKey),
                 AudioScript: assetByRole.ContainsKey(PaperAssetRole.AudioScript)),
             TranscriptSegments: segments,
-            Extracts: extracts);
+            Extracts: extracts,
+            UsesRelationalStructure: usesRelationalStructure);
     }
 
     private static ListeningSource BuildLegacySource(ContentItem item)
@@ -571,7 +1111,8 @@ public sealed class ListeningLearnerService(
                 AnswerKey: true,
                 AudioScript: questions.Any(q => !string.IsNullOrWhiteSpace(q.TranscriptExcerpt))),
             TranscriptSegments: segments,
-            Extracts: extracts);
+            Extracts: extracts,
+            UsesRelationalStructure: false);
     }
 
     /// <summary>
@@ -740,28 +1281,226 @@ public sealed class ListeningLearnerService(
         return normalized is "m" or "f" or "nb" ? normalized : null;
     }
 
-    private ListeningReviewDto BuildReview(Attempt attempt, ListeningSource source, Evaluation? evaluation = null)
+    private static ListeningQuestion MapRelationalQuestion(OetLearner.Api.Domain.ListeningQuestion question)
     {
-        var answers = DeserializeAnswers(attempt.AnswersJson);
-        var orderedQuestions = source.Questions.OrderBy(q => q.Number).ToList();
+        var options = question.Options
+            .OrderBy(option => option.DisplayOrder)
+            .ToList();
+        var optionTexts = options.Select(option => option.Text).ToList();
+        var correctOption = options.FirstOrDefault(option => option.IsCorrect);
+        var rawCorrect = ReadJsonString(question.CorrectAnswerJson) ?? string.Empty;
+        var correctDisplay = correctOption?.Text ?? rawCorrect;
+        var accepted = ReadJsonStringList(question.AcceptedSynonymsJson).ToList();
+        AddAccepted(accepted, rawCorrect);
+        if (correctOption is not null)
+        {
+            AddAccepted(accepted, correctOption.OptionKey);
+            AddAccepted(accepted, correctOption.Text);
+        }
+
+        return new ListeningQuestion(
+            Id: question.Id,
+            Number: question.QuestionNumber,
+            PartCode: PartCodeString(question.Part?.PartCode ?? ListeningPartCode.A1),
+            Text: question.Stem,
+            Type: question.QuestionType == ListeningQuestionType.MultipleChoice3 ? "multiple_choice_3" : "short_answer",
+            Options: optionTexts,
+            CorrectAnswer: correctDisplay,
+            AcceptedAnswers: accepted,
+            Explanation: question.ExplanationMarkdown,
+            SkillTag: question.SkillTag,
+            AllowTranscriptReveal: true,
+            TranscriptExcerpt: question.TranscriptEvidenceText,
+            DistractorExplanation: null,
+            Points: Math.Max(1, question.Points),
+            OptionDistractorWhy: options.Select(option => option.WhyWrongMarkdown).ToList(),
+            OptionDistractorCategory: options.Select(option => option.DistractorCategory is null ? null : DistractorCategoryString(option.DistractorCategory.Value)).ToList(),
+            SpeakerAttitude: question.SpeakerAttitude is null ? null : SpeakerAttitudeString(question.SpeakerAttitude.Value),
+            TranscriptEvidenceStartMs: question.TranscriptEvidenceStartMs,
+            TranscriptEvidenceEndMs: question.TranscriptEvidenceEndMs);
+    }
+
+    private static void AddAccepted(List<string> accepted, string? answer)
+    {
+        if (string.IsNullOrWhiteSpace(answer)) return;
+        if (!accepted.Any(existing => string.Equals(existing.Trim(), answer.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            accepted.Add(answer.Trim());
+        }
+    }
+
+    private static ListeningExtractMetaDto MapRelationalExtract(
+        ListeningExtract extract,
+        ListeningPartCode partCode,
+        int index)
+        => new(
+            PartCode: PartCodeString(partCode),
+            DisplayOrder: extract.DisplayOrder,
+            Kind: ExtractKindString(extract.Kind),
+            Title: string.IsNullOrWhiteSpace(extract.Title) ? $"Extract {index + 1}" : extract.Title,
+            AccentCode: extract.AccentCode,
+            Speakers: ReadSpeakersJson(extract.SpeakersJson),
+            AudioStartMs: extract.AudioStartMs,
+            AudioEndMs: extract.AudioEndMs);
+
+    private static IReadOnlyList<ListeningSpeakerDto> ReadSpeakersJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try
+        {
+            var speakers = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(json, []);
+            return ParseSpeakers(speakers);
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<ListeningTranscriptSegmentDto> ExtractTranscriptSegmentsFromJson(string? json, string? fallbackPartCode)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try
+        {
+            var raw = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(json, []);
+            var output = ExtractTranscriptSegments(raw);
+            if (string.IsNullOrWhiteSpace(fallbackPartCode)) return output;
+            return output
+                .Select(segment => segment.PartCode is null ? segment with { PartCode = fallbackPartCode } : segment)
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static string? ReadJsonString(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind switch
+            {
+                JsonValueKind.String => doc.RootElement.GetString(),
+                JsonValueKind.Number => doc.RootElement.ToString(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                _ => doc.RootElement.ToString(),
+            };
+        }
+        catch (JsonException)
+        {
+            return json;
+        }
+    }
+
+    private static IReadOnlyList<string> ReadJsonStringList(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return [];
+            return doc.RootElement.EnumerateArray()
+                .Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static string PartCodeString(ListeningPartCode partCode) => partCode switch
+    {
+        ListeningPartCode.A1 => "A1",
+        ListeningPartCode.A2 => "A2",
+        ListeningPartCode.B => "B",
+        ListeningPartCode.C1 => "C1",
+        ListeningPartCode.C2 => "C2",
+        _ => partCode.ToString(),
+    };
+
+    private static string ExtractKindString(ListeningExtractKind kind) => kind switch
+    {
+        ListeningExtractKind.Consultation => "consultation",
+        ListeningExtractKind.Workplace => "workplace",
+        ListeningExtractKind.Presentation => "presentation",
+        _ => "consultation",
+    };
+
+    private static string DistractorCategoryString(ListeningDistractorCategory category) => category switch
+    {
+        ListeningDistractorCategory.TooStrong => "too_strong",
+        ListeningDistractorCategory.TooWeak => "too_weak",
+        ListeningDistractorCategory.WrongSpeaker => "wrong_speaker",
+        ListeningDistractorCategory.OppositeMeaning => "opposite_meaning",
+        ListeningDistractorCategory.ReusedKeyword => "reused_keyword",
+        _ => category.ToString(),
+    };
+
+    private static string SpeakerAttitudeString(ListeningSpeakerAttitude attitude) => attitude switch
+    {
+        ListeningSpeakerAttitude.Concerned => "concerned",
+        ListeningSpeakerAttitude.Optimistic => "optimistic",
+        ListeningSpeakerAttitude.Doubtful => "doubtful",
+        ListeningSpeakerAttitude.Critical => "critical",
+        ListeningSpeakerAttitude.Neutral => "neutral",
+        ListeningSpeakerAttitude.Other => "other",
+        _ => "other",
+    };
+
+    private ListeningReviewDto BuildReview(Attempt attempt, ListeningSource source, Evaluation? evaluation = null)
+        => BuildReviewCore(
+            AttemptId: attempt.Id,
+            CompletedAt: attempt.CompletedAt ?? attempt.SubmittedAt,
+            Answers: DeserializeAnswers(attempt.AnswersJson),
+            Source: source,
+            Evaluation: evaluation);
+
+    private ListeningReviewDto BuildReview(
+        ListeningAttempt attempt,
+        ListeningSource source,
+        IReadOnlyDictionary<string, string?> answers,
+        Evaluation? evaluation = null)
+        => BuildReviewCore(
+            AttemptId: attempt.Id,
+            CompletedAt: attempt.SubmittedAt,
+            Answers: answers,
+            Source: source,
+            Evaluation: evaluation);
+
+    private ListeningReviewDto BuildReviewCore(
+        string AttemptId,
+        DateTimeOffset? CompletedAt,
+        IReadOnlyDictionary<string, string?> Answers,
+        ListeningSource Source,
+        Evaluation? Evaluation)
+    {
+        var orderedQuestions = Source.Questions.OrderBy(q => q.Number).ToList();
         var items = orderedQuestions
-            .Select(q => ReviewItemDto(q, answers.GetValueOrDefault(q.Id), orderedQuestions))
+            .Select(q => ReviewItemDto(q, Answers.GetValueOrDefault(q.Id), orderedQuestions))
             .ToList();
         var raw = Math.Clamp(items.Sum(i => i.PointsEarned), 0, CanonicalRawMax);
         var score = OetScoring.GradeListeningReading(Subtest, raw);
         var clusters = BuildErrorClusters(items);
         var recommended = clusters.Count > 0
-            ? BuildDrill(clusters[0].ErrorType, source.Id, attempt.Id)
-            : BuildDrill("detail_capture", source.Id, attempt.Id);
+            ? BuildDrill(clusters[0].ErrorType, Source.Id, AttemptId)
+            : BuildDrill("detail_capture", Source.Id, AttemptId);
         var allowedTranscriptIds = items
             .Where(item => item.Transcript is not null && item.Transcript.Allowed)
             .Select(item => item.QuestionId)
             .ToList();
 
         return new ListeningReviewDto(
-            EvaluationId: evaluation?.Id,
-            AttemptId: attempt.Id,
-            Paper: SourceDto(source),
+            EvaluationId: Evaluation?.Id,
+            AttemptId: AttemptId,
+            Paper: SourceDto(Source),
             RawScore: score.RawCorrect,
             MaxRawScore: score.RawMax,
             ScaledScore: score.ScaledScore,
@@ -779,10 +1518,10 @@ public sealed class ListeningLearnerService(
                 State: allowedTranscriptIds.Count == 0 ? "restricted" : allowedTranscriptIds.Count == items.Count ? "available" : "partial",
                 AllowedQuestionIds: allowedTranscriptIds,
                 Reason: "Transcript snippets and answer evidence are revealed only after submit and only for items whose authored policy allows it."),
-            TranscriptSegments: source.TranscriptSegments,
+            TranscriptSegments: Source.TranscriptSegments,
             Strengths: BuildStrengths(score.RawCorrect, items),
             Issues: BuildIssues(items),
-            GeneratedAt: evaluation?.GeneratedAt ?? attempt.CompletedAt ?? attempt.SubmittedAt);
+            GeneratedAt: Evaluation?.GeneratedAt ?? CompletedAt);
     }
 
     private static ListeningReviewItemDto ReviewItemDto(ListeningQuestion q, string? learnerAnswer, IReadOnlyList<ListeningQuestion> allQuestions)
@@ -991,10 +1730,58 @@ public sealed class ListeningLearnerService(
         answers
     };
 
-    private static object PaperHomeDto(ContentPaper paper, Attempt? lastAttempt)
+    private static object RelationalAttemptDto(ListeningAttempt attempt, Dictionary<string, string?> answers) => new
+    {
+        attemptId = attempt.Id,
+        paperId = attempt.PaperId,
+        state = attempt.Status == ListeningAttemptStatus.Submitted ? "completed" : ToApiState(attempt.Status),
+        mode = ToApiMode(attempt.Mode),
+        attempt.StartedAt,
+        attempt.SubmittedAt,
+        completedAt = attempt.SubmittedAt,
+        elapsedSeconds = (int)Math.Max(0, (attempt.LastActivityAt - attempt.StartedAt).TotalSeconds),
+        lastClientSyncAt = attempt.LastActivityAt,
+        answers
+    };
+
+    private static object? BuildPaperLastAttemptDto(string paperId, Attempt? genericAttempt, ListeningAttempt? relationalAttempt)
+    {
+        var genericAt = genericAttempt?.LastClientSyncAt ?? genericAttempt?.SubmittedAt ?? genericAttempt?.StartedAt ?? DateTimeOffset.MinValue;
+        var relationalAt = relationalAttempt?.LastActivityAt ?? DateTimeOffset.MinValue;
+        if (relationalAttempt is not null && relationalAt >= genericAt)
+        {
+            var mode = ToApiMode(relationalAttempt.Mode);
+            return new
+            {
+                attemptId = relationalAttempt.Id,
+                status = relationalAttempt.Status == ListeningAttemptStatus.Submitted ? "completed" : ToApiState(relationalAttempt.Status),
+                relationalAttempt.StartedAt,
+                relationalAttempt.SubmittedAt,
+                mode,
+                route = relationalAttempt.Status == ListeningAttemptStatus.Submitted
+                    ? $"/listening/results/{Uri.EscapeDataString(relationalAttempt.Id)}"
+                    : $"/listening/player/{Uri.EscapeDataString(paperId)}?attemptId={Uri.EscapeDataString(relationalAttempt.Id)}&mode={Uri.EscapeDataString(mode)}"
+            };
+        }
+
+        return genericAttempt is null ? null : new
+        {
+            attemptId = genericAttempt.Id,
+            status = ToApiState(genericAttempt.State),
+            genericAttempt.StartedAt,
+            genericAttempt.SubmittedAt,
+            mode = genericAttempt.Mode,
+            route = genericAttempt.State == AttemptState.Completed
+                ? $"/listening/results/{Uri.EscapeDataString(genericAttempt.Id)}"
+                : $"/listening/player/{Uri.EscapeDataString(paperId)}?attemptId={Uri.EscapeDataString(genericAttempt.Id)}&mode={Uri.EscapeDataString(genericAttempt.Mode)}"
+        };
+    }
+
+    private static object PaperHomeDto(ContentPaper paper, object? lastAttempt, int relationalQuestionCount)
     {
         var roles = paper.Assets.Where(a => a.IsPrimary).Select(a => a.Role).ToHashSet();
         var questions = ExtractQuestions(JsonSupport.Deserialize<Dictionary<string, object?>>(paper.ExtractedTextJson, new Dictionary<string, object?>()).GetValueOrDefault("listeningQuestions")).ToList();
+        var questionCount = relationalQuestionCount > 0 ? relationalQuestionCount : questions.Count;
         return new
         {
             id = paper.Id,
@@ -1005,8 +1792,8 @@ public sealed class ListeningLearnerService(
             paper.PublishedAt,
             route = $"/listening/player/{Uri.EscapeDataString(paper.Id)}",
             sourceKind = "content_paper",
-            objectiveReady = questions.Count > 0,
-            questionCount = questions.Count,
+            objectiveReady = questionCount > 0,
+            questionCount,
             assetReadiness = new
             {
                 audio = roles.Contains(PaperAssetRole.Audio),
@@ -1014,16 +1801,7 @@ public sealed class ListeningLearnerService(
                 answerKey = roles.Contains(PaperAssetRole.AnswerKey),
                 audioScript = roles.Contains(PaperAssetRole.AudioScript)
             },
-            lastAttempt = lastAttempt is null ? null : new
-            {
-                attemptId = lastAttempt.Id,
-                status = ToApiState(lastAttempt.State),
-                lastAttempt.StartedAt,
-                lastAttempt.SubmittedAt,
-                route = lastAttempt.State == AttemptState.Completed
-                    ? $"/listening/results/{Uri.EscapeDataString(lastAttempt.Id)}"
-                    : $"/listening/player/{Uri.EscapeDataString(paper.Id)}?attemptId={Uri.EscapeDataString(lastAttempt.Id)}&mode={Uri.EscapeDataString(lastAttempt.Mode)}"
-            }
+            lastAttempt
         };
     }
 
@@ -1215,6 +1993,23 @@ public sealed class ListeningLearnerService(
 
         var defaultScore = OetScoring.GradeListeningReading(Subtest, 0);
         return new ListeningScoreDto(defaultScore.RawCorrect, defaultScore.RawMax, defaultScore.ScaledScore, defaultScore.Grade, defaultScore.Passed);
+    }
+
+    private static ListeningScoreDto ResolveScoreFromRelationalAttempt(ListeningAttempt attempt, Evaluation? evaluation)
+    {
+        if (evaluation is not null)
+        {
+            return ResolveScoreFromEvaluation(evaluation);
+        }
+
+        var rawValue = Math.Clamp(attempt.RawScore ?? 0, 0, CanonicalRawMax);
+        var scaledValue = attempt.ScaledScore ?? OetScoring.OetRawToScaled(rawValue);
+        return new ListeningScoreDto(
+            rawValue,
+            attempt.MaxRawScore > 0 ? attempt.MaxRawScore : CanonicalRawMax,
+            scaledValue,
+            OetScoring.OetGradeLetterFromScaled(scaledValue),
+            OetScoring.IsListeningReadingPassByScaled(scaledValue));
     }
 
     private async Task<Attempt> GetAttemptOwnedByUserAsync(string userId, string attemptId, CancellationToken ct)
@@ -1441,6 +2236,15 @@ public sealed class ListeningLearnerService(
         _ => "unknown"
     };
 
+    private static string ToApiState(ListeningAttemptStatus status) => status switch
+    {
+        ListeningAttemptStatus.InProgress => "in_progress",
+        ListeningAttemptStatus.Submitted => "submitted",
+        ListeningAttemptStatus.Expired => "failed",
+        ListeningAttemptStatus.Abandoned => "abandoned",
+        _ => "unknown"
+    };
+
     private static string? ReadString(object? value) => value switch
     {
         null => null,
@@ -1556,7 +2360,10 @@ public sealed class ListeningLearnerService(
         // Phase 5 tail: paper-level extract metadata (accent + speakers +
         // audio window + extract kind/title). One row per extract: A1, A2,
         // B (one per workplace clip), C1, C2. Empty list when not authored.
-        IReadOnlyList<ListeningExtractMetaDto> Extracts);
+        IReadOnlyList<ListeningExtractMetaDto> Extracts,
+        // Authored ContentPaper runtime prefers normalized Listening tables;
+        // legacy JSON remains a fallback for papers not backfilled yet.
+        bool UsesRelationalStructure);
 
     private sealed record ListeningExtractMetaDto(
         string PartCode,                     // A1 | A2 | B | C1 | C2
@@ -1687,3 +2494,4 @@ public sealed class ListeningLearnerService(
 }
 
 public sealed record ListeningAnswerSaveRequest(string? UserAnswer);
+public sealed record ListeningIntegrityEventRequest(string EventType, string? Details, DateTimeOffset? OccurredAt);

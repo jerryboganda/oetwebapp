@@ -85,10 +85,23 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 "ExtractedTextJson.listeningQuestions is empty — nothing to backfill.");
         }
 
+        var hasLearnerAttempts = await db.ListeningAttempts.AsNoTracking()
+            .AnyAsync(a => a.PaperId == paperId, ct);
+        if (hasLearnerAttempts)
+        {
+            return new ListeningBackfillReport(paperId, false, 0, 0, 0, 0,
+                "This paper already has relational learner attempts. Backfill is blocked to preserve submitted answers; create a new paper revision before re-projecting authoring rows.");
+        }
+
         // Idempotent rebuild: wipe existing relational rows for this paper
-        // before re-inserting. We do NOT touch ListeningAttempt rows: those
-        // belong to the learner attempt history and are content-id stable.
+        // before re-inserting. Once learner attempts exist, the guard above
+        // blocks this destructive rewrite because answer rows point at stable
+        // question ids.
         var now = DateTimeOffset.UtcNow;
+
+        await using var tx = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
 
         var existingPartIds = await db.ListeningParts
             .Where(p => p.PaperId == paperId)
@@ -283,6 +296,10 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         });
 
         await db.SaveChangesAsync(ct);
+        if (tx is not null)
+        {
+            await tx.CommitAsync(ct);
+        }
 
         return new ListeningBackfillReport(
             PaperId: paperId,

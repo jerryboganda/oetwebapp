@@ -10,6 +10,10 @@ vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href}>{children}</a>,
 }));
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
     <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>

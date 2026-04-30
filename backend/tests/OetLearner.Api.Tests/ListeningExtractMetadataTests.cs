@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Listening;
 
 namespace OetLearner.Api.Tests;
@@ -148,5 +149,24 @@ public class ListeningExtractMetadataTests
         var root = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(paper.ExtractedTextJson)!;
         Assert.True(root.ContainsKey("listeningQuestions"));
         Assert.True(root.ContainsKey("listeningExtracts"));
+    }
+
+    [Fact]
+    public async Task ReplaceExtracts_RejectsDuplicatePartMetadata()
+    {
+        var (db, svc) = Build();
+        var paperId = await AddPaperAsync(db);
+
+        var input = new[]
+        {
+            new ListeningAuthoredExtract("B", 0, "workplace", "Workplace 1", null,
+                Array.Empty<ListeningAuthoredSpeaker>(), null, null),
+            new ListeningAuthoredExtract("B", 1, "workplace", "Workplace 2", null,
+                Array.Empty<ListeningAuthoredSpeaker>(), null, null),
+        };
+
+        var error = await Assert.ThrowsAsync<ApiException>(() => svc.ReplaceExtractsAsync(paperId, input, "admin-1", default));
+
+        Assert.Equal("listening_extract_duplicate_part", error.ErrorCode);
     }
 }

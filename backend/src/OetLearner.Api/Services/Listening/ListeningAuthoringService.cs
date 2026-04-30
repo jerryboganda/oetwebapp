@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Services.Listening;
 
@@ -235,6 +236,17 @@ public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningA
             .OrderBy(e => PartCodeOrder(e.PartCode))
             .ThenBy(e => e.DisplayOrder)
             .ToList();
+        var duplicateParts = normalized
+            .GroupBy(e => e.PartCode, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToList();
+        if (duplicateParts.Count > 0)
+        {
+            throw ApiException.Validation(
+                "listening_extract_duplicate_part",
+                $"Listening extract metadata must contain one row per part. Duplicate parts: {string.Join(", ", duplicateParts)}.");
+        }
 
         // Persist with camelCase JSON property names so the read-back path
         // (which inspects keys like "partCode", "accentCode", etc.) sees the

@@ -16,13 +16,9 @@ namespace OetLearner.Api.Services.Listening;
 //                                            hardest items, distractor heat,
 //                                            common misspellings, readiness.
 //
-// Both views read from the same source-of-truth: completed Listening
-// `Attempt` rows + their `Evaluation.CriterionScoresJson` payload (rawScore +
-// scaledScore extracted as in `ListeningLearnerService.ResolveScoreFromEvaluation`)
-// and the per-question answers stored on `AttemptItem`. Item-level correctness is
-// re-derived against the authored 42-item map currently sitting in
-// `ContentPaper.ExtractedTextJson["listeningQuestions"]` so this service stays
-// useful before the relational Listening schema (deferred Phase 2) ships.
+// Both views merge legacy generic Listening `Attempt` rows and relational
+// `ListeningAttempt` rows. Item-level correctness is re-derived against the
+// authored 42-item map so analytics remain stable during migration.
 // ═════════════════════════════════════════════════════════════════════════════
 
 public interface IListeningAnalyticsService
@@ -97,12 +93,18 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
         var attempts = await db.Attempts.AsNoTracking()
             .Where(a => a.UserId == userId
                 && a.SubtestCode == Subtest
-                && a.State == AttemptState.Submitted)
+                && (a.State == AttemptState.Submitted || a.State == AttemptState.Completed))
             .OrderByDescending(a => a.SubmittedAt)
             .Take(20)
             .ToListAsync(ct);
 
-        if (attempts.Count == 0)
+        var relationalAttempts = await db.ListeningAttempts.AsNoTracking()
+            .Where(a => a.UserId == userId && a.Status == ListeningAttemptStatus.Submitted)
+            .OrderByDescending(a => a.SubmittedAt)
+            .Take(20)
+            .ToListAsync(ct);
+
+        if (attempts.Count == 0 && relationalAttempts.Count == 0)
         {
             return new ListeningStudentAnalyticsDto(
                 CompletedAttempts: 0,
@@ -121,11 +123,18 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
         }
 
         var attemptIds = attempts.Select(a => a.Id).ToList();
-        var paperIds = attempts.Select(a => a.ContentId).Distinct().ToList();
+        var relationalAttemptIds = relationalAttempts.Select(a => a.Id).ToList();
+        var allAttemptIds = attemptIds.Concat(relationalAttemptIds).Distinct(StringComparer.Ordinal).ToList();
+        var paperIds = attempts.Select(a => a.ContentId)
+            .Concat(relationalAttempts.Select(a => a.PaperId))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
         var papers = await db.ContentPapers.AsNoTracking()
             .Where(p => paperIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, p => p, ct);
+        var relationalAuthoredByPaper = await LoadRelationalAuthoredQuestionsAsync(
+            relationalAttempts.Select(a => a.PaperId).Distinct(StringComparer.Ordinal).ToList(), ct);
 
         // Listening answers are stored as a JSON dictionary on the Attempt
         // itself (`AnswersJson`), not in a separate AttemptItem table —
@@ -134,14 +143,34 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             a => a.Id,
             a => DeserializeAnswers(a.AnswersJson));
 
+        var relationalAnswers = relationalAttemptIds.Count == 0
+            ? new List<ListeningAnswer>()
+            : await db.ListeningAnswers.AsNoTracking()
+                .Where(a => relationalAttemptIds.Contains(a.ListeningAttemptId))
+                .ToListAsync(ct);
+        var relationalAnswersByAttempt = relationalAnswers
+            .GroupBy(a => a.ListeningAttemptId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToDictionary(a => a.ListeningQuestionId, a => DeserializeRelationalAnswer(a.UserAnswerJson), StringComparer.Ordinal),
+                StringComparer.Ordinal);
+
         var evals = await db.Evaluations.AsNoTracking()
-            .Where(e => attemptIds.Contains(e.AttemptId))
+            .Where(e => allAttemptIds.Contains(e.AttemptId))
             .ToListAsync(ct);
 
         var scaledByAttempt = evals
             .Select(e => (e.AttemptId, Scaled: TryReadScaled(e)))
             .Where(x => x.Scaled.HasValue)
             .ToDictionary(x => x.AttemptId, x => x.Scaled!.Value);
+
+        foreach (var relationalAttempt in relationalAttempts)
+        {
+            if (relationalAttempt.ScaledScore is int scaled)
+            {
+                scaledByAttempt[relationalAttempt.Id] = scaled;
+            }
+        }
 
         // Per-part aggregates across recent attempts
         var partAgg = new Dictionary<string, (int earned, int max)>(StringComparer.OrdinalIgnoreCase);
@@ -154,6 +183,39 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             if (authored.Count == 0) continue;
 
             var answers = answersByAttempt.TryGetValue(attempt.Id, out var a) ? a : new Dictionary<string, string?>();
+            foreach (var q in authored)
+            {
+                var partKey = NormalizePartKey(q.PartCode);
+                if (!partAgg.ContainsKey(partKey)) partAgg[partKey] = (0, 0);
+                var prev = partAgg[partKey];
+                partAgg[partKey] = (prev.earned, prev.max + q.Points);
+
+                answers.TryGetValue(q.Id, out var raw);
+                var learner = (raw ?? string.Empty).Trim();
+                var correct = AnyAccepted(q, learner);
+                if (correct)
+                {
+                    var p = partAgg[partKey];
+                    partAgg[partKey] = (p.earned + q.Points, p.max);
+                }
+                else
+                {
+                    var et = ClassifyError(q, learner);
+                    weaknessAgg.TryGetValue(et, out var c);
+                    weaknessAgg[et] = c + 1;
+                }
+            }
+        }
+
+        foreach (var attempt in relationalAttempts)
+        {
+            if (!papers.TryGetValue(attempt.PaperId, out var paper)) continue;
+            var authored = relationalAuthoredByPaper.TryGetValue(attempt.PaperId, out var relationalAuthored)
+                ? relationalAuthored
+                : ParseAuthoredQuestions(paper);
+            if (authored.Count == 0) continue;
+
+            var answers = relationalAnswersByAttempt.TryGetValue(attempt.Id, out var a) ? a : new Dictionary<string, string?>();
             foreach (var q in authored)
             {
                 var partKey = NormalizePartKey(q.PartCode);
@@ -200,7 +262,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
         var plan = BuildStudentActionPlan(weaknesses, partBreakdown, passing);
 
         return new ListeningStudentAnalyticsDto(
-            CompletedAttempts: attempts.Count,
+            CompletedAttempts: attempts.Count + relationalAttempts.Count,
             BestScaledScore: best,
             AverageScaledScore: avg,
             LikelyPassing: passing,
@@ -256,11 +318,16 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
         var since = DateTimeOffset.UtcNow.AddDays(-days);
         var attempts = await db.Attempts.AsNoTracking()
             .Where(a => a.SubtestCode == Subtest
-                && a.State == AttemptState.Submitted
+                && (a.State == AttemptState.Submitted || a.State == AttemptState.Completed)
                 && a.SubmittedAt >= since)
             .ToListAsync(ct);
 
-        if (attempts.Count == 0)
+        var relationalAttempts = await db.ListeningAttempts.AsNoTracking()
+            .Where(a => a.Status == ListeningAttemptStatus.Submitted
+                && a.SubmittedAt >= since)
+            .ToListAsync(ct);
+
+        if (attempts.Count == 0 && relationalAttempts.Count == 0)
         {
             return new ListeningAdminAnalyticsDto(
                 Days: days,
@@ -274,23 +341,58 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
         }
 
         var attemptIds = attempts.Select(a => a.Id).ToList();
-        var paperIds = attempts.Select(a => a.ContentId).Distinct().ToList();
+        var relationalAttemptIds = relationalAttempts.Select(a => a.Id).ToList();
+        var allAttemptIds = attemptIds.Concat(relationalAttemptIds).Distinct(StringComparer.Ordinal).ToList();
+        var paperIds = attempts.Select(a => a.ContentId)
+            .Concat(relationalAttempts.Select(a => a.PaperId))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
         var papers = await db.ContentPapers.AsNoTracking()
             .Where(p => paperIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, p => p, ct);
+        var relationalAuthoredByPaper = await LoadRelationalAuthoredQuestionsAsync(
+            relationalAttempts.Select(a => a.PaperId).Distinct(StringComparer.Ordinal).ToList(), ct);
 
         var answersByAttempt = attempts.ToDictionary(
             a => a.Id,
             a => DeserializeAnswers(a.AnswersJson));
 
+        var relationalAnswers = relationalAttemptIds.Count == 0
+            ? new List<ListeningAnswer>()
+            : await db.ListeningAnswers.AsNoTracking()
+                .Where(a => relationalAttemptIds.Contains(a.ListeningAttemptId))
+                .ToListAsync(ct);
+        var relationalAnswersByAttempt = relationalAnswers
+            .GroupBy(a => a.ListeningAttemptId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToDictionary(a => a.ListeningQuestionId, a => DeserializeRelationalAnswer(a.UserAnswerJson), StringComparer.Ordinal),
+                StringComparer.Ordinal);
+
         var evals = await db.Evaluations.AsNoTracking()
-            .Where(e => attemptIds.Contains(e.AttemptId))
+            .Where(e => allAttemptIds.Contains(e.AttemptId))
             .ToListAsync(ct);
 
-        var scaled = evals.Select(TryReadScaled).Where(s => s.HasValue).Select(s => s!.Value).ToList();
+        var scaledByAttempt = evals
+            .Select(e => new { e.AttemptId, e.GeneratedAt, Scaled = TryReadScaled(e) })
+            .Where(x => x.Scaled.HasValue)
+            .GroupBy(x => x.AttemptId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(x => x.GeneratedAt).First().Scaled!.Value,
+                StringComparer.Ordinal);
+        foreach (var relationalAttempt in relationalAttempts)
+        {
+            if (relationalAttempt.ScaledScore is int scaledScore)
+            {
+                scaledByAttempt[relationalAttempt.Id] = scaledScore;
+            }
+        }
+
+        var scaled = scaledByAttempt.Values.ToList();
         int? avgScaled = scaled.Count == 0 ? null : (int)Math.Round(scaled.Average());
-        var percentPassing = scaled.Count == 0 ? 0 : Math.Round(100.0 * scaled.Count(s => s >= 350) / scaled.Count, 1);
+        var percentPassing = scaled.Count == 0 ? 0 : Math.Round(100.0 * scaled.Count(OetScoring.IsListeningReadingPassByScaled) / scaled.Count, 1);
 
         // Per-part class averages
         var partAgg = new Dictionary<string, (int earned, int max)>(StringComparer.OrdinalIgnoreCase);
@@ -356,6 +458,62 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             }
         }
 
+        foreach (var attempt in relationalAttempts)
+        {
+            if (!papers.TryGetValue(attempt.PaperId, out var paper)) continue;
+            var authored = relationalAuthoredByPaper.TryGetValue(attempt.PaperId, out var relationalAuthored)
+                ? relationalAuthored
+                : ParseAuthoredQuestions(paper);
+            if (authored.Count == 0) continue;
+
+            var answers = relationalAnswersByAttempt.TryGetValue(attempt.Id, out var a) ? a : new Dictionary<string, string?>();
+
+            foreach (var q in authored)
+            {
+                var partKey = NormalizePartKey(q.PartCode);
+                if (!partAgg.ContainsKey(partKey)) partAgg[partKey] = (0, 0);
+                var ag = partAgg[partKey];
+                partAgg[partKey] = (ag.earned, ag.max + q.Points);
+
+                answers.TryGetValue(q.Id, out var raw);
+                var learner = (raw ?? string.Empty).Trim();
+                var isCorrect = AnyAccepted(q, learner);
+
+                if (isCorrect)
+                {
+                    var p = partAgg[partKey];
+                    partAgg[partKey] = (p.earned + q.Points, p.max);
+                }
+
+                var key = (paper.Id, q.Number);
+                if (!qTally.TryGetValue(key, out var t))
+                {
+                    t = (0, 0, partKey, q.CorrectAnswer ?? string.Empty, new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase));
+                }
+                t.total += 1;
+                if (isCorrect) t.correct += 1;
+                else if (!string.IsNullOrWhiteSpace(learner))
+                {
+                    t.wrongs.TryGetValue(learner, out var c);
+                    t.wrongs[learner] = c + 1;
+
+                    if (partKey == "A"
+                        && !string.IsNullOrWhiteSpace(q.CorrectAnswer)
+                        && learner.Length >= 3
+                        && q.CorrectAnswer.Length >= 3
+                        && !string.Equals(learner, q.CorrectAnswer, StringComparison.OrdinalIgnoreCase)
+                        && Levenshtein(learner.ToLowerInvariant(), q.CorrectAnswer.ToLowerInvariant())
+                            <= Math.Max(1, q.CorrectAnswer.Length / 4))
+                    {
+                        var k = (q.CorrectAnswer.Trim(), learner.Trim());
+                        spellingTally.TryGetValue(k, out var sc);
+                        spellingTally[k] = sc + 1;
+                    }
+                }
+                qTally[key] = t;
+            }
+        }
+
         var classParts = partAgg
             .Select(kv => new ListeningPartBreakdownDto(
                 PartCode: kv.Key,
@@ -401,7 +559,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
 
         return new ListeningAdminAnalyticsDto(
             Days: days,
-            CompletedAttempts: attempts.Count,
+            CompletedAttempts: attempts.Count + relationalAttempts.Count,
             AverageScaledScore: avgScaled,
             PercentLikelyPassing: percentPassing,
             ClassPartAverages: classParts,
@@ -423,6 +581,91 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
         string Id, int Number, string PartCode, string Type,
         IReadOnlyList<string> Options, string CorrectAnswer,
         IReadOnlyList<string> AcceptedAnswers, int Points);
+
+    private async Task<Dictionary<string, IReadOnlyList<AuthoredQ>>> LoadRelationalAuthoredQuestionsAsync(
+        IReadOnlyCollection<string> paperIds,
+        CancellationToken ct)
+    {
+        if (paperIds.Count == 0) return new Dictionary<string, IReadOnlyList<AuthoredQ>>(StringComparer.Ordinal);
+
+        var questions = await db.ListeningQuestions.AsNoTracking()
+            .Include(q => q.Part)
+            .Include(q => q.Options)
+            .Where(q => paperIds.Contains(q.PaperId))
+            .OrderBy(q => q.QuestionNumber)
+            .ToListAsync(ct);
+
+        return questions
+            .GroupBy(q => q.PaperId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<AuthoredQ>)group.Select(MapRelationalAuthoredQuestion).ToList(),
+                StringComparer.Ordinal);
+    }
+
+    private static AuthoredQ MapRelationalAuthoredQuestion(OetLearner.Api.Domain.ListeningQuestion question)
+    {
+        var options = question.Options.OrderBy(option => option.DisplayOrder).ToList();
+        var correctOption = options.FirstOrDefault(option => option.IsCorrect);
+        var rawCorrect = DeserializeRelationalAnswer(question.CorrectAnswerJson) ?? string.Empty;
+        var correctAnswer = correctOption?.Text ?? rawCorrect;
+        var accepted = ReadStringListJson(question.AcceptedSynonymsJson).ToList();
+        AddAccepted(accepted, rawCorrect);
+        if (correctOption is not null)
+        {
+            AddAccepted(accepted, correctOption.OptionKey);
+            AddAccepted(accepted, correctOption.Text);
+        }
+
+        return new AuthoredQ(
+            Id: question.Id,
+            Number: question.QuestionNumber,
+            PartCode: PartCodeLabel(question.Part?.PartCode ?? ListeningPartCode.A1),
+            Type: question.QuestionType == ListeningQuestionType.MultipleChoice3 ? "multiple_choice_3" : "short_answer",
+            Options: options.Select(option => option.Text).ToList(),
+            CorrectAnswer: correctAnswer,
+            AcceptedAnswers: accepted,
+            Points: Math.Max(1, question.Points));
+    }
+
+    private static void AddAccepted(List<string> accepted, string? answer)
+    {
+        if (string.IsNullOrWhiteSpace(answer)) return;
+        if (!accepted.Any(existing => string.Equals(existing.Trim(), answer.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            accepted.Add(answer.Trim());
+        }
+    }
+
+    private static string PartCodeLabel(ListeningPartCode partCode) => partCode switch
+    {
+        ListeningPartCode.A1 => "A1",
+        ListeningPartCode.A2 => "A2",
+        ListeningPartCode.B => "B",
+        ListeningPartCode.C1 => "C1",
+        ListeningPartCode.C2 => "C2",
+        _ => partCode.ToString(),
+    };
+
+    private static IReadOnlyList<string> ReadStringListJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return [];
+            return doc.RootElement.EnumerateArray()
+                .Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
 
     private static IReadOnlyList<AuthoredQ> ParseAuthoredQuestions(ContentPaper paper)
     {
@@ -527,6 +770,28 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
 
     private static Dictionary<string, string?> DeserializeAnswers(string? json)
         => JsonSupport.Deserialize<Dictionary<string, string?>>(json ?? string.Empty, new Dictionary<string, string?>());
+
+    private static string? DeserializeRelationalAnswer(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind switch
+            {
+                JsonValueKind.String => doc.RootElement.GetString(),
+                JsonValueKind.Number => doc.RootElement.ToString(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                JsonValueKind.Null => null,
+                _ => doc.RootElement.ToString(),
+            };
+        }
+        catch (JsonException)
+        {
+            return json;
+        }
+    }
 
     private static int Levenshtein(string a, string b)
     {

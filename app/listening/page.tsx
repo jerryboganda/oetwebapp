@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, Sparkles, Target, TrendingUp, Volume2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, MonitorCheck, Printer, Sparkles, Target, TrendingUp, Volume2 } from 'lucide-react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
@@ -67,6 +67,13 @@ function taskToCard(task: ListeningHomeTaskDto, index: number) {
       <LearnerSurfaceCard card={card} />
     </MotionItem>
   );
+}
+
+function modeLabel(mode: string) {
+  if (mode === 'exam') return 'Exam Mode';
+  if (mode === 'home') return 'OET@Home';
+  if (mode === 'paper') return 'Paper Mode';
+  return 'Practice Mode';
 }
 
 export default function ListeningHome() {
@@ -293,7 +300,7 @@ export default function ListeningHome() {
                       kind: 'task',
                       sourceType: 'backend_task',
                       accent: 'indigo',
-                      eyebrow: `${attempt.mode === 'exam' ? 'Exam' : 'Practice'} Mode`,
+                      eyebrow: modeLabel(attempt.mode),
                       eyebrowIcon: History,
                       title: attempt.paperTitle,
                       description: 'Resume from the latest server-saved answer state.',
@@ -357,7 +364,25 @@ export default function ListeningHome() {
                     };
                     return (
                       <MotionItem key={paper.id} delayIndex={index}>
-                        <LearnerSurfaceCard card={card} />
+                        <LearnerSurfaceCard
+                          card={card}
+                          footer={paper.objectiveReady ? (
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              <Link
+                                href={`${paper.route}?mode=home`}
+                                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-navy transition hover:border-border-hover hover:bg-surface"
+                              >
+                                <MonitorCheck className="h-4 w-4" aria-hidden /> OET@Home
+                              </Link>
+                              <Link
+                                href={`${paper.route}?mode=paper`}
+                                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-navy transition hover:border-border-hover hover:bg-surface"
+                              >
+                                <Printer className="h-4 w-4" aria-hidden /> Paper Mode
+                              </Link>
+                            </div>
+                          ) : undefined}
+                        />
                       </MotionItem>
                     );
                   })}
