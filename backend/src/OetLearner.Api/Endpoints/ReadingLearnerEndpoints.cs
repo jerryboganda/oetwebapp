@@ -385,6 +385,16 @@ public static class ReadingLearnerEndpoints
             return Results.Ok(policy);
         });
 
+        // ── Course pathway snapshot (diagnostic → drills → mocks → ready) ──
+        group.MapGet("/me/pathway", async (
+            IReadingPathwayService pathway, HttpContext http, CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+            var snap = await pathway.GetPathwayAsync(userId, ct);
+            return Results.Ok(snap);
+        }).RequireAuthorization();
+
         // ════════════════════════════════════════════════════════════════
         // Phase 3 — Practice Mode + Error Bank
         // ════════════════════════════════════════════════════════════════

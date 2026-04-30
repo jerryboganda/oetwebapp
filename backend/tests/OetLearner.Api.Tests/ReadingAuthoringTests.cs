@@ -240,6 +240,11 @@ public class ReadingAuthoringTests
 
         Assert.Empty(doc.RootElement.GetProperty("recentResults").EnumerateArray());
 
+        var paper = doc.RootElement.GetProperty("papers")
+            .EnumerateArray()
+            .Single(item => item.GetProperty("id").GetString() == "p1");
+        Assert.Equal(JsonValueKind.Null, paper.GetProperty("lastAttempt").ValueKind);
+
         var activeAttempt = doc.RootElement.GetProperty("activeAttempts")
             .EnumerateArray()
             .Single(item => item.GetProperty("attemptId").GetString() == active.AttemptId);
@@ -1210,6 +1215,103 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Subset_practice_start_requires_question_scope()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() => attemptSvc.StartInModeAsync(
+            "u1",
+            "p1",
+            ReadingAttemptMode.Drill,
+            JsonSerializer.Serialize(new { kind = "drill", minutes = 8 }),
+            default));
+
+        Assert.Equal("scope_question_ids_required", ex.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Legacy_subset_practice_without_scope_never_receives_scaled_score()
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var snapshot = await policy.ResolveForUserAsync("u1", default);
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "legacy-drill",
+            UserId = "u1",
+            PaperId = "p1",
+            Mode = ReadingAttemptMode.Drill,
+            ScopeJson = null,
+            StartedAt = DateTimeOffset.UtcNow,
+            LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress,
+            MaxRawScore = ReadingStructureService.CanonicalMaxRawScore,
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("legacy-drill", default);
+
+        Assert.Equal(0, result.RawScore);
+        Assert.Equal(0, result.MaxRawScore);
+        Assert.Null(result.ScaledScore);
+        Assert.Equal("—", result.GradeLetter);
+
+        var attempt = await db.ReadingAttempts.SingleAsync(a => a.Id == "legacy-drill");
+        Assert.Null(attempt.ScaledScore);
+        Assert.Equal(0, attempt.MaxRawScore);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submitted_legacy_subset_practice_with_stale_scaled_score_is_cleaned_up()
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var snapshot = await policy.ResolveForUserAsync("u1", default);
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "legacy-submitted-drill",
+            UserId = "u1",
+            PaperId = "p1",
+            Mode = ReadingAttemptMode.Drill,
+            ScopeJson = null,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            LastActivityAt = DateTimeOffset.UtcNow,
+            SubmittedAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.Submitted,
+            RawScore = 30,
+            MaxRawScore = ReadingStructureService.CanonicalMaxRawScore,
+            ScaledScore = 350,
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("legacy-submitted-drill", default);
+
+        Assert.Equal(0, result.RawScore);
+        Assert.Equal(0, result.MaxRawScore);
+        Assert.Null(result.ScaledScore);
+        Assert.Equal("—", result.GradeLetter);
+
+        var attempt = await db.ReadingAttempts.SingleAsync(a => a.Id == "legacy-submitted-drill");
+        Assert.Equal(0, attempt.RawScore);
+        Assert.Equal(0, attempt.MaxRawScore);
+        Assert.Null(attempt.ScaledScore);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Drill_sampler_returns_only_questions_for_requested_part()
     {
         var (db, structure, _, _, _) = Build();
@@ -1617,6 +1719,47 @@ public class ReadingAuthoringTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default));
+        await db.DisposeAsync();
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Course pathway integration
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Pathway_starts_at_not_started_then_advances_through_drilling_to_mock_ready()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var pathway = new OetLearner.Api.Services.Reading.ReadingPathwayService(db);
+
+        // Stage 1: brand-new learner.
+        var s1 = await pathway.GetPathwayAsync("u1", default);
+        Assert.Equal("not_started", s1.Stage);
+        Assert.Equal("start_diagnostic", s1.NextAction.Kind);
+        Assert.Equal(0, s1.SubmittedExamAttempts);
+        Assert.Contains(s1.Milestones, m => m.Code == "first_attempt" && !m.Achieved);
+
+        // Stage 2: one weak Exam attempt — best-scaled is computed from a
+        // freshly-graded attempt. We answer everything wrong so scaled is 0.
+        var run = await attemptSvc.StartAsync("u1", "p1", default);
+        var qs = await db.ReadingQuestions.AsNoTracking()
+            .Where(q => q.Part!.PaperId == "p1")
+            .ToListAsync();
+        foreach (var q in qs)
+        {
+            await attemptSvc.SaveAnswerAsync("u1", run.AttemptId, q.Id, "\"WRONG\"", default);
+        }
+        await attemptSvc.SubmitAsync("u1", run.AttemptId, default);
+
+        var s2 = await pathway.GetPathwayAsync("u1", default);
+        Assert.True(s2.Stage == "drilling" || s2.Stage == "mini_tests" || s2.Stage == "mock_ready",
+            $"expected post-attempt stage, got {s2.Stage}");
+        Assert.True(s2.SubmittedExamAttempts >= 1);
+
         await db.DisposeAsync();
     }
 }
