@@ -216,7 +216,16 @@ export default function DiagnosticSpeakingPage() {
         throw new Error('No diagnostic speaking audio was captured.');
       }
 
-      await submitSpeakingRecording(DIAGNOSTIC_SPEAKING_TASK_ID, recordedBlobRef.current, recordingSeconds || 120);
+      await submitSpeakingRecording(
+        DIAGNOSTIC_SPEAKING_TASK_ID,
+        recordedBlobRef.current,
+        recordingSeconds || 120,
+        'exam',
+        {
+          accepted: true,
+          text: 'Diagnostic speaking audio consent accepted during microphone setup.',
+        },
+      );
       clearInterval(interval);
       setUploadProgress(100);
 
