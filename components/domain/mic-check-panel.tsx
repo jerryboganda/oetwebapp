@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { Mic, Volume2, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
+import { motion, AnimatePresence } from 'motion/react';
 
 declare global {
   interface Window {
@@ -242,10 +243,19 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
   };
 
   return (
-    <div className={cn('flex flex-col gap-4', className)}>
-      <InlineAlert variant="info">
-        We need to check your microphone and environment before you start the speaking task. This performs a real permission check, records a short sample, plays it back, and measures background noise.
-      </InlineAlert>
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn('flex flex-col gap-4', className)}
+    >
+      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-navy shadow-sm">
+        <p className="flex items-start gap-2">
+          <Mic className="w-5 h-5 text-primary shrink-0" />
+          <span>
+            We need to check your microphone and environment before you start the speaking task. This ensures your recording will be clear.
+          </span>
+        </p>
+      </div>
 
       {audioUrl && (
         <audio
@@ -262,57 +272,106 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
       )}
 
       <div className="flex flex-col gap-3">
-        {stepOrder.map((step) => {
-          const status = steps[step];
-          const config = stepLabels[step];
-          const Icon = config.icon;
-          const isBusy = status === 'checking';
+        <AnimatePresence mode="popLayout">
+          {stepOrder.map((step, index) => {
+            const status = steps[step];
+            const config = stepLabels[step];
+            const Icon = config.icon;
+            const isBusy = status === 'checking';
 
-          return (
-            <div key={step} className={cn(
-              'flex items-center gap-3 p-4 rounded border transition-colors',
-              status === 'active' && 'border-primary bg-primary/5',
-              status === 'checking' && 'border-primary bg-primary/5',
-              status === 'passed' && 'border-emerald-200 bg-emerald-50/50',
-              status === 'failed' && 'border-red-200 bg-red-50/50',
-              status === 'pending' && 'border-border bg-background-light opacity-50',
-            )}>
-              <div className={cn(
-                'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
-                status === 'passed' && 'bg-emerald-100 text-emerald-600',
-                status === 'failed' && 'bg-red-100 text-red-600',
-                (status === 'active' || status === 'checking') && 'bg-primary/10 text-primary',
-                status === 'pending' && 'bg-background-light text-muted',
-              )}>
-                {status === 'passed' ? <CheckCircle2 className="w-5 h-5" /> :
-                 status === 'failed' ? <AlertCircle className="w-5 h-5" /> :
-                 isBusy ? <Loader2 className="w-5 h-5 animate-spin" /> :
-                 <Icon className="w-5 h-5" />}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-navy">{config.label}</p>
-                {status === 'passed' && <p className="text-xs text-emerald-600">Passed</p>}
-                {status === 'checking' && step === 'record' && <p className="text-xs text-primary">Recording sample… {recordCountdown}s</p>}
-                {status === 'checking' && step === 'playback' && <p className="text-xs text-primary">Playing your test recording…</p>}
-                {status === 'checking' && step === 'noise' && <p className="text-xs text-primary">Listening to room noise… {noiseLevel ?? 0}</p>}
-                {status === 'checking' && step === 'permission' && <p className="text-xs text-primary">Waiting for browser permission…</p>}
-                {status === 'failed' && <p className="text-xs text-red-600">Failed — please try again</p>}
-              </div>
-              {(status === 'active' || status === 'failed') && (
-                <Button size="sm" variant={status === 'failed' ? 'outline' : 'primary'} onClick={() => handleActiveStep(step)}>
-                  {status === 'failed' ? 'Retry' : config.action}
-                </Button>
-              )}
-            </div>
-          );
-        })}
+            return (
+              <motion.div
+                layout
+                key={step}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className={cn(
+                  'flex items-center gap-4 p-4 rounded-xl border transition-all duration-300 relative overflow-hidden',
+                  status === 'active' && 'border-primary/40 bg-gradient-to-r from-primary/10 to-transparent shadow-sm',
+                  status === 'checking' && 'border-primary bg-primary/5 shadow-md',
+                  status === 'passed' && 'border-emerald-200 bg-emerald-50/50',
+                  status === 'failed' && 'border-red-200 bg-red-50/50',
+                  status === 'pending' && 'border-border bg-background-light opacity-50'
+                )}
+              >
+                {/* Active Indicator Bar */}
+                {(status === 'active' || status === 'checking') && (
+                  <motion.div layoutId="activeStep" className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
+                )}
+
+                <div className={cn(
+                  'w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform duration-300',
+                  status === 'passed' && 'bg-emerald-100 text-emerald-600',
+                  status === 'failed' && 'bg-red-100 text-red-600',
+                  (status === 'active' || status === 'checking') && 'bg-primary text-white scale-110',
+                  status === 'pending' && 'bg-muted/20 text-muted'
+                )}>
+                  {status === 'passed' ? <CheckCircle2 className="w-5 h-5" /> :
+                   status === 'failed' ? <AlertCircle className="w-5 h-5" /> :
+                   isBusy ? <Loader2 className="w-5 h-5 animate-spin" /> :
+                   <Icon className="w-5 h-5" />}
+                </div>
+                
+                <div className="flex-1">
+                  <p className={cn("text-sm font-semibold transition-colors", 
+                    (status === 'active' || status === 'checking') ? "text-primary" : "text-navy"
+                  )}>{config.label}</p>
+                  
+                  {status === 'passed' && <p className="text-xs text-emerald-600 font-medium tracking-wide">Passed</p>}
+                  
+                  {status === 'checking' && step === 'record' && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      </span>
+                      <p className="text-xs font-semibold text-red-600">Recording... {recordCountdown}s</p>
+                    </div>
+                  )}
+                  
+                  {status === 'checking' && step === 'playback' && <p className="text-xs text-primary font-medium">Playing your test recording…</p>}
+                  
+                  {status === 'checking' && step === 'noise' && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex gap-1 h-3 items-end">
+                        {[...Array(5)].map((_, i) => (
+                          <motion.div 
+                            key={i}
+                            animate={{ height: ['20%', '100%', '20%'] }}
+                            transition={{ repeat: Infinity, duration: 0.5 + Math.random() * 0.5 }}
+                            className={cn('w-1 rounded-full', (noiseLevel ?? 0) > NOISE_WARNING_THRESHOLD ? 'bg-red-500' : 'bg-primary/60')}
+                          />
+                        ))}
+                      </div>
+                      <p className="text-xs text-primary font-medium">Listening to room noise… <span className="opacity-70">({noiseLevel ?? 0} dB)</span></p>
+                    </div>
+                  )}
+                  
+                  {status === 'checking' && step === 'permission' && <p className="text-xs text-primary font-medium">Waiting for browser permission…</p>}
+                  {status === 'failed' && <p className="text-xs text-red-600 font-medium">Failed — please try again</p>}
+                </div>
+                
+                {(status === 'active' || status === 'failed') && (
+                  <Button size="sm" variant={status === 'failed' ? 'outline' : 'primary'} onClick={() => handleActiveStep(step)} className="shadow-sm">
+                    {status === 'failed' ? 'Retry' : config.action}
+                  </Button>
+                )}
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
       </div>
 
-      {error && (
-        <InlineAlert variant="error" dismissible>
-          {error}
-        </InlineAlert>
-      )}
-    </div>
+      <AnimatePresence>
+        {error && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+            <InlineAlert variant="error" dismissible className="shadow-sm rounded-xl mt-2 border-red-200">
+              {error}
+            </InlineAlert>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

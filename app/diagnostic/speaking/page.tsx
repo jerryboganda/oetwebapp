@@ -271,26 +271,29 @@ export default function DiagnosticSpeakingPage() {
         <AsyncStateWrapper status={status} onRetry={load} errorMessage={error}>
           {/* Phase: Mic Check */}
           {phase === 'mic-check' && (
-            <div className="space-y-6">
-              <div className="text-center">
-                <h2 className="text-xl font-bold text-navy">Microphone Setup</h2>
-                <p className="text-sm text-muted mt-1">
+            <div className="space-y-6 max-w-2xl mx-auto">
+              <div className="text-center pb-2 relative">
+                <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent opacity-80 blur-xl"></div>
+                <h2 className="text-2xl font-black text-navy/90 tracking-tight">Microphone Setup</h2>
+                <p className="text-sm text-muted mt-2 font-medium">
                   Complete the checks below before starting the speaking task.
                 </p>
               </div>
 
-              <InlineAlert variant="info">
-                <div className="flex items-start gap-2">
-                  <ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="bg-primary/10 rounded-full p-2 shrink-0">
+                    <ShieldCheck className="w-5 h-5 text-primary" />
+                  </div>
                   <div>
-                    <p className="font-semibold text-sm text-navy">Audio Consent</p>
-                    <p className="text-xs text-muted mt-0.5">
+                    <h3 className="font-bold text-sm text-navy mb-1">Audio Consent</h3>
+                    <p className="text-xs text-muted leading-relaxed">
                       Your audio recording will be processed by AI for evaluation only.
                       Recordings are not shared with other users and are deleted after analysis.
                     </p>
                   </div>
                 </div>
-              </InlineAlert>
+              </div>
 
               <MicCheckPanel onComplete={handleMicCheckComplete} />
             </div>
