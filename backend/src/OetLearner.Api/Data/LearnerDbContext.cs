@@ -214,6 +214,20 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ReadingErrorBankEntry> ReadingErrorBankEntries => Set<ReadingErrorBankEntry>();
     public DbSet<ReadingQuestionReviewLog> ReadingQuestionReviewLogs => Set<ReadingQuestionReviewLog>();
     public DbSet<ReadingExtractionDraft> ReadingExtractionDrafts => Set<ReadingExtractionDraft>();
+
+    // Listening Module subsystem (Phase 2 of LISTENING-MODULE-PLAN.md).
+    // Additive to the existing JSON-backed ContentPaper.ExtractedTextJson
+    // runtime — these tables are populated by the next-generation authoring
+    // path while learner grading continues to read the JSON blob until the
+    // backfill ships.
+    public DbSet<ListeningPart> ListeningParts => Set<ListeningPart>();
+    public DbSet<ListeningExtract> ListeningExtracts => Set<ListeningExtract>();
+    public DbSet<ListeningQuestion> ListeningQuestions => Set<ListeningQuestion>();
+    public DbSet<ListeningQuestionOption> ListeningQuestionOptions => Set<ListeningQuestionOption>();
+    public DbSet<ListeningAttempt> ListeningAttempts => Set<ListeningAttempt>();
+    public DbSet<ListeningAnswer> ListeningAnswers => Set<ListeningAnswer>();
+    public DbSet<ListeningPolicy> ListeningPolicies => Set<ListeningPolicy>();
+    public DbSet<ListeningUserPolicyOverride> ListeningUserPolicyOverrides => Set<ListeningUserPolicyOverride>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<BillingPlanVersion> BillingPlanVersions => Set<BillingPlanVersion>();
     public DbSet<AdminPermissionGrant> AdminPermissionGrants => Set<AdminPermissionGrant>();
