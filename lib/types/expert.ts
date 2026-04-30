@@ -195,7 +195,30 @@ export interface WritingReviewDetail extends ReviewRequest {
 export interface SpeakingReviewDetail extends ReviewRequest {
   audioUrl: string;
   transcriptLines: ExpertTranscriptLine[];
-  roleCard: { role: string; setting: string; patient: string; task: string; background?: string };
+  roleCard: {
+    role: string;
+    setting: string;
+    patient: string;
+    task: string;
+    background?: string;
+    tasks?: string[];
+    patientEmotion?: string;
+    communicationGoal?: string;
+    clinicalTopic?: string;
+    warmUpQuestions?: string[];
+    prepTimeSeconds?: number;
+    roleplayTimeSeconds?: number;
+    interlocutorCard?: {
+      patientProfile?: string;
+      background?: string;
+      hiddenInformation?: string;
+      cuePrompts?: string[];
+      prompts?: string[];
+      objectives?: string[];
+      privateNotes?: string;
+    } | Record<string, unknown> | null;
+    disclaimer?: string;
+  };
   aiFlags: AIFlag[];
   aiSuggestedScores?: Partial<Record<SpeakingCriterionKey, number>>;
   existingDraft?: ExpertSavedDraft | null;

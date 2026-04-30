@@ -105,7 +105,16 @@ public sealed record ExpertSpeakingRoleCardResponse(
     string Setting,
     string Patient,
     string Task,
-    string? Background);
+    string? Background,
+    IReadOnlyList<string>? Tasks = null,
+    string? PatientEmotion = null,
+    string? CommunicationGoal = null,
+    string? ClinicalTopic = null,
+    IReadOnlyList<string>? WarmUpQuestions = null,
+    int PrepTimeSeconds = 180,
+    int RoleplayTimeSeconds = 300,
+    object? InterlocutorCard = null,
+    string? Disclaimer = null);
 
 public sealed record ExpertWritingReviewBundleResponse(
     string Id,

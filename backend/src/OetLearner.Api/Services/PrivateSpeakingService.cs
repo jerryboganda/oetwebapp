@@ -19,6 +19,9 @@ public sealed class PrivateSpeakingService(
     IOptions<BillingOptions> billingOptions,
     ILogger<PrivateSpeakingService> logger)
 {
+    private const double CalibrationRedDriftThreshold100 = 40.0;
+    private const string CalibrationOverrideAction = "tutor_calibration_override";
+
     // ── Config ──────────────────────────────────────────────────────────
 
     public async Task<PrivateSpeakingConfig> GetConfigAsync(CancellationToken ct)
@@ -110,6 +113,38 @@ public sealed class PrivateSpeakingService(
         await AuditAsync(null, adminId, "admin", "tutor_profile_updated",
             $"Profile: {profileId}", ct);
         return profile;
+    }
+
+    public async Task<object> CreateTutorCalibrationOverrideAsync(
+        string profileId,
+        string adminId,
+        string? reason,
+        DateTimeOffset? expiresAt,
+        CancellationToken ct)
+    {
+        var profile = await db.PrivateSpeakingTutorProfiles.FindAsync([profileId], ct)
+            ?? throw ApiException.NotFound("private_speaking_tutor_not_found", "Tutor profile not found.");
+        var now = timeProvider.GetUtcNow();
+        var expiry = expiresAt.HasValue && expiresAt.Value > now
+            ? expiresAt.Value
+            : now.AddDays(7);
+        var details = JsonSupport.Serialize(new
+        {
+            profileId = profile.Id,
+            expertUserId = profile.ExpertUserId,
+            reason = string.IsNullOrWhiteSpace(reason) ? "Admin calibration override" : reason.Trim(),
+            expiresAt = expiry,
+        });
+
+        await AuditAsync(profile.Id, adminId, "admin", CalibrationOverrideAction, details, ct);
+
+        return new
+        {
+            profileId = profile.Id,
+            expertUserId = profile.ExpertUserId,
+            overrideActive = true,
+            expiresAt = expiry,
+        };
     }
 
     // ── Availability Rules ──────────────────────────────────────────────
@@ -213,6 +248,12 @@ public sealed class PrivateSpeakingService(
         var profile = await db.PrivateSpeakingTutorProfiles.FindAsync([tutorProfileId], ct);
         if (profile is null || !profile.IsActive || !config.IsEnabled)
             return [];
+        var now = timeProvider.GetUtcNow();
+        var calibration = await CheckTutorCalibrationBookingGuardAsync(profile, now, ct);
+        if (!calibration.Allowed)
+        {
+            return [];
+        }
 
         var rules = await db.PrivateSpeakingAvailabilityRules
             .Where(r => r.TutorProfileId == tutorProfileId && r.IsActive)
@@ -235,7 +276,6 @@ public sealed class PrivateSpeakingService(
 
         var slotDuration = profile.SlotDurationOverrideMinutes ?? config.DefaultSlotDurationMinutes;
         var bufferMinutes = config.BufferMinutesBetweenSlots;
-        var now = timeProvider.GetUtcNow();
         var minBookingTime = now.AddHours(config.MinBookingLeadTimeHours);
         var tutorTz = TimeZoneInfo.FindSystemTimeZoneById(profile.Timezone);
         var priceMinorUnits = profile.PriceOverrideMinorUnits ?? config.DefaultPriceMinorUnits;
@@ -392,6 +432,12 @@ public sealed class PrivateSpeakingService(
             return BookingCheckoutResult.Fail("Tutor is not available.");
 
         var now = timeProvider.GetUtcNow();
+        var calibration = await CheckTutorCalibrationBookingGuardAsync(profile, now, ct);
+        if (!calibration.Allowed)
+        {
+            return BookingCheckoutResult.Fail("Tutor is temporarily unavailable while calibration quality is reviewed.");
+        }
+
         var minBookingTime = now.AddHours(config.MinBookingLeadTimeHours);
         if (sessionStartUtc <= minBookingTime)
             return BookingCheckoutResult.Fail($"Sessions must be booked at least {config.MinBookingLeadTimeHours} hours in advance.");
@@ -1080,6 +1126,108 @@ public sealed class PrivateSpeakingService(
     }
 
     // ── Private Helpers ─────────────────────────────────────────────────
+
+    private async Task<TutorCalibrationBookingGuard> CheckTutorCalibrationBookingGuardAsync(
+        PrivateSpeakingTutorProfile profile,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var rows = await db.SpeakingCalibrationScores
+            .AsNoTracking()
+            .Join(db.SpeakingCalibrationSamples.AsNoTracking(),
+                score => score.SampleId,
+                sample => sample.Id,
+                (score, sample) => new { score, sample })
+            .Where(x => x.sample.Status == SpeakingCalibrationSampleStatus.Published
+                        && x.score.TutorId == profile.ExpertUserId)
+            .Select(x => new
+            {
+                x.score.ScoresJson,
+                x.sample.GoldScoresJson,
+            })
+            .ToListAsync(ct);
+
+        if (rows.Count == 0)
+        {
+            return new TutorCalibrationBookingGuard(true, null, false);
+        }
+
+        var errorSum = 0.0;
+        var count = 0;
+        foreach (var row in rows)
+        {
+            var scores = JsonSupport.Deserialize<Dictionary<string, double>>(row.ScoresJson, new Dictionary<string, double>());
+            var gold = JsonSupport.Deserialize<Dictionary<string, double>>(row.GoldScoresJson, new Dictionary<string, double>());
+            foreach (var (code, max) in SpeakingCriterionMaxima)
+            {
+                if (!scores.TryGetValue(code, out var score) || !gold.TryGetValue(code, out var expected))
+                {
+                    continue;
+                }
+                errorSum += Math.Abs(score - expected) / max * 100.0;
+                count++;
+            }
+        }
+
+        if (count == 0)
+        {
+            return new TutorCalibrationBookingGuard(true, null, false);
+        }
+
+        var meanDrift100 = errorSum / count;
+        if (meanDrift100 <= CalibrationRedDriftThreshold100)
+        {
+            return new TutorCalibrationBookingGuard(true, meanDrift100, false);
+        }
+
+        var overrideActive = await HasActiveCalibrationOverrideAsync(profile.Id, now, ct);
+        return new TutorCalibrationBookingGuard(overrideActive, meanDrift100, overrideActive);
+    }
+
+    private async Task<bool> HasActiveCalibrationOverrideAsync(
+        string tutorProfileId,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var auditRows = await db.PrivateSpeakingAuditLogs.AsNoTracking()
+            .Where(x => x.BookingId == tutorProfileId && x.Action == CalibrationOverrideAction)
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => x.Details)
+            .Take(5)
+            .ToListAsync(ct);
+        foreach (var details in auditRows)
+        {
+            var payload = JsonSupport.Deserialize<Dictionary<string, JsonElement>>(details, new Dictionary<string, JsonElement>());
+            if (payload.TryGetValue("expiresAt", out var expiresElement)
+                && expiresElement.ValueKind == JsonValueKind.String
+                && DateTimeOffset.TryParse(expiresElement.GetString(), out var expiresAt)
+                && expiresAt > now)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static readonly IReadOnlyDictionary<string, double> SpeakingCriterionMaxima =
+        new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["intelligibility"] = 6,
+            ["fluency"] = 6,
+            ["appropriateness"] = 6,
+            ["grammarExpression"] = 6,
+            ["relationshipBuilding"] = 3,
+            ["patientPerspective"] = 3,
+            ["structure"] = 3,
+            ["informationGathering"] = 3,
+            ["informationGiving"] = 3,
+        };
+
+    private sealed record TutorCalibrationBookingGuard(
+        bool Allowed,
+        double? MeanDrift100,
+        bool OverrideActive);
 
     private async Task AuditAsync(
         string? bookingId, string actorId, string actorRole,

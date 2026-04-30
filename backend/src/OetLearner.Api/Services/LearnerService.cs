@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services;
 
@@ -1368,6 +1369,23 @@ public partial class LearnerService(
             strengths = JsonSupport.Deserialize<List<string>>(evaluation.StrengthsJson, []),
             issues = JsonSupport.Deserialize<List<string>>(evaluation.IssuesJson, []),
             generatedAt = evaluation.GeneratedAt,
+            recommendedDrills = new[]
+            {
+                new
+                {
+                    id = $"phrasing-{evaluation.Id}",
+                    title = "Phrasing and transcript drill",
+                    description = "Practise stronger patient-centred alternatives from the marked transcript.",
+                    route = $"/speaking/phrasing/{evaluation.Id}"
+                },
+                new
+                {
+                    id = "ai-patient-practice",
+                    title = "AI patient conversation practice",
+                    description = "Launch the existing conversation module for a grounded patient practice session.",
+                    route = "/conversation"
+                }
+            },
             modelExplanationSafe = evaluation.ModelExplanationSafe,
             learnerDisclaimer = evaluation.LearnerDisclaimer,
             isOfficialScore = false,
@@ -1611,25 +1629,9 @@ public partial class LearnerService(
 
     public async Task<object> GetSpeakingTaskAsync(string contentId, CancellationToken cancellationToken)
     {
-        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "speaking", cancellationToken)
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "speaking" && x.Status == ContentStatus.Published, cancellationToken)
                    ?? throw ApiException.NotFound("content_not_found", "Speaking task not found.");
-        var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(item.DetailJson, new Dictionary<string, object?>());
-        return Merge(new Dictionary<string, object?>
-        {
-            ["contentId"] = item.Id,
-            ["contentType"] = item.ContentType,
-            ["subtest"] = item.SubtestCode,
-            ["title"] = item.Title,
-            ["professionId"] = item.ProfessionId,
-            ["difficulty"] = item.Difficulty,
-            ["estimatedDurationMinutes"] = item.EstimatedDurationMinutes,
-            ["criteriaFocus"] = JsonSupport.Deserialize<List<string>>(item.CriteriaFocusJson, []),
-            ["scenarioType"] = item.ScenarioType,
-            ["modeSupport"] = JsonSupport.Deserialize<List<string>>(item.ModeSupportJson, []),
-            ["publishedRevisionId"] = item.PublishedRevisionId,
-            ["status"] = ToContentStatus(item.Status),
-            ["caseNotes"] = item.CaseNotes
-        }, detail);
+        return BuildLearnerSpeakingTaskPayload(item);
     }
 
     public async Task<object> CreateSpeakingAttemptAsync(string userId, CreateAttemptRequest request, CancellationToken cancellationToken)
@@ -1721,6 +1723,13 @@ public partial class LearnerService(
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         var upload = await GetUploadSessionForCompletionAsync(userId, attemptId, request, cancellationToken);
+        if (request.ConsentAccepted != true)
+        {
+            throw ApiException.Validation(
+                "speaking_recording_consent_required",
+                "Confirm recording consent before uploading speaking audio.",
+                [new ApiFieldError("consent", "required", "Accept the speaking recording consent before submitting audio.")]);
+        }
         if (upload.State != UploadState.Uploaded || !mediaStorage.Exists(upload.StorageKey))
         {
             throw ApiException.Validation(
@@ -1740,7 +1749,13 @@ public partial class LearnerService(
             reportedSizeBytes = request.SizeBytes,
             durationSeconds = request.DurationSeconds,
             captureMethod = request.CaptureMethod ?? "browser-recording",
-            contentType = resolvedContentType
+            contentType = resolvedContentType,
+            consent = new
+            {
+                accepted = true,
+                acceptedAt = request.ConsentAcceptedAt ?? DateTimeOffset.UtcNow,
+                consentText = request.ConsentText
+            }
         });
 
         var existingTranscriptionJobs = await db.BackgroundJobs
@@ -1853,6 +1868,15 @@ public partial class LearnerService(
         var examFamilyLabel = FormatExamFamilyLabel(examFamilyCode);
         await RecordEventAsync(userId, "evaluation_viewed", new { evaluationId = evaluation.Id, attemptId = attempt.Id, subtest = evaluation.SubtestCode }, cancellationToken);
 
+        // Stable Wave 1 contract: criterion-keyed feedback + readiness band.
+        // See docs/SPEAKING-MODULE-PLAN.md §3 Wave 1.
+        var criteria = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.CriterionScoresJson, []);
+        var (estimatedScaledScore, readinessBandCode, criteriaSource) = ReadSpeakingBandFromAnalysis(attempt.AnalysisJson);
+        var roleCard = BuildLearnerSpeakingTaskPayload(content);
+        var disclaimer = string.IsNullOrWhiteSpace(evaluation.LearnerDisclaimer)
+            ? SpeakingContentStructure.PracticeDisclaimer
+            : evaluation.LearnerDisclaimer;
+
         return new
         {
             evaluationId = evaluation.Id,
@@ -1868,6 +1892,38 @@ public partial class LearnerService(
             confidenceLabel = BuildConfidenceLabel(evaluation.ConfidenceBand),
             strengths = JsonSupport.Deserialize<List<string>>(evaluation.StrengthsJson, []),
             issues = JsonSupport.Deserialize<List<string>>(evaluation.IssuesJson, []),
+            // Wave 1 contract additions ↓
+            criteria,
+            criterionScores = criteria,
+            criteriaSource,
+            readinessBand = readinessBandCode,
+            readinessBandLabel = BuildSpeakingReadinessBandLabel(readinessBandCode),
+            estimatedScaledScore,
+            passThreshold = OetScoring.ScaledPassGradeB,
+            rubricMax = OetScoring.SpeakingRubricMax,
+            timing = new
+            {
+                prepTimeSeconds = roleCard.GetValueOrDefault("prepTimeSeconds"),
+                roleplayTimeSeconds = roleCard.GetValueOrDefault("roleplayTimeSeconds"),
+                recordedSeconds = attempt.ElapsedSeconds
+            },
+            workflow = new[]
+            {
+                "selection",
+                "device_check",
+                "prep",
+                "roleplay_recording",
+                "upload_submit",
+                "processing_result",
+                "transcript_review",
+                "phrasing_drill",
+                "expert_review_optional"
+            },
+            statusReasonCode = evaluation.StatusReasonCode,
+            statusMessage = evaluation.StatusMessage,
+            retryable = evaluation.Retryable,
+            retryAfterMs = evaluation.RetryAfterMs,
+            // Wave 1 contract additions ↑
             generatedAt = evaluation.GeneratedAt,
             nextDrill = new
             {
@@ -1876,8 +1932,26 @@ public partial class LearnerService(
                 description = "Review the transcript markers and practise stronger alternatives from this attempt.",
                 route = $"/speaking/phrasing/{evaluation.Id}"
             },
+            recommendedDrills = new[]
+            {
+                new
+                {
+                    id = $"phrasing-{evaluation.Id}",
+                    title = "Phrasing and transcript drill",
+                    description = "Practise stronger patient-centred alternatives from the marked transcript.",
+                    route = $"/speaking/phrasing/{evaluation.Id}"
+                },
+                new
+                {
+                    id = "ai-patient-practice",
+                    title = "AI patient conversation practice",
+                    description = "Launch the existing conversation module for a grounded patient practice session.",
+                    route = "/conversation"
+                }
+            },
             modelExplanationSafe = evaluation.ModelExplanationSafe,
-            learnerDisclaimer = evaluation.LearnerDisclaimer,
+            learnerDisclaimer = disclaimer,
+            disclaimer,
             isOfficialScore = false,
             methodLabel = BuildAiMethodLabel("speaking"),
             provenanceLabel = $"{examFamilyLabel} practice estimate",
@@ -1886,13 +1960,57 @@ public partial class LearnerService(
         };
     }
 
+    private static (int? estimatedScaledScore, string readinessBandCode, string? criteriaSource) ReadSpeakingBandFromAnalysis(string analysisJson)
+    {
+        if (string.IsNullOrWhiteSpace(analysisJson))
+        {
+            return (null, OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBand.NotReady), null);
+        }
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(analysisJson);
+            if (!doc.RootElement.TryGetProperty("speakingBand", out var band)) goto fallback;
+            int? scaled = band.TryGetProperty("scaledEstimate", out var s) && s.TryGetInt32(out var v) ? v : null;
+            string? readiness = band.TryGetProperty("readinessBand", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.String ? r.GetString() : null;
+            string? source = band.TryGetProperty("criteriaSource", out var src) && src.ValueKind == System.Text.Json.JsonValueKind.String ? src.GetString() : null;
+            // If readinessBand was not yet persisted (legacy attempts before
+            // Wave 1), derive it from the scaled estimate so the contract
+            // is always populated.
+            readiness ??= scaled is { } sv
+                ? OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled(sv))
+                : OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBand.NotReady);
+            return (scaled, readiness, source);
+        }
+        catch
+        {
+        }
+    fallback:
+        return (null, OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBand.NotReady), null);
+    }
+
+    private static string BuildSpeakingReadinessBandLabel(string code) => code switch
+    {
+        "not_ready"  => "Not ready",
+        "developing" => "Developing",
+        "borderline" => "Borderline",
+        "exam_ready" => "Exam-ready",
+        "strong"     => "Strong",
+        _             => "Not ready",
+    };
+
     public async Task<object> GetSpeakingReviewAsync(string userId, string evaluationId, CancellationToken cancellationToken)
     {
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
+        var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
+        var disclaimer = string.IsNullOrWhiteSpace(evaluation.LearnerDisclaimer)
+            ? SpeakingContentStructure.PracticeDisclaimer
+            : evaluation.LearnerDisclaimer;
         return new
         {
             summary = await GetSpeakingEvaluationSummaryAsync(userId, evaluationId, cancellationToken),
+            roleCard = BuildLearnerSpeakingTaskPayload(content),
+            disclaimer,
             transcript = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(attempt.TranscriptJson, []),
             analysis = JsonSupport.Deserialize<Dictionary<string, object?>>(attempt.AnalysisJson, new Dictionary<string, object?>()),
             feedbackItems = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.FeedbackItemsJson, []),
@@ -3675,9 +3793,112 @@ public partial class LearnerService(
         return JsonSupport.Deserialize<Dictionary<string, object?>>(JsonSupport.Serialize(value), new Dictionary<string, object?>());
     }
 
+    private static Dictionary<string, object?> BuildLearnerSpeakingTaskPayload(ContentItem item)
+    {
+        var detail = SpeakingContentStructure.ExtractStructure(item.DetailJson);
+        var candidate = SpeakingContentStructure.ToDictionary(SpeakingContentStructure.ReadValue(detail, "candidateCard"));
+
+        var role = SpeakingContentStructure.ReadString(candidate, "candidateRole", "role")
+                   ?? SpeakingContentStructure.ReadString(detail, "candidateRole", "role")
+                   ?? "Candidate";
+        var setting = SpeakingContentStructure.ReadString(candidate, "setting")
+                      ?? SpeakingContentStructure.ReadString(detail, "setting")
+                      ?? "Clinical setting";
+        var patient = SpeakingContentStructure.ReadString(candidate, "patientRole", "patient")
+                      ?? SpeakingContentStructure.ReadString(detail, "patientRole", "patient")
+                      ?? "Patient";
+        var task = SpeakingContentStructure.ReadString(candidate, "task", "brief")
+                   ?? SpeakingContentStructure.ReadString(detail, "task", "brief")
+                   ?? "Complete the role play using patient-centred communication.";
+        var background = SpeakingContentStructure.ReadString(candidate, "background")
+                         ?? SpeakingContentStructure.ReadString(detail, "background", "caseNotes")
+                         ?? item.CaseNotes
+                         ?? string.Empty;
+        var tasks = FirstNonEmptyList(
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(candidate, "tasks")),
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(detail, "tasks")),
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(detail, "roleObjectives")));
+        var warmUps = SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(detail, "warmUpQuestions"));
+        var criteriaFocus = FirstNonEmptyList(
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(detail, "criteriaFocus")),
+            JsonSupport.Deserialize<List<string>>(item.CriteriaFocusJson, []));
+        var prepSeconds = SpeakingContentStructure.ReadInt(detail, "prepTimeSeconds")
+                          ?? SpeakingContentStructure.DefaultPrepTimeSeconds;
+        var roleplaySeconds = SpeakingContentStructure.ReadInt(detail, "roleplayTimeSeconds")
+                              ?? SpeakingContentStructure.DefaultRoleplayTimeSeconds;
+        var disclaimer = SpeakingContentStructure.ReadString(detail, "disclaimer")
+                         ?? SpeakingContentStructure.PracticeDisclaimer;
+
+        var candidateCard = new Dictionary<string, object?>
+        {
+            ["role"] = role,
+            ["candidateRole"] = role,
+            ["setting"] = setting,
+            ["patient"] = patient,
+            ["patientRole"] = patient,
+            ["task"] = task,
+            ["brief"] = task,
+            ["background"] = background,
+            ["tasks"] = tasks
+        };
+
+        return new Dictionary<string, object?>
+        {
+            ["contentId"] = item.Id,
+            ["contentType"] = item.ContentType,
+            ["subtest"] = item.SubtestCode,
+            ["title"] = item.Title,
+            ["professionId"] = item.ProfessionId,
+            ["difficulty"] = item.Difficulty,
+            ["estimatedDurationMinutes"] = item.EstimatedDurationMinutes,
+            ["criteriaFocus"] = criteriaFocus,
+            ["criteriaFocusTags"] = criteriaFocus,
+            ["scenarioType"] = item.ScenarioType,
+            ["modeSupport"] = JsonSupport.Deserialize<List<string>>(item.ModeSupportJson, []),
+            ["publishedRevisionId"] = item.PublishedRevisionId,
+            ["status"] = ToContentStatus(item.Status),
+            ["caseNotes"] = item.CaseNotes,
+            ["candidateCard"] = candidateCard,
+            ["role"] = role,
+            ["setting"] = setting,
+            ["patient"] = patient,
+            ["task"] = task,
+            ["brief"] = task,
+            ["background"] = background,
+            ["tasks"] = tasks,
+            ["warmUpQuestions"] = warmUps,
+            ["prepTimeSeconds"] = prepSeconds,
+            ["roleplayTimeSeconds"] = roleplaySeconds,
+            ["patientEmotion"] = SpeakingContentStructure.ReadString(detail, "patientEmotion") ?? "neutral",
+            ["communicationGoal"] = SpeakingContentStructure.ReadString(detail, "communicationGoal", "purpose") ?? "Build rapport and complete the clinical task.",
+            ["clinicalTopic"] = SpeakingContentStructure.ReadString(detail, "clinicalTopic") ?? item.ScenarioType ?? "roleplay",
+            ["disclaimer"] = disclaimer,
+            ["compliance"] = new
+            {
+                learnerSafe = true,
+                // The interlocutor card is intentionally stripped from
+                // every learner-facing payload (Wave 2 of
+                // docs/SPEAKING-MODULE-PLAN.md). The card lives in
+                // ContentPaper.ExtractedTextJson["interlocutorCard"] and
+                // is only projected to expert/admin audiences.
+                hiddenInterlocutorCard = true,
+                sourceProvenanceAvailable = !string.IsNullOrWhiteSpace(item.SourceProvenance),
+                officialScore = false
+            }
+        };
+    }
+
+    private static List<string> FirstNonEmptyList(params List<string>[] lists)
+        => lists.FirstOrDefault(list => list.Count > 0) ?? [];
+
     private async Task<List<object>> GetTasksBySubtestAsync(string subtest, CancellationToken cancellationToken)
     {
         var items = await db.ContentItems.Where(x => x.SubtestCode == subtest && x.Status == ContentStatus.Published).OrderBy(x => x.Title).ToListAsync(cancellationToken);
+        if (string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            return items.Select(item => (object)BuildLearnerSpeakingTaskPayload(item)).ToList();
+        }
+
         return items.Select(item => (object)new
         {
             contentId = item.Id,
@@ -3699,6 +3920,18 @@ public partial class LearnerService(
     {
         await EnsureUserAsync(userId, cancellationToken);
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
+        var contentForAttempt = await db.ContentItems
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == request.ContentId, cancellationToken)
+            ?? throw ApiException.NotFound("content_not_found", "Practice content not found.");
+        if (!string.Equals(contentForAttempt.SubtestCode, subtest, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.NotFound("content_not_found", "Practice content not found.");
+        }
+        if (contentForAttempt.Status != ContentStatus.Published)
+        {
+            throw ApiException.Conflict("content_not_available", "This practice content is not currently available.");
+        }
         var context = request.Context ?? "practice";
         var mode = request.Mode ?? (subtest is "reading" or "listening" ? "exam" : "practice");
         var existingAttempts = await db.Attempts
@@ -3742,6 +3975,20 @@ public partial class LearnerService(
         var attempt = await db.Attempts.FirstAsync(x => x.Id == attemptId, cancellationToken);
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
         var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(content.DetailJson, new Dictionary<string, object?>());
+        var contentPayload = string.Equals(content.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
+            ? BuildLearnerSpeakingTaskPayload(content)
+            : Merge(new Dictionary<string, object?>
+            {
+                ["contentId"] = content.Id,
+                ["title"] = content.Title,
+                ["subtest"] = content.SubtestCode,
+                ["professionId"] = content.ProfessionId,
+                ["difficulty"] = content.Difficulty,
+                ["estimatedDurationMinutes"] = content.EstimatedDurationMinutes,
+                ["caseNotes"] = content.CaseNotes,
+                ["scenarioType"] = content.ScenarioType,
+                ["criteriaFocus"] = JsonSupport.Deserialize<List<string>>(content.CriteriaFocusJson, [])
+            }, detail);
 
         return new
         {
@@ -3768,18 +4015,7 @@ public partial class LearnerService(
             audioUploadState = ToUploadState(attempt.AudioUploadState),
             transcript = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(attempt.TranscriptJson, []),
             analysis = JsonSupport.Deserialize<Dictionary<string, object?>>(attempt.AnalysisJson, new Dictionary<string, object?>()),
-            content = Merge(new Dictionary<string, object?>
-            {
-                ["contentId"] = content.Id,
-                ["title"] = content.Title,
-                ["subtest"] = content.SubtestCode,
-                ["professionId"] = content.ProfessionId,
-                ["difficulty"] = content.Difficulty,
-                ["estimatedDurationMinutes"] = content.EstimatedDurationMinutes,
-                ["caseNotes"] = content.CaseNotes,
-                ["scenarioType"] = content.ScenarioType,
-                ["criteriaFocus"] = JsonSupport.Deserialize<List<string>>(content.CriteriaFocusJson, [])
-            }, detail)
+            content = contentPayload
         };
     }
 
@@ -5945,10 +6181,12 @@ public partial class LearnerService(
         "fluency" => "Fluency",
         "appropriateness" => "Appropriateness of Language",
         "grammar" => "Resources of Grammar & Expression",
+        "grammarExpression" => "Resources of Grammar & Expression",
         "grammar_expression" => "Resources of Grammar & Expression",
         "relationshipBuilding" => "Relationship Building",
         "patientPerspective" => "Understanding & Incorporating Patient's Perspective",
         "providingStructure" => "Providing Structure",
+        "structure" => "Providing Structure",
         "informationGathering" => "Information Gathering",
         "informationGiving" => "Information Giving",
         _ => code ?? "Criterion"

@@ -24,6 +24,7 @@ function BetterPhrasingContent() {
   // --- Data State ---
   const [, setTitle] = useState('');
   const [segments, setSegments] = useState<PhrasingSegment[]>([]);
+  const [disclaimer, setDisclaimer] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -38,6 +39,7 @@ function BetterPhrasingContent() {
       .then((result) => {
         setTitle(result.title);
         setSegments(result.segments);
+        setDisclaimer(result.disclaimer);
         analytics.track('content_view', { contentId: id, subtest: 'speaking', type: 'phrasing' });
       })
       .catch(() => setError(true))
@@ -112,6 +114,7 @@ function BetterPhrasingContent() {
     >
       <main className="flex-1 p-6 overflow-y-auto">
         <div className="max-w-3xl mx-auto space-y-6">
+          {disclaimer ? <InlineAlert variant="info">{disclaimer}</InlineAlert> : null}
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSegment.id}

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Services.Content;
@@ -84,7 +85,12 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         ["listening"] = new() { PaperAssetRole.Audio, PaperAssetRole.QuestionPaper, PaperAssetRole.AudioScript, PaperAssetRole.AnswerKey },
         ["reading"]   = new() { PaperAssetRole.QuestionPaper, PaperAssetRole.AnswerKey },
         ["writing"]   = new() { PaperAssetRole.CaseNotes },
-        ["speaking"]  = new() { PaperAssetRole.RoleCard },
+        ["speaking"]  = new()
+        {
+            PaperAssetRole.RoleCard,
+            PaperAssetRole.AssessmentCriteria,
+            PaperAssetRole.WarmUpQuestions,
+        },
     };
 
     public IReadOnlySet<PaperAssetRole> RequiredRolesFor(string subtestCode)
@@ -254,10 +260,28 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
             }
         }
 
+        if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            var speakingValidation = SpeakingContentStructure.Validate(paper);
+            if (!speakingValidation.IsPublishReady)
+            {
+                var blockers = speakingValidation.Issues
+                    .Where(i => string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase))
+                    .Select(i => $"{i.Code}: {i.Message}")
+                    .ToList();
+                throw new InvalidOperationException(
+                    $"Speaking structure is not publish-ready: {string.Join("; ", blockers)}");
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
         paper.Status = ContentStatus.Published;
         paper.PublishedAt = now;
         paper.UpdatedAt = now;
+        if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            await UpsertSpeakingContentItemAsync(paper, adminId, now, ct);
+        }
         await WriteAuditAsync("ContentPaperPublished", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
     }
@@ -320,6 +344,46 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
     {
         if (await db.ContentPapers.AnyAsync(p => p.Slug == slug, ct))
             throw new InvalidOperationException($"Slug '{slug}' already exists.");
+    }
+
+    private async Task UpsertSpeakingContentItemAsync(ContentPaper paper, string adminId, DateTimeOffset now, CancellationToken ct)
+    {
+        var detail = SpeakingContentStructure.BuildContentItemDetail(paper);
+        var criteriaFocus = SpeakingContentStructure.ReadStringList(
+            SpeakingContentStructure.ReadValue(detail, "criteriaFocus"));
+        var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == paper.Id, ct);
+        if (content is null)
+        {
+            content = new ContentItem
+            {
+                Id = paper.Id,
+                ContentType = "roleplay",
+                SubtestCode = "speaking",
+                CreatedAt = now,
+                CreatedBy = adminId,
+            };
+            db.ContentItems.Add(content);
+        }
+
+        content.Title = paper.Title;
+        content.ProfessionId = paper.AppliesToAllProfessions ? null : paper.ProfessionId;
+        content.Difficulty = paper.Difficulty;
+        content.EstimatedDurationMinutes = paper.EstimatedDurationMinutes;
+        content.CriteriaFocusJson = JsonSupport.Serialize(criteriaFocus);
+        content.ScenarioType = paper.CardType ?? SpeakingContentStructure.ReadString(detail, "clinicalTopic");
+        content.ModeSupportJson = JsonSupport.Serialize(new[] { "self", "exam" });
+        content.PublishedRevisionId = paper.PublishedRevisionId ?? paper.Id;
+        content.Status = ContentStatus.Published;
+        content.CaseNotes = SpeakingContentStructure.ReadString(detail, "background");
+        content.DetailJson = JsonSupport.Serialize(detail);
+        content.SourceType = "content-paper";
+        content.SourceProvenance = string.IsNullOrWhiteSpace(paper.SourceProvenance)
+            ? "curated"
+            : paper.SourceProvenance!;
+        content.RightsStatus = "owned";
+        content.FreshnessConfidence = "current";
+        content.UpdatedAt = now;
+        content.PublishedAt = now;
     }
 
     private static string NormalizeSlug(string input)

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services;
 
@@ -31,8 +32,11 @@ public class ConversationService(
 
         var profession = (request.Profession ?? "medicine").Trim().ToLowerInvariant();
         var difficulty = (request.Difficulty ?? "medium").Trim().ToLowerInvariant();
+        var sourceContent = await ResolvePublishedSpeakingContentAsync(request.ContentId, ct);
 
-        var template = await PickTemplateAsync(userId, taskType, profession, ct);
+        var template = sourceContent is null
+            ? await PickTemplateAsync(userId, taskType, profession, ct)
+            : null;
         _ = difficulty;
 
         var sessionId = $"cs-{Guid.NewGuid():N}";
@@ -48,7 +52,9 @@ public class ConversationService(
             SubtestCode = "speaking",
             TaskTypeCode = taskType,
             Profession = profession,
-            ScenarioJson = template is not null
+            ScenarioJson = sourceContent is not null
+                ? BuildScenarioJsonFromSpeakingContent(sourceContent, taskType, profession, difficulty)
+                : template is not null
                 ? BuildScenarioJsonFromTemplate(template)
                 : BuildFallbackScenarioJson(taskType, profession),
             State = "preparing",
@@ -61,6 +67,25 @@ public class ConversationService(
         await db.SaveChangesAsync(ct);
 
         return MapSession(session);
+    }
+
+    private async Task<ContentItem?> ResolvePublishedSpeakingContentAsync(string? contentId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(contentId))
+        {
+            return null;
+        }
+
+        var content = await db.ContentItems.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == contentId.Trim(), ct)
+            ?? throw ApiException.NotFound("CONVERSATION_CONTENT_NOT_FOUND", "Conversation source content was not found.");
+        if (!string.Equals(content.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
+            || content.Status != ContentStatus.Published)
+        {
+            throw ApiException.Conflict("CONVERSATION_CONTENT_NOT_AVAILABLE", "Conversation source content is not available for speaking practice.");
+        }
+
+        return content;
     }
 
     public async Task<object> GetSessionAsync(string userId, string sessionId, CancellationToken ct)
@@ -363,6 +388,67 @@ public class ConversationService(
             timeLimitSeconds = t.EstimatedDurationSeconds,
         });
     }
+
+    private static string BuildScenarioJsonFromSpeakingContent(
+        ContentItem content,
+        string taskType,
+        string profession,
+        string difficulty)
+    {
+        var detail = SpeakingContentStructure.ExtractStructure(content.DetailJson);
+        var candidate = SpeakingContentStructure.ToDictionary(SpeakingContentStructure.ReadValue(detail, "candidateCard"));
+        var interlocutor = SpeakingContentStructure.ToDictionary(SpeakingContentStructure.ReadValue(detail, "interlocutorCard"));
+        var objectives = FirstNonEmptyList(
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(candidate, "tasks")),
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(detail, "tasks")),
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(detail, "roleObjectives")));
+        var cuePrompts = FirstNonEmptyList(
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(interlocutor, "cuePrompts")),
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(interlocutor, "prompts")),
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(interlocutor, "objectives")));
+        var patientVoice = SpeakingContentStructure.ToDictionary(SpeakingContentStructure.ReadValue(detail, "patientVoice"));
+        if (patientVoice.Count == 0)
+        {
+            patientVoice["emotion"] = SpeakingContentStructure.ReadString(detail, "patientEmotion") ?? "neutral";
+            patientVoice["style"] = "Respond as the patient or carer on the hidden interlocutor card. Do not reveal examiner notes unless the candidate elicits them naturally.";
+        }
+
+        return JsonSupport.Serialize(new
+        {
+            contentId = content.Id,
+            title = content.Title,
+            taskTypeCode = taskType,
+            profession,
+            difficulty,
+            setting = SpeakingContentStructure.ReadString(candidate, "setting")
+                      ?? SpeakingContentStructure.ReadString(detail, "setting")
+                      ?? "Clinical setting",
+            patientRole = SpeakingContentStructure.ReadString(candidate, "patientRole", "patient")
+                          ?? SpeakingContentStructure.ReadString(detail, "patientRole", "patient")
+                          ?? "Patient",
+            clinicianRole = SpeakingContentStructure.ReadString(candidate, "candidateRole", "role")
+                            ?? SpeakingContentStructure.ReadString(detail, "candidateRole", "role")
+                            ?? "Candidate",
+            context = SpeakingContentStructure.ReadString(candidate, "background")
+                      ?? SpeakingContentStructure.ReadString(detail, "background", "caseNotes")
+                      ?? content.CaseNotes
+                      ?? string.Empty,
+            candidateBrief = SpeakingContentStructure.ReadString(candidate, "task", "brief")
+                             ?? SpeakingContentStructure.ReadString(detail, "task", "brief")
+                             ?? "Complete the role play using patient-centred communication.",
+            hiddenPatientProfile = SpeakingContentStructure.ReadString(interlocutor, "patientProfile", "background", "hiddenInformation"),
+            cuePrompts,
+            objectives,
+            expectedOutcomes = SpeakingContentStructure.ReadString(detail, "communicationGoal", "purpose"),
+            keyVocabulary = SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(detail, "keyVocabulary")),
+            patientVoice,
+            timeLimitSeconds = SpeakingContentStructure.ReadInt(detail, "roleplayTimeSeconds")
+                               ?? SpeakingContentStructure.DefaultRoleplayTimeSeconds,
+        });
+    }
+
+    private static List<string> FirstNonEmptyList(params List<string>[] lists)
+        => lists.FirstOrDefault(list => list.Count > 0) ?? [];
 
     private string BuildFallbackScenarioJson(string taskType, string profession)
     {

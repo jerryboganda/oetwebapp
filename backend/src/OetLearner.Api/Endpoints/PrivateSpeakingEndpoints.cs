@@ -392,6 +392,22 @@ public static class PrivateSpeakingEndpoints
             }
         });
 
+        admin.MapPost("/tutors/{profileId}/calibration-override", async (
+            HttpContext http,
+            string profileId,
+            TutorCalibrationOverrideRequest req,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            var result = await svc.CreateTutorCalibrationOverrideAsync(
+                profileId,
+                http.UserId(),
+                req.Reason,
+                req.ExpiresAt,
+                ct);
+            return Results.Ok(result);
+        });
+
         // Availability rule management
         admin.MapGet("/tutors/{profileId}/availability", async (
             string profileId, PrivateSpeakingService svc, CancellationToken ct) =>
@@ -661,6 +677,10 @@ public record UpdateTutorProfileRequest(
     int? SlotDurationOverrideMinutes,
     string? SpecialtiesJson,
     bool? IsActive);
+
+public record TutorCalibrationOverrideRequest(
+    string? Reason,
+    DateTimeOffset? ExpiresAt);
 
 public record CreateAvailabilityRuleRequest(
     int DayOfWeek,

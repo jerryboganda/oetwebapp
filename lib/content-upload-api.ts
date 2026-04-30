@@ -118,6 +118,55 @@ export interface ChunkedUploadCommitResult {
   deduplicated: boolean;
 }
 
+export interface SpeakingStructureValidationIssue {
+  code: string;
+  severity: 'error' | 'warning' | string;
+  message: string;
+}
+
+export interface SpeakingStructureValidationReport {
+  isPublishReady: boolean;
+  issues: SpeakingStructureValidationIssue[];
+}
+
+export interface SpeakingAuthoringStructure {
+  candidateCard?: {
+    candidateRole?: string;
+    role?: string;
+    setting?: string;
+    patientRole?: string;
+    patient?: string;
+    task?: string;
+    brief?: string;
+    background?: string;
+    tasks?: string[];
+  };
+  interlocutorCard?: {
+    patientProfile?: string;
+    background?: string;
+    hiddenInformation?: string;
+    cuePrompts?: string[];
+    prompts?: string[];
+    objectives?: string[];
+    privateNotes?: string;
+  };
+  warmUpQuestions?: string[];
+  prepTimeSeconds?: number;
+  roleplayTimeSeconds?: number;
+  patientEmotion?: string;
+  communicationGoal?: string;
+  clinicalTopic?: string;
+  criteriaFocus?: string[];
+  complianceNotes?: string;
+}
+
+export interface SpeakingStructureResponse {
+  paperId: string;
+  structure: SpeakingAuthoringStructure;
+  validation: SpeakingStructureValidationReport;
+  updatedAt?: string;
+}
+
 // ── Transport ───────────────────────────────────────────────────────────
 
 function resolveUrl(path: string): string {
@@ -193,6 +242,15 @@ export const archiveContentPaper = (id: string) =>
   api<void>(`/v1/admin/papers/${id}`, { method: 'DELETE' });
 export const publishContentPaper = (id: string) =>
   api<void>(`/v1/admin/papers/${id}/publish`, { method: 'POST' });
+
+export const getSpeakingStructure = (paperId: string) =>
+  api<SpeakingStructureResponse>(`/v1/admin/papers/${paperId}/speaking-structure`);
+
+export const updateSpeakingStructure = (paperId: string, structure: SpeakingAuthoringStructure) =>
+  api<SpeakingStructureResponse>(`/v1/admin/papers/${paperId}/speaking-structure`, {
+    method: 'PUT',
+    body: JSON.stringify({ structure }),
+  });
 
 export const attachPaperAsset = (paperId: string, body: ContentPaperAssetAttachDto) =>
   api<ContentPaperAssetDto>(`/v1/admin/papers/${paperId}/assets`, {

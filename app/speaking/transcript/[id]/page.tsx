@@ -125,6 +125,7 @@ export default function SpeakingTranscriptPage() {
     <LearnerDashboardShell pageTitle={review.title} subtitle="Review your speaking transcript alongside the original recording.">
       <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+        {review.disclaimer ? <InlineAlert variant="info">{review.disclaimer}</InlineAlert> : null}
 
         <LearnerPageHero
           eyebrow="Speaking Evidence"
@@ -177,6 +178,22 @@ export default function SpeakingTranscriptPage() {
           </div>
 
           <div className="space-y-6">
+            {review.roleCard ? (
+              <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+                <LearnerSurfaceSectionHeader
+                  eyebrow="Role card context"
+                  title={review.roleCard.title}
+                  description="Candidate-facing card details are kept with the transcript so comments stay anchored to the task."
+                  className="mb-4"
+                />
+                <div className="space-y-3 text-sm text-muted">
+                  <p><span className="font-bold text-navy">Setting:</span> {review.roleCard.setting}</p>
+                  <p><span className="font-bold text-navy">Patient:</span> {review.roleCard.patient}</p>
+                  <p><span className="font-bold text-navy">Task:</span> {review.roleCard.brief}</p>
+                </div>
+              </section>
+            ) : null}
+
                         <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader
                 eyebrow="Audio Review"

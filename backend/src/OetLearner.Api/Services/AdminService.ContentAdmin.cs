@@ -1091,6 +1091,7 @@ public partial class AdminService
                 MaxSpeakingAttempts = 3,
                 MaxReadingAttempts = 5,
                 MaxListeningAttempts = 5,
+                MaxSpeakingMockSets = 1,
                 TrialDurationDays = 7,
                 ShowUpgradePrompts = true,
                 UpdatedAt = DateTimeOffset.UtcNow
@@ -1107,6 +1108,7 @@ public partial class AdminService
             config.MaxSpeakingAttempts,
             config.MaxReadingAttempts,
             config.MaxListeningAttempts,
+            config.MaxSpeakingMockSets,
             config.TrialDurationDays,
             config.ShowUpgradePrompts,
             config.UpdatedAt
@@ -1132,6 +1134,12 @@ public partial class AdminService
         config.MaxSpeakingAttempts = request.MaxSpeakingAttempts;
         config.MaxReadingAttempts = request.MaxReadingAttempts;
         config.MaxListeningAttempts = request.MaxListeningAttempts;
+        // Wave 3 — nullable in the request keeps backward compatibility
+        // with admin clients that still post the legacy 7-field payload.
+        if (request.MaxSpeakingMockSets is int mockSets)
+        {
+            config.MaxSpeakingMockSets = Math.Max(0, mockSets);
+        }
         config.TrialDurationDays = request.TrialDurationDays;
         config.ShowUpgradePrompts = request.ShowUpgradePrompts;
         config.UpdatedAt = DateTimeOffset.UtcNow;
@@ -1147,6 +1155,7 @@ public partial class AdminService
             config.MaxSpeakingAttempts,
             config.MaxReadingAttempts,
             config.MaxListeningAttempts,
+            config.MaxSpeakingMockSets,
             config.TrialDurationDays,
             config.ShowUpgradePrompts,
             config.UpdatedAt

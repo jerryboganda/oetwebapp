@@ -214,7 +214,9 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
             sizeBytes = audioPayload.Length,
             durationSeconds = 42,
             captureMethod = "browser-recording",
-            contentType = "audio/webm"
+            contentType = "audio/webm",
+            consentAccepted = true,
+            consentText = "Test consent accepted"
         });
         uploadCompleteResponse.EnsureSuccessStatusCode();
 
@@ -231,6 +233,42 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
                 return json.RootElement.GetProperty("state").GetString() == "completed";
             },
             "speaking evaluation to complete");
+
+        // Wave 1 regression (docs/SPEAKING-MODULE-PLAN.md §3): the summary
+        // payload must carry the stable 9-key criterion contract and the
+        // advisory readiness band so the results page can render its new
+        // criterion-by-criterion card without re-deriving projections.
+        var summaryResponse = await learner.GetAsync($"/v1/speaking/evaluations/{evaluationId}/summary");
+        summaryResponse.EnsureSuccessStatusCode();
+        using (var summaryJson = JsonDocument.Parse(await summaryResponse.Content.ReadAsStringAsync()))
+        {
+            var root = summaryJson.RootElement;
+            Assert.Equal(350, root.GetProperty("passThreshold").GetInt32());
+            Assert.Equal(39, root.GetProperty("rubricMax").GetInt32());
+
+            var readiness = root.GetProperty("readinessBand").GetString();
+            Assert.Contains(readiness, new[] { "not_ready", "developing", "borderline", "exam_ready", "strong" });
+            Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("readinessBandLabel").GetString()));
+
+            var criteria = root.GetProperty("criteria");
+            Assert.Equal(JsonValueKind.Array, criteria.ValueKind);
+            Assert.Equal(9, criteria.GetArrayLength());
+            var seenCodes = new HashSet<string>();
+            foreach (var entry in criteria.EnumerateArray())
+            {
+                var code = entry.GetProperty("criterionCode").GetString();
+                Assert.False(string.IsNullOrWhiteSpace(code));
+                Assert.True(seenCodes.Add(code!), $"duplicate criterionCode {code}");
+                var family = entry.GetProperty("family").GetString();
+                Assert.True(family == "linguistic" || family == "clinical");
+                var max = entry.GetProperty("max").GetInt32();
+                Assert.True(family == "linguistic" ? max == 6 : max == 3);
+                var score = entry.GetProperty("score").GetInt32();
+                Assert.InRange(score, 0, max);
+            }
+            Assert.Contains("intelligibility", seenCodes);
+            Assert.Contains("structure", seenCodes);
+        }
 
         await SetWalletCreditsAsync("audio-owner", 1);
 

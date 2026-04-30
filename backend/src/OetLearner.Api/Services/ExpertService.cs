@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services;
 
@@ -641,6 +642,25 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
         var metadata = JsonSupport.Deserialize(context.Attempt.AudioMetadataJson, new Dictionary<string, object?>());
         var contentType = metadata.TryGetValue("contentType", out var value) ? value?.ToString() : null;
+
+        // Wave 7 of docs/SPEAKING-MODULE-PLAN.md - any non-owner access
+        // to a speaking recording is a privacy-sensitive event and must
+        // be auditable. We write the audit row before opening the file
+        // stream so the side-effect is durable even if the client
+        // disconnects mid-stream.
+        var actorName = context.AssignedReviewers.TryGetValue(reviewerId, out var assignedExpert)
+            ? assignedExpert.DisplayName
+            : (await db.ExpertUsers.AsNoTracking().FirstOrDefaultAsync(e => e.Id == reviewerId, ct))?.DisplayName
+              ?? reviewerId;
+        await LogExpertAuditAsync(
+            reviewerId,
+            actorName,
+            "speaking_recording_accessed",
+            reviewRequestId,
+            $"Tutor streamed learner speaking audio for attempt {context.Attempt.Id}.",
+            ct);
+        await db.SaveChangesAsync(ct);
+
         return mediaStorage.OpenRead(context.Attempt.AudioObjectKey, contentType);
     }
 
@@ -2408,20 +2428,64 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
     private static ExpertSpeakingRoleCardResponse ExtractRoleCard(ContentItem? content)
     {
-        var fallback = new ExpertSpeakingRoleCardResponse("Nurse", "Ward", "Patient", "Provide a clinical handover.", null);
+        var fallback = new ExpertSpeakingRoleCardResponse(
+            "Nurse",
+            "Ward",
+            "Patient",
+            "Provide a clinical handover.",
+            null,
+            [],
+            "neutral",
+            "Build rapport and complete the clinical task.",
+            "roleplay",
+            [],
+            SpeakingContentStructure.DefaultPrepTimeSeconds,
+            SpeakingContentStructure.DefaultRoleplayTimeSeconds,
+            null,
+            SpeakingContentStructure.PracticeDisclaimer);
         if (content is null)
         {
             return fallback;
         }
 
-        var payload = JsonSupport.Deserialize(content.DetailJson, new Dictionary<string, object?>());
+        var payload = SpeakingContentStructure.ExtractStructure(content.DetailJson);
+        var candidate = SpeakingContentStructure.ToDictionary(SpeakingContentStructure.ReadValue(payload, "candidateCard"));
+        var interlocutor = SpeakingContentStructure.ToDictionary(SpeakingContentStructure.ReadValue(payload, "interlocutorCard"));
+        var tasks = FirstNonEmptyList(
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(candidate, "tasks")),
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(payload, "tasks")),
+            SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(payload, "roleObjectives")));
+        var warmUps = SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(payload, "warmUpQuestions"));
+
         return new ExpertSpeakingRoleCardResponse(
-            payload.TryGetValue("role", out var role) ? role?.ToString() ?? fallback.Role : fallback.Role,
-            payload.TryGetValue("setting", out var setting) ? setting?.ToString() ?? fallback.Setting : fallback.Setting,
-            payload.TryGetValue("patient", out var patient) ? patient?.ToString() ?? fallback.Patient : fallback.Patient,
-            payload.TryGetValue("task", out var task) ? task?.ToString() ?? fallback.Task : fallback.Task,
-            payload.TryGetValue("background", out var background) ? background?.ToString() : fallback.Background);
+            SpeakingContentStructure.ReadString(candidate, "candidateRole", "role")
+                ?? SpeakingContentStructure.ReadString(payload, "candidateRole", "role")
+                ?? fallback.Role,
+            SpeakingContentStructure.ReadString(candidate, "setting")
+                ?? SpeakingContentStructure.ReadString(payload, "setting")
+                ?? fallback.Setting,
+            SpeakingContentStructure.ReadString(candidate, "patientRole", "patient")
+                ?? SpeakingContentStructure.ReadString(payload, "patientRole", "patient")
+                ?? fallback.Patient,
+            SpeakingContentStructure.ReadString(candidate, "task", "brief")
+                ?? SpeakingContentStructure.ReadString(payload, "task", "brief")
+                ?? fallback.Task,
+            SpeakingContentStructure.ReadString(candidate, "background")
+                ?? SpeakingContentStructure.ReadString(payload, "background", "caseNotes")
+                ?? fallback.Background,
+            tasks,
+            SpeakingContentStructure.ReadString(payload, "patientEmotion") ?? fallback.PatientEmotion,
+            SpeakingContentStructure.ReadString(payload, "communicationGoal", "purpose") ?? fallback.CommunicationGoal,
+            SpeakingContentStructure.ReadString(payload, "clinicalTopic") ?? content.ScenarioType ?? fallback.ClinicalTopic,
+            warmUps,
+            SpeakingContentStructure.ReadInt(payload, "prepTimeSeconds") ?? fallback.PrepTimeSeconds,
+            SpeakingContentStructure.ReadInt(payload, "roleplayTimeSeconds") ?? fallback.RoleplayTimeSeconds,
+            interlocutor.Count > 0 ? interlocutor : null,
+            SpeakingContentStructure.ReadString(payload, "disclaimer") ?? fallback.Disclaimer);
     }
+
+    private static List<string> FirstNonEmptyList(params List<string>[] lists)
+        => lists.FirstOrDefault(list => list.Count > 0) ?? [];
 
     private static List<ExpertTranscriptLineResponse> ExtractTranscriptLines(Attempt attempt)
     {

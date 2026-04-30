@@ -44,7 +44,10 @@ public record UploadCompleteRequest(
     long? SizeBytes,
     int? DurationSeconds,
     string? CaptureMethod,
-    string? ContentType);
+    string? ContentType,
+    bool? ConsentAccepted,
+    string? ConsentText,
+    DateTimeOffset? ConsentAcceptedAt);
 
 public record AnswersUpdateRequest(Dictionary<string, string?> Answers);
 
@@ -55,6 +58,9 @@ public record DeviceCheckRequest(
     string? TaskId = null,
     double? NoiseLevel = null,
     bool? NoiseAcceptable = null);
+
+// Wave 3 of docs/SPEAKING-MODULE-PLAN.md.
+public record StartSpeakingMockSetRequest(string? Mode = "exam");
 
 public record ReviewRequestCreateRequest(
     string AttemptId,

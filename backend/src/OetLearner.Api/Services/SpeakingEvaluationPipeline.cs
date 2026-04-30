@@ -75,6 +75,7 @@ public sealed class SpeakingEvaluationPipeline(
         AiGatewayResult? aiResult = null;
         int? aiEstimatedScore = null;
         IReadOnlyList<GatewayFinding> aiFindings = Array.Empty<GatewayFinding>();
+        OetScoring.SpeakingCriterionScores? aiCriterionScores = null;
         string aiProvenance = "gateway";
 
         try
@@ -91,7 +92,7 @@ public sealed class SpeakingEvaluationPipeline(
                 PromptTemplateId = "speaking.score.v1",
             }, cancellationToken);
 
-            (aiEstimatedScore, aiFindings) = ParseGatewayScore(aiResult.Completion, prompt.Metadata.AppliedRuleIds);
+            (aiEstimatedScore, aiFindings, aiCriterionScores) = ParseGatewayScore(aiResult.Completion, prompt.Metadata.AppliedRuleIds);
             aiProvenance = "gateway:mock";
         }
         catch (PromptNotGroundedException)
@@ -100,14 +101,46 @@ public sealed class SpeakingEvaluationPipeline(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Speaking grounded AI score call failed for attempt {AttemptId}; using rulebook fallback.", attempt.Id);
-            aiProvenance = "gateway_error:rulebook_fallback";
+            // Q3 (docs/SPEAKING-MODULE-PLAN.md §6): fail loud on AI provider
+            // errors instead of silently substituting rule-engine scores.
+            // The transcript is preserved on the attempt so the learner can
+            // retry. Free-tier counter refund is the AI gateway's
+            // responsibility (writes AiUsageRecord with Outcome=ProviderError).
+            logger.LogWarning(ex, "Speaking grounded AI score call failed for attempt {AttemptId}; marking evaluation Failed (Q3 fail-loud).", attempt.Id);
+            evaluation.State = AsyncState.Failed;
+            evaluation.StatusReasonCode = "ai_provider_error";
+            evaluation.StatusMessage = "We couldn't grade this attempt because the AI grading service was unavailable. Please retry — your free-tier counter has not been consumed.";
+            evaluation.Retryable = true;
+            evaluation.RetryAfterMs = 30_000;
+            evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
+            evaluation.LearnerDisclaimer = "Grading was not completed. Please retry.";
+            attempt.AnalysisJson = JsonSupport.Serialize(MergeAnalysis(attempt.AnalysisJson, new Dictionary<string, object?>
+            {
+                ["aiProvenance"] = new
+                {
+                    featureCode = AiFeatureCodes.SpeakingGrade,
+                    promptTemplateId = "speaking.score.v1",
+                    gateway = "gateway_error:fail_loud",
+                    error = ex.GetType().Name,
+                    advisoryOnly = true
+                }
+            }));
+            return;
         }
 
         var mergedFindings = MergeFindings(findings, aiFindings);
         var transcriptWithMarkers = AttachMarkers(transcript, mergedFindings);
-        var scaledEstimate = ClampScaled(aiEstimatedScore ?? EstimateScaledScore(mergedFindings, transcriptWithMarkers, attempt));
+        // When the gateway provided per-criterion scores, prefer the
+        // canonical OetScoring projection over the AI's headline number so
+        // the scaled value is always derived through the single source of
+        // truth (AGENTS.md). Otherwise fall back to the AI scaled estimate
+        // or the deterministic finding-based heuristic.
+        var scaledFromCriteria = aiCriterionScores is { } cs ? OetScoring.SpeakingProjectedScaled(cs) : (int?)null;
+        var scaledEstimate = ClampScaled(scaledFromCriteria
+            ?? aiEstimatedScore
+            ?? EstimateScaledScore(mergedFindings, transcriptWithMarkers, attempt));
         var speakingBand = OetScoring.GradeSpeaking(scaledEstimate);
+        var readinessBand = OetScoring.SpeakingReadinessBandFromScaled(scaledEstimate);
         var scoreRange = BuildScoreRange(scaledEstimate);
         var confidence = ResolveConfidence(attempt, mergedFindings, aiResult);
         var phrasing = BuildPhrasingSegments(mergedFindings);
@@ -144,7 +177,10 @@ public sealed class SpeakingEvaluationPipeline(
                 requiredScaled = speakingBand.RequiredScaled,
                 requiredGrade = speakingBand.RequiredGrade,
                 grade = speakingBand.Grade,
-                passed = speakingBand.Passed
+                passed = speakingBand.Passed,
+                readinessBand = OetScoring.SpeakingReadinessBandCode(readinessBand),
+                rubricMax = OetScoring.SpeakingRubricMax,
+                criteriaSource = aiCriterionScores is null ? "rulebook_fallback" : "ai_grounded"
             }
         }));
 
@@ -154,7 +190,7 @@ public sealed class SpeakingEvaluationPipeline(
         evaluation.ConfidenceBand = confidence;
         evaluation.StrengthsJson = JsonSupport.Serialize(BuildStrengths(mergedFindings, transcriptWithMarkers));
         evaluation.IssuesJson = JsonSupport.Serialize(BuildIssues(mergedFindings, attempt.AnalysisJson));
-        evaluation.CriterionScoresJson = JsonSupport.Serialize(BuildCriterionScores(mergedFindings, scaledEstimate));
+        evaluation.CriterionScoresJson = JsonSupport.Serialize(BuildCriterionScores(mergedFindings, scaledEstimate, aiCriterionScores));
         evaluation.FeedbackItemsJson = JsonSupport.Serialize(BuildFeedbackItems(evaluation.Id, transcriptWithMarkers, mergedFindings));
         evaluation.GeneratedAt = DateTimeOffset.UtcNow;
         evaluation.ModelExplanationSafe = "This advisory estimate uses the Speaking rulebook, rule-cited transcript markers, and the universal 350/500 Speaking pass anchor.";
@@ -246,15 +282,15 @@ public sealed class SpeakingEvaluationPipeline(
         return sb.ToString();
     }
 
-    private static (int? scaledScore, IReadOnlyList<GatewayFinding> findings) ParseGatewayScore(
+    private static (int? scaledScore, IReadOnlyList<GatewayFinding> findings, OetScoring.SpeakingCriterionScores? criterionScores) ParseGatewayScore(
         string completion,
         IReadOnlyList<string> allowedRuleIds)
     {
-        if (string.IsNullOrWhiteSpace(completion)) return (null, Array.Empty<GatewayFinding>());
+        if (string.IsNullOrWhiteSpace(completion)) return (null, Array.Empty<GatewayFinding>(), null);
 
         var start = completion.IndexOf('{');
         var end = completion.LastIndexOf('}');
-        if (start < 0 || end <= start) return (null, Array.Empty<GatewayFinding>());
+        if (start < 0 || end <= start) return (null, Array.Empty<GatewayFinding>(), null);
 
         try
         {
@@ -286,11 +322,33 @@ public sealed class SpeakingEvaluationPipeline(
                 }
             }
 
-            return (score, findings);
+            // Extract per-criterion scores when the AI emits them. The
+            // grounded prompt may carry a "criterionScores" object with the
+            // 9 stable keys (4 linguistic 0-6, 5 clinical 0-3). Out-of-range
+            // values are clamped by OetScoring.SpeakingProjectedScaled.
+            OetScoring.SpeakingCriterionScores? criterionScores = null;
+            if (root.TryGetProperty("criterionScores", out var critElement)
+                && critElement.ValueKind == JsonValueKind.Object)
+            {
+                int Read6(string key) => ReadJsonInt(critElement, key) ?? 0;
+                int Read3(string key) => ReadJsonInt(critElement, key) ?? 0;
+                criterionScores = new OetScoring.SpeakingCriterionScores(
+                    Intelligibility:      Read6("intelligibility"),
+                    Fluency:              Read6("fluency"),
+                    Appropriateness:      Read6("appropriateness"),
+                    GrammarExpression:    Read6("grammarExpression"),
+                    RelationshipBuilding: Read3("relationshipBuilding"),
+                    PatientPerspective:   Read3("patientPerspective"),
+                    Structure:            Read3("structure"),
+                    InformationGathering: Read3("informationGathering"),
+                    InformationGiving:    Read3("informationGiving"));
+            }
+
+            return (score, findings, criterionScores);
         }
         catch
         {
-            return (null, Array.Empty<GatewayFinding>());
+            return (null, Array.Empty<GatewayFinding>(), null);
         }
     }
 
@@ -452,43 +510,76 @@ public sealed class SpeakingEvaluationPipeline(
         return issues.Take(4).ToList();
     }
 
-    private static List<object> BuildCriterionScores(IReadOnlyList<UnifiedFinding> findings, int scaledEstimate)
+    private static List<object> BuildCriterionScores(
+        IReadOnlyList<UnifiedFinding> findings,
+        int scaledEstimate,
+        OetScoring.SpeakingCriterionScores? aiCriterionScores)
     {
-        var baseline = scaledEstimate >= OetScoring.ScaledPassGradeB ? 4 : 3;
-        // OET Speaking 9 criteria (4 linguistic 0–6 + 5 clinical 0–3).
-        var linguistic = new[] { "intelligibility", "fluency", "appropriateness", "grammar" };
-        var clinical = new[] { "relationshipBuilding", "patientPerspective", "providingStructure", "informationGathering", "informationGiving" };
-        var result = new List<object>();
-        foreach (var criterion in linguistic)
+        // Stable 9-key Speaking criterion contract (Wave 1 of
+        // docs/SPEAKING-MODULE-PLAN.md). Linguistic family is 0-6, clinical
+        // family is 0-3. Per-criterion `score` is numeric (not a range)
+        // so the contract is machine-readable. When the AI gateway
+        // provided per-criterion scores via `criterionScores`, those are
+        // authoritative. Otherwise we derive a deterministic baseline from
+        // the rulebook findings so the shape stays stable for retries.
+        var baselineLinguistic = scaledEstimate >= OetScoring.ScaledPassGradeB ? 4 : 3;
+        var baselineClinical = scaledEstimate >= OetScoring.ScaledPassGradeB ? 2 : 1;
+
+        int LinguisticScore(string code, Func<OetScoring.SpeakingCriterionScores, int>? aiPicker)
         {
-            var related = findings.Count(f => CriterionFromFinding(f) == criterion);
-            var score = Math.Clamp(baseline - related, 2, 5);
-            result.Add(new
+            if (aiCriterionScores is { } cs && aiPicker is not null)
             {
-                criterionCode = criterion,
-                scoreRange = $"{score}-{Math.Min(score + 1, 6)}/6",
-                confidenceBand = related > 0 ? "medium" : "low",
-                explanation = related > 0
+                return Math.Clamp(aiPicker(cs), 0, 6);
+            }
+            var related = findings.Count(f => CriterionFromFinding(f) == code);
+            return Math.Clamp(baselineLinguistic - related, 2, 5);
+        }
+
+        int ClinicalScore(string code, Func<OetScoring.SpeakingCriterionScores, int>? aiPicker)
+        {
+            if (aiCriterionScores is { } cs && aiPicker is not null)
+            {
+                return Math.Clamp(aiPicker(cs), 0, 3);
+            }
+            var related = findings.Count(f => CriterionFromFinding(f) == code);
+            return Math.Clamp(baselineClinical - (related > 1 ? 1 : 0), 0, 3);
+        }
+
+        object Build(string code, string family, int max, int score, IEnumerable<string> linkedRuleIds)
+            => new
+            {
+                criterionCode = code,
+                family,
+                score,
+                max,
+                scoreRange = $"{score}/{max}",
+                confidenceBand = aiCriterionScores is null
+                    ? (linkedRuleIds.Any() ? "medium" : "low")
+                    : "high",
+                source = aiCriterionScores is null ? "rulebook_fallback" : "ai_grounded",
+                linkedRuleIds = linkedRuleIds.ToArray(),
+                explanation = linkedRuleIds.Any()
                     ? "Rulebook findings are linked to this criterion in the transcript markers."
-                    : "No direct rulebook marker was linked to this criterion in the current transcript evidence."
-            });
-        }
-        var clinicalBaseline = scaledEstimate >= OetScoring.ScaledPassGradeB ? 2 : 1;
-        foreach (var criterion in clinical)
-        {
-            var related = findings.Count(f => CriterionFromFinding(f) == criterion);
-            var score = Math.Clamp(clinicalBaseline - (related > 1 ? 1 : 0), 0, 3);
-            result.Add(new
-            {
-                criterionCode = criterion,
-                scoreRange = $"{score}/3",
-                confidenceBand = related > 0 ? "medium" : "low",
-                explanation = related > 0
-                    ? "Rulebook findings are linked to this clinical-communication criterion."
-                    : "No direct rulebook marker was linked to this clinical-communication criterion in the current transcript."
-            });
-        }
-        return result;
+                    : aiCriterionScores is null
+                        ? "No direct rulebook marker was linked to this criterion in the current transcript evidence."
+                        : "Score derived from the grounded AI evaluation."
+            };
+
+        IEnumerable<string> Linked(string code) =>
+            findings.Where(f => CriterionFromFinding(f) == code).Select(f => f.RuleId).Distinct();
+
+        return
+        [
+            Build("intelligibility",      "linguistic", 6, LinguisticScore("intelligibility",      cs => cs.Intelligibility),      Linked("intelligibility")),
+            Build("fluency",              "linguistic", 6, LinguisticScore("fluency",              cs => cs.Fluency),              Linked("fluency")),
+            Build("appropriateness",      "linguistic", 6, LinguisticScore("appropriateness",      cs => cs.Appropriateness),      Linked("appropriateness")),
+            Build("grammarExpression",    "linguistic", 6, LinguisticScore("grammarExpression",    cs => cs.GrammarExpression),    Linked("grammar")),
+            Build("relationshipBuilding", "clinical",   3, ClinicalScore("relationshipBuilding",   cs => cs.RelationshipBuilding), Linked("relationshipBuilding")),
+            Build("patientPerspective",   "clinical",   3, ClinicalScore("patientPerspective",     cs => cs.PatientPerspective),   Linked("patientPerspective")),
+            Build("structure",            "clinical",   3, ClinicalScore("structure",              cs => cs.Structure),            Linked("providingStructure")),
+            Build("informationGathering", "clinical",   3, ClinicalScore("informationGathering",   cs => cs.InformationGathering), Linked("informationGathering")),
+            Build("informationGiving",    "clinical",   3, ClinicalScore("informationGiving",      cs => cs.InformationGiving),    Linked("informationGiving"))
+        ];
     }
 
     private static List<object> BuildFeedbackItems(
@@ -659,6 +750,18 @@ public sealed class SpeakingEvaluationPipeline(
         => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+
+    private static int? ReadJsonInt(JsonElement element, string property)
+    {
+        if (!element.TryGetProperty(property, out var value)) return null;
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetInt32(out var i) => i,
+            JsonValueKind.Number => (int)Math.Round(value.GetDouble()),
+            JsonValueKind.String when int.TryParse(value.GetString(), out var s) => s,
+            _ => null,
+        };
+    }
 
     private static string? ReadTranscriptionProvider(string analysisJson)
     {

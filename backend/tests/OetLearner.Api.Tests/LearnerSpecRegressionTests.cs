@@ -221,7 +221,9 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             sizeBytes = uploadBytes.Length,
             durationSeconds = 75,
             captureMethod = "browser-recording",
-            contentType = "audio/webm"
+            contentType = "audio/webm",
+            consentAccepted = true,
+            consentText = "Test consent accepted"
         });
         uploadComplete.EnsureSuccessStatusCode();
 
@@ -304,6 +306,55 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
                 return version > initialVersion || generatedAt > initialGeneratedAt;
             },
             "study plan regeneration to complete");
+    }
+
+    [Fact]
+    public async Task SpeakingTask_LearnerProjection_NeverLeaksInterlocutorCard()
+    {
+        // Wave 2 of docs/SPEAKING-MODULE-PLAN.md: the hidden interlocutor
+        // card is curated for tutors/admins only. Mirroring the Reading
+        // CorrectAnswerJson pattern, the learner-facing payload must never
+        // contain `interlocutorCard` at any nesting level.
+        using var client = await CreateClientForUserAsync("speaking-projection");
+
+        var listResponse = await client.GetAsync("/v1/speaking/tasks");
+        listResponse.EnsureSuccessStatusCode();
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        AssertNoInterlocutorCard(listJson.RootElement);
+
+        var detailResponse = await client.GetAsync("/v1/speaking/tasks/st-001");
+        detailResponse.EnsureSuccessStatusCode();
+        using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        AssertNoInterlocutorCard(detailJson.RootElement);
+
+        // Compliance flag must declare the card hidden so admins/auditors
+        // can grep this single field across the API surface.
+        Assert.True(detailJson.RootElement
+            .GetProperty("compliance")
+            .GetProperty("hiddenInterlocutorCard")
+            .GetBoolean());
+    }
+
+    private static void AssertNoInterlocutorCard(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var prop in element.EnumerateObject())
+                {
+                    Assert.False(
+                        string.Equals(prop.Name, "interlocutorCard", StringComparison.OrdinalIgnoreCase),
+                        "Learner speaking projection leaked the interlocutorCard property.");
+                    AssertNoInterlocutorCard(prop.Value);
+                }
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    AssertNoInterlocutorCard(item);
+                }
+                break;
+        }
     }
 
     private async Task<HttpClient> CreateClientForUserAsync(string userId)

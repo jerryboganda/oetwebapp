@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BookOpen, ChevronRight, CheckCircle2, Target } from 'lucide-react';
+import Link from 'next/link';
+import { BookOpen, ChevronRight, CheckCircle2, Target, Mic } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
@@ -117,6 +118,32 @@ export default function LearningPathsPage() {
           </div>
         </MotionSection>
       )}
+
+      {/* Wave 6 of docs/SPEAKING-MODULE-PLAN.md - "Speaking
+          Foundations" pathway entry. Surfaces the §17 micro-drills
+          catalogue alongside the per-subtest paths. */}
+      <MotionSection className="mt-6">
+        <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Mic className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-primary">
+                Speaking Foundations
+              </p>
+              <h3 className="text-base font-black text-navy">Short, focused speaking drills</h3>
+              <p className="text-sm text-muted">
+                Build the micro-skills behind every role-play: phrasing, intonation,
+                pronunciation, vocabulary, chunking and empathy.
+              </p>
+            </div>
+          </div>
+          <Link href="/speaking/drills">
+            <Button variant="primary">Open drills</Button>
+          </Link>
+        </Card>
+      </MotionSection>
 
       {/* Per-subtest paths */}
       {data?.subtestPaths.map((sp) => (
