@@ -2,15 +2,19 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, Sparkles, Target, Volume2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, Sparkles, Target, TrendingUp, Volume2 } from 'lucide-react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { fetchMockReports } from '@/lib/api';
 import { getListeningHome, type ListeningHomeDto, type ListeningHomePaperDto, type ListeningHomeTaskDto } from '@/lib/listening-api';
+import { getListeningPathway, type ListeningPathwaySnapshot } from '@/lib/listening-authoring-api';
 import type { MockReport } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
@@ -67,8 +71,11 @@ function taskToCard(task: ListeningHomeTaskDto, index: number) {
 
 export default function ListeningHome() {
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [home, setHome] = useState<ListeningHomeDto | null>(null);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
+  const [pathway, setPathway] = useState<ListeningPathwaySnapshot | null>(null);
+  const [pathwayBusy, setPathwayBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,12 +104,32 @@ export default function ListeningHome() {
       } finally {
         if (!cancelled) setLoading(false);
       }
+      // Best-effort pathway fetch — never blocks the hub.
+      void getListeningPathway()
+        .then((snap) => { if (!cancelled) setPathway(snap); })
+        .catch(() => { if (!cancelled) setPathway(null); });
     })();
 
     return () => {
       cancelled = true;
     };
   }, [authLoading, isAuthenticated]);
+
+  const handlePathwayAction = useMemo(
+    () => async () => {
+      if (!pathway) return;
+      const { nextAction } = pathway;
+      setPathwayBusy(true);
+      try {
+        if (nextAction.route) {
+          router.push(nextAction.route);
+        }
+      } finally {
+        setPathwayBusy(false);
+      }
+    },
+    [pathway, router],
+  );
 
   const papers = home?.papers ?? [];
   const tasks = home?.featuredTasks ?? [];
@@ -186,6 +213,65 @@ export default function ListeningHome() {
         />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+        {/* ── Course pathway recommendation ─────────────────────────
+            Joins completed-attempt, best-scaled, and mock signals into a
+            single readiness stage with one concrete next step. */}
+        {pathway ? (
+          <section aria-label="Listening pathway">
+            <LearnerSurfaceCard
+              card={{
+                kind: 'navigation',
+                sourceType: 'frontend_navigation',
+                accent: pathway.stage === 'exam_ready' ? 'emerald' : 'amber',
+                eyebrow: 'YOUR PATHWAY',
+                eyebrowIcon: TrendingUp,
+                title: pathway.headline,
+                description:
+                  pathway.bestScaledScore != null
+                    ? `Best scaled score so far: ${pathway.bestScaledScore}/500.`
+                    : 'A single recommended next step based on your recent Listening attempts.',
+                metaItems: [
+                  {
+                    icon: CheckCircle2,
+                    label: `${pathway.submittedAttempts} attempts · ${pathway.submittedListeningMockAttempts} mocks`,
+                  },
+                  pathway.bestScaledScore != null
+                    ? { icon: Sparkles, label: `Best ${pathway.bestScaledScore}/500` }
+                    : { icon: AlertTriangle, label: 'No graded score yet' },
+                ],
+              }}
+            >
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {pathway.milestones.map((m) => (
+                    <Badge
+                      key={m.code}
+                      variant={m.achieved ? 'success' : 'info'}
+                      title={
+                        m.target != null && m.progress != null
+                          ? `${m.label} (${m.progress}/${m.target})`
+                          : m.label
+                      }
+                    >
+                      {m.achieved ? '✓ ' : ''}
+                      {m.label}
+                    </Badge>
+                  ))}
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={pathwayBusy}
+                  onClick={() => void handlePathwayAction()}
+                >
+                  {pathwayBusy ? 'Starting…' : pathway.nextAction.label}{' '}
+                  <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
+                </Button>
+              </div>
+            </LearnerSurfaceCard>
+          </section>
+        ) : null}
 
         {loading ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

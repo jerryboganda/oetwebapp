@@ -116,6 +116,59 @@ export const replaceListeningStructure = (
 export const validateListeningStructure = (paperId: string) =>
   api<ListeningValidationReport>(`/v1/admin/papers/${paperId}/listening/validate`);
 
+// ── Learner: course pathway snapshot ───────────────────────────────────
+//
+// Mirrors `ListeningPathwaySnapshot` from
+// `backend/src/OetLearner.Api/Services/Listening/ListeningPathwayService.cs`.
+// Surfaced at GET /v1/listening-papers/me/pathway (auth-required) and joins
+// completed-attempt, best-scaled, and mock signals into a single readiness
+// stage with one structured next-action.
+
+export type ListeningPathwayStage =
+  | 'not_started'
+  | 'diagnostic'
+  | 'drilling'
+  | 'mini_tests'
+  | 'mock_ready'
+  | 'exam_ready';
+
+export type ListeningPathwayActionKind =
+  | 'start_diagnostic'
+  | 'start_drill'
+  | 'start_mini_test'
+  | 'start_mock'
+  | 'review_results'
+  | 'book_exam';
+
+export interface ListeningPathwayAction {
+  kind: ListeningPathwayActionKind;
+  label: string;
+  drillId: string | null;
+  paperId: string | null;
+  route: string | null;
+}
+
+export interface ListeningPathwayMilestone {
+  code: string;
+  label: string;
+  achieved: boolean;
+  progress: number | null;
+  target: number | null;
+}
+
+export interface ListeningPathwaySnapshot {
+  stage: ListeningPathwayStage;
+  headline: string;
+  bestScaledScore: number | null;
+  submittedAttempts: number;
+  submittedListeningMockAttempts: number;
+  nextAction: ListeningPathwayAction;
+  milestones: ListeningPathwayMilestone[];
+}
+
+export const getListeningPathway = () =>
+  api<ListeningPathwaySnapshot>('/v1/listening-papers/me/pathway');
+
 // ── Canonical scaffold ─────────────────────────────────────────────────────
 
 export const LISTENING_CANONICAL_TOTAL = 42;

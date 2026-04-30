@@ -12,6 +12,16 @@ public static class ListeningLearnerEndpoints
             .RequireAuthorization("LearnerOnly")
             .RequireRateLimiting("PerUser");
 
+        // ── Course pathway snapshot (diagnostic → drills → mocks → ready) ──
+        group.MapGet("/me/pathway", async (
+            IListeningPathwayService pathway, HttpContext http, CancellationToken ct) =>
+        {
+            var snap = await pathway.GetPathwayAsync(http.UserId(), ct);
+            return Results.Ok(snap);
+        })
+            .WithName("GetListeningPathway")
+            .WithSummary("Get the learner's Listening course pathway snapshot");
+
         group.MapGet("/papers/{paperId}/session", async (
             string paperId,
             string? mode,
