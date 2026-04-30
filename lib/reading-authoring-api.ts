@@ -547,6 +547,61 @@ export const updateReadingPolicy = (body: ReadingPolicyDto) =>
 
 export const getReadingHome = () => api<ReadingHomeDto>('/v1/reading/home');
 
+// ── Learner: course pathway snapshot ───────────────────────────────────
+//
+// Mirrors `ReadingPathwaySnapshot` from
+// `backend/src/OetLearner.Api/Services/Reading/ReadingPathwayService.cs`.
+// Surfaced at GET /v1/reading-papers/me/pathway (auth-required) and joins
+// diagnostic + drilling + mock signals into a single readiness stage.
+
+export type ReadingPathwayStage =
+  | 'not_started'
+  | 'diagnostic'
+  | 'drilling'
+  | 'mini_tests'
+  | 'mock_ready'
+  | 'exam_ready';
+
+export type ReadingPathwayActionKind =
+  | 'start_diagnostic'
+  | 'start_drill'
+  | 'start_mini_test'
+  | 'start_mock'
+  | 'review_results'
+  | 'book_exam';
+
+export interface ReadingPathwayAction {
+  kind: ReadingPathwayActionKind;
+  label: string;
+  drillCode: string | null;
+  paperId: string | null;
+  route: string | null;
+}
+
+export interface ReadingPathwayMilestone {
+  code: string;
+  label: string;
+  achieved: boolean;
+  progress: number | null;
+  target: number | null;
+}
+
+export interface ReadingPathwaySnapshot {
+  stage: ReadingPathwayStage;
+  headline: string;
+  bestScaledScore: number | null;
+  openErrorBankCount: number;
+  submittedExamAttempts: number;
+  submittedPracticeAttempts: number;
+  submittedReadingMockAttempts: number;
+  weakestSkillTag: string | null;
+  nextAction: ReadingPathwayAction;
+  milestones: ReadingPathwayMilestone[];
+}
+
+export const getReadingPathway = () =>
+  api<ReadingPathwaySnapshot>('/v1/reading-papers/me/pathway');
+
 export const getReadingStructureLearner = (paperId: string) =>
   api<ReadingLearnerStructureDto>(`/v1/reading-papers/papers/${paperId}/structure`);
 

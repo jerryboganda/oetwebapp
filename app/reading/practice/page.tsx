@@ -47,6 +47,7 @@ import {
   getReadingDrillCatalogue,
   getReadingErrorBank,
   getReadingHome,
+  getReadingPathway,
   startReadingDrill,
   startReadingErrorBankRetest,
   startReadingLearningAttempt,
@@ -55,6 +56,7 @@ import {
   type ReadingErrorBankDto,
   type ReadingHomeDto,
   type ReadingHomePaperDto,
+  type ReadingPathwaySnapshot,
 } from '@/lib/reading-authoring-api';
 
 export default function ReadingPracticePage() {
@@ -63,6 +65,7 @@ export default function ReadingPracticePage() {
   const [home, setHome] = useState<ReadingHomeDto | null>(null);
   const [errorBank, setErrorBank] = useState<ReadingErrorBankDto | null>(null);
   const [drillCatalogue, setDrillCatalogue] = useState<ReadingDrillCatalogueDto | null>(null);
+  const [pathway, setPathway] = useState<ReadingPathwaySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [startingPaperId, setStartingPaperId] = useState<string | null>(null);
@@ -85,6 +88,10 @@ export default function ReadingPracticePage() {
       setHome(homeData);
       setErrorBank(bank);
       setDrillCatalogue(drills);
+      // Pathway snapshot is best-effort; never blocks the hub.
+      void getReadingPathway()
+        .then((snap) => setPathway(snap))
+        .catch(() => setPathway(null));
       // Default the drill paper picker to the first published paper, if any.
       setDrillPaperId((current) => current ?? homeData?.papers?.[0]?.id ?? null);
     } catch (err) {
@@ -160,6 +167,50 @@ export default function ReadingPracticePage() {
     }
   }, [router]);
 
+  // ── Pathway: convert the recommended next action into a real launcher.
+  const handlePathwayAction = useCallback(async () => {
+    if (!pathway) return;
+    const { nextAction } = pathway;
+    setBusyKey('pathway');
+    setErrorMsg(null);
+    try {
+      switch (nextAction.kind) {
+        case 'start_drill': {
+          if (nextAction.paperId && nextAction.drillCode) {
+            const started = await startReadingDrill(nextAction.paperId, nextAction.drillCode);
+            router.push(started.playerRoute);
+            return;
+          }
+          break;
+        }
+        case 'start_mini_test': {
+          if (nextAction.paperId) {
+            const started = await startReadingMiniTest(nextAction.paperId, 10);
+            router.push(started.playerRoute);
+            return;
+          }
+          break;
+        }
+        case 'start_diagnostic':
+        case 'start_mock':
+        case 'review_results':
+        case 'book_exam':
+        default: {
+          if (nextAction.route) {
+            router.push(nextAction.route);
+            return;
+          }
+        }
+      }
+      // Fallback: route-only navigation if the structured launcher could not run.
+      if (nextAction.route) router.push(nextAction.route);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Could not start the recommended step.');
+    } finally {
+      setBusyKey(null);
+    }
+  }, [pathway, router]);
+
   const handleClearEntry = useCallback(
     async (entryId: string) => {
       setClearingEntryId(entryId);
@@ -225,6 +276,65 @@ export default function ReadingPracticePage() {
           timed and Part A cannot be revisited. Use Practice for teaching; switch to a full
           mock when you need exam fidelity.
         </InlineAlert>
+
+        {/* ── Course pathway recommendation ───────────────────────
+            Joins your diagnostic, drill, error-bank, and mock signals
+            into a single readiness stage with one concrete next step. */}
+        {pathway ? (
+          <section aria-label="Course pathway">
+            <LearnerSurfaceCard
+              card={{
+                kind: 'navigation',
+                sourceType: 'frontend_navigation',
+                accent: pathway.stage === 'exam_ready' ? 'emerald' : 'amber',
+                eyebrow: 'YOUR PATHWAY',
+                eyebrowIcon: TrendingUp,
+                title: pathway.headline,
+                description:
+                  pathway.weakestSkillTag
+                    ? `Weakest skill in your error bank: ${pathway.weakestSkillTag}.`
+                    : 'A single recommended next step based on your recent attempts.',
+                metaItems: [
+                  {
+                    icon: CheckCircle2,
+                    label: `${pathway.submittedExamAttempts} exam · ${pathway.submittedPracticeAttempts} practice · ${pathway.submittedReadingMockAttempts} mocks`,
+                  },
+                  pathway.bestScaledScore != null
+                    ? { icon: Sparkles, label: `Best ${pathway.bestScaledScore}/500` }
+                    : { icon: AlertTriangle, label: `${pathway.openErrorBankCount} open errors` },
+                ],
+              }}
+            >
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {pathway.milestones.map((m) => (
+                    <Badge
+                      key={m.code}
+                      variant={m.achieved ? 'success' : 'info'}
+                      title={
+                        m.target != null && m.progress != null
+                          ? `${m.label} (${m.progress}/${m.target})`
+                          : m.label
+                      }
+                    >
+                      {m.achieved ? '✓ ' : ''}
+                      {m.label}
+                    </Badge>
+                  ))}
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={busyKey === 'pathway'}
+                  onClick={() => void handlePathwayAction()}
+                >
+                  {busyKey === 'pathway' ? 'Starting…' : pathway.nextAction.label}{' '}
+                  <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
+                </Button>
+              </div>
+            </LearnerSurfaceCard>
+          </section>
+        ) : null}
 
         {/* ── Learning Mode launcher ──────────────────────────── */}
         <section>
