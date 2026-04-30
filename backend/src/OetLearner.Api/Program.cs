@@ -794,8 +794,27 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningCurriculu
     OetLearner.Api.Services.Listening.ListeningCurriculumService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionService,
     OetLearner.Api.Services.Listening.ListeningExtractionService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionAi,
-    OetLearner.Api.Services.Listening.StubListeningExtractionAi>();
+// Grounded AI extraction is the production default once an AI provider is
+// configured (AI__ApiKey or AI__BaseUrl). Otherwise we fall back to the
+// deterministic stub so the admin UI works end-to-end on dev machines and
+// the 600+ unit tests stay offline. The grounded impl itself catches all
+// failure modes and returns IsStub=true with a reason, so flipping this DI
+// line is safe even before a real key is wired up.
+{
+    var aiKey = builder.Configuration["AI:ApiKey"] ?? builder.Configuration["AI__ApiKey"];
+    var aiBase = builder.Configuration["AI:BaseUrl"] ?? builder.Configuration["AI__BaseUrl"];
+    var aiConfigured = !string.IsNullOrWhiteSpace(aiKey) || !string.IsNullOrWhiteSpace(aiBase);
+    if (aiConfigured)
+    {
+        builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionAi,
+            OetLearner.Api.Services.Listening.GroundedListeningExtractionAi>();
+    }
+    else
+    {
+        builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionAi,
+            OetLearner.Api.Services.Listening.StubListeningExtractionAi>();
+    }
+}
 builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentEntitlementService,
     OetLearner.Api.Services.Content.ContentEntitlementService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.RulebookAdminService>();

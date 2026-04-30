@@ -1,0 +1,73 @@
+{
+  "version": "1.0.0",
+  "kind": "listening",
+  "profession": "medicine",
+  "publishedAt": "2026-04-30T00:00:00Z",
+  "authoritySource": "Dr. Ahmed Hesham — OET Listening Authoring Rulebook v1",
+  "sections": [
+    { "id": "L01", "title": "Canonical 42-item shape", "order": 1 },
+    { "id": "L02", "title": "Part A: short-answer / fill-in-the-blank", "order": 2 },
+    { "id": "L03", "title": "Part B: workplace extracts (3-option MCQ)", "order": 3 },
+    { "id": "L04", "title": "Part C: presentations (3-option MCQ)", "order": 4 },
+    { "id": "L05", "title": "Distractor design", "order": 5 },
+    { "id": "L06", "title": "Transcript evidence", "order": 6 },
+    { "id": "L07", "title": "Speaker attitude (Part C)", "order": 7 },
+    { "id": "L08", "title": "Audio production constraints", "order": 8 }
+  ],
+  "rules": [
+    { "id": "L01.1", "section": "L01", "severity": "critical", "title": "Exactly 42 items, contiguous numbering", "body": "Every authored Listening paper has exactly 42 questions numbered 1..42 with no gaps. The shape is fixed: Part A1 (Q1-12), A2 (Q13-24), B (Q25-30), C1 (Q31-36), C2 (Q37-42).", "appliesTo": "all" },
+    { "id": "L01.2", "section": "L01", "severity": "critical", "title": "24 / 6 / 12 split", "body": "Part A must contain exactly 24 short-answer items (12 in A1 + 12 in A2). Part B must contain exactly 6 three-option MCQ items. Part C must contain exactly 12 three-option MCQ items (6 in C1 + 6 in C2). Any other shape is rejected by the publish gate.", "appliesTo": "all" },
+    { "id": "L01.3", "section": "L01", "severity": "critical", "title": "30/42 ≡ 350/500 anchor", "body": "Listening grading uses the canonical raw→scaled anchor 30/42 ≡ 350/500. Authors never produce or assert a scaled score; the OetScoring service computes it after submit.", "appliesTo": "all" },
+
+    { "id": "L02.1", "section": "L02", "severity": "critical", "title": "Part A items are short-answer, never MCQ", "body": "Part A questions test note-taking from a fast consultation. They are short-answer / fill-in-the-blank only. MCQ is forbidden in Part A.", "appliesTo": "all" },
+    { "id": "L02.2", "section": "L02", "severity": "major", "title": "Accept clinically-sensible spelling variants", "body": "Each Part A item should provide the canonical answer plus 0-N accepted variants (UK/US spelling, common abbreviations, hyphen/space differences). Do NOT accept clinically-different terms.", "appliesTo": "all" },
+    { "id": "L02.3", "section": "L02", "severity": "major", "title": "Stems carry a single, unambiguous gap", "body": "Part A stems are partial note-form sentences with one blank to be completed. They never ask the candidate to write a full sentence.", "appliesTo": "all" },
+
+    { "id": "L03.1", "section": "L03", "severity": "critical", "title": "Part B is exactly 3-option MCQ", "body": "Each Part B item has exactly 3 options labelled A, B, C. Two-option, four-option, multi-select, or true/false formats are forbidden.", "appliesTo": "all" },
+    { "id": "L03.2", "section": "L03", "severity": "major", "title": "Part B targets gist / purpose / concern", "body": "Part B questions probe the gist, speaker's purpose, or main concern of a workplace extract. Detail-trivia questions belong in Part A.", "appliesTo": "all" },
+
+    { "id": "L04.1", "section": "L04", "severity": "critical", "title": "Part C is exactly 3-option MCQ", "body": "Each Part C item has exactly 3 options labelled A, B, C. Other shapes are forbidden.", "appliesTo": "all" },
+    { "id": "L04.2", "section": "L04", "severity": "major", "title": "Part C tests inference, attitude, and detail across a longer extract", "body": "Part C questions probe the speaker's attitude, implied meaning, or longer-range detail across a 6-minute presentation. Stems must be answerable only from the audio, never from general medical knowledge.", "appliesTo": "all" },
+
+    { "id": "L05.1", "section": "L05", "severity": "major", "title": "Distractor categories are explicit", "body": "Every wrong option in Part B / Part C should be tagged with one of: too_strong, too_weak, wrong_speaker, opposite_meaning, reused_keyword. Untagged distractors weaken downstream learner analytics.", "appliesTo": "all" },
+    { "id": "L05.2", "section": "L05", "severity": "major", "title": "No giveaway distractors", "body": "Wrong options must be plausible to a candidate who half-heard the audio. Avoid distractors that are obviously off-topic, ungrammatical, or contradict basic clinical knowledge.", "appliesTo": "all" },
+    { "id": "L05.3", "section": "L05", "severity": "minor", "title": "Reused keywords are a deliberate trap, not a coincidence", "body": "When a wrong option re-uses a content word from the audio, mark its category as reused_keyword and explain why the reused word does NOT support the answer in the per-option why-wrong field.", "appliesTo": "all" },
+
+    { "id": "L06.1", "section": "L06", "severity": "critical", "title": "Every authored item carries a transcript excerpt", "body": "Each question must include a verbatim excerpt from the audio script that supports the correct answer. Excerpts are not exposed to the learner pre-submit.", "appliesTo": "all" },
+    { "id": "L06.2", "section": "L06", "severity": "major", "title": "Time-coded evidence enables jump-to-evidence playback", "body": "When transcriptEvidenceStartMs / transcriptEvidenceEndMs are populated they must be non-negative, end > start, and reference the section audio (not the whole paper).", "appliesTo": "all" },
+
+    { "id": "L07.1", "section": "L07", "severity": "major", "title": "Speaker attitude only on Part C", "body": "speakerAttitude is only meaningful for Part C presentation extracts. Leave it null on Part A and Part B items.", "appliesTo": "all" },
+    { "id": "L07.2", "section": "L07", "severity": "major", "title": "Speaker attitude vocabulary is fixed", "body": "Allowed values: concerned | optimistic | doubtful | critical | neutral | other. Other tags must be rejected and surfaced as an authoring warning.", "appliesTo": "all" },
+
+    { "id": "L08.1", "section": "L08", "severity": "major", "title": "Healthcare-realistic accents and registers", "body": "Audio extracts represent realistic UK / IE / AU / NZ / CA healthcare environments. Accent must be intelligible at exam pace; registers are clinical (consultation, handover, presentation).", "appliesTo": "all" },
+    { "id": "L08.2", "section": "L08", "severity": "minor", "title": "One-play policy is not negotiable", "body": "Listening papers are graded one-play only at exam time. Authoring drafts that depend on rewinding the same chunk twice violate the test format.", "appliesTo": "all" }
+  ],
+  "tables": {
+    "shape": {
+      "totalItems": 42,
+      "partA": 24,
+      "partB": 6,
+      "partC": 12,
+      "partA1Range": [1, 12],
+      "partA2Range": [13, 24],
+      "partBRange": [25, 30],
+      "partC1Range": [31, 36],
+      "partC2Range": [37, 42]
+    },
+    "distractorCategories": [
+      "too_strong",
+      "too_weak",
+      "wrong_speaker",
+      "opposite_meaning",
+      "reused_keyword"
+    ],
+    "speakerAttitudes": [
+      "concerned",
+      "optimistic",
+      "doubtful",
+      "critical",
+      "neutral",
+      "other"
+    ]
+  }
+}

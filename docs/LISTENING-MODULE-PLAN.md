@@ -65,8 +65,12 @@ Mapped to spec sections (1–16). `[exists]` = already shipped, `[gap]` = missin
 > paper-level `listeningTranscriptSegments` array surfaced on the review DTO;
 > first-class accent/speakers metadata still rides inside the JSON blob.
 > Phase 8 ships the `IListeningExtractionAi` seam + `StubListeningExtractionAi`
-> + admin "Propose with AI" path; a grounded-gateway implementation lands in
-> a follow-up commit.
+> + admin "Propose with AI" path **and** the grounded-gateway impl
+> (`GroundedListeningExtractionAi`) wired through `IAiGatewayService` with
+> `RuleKind.Listening` + `AiTaskMode.GenerateListeningStructure` +
+> `AiFeatureCodes.AdminListeningDraft`. Listening rulebooks shipped for
+> medicine + nursing; other professions safely fall back to the deterministic
+> stub via the gateway's `RulebookNotFoundException` catch.
 
 ### Phase 1 — Listening Pathway snapshot **(shipped)**
 
@@ -151,7 +155,7 @@ Admin "Listening Analytics" page mirroring `getReadingAdminAnalytics`:
 - audio-difficulty rating (per-extract accuracy)
 - student readiness (red / amber / green)
 
-### Phase 8 — AI authoring assist **(shipped — IListeningExtractionAi seam + StubListeningExtractionAi + admin endpoint + editor button; grounded-gateway impl pending)**
+### Phase 8 — AI authoring assist **(shipped — grounded gateway: `RuleKind.Listening`, `AiTaskMode.GenerateListeningStructure`, `AiFeatureCodes.AdminListeningDraft`, listening rulebooks for medicine + nursing, `GroundedListeningExtractionAi`, conditional DI on `AI__BaseUrl`/`AI__ApiKey` config)**
 
 Admin uploads Question-Paper PDF + Audio Script PDF + Answer Key PDF →
 AI extraction proposes 42 items via `IAiGatewayService` with a strict JSON
