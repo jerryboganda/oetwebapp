@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -78,6 +79,25 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        // Replace AI provider registrations so tests run against the
+        // deterministic MockAiProvider instead of OpenAi/Anthropic, which
+        // would fail without real credentials. Q3 of the Speaking module
+        // (docs/SPEAKING-MODULE-PLAN.md §6) is now fail-loud on AI errors,
+        // so the previous silent rule-engine fallback is gone — tests must
+        // supply a working provider.
+        builder.ConfigureTestServices(services =>
+        {
+            for (var i = services.Count - 1; i >= 0; i--)
+            {
+                if (services[i].ServiceType == typeof(OetLearner.Api.Services.Rulebook.IAiModelProvider))
+                {
+                    services.RemoveAt(i);
+                }
+            }
+            services.AddSingleton<OetLearner.Api.Services.Rulebook.IAiModelProvider,
+                OetLearner.Api.Services.Rulebook.MockAiProvider>();
+        });
 
         if (_useFirstPartyAuth)
         {

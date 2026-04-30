@@ -1295,6 +1295,68 @@ public static class AdminEndpoints
         .WithSummary("Archives a strategy guide and writes an audit event.")
         .WithAdminWrite("AdminContentPublish");
 
+        // ── Speaking mock sets (Wave 3 of docs/SPEAKING-MODULE-PLAN.md) ──
+        // Curatorial pairing of two speaking role-plays. Permissions reuse
+        // the existing AdminContent* grants — mock sets are a thin
+        // composition over content the AdminContent permission already
+        // governs.
+        admin.MapGet("/speaking/mock-sets", async (AdminService service, CancellationToken ct,
+            string? status, string? professionId)
+            => Results.Ok(await service.ListSpeakingMockSetsAsync(status, professionId, ct)))
+            .WithAdminRead("AdminContentRead");
+
+        admin.MapGet("/speaking/mock-sets/{mockSetId}", async (string mockSetId, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetSpeakingMockSetAsync(mockSetId, ct)))
+            .WithAdminRead("AdminContentRead");
+
+        admin.MapPost("/speaking/mock-sets", async (HttpContext http, AdminSpeakingMockSetCreateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateSpeakingMockSetAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPut("/speaking/mock-sets/{mockSetId}", async (string mockSetId, HttpContext http, AdminSpeakingMockSetUpdateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateSpeakingMockSetAsync(http.AdminId(), http.AdminName(), mockSetId, request, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/speaking/mock-sets/{mockSetId}/publish", async (string mockSetId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.PublishSpeakingMockSetAsync(http.AdminId(), http.AdminName(), mockSetId, ct)))
+            .WithAdminWrite("AdminContentPublish");
+
+        admin.MapPost("/speaking/mock-sets/{mockSetId}/archive", async (string mockSetId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ArchiveSpeakingMockSetAsync(http.AdminId(), http.AdminName(), mockSetId, ct)))
+            .WithAdminWrite("AdminContentPublish");
+
+        // ── Speaking calibration (Wave 4 of docs/SPEAKING-MODULE-PLAN.md) ──
+        // Admin curates gold-marked recordings; tutors then submit their
+        // own rubric for the same recording. Drift report aggregates the
+        // per-tutor mean absolute error so admins can spot outliers.
+        admin.MapGet("/speaking/calibration/samples", async (AdminService service, CancellationToken ct, string? status)
+            => Results.Ok(await service.ListSpeakingCalibrationSamplesAsync(status, ct)))
+            .WithAdminRead("AdminContentRead");
+
+        admin.MapGet("/speaking/calibration/samples/{sampleId}", async (string sampleId, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetSpeakingCalibrationSampleAsync(sampleId, ct)))
+            .WithAdminRead("AdminContentRead");
+
+        admin.MapPost("/speaking/calibration/samples", async (HttpContext http, AdminSpeakingCalibrationSampleCreateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateSpeakingCalibrationSampleAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPut("/speaking/calibration/samples/{sampleId}", async (string sampleId, HttpContext http, AdminSpeakingCalibrationSampleUpdateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateSpeakingCalibrationSampleAsync(http.AdminId(), http.AdminName(), sampleId, request, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/speaking/calibration/samples/{sampleId}/publish", async (string sampleId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.PublishSpeakingCalibrationSampleAsync(http.AdminId(), http.AdminName(), sampleId, ct)))
+            .WithAdminWrite("AdminContentPublish");
+
+        admin.MapPost("/speaking/calibration/samples/{sampleId}/archive", async (string sampleId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ArchiveSpeakingCalibrationSampleAsync(http.AdminId(), http.AdminName(), sampleId, ct)))
+            .WithAdminWrite("AdminContentPublish");
+
+        admin.MapGet("/speaking/calibration/drift", async (AdminService service, CancellationToken ct, int? minSubmissions)
+            => Results.Ok(await service.GetSpeakingCalibrationDriftAsync(minSubmissions ?? 1, ct)))
+            .WithAdminRead("AdminContentRead");
+
         return app;
     }
 

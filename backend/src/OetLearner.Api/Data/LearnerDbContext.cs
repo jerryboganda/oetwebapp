@@ -276,6 +276,21 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ConversationTemplate> ConversationTemplates => Set<ConversationTemplate>();
     public DbSet<FreeTierConfig> FreeTierConfigs => Set<FreeTierConfig>();
 
+    // Wave 3 of docs/SPEAKING-MODULE-PLAN.md - Speaking mock-set composition
+    // (two role-plays as one mock) and per-learner mock-session tracking
+    // (free-tier cap enforcement + combined readiness band snapshot).
+    public DbSet<SpeakingMockSet> SpeakingMockSets => Set<SpeakingMockSet>();
+    public DbSet<SpeakingMockSession> SpeakingMockSessions => Set<SpeakingMockSession>();
+
+    // Wave 4 of docs/SPEAKING-MODULE-PLAN.md - tutor calibration drift +
+    // inline transcript comments. Calibration samples store gold rubric
+    // scores; calibration scores capture each tutor's submitted rubric
+    // for the same sample. Feedback comments are line-keyed so the
+    // learner can see them inline beneath the transcript.
+    public DbSet<SpeakingCalibrationSample> SpeakingCalibrationSamples => Set<SpeakingCalibrationSample>();
+    public DbSet<SpeakingCalibrationScore> SpeakingCalibrationScores => Set<SpeakingCalibrationScore>();
+    public DbSet<SpeakingFeedbackComment> SpeakingFeedbackComments => Set<SpeakingFeedbackComment>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ContentItem>().HasIndex(x => new { x.SubtestCode, x.Status });
@@ -595,6 +610,22 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
 
         // Prediction indexes
         modelBuilder.Entity<PredictionSnapshot>().HasIndex(x => new { x.UserId, x.ExamTypeCode, x.SubtestCode, x.ComputedAt });
+
+        // Wave 3 of docs/SPEAKING-MODULE-PLAN.md - mock-set lookups by
+        // status (admin list / learner published list) and rolling window
+        // counting per learner for the free-tier cap.
+        modelBuilder.Entity<SpeakingMockSet>().HasIndex(x => new { x.Status, x.SortOrder });
+        modelBuilder.Entity<SpeakingMockSession>().HasIndex(x => new { x.UserId, x.StartedAt });
+        modelBuilder.Entity<SpeakingMockSession>().HasIndex(x => x.MockSetId);
+
+        // Wave 4 of docs/SPEAKING-MODULE-PLAN.md - calibration drift +
+        // inline transcript comments. Composite uniqueness on
+        // (SampleId, TutorId) so each tutor submits exactly one rubric
+        // per sample (re-submits update in place).
+        modelBuilder.Entity<SpeakingCalibrationSample>().HasIndex(x => new { x.Status, x.PublishedAt });
+        modelBuilder.Entity<SpeakingCalibrationScore>().HasIndex(x => new { x.SampleId, x.TutorId }).IsUnique();
+        modelBuilder.Entity<SpeakingCalibrationScore>().HasIndex(x => x.TutorId);
+        modelBuilder.Entity<SpeakingFeedbackComment>().HasIndex(x => new { x.AttemptId, x.TranscriptLineIndex });
 
         // Learning content indexes
         modelBuilder.Entity<GrammarLesson>().HasIndex(x => new { x.ExamTypeCode, x.Category, x.Status });

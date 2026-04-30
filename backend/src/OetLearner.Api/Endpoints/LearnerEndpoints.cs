@@ -104,6 +104,51 @@ public static class LearnerEndpoints
         });
         speaking.MapPost("/device-checks", async (HttpContext http, DeviceCheckRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SaveDeviceCheckAsync(http.UserId(), request, ct)));
 
+        // Wave 3 of docs/SPEAKING-MODULE-PLAN.md - speaking mock sets
+        // (two role-plays attempted as one mock). The free-tier rolling
+        // 7-day cap is enforced server-side by StartSpeakingMockSetAsync.
+        speaking.MapGet("/mock-sets", async (HttpContext http, LearnerService service, CancellationToken ct) =>
+            Results.Ok(await service.ListSpeakingMockSetsAsync(http.UserId(), ct)));
+        speaking.MapPost("/mock-sets/{mockSetId}/start", async (HttpContext http, string mockSetId, StartSpeakingMockSetRequest? body, LearnerService service, CancellationToken ct) =>
+            Results.Ok(await service.StartSpeakingMockSetAsync(http.UserId(), mockSetId, body?.Mode ?? "exam", ct)));
+        speaking.MapGet("/mock-sessions/{sessionId}", async (HttpContext http, string sessionId, LearnerService service, CancellationToken ct) =>
+            Results.Ok(await service.GetSpeakingMockSessionAsync(http.UserId(), sessionId, ct)));
+
+        // Wave 5 of docs/SPEAKING-MODULE-PLAN.md - deep-link from a
+        // speaking task into the AI-patient Conversation module so the
+        // learner can practise the same scenario unlimited times. Reuses
+        // ConversationService end-to-end — no new AI provider, no new
+        // grounding code. Free-tier caps come from
+        // IConversationEntitlementService inside CreateSessionAsync.
+        speaking.MapPost("/tasks/{contentId}/self-practice", async (
+            HttpContext http, string contentId,
+            LearnerService service, ConversationService conversation, CancellationToken ct) =>
+            Results.Ok(await service.StartSpeakingSelfPracticeAsync(http.UserId(), contentId, conversation, ct)));
+
+        // Wave 6 of docs/SPEAKING-MODULE-PLAN.md - speaking drills bank.
+        // Filterable by drill kind / profession / criterion focus.
+        speaking.MapGet("/drills", async (
+            HttpContext http,
+            string? kind, string? profession, string? criterion,
+            LearnerService service, CancellationToken ct) =>
+            Results.Ok(await service.ListSpeakingDrillsAsync(http.UserId(), kind, profession, criterion, ct)));
+
+        // Wave 7 of docs/SPEAKING-MODULE-PLAN.md - learner-facing
+        // compliance copy (consent text + score disclaimer + retention
+        // window). Driven by SpeakingComplianceOptions so operators can
+        // tune wording and retention without code changes.
+        speaking.MapGet("/compliance", (
+            Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingComplianceOptions> opts) =>
+        {
+            var o = opts.Value;
+            return Results.Ok(new
+            {
+                consentText = o.ConsentText,
+                scoreDisclaimer = o.ScoreDisclaimer,
+                audioRetentionDays = o.AudioRetentionDays,
+            });
+        });
+
         var reading = v1.MapGroup("/reading");
         reading.MapGet("/home", async (
             HttpContext http,

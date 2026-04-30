@@ -532,6 +532,7 @@ builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeli
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<ExpertOnboardingService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<SpeakingTutorCalibrationService>();
 builder.Services.AddScoped<SponsorService>();
 builder.Services.AddScoped<ContentHierarchyService>();
 builder.Services.AddScoped<ContentDeduplicationService>();
@@ -662,6 +663,12 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Auth.AuthDataRetention
 builder.Services.Configure<OetLearner.Api.Configuration.DataRetentionOptions>(
     builder.Configuration.GetSection("DataRetention"));
 builder.Services.AddHostedService<OetLearner.Api.Services.DataRetentionWorker>();
+
+// Wave 7 of docs/SPEAKING-MODULE-PLAN.md - speaking compliance copy +
+// audio retention. Bound to the "Speaking:Compliance" config section.
+builder.Services.Configure<OetLearner.Api.Configuration.SpeakingComplianceOptions>(
+    builder.Configuration.GetSection("Speaking:Compliance"));
+builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.SpeakingAudioRetentionWorker>();
 
 // Partition-maintenance worker: keeps next-month range partitions pre-created
 // for candidate time-ordered tables (AnalyticsEvents, AuditEvents, AiUsageRecords).
@@ -1113,6 +1120,7 @@ app.MapNotificationEndpoints();
 app.MapLearnerEndpoints();
 app.MapExpertEndpoints();
 app.MapAdminEndpoints();
+app.MapSpeakingCalibrationEndpoints();
 app.MapAiUsageAdminEndpoints();
 app.MapAiMeEndpoints();
 app.MapContentPapersAdminEndpoints();

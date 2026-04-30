@@ -56,6 +56,9 @@ public record DeviceCheckRequest(
     double? NoiseLevel = null,
     bool? NoiseAcceptable = null);
 
+// Wave 3 of docs/SPEAKING-MODULE-PLAN.md.
+public record StartSpeakingMockSetRequest(string? Mode = "exam");
+
 public record ReviewRequestCreateRequest(
     string AttemptId,
     string Subtest,

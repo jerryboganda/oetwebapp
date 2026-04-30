@@ -425,6 +425,156 @@ public static class OetScoring
     }
 
     // -----------------------------------------------------------------------
+    // Speaking projection (full official rubric → 0–500)
+    // -----------------------------------------------------------------------
+    //
+    // Authority: docs/SPEAKING-MODULE-PLAN.md §3 Wave 1, the OET official
+    // descriptors, and the existing Conversation / Pronunciation 70 ≡ 350
+    // anchor. The full Speaking rubric has TWO criterion families:
+    //
+    //   Linguistic (4 criteria, each 0..6, max 24):
+    //     Intelligibility, Fluency, Appropriateness, Grammar/Expression.
+    //
+    //   Clinical Communication (5 criteria, each 0..3, max 15):
+    //     Relationship Building, Patient Perspective, Structure,
+    //     Information Gathering, Information Giving.
+    //
+    // Combined max = 24 + 15 = 39. The composite is normalised to a
+    // 0..100 percentage and projected via the canonical anchor table:
+    //
+    //   0   → 0
+    //   50  → 250  (developing)
+    //   70  → 350  (B pass — universal Speaking; matches Pronunciation /
+    //              Conversation anchor)
+    //   80  → 400
+    //   90  → 450
+    //   100 → 500
+    //
+    // The projection is ADVISORY — the authoritative scaled score still
+    // comes from the AI-gateway-grounded evaluation pipeline, but this
+    // function is the ONE place the rubric→scaled math lives. Endpoints
+    // and UI MUST NOT reimplement it.
+
+    /// <summary>
+    /// Speaking criterion scores for the full official rubric. Linguistic
+    /// criteria are 0–6, clinical communication criteria are 0–3.
+    /// </summary>
+    public sealed record SpeakingCriterionScores(
+        int Intelligibility,
+        int Fluency,
+        int Appropriateness,
+        int GrammarExpression,
+        int RelationshipBuilding,
+        int PatientPerspective,
+        int Structure,
+        int InformationGathering,
+        int InformationGiving);
+
+    /// <summary>Maximum scoreable points for the full Speaking rubric (24 linguistic + 15 clinical).</summary>
+    public const int SpeakingRubricMax = 24 + 15;
+
+    /// <summary>
+    /// Project full Speaking criterion scores onto the 0–500 scaled scale
+    /// using the canonical 70% ≡ 350 anchor.
+    /// </summary>
+    public static int SpeakingProjectedScaled(SpeakingCriterionScores scores)
+    {
+        var linguistic =
+            ClampInt(scores.Intelligibility,    0, 6) +
+            ClampInt(scores.Fluency,            0, 6) +
+            ClampInt(scores.Appropriateness,    0, 6) +
+            ClampInt(scores.GrammarExpression,  0, 6);
+        var clinical =
+            ClampInt(scores.RelationshipBuilding,  0, 3) +
+            ClampInt(scores.PatientPerspective,    0, 3) +
+            ClampInt(scores.Structure,             0, 3) +
+            ClampInt(scores.InformationGathering,  0, 3) +
+            ClampInt(scores.InformationGiving,     0, 3);
+        var pct = (linguistic + clinical) * 100.0 / SpeakingRubricMax;
+        return SpeakingProjectedScaledFromPercentage(pct);
+    }
+
+    /// <summary>
+    /// Project a 0–100 composite percentage onto the 0–500 scale. Exposed
+    /// for callers that already have a normalised percentage (e.g. legacy
+    /// evaluations that don't carry the per-criterion breakdown).
+    /// </summary>
+    public static int SpeakingProjectedScaledFromPercentage(double pct0To100)
+    {
+        if (double.IsNaN(pct0To100)) return 0;
+        var p = Math.Clamp(pct0To100, 0.0, 100.0);
+        (double From, double To, int ScaledFrom, int ScaledTo)[] anchors =
+        {
+            (0,   50,  0,   250),
+            (50,  70,  250, 350),
+            (70,  80,  350, 400),
+            (80,  90,  400, 450),
+            (90,  100, 450, 500),
+        };
+        foreach (var (f, t, sf, st) in anchors)
+        {
+            if (p >= f && p <= t)
+            {
+                var ratio = (p - f) / (t - f == 0 ? 1 : (t - f));
+                return (int)Math.Round(sf + ratio * (st - sf));
+            }
+        }
+        return ScaledMax;
+    }
+
+    /// <summary>
+    /// Project full Speaking criterion scores into a Speaking pass/fail result.
+    /// </summary>
+    public static SpeakingResult SpeakingProjectedBand(SpeakingCriterionScores scores)
+        => GradeSpeaking(SpeakingProjectedScaled(scores));
+
+    // -----------------------------------------------------------------------
+    // Speaking readiness band (advisory, learner-facing)
+    // -----------------------------------------------------------------------
+    //
+    // Spec §10 readiness ladder. Maps a scaled 0–500 score to a typed band
+    // so endpoints and UIs never compare to 350/300 inline. Authoritative
+    // pass/fail still comes from <see cref="IsSpeakingPass"/>.
+    //
+    //   < 250            → NotReady
+    //   250 ≤ s < 300    → Developing
+    //   300 ≤ s < 350    → Borderline (just under pass line)
+    //   350 ≤ s < 420    → ExamReady (at/above pass line)
+    //   ≥ 420            → Strong
+
+    /// <summary>Advisory readiness band per Spec §10.</summary>
+    public enum SpeakingReadinessBand
+    {
+        NotReady = 0,
+        Developing = 1,
+        Borderline = 2,
+        ExamReady = 3,
+        Strong = 4,
+    }
+
+    /// <summary>Map a scaled 0–500 Speaking score to a readiness band.</summary>
+    public static SpeakingReadinessBand SpeakingReadinessBandFromScaled(int scaled)
+    {
+        var s = ClampInt(scaled, ScaledMin, ScaledMax);
+        if (s < 250) return SpeakingReadinessBand.NotReady;
+        if (s < 300) return SpeakingReadinessBand.Developing;
+        if (s < ScaledPassGradeB) return SpeakingReadinessBand.Borderline;
+        if (s < 420) return SpeakingReadinessBand.ExamReady;
+        return SpeakingReadinessBand.Strong;
+    }
+
+    /// <summary>Stable wire-format code for a <see cref="SpeakingReadinessBand"/>.</summary>
+    public static string SpeakingReadinessBandCode(SpeakingReadinessBand band) => band switch
+    {
+        SpeakingReadinessBand.NotReady   => "not_ready",
+        SpeakingReadinessBand.Developing => "developing",
+        SpeakingReadinessBand.Borderline => "borderline",
+        SpeakingReadinessBand.ExamReady  => "exam_ready",
+        SpeakingReadinessBand.Strong     => "strong",
+        _ => "not_ready",
+    };
+
+    // -----------------------------------------------------------------------
     // Advisory tier (readiness messaging)
     // -----------------------------------------------------------------------
     //

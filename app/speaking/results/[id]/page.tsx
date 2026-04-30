@@ -15,6 +15,8 @@ import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { fetchPronunciationSpeakingLinked, fetchSpeakingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
+import { SpeakingScoreDisclaimer } from '@/components/domain/SpeakingScoreDisclaimer';
 import type { SpeakingResult } from '@/lib/mock-data';
 
 type PronunciationLinkedAssessment = {
@@ -29,6 +31,15 @@ type PronunciationLinkedAssessment = {
   projectedSpeakingGrade: string;
   createdAt: string;
 };
+
+type SpeakingCriterion = NonNullable<SpeakingResult['criteria']>[number];
+
+function criterionLabel(code: string) {
+  return code
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (m) => m.toUpperCase())
+    .trim();
+}
 
 export default function SpeakingResultSummary() {
   const params = useParams();
@@ -127,6 +138,13 @@ export default function SpeakingResultSummary() {
     );
   }
 
+  const strongestCriterion = result.criteria?.reduce<SpeakingCriterion | undefined>((best, item) => (
+    !best || item.score / Math.max(1, item.max) > best.score / Math.max(1, best.max) ? item : best
+  ), undefined);
+  const weakestCriterion = result.criteria?.reduce<SpeakingCriterion | undefined>((weakest, item) => (
+    !weakest || item.score / Math.max(1, item.max) < weakest.score / Math.max(1, weakest.max) ? item : weakest
+  ), undefined);
+
   return (
     <LearnerDashboardShell pageTitle="Performance Summary">
       <div className="space-y-6">
@@ -142,7 +160,11 @@ export default function SpeakingResultSummary() {
           <strong>{result.methodLabel}:</strong> {result.learnerDisclaimer}
         </InlineAlert>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {/* Wave 7: standardised "Estimated score, not official OET"
+            disclaimer banner. Required on every speaking results page. */}
+        <SpeakingScoreDisclaimer />
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
           <Card className="p-4">
             <p className="text-xs font-bold uppercase tracking-widest text-muted">Exam Family</p>
             <p className="mt-2 text-base font-bold text-navy">{result.examFamilyLabel}</p>
@@ -155,6 +177,18 @@ export default function SpeakingResultSummary() {
             <p className="text-xs font-bold uppercase tracking-widest text-muted">Provenance</p>
             <p className="mt-2 text-base font-bold text-navy">{result.provenanceLabel}</p>
           </Card>
+          <Card className="p-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted">Strongest</p>
+            <p className="mt-2 text-base font-bold text-navy">
+              {strongestCriterion ? criterionLabel(strongestCriterion.criterionCode) : 'More evidence needed'}
+            </p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted">Next focus</p>
+            <p className="mt-2 text-base font-bold text-navy">
+              {weakestCriterion ? criterionLabel(weakestCriterion.criterionCode) : 'Phrasing drill'}
+            </p>
+          </Card>
         </div>
 
         {result.humanReviewRecommended ? (
@@ -166,15 +200,36 @@ export default function SpeakingResultSummary() {
         <MotionSection>
           <Card className="p-8 flex flex-col md:flex-row items-center gap-8">
             <div className="flex-1 text-center md:text-left">
-              <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+              <div className="flex items-center justify-center md:justify-start gap-2 mb-2 flex-wrap">
                 <span className="text-xs font-bold text-muted uppercase tracking-widest">Estimated Score Range</span>
                 <Badge variant={result.confidence === 'High' ? 'success' : result.confidence === 'Medium' ? 'warning' : 'danger'} size="sm">
                   {result.confidence} Band
                 </Badge>
+                {result.readinessBandLabel ? (
+                  <Badge
+                    variant={
+                      result.readinessBand === 'strong' || result.readinessBand === 'exam_ready'
+                        ? 'success'
+                        : result.readinessBand === 'borderline'
+                          ? 'warning'
+                          : 'danger'
+                    }
+                    size="sm"
+                  >
+                    {result.readinessBandLabel}
+                  </Badge>
+                ) : null}
               </div>
               <div className="text-6xl font-black text-navy tracking-tighter mb-4">
                 {result.scoreRange}
               </div>
+              {typeof result.estimatedScaledScore === 'number' && typeof result.passThreshold === 'number' ? (
+                <p className="text-xs text-muted mb-3">
+                  Estimated <strong className="text-navy">{result.estimatedScaledScore}/500</strong> · pass threshold{' '}
+                  <strong className="text-navy">{result.passThreshold}/500</strong>
+                  {typeof result.rubricMax === 'number' ? <> · advisory rubric anchor 70/100 ≡ {result.passThreshold}/500</> : null}
+                </p>
+              ) : null}
               <p className="text-sm text-muted leading-relaxed max-w-md">
                 {result.learnerDisclaimer}
               </p>
@@ -193,9 +248,83 @@ export default function SpeakingResultSummary() {
                   <UserCheck className="w-5 h-5" /> Request Tutor Review
                 </Button>
               </Link>
+              {/* Wave 5: deep-link this attempt's scenario into the
+                  AI-patient Conversation module for unlimited
+                  rehearsal. Falls back to no button when the result
+                  has no source taskId. */}
+              {result.taskId ? (
+                <SpeakingSelfPracticeButton
+                  taskId={result.taskId}
+                  label="Practise with AI patient"
+                />
+              ) : null}
             </div>
           </Card>
         </MotionSection>
+
+        {result.criteria && result.criteria.length > 0 ? (
+          <MotionSection delayIndex={1}>
+            <Card className="p-8">
+              <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+                <div>
+                  <h2 className="text-lg font-black text-navy">Criterion-by-criterion breakdown</h2>
+                  <p className="text-xs text-muted mt-1">
+                    OET Speaking has nine advisory criteria — four linguistic (each scored out of 6) and five clinical-communication (each scored out of 3).
+                  </p>
+                </div>
+                {result.criteriaSource ? (
+                  <Badge
+                    variant={result.criteriaSource === 'ai_grounded' ? 'success' : 'warning'}
+                    size="sm"
+                  >
+                    {result.criteriaSource === 'ai_grounded' ? 'AI grounded' : 'Rulebook fallback'}
+                  </Badge>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {(['linguistic', 'clinical'] as const).map((family) => {
+                  const items = result.criteria!.filter((c) => c.family === family);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={family} className="rounded-2xl border border-border p-4">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted mb-3">
+                        {family === 'linguistic' ? 'Linguistic (0–6)' : 'Clinical communication (0–3)'}
+                      </p>
+                      <ul className="space-y-3">
+                        {items.map((criterion) => {
+                          const pct = criterion.max > 0 ? Math.min(100, Math.max(0, (criterion.score / criterion.max) * 100)) : 0;
+                          const label = criterionLabel(criterion.criterionCode);
+                          return (
+                            <li key={criterion.criterionCode}>
+                              <div className="flex items-baseline justify-between gap-3">
+                                <span className="text-sm font-semibold text-navy">{label}</span>
+                                <span className="font-mono text-sm tabular-nums text-navy">
+                                  {criterion.score}/{criterion.max}
+                                </span>
+                              </div>
+                              <div className="mt-1 h-1.5 rounded-full bg-background-light overflow-hidden">
+                                <div
+                                  className="h-full bg-primary transition-all"
+                                  style={{ width: `${pct}%` }}
+                                  aria-hidden="true"
+                                />
+                              </div>
+                              {criterion.linkedRuleIds && criterion.linkedRuleIds.length > 0 ? (
+                                <p className="mt-1 text-[11px] text-muted">
+                                  Linked rules: {criterion.linkedRuleIds.join(', ')}
+                                </p>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </MotionSection>
+        ) : null}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <MotionSection delayIndex={1}>

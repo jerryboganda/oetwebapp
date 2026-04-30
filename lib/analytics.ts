@@ -126,6 +126,15 @@ const TRACKED_EVENTS = [
   'speaking_cbt_environment_confirmed',
   'speaking_cbt_paper_acknowledged',
   'speaking_cbt_paper_destroyed',
+  // Speaking module — strict exam-mode time enforcement
+  // (Wave 2 of docs/SPEAKING-MODULE-PLAN.md). Fires once per attempt
+  // when the audible 30-second warning plays.
+  'speaking_time_warning',
+  // Speaking module — mock-set orchestrator events (Wave 3 of
+  // docs/SPEAKING-MODULE-PLAN.md). Two role-plays attempted as one mock.
+  'speaking_mock_set_card_opened',
+  'speaking_mock_set_started_orchestrator',
+  'speaking_mock_set_card_opened',
   // Marketplace events
   'marketplace_page_viewed',
   'marketplace_submission_created',

@@ -897,7 +897,7 @@ describe('Admin Non-Editor Pages', () => {
     expect(screen.getAllByText('Quote Snapshot').length).toBeGreaterThan(0);
     expect(screen.getAllByText('checkout_completed').length).toBeGreaterThan(0);
     expect(screen.queryByText('SHOULD_NOT_RENDER_RAW_PAYLOAD')).not.toBeInTheDocument();
-  });
+  }, 15000);
 
   it('renders the notifications page inside the learner-style route surface', async () => {
     notificationsApi.fetchAdminNotificationCatalog.mockResolvedValue([

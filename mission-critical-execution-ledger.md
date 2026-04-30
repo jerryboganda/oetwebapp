@@ -49,6 +49,27 @@ Mode: local/GitHub-only. No production VPS deployment, no production Docker comm
 - `cmd /c npm test` - 113 files / 675 tests passed.
 - `cmd /c npm run backend:test` - 601 backend tests passed.
 
+## Speaking Module Plan (docs/SPEAKING-MODULE-PLAN.md) — 2026-04-30 closeout
+
+All seven waves complete. Final gate evidence (TRX `<Counters/>`):
+`total="813" executed="813" passed="813" failed="0" error="0"`.
+
+| Wave | Headline artefacts |
+|---|---|
+| 1 — Stable criterion-keyed feedback contract | `OetScoring.SpeakingProjectedScaled`, `SpeakingReadinessBand` enum, 9-criterion summary projection. |
+| 2 — Interlocutor card + 3-min prep + 5-min timer | `InterlocutorCard` entity, learner-side projection that strips it, prep/roleplay timer enforcement. |
+| 3 — Speaking mock set | `SpeakingMockSet` entity, paired-attempt orchestrator routes, admin CRUD page. |
+| 4 — Tutor calibration + transcript comments | `SpeakingCalibrationSample`/`Score`, `SpeakingFeedbackComment`, drift dashboard, expert calibration page, inline-comments UI. |
+| 5 — AI patient deep-link | `LearnerService.SpeakingSelfPractice.cs` partial, `POST /v1/speaking/tasks/{id}/self-practice` (delegates to `ConversationService.CreateSessionAsync`, **no new AI provider**), shared `SpeakingSelfPracticeButton` on task + results pages. |
+| 6 — Drills bank + pathway | 6 seeded `speaking_drill` `ContentItem`s (schema-free encoding via `ContentType`+`ScenarioType`), `LearnerService.SpeakingDrills.cs`, `GET /v1/speaking/drills?kind=&profession=&criterion=`, `app/speaking/drills/page.tsx`, "Speaking Foundations" callout in Learning Paths. |
+| 7 — Compliance polish | `SpeakingComplianceOptions` (consent + disclaimer + 365-day retention bound to `Speaking:Compliance`), `speaking_recording_accessed` `AuditEvent` on every tutor audio stream, `GET /v1/speaking/compliance`, always-on `SpeakingScoreDisclaimer` banner on results, `SpeakingAudioRetentionWorker` `BackgroundService` mirroring `ConversationAudioRetentionWorker`. |
+
+Verification commands run from repo root and `backend/`:
+
+- `npx tsc --noEmit` → 0 errors.
+- `npm run lint` → 0 errors / 0 warnings.
+- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj` → 813/813 passed (TRX `<Counters/>` confirms 0 failed / 0 error).
+
 ## Final Count Evidence
 
 - Routes: 241 (`app/**/page.tsx`).

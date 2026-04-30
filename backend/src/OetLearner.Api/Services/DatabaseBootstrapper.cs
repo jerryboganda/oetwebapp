@@ -70,6 +70,9 @@ public static class DatabaseBootstrapper
                 await SeedData.EnsureDemoOperationalStateAsync(db, cancellationToken);
             }
             await SeedData.EnsureDemoMediaAsync(db, storage, cancellationToken);
+            // Wave 3 of docs/SPEAKING-MODULE-PLAN.md - seed canonical
+            // speaking mock set when both st-001 and st-002 exist.
+            await SeedData.EnsureSpeakingMockSetsAsync(db, cancellationToken);
         }
     }
 

@@ -618,6 +618,142 @@ export function conversationProjectedBand(
 }
 
 // ---------------------------------------------------------------------------
+// Speaking projection (full official rubric → 0–500)
+// ---------------------------------------------------------------------------
+//
+// Authority: docs/SPEAKING-MODULE-PLAN.md §3 Wave 1 and the canonical
+// 70 ≡ 350 anchor shared with Pronunciation / Conversation.
+//
+//   Linguistic (4 criteria, each 0..6, max 24):
+//     intelligibility, fluency, appropriateness, grammarExpression.
+//
+//   Clinical Communication (5 criteria, each 0..3, max 15):
+//     relationshipBuilding, patientPerspective, structure,
+//     informationGathering, informationGiving.
+//
+// Combined max = 39. The composite is normalised to a 0..100 percentage
+// and projected via the canonical anchor table:
+//
+//   0   → 0
+//   50  → 250
+//   70  → 350 (B pass — universal Speaking)
+//   80  → 400
+//   90  → 450
+//   100 → 500
+//
+// Advisory only — the authoritative scaled score still comes from the
+// AI-gateway-grounded evaluation pipeline. This function is the ONE
+// place the rubric→scaled math lives on the client. UIs and helpers
+// MUST NOT reimplement it.
+
+/** Speaking criterion scores for the full official rubric. */
+export interface SpeakingCriterionScores {
+  /** 0–6 */ readonly intelligibility: number;
+  /** 0–6 */ readonly fluency: number;
+  /** 0–6 */ readonly appropriateness: number;
+  /** 0–6 */ readonly grammarExpression: number;
+  /** 0–3 */ readonly relationshipBuilding: number;
+  /** 0–3 */ readonly patientPerspective: number;
+  /** 0–3 */ readonly structure: number;
+  /** 0–3 */ readonly informationGathering: number;
+  /** 0–3 */ readonly informationGiving: number;
+}
+
+/** Maximum scoreable points for the full Speaking rubric. */
+export const SPEAKING_RUBRIC_MAX = 24 + 15;
+
+const SPEAKING_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0],
+  [50, 250],
+  [70, 350],
+  [80, 400],
+  [90, 450],
+  [100, 500],
+] as const;
+
+/**
+ * Project a 0–100 composite percentage onto the OET Speaking 0–500 scale.
+ * Used by callers that already have a normalised percentage.
+ */
+export function speakingProjectedScaledFromPercentage(pct0To100: number): number {
+  if (!Number.isFinite(pct0To100)) return 0;
+  const p = Math.max(0, Math.min(100, pct0To100));
+  for (let i = 0; i < SPEAKING_ANCHORS.length - 1; i++) {
+    const [fromP, fromS] = SPEAKING_ANCHORS[i];
+    const [toP, toS] = SPEAKING_ANCHORS[i + 1];
+    if (p >= fromP && p <= toP) {
+      const span = toP - fromP || 1;
+      const ratio = (p - fromP) / span;
+      return Math.round(fromS + ratio * (toS - fromS));
+    }
+  }
+  return OET_SCALED_MAX;
+}
+
+/**
+ * Project full Speaking criterion scores onto the 0–500 scaled scale
+ * using the canonical 70% ≡ 350 anchor.
+ */
+export function speakingProjectedScaled(scores: SpeakingCriterionScores): number {
+  const c6 = (v: number) => Math.max(0, Math.min(6, Number.isFinite(v) ? v : 0));
+  const c3 = (v: number) => Math.max(0, Math.min(3, Number.isFinite(v) ? v : 0));
+  const linguistic =
+    c6(scores.intelligibility) +
+    c6(scores.fluency) +
+    c6(scores.appropriateness) +
+    c6(scores.grammarExpression);
+  const clinical =
+    c3(scores.relationshipBuilding) +
+    c3(scores.patientPerspective) +
+    c3(scores.structure) +
+    c3(scores.informationGathering) +
+    c3(scores.informationGiving);
+  const pct = ((linguistic + clinical) * 100) / SPEAKING_RUBRIC_MAX;
+  return speakingProjectedScaledFromPercentage(pct);
+}
+
+/** Project full Speaking criterion scores into a PassFailResult. */
+export function speakingProjectedBand(scores: SpeakingCriterionScores): PassFailResult {
+  return gradeSpeaking(speakingProjectedScaled(scores));
+}
+
+// ---------------------------------------------------------------------------
+// Speaking readiness band (advisory, learner-facing)
+// ---------------------------------------------------------------------------
+//
+// Spec §10. Maps a scaled 0–500 score to a typed band so endpoints and
+// UIs never compare to 350/300 inline. Authoritative pass/fail still
+// comes from {@link isSpeakingPass} / {@link gradeSpeaking}.
+
+export type SpeakingReadinessBand =
+  | 'not_ready'
+  | 'developing'
+  | 'borderline'
+  | 'exam_ready'
+  | 'strong';
+
+/** Map a scaled 0–500 Speaking score to a readiness band. */
+export function speakingReadinessBandFromScaled(scaled: number): SpeakingReadinessBand {
+  const s = clampInt(scaled, OET_SCALED_MIN, OET_SCALED_MAX);
+  if (s < 250) return 'not_ready';
+  if (s < 300) return 'developing';
+  if (s < OET_SCALED_PASS_B) return 'borderline';
+  if (s < 420) return 'exam_ready';
+  return 'strong';
+}
+
+/** Human-readable label for a {@link SpeakingReadinessBand}. */
+export function speakingReadinessBandLabel(band: SpeakingReadinessBand): string {
+  switch (band) {
+    case 'not_ready': return 'Not ready';
+    case 'developing': return 'Developing';
+    case 'borderline': return 'Borderline';
+    case 'exam_ready': return 'Exam-ready';
+    case 'strong': return 'Strong';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Display formatting
 // ---------------------------------------------------------------------------
 

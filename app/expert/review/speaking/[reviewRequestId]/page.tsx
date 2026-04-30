@@ -94,6 +94,10 @@ function pickLatestDraft(localDraft: DraftCandidate | null, serverDraft: DraftCa
   return new Date(localDraft.updatedAt).getTime() >= new Date(serverDraft.updatedAt).getTime() ? localDraft : serverDraft;
 }
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
 export default function SpeakingReviewWorkspace() {
   const params = useParams();
   const reviewRequestId = params?.reviewRequestId as string | undefined;
@@ -536,13 +540,71 @@ export default function SpeakingReviewWorkspace() {
 
             <TabPanel id="rolecard" activeTab={activeTab} className="h-full">
               {reviewDetail && (
-                <SpeakingRoleCard
-                  role={reviewDetail.roleCard.role}
-                  setting={reviewDetail.roleCard.setting}
-                  patient={reviewDetail.roleCard.patient}
-                  task={reviewDetail.roleCard.task}
-                  background={reviewDetail.roleCard.background}
-                />
+                <div className="space-y-4">
+                  <SpeakingRoleCard
+                    role={reviewDetail.roleCard.role}
+                    setting={reviewDetail.roleCard.setting}
+                    patient={reviewDetail.roleCard.patient}
+                    task={reviewDetail.roleCard.task}
+                    background={reviewDetail.roleCard.background}
+                    tasks={reviewDetail.roleCard.tasks}
+                    patientEmotion={reviewDetail.roleCard.patientEmotion}
+                    communicationGoal={reviewDetail.roleCard.communicationGoal}
+                    clinicalTopic={reviewDetail.roleCard.clinicalTopic}
+                    prepTimeSeconds={reviewDetail.roleCard.prepTimeSeconds}
+                    roleplayTimeSeconds={reviewDetail.roleCard.roleplayTimeSeconds}
+                    disclaimer={reviewDetail.roleCard.disclaimer}
+                  />
+
+                  {(reviewDetail.roleCard.warmUpQuestions?.length ?? 0) > 0 ? (
+                    <div className="rounded-2xl border border-border bg-background-light p-4">
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">Warm-up questions</p>
+                      <ul className="mt-3 space-y-2 text-sm text-navy">
+                        {reviewDetail.roleCard.warmUpQuestions?.map((question, index) => (
+                          <li key={`${question}-${index}`}><span className="font-bold text-primary">{index + 1}.</span> {question}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {reviewDetail.roleCard.interlocutorCard ? (
+                    <div className="rounded-2xl border border-warning/30 bg-amber-50 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-black text-navy">Hidden interlocutor card</p>
+                        <Badge variant="warning">Tutor only</Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-relaxed text-warning/80">
+                        This card is intentionally hidden from learner task endpoints and is used only for expert/tutor context.
+                      </p>
+                      <div className="mt-4 space-y-3 text-sm text-navy">
+                        {String((reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).patientProfile ?? (reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).background ?? (reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).hiddenInformation ?? '').trim() ? (
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-widest text-muted">Patient profile</p>
+                            <p className="mt-1 leading-relaxed">
+                              {String((reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).patientProfile ?? (reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).background ?? (reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).hiddenInformation)}
+                            </p>
+                          </div>
+                        ) : null}
+                        {stringList((reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).cuePrompts ?? (reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).prompts ?? (reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).objectives).length > 0 ? (
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-widest text-muted">Cue prompts</p>
+                            <ul className="mt-2 space-y-2">
+                              {stringList((reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).cuePrompts ?? (reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).prompts ?? (reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).objectives).map((prompt, index) => (
+                                <li key={`${prompt}-${index}`}><span className="font-bold text-primary">{index + 1}.</span> {prompt}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {String((reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).privateNotes ?? '').trim() ? (
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-widest text-muted">Private notes</p>
+                            <p className="mt-1 leading-relaxed">{String((reviewDetail.roleCard.interlocutorCard as Record<string, unknown>).privateNotes)}</p>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               )}
             </TabPanel>
 

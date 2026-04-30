@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
@@ -85,6 +86,79 @@ public static class ContentPapersAdminEndpoints
             return Results.NoContent();
         })
         .RequireAuthorization("AdminContentPublish")
+        .RequireRateLimiting("PerUserWrite");
+
+        // Speaking-specific structure editor. Hidden interlocutor data stays
+        // behind the admin gate and is never exposed through learner routes.
+        group.MapGet("/{id}/speaking-structure", async (
+            string id, LearnerDbContext db, CancellationToken ct) =>
+        {
+            var paper = await db.ContentPapers
+                .Include(p => p.Assets)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (paper is null) return Results.NotFound();
+            if (!string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(new { error = "This paper is not a speaking paper." });
+            }
+
+            return Results.Ok(new
+            {
+                paperId = paper.Id,
+                structure = SpeakingContentStructure.ExtractStructure(paper.ExtractedTextJson),
+                validation = SpeakingContentStructure.Validate(paper),
+            });
+        })
+        .RequireAuthorization("AdminContentWrite")
+        .RequireRateLimiting("PerUserWrite");
+
+        group.MapPut("/{id}/speaking-structure", async (
+            string id,
+            SpeakingStructureSaveDto dto,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var paper = await db.ContentPapers
+                .Include(p => p.Assets)
+                .FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (paper is null) return Results.NotFound();
+            if (!string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(new { error = "This paper is not a speaking paper." });
+            }
+
+            if (dto.Structure.ValueKind != JsonValueKind.Object)
+            {
+                return Results.BadRequest(new { error = "speaking structure object is required." });
+            }
+
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            paper.ExtractedTextJson = SpeakingContentStructure.ReplaceStructure(paper.ExtractedTextJson, dto.Structure);
+            paper.UpdatedAt = DateTimeOffset.UtcNow;
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = adminId,
+                ActorName = adminId,
+                Action = "ContentPaperSpeakingStructureUpdated",
+                ResourceType = "ContentPaper",
+                ResourceId = paper.Id,
+                Details = paper.Title,
+            });
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new
+            {
+                paperId = paper.Id,
+                structure = SpeakingContentStructure.ExtractStructure(paper.ExtractedTextJson),
+                validation = SpeakingContentStructure.Validate(paper),
+                updatedAt = paper.UpdatedAt,
+            });
+        })
+        .RequireAuthorization("AdminContentWrite")
         .RequireRateLimiting("PerUserWrite");
 
         // ── Asset attach / remove ──────────────────────────────────────────
@@ -228,3 +302,5 @@ public sealed record ChunkedUploadStartDto(
     string DeclaredMimeType,
     long DeclaredSizeBytes,
     string? IntendedRole);
+
+public sealed record SpeakingStructureSaveDto(JsonElement Structure);

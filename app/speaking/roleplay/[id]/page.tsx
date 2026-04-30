@@ -27,9 +27,16 @@ export default function RoleCardPreview() {
 
   const [card, setCard] = useState<RoleCard | null>(null);
   const [loading, setLoading] = useState(true);
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(() => (
+    typeof window === 'undefined' ? '' : window.localStorage.getItem(`speaking-prep:${id}:notes`) ?? ''
+  ));
   const [selectedMode, setSelectedMode] = useState<TaskMode>('self');
   const [prepRunning, setPrepRunning] = useState(true);
+  const [layLanguagePlan, setLayLanguagePlan] = useState(() => (
+    typeof window === 'undefined' ? '' : window.localStorage.getItem(`speaking-prep:${id}:lay-language-plan`) ?? ''
+  ));
+  const prepTimeSeconds = card?.prepTimeSeconds ?? 180;
+  const roleplayTimeSeconds = card?.roleplayTimeSeconds ?? 300;
 
   useEffect(() => {
     fetchRoleCard(id)
@@ -37,6 +44,14 @@ export default function RoleCardPreview() {
       .catch(() => setCard(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    window.localStorage.setItem(`speaking-prep:${id}:notes`, notes);
+  }, [id, notes]);
+
+  useEffect(() => {
+    window.localStorage.setItem(`speaking-prep:${id}:lay-language-plan`, layLanguagePlan);
+  }, [id, layLanguagePlan]);
 
   const handleStartTask = () => {
     analytics.track('task_started', { taskId: id, subtest: 'speaking', mode: selectedMode });
@@ -68,7 +83,7 @@ export default function RoleCardPreview() {
       navActions={
         <Timer
           mode="countdown"
-          initialSeconds={180}
+          initialSeconds={prepTimeSeconds}
           running={prepRunning}
           onComplete={() => setPrepRunning(false)}
           size="md"
@@ -85,10 +100,14 @@ export default function RoleCardPreview() {
           description="Use the preparation window to read the card, plan your opening, and choose a practice mode before the recorder starts."
           highlights={[
             { icon: User, label: 'Role', value: card.profession },
-            { icon: ShieldCheck, label: 'Prep timer', value: prepRunning ? 'Running' : 'Finished' },
+            { icon: ShieldCheck, label: 'Prep timer', value: prepRunning ? `${Math.round(prepTimeSeconds / 60)} min running` : 'Finished' },
             { icon: FileText, label: 'Setting', value: card.setting },
           ]}
         />
+
+        <InlineAlert variant="warning">
+          {card.disclaimer ?? 'Practice estimate only. This is not an official OET score or result.'}
+        </InlineAlert>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <section className="flex flex-col">
@@ -111,6 +130,13 @@ export default function RoleCardPreview() {
               patient={card.patient}
               task={card.brief}
               background={card.background}
+              tasks={card.tasks}
+              patientEmotion={card.patientEmotion}
+              communicationGoal={card.communicationGoal}
+              clinicalTopic={card.clinicalTopic}
+              prepTimeSeconds={prepTimeSeconds}
+              roleplayTimeSeconds={roleplayTimeSeconds}
+              disclaimer={card.disclaimer}
             />
 
             {/* Computer-based Speaking paper rule notice (rulebook RULE_61/RULE_75 + RULE_62/RULE_76). */}
@@ -142,6 +168,19 @@ export default function RoleCardPreview() {
                 ))}
               </ul>
             </div>
+
+            {(card.warmUpQuestions?.length ?? 0) > 0 && (
+              <div className="rounded-2xl border border-border bg-background-light p-4">
+                <p className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">Warm-up prompts</p>
+                <ul className="space-y-2">
+                  {card.warmUpQuestions?.map((question, index) => (
+                    <li key={`${question}-${index}`} className="text-sm leading-relaxed text-navy">
+                      <span className="font-bold text-primary">{index + 1}.</span> {question}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Card>
         </section>
 
@@ -162,8 +201,24 @@ export default function RoleCardPreview() {
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Jot down your opening, key points, or questions here..."
+                placeholder="Jot down your opening, key points, patient concern, and final safety-netting..."
                 className="flex-1 p-4 text-sm text-navy resize-none focus:outline-none leading-relaxed placeholder:text-muted"
+              />
+            </Card>
+
+            <Card className="p-5">
+              <label htmlFor="lay-language-plan" className="text-xs font-bold text-muted uppercase tracking-widest">
+                Lay-language plan
+              </label>
+              <p className="mt-1 text-sm leading-relaxed text-muted">
+                Convert clinical terms into patient-friendly language before you start.
+              </p>
+              <textarea
+                id="lay-language-plan"
+                value={layLanguagePlan}
+                onChange={(e) => setLayLanguagePlan(e.target.value)}
+                placeholder="Example: 'bronchodilator' -> 'medicine that opens the airways'..."
+                className="mt-3 min-h-28 w-full rounded-2xl border border-border bg-background-light p-4 text-sm leading-relaxed text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </Card>
 
@@ -196,7 +251,7 @@ export default function RoleCardPreview() {
               <InlineAlert variant="info">
                 {selectedMode === 'self'
                   ? 'Use guided self-practice with local recording and transcript review after the task.'
-                  : 'Strict exam conditions. 5-minute timer with no feedback.'}
+                  : `Strict exam conditions. ${Math.round(roleplayTimeSeconds / 60)}-minute timer with no feedback and no pause.`}
               </InlineAlert>
 
               <Button fullWidth size="lg" onClick={handleStartTask}>

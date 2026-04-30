@@ -33,6 +33,80 @@ public record AdminContentUpdateRequest(
 
 public record AdminContentStatusRequest(string? Reason);
 
+// ── Speaking mock sets (Wave 3 of docs/SPEAKING-MODULE-PLAN.md) ──
+//
+// A mock set is the curatorial pairing of two speaking role-plays. Both
+// referenced ContentItem rows MUST have SubtestCode = "speaking" and the
+// admin service refuses to publish until that holds.
+public record AdminSpeakingMockSetCreateRequest(
+    string Title,
+    string RolePlay1ContentId,
+    string RolePlay2ContentId,
+    string? ProfessionId = null,
+    string? Description = null,
+    string? Difficulty = null,
+    string? CriteriaFocus = null,
+    string? Tags = null,
+    int? SortOrder = null);
+
+public record AdminSpeakingMockSetUpdateRequest(
+    string? Title = null,
+    string? RolePlay1ContentId = null,
+    string? RolePlay2ContentId = null,
+    string? ProfessionId = null,
+    string? Description = null,
+    string? Difficulty = null,
+    string? CriteriaFocus = null,
+    string? Tags = null,
+    int? SortOrder = null);
+
+// ── Speaking calibration (Wave 4 of docs/SPEAKING-MODULE-PLAN.md) ──
+//
+// Calibration samples are admin-curated reference attempts with the
+// canonical 9-criterion rubric. Tutors then submit their rubric for the
+// same sample; drift = mean absolute error across criteria. Scores are
+// validated server-side against `OetScoring.SpeakingCriterionScores`
+// limits (linguistic 0–6, clinical 0–3) — see
+// `AdminService.SpeakingCalibration.cs` and
+// `ExpertService.SpeakingCalibration.cs`.
+
+public record AdminSpeakingCalibrationSampleCreateRequest(
+    string Title,
+    string SourceAttemptId,
+    SpeakingCriterionScoresPayload GoldScores,
+    string? Description = null,
+    string? ProfessionId = null,
+    string? Difficulty = null,
+    string? CalibrationNotes = null);
+
+public record AdminSpeakingCalibrationSampleUpdateRequest(
+    string? Title = null,
+    string? Description = null,
+    SpeakingCriterionScoresPayload? GoldScores = null,
+    string? ProfessionId = null,
+    string? Difficulty = null,
+    string? CalibrationNotes = null);
+
+public record SpeakingCriterionScoresPayload(
+    int Intelligibility,
+    int Fluency,
+    int Appropriateness,
+    int GrammarExpression,
+    int RelationshipBuilding,
+    int PatientPerspective,
+    int Structure,
+    int InformationGathering,
+    int InformationGiving);
+
+public record TutorSpeakingCalibrationSubmitRequest(
+    SpeakingCriterionScoresPayload Scores,
+    string? Notes = null);
+
+public record ExpertSpeakingFeedbackCommentRequest(
+    int TranscriptLineIndex,
+    string Body,
+    string? CriterionCode = null);
+
 // ── Taxonomy ──
 
 public record AdminTaxonomyCreateRequest(
@@ -463,7 +537,8 @@ public record AdminFreeTierConfigUpdateRequest(
     int MaxReadingAttempts,
     int MaxListeningAttempts,
     int TrialDurationDays,
-    bool ShowUpgradePrompts);
+    bool ShowUpgradePrompts,
+    int? MaxSpeakingMockSets = null);
 
 // -- Conversation Runtime Settings Admin --
 

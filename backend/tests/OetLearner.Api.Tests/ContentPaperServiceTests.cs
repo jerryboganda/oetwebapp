@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Reading;
 
@@ -50,6 +51,73 @@ public class ContentPaperServiceTests
         await svc.AttachAssetAsync(paperId, new ContentPaperAssetAttach(
             PaperAssetRole.AnswerKey, "reading-answer-key", null, null, 1, true),
             "admin-1", default);
+    }
+
+    private static async Task AttachRequiredSpeakingAssetsAsync(
+        LearnerDbContext db,
+        ContentPaperService svc,
+        string paperId)
+    {
+        await AddMediaAsync(db, "speaking-role-card");
+        await AddMediaAsync(db, "speaking-assessment-criteria");
+        await AddMediaAsync(db, "speaking-warm-up");
+        await svc.AttachAssetAsync(paperId, new ContentPaperAssetAttach(
+                PaperAssetRole.RoleCard, "speaking-role-card", null, null, 0, true),
+            "admin-1", default);
+        await svc.AttachAssetAsync(paperId, new ContentPaperAssetAttach(
+                PaperAssetRole.AssessmentCriteria, "speaking-assessment-criteria", null, null, 1, true),
+            "admin-1", default);
+        await svc.AttachAssetAsync(paperId, new ContentPaperAssetAttach(
+                PaperAssetRole.WarmUpQuestions, "speaking-warm-up", null, null, 2, true),
+            "admin-1", default);
+    }
+
+    private static async Task FullyAuthorSpeakingPaperAsync(LearnerDbContext db, string paperId)
+    {
+        var paper = await db.ContentPapers.FirstAsync(p => p.Id == paperId);
+        paper.ExtractedTextJson = JsonSupport.Serialize(new
+        {
+            speakingStructure = new
+            {
+                candidateCard = new
+                {
+                    candidateRole = "Nurse",
+                    setting = "Community clinic",
+                    patientRole = "Parent of a child with asthma",
+                    task = "Explain inhaler technique and safety-netting.",
+                    background = "The parent is anxious after a night-time wheeze episode.",
+                    tasks = new[]
+                    {
+                        "Find out the parent's main concern.",
+                        "Explain inhaler technique in lay language.",
+                        "Agree a clear follow-up plan."
+                    }
+                },
+                interlocutorCard = new
+                {
+                    patientProfile = "You are worried the medication is too strong for your child.",
+                    cuePrompts = new[]
+                    {
+                        "Ask whether the inhaler is addictive.",
+                        "Say you are afraid of another night attack."
+                    },
+                    privateNotes = "Escalate concern if the candidate uses jargon."
+                },
+                warmUpQuestions = new[]
+                {
+                    "How are you feeling today?",
+                    "What would you like help with first?"
+                },
+                prepTimeSeconds = 180,
+                roleplayTimeSeconds = 300,
+                patientEmotion = "anxious",
+                communicationGoal = "Reassure the parent while checking understanding.",
+                clinicalTopic = "paediatric asthma inhaler education",
+                criteriaFocus = new[] { "relationshipBuilding", "informationGiving" },
+                complianceNotes = "Practice content only."
+            }
+        });
+        await db.SaveChangesAsync();
     }
 
     private static async Task FullyAuthorReadingPaperAsync(
@@ -145,6 +213,8 @@ public class ContentPaperServiceTests
         Assert.Contains(PaperAssetRole.AudioScript, svc.RequiredRolesFor("listening"));
         Assert.Contains(PaperAssetRole.CaseNotes, svc.RequiredRolesFor("writing"));
         Assert.Contains(PaperAssetRole.RoleCard, svc.RequiredRolesFor("speaking"));
+        Assert.Contains(PaperAssetRole.AssessmentCriteria, svc.RequiredRolesFor("speaking"));
+        Assert.Contains(PaperAssetRole.WarmUpQuestions, svc.RequiredRolesFor("speaking"));
         await db.DisposeAsync();
     }
 
@@ -233,6 +303,46 @@ public class ContentPaperServiceTests
 
         var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
         Assert.Equal(ContentStatus.Published, reload.Status);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Publish_fails_when_speaking_structure_is_not_ready()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "speaking", "Speaking 1", null, "nursing", false, null, 10, "roleplay", null, 0,
+            "relationshipBuilding", DefaultSourceProvenance), "admin-1", default);
+        await AttachRequiredSpeakingAssetsAsync(db, svc, paper.Id);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.PublishAsync(paper.Id, "admin-1", default));
+        Assert.Contains("Speaking structure", ex.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Publish_succeeds_for_speaking_when_structure_and_assets_are_ready()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "speaking", "Speaking 2", null, "nursing", false, "B", 10, "roleplay", null, 0,
+            "relationshipBuilding,informationGiving", DefaultSourceProvenance), "admin-1", default);
+        await AttachRequiredSpeakingAssetsAsync(db, svc, paper.Id);
+        await FullyAuthorSpeakingPaperAsync(db, paper.Id);
+
+        await svc.PublishAsync(paper.Id, "admin-1", default);
+
+        var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
+        var content = await db.ContentItems.FirstAsync(x => x.Id == paper.Id);
+        var detail = SpeakingContentStructure.ExtractStructure(content.DetailJson);
+        Assert.Equal(ContentStatus.Published, reload.Status);
+        Assert.Equal("speaking", content.SubtestCode);
+        Assert.Equal(ContentStatus.Published, content.Status);
+        Assert.Equal("Nurse", SpeakingContentStructure.ReadString(
+            SpeakingContentStructure.ToDictionary(SpeakingContentStructure.ReadValue(detail, "candidateCard")),
+            "candidateRole"));
+        Assert.NotNull(SpeakingContentStructure.ReadValue(detail, "interlocutorCard"));
         await db.DisposeAsync();
     }
 

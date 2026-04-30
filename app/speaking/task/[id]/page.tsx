@@ -16,6 +16,7 @@ import { Timer } from '@/components/ui/timer';
 import { fetchRoleCard, submitSpeakingRecording } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
+import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
 import type { RoleCard } from '@/lib/mock-data';
 
 // --- Types ---
@@ -34,6 +35,8 @@ function LiveSpeakingTaskContent() {
   // --- Card State ---
   const [card, setCard] = useState<RoleCard | null>(null);
   const [cardLoading, setCardLoading] = useState(true);
+  const roleplayTimeSeconds = card?.roleplayTimeSeconds ?? 300;
+  const roleplayTimeLabel = `${Math.round(roleplayTimeSeconds / 60)} min`;
 
   useEffect(() => {
     fetchRoleCard(id)
@@ -58,6 +61,7 @@ function LiveSpeakingTaskContent() {
   const paperRuleRequired = mode === 'exam';
   const [audioLevels, setAudioLevels] = useState<number[]>([10, 10, 10, 10, 10]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [prepNotes, setPrepNotes] = useState('');
 
   // --- Refs ---
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -80,6 +84,14 @@ function LiveSpeakingTaskContent() {
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const resultNavigationTimerRef = useRef<number | null>(null);
   const isNativeRecorder = Capacitor.isNativePlatform();
+
+  useEffect(() => {
+    setPrepNotes(window.localStorage.getItem(`speaking-prep:${id}:notes`) ?? '');
+  }, [id]);
+
+  useEffect(() => {
+    window.localStorage.setItem(`speaking-prep:${id}:notes`, prepNotes);
+  }, [id, prepNotes]);
 
   // --- Timer ---
   useEffect(() => {
@@ -349,6 +361,10 @@ function LiveSpeakingTaskContent() {
   };
 
   const handlePauseRecording = () => {
+    if (mode === 'exam') {
+      return;
+    }
+
     if (isNativeRecorder) {
       void SpeakingRecorder.pause().catch(() => undefined);
       stopNativeVisualizerPulse();
@@ -363,6 +379,92 @@ function LiveSpeakingTaskContent() {
       setRecordingState('paused');
     }
   };
+
+  useEffect(() => {
+    if (mode !== 'exam' || recordingState !== 'recording' || elapsedSeconds < roleplayTimeSeconds) {
+      return;
+    }
+
+    if (isNativeRecorder) {
+      void SpeakingRecorder.pause().catch(() => undefined);
+      stopNativeVisualizerPulse();
+    } else if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.pause();
+    }
+
+    pauseDurationClock();
+    setRecordingState('finished');
+    setShowSubmitConfirm(true);
+  }, [elapsedSeconds, isNativeRecorder, mode, pauseDurationClock, recordingState, roleplayTimeSeconds, stopNativeVisualizerPulse]);
+
+  // Wave 2 of docs/SPEAKING-MODULE-PLAN.md: 30-second audible warning
+  // before the role-play time cap expires (default 4:30 of 5:00) and a
+  // 10-second auto-submit kicker once the cap is reached. Only active in
+  // strict 'exam' mode; self-study mode keeps untimed practice.
+  const WARN_BEFORE_END_SECONDS = 30;
+  const AUTO_SUBMIT_GRACE_SECONDS = 10;
+  const warningPlayedRef = useRef(false);
+  const [autoSubmitCountdown, setAutoSubmitCountdown] = useState<number | null>(null);
+  const confirmSubmitRef = useRef<() => void>(() => undefined);
+
+  const playWarningBeep = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!Ctor) return;
+      const ctx = new Ctor();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.65);
+      osc.onended = () => { try { ctx.close(); } catch { /* noop */ } };
+    } catch {
+      // Audio cue is best-effort; fail silently if WebAudio is unavailable.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mode !== 'exam' || recordingState !== 'recording') {
+      warningPlayedRef.current = false;
+      return;
+    }
+    const warnAt = roleplayTimeSeconds - WARN_BEFORE_END_SECONDS;
+    if (warnAt > 0 && elapsedSeconds >= warnAt && !warningPlayedRef.current) {
+      warningPlayedRef.current = true;
+      playWarningBeep();
+      analytics.track('speaking_time_warning', { taskId: id, mode, secondsRemaining: WARN_BEFORE_END_SECONDS });
+    }
+  }, [elapsedSeconds, id, mode, playWarningBeep, recordingState, roleplayTimeSeconds]);
+
+  useEffect(() => {
+    if (mode !== 'exam' || recordingState !== 'finished' || !showSubmitConfirm || elapsedSeconds < roleplayTimeSeconds) {
+      setAutoSubmitCountdown(null);
+      return undefined;
+    }
+    setAutoSubmitCountdown(AUTO_SUBMIT_GRACE_SECONDS);
+    const interval = window.setInterval(() => {
+      setAutoSubmitCountdown((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          window.clearInterval(interval);
+          // Fire auto-submit. Existing paper-rule guard inside
+          // confirmSubmit will short-circuit if the candidate has not yet
+          // checked the paper-destroyed acknowledgement, surfacing a
+          // friendly error instead of silently swallowing the attempt.
+          confirmSubmitRef.current();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [elapsedSeconds, mode, recordingState, roleplayTimeSeconds, showSubmitConfirm]);
 
   // --- Handlers ---
   const handleStop = () => setShowStopConfirm(true);
@@ -406,7 +508,7 @@ function LiveSpeakingTaskContent() {
         throw new Error('No speaking audio was captured.');
       }
 
-      const { submissionId } = await submitSpeakingRecording(id, recording, durationSeconds);
+      const { submissionId } = await submitSpeakingRecording(id, recording, durationSeconds, mode);
       const resultUrl = `/speaking/results/${submissionId}`;
       setShowSubmitConfirm(false);
       router.replace(resultUrl);
@@ -428,6 +530,13 @@ function LiveSpeakingTaskContent() {
       setIsSubmitting(false);
     }
   };
+
+  // Keep the ref-stable handle in sync with the latest closure so the
+  // exam-mode auto-submit kicker (defined above confirmSubmit) can call
+  // the most up-to-date implementation without inverting hook ordering.
+  useEffect(() => {
+    confirmSubmitRef.current = () => { void confirmSubmit(); };
+  });
 
   if (cardLoading) {
     return (
@@ -465,8 +574,23 @@ function LiveSpeakingTaskContent() {
 
         <div className="flex items-center gap-6">
           <div className="flex flex-col items-end">
-            <span className="text-[10px] font-black text-muted uppercase tracking-widest">Elapsed Time</span>
+            <span className="text-[10px] font-black text-muted uppercase tracking-widest">
+              {mode === 'exam' ? 'Exam timer' : 'Elapsed Time'}
+            </span>
             <Timer mode="elapsed" running={recordingState === 'recording'} size="lg" />
+            {mode === 'exam' && (
+              <span
+                className={`mt-1 text-[10px] font-bold uppercase tracking-widest ${
+                  warningPlayedRef.current && recordingState === 'recording'
+                    ? 'animate-pulse text-danger'
+                    : 'text-warning'
+                }`}
+                aria-live="polite"
+              >
+                {Math.max(0, roleplayTimeSeconds - elapsedSeconds)}s left of {roleplayTimeLabel}
+                {warningPlayedRef.current && recordingState === 'recording' ? ' · time warning' : ''}
+              </span>
+            )}
           </div>
         </div>
       </header>
@@ -539,6 +663,9 @@ function LiveSpeakingTaskContent() {
             <p className="text-sm text-muted leading-relaxed">
               Complete the tasks on your role card. Your recording will be saved for transcript review and speaking feedback.
             </p>
+            <p className="mt-2 text-xs font-semibold leading-relaxed text-muted">
+              {card?.disclaimer ?? 'Practice estimate only. This is not an official OET score or result.'}
+            </p>
             <p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted">Captured duration: {elapsedSeconds}s</p>
           </div>
           
@@ -562,11 +689,11 @@ function LiveSpeakingTaskContent() {
               </button>
             ) : recordingState === 'recording' ? (
               <button
-                onClick={handlePauseRecording}
+                onClick={mode === 'exam' ? handleSubmit : handlePauseRecording}
                 className="w-16 h-16 rounded-full border border-border bg-surface hover:bg-background-light flex items-center justify-center transition-all shadow-sm"
-                aria-label="Pause recording"
+                aria-label={mode === 'exam' ? 'Finish exam recording' : 'Pause recording'}
               >
-                <Pause className="w-6 h-6 text-navy" />
+                {mode === 'exam' ? <Square className="w-6 h-6 text-danger" /> : <Pause className="w-6 h-6 text-navy" />}
               </button>
             ) : null}
           </div>
@@ -590,6 +717,12 @@ function LiveSpeakingTaskContent() {
           >
             <Edit3 className="w-4 h-4" /> Notes {showNotes ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
           </button>
+          {/* Wave 5: deep-link into the AI-patient Conversation module
+              for unlimited self-practice. Hidden in exam mode where
+              learners must complete the timed simulation. */}
+          {mode === 'self' && id ? (
+            <SpeakingSelfPracticeButton taskId={id} label="AI patient" />
+          ) : null}
         </div>
 
         {/* Overlays */}
@@ -611,6 +744,13 @@ function LiveSpeakingTaskContent() {
                   <p className="text-xs text-muted uppercase font-bold tracking-wider">{card?.profession} - {card?.setting}</p>
                 </div>
                 <p className="text-sm text-navy/80 leading-relaxed">{card?.brief}</p>
+                {(card?.patientEmotion || card?.communicationGoal || card?.clinicalTopic) && (
+                  <div className="grid gap-2 rounded-2xl bg-background-light p-3 text-xs text-muted sm:grid-cols-3">
+                    {card?.patientEmotion && <p><span className="font-bold text-navy">Emotion:</span> {card.patientEmotion}</p>}
+                    {card?.communicationGoal && <p><span className="font-bold text-navy">Goal:</span> {card.communicationGoal}</p>}
+                    {card?.clinicalTopic && <p><span className="font-bold text-navy">Topic:</span> {card.clinicalTopic}</p>}
+                  </div>
+                )}
                 <ul className="space-y-2">
                   {card?.tasks.map((t, i) => (
                     <li key={i} className="text-sm text-muted flex gap-3">
@@ -635,6 +775,8 @@ function LiveSpeakingTaskContent() {
               </div>
               <textarea 
                 placeholder="Type your notes here..."
+                value={prepNotes}
+                onChange={(e) => setPrepNotes(e.target.value)}
                 className="flex-1 resize-none rounded-2xl border border-border bg-background-light p-4 text-sm leading-relaxed text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </motion.div>
@@ -745,6 +887,27 @@ function LiveSpeakingTaskContent() {
               <p className="text-muted text-sm leading-relaxed mb-6">
                 Are you ready to submit your recording for evaluation? You won&apos;t be able to make changes after this.
               </p>
+
+              {/*
+                Wave 2 of docs/SPEAKING-MODULE-PLAN.md: when the strict
+                exam-mode 5-minute cap expires, surface a visible
+                auto-submit countdown so the candidate knows the recording
+                is being submitted automatically. The kicker still respects
+                the paper-destroyed acknowledgement guard inside
+                confirmSubmit.
+              */}
+              {autoSubmitCountdown !== null ? (
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className="mb-6 rounded-2xl border border-danger/30 bg-danger/10 p-3 text-center text-xs font-bold text-danger"
+                >
+                  Time is up. Auto-submitting in {autoSubmitCountdown}s
+                  {paperRuleRequired && !paperDestroyed
+                    ? ' (waiting for paper-destroyed confirmation)'
+                    : '…'}
+                </p>
+              ) : null}
 
               <div className="mb-6 rounded-2xl border border-warning/30 bg-amber-50 p-4">
                 <div className="flex items-start gap-3">

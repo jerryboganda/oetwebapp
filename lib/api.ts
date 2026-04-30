@@ -807,14 +807,22 @@ function mapWritingTask(item: ApiRecord): WritingTask {
 }
 
 function mapSpeakingTask(item: ApiRecord): SpeakingTask {
+  const criteriaFocusTags = toStringArray(item.criteriaFocus ?? item.criteriaFocusTags);
   return {
     id: item.contentId,
     title: item.title,
     scenarioType: titleCase(item.scenarioType),
     difficulty: titleCase(item.difficulty) as SpeakingTask['difficulty'],
     profession: titleCase(item.professionId),
-    criteriaFocus: Array.isArray(item.criteriaFocus) ? item.criteriaFocus.map(normalizeCriterionName).join(', ') : '',
+    criteriaFocus: criteriaFocusTags.map(normalizeCriterionName).join(', '),
     duration: minutesToLabel(item.estimatedDurationMinutes),
+    prepTimeSeconds: typeof item.prepTimeSeconds === 'number' ? item.prepTimeSeconds : undefined,
+    roleplayTimeSeconds: typeof item.roleplayTimeSeconds === 'number' ? item.roleplayTimeSeconds : undefined,
+    patientEmotion: typeof item.patientEmotion === 'string' ? item.patientEmotion : undefined,
+    communicationGoal: typeof item.communicationGoal === 'string' ? item.communicationGoal : undefined,
+    clinicalTopic: typeof item.clinicalTopic === 'string' ? item.clinicalTopic : undefined,
+    criteriaFocusTags,
+    disclaimer: typeof item.disclaimer === 'string' ? item.disclaimer : undefined,
   };
 }
 
@@ -1415,22 +1423,224 @@ export async function fetchSpeakingTasks(): Promise<SpeakingTask[]> {
   return items.map(mapSpeakingTask);
 }
 
+// Wave 3 of docs/SPEAKING-MODULE-PLAN.md - Speaking mock-set helpers.
+// These are intentionally typed as ApiRecord-shaped objects so the
+// orchestrator UI can stay loose while the backend contract stabilises;
+// strict types will land alongside the admin authoring UI in Wave 3b.
+export interface SpeakingMockSetSummary {
+  mockSetId: string;
+  title: string;
+  description: string;
+  difficulty: string;
+  criteriaFocus: string[];
+  tags: string[];
+  rolePlay1ContentId: string;
+  rolePlay2ContentId: string;
+  publishedAt: string | null;
+}
+
+export interface SpeakingMockSetEntitlement {
+  cap: number;
+  used: number;
+  remaining: number;
+  windowDays: number;
+  windowStartsAt: string;
+}
+
+export interface SpeakingMockSessionRolePlay {
+  attemptId: string;
+  contentId: string;
+  title: string;
+  scenarioType: string | null;
+  state: string;
+  evaluationId: string | null;
+  evaluationState: string | null;
+  estimatedScaledScore: number | null;
+  readinessBand: string;
+  readinessBandLabel: string;
+}
+
+export interface SpeakingMockSession {
+  mockSessionId: string;
+  mockSetId: string;
+  title: string;
+  description: string;
+  mode: 'exam' | 'self';
+  state: 'inprogress' | 'completed' | 'abandoned';
+  startedAt: string;
+  completedAt: string | null;
+  criteriaFocus: string[];
+  tags: string[];
+  rolePlay1: SpeakingMockSessionRolePlay;
+  rolePlay2: SpeakingMockSessionRolePlay;
+  combined: {
+    bothCompleted: boolean;
+    estimatedScaledScore: number | null;
+    passThreshold: number;
+    readinessBand: string;
+    readinessBandLabel: string;
+  };
+}
+
+function mapSpeakingMockSession(json: ApiRecord): SpeakingMockSession {
+  const role = (key: string): SpeakingMockSessionRolePlay => {
+    const rec = asRecord(json[key]);
+    return {
+      attemptId: typeof rec.attemptId === 'string' ? rec.attemptId : '',
+      contentId: typeof rec.contentId === 'string' ? rec.contentId : '',
+      title: typeof rec.title === 'string' ? rec.title : '',
+      scenarioType: typeof rec.scenarioType === 'string' ? rec.scenarioType : null,
+      state: typeof rec.state === 'string' ? rec.state : 'inprogress',
+      evaluationId: typeof rec.evaluationId === 'string' ? rec.evaluationId : null,
+      evaluationState: typeof rec.evaluationState === 'string' ? rec.evaluationState : null,
+      estimatedScaledScore: typeof rec.estimatedScaledScore === 'number' ? rec.estimatedScaledScore : null,
+      readinessBand: typeof rec.readinessBand === 'string' ? rec.readinessBand : 'not_ready',
+      readinessBandLabel: typeof rec.readinessBandLabel === 'string' ? rec.readinessBandLabel : 'Not ready',
+    };
+  };
+  const combined = asRecord(json.combined);
+  return {
+    mockSessionId: typeof json.mockSessionId === 'string' ? json.mockSessionId : '',
+    mockSetId: typeof json.mockSetId === 'string' ? json.mockSetId : '',
+    title: typeof json.title === 'string' ? json.title : '',
+    description: typeof json.description === 'string' ? json.description : '',
+    mode: json.mode === 'self' ? 'self' : 'exam',
+    state: (json.state === 'completed' || json.state === 'abandoned') ? json.state : 'inprogress',
+    startedAt: typeof json.startedAt === 'string' ? json.startedAt : new Date().toISOString(),
+    completedAt: typeof json.completedAt === 'string' ? json.completedAt : null,
+    criteriaFocus: toStringArray(json.criteriaFocus),
+    tags: toStringArray(json.tags),
+    rolePlay1: role('rolePlay1'),
+    rolePlay2: role('rolePlay2'),
+    combined: {
+      bothCompleted: combined.bothCompleted === true,
+      estimatedScaledScore: typeof combined.estimatedScaledScore === 'number' ? combined.estimatedScaledScore : null,
+      passThreshold: typeof combined.passThreshold === 'number' ? combined.passThreshold : 350,
+      readinessBand: typeof combined.readinessBand === 'string' ? combined.readinessBand : 'not_ready',
+      readinessBandLabel: typeof combined.readinessBandLabel === 'string' ? combined.readinessBandLabel : 'Not ready',
+    },
+  };
+}
+
+export async function fetchSpeakingMockSets(): Promise<{ mockSets: SpeakingMockSetSummary[]; entitlement: SpeakingMockSetEntitlement }> {
+  const json = await apiRequest<ApiRecord>('/v1/speaking/mock-sets');
+  const list = Array.isArray(json.mockSets) ? json.mockSets.map(asRecord) : [];
+  const ent = asRecord(json.entitlement);
+  return {
+    mockSets: list.map((rec): SpeakingMockSetSummary => ({
+      mockSetId: typeof rec.mockSetId === 'string' ? rec.mockSetId : '',
+      title: typeof rec.title === 'string' ? rec.title : '',
+      description: typeof rec.description === 'string' ? rec.description : '',
+      difficulty: typeof rec.difficulty === 'string' ? rec.difficulty : 'core',
+      criteriaFocus: toStringArray(rec.criteriaFocus),
+      tags: toStringArray(rec.tags),
+      rolePlay1ContentId: typeof rec.rolePlay1ContentId === 'string' ? rec.rolePlay1ContentId : '',
+      rolePlay2ContentId: typeof rec.rolePlay2ContentId === 'string' ? rec.rolePlay2ContentId : '',
+      publishedAt: typeof rec.publishedAt === 'string' ? rec.publishedAt : null,
+    })),
+    entitlement: {
+      cap: typeof ent.cap === 'number' ? ent.cap : 1,
+      used: typeof ent.used === 'number' ? ent.used : 0,
+      remaining: typeof ent.remaining === 'number' ? ent.remaining : 1,
+      windowDays: typeof ent.windowDays === 'number' ? ent.windowDays : 7,
+      windowStartsAt: typeof ent.windowStartsAt === 'string' ? ent.windowStartsAt : new Date().toISOString(),
+    },
+  };
+}
+
+export async function startSpeakingMockSet(mockSetId: string, mode: 'exam' | 'self' = 'exam'): Promise<SpeakingMockSession> {
+  const json = await apiRequest<ApiRecord>(`/v1/speaking/mock-sets/${mockSetId}/start`, {
+    method: 'POST',
+    body: JSON.stringify({ mode }),
+  });
+  return mapSpeakingMockSession(json);
+}
+
+export async function fetchSpeakingMockSession(sessionId: string): Promise<SpeakingMockSession> {
+  const json = await apiRequest<ApiRecord>(`/v1/speaking/mock-sessions/${sessionId}`);
+  return mapSpeakingMockSession(json);
+}
+
+function mapRoleCardPayload(item: ApiRecord): RoleCard {
+  const candidateCard = asRecord(item.candidateCard);
+  const tasks = toStringArray(candidateCard.tasks).length > 0
+    ? toStringArray(candidateCard.tasks)
+    : toStringArray(item.tasks);
+  const criteriaFocus = toStringArray(item.criteriaFocus ?? item.criteriaFocusTags);
+  return {
+    id: String(item.contentId ?? item.id ?? ''),
+    title: String(item.title ?? 'Speaking role play'),
+    profession: item.profession ? titleCase(item.profession) : titleCase(item.professionId),
+    setting: String(candidateCard.setting ?? item.setting ?? 'Clinical setting'),
+    patient: String(candidateCard.patient ?? candidateCard.patientRole ?? item.patient ?? 'Patient'),
+    brief: String(candidateCard.brief ?? candidateCard.task ?? item.brief ?? item.task ?? item.caseNotes ?? ''),
+    tasks,
+    background: String(candidateCard.background ?? item.background ?? item.caseNotes ?? ''),
+    candidateCard: {
+      role: typeof candidateCard.role === 'string' ? candidateCard.role : undefined,
+      candidateRole: typeof candidateCard.candidateRole === 'string' ? candidateCard.candidateRole : undefined,
+      setting: typeof candidateCard.setting === 'string' ? candidateCard.setting : undefined,
+      patient: typeof candidateCard.patient === 'string' ? candidateCard.patient : undefined,
+      patientRole: typeof candidateCard.patientRole === 'string' ? candidateCard.patientRole : undefined,
+      brief: typeof candidateCard.brief === 'string' ? candidateCard.brief : undefined,
+      task: typeof candidateCard.task === 'string' ? candidateCard.task : undefined,
+      background: typeof candidateCard.background === 'string' ? candidateCard.background : undefined,
+      tasks,
+    },
+    warmUpQuestions: toStringArray(item.warmUpQuestions),
+    prepTimeSeconds: typeof item.prepTimeSeconds === 'number' ? item.prepTimeSeconds : undefined,
+    roleplayTimeSeconds: typeof item.roleplayTimeSeconds === 'number' ? item.roleplayTimeSeconds : undefined,
+    patientEmotion: typeof item.patientEmotion === 'string' ? item.patientEmotion : undefined,
+    communicationGoal: typeof item.communicationGoal === 'string' ? item.communicationGoal : undefined,
+    clinicalTopic: typeof item.clinicalTopic === 'string' ? item.clinicalTopic : undefined,
+    criteriaFocus,
+    disclaimer: typeof item.disclaimer === 'string' ? item.disclaimer : undefined,
+  };
+}
+
 export async function fetchRoleCard(taskId: string): Promise<RoleCard> {
   const item = await apiRequest<ApiRecord>(`/v1/speaking/tasks/${taskId}`);
-  return {
-    id: item.contentId,
-    title: item.title,
-    profession: item.profession ? titleCase(item.profession) : titleCase(item.professionId),
-    setting: item.setting ?? 'Clinical setting',
-    patient: item.patient ?? 'Patient',
-    brief: item.brief ?? item.caseNotes ?? '',
-    tasks: item.tasks ?? [],
-    background: item.background ?? item.caseNotes ?? '',
-  };
+  return mapRoleCardPayload(item);
 }
 
 export async function fetchSpeakingResult(resultId: string): Promise<SpeakingResult> {
   const summary = await apiRequest<ApiRecord>(`/v1/speaking/evaluations/${resultId}/summary`);
+  // Wave 1 of docs/SPEAKING-MODULE-PLAN.md: pass through criterion-keyed
+  // feedback + readiness band so the results page can render the new card
+  // without re-deriving the projection in the client.
+  const rawCriteria = Array.isArray(summary.criteria)
+    ? (summary.criteria as ApiRecord[])
+    : Array.isArray(summary.criterionScores)
+      ? (summary.criterionScores as ApiRecord[])
+      : [];
+  const criteria = rawCriteria
+    .map((entry) => {
+      const family = entry.family === 'clinical' ? 'clinical' : 'linguistic';
+      const score = typeof entry.score === 'number' ? entry.score : Number(entry.score ?? 0);
+      const max = typeof entry.max === 'number' ? entry.max : Number(entry.max ?? (family === 'clinical' ? 3 : 6));
+      return {
+        criterionCode: String(entry.criterionCode ?? ''),
+        family,
+        score: Number.isFinite(score) ? score : 0,
+        max: Number.isFinite(max) ? max : (family === 'clinical' ? 3 : 6),
+        scoreRange: typeof entry.scoreRange === 'string' ? entry.scoreRange : undefined,
+        descriptor: typeof entry.descriptor === 'string' ? entry.descriptor : undefined,
+        confidenceBand: typeof entry.confidenceBand === 'string' ? entry.confidenceBand : undefined,
+        source: entry.source === 'ai_grounded' || entry.source === 'rulebook_fallback' ? entry.source : undefined,
+        linkedRuleIds: Array.isArray(entry.linkedRuleIds) ? entry.linkedRuleIds.map(String) : [],
+        explanation: typeof entry.explanation === 'string' ? entry.explanation : undefined,
+      } as SpeakingResult['criteria'] extends (infer U)[] | undefined ? U : never;
+    })
+    .filter((entry) => entry.criterionCode.length > 0);
+
+  const readinessBand = (() => {
+    const code = summary.readinessBand;
+    if (code === 'not_ready' || code === 'developing' || code === 'borderline' || code === 'exam_ready' || code === 'strong') {
+      return code;
+    }
+    return undefined;
+  })();
+
   return {
     id: resultId,
     taskId: summary.taskId,
@@ -1440,7 +1650,7 @@ export async function fetchSpeakingResult(resultId: string): Promise<SpeakingRes
     scoreRange: scoreRangeDisplay(summary.scoreRange),
     confidence: toConfidence(summary.confidenceBand),
     confidenceLabel: summary.confidenceLabel ?? `${toConfidence(summary.confidenceBand)} confidence practice estimate`,
-    learnerDisclaimer: summary.learnerDisclaimer ?? `Practice estimate only. This is not an official ${summary.examFamilyLabel ?? 'exam'} score.`,
+    learnerDisclaimer: summary.learnerDisclaimer ?? summary.disclaimer ?? `Practice estimate only. This is not an official ${summary.examFamilyLabel ?? 'exam'} score.`,
     methodLabel: summary.methodLabel ?? 'AI-assisted speaking evaluation',
     provenanceLabel: summary.provenanceLabel ?? `${summary.examFamilyLabel ?? 'Exam'} practice estimate`,
     humanReviewRecommended: Boolean(summary.humanReviewRecommended),
@@ -1451,6 +1661,32 @@ export async function fetchSpeakingResult(resultId: string): Promise<SpeakingRes
     evalStatus: toEvalStatus(summary.state),
     submittedAt: summary.generatedAt ?? new Date().toISOString(),
     nextDrill: summary.nextDrill ?? undefined,
+    recommendedDrills: Array.isArray(summary.recommendedDrills)
+      ? summary.recommendedDrills.map((drill: ApiRecord) => ({
+        id: String(drill.id ?? drill.route ?? drill.title ?? 'drill'),
+        title: String(drill.title ?? 'Speaking drill'),
+        description: String(drill.description ?? ''),
+        route: typeof drill.route === 'string' ? drill.route : undefined,
+      }))
+      : undefined,
+    criteria: criteria.length > 0 ? criteria : undefined,
+    criteriaSource: summary.criteriaSource === 'ai_grounded' || summary.criteriaSource === 'rulebook_fallback' ? summary.criteriaSource : undefined,
+    readinessBand,
+    readinessBandLabel: typeof summary.readinessBandLabel === 'string' ? summary.readinessBandLabel : undefined,
+    estimatedScaledScore: typeof summary.estimatedScaledScore === 'number' ? summary.estimatedScaledScore : undefined,
+    passThreshold: typeof summary.passThreshold === 'number' ? summary.passThreshold : undefined,
+    rubricMax: typeof summary.rubricMax === 'number' ? summary.rubricMax : undefined,
+    statusReasonCode: typeof summary.statusReasonCode === 'string' ? summary.statusReasonCode : undefined,
+    statusMessage: typeof summary.statusMessage === 'string' ? summary.statusMessage : undefined,
+    retryable: typeof summary.retryable === 'boolean' ? summary.retryable : undefined,
+    retryAfterMs: typeof summary.retryAfterMs === 'number' ? summary.retryAfterMs : undefined,
+    timing: summary.timing
+      ? {
+        prepTimeSeconds: typeof summary.timing.prepTimeSeconds === 'number' ? summary.timing.prepTimeSeconds : undefined,
+        roleplayTimeSeconds: typeof summary.timing.roleplayTimeSeconds === 'number' ? summary.timing.roleplayTimeSeconds : undefined,
+        recordedSeconds: typeof summary.timing.recordedSeconds === 'number' ? summary.timing.recordedSeconds : undefined,
+      }
+      : undefined,
   };
 }
 
@@ -1480,10 +1716,16 @@ export async function fetchTranscript(resultId: string): Promise<SpeakingTranscr
     audioAvailable: Boolean(review.audioAvailable),
     audioUrl: review.audioUrl ?? undefined,
     waveformPeaks: normalizeWaveformPeaks(review.analysis?.waveformPeaks),
+    disclaimer: typeof review.disclaimer === 'string'
+      ? review.disclaimer
+      : typeof review.summary?.learnerDisclaimer === 'string'
+        ? review.summary.learnerDisclaimer
+        : undefined,
+    roleCard: review.roleCard ? mapRoleCardPayload(asRecord(review.roleCard)) : undefined,
   };
 }
 
-export async function fetchPhrasingData(resultId: string): Promise<{ title: string; segments: PhrasingSegment[] }> {
+export async function fetchPhrasingData(resultId: string): Promise<{ title: string; segments: PhrasingSegment[]; disclaimer?: string; recommendedDrills?: SpeakingResult['recommendedDrills'] }> {
   const review = await apiRequest<ApiRecord>(`/v1/speaking/evaluations/${resultId}/review`);
   return {
     title: review.summary?.taskTitle ?? 'Speaking Review',
@@ -1494,6 +1736,19 @@ export async function fetchPhrasingData(resultId: string): Promise<{ title: stri
       strongerAlternative: segment.strongerAlternative,
       drillPrompt: segment.drillPrompt,
     })),
+    disclaimer: typeof review.disclaimer === 'string'
+      ? review.disclaimer
+      : typeof review.summary?.learnerDisclaimer === 'string'
+        ? review.summary.learnerDisclaimer
+        : undefined,
+    recommendedDrills: Array.isArray(review.summary?.recommendedDrills)
+      ? review.summary.recommendedDrills.map((drill: ApiRecord) => ({
+        id: String(drill.id ?? drill.route ?? drill.title ?? 'drill'),
+        title: String(drill.title ?? 'Speaking drill'),
+        description: String(drill.description ?? ''),
+        route: typeof drill.route === 'string' ? drill.route : undefined,
+      }))
+      : undefined,
   };
 }
 
@@ -1501,8 +1756,9 @@ export async function submitSpeakingRecording(
   taskId: string,
   recording: Blob,
   durationSeconds = 120,
+  mode: 'self' | 'exam' | 'practice' = 'self',
 ): Promise<{ uploadUrl: string; submissionId: string }> {
-  const attempt = await ensureAttempt('speaking', taskId, 'self');
+  const attempt = await ensureAttempt('speaking', taskId, mode);
   const upload = await apiRequest<ApiRecord>(`/v1/speaking/attempts/${attempt.attemptId}/audio/upload-session`, { method: 'POST' });
   await uploadBinary(upload.uploadUrl, recording);
   await apiRequest(`/v1/speaking/attempts/${attempt.attemptId}/audio/complete`, {
@@ -4072,6 +4328,433 @@ export async function adminUpdateContentEligibility(contentId: string, eligibili
 }
 
 // ── Admin: Vocabulary Management ──────────────────────────────────────
+
+// Wave 3 of docs/SPEAKING-MODULE-PLAN.md - admin CRUD for speaking
+// mock sets. Permissions reuse AdminContent* on the backend.
+export interface AdminSpeakingMockSetRow {
+  mockSetId: string;
+  title: string;
+  description: string;
+  professionId: string;
+  difficulty: string;
+  status: 'draft' | 'published' | 'archived';
+  criteriaFocus: string[];
+  tags: string[];
+  sortOrder: number;
+  rolePlay1: { contentId: string; title: string; isSpeaking: boolean };
+  rolePlay2: { contentId: string; title: string; isSpeaking: boolean };
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+}
+
+function mapAdminMockSetRow(rec: ApiRecord): AdminSpeakingMockSetRow {
+  const r1 = asRecord(rec.rolePlay1);
+  const r2 = asRecord(rec.rolePlay2);
+  const status = rec.status === 'published' || rec.status === 'archived' ? rec.status : 'draft';
+  return {
+    mockSetId: typeof rec.mockSetId === 'string' ? rec.mockSetId : '',
+    title: typeof rec.title === 'string' ? rec.title : '',
+    description: typeof rec.description === 'string' ? rec.description : '',
+    professionId: typeof rec.professionId === 'string' ? rec.professionId : 'nursing',
+    difficulty: typeof rec.difficulty === 'string' ? rec.difficulty : 'core',
+    status,
+    criteriaFocus: toStringArray(rec.criteriaFocus),
+    tags: toStringArray(rec.tags),
+    sortOrder: typeof rec.sortOrder === 'number' ? rec.sortOrder : 0,
+    rolePlay1: {
+      contentId: typeof r1.contentId === 'string' ? r1.contentId : '',
+      title: typeof r1.title === 'string' ? r1.title : '',
+      isSpeaking: r1.isSpeaking === true,
+    },
+    rolePlay2: {
+      contentId: typeof r2.contentId === 'string' ? r2.contentId : '',
+      title: typeof r2.title === 'string' ? r2.title : '',
+      isSpeaking: r2.isSpeaking === true,
+    },
+    createdAt: typeof rec.createdAt === 'string' ? rec.createdAt : '',
+    updatedAt: typeof rec.updatedAt === 'string' ? rec.updatedAt : '',
+    publishedAt: typeof rec.publishedAt === 'string' ? rec.publishedAt : null,
+  };
+}
+
+export async function fetchAdminSpeakingMockSets(params?: { status?: string; professionId?: string }): Promise<AdminSpeakingMockSetRow[]> {
+  const p = new URLSearchParams();
+  if (params?.status) p.set('status', params.status);
+  if (params?.professionId) p.set('professionId', params.professionId);
+  const qs = p.toString();
+  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/mock-sets${qs ? `?${qs}` : ''}`);
+  const list = Array.isArray(json.mockSets) ? json.mockSets.map(asRecord) : [];
+  return list.map(mapAdminMockSetRow);
+}
+
+export async function fetchAdminSpeakingMockSet(mockSetId: string): Promise<AdminSpeakingMockSetRow> {
+  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/mock-sets/${encodeURIComponent(mockSetId)}`);
+  return mapAdminMockSetRow(json);
+}
+
+export async function createAdminSpeakingMockSet(payload: {
+  title: string;
+  rolePlay1ContentId: string;
+  rolePlay2ContentId: string;
+  professionId?: string;
+  description?: string;
+  difficulty?: string;
+  criteriaFocus?: string;
+  tags?: string;
+  sortOrder?: number;
+}): Promise<AdminSpeakingMockSetRow> {
+  const json = await apiRequest<ApiRecord>('/v1/admin/speaking/mock-sets', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return mapAdminMockSetRow(json);
+}
+
+export async function updateAdminSpeakingMockSet(mockSetId: string, payload: Record<string, unknown>): Promise<AdminSpeakingMockSetRow> {
+  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/mock-sets/${encodeURIComponent(mockSetId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+  return mapAdminMockSetRow(json);
+}
+
+export async function publishAdminSpeakingMockSet(mockSetId: string): Promise<AdminSpeakingMockSetRow> {
+  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/mock-sets/${encodeURIComponent(mockSetId)}/publish`, {
+    method: 'POST',
+  });
+  return mapAdminMockSetRow(json);
+}
+
+export async function archiveAdminSpeakingMockSet(mockSetId: string): Promise<AdminSpeakingMockSetRow> {
+  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/mock-sets/${encodeURIComponent(mockSetId)}/archive`, {
+    method: 'POST',
+  });
+  return mapAdminMockSetRow(json);
+}
+
+// Admin helper: list all speaking ContentItem rows the curator can pick
+// from when building a mock set. Limited to the existing /v1/admin/content
+// endpoint so permissions and filtering stay in one place.
+export async function fetchAdminSpeakingContentOptions(): Promise<Array<{ id: string; title: string; status: string }>> {
+  const json = await apiRequest<ApiRecord>('/v1/admin/content?subtest=speaking&pageSize=200');
+  const items = Array.isArray(json.items) ? json.items.map(asRecord) : [];
+  return items.map((it) => ({
+    id: typeof it.id === 'string' ? it.id : '',
+    title: typeof it.title === 'string' ? it.title : '',
+    status: typeof it.status === 'string' ? it.status : 'draft',
+  }));
+}
+
+// ── Wave 4 of docs/SPEAKING-MODULE-PLAN.md - tutor calibration drift +
+// inline transcript comments. Three audiences:
+//   • Admin: CRUD over calibration samples, drift report.
+//   • Expert/tutor: list samples, submit rubric, post inline comments.
+//   • Learner: read inline comments on their attempt.
+
+export interface SpeakingCriterionRubric {
+  intelligibility: number;
+  fluency: number;
+  appropriateness: number;
+  grammarExpression: number;
+  relationshipBuilding: number;
+  patientPerspective: number;
+  structure: number;
+  informationGathering: number;
+  informationGiving: number;
+}
+
+export interface AdminSpeakingCalibrationSampleRow {
+  sampleId: string;
+  title: string;
+  description: string;
+  sourceAttemptId: string;
+  professionId: string;
+  difficulty: string;
+  status: 'draft' | 'published' | 'archived';
+  goldScores: Partial<SpeakingCriterionRubric>;
+  tutorSubmissionCount: number;
+  createdAt: string;
+  publishedAt: string | null;
+}
+
+function mapAdminCalibrationSampleRow(rec: ApiRecord): AdminSpeakingCalibrationSampleRow {
+  const status = (typeof rec.status === 'string' ? rec.status : 'draft') as 'draft' | 'published' | 'archived';
+  const gold = asRecord(rec.goldScores);
+  return {
+    sampleId: typeof rec.sampleId === 'string' ? rec.sampleId : '',
+    title: typeof rec.title === 'string' ? rec.title : '',
+    description: typeof rec.description === 'string' ? rec.description : '',
+    sourceAttemptId: typeof rec.sourceAttemptId === 'string' ? rec.sourceAttemptId : '',
+    professionId: typeof rec.professionId === 'string' ? rec.professionId : 'nursing',
+    difficulty: typeof rec.difficulty === 'string' ? rec.difficulty : 'core',
+    status,
+    goldScores: Object.fromEntries(
+      Object.entries(gold).filter(([, v]) => typeof v === 'number'),
+    ) as Partial<SpeakingCriterionRubric>,
+    tutorSubmissionCount: typeof rec.tutorSubmissionCount === 'number' ? rec.tutorSubmissionCount : 0,
+    createdAt: typeof rec.createdAt === 'string' ? rec.createdAt : '',
+    publishedAt: typeof rec.publishedAt === 'string' ? rec.publishedAt : null,
+  };
+}
+
+export async function fetchAdminSpeakingCalibrationSamples(status?: string): Promise<AdminSpeakingCalibrationSampleRow[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/calibration/samples${qs}`);
+  const items = Array.isArray(json.samples) ? json.samples.map(asRecord) : [];
+  return items.map(mapAdminCalibrationSampleRow);
+}
+
+export async function createAdminSpeakingCalibrationSample(payload: {
+  title: string;
+  sourceAttemptId: string;
+  goldScores: SpeakingCriterionRubric;
+  description?: string;
+  professionId?: string;
+  difficulty?: string;
+  calibrationNotes?: string;
+}): Promise<AdminSpeakingCalibrationSampleRow> {
+  const json = await apiRequest<ApiRecord>('/v1/admin/speaking/calibration/samples', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return mapAdminCalibrationSampleRow(json);
+}
+
+export async function publishAdminSpeakingCalibrationSample(sampleId: string): Promise<AdminSpeakingCalibrationSampleRow> {
+  const json = await apiRequest<ApiRecord>(
+    `/v1/admin/speaking/calibration/samples/${encodeURIComponent(sampleId)}/publish`,
+    { method: 'POST' },
+  );
+  return mapAdminCalibrationSampleRow(json);
+}
+
+export async function archiveAdminSpeakingCalibrationSample(sampleId: string): Promise<AdminSpeakingCalibrationSampleRow> {
+  const json = await apiRequest<ApiRecord>(
+    `/v1/admin/speaking/calibration/samples/${encodeURIComponent(sampleId)}/archive`,
+    { method: 'POST' },
+  );
+  return mapAdminCalibrationSampleRow(json);
+}
+
+export interface AdminSpeakingCalibrationDriftRow {
+  tutorId: string;
+  tutorName: string;
+  submissionCount: number;
+  meanAbsoluteError: number;
+  totalAbsoluteError: number;
+  lastSubmittedAt: string;
+}
+
+export interface AdminSpeakingCalibrationDriftReport {
+  tutors: AdminSpeakingCalibrationDriftRow[];
+  sampleSize: number;
+  samplesPublished: number;
+}
+
+export async function fetchAdminSpeakingCalibrationDrift(minSubmissions = 1): Promise<AdminSpeakingCalibrationDriftReport> {
+  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/calibration/drift?minSubmissions=${minSubmissions}`);
+  const tutors = Array.isArray(json.tutors) ? json.tutors.map(asRecord) : [];
+  return {
+    tutors: tutors.map((t) => ({
+      tutorId: typeof t.tutorId === 'string' ? t.tutorId : '',
+      tutorName: typeof t.tutorName === 'string' ? t.tutorName : '',
+      submissionCount: typeof t.submissionCount === 'number' ? t.submissionCount : 0,
+      meanAbsoluteError: typeof t.meanAbsoluteError === 'number' ? t.meanAbsoluteError : 0,
+      totalAbsoluteError: typeof t.totalAbsoluteError === 'number' ? t.totalAbsoluteError : 0,
+      lastSubmittedAt: typeof t.lastSubmittedAt === 'string' ? t.lastSubmittedAt : '',
+    })),
+    sampleSize: typeof json.sampleSize === 'number' ? json.sampleSize : 0,
+    samplesPublished: typeof json.samplesPublished === 'number' ? json.samplesPublished : 0,
+  };
+}
+
+// ── Tutor surface ──
+
+export interface TutorSpeakingCalibrationSampleRow {
+  sampleId: string;
+  title: string;
+  description: string;
+  sourceAttemptId: string;
+  professionId: string;
+  difficulty: string;
+  publishedAt: string | null;
+  submitted: boolean;
+  mySubmission: { submittedAt: string; totalAbsoluteError: number } | null;
+}
+
+export async function fetchTutorSpeakingCalibrationSamples(): Promise<TutorSpeakingCalibrationSampleRow[]> {
+  const json = await apiRequest<ApiRecord>('/v1/expert/calibration/speaking/samples');
+  const items = Array.isArray(json.samples) ? json.samples.map(asRecord) : [];
+  return items.map((rec) => {
+    const mine = rec.mySubmission ? asRecord(rec.mySubmission) : null;
+    return {
+      sampleId: typeof rec.sampleId === 'string' ? rec.sampleId : '',
+      title: typeof rec.title === 'string' ? rec.title : '',
+      description: typeof rec.description === 'string' ? rec.description : '',
+      sourceAttemptId: typeof rec.sourceAttemptId === 'string' ? rec.sourceAttemptId : '',
+      professionId: typeof rec.professionId === 'string' ? rec.professionId : 'nursing',
+      difficulty: typeof rec.difficulty === 'string' ? rec.difficulty : 'core',
+      publishedAt: typeof rec.publishedAt === 'string' ? rec.publishedAt : null,
+      submitted: rec.submitted === true,
+      mySubmission: mine
+        ? {
+            submittedAt: typeof mine.submittedAt === 'string' ? mine.submittedAt : '',
+            totalAbsoluteError: typeof mine.totalAbsoluteError === 'number' ? mine.totalAbsoluteError : 0,
+          }
+        : null,
+    };
+  });
+}
+
+export interface TutorCalibrationSubmissionResult {
+  sampleId: string;
+  tutorId: string;
+  submittedAt: string;
+  totalAbsoluteError: number;
+  perCriterionDelta: Partial<SpeakingCriterionRubric>;
+}
+
+export async function submitTutorSpeakingCalibrationScores(
+  sampleId: string,
+  scores: SpeakingCriterionRubric,
+  notes?: string,
+): Promise<TutorCalibrationSubmissionResult> {
+  const json = await apiRequest<ApiRecord>(
+    `/v1/expert/calibration/speaking/samples/${encodeURIComponent(sampleId)}/scores`,
+    { method: 'POST', body: JSON.stringify({ scores, notes }) },
+  );
+  const delta = asRecord(json.perCriterionDelta);
+  return {
+    sampleId: typeof json.sampleId === 'string' ? json.sampleId : sampleId,
+    tutorId: typeof json.tutorId === 'string' ? json.tutorId : '',
+    submittedAt: typeof json.submittedAt === 'string' ? json.submittedAt : '',
+    totalAbsoluteError: typeof json.totalAbsoluteError === 'number' ? json.totalAbsoluteError : 0,
+    perCriterionDelta: Object.fromEntries(
+      Object.entries(delta).filter(([, v]) => typeof v === 'number'),
+    ) as Partial<SpeakingCriterionRubric>,
+  };
+}
+
+// ── Inline transcript comments ──
+
+export interface SpeakingTranscriptComment {
+  commentId: string;
+  attemptId: string;
+  expertId: string;
+  transcriptLineIndex: number;
+  criterionCode: string;
+  body: string;
+  createdAt: string;
+}
+
+function mapTranscriptComment(rec: ApiRecord): SpeakingTranscriptComment {
+  return {
+    commentId: typeof rec.commentId === 'string' ? rec.commentId : '',
+    attemptId: typeof rec.attemptId === 'string' ? rec.attemptId : '',
+    expertId: typeof rec.expertId === 'string' ? rec.expertId : '',
+    transcriptLineIndex: typeof rec.transcriptLineIndex === 'number' ? rec.transcriptLineIndex : 0,
+    criterionCode: typeof rec.criterionCode === 'string' ? rec.criterionCode : 'general',
+    body: typeof rec.body === 'string' ? rec.body : '',
+    createdAt: typeof rec.createdAt === 'string' ? rec.createdAt : '',
+  };
+}
+
+export async function fetchSpeakingTranscriptComments(attemptId: string): Promise<SpeakingTranscriptComment[]> {
+  const json = await apiRequest<ApiRecord>(`/v1/speaking/attempts/${encodeURIComponent(attemptId)}/comments`);
+  const items = Array.isArray(json.comments) ? json.comments.map(asRecord) : [];
+  return items.map(mapTranscriptComment);
+}
+
+export async function postExpertSpeakingTranscriptComment(
+  attemptId: string,
+  payload: { transcriptLineIndex: number; body: string; criterionCode?: string },
+): Promise<SpeakingTranscriptComment> {
+  const json = await apiRequest<ApiRecord>(
+    `/v1/expert/speaking/attempts/${encodeURIComponent(attemptId)}/comments`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+  return mapTranscriptComment(json);
+}
+
+// Wave 5 of docs/SPEAKING-MODULE-PLAN.md - deep-link from a speaking
+// task into the AI-patient Conversation module. Returns the redirect
+// path the caller should navigate the learner to.
+export interface SpeakingSelfPracticeStartResult {
+  sessionId: string;
+  redirectPath: string;
+}
+
+export async function startSpeakingSelfPracticeSession(
+  taskId: string,
+): Promise<SpeakingSelfPracticeStartResult> {
+  const json = await apiRequest<ApiRecord>(
+    `/v1/speaking/tasks/${encodeURIComponent(taskId)}/self-practice`,
+    { method: 'POST', body: JSON.stringify({}) },
+  );
+  const session = asRecord(json.session);
+  const sessionId = typeof session.id === 'string' ? session.id : '';
+  const redirectPath = typeof json.redirectPath === 'string' && json.redirectPath
+    ? json.redirectPath
+    : `/conversation/session/${sessionId}`;
+  return { sessionId, redirectPath };
+}
+
+// Wave 6 of docs/SPEAKING-MODULE-PLAN.md - speaking drills bank.
+export interface SpeakingDrillRow {
+  id: string;
+  title: string;
+  kind: string;
+  difficulty: string;
+  estimatedDurationMinutes: number;
+  professionCode: string | null;
+  criteriaFocus: string[];
+  caseNotes: string | null;
+  completed: boolean;
+}
+
+export interface SpeakingDrillsListResponse {
+  kinds: string[];
+  totalCount: number;
+  completedCount: number;
+  items: SpeakingDrillRow[];
+}
+
+export async function fetchSpeakingDrills(filters?: {
+  kind?: string;
+  profession?: string;
+  criterion?: string;
+}): Promise<SpeakingDrillsListResponse> {
+  const params = new URLSearchParams();
+  if (filters?.kind) params.set('kind', filters.kind);
+  if (filters?.profession) params.set('profession', filters.profession);
+  if (filters?.criterion) params.set('criterion', filters.criterion);
+  const qs = params.toString();
+  const json = await apiRequest<ApiRecord>(`/v1/speaking/drills${qs ? `?${qs}` : ''}`);
+  const items = Array.isArray(json.items) ? json.items.map(asRecord) : [];
+  const kinds = Array.isArray(json.kinds)
+    ? json.kinds.filter((k): k is string => typeof k === 'string')
+    : [];
+  return {
+    kinds,
+    totalCount: typeof json.totalCount === 'number' ? json.totalCount : items.length,
+    completedCount: typeof json.completedCount === 'number' ? json.completedCount : 0,
+    items: items.map((row) => ({
+      id: typeof row.id === 'string' ? row.id : '',
+      title: typeof row.title === 'string' ? row.title : '',
+      kind: typeof row.kind === 'string' ? row.kind : 'drill',
+      difficulty: typeof row.difficulty === 'string' ? row.difficulty : 'easy',
+      estimatedDurationMinutes:
+        typeof row.estimatedDurationMinutes === 'number' ? row.estimatedDurationMinutes : 5,
+      professionCode: typeof row.professionCode === 'string' ? row.professionCode : null,
+      criteriaFocus: Array.isArray(row.criteriaFocus)
+        ? row.criteriaFocus.filter((c): c is string => typeof c === 'string')
+        : [],
+      caseNotes: typeof row.caseNotes === 'string' ? row.caseNotes : null,
+      completed: row.completed === true,
+    })),
+  };
+}
 
 export async function fetchAdminVocabularyItems(params?: {
   profession?: string; category?: string; status?: string; search?: string;

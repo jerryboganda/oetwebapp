@@ -158,6 +158,48 @@ public static partial class SeedData
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public static async Task EnsureSpeakingMockSetsAsync(LearnerDbContext db, CancellationToken cancellationToken = default)
+    {
+        // Wave 3 of docs/SPEAKING-MODULE-PLAN.md - seed a single canonical
+        // speaking mock set so the orchestrator UI has something to bind
+        // to in dev/staging without authoring content. Only inserted when
+        // both underlying role-play content papers exist and no mock set
+        // is already present.
+        if (await db.SpeakingMockSets.AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        var rolePlay1 = await db.ContentItems.FirstOrDefaultAsync(
+            x => x.Id == "st-001" && x.SubtestCode == "speaking", cancellationToken);
+        var rolePlay2 = await db.ContentItems.FirstOrDefaultAsync(
+            x => x.Id == "st-002" && x.SubtestCode == "speaking", cancellationToken);
+        if (rolePlay1 is null || rolePlay2 is null)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        db.SpeakingMockSets.Add(new SpeakingMockSet
+        {
+            Id = "sms-nursing-core-1",
+            ProfessionId = "nursing",
+            Title = "Nursing Mock Set 1 - Core",
+            Description = "Two paired role-plays (handover + breaking bad news) attempted as a single OET-style mock.",
+            RolePlay1ContentId = rolePlay1.Id,
+            RolePlay2ContentId = rolePlay2.Id,
+            Status = SpeakingMockSetStatus.Published,
+            Difficulty = "core",
+            CriteriaFocus = "informationGiving,relationshipBuilding,providingStructure",
+            Tags = "nursing,core,handover",
+            SortOrder = 1,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public static async Task EnsureDemoOperationalStateAsync(LearnerDbContext db, CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
@@ -838,6 +880,145 @@ public static partial class SeedData
                 Status = ContentStatus.Published,
                 CaseNotes = "Inform a patient that a biopsy confirms invasive ductal carcinoma using a calm, empathetic structure.",
                 DetailJson = JsonSupport.Serialize(new { profession = "Medicine", setting = "Outpatient room", patient = "Mrs Patricia Collins", brief = "Deliver results using the SPIKES framework." })
+            },
+            // Wave 6 of docs/SPEAKING-MODULE-PLAN.md - speaking drills
+            // bank. Drills are ContentItem rows with
+            // ContentType = "speaking_drill" and ScenarioType encoding
+            // the drill kind (phrasing | intonation | pronunciation |
+            // vocabulary | chunking | empathy). They surface in
+            // /v1/speaking/drills and feed the §16 16-stage course
+            // pathway entry point.
+            new ContentItem
+            {
+                Id = "sd-phrasing-001",
+                ContentType = "speaking_drill",
+                SubtestCode = "speaking",
+                ProfessionId = null,
+                Title = "Empathic phrasing — opening the consultation",
+                Difficulty = "easy",
+                EstimatedDurationMinutes = 5,
+                CriteriaFocusJson = JsonSupport.Serialize(new[] { "appropriateness", "relationship_building" }),
+                ScenarioType = "phrasing",
+                ModeSupportJson = JsonSupport.Serialize(new[] { "self" }),
+                PublishedRevisionId = "sd-phrasing-001-r1",
+                Status = ContentStatus.Published,
+                CaseNotes = "Drill: practise opening the consultation with empathic phrasing.",
+                DetailJson = JsonSupport.Serialize(new
+                {
+                    drillKind = "phrasing",
+                    focus = "Opening rapport-building phrases",
+                    promptLines = new[]
+                    {
+                        "I can see this has been a difficult few days for you.",
+                        "Take your time — there's no rush.",
+                        "Thank you for sharing that with me."
+                    },
+                })
+            },
+            new ContentItem
+            {
+                Id = "sd-intonation-001",
+                ContentType = "speaking_drill",
+                SubtestCode = "speaking",
+                ProfessionId = null,
+                Title = "Intonation — reassurance vs uncertainty",
+                Difficulty = "medium",
+                EstimatedDurationMinutes = 5,
+                CriteriaFocusJson = JsonSupport.Serialize(new[] { "intelligibility", "appropriateness" }),
+                ScenarioType = "intonation",
+                ModeSupportJson = JsonSupport.Serialize(new[] { "self" }),
+                PublishedRevisionId = "sd-intonation-001-r1",
+                Status = ContentStatus.Published,
+                CaseNotes = "Drill: contrast falling vs rising tones for reassurance and questioning.",
+                DetailJson = JsonSupport.Serialize(new
+                {
+                    drillKind = "intonation",
+                    focus = "Falling tone for confident reassurance; rising tone for checking understanding.",
+                })
+            },
+            new ContentItem
+            {
+                Id = "sd-pronunciation-001",
+                ContentType = "speaking_drill",
+                SubtestCode = "speaking",
+                ProfessionId = null,
+                Title = "Pronunciation — common medication names",
+                Difficulty = "medium",
+                EstimatedDurationMinutes = 6,
+                CriteriaFocusJson = JsonSupport.Serialize(new[] { "intelligibility" }),
+                ScenarioType = "pronunciation",
+                ModeSupportJson = JsonSupport.Serialize(new[] { "self" }),
+                PublishedRevisionId = "sd-pronunciation-001-r1",
+                Status = ContentStatus.Published,
+                CaseNotes = "Drill: enunciate high-frequency drug names clearly.",
+                DetailJson = JsonSupport.Serialize(new
+                {
+                    drillKind = "pronunciation",
+                    focus = "Stress on the correct syllable for amoxicillin, paracetamol, ibuprofen.",
+                })
+            },
+            new ContentItem
+            {
+                Id = "sd-vocabulary-001",
+                ContentType = "speaking_drill",
+                SubtestCode = "speaking",
+                ProfessionId = null,
+                Title = "Vocabulary — translating jargon for patients",
+                Difficulty = "easy",
+                EstimatedDurationMinutes = 5,
+                CriteriaFocusJson = JsonSupport.Serialize(new[] { "appropriateness", "information_giving" }),
+                ScenarioType = "vocabulary",
+                ModeSupportJson = JsonSupport.Serialize(new[] { "self" }),
+                PublishedRevisionId = "sd-vocabulary-001-r1",
+                Status = ContentStatus.Published,
+                CaseNotes = "Drill: replace technical jargon with patient-friendly language.",
+                DetailJson = JsonSupport.Serialize(new
+                {
+                    drillKind = "vocabulary",
+                    focus = "Hypertension → high blood pressure; myocardial infarction → heart attack.",
+                })
+            },
+            new ContentItem
+            {
+                Id = "sd-chunking-001",
+                ContentType = "speaking_drill",
+                SubtestCode = "speaking",
+                ProfessionId = null,
+                Title = "Chunking — pacing complex explanations",
+                Difficulty = "medium",
+                EstimatedDurationMinutes = 6,
+                CriteriaFocusJson = JsonSupport.Serialize(new[] { "fluency", "intelligibility" }),
+                ScenarioType = "chunking",
+                ModeSupportJson = JsonSupport.Serialize(new[] { "self" }),
+                PublishedRevisionId = "sd-chunking-001-r1",
+                Status = ContentStatus.Published,
+                CaseNotes = "Drill: pause between thought groups when explaining a treatment plan.",
+                DetailJson = JsonSupport.Serialize(new
+                {
+                    drillKind = "chunking",
+                    focus = "Group ideas with deliberate micro-pauses (≈300 ms).",
+                })
+            },
+            new ContentItem
+            {
+                Id = "sd-empathy-001",
+                ContentType = "speaking_drill",
+                SubtestCode = "speaking",
+                ProfessionId = null,
+                Title = "Empathy — acknowledging fear and concern",
+                Difficulty = "medium",
+                EstimatedDurationMinutes = 5,
+                CriteriaFocusJson = JsonSupport.Serialize(new[] { "relationship_building", "patient_perspective" }),
+                ScenarioType = "empathy",
+                ModeSupportJson = JsonSupport.Serialize(new[] { "self" }),
+                PublishedRevisionId = "sd-empathy-001-r1",
+                Status = ContentStatus.Published,
+                CaseNotes = "Drill: acknowledge concerns explicitly before redirecting.",
+                DetailJson = JsonSupport.Serialize(new
+                {
+                    drillKind = "empathy",
+                    focus = "Name + normalise + invite — \"That sounds frightening — many people in your situation feel the same. Tell me more...\"",
+                })
             },
             new ContentItem
             {

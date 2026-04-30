@@ -153,6 +153,25 @@ export interface SpeakingTask {
   profession: string;
   criteriaFocus: string;
   duration: string;
+  prepTimeSeconds?: number;
+  roleplayTimeSeconds?: number;
+  patientEmotion?: string;
+  communicationGoal?: string;
+  clinicalTopic?: string;
+  criteriaFocusTags?: string[];
+  disclaimer?: string;
+}
+
+export interface CandidateCard {
+  role?: string;
+  candidateRole?: string;
+  setting?: string;
+  patient?: string;
+  patientRole?: string;
+  brief?: string;
+  task?: string;
+  background?: string;
+  tasks?: string[];
 }
 
 export interface RoleCard {
@@ -164,6 +183,15 @@ export interface RoleCard {
   brief: string;
   tasks: string[];
   background: string;
+  candidateCard?: CandidateCard;
+  warmUpQuestions?: string[];
+  prepTimeSeconds?: number;
+  roleplayTimeSeconds?: number;
+  patientEmotion?: string;
+  communicationGoal?: string;
+  clinicalTopic?: string;
+  criteriaFocus?: string[];
+  disclaimer?: string;
 }
 
 export type MarkerType =
@@ -192,6 +220,26 @@ export interface TranscriptLine {
   markers?: TranscriptMarker[];
 }
 
+export interface SpeakingCriterionScore {
+  criterionCode: string;
+  family: 'linguistic' | 'clinical';
+  score: number;
+  max: number;
+  scoreRange?: string;
+  descriptor?: string;
+  confidenceBand?: string;
+  source?: 'ai_grounded' | 'rulebook_fallback';
+  linkedRuleIds?: string[];
+  explanation?: string;
+}
+
+export type SpeakingReadinessBand =
+  | 'not_ready'
+  | 'developing'
+  | 'borderline'
+  | 'exam_ready'
+  | 'strong';
+
 export interface SpeakingResult {
   id: string;
   taskId: string;
@@ -212,6 +260,24 @@ export interface SpeakingResult {
   evalStatus: EvalStatus;
   submittedAt: string;
   nextDrill?: { title: string; description: string; id: string; route?: string };
+  recommendedDrills?: Array<{ title: string; description: string; id: string; route?: string }>;
+  // Wave 1 Speaking criterion contract (docs/SPEAKING-MODULE-PLAN.md §3 Wave 1).
+  criteria?: SpeakingCriterionScore[];
+  criteriaSource?: 'ai_grounded' | 'rulebook_fallback';
+  readinessBand?: SpeakingReadinessBand;
+  readinessBandLabel?: string;
+  estimatedScaledScore?: number;
+  passThreshold?: number;
+  rubricMax?: number;
+  statusReasonCode?: string;
+  statusMessage?: string;
+  retryable?: boolean;
+  retryAfterMs?: number;
+  timing?: {
+    prepTimeSeconds?: number;
+    roleplayTimeSeconds?: number;
+    recordedSeconds?: number;
+  };
 }
 
 export interface PhrasingSegment {
@@ -635,6 +701,8 @@ export interface SpeakingTranscriptReview {
   audioAvailable: boolean;
   audioUrl?: string;
   waveformPeaks: number[];
+  disclaimer?: string;
+  roleCard?: RoleCard;
 }
 
 export interface ProgressEvidenceSummary {
@@ -696,4 +764,3 @@ export interface DiagnosticResult {
 // ══════════════════════════════════════════════════════
 //                    MOCK DATA FIXTURES
 // ══════════════════════════════════════════════════════
-
