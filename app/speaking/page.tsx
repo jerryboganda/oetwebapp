@@ -233,7 +233,10 @@ export default function SpeakingHome() {
               <LearnerSurfaceCard card={drillFocusCard}>
                 <div className="space-y-2.5">
                   {(home?.commonIssuesToImprove ?? ['Build smoother openings for role plays.', 'Keep the professional tone consistent.']).slice(0, 3).map((issue) => (
-                    <div key={issue} className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-sm text-navy/80">
+                    <div
+                      key={issue}
+                      className="rounded-xl border !border-amber-300 !bg-white px-3 py-2 text-sm font-black !text-slate-950 shadow-sm shadow-amber-950/5 dark:!border-amber-300/30 dark:!bg-slate-950 dark:!text-amber-50 dark:shadow-none"
+                    >
                       {issue}
                     </div>
                   ))}

@@ -498,75 +498,96 @@ export default function BillingPage() {
           </div>
         </section>
 
-        {/* ── Validated Checkout + Active Add-ons ── */}
+        {/* Visual checkout + active add-ons */}
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-          <MotionSection className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          <MotionSection className="rounded-[28px] border border-primary/20 bg-gradient-to-br from-primary/10 via-surface to-surface p-6 shadow-sm dark:border-primary/25 dark:from-primary/15">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Validated Checkout</p>
-                <h2 className="mt-2 text-2xl font-black text-navy">Generate a quote before you pay</h2>
-                <p className="mt-2 text-sm text-muted">Coupon codes, plan switches, and add-on purchases are priced by the server so the checkout handoff stays consistent.</p>
+              <div className="flex items-start gap-4">
+                <div className="rounded-2xl bg-primary text-white p-3 shadow-sm">
+                  <CreditCard className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-primary">Validated checkout</p>
+                  <h2 className="mt-1 text-2xl font-black text-navy">Quote builder</h2>
+                  <p className="mt-2 max-w-xl text-sm text-muted">Pick a plan or add-on below, then confirm one server-checked total here.</p>
+                </div>
               </div>
-              <Button variant="outline" onClick={() => { setCouponCode(''); setQuote(null); setQuoteLabel(null); }}>Clear quote</Button>
+              <Button variant="outline" onClick={() => { setCouponCode(''); setQuote(null); setQuoteLabel(null); }}>Reset quote</Button>
             </div>
-            <div className="mt-6 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-              <Input label="Coupon code" value={couponCode} onChange={(event) => setCouponCode(event.target.value.toUpperCase())} placeholder="WELCOME10" hint="Apply a coupon to the next quote you generate." />
-              <div className="rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-muted">Coupons are checked at checkout.</div>
+
+            <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+              <Input label="Coupon code" value={couponCode} onChange={(event) => setCouponCode(event.target.value.toUpperCase())} placeholder="WELCOME10" hint="Optional — applied to the next generated quote." />
+              <div className="inline-flex min-h-12 items-center justify-center rounded-2xl border !border-emerald-300 !bg-white px-4 py-3 text-sm font-black !text-emerald-800 shadow-sm shadow-emerald-950/5 dark:!border-emerald-300/30 dark:!bg-slate-950 dark:!text-emerald-100 dark:shadow-none">
+                <CheckCircle2 className="mr-2 inline h-4 w-4 !text-emerald-600 dark:!text-emerald-200" />Server validated
+              </div>
             </div>
-            <div className="mt-6 rounded-2xl border border-dashed border-border bg-background-light p-5">
+
+            <div className="mt-6 rounded-[24px] border border-border bg-surface/90 p-5 shadow-inner">
               {quote ? (
-                <div className="space-y-4">
+                <div className="space-y-5">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-muted">Last quote</p>
-                      <h3 className="mt-2 text-xl font-black text-navy">{quoteLabel ?? 'Checkout'}</h3>
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">Ready quote</p>
+                      <h3 className="mt-1 text-xl font-black text-navy">{quoteLabel ?? 'Checkout'}</h3>
                       <p className="mt-1 text-sm text-muted">{quote.summary}</p>
                     </div>
-                    <span className="rounded-full bg-navy px-3 py-1 text-xs font-black uppercase tracking-widest text-white">{quote.status}</span>
+                    <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-black uppercase tracking-widest text-white dark:bg-white dark:text-slate-950">{quote.status}</span>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-2xl border border-border bg-surface p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Subtotal</p><p className="mt-2 text-sm font-bold text-navy">{formatCurrency(quote.subtotalAmount, quote.currency)}</p></div>
-                    <div className="rounded-2xl border border-border bg-surface p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Discount</p><p className="mt-2 text-sm font-bold text-navy">{formatCurrency(quote.discountAmount, quote.currency)}</p></div>
-                    <div className="rounded-2xl border border-border bg-surface p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Total</p><p className="mt-2 text-sm font-bold text-navy">{formatCurrency(quote.totalAmount, quote.currency)}</p></div>
+                    <div className="rounded-2xl border border-border bg-background-light p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Subtotal</p><p className="mt-2 text-lg font-black text-navy">{formatCurrency(quote.subtotalAmount, quote.currency)}</p></div>
+                    <div className="rounded-2xl border border-border bg-background-light p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Discount</p><p className="mt-2 text-lg font-black text-success">{formatCurrency(quote.discountAmount, quote.currency)}</p></div>
+                    <div className="rounded-2xl border border-primary/20 bg-primary/10 p-4"><p className="text-xs font-black uppercase tracking-widest text-primary">Total</p><p className="mt-2 text-lg font-black text-navy">{formatCurrency(quote.totalAmount, quote.currency)}</p></div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="grid gap-2">
                     {quote.items.map((item) => (
-                      <div key={`${item.code}:${item.kind}`} className="flex items-center justify-between rounded-2xl border border-border bg-surface px-4 py-3 text-sm">
-                        <div><p className="font-bold text-navy">{item.name}</p><p className="text-xs uppercase tracking-widest text-muted">{item.kind} | {item.code}</p></div>
+                      <div key={`${item.code}:${item.kind}`} className="flex items-center justify-between rounded-2xl border border-border bg-background-light px-4 py-3 text-sm">
+                        <div><p className="font-bold text-navy">{item.name}</p><p className="text-xs uppercase tracking-widest text-muted">{item.kind} · {item.code}</p></div>
                         <p className="font-black text-navy">{formatCurrency(item.amount, item.currency)}</p>
                       </div>
                     ))}
                   </div>
                   {Object.keys(quote.validation ?? {}).length > 0 ? (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-300/30 dark:bg-amber-300/10 dark:text-amber-100">
                       <p className="font-black uppercase tracking-widest">Validation</p>
                       <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(quote.validation, null, 2)}</pre>
                     </div>
                   ) : null}
                 </div>
               ) : (
-                <div className="text-sm text-muted">Select a plan or add-on below to calculate a server-validated quote.</div>
+                <div className="grid gap-3 text-sm text-muted sm:grid-cols-3">
+                  <div className="rounded-2xl border border-border bg-background-light p-4"><p className="font-black text-navy">1. Choose</p><p className="mt-1">Select a plan or add-on.</p></div>
+                  <div className="rounded-2xl border border-border bg-background-light p-4"><p className="font-black text-navy">2. Validate</p><p className="mt-1">Coupon and totals are checked.</p></div>
+                  <div className="rounded-2xl border border-border bg-background-light p-4"><p className="font-black text-navy">3. Checkout</p><p className="mt-1">Pay only after quote review.</p></div>
+                </div>
               )}
             </div>
           </MotionSection>
 
-          <MotionSection delayIndex={1} className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          <MotionSection delayIndex={1} className="rounded-[28px] border border-primary/15 bg-surface p-6 shadow-sm">
             <div className="flex items-start gap-4">
-              <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 text-indigo-700"><Sparkles className="h-5 w-5" /></div>
+              <div className="rounded-2xl border border-primary/20 bg-primary/10 p-3 text-primary"><Sparkles className="h-5 w-5" /></div>
               <div>
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Active Add-ons</p>
-                <h2 className="mt-2 text-xl font-black text-navy">Current subscription items are visible here</h2>
-                <p className="mt-2 text-sm leading-6 text-muted">Existing subscription items come from the server-backed catalog, so the page can reflect purchased extras without guessing.</p>
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Active add-ons</p>
+                <h2 className="mt-1 text-xl font-black text-navy">Subscription extras</h2>
+                <p className="mt-2 text-sm leading-6 text-muted">Visible, server-backed items attached to this learner account.</p>
               </div>
             </div>
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-5 grid gap-3">
               {activeAddOns.length > 0 ? activeAddOns.map((addOn) => (
-                <span key={addOn.id} className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-black uppercase tracking-widest text-indigo-700">{addOn.name} | {addOn.quantity}</span>
+                <div key={addOn.id} className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+                  <p className="text-sm font-black text-navy">{addOn.name}</p>
+                  <p className="mt-1 text-xs font-bold uppercase tracking-widest text-primary">Quantity {addOn.quantity}</p>
+                </div>
               )) : (
-                <span className="rounded-full border border-border bg-background-light px-3 py-1 text-xs font-black uppercase tracking-widest text-muted">No active add-ons</span>
+                <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-center">
+                  <p className="text-sm font-black text-navy">No active add-ons</p>
+                  <p className="mt-1 text-xs text-muted">Purchased review credits will appear here.</p>
+                </div>
               )}
             </div>
-            <div className="mt-6 rounded-2xl border border-border bg-background-light p-4 text-sm leading-6 text-muted">Add-on purchases use the same checkout flow as plan changes, so any coupons and totals stay consistent.</div>
+            <div className="mt-5 rounded-2xl border border-border bg-background-light p-4 text-sm leading-6 text-muted">
+              Add-ons follow the same quote → checkout flow as plan changes.
+            </div>
           </MotionSection>
         </section>
 
@@ -607,19 +628,25 @@ export default function BillingPage() {
               const isCurrent = plan.changeDirection === 'current';
               const isPreviewing = previewPlanId === plan.id && preview;
               return (
-                <MotionItem key={plan.id} delayIndex={index} className={`rounded-2xl border p-5 shadow-sm ${isCurrent ? 'border-navy bg-navy text-white' : 'border-border bg-surface'}`}>
+                <MotionItem
+                  key={plan.id}
+                  delayIndex={index}
+                  className={`rounded-2xl border p-5 shadow-sm ${
+                    isCurrent ? 'border-slate-800 bg-slate-950 text-white dark:border-slate-700' : 'border-border bg-surface'
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className={`text-xs font-black uppercase tracking-widest ${isCurrent ? 'text-white/70' : 'text-muted'}`}>{plan.badge || plan.tier}</p>
+                      <p className={`text-xs font-black uppercase tracking-widest ${isCurrent ? 'text-slate-300' : 'text-muted'}`}>{plan.badge || plan.tier}</p>
                       <h3 className={`mt-2 text-xl font-black ${isCurrent ? 'text-white' : 'text-navy'}`}>{plan.label}</h3>
-                      <p className={`mt-2 text-sm leading-6 ${isCurrent ? 'text-white/80' : 'text-muted'}`}>{plan.description}</p>
+                      <p className={`mt-2 text-sm leading-6 ${isCurrent ? 'text-slate-200' : 'text-muted'}`}>{plan.description}</p>
                     </div>
                     {plan.changeDirection === 'upgrade' ? <ArrowUpCircle className="h-5 w-5 text-success" /> : null}
                     {plan.changeDirection === 'downgrade' ? <ArrowDownCircle className="h-5 w-5 text-amber-500" /> : null}
                   </div>
-                  <div className={`mt-5 rounded-2xl border p-4 text-sm ${isCurrent ? 'border-white/10 bg-white/5' : 'border-border bg-background-light'}`}>
+                  <div className={`mt-5 rounded-2xl border p-4 text-sm ${isCurrent ? 'border-white/15 bg-white/10' : 'border-border bg-background-light'}`}>
                     <p className={`font-black ${isCurrent ? 'text-white' : 'text-navy'}`}>{plan.price} / {plan.interval}</p>
-                    <p className={`mt-1 ${isCurrent ? 'text-white/70' : 'text-muted'}`}>{plan.reviewCredits} review credits included</p>
+                    <p className={`mt-1 ${isCurrent ? 'text-slate-200' : 'text-muted'}`}>{plan.reviewCredits} review credits included</p>
                   </div>
                   {!isCurrent ? (
                     <div className="mt-5 space-y-3">
@@ -718,7 +745,7 @@ export default function BillingPage() {
                   <MotionItem
                     key={plan.id}
                     delayIndex={planIndex}
-                    className={`rounded-2xl border p-4 shadow-sm ${plan.changeDirection === 'current' ? 'border-navy/10 bg-navy/5' : 'border-border bg-surface'}`}
+                    className={`rounded-2xl border p-4 shadow-sm ${plan.changeDirection === 'current' ? 'border-primary/20 bg-primary/10 dark:bg-primary/15' : 'border-border bg-surface'}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -729,7 +756,7 @@ export default function BillingPage() {
                         </p>
                       </div>
                       {plan.changeDirection === 'current' ? (
-                        <span className="rounded-full bg-navy/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-navy">
+                        <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
                           Current
                         </span>
                       ) : null}
@@ -767,7 +794,7 @@ export default function BillingPage() {
                           <th
                             key={plan.id}
                             className={`px-4 py-4 text-center text-xs font-black uppercase tracking-widest ${
-                              plan.changeDirection === 'current' ? 'bg-navy/5 text-navy' : 'text-muted'
+                              plan.changeDirection === 'current' ? 'bg-primary/10 text-primary' : 'text-muted'
                             }`}
                           >
                             <div className="flex flex-col items-center gap-1">
@@ -792,7 +819,7 @@ export default function BillingPage() {
                               <td
                                 key={`${row.feature}:${plan?.id ?? index}`}
                                 className={`px-4 py-3.5 text-center ${
-                                  isCurrent ? 'bg-navy/5' : ''
+                                  isCurrent ? 'bg-primary/10' : ''
                                 }`}
                               >
                                 {typeof value === 'boolean' ? (

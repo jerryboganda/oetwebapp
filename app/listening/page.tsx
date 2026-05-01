@@ -8,7 +8,6 @@ import { MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
@@ -249,32 +248,41 @@ export default function ListeningHome() {
                 ],
               }}
             >
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap gap-2">
-                  {pathway.milestones.map((m) => (
-                    <Badge
+              <div className="mt-5 space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  {pathway.milestones.map((m, milestoneIndex) => (
+                    <div
                       key={m.code}
-                      variant={m.achieved ? 'success' : 'info'}
-                      title={
-                        m.target != null && m.progress != null
-                          ? `${m.label} (${m.progress}/${m.target})`
-                          : m.label
-                      }
+                      title={m.target != null && m.progress != null ? `${m.label} (${m.progress}/${m.target})` : m.label}
+                      className={`flex min-h-14 items-center gap-2 rounded-2xl border px-3 py-2.5 shadow-sm ${
+                        m.achieved
+                          ? '!border-emerald-300 !bg-white !text-emerald-900 dark:!border-emerald-300/30 dark:!bg-slate-950 dark:!text-emerald-100'
+                          : '!border-primary/25 !bg-white !text-slate-950 dark:!border-primary/30 dark:!bg-slate-950 dark:!text-white'
+                      }`}
                     >
-                      {m.achieved ? '✓ ' : ''}
-                      {m.label}
-                    </Badge>
+                      <span
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${
+                          m.achieved ? '!bg-emerald-600 !text-white' : '!bg-primary/10 !text-primary ring-1 ring-primary/20 dark:!bg-white/10 dark:!text-primary'
+                        }`}
+                      >
+                        {m.achieved ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : milestoneIndex + 1}
+                      </span>
+                      <span className="min-w-0 text-xs font-black leading-snug">{m.label}</span>
+                    </div>
                   ))}
                 </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  disabled={pathwayBusy}
-                  onClick={() => void handlePathwayAction()}
-                >
-                  {pathwayBusy ? 'Starting…' : pathway.nextAction.label}{' '}
-                  <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
-                </Button>
+                <div className="flex justify-start sm:justify-end">
+                  <Button
+                    variant="primary"
+                    size="md"
+                    className="w-full justify-center sm:w-auto sm:min-w-72"
+                    disabled={pathwayBusy}
+                    onClick={() => void handlePathwayAction()}
+                  >
+                    {pathwayBusy ? 'Starting…' : pathway.nextAction.label}{' '}
+                    <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
+                  </Button>
+                </div>
               </div>
             </LearnerSurfaceCard>
           </section>

@@ -43,6 +43,7 @@ export interface StudyPlanTask {
   section: 'today' | 'thisWeek' | 'nextCheckpoint' | 'weakSkillFocus';
   contentId?: string;
   type?: string;
+  route?: string;
 }
 
 // ═══════════════════ WRITING TYPES ═══════════════════
@@ -679,6 +680,7 @@ export interface ReadinessData {
   subTests: SubTestReadiness[];
   blockers: { id: number; title: string; description: string }[];
   evidence: {
+    source?: string;
     mocksCompleted: number;
     practiceQuestions: number;
     expertReviews: number;

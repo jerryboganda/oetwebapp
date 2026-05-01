@@ -172,19 +172,19 @@ export default function ReadinessCenter() {
 
           <MotionSection
             delayIndex={1}
-            className="bg-navy rounded-[24px] p-8 text-white relative overflow-hidden shadow-sm flex flex-col justify-center"
+            className="rounded-[24px] border border-slate-800 bg-slate-950 p-8 text-white relative overflow-hidden shadow-sm flex flex-col justify-center dark:border-slate-700"
           >
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3" aria-hidden="true" />
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="w-6 h-6 text-primary" />
-                <span className="text-sm font-black uppercase tracking-widest text-primary">Recommended Study</span>
+                <span className="text-sm font-black uppercase tracking-widest text-violet-200">Recommended Study</span>
               </div>
               <div className="flex items-baseline gap-2 mb-2">
                 <h2 className="text-5xl font-black">{data.recommendedStudyHours}</h2>
-                <span className="text-xl font-bold text-white/70">hours</span>
+                <span className="text-xl font-bold text-slate-200">hours</span>
               </div>
-              <p className="text-white/70 text-sm leading-relaxed">
+              <p className="text-slate-200 text-sm leading-relaxed">
                 Estimated remaining study time to reach target readiness levels before {data.targetDate}.
               </p>
             </div>

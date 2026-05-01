@@ -54,7 +54,7 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
         <Link
           href="/achievements"
           aria-label={`Level ${level}`}
-          className="flex items-center gap-1 rounded-full bg-navy px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-navy/90 dark:bg-navy dark:text-white dark:hover:bg-navy/80"
+          className="flex items-center gap-1 rounded-full bg-slate-950 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm ring-1 ring-white/10 transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:ring-white/70 dark:hover:bg-slate-100"
         >
           <Zap className="h-3.5 w-3.5" aria-hidden="true" />
           Lv.{level}

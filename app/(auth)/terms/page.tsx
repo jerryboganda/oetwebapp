@@ -231,10 +231,18 @@ export default function TermsPage() {
     >
       <div className={legalStyles.shell}>
         <div className={legalStyles.meta}>
-          <span className={legalStyles.metaPill}>Effective {EFFECTIVE_FROM}</span>
-          <span>Last updated {LAST_UPDATED}</span>
-          <span aria-hidden="true">·</span>
-          <span>Plain-English summary first, full terms below</span>
+          <span className={legalStyles.metaPill}>
+            <span className={legalStyles.metaLabel}>Effective</span>
+            <span>{EFFECTIVE_FROM}</span>
+          </span>
+          <span className={legalStyles.metaPill}>
+            <span className={legalStyles.metaLabel}>Last updated</span>
+            <span>{LAST_UPDATED}</span>
+          </span>
+          <span className={`${legalStyles.metaPill} ${legalStyles.metaPillWide}`.trim()}>
+            <span className={legalStyles.metaLabel}>Plain English</span>
+            <span>Summary first, full terms below</span>
+          </span>
         </div>
 
         <div className={legalStyles.layout}>

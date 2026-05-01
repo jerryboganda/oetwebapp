@@ -758,7 +758,7 @@ public partial class LearnerService(
         var freeze = await GetFreezeStatusAsync(userId, cancellationToken);
         var readiness = await GetReadinessAsync(userId, cancellationToken);
         var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var plan = await GetStudyPlanAsync(userId, cancellationToken);
+        await GetStudyPlanAsync(userId, cancellationToken);
         var activePlan = await GetActiveStudyPlanEntityAsync(userId, cancellationToken);
         var attemptIds = await db.Attempts.Where(x => x.UserId == userId).Select(x => x.Id).ToListAsync(cancellationToken);
         var latestEvaluation = await GetLatestEvaluationForAttemptsAsync(attemptIds, cancellationToken);
@@ -768,13 +768,43 @@ public partial class LearnerService(
         var pendingReviews = await db.ReviewRequests
             .Where(x => attemptIds.Contains(x.AttemptId) && (x.State == ReviewRequestState.Submitted || x.State == ReviewRequestState.Queued || x.State == ReviewRequestState.InReview))
             .CountAsync(cancellationToken);
-        var streak = Math.Min(7, await db.Attempts.CountAsync(x => x.UserId == userId, cancellationToken));
-        var todaysTasks = await db.StudyPlanItems
+        var planItems = await db.StudyPlanItems
             .Where(x => x.StudyPlanId == activePlan.Id)
-            .OrderBy(x => x.DueDate)
-            .Take(2)
             .ToListAsync(cancellationToken);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var todaysTasks = planItems
+            .Where(x => string.Equals(x.Section, "today", StringComparison.OrdinalIgnoreCase) || x.DueDate <= today)
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.DurationMinutes)
+            .Take(5)
+            .ToList();
+        var dueItems = planItems.Where(x => x.DueDate <= today).ToList();
+        var completedDueItems = dueItems.Count(x => x.Status == StudyPlanItemStatus.Completed);
+        var completionRate = dueItems.Count > 0
+            ? Math.Round(completedDueItems / (double)dueItems.Count, 2)
+            : (double?)null;
+        var nextPlanItem = planItems
+            .Where(x => x.Status is not StudyPlanItemStatus.Completed and not StudyPlanItemStatus.Skipped)
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.DurationMinutes)
+            .FirstOrDefault();
+        var nextMockItem = planItems
+            .Where(x => string.Equals(x.ItemType, "mock", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(x => x.DueDate)
+            .FirstOrDefault();
         var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
+        var primaryActions = new List<object>
+        {
+            new { id = "resume-study-plan", label = "Resume Study Plan", route = "/study-plan" }
+        };
+        if (nextPlanItem is not null)
+        {
+            primaryActions.Add(new { id = "start-next-task", label = "Start Next Task", route = StudyPlanRouteForItem(nextPlanItem) });
+        }
+        if (latestEvaluation is not null)
+        {
+            primaryActions.Add(new { id = "view-latest-feedback", label = "View Latest Feedback", route = AttemptFeedbackRoute(latestEvaluation.SubtestCode, latestEvaluation.Id) });
+        }
 
         return new
         {
@@ -785,12 +815,14 @@ public partial class LearnerService(
                 todaysTasks = todaysTasks.Select(StudyPlanItemDto),
                 latestEvaluatedSubmission = latestEvaluation is null || latestAttempt is null
                     ? null
-                    : new { evaluationId = latestEvaluation.Id, attemptId = latestAttempt.Id, subtest = latestEvaluation.SubtestCode, scoreRange = latestEvaluation.ScoreRange, route = $"/{latestEvaluation.SubtestCode}/result/{latestEvaluation.Id}" },
+                    : new { evaluationId = latestEvaluation.Id, attemptId = latestAttempt.Id, subtest = latestEvaluation.SubtestCode, scoreRange = latestEvaluation.ScoreRange, route = AttemptFeedbackRoute(latestEvaluation.SubtestCode, latestEvaluation.Id) },
                 weakCriteria = latestEvaluation is null
                     ? new List<Dictionary<string, object?>>()
                     : JsonSupport.Deserialize<List<Dictionary<string, object?>>>(latestEvaluation.CriterionScoresJson, []),
-                momentum = new { streakDays = streak, completionRate = 0.78 },
-                nextMockRecommendation = new { title = $"Full {FormatExamFamilyLabel(goal.ExamFamilyCode)} Mock Test", route = "/mocks", rationale = "A full mock will confirm whether your recent practice gains are transferring under pressure." },
+                momentum = new { streakDays = user?.CurrentStreak ?? 0, completionRate, dueItems = dueItems.Count, completedDueItems },
+                nextMockRecommendation = nextMockItem is null
+                    ? null
+                    : new { title = nextMockItem.Title, route = StudyPlanRouteForItem(nextMockItem), rationale = nextMockItem.Rationale },
                 pendingExpertReviews = new { count = pendingReviews, route = "/reviews" }
             },
             engagement = user is not null ? new
@@ -802,12 +834,7 @@ public partial class LearnerService(
                 totalPracticeSessions = user.TotalPracticeSessions
             } : null,
             freeze,
-            primaryActions = new[]
-            {
-                new { id = "resume-study-plan", label = "Resume Study Plan", route = "/study-plan" },
-                new { id = "start-next-task", label = "Start Next Task", route = "/writing/tasks/wt-001" },
-                new { id = "view-latest-feedback", label = "View Latest Feedback", route = latestEvaluation is null ? "/writing" : $"/writing/result/{latestEvaluation.Id}" }
-            },
+            primaryActions,
             partialData = latestEvaluation is null,
             lastUpdatedAt = DateTimeOffset.UtcNow
         };
@@ -3461,26 +3488,20 @@ public partial class LearnerService(
             PayloadJson = JsonSupport.Serialize(new
             {
                 targetDate = targetDate.ToString("yyyy-MM-dd"),
-                weeksRemaining = 12,
-                overallRisk = "moderate",
-                recommendedStudyHours = 10,
-                weakestLink = "Writing - Conciseness & Clarity",
-                subTests = new[]
-                {
-                    new { id = "rd-w", name = "Writing", readiness = 62, target = 80, status = "Needs attention", isWeakest = true },
-                    new { id = "rd-s", name = "Speaking", readiness = 68, target = 80, status = "On track", isWeakest = false },
-                    new { id = "rd-r", name = "Reading", readiness = 76, target = 80, status = "Almost there", isWeakest = false },
-                    new { id = "rd-l", name = "Listening", readiness = 72, target = 80, status = "Almost there", isWeakest = false }
-                },
-                blockers = new[]
-                {
-                    new { id = 1, title = "Writing conciseness remains below threshold", description = "Tighten detail so each response stays focused on the clinical brief." },
-                    new { id = 2, title = "Speaking fluency still needs structure", description = "Keep answers short, ordered, and confident under time pressure." }
-                },
+                weeksRemaining = Math.Max(0, (int)Math.Ceiling((targetDate.ToDateTime(TimeOnly.MinValue) - now.UtcDateTime.Date).TotalDays / 7.0)),
+                overallRisk = "unknown",
+                recommendedStudyHours = goal.StudyHoursPerWeek,
+                weakestLink = "No readiness evidence yet",
+                subTests = Array.Empty<object>(),
+                blockers = Array.Empty<object>(),
                 evidence = new
                 {
-                    source = "bootstrap",
-                    notes = "Created automatically for a newly initialized learner account."
+                    source = "no_evidence",
+                    mocksCompleted = 0,
+                    practiceQuestions = 0,
+                    expertReviews = 0,
+                    recentTrend = "Complete practice, mocks, or tutor reviews to unlock live readiness analytics.",
+                    lastUpdated = now
                 }
             })
         };
@@ -3494,88 +3515,13 @@ public partial class LearnerService(
             Version = 1,
             GeneratedAt = now,
             State = AsyncState.Completed,
-            Checkpoint = "Personalized plan ready",
-            WeakSkillFocus = "Writing conciseness and speaking fluency",
+            Checkpoint = "Awaiting live study-plan evidence",
+            WeakSkillFocus = "Awaiting learner evidence",
             ExamFamilyCode = goal.ExamFamilyCode
         };
 
     private static IEnumerable<StudyPlanItem> CreateDefaultStudyPlanItems(string planId)
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        return
-        [
-            new StudyPlanItem
-            {
-                Id = $"spi-{Guid.NewGuid():N}",
-                StudyPlanId = planId,
-                Title = "Writing: Discharge Summary Practice",
-                SubtestCode = "writing",
-                DurationMinutes = 45,
-                Rationale = "Start with a focused writing task that sharpens conciseness and clinical detail selection.",
-                DueDate = today,
-                Status = StudyPlanItemStatus.NotStarted,
-                Section = "today",
-                ContentId = "wt-001",
-                ItemType = "practice"
-            },
-            new StudyPlanItem
-            {
-                Id = $"spi-{Guid.NewGuid():N}",
-                StudyPlanId = planId,
-                Title = "Speaking: Patient Handover Role Play",
-                SubtestCode = "speaking",
-                DurationMinutes = 20,
-                Rationale = "Practice a calm, ordered response so your fluency stays strong under pressure.",
-                DueDate = today,
-                Status = StudyPlanItemStatus.NotStarted,
-                Section = "today",
-                ContentId = "st-001",
-                ItemType = "roleplay"
-            },
-            new StudyPlanItem
-            {
-                Id = $"spi-{Guid.NewGuid():N}",
-                StudyPlanId = planId,
-                Title = "Reading: Part C Detail Extraction",
-                SubtestCode = "reading",
-                DurationMinutes = 30,
-                Rationale = "Train scanning for exact figures and qualifiers before moving on to the next item.",
-                DueDate = today.AddDays(1),
-                Status = StudyPlanItemStatus.NotStarted,
-                Section = "thisWeek",
-                ContentId = "rt-001",
-                ItemType = "practice"
-            },
-            new StudyPlanItem
-            {
-                Id = $"spi-{Guid.NewGuid():N}",
-                StudyPlanId = planId,
-                Title = "Listening: Number & Frequency Drill",
-                SubtestCode = "listening",
-                DurationMinutes = 15,
-                Rationale = "Use a short drill to reinforce number recognition and frequency cues.",
-                DueDate = today.AddDays(2),
-                Status = StudyPlanItemStatus.NotStarted,
-                Section = "thisWeek",
-                ContentId = "lt-001",
-                ItemType = "drill"
-            },
-            new StudyPlanItem
-            {
-                Id = $"spi-{Guid.NewGuid():N}",
-                StudyPlanId = planId,
-                Title = "Vocabulary: Learn 10 new terms",
-                SubtestCode = "vocabulary",
-                DurationMinutes = 10,
-                Rationale = "Build your clinical lexicon with spaced-repetition flashcards and AI-gloss on unknown words.",
-                DueDate = today,
-                Status = StudyPlanItemStatus.NotStarted,
-                Section = "today",
-                ContentId = "vocabulary-daily-set",
-                ItemType = "vocabulary"
-            }
-        ];
-    }
+        => Array.Empty<StudyPlanItem>();
 
     private static void ApplyGoalSettingsPatch(LearnerGoal goal, Dictionary<string, object?> values)
     {
@@ -4803,8 +4749,25 @@ public partial class LearnerService(
         status = ToStudyPlanItemState(item.Status),
         section = item.Section,
         contentId = item.ContentId,
-        itemType = item.ItemType
+        itemType = item.ItemType,
+        route = StudyPlanRouteForItem(item)
     };
+
+    private static string StudyPlanRouteForItem(StudyPlanItem item)
+    {
+        if (string.Equals(item.ItemType, "mock", StringComparison.OrdinalIgnoreCase)) return "/mocks";
+        if (string.Equals(item.SubtestCode, "vocabulary", StringComparison.OrdinalIgnoreCase)) return "/vocabulary";
+        if (string.IsNullOrWhiteSpace(item.ContentId)) return $"/{item.SubtestCode.ToLowerInvariant()}";
+
+        return item.SubtestCode.ToLowerInvariant() switch
+        {
+            "writing" => $"/writing/player?taskId={Uri.EscapeDataString(item.ContentId)}",
+            "speaking" => $"/speaking/task/{Uri.EscapeDataString(item.ContentId)}",
+            "reading" => $"/reading/player/{Uri.EscapeDataString(item.ContentId)}",
+            "listening" => $"/listening/player/{Uri.EscapeDataString(item.ContentId)}",
+            _ => $"/{item.SubtestCode.ToLowerInvariant()}"
+        };
+    }
 
     private static string MergeJsonSection(string currentJson, Dictionary<string, object?> values)
     {

@@ -1261,6 +1261,7 @@ export async function fetchStudyPlan(): Promise<StudyPlanTask[]> {
     section: item.section,
     contentId: item.contentId ?? undefined,
     type: item.itemType ?? undefined,
+    route: typeof item.route === 'string' ? item.route : undefined,
   }));
 }
 
@@ -1287,6 +1288,7 @@ export async function updateStudyPlanTask(taskId: string, updates: Partial<Study
     section: result.section,
     contentId: result.contentId ?? undefined,
     type: result.itemType ?? undefined,
+    route: typeof result.route === 'string' ? result.route : undefined,
   };
 }
 

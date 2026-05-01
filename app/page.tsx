@@ -50,6 +50,17 @@ const SUBTEST_COLORS: Record<SubTest, string> = {
   Listening: 'text-indigo-600 bg-indigo-50',
 };
 
+function hasLiveReadinessEvidence(readiness: ReturnType<typeof useDashboardHome>['data']['readiness']) {
+  if (!readiness) return false;
+  const source = readiness.evidence?.source;
+  if (source === 'bootstrap' || source === 'no_evidence') return false;
+  return readiness.subTests.length > 0;
+}
+
+function routeForTask(task: { route?: string; subTest: SubTest }) {
+  return task.route ?? `/${task.subTest.toLowerCase()}`;
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
@@ -62,11 +73,12 @@ export default function Dashboard() {
   const completedToday = todayTasks.filter((task) => task.status === 'completed').length;
   const nextAction = todayTasks.find((task) => task.status !== 'completed');
   const asyncStatus = status === 'loading' ? 'loading' : status === 'error' ? 'error' : status === 'partial' ? 'partial' : !profile ? 'empty' : 'success' as const;
-  const readinessSubTests = readiness?.subTests ?? [];
+  const liveReadiness = hasLiveReadinessEvidence(readiness) ? readiness : null;
+  const readinessSubTests = liveReadiness?.subTests ?? [];
   const readinessAverage = readinessSubTests.length > 0
     ? Math.round(readinessSubTests.reduce((sum, subTest) => sum + subTest.readiness, 0) / readinessSubTests.length)
     : 0;
-  const readinessRecentTrend = readiness?.evidence?.recentTrend ?? 'Trend data will appear after more practice.';
+  const readinessRecentTrend = liveReadiness?.evidence?.recentTrend ?? 'Trend data will appear after more practice.';
 
   const dashboardHeroHighlights = [
     {
@@ -104,42 +116,43 @@ export default function Dashboard() {
         eyebrow: 'Recommended Next',
         eyebrowIcon: Sparkles,
         title: nextAction.title,
-        description: 'This is your clearest next move inside the current study plan, based on what is due now and still incomplete.',
+        description: nextAction.rationale || 'This is the next scheduled item from your live study plan.',
         metaItems: [
           { icon: Timer, label: nextAction.duration },
           { icon: nextActionSubTestIcon, label: nextAction.subTest },
         ],
         primaryAction: {
           label: 'Start Now',
-          href: `/${nextAction.subTest.toLowerCase()}`,
+          href: routeForTask(nextAction),
         },
       } satisfies LearnerSurfaceCardModel)
     : null;
 
-  const nextMockCard: LearnerSurfaceCardModel = {
+  const nextMockRecommendation = home?.cards?.nextMockRecommendation;
+  const nextMockCard: LearnerSurfaceCardModel | null = nextMockRecommendation
+    ? {
     kind: 'navigation',
     sourceType: 'backend_summary',
     accent: 'navy',
     eyebrow: 'Mock Progression',
     eyebrowIcon: Flag,
-    title: home?.cards?.nextMockRecommendation?.title ?? 'Full OET Mock Test',
-    description:
-      home?.cards?.nextMockRecommendation?.rationale ??
-      'Use a full mock to check whether your recent practice work is transferring under pressure.',
+    title: nextMockRecommendation.title,
+    description: nextMockRecommendation.rationale,
     metaItems: [
       { icon: Calendar, label: home?.cards?.examDate?.value ?? 'Exam date not set' },
       { icon: Star, label: `${home?.cards?.pendingExpertReviews?.count ?? 0} pending reviews` },
     ],
     primaryAction: {
       label: 'Open Mock Center',
-      href: home?.cards?.nextMockRecommendation?.route ?? '/mocks',
+      href: nextMockRecommendation.route ?? '/mocks',
     },
     secondaryAction: {
       label: 'View Study Plan',
       href: '/study-plan',
       variant: 'outline',
     },
-  };
+  }
+    : null;
 
   return (
     <LearnerDashboardShell pageTitle="Dashboard">
@@ -211,9 +224,26 @@ export default function Dashboard() {
                 <LearnerSurfaceCard card={nextActionCard} />
               </MotionItem>
             ) : null}
-            <MotionItem delayIndex={1}>
-              <LearnerSurfaceCard card={nextMockCard} />
-            </MotionItem>
+            {nextMockCard ? (
+              <MotionItem delayIndex={1}>
+                <LearnerSurfaceCard card={nextMockCard} />
+              </MotionItem>
+            ) : null}
+            {!nextActionCard && !nextMockCard ? (
+              <Card className="border-dashed border-border bg-surface shadow-sm lg:col-span-2">
+                <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-navy">No live dashboard priorities yet</p>
+                    <p className="mt-1 text-xs text-muted">
+                      Complete onboarding, practice, or generate a study plan to populate this area with real next actions.
+                    </p>
+                  </div>
+                  <Button size="sm" onClick={() => router.push('/study-plan')}>
+                    Open Study Plan <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -231,7 +261,7 @@ export default function Dashboard() {
                 />
 
                 <div className="flex flex-col gap-3">
-                  {todayTasks.map((task) => {
+                  {todayTasks.length > 0 ? todayTasks.map((task) => {
                     const Icon = SUBTEST_ICONS[task.subTest];
                     const colorClass = SUBTEST_COLORS[task.subTest];
                     const isComplete = task.status === 'completed';
@@ -260,14 +290,23 @@ export default function Dashboard() {
                           <Button
                             variant="primary"
                             size="sm"
-                            onClick={() => router.push(`/${task.subTest.toLowerCase()}`)}
+                            onClick={() => router.push(routeForTask(task))}
                           >
                             Start <ArrowRight className="ml-1 h-3.5 w-3.5" />
                           </Button>
                         ) : null}
                       </motion.div>
                     );
-                  })}
+                  }) : (
+                    <Card className="border-dashed border-border bg-surface shadow-sm">
+                      <CardContent className="p-5">
+                        <p className="text-sm font-bold text-navy">No live tasks scheduled today</p>
+                        <p className="mt-1 text-xs text-muted">
+                          Tasks will appear here from your server-backed study plan after onboarding or new practice evidence.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               </section>
 
@@ -283,7 +322,7 @@ export default function Dashboard() {
                     {upcomingTasks.map((task) => {
                       const Icon = SUBTEST_ICONS[task.subTest];
                       return (
-                        <CardLink key={task.id} href={`/${task.subTest.toLowerCase()}`}>
+                        <CardLink key={task.id} href={routeForTask(task)}>
                           <CardContent className="flex items-start gap-3 p-0">
                             <Icon className="mt-0.5 h-5 w-5 shrink-0 text-muted" />
                             <div>
@@ -300,7 +339,7 @@ export default function Dashboard() {
             </div>
 
             <div className="space-y-5 lg:col-span-4">
-              {readiness ? (
+              {liveReadiness ? (
                 <Card>
                   <CardHeader>
                     <CardTitle>Test Readiness</CardTitle>
@@ -315,19 +354,19 @@ export default function Dashboard() {
                       {readinessRecentTrend}
                     </p>
                     <p className="text-xs text-muted">
-                      {readiness.weeksRemaining} weeks to exam · {readiness.overallRisk} risk
+                      {liveReadiness.weeksRemaining} weeks to exam · {liveReadiness.overallRisk} risk
                     </p>
                   </CardContent>
                 </Card>
               ) : null}
 
-              {readiness ? (
+              {liveReadiness ? (
                 <Card>
                   <CardHeader>
                     <CardTitle>Skill Breakdown</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {readiness.subTests.map((subTest) => (
+                    {liveReadiness.subTests.map((subTest) => (
                       <div key={subTest.id}>
                         <div className="mb-1 flex justify-between text-sm">
                           <span className="font-semibold text-navy">{subTest.name}</span>
@@ -344,11 +383,11 @@ export default function Dashboard() {
                 </Card>
               ) : null}
 
-              {readiness && readiness.blockers.length > 0 ? (
+              {liveReadiness && liveReadiness.blockers.length > 0 ? (
                 <WeakestLinkCard
-                  criterion={readiness.weakestLink}
-                  subtest={readiness.subTests.find((subTest) => subTest.isWeakest)?.name ?? 'General'}
-                  description={readiness.blockers[0].description}
+                  criterion={liveReadiness.weakestLink}
+                  subtest={liveReadiness.subTests.find((subTest) => subTest.isWeakest)?.name ?? 'General'}
+                  description={liveReadiness.blockers[0].description}
                 />
               ) : null}
 

@@ -44,6 +44,8 @@ tsconfig.tsbuildinfo
 !.env.staging.example
 
 # Local/temp artifacts
+.local-deploy/
+.opencode/*.tmp
 Contactppp.png
 Contactzzz.png
 $sdkRoot/
