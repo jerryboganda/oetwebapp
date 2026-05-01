@@ -621,6 +621,38 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             .Select(x => TryReadOverallScore(x.PayloadJson))
             .FirstOrDefault(x => x.HasValue);
 
+        var proctoringEvents = await db.MockProctoringEvents.AsNoTracking()
+            .Where(x => x.MockAttemptId == mockAttempt.Id)
+            .ToListAsync(cancellationToken);
+        var perModuleReadiness = subTests.Select(x =>
+        {
+            var advisory = x.scaledScore.HasValue ? OetScoring.AdvisoryTier(x.scaledScore.Value) : null;
+            return new
+            {
+                subtest = x.name,
+                scaledScore = x.scaledScore,
+                grade = x.grade,
+                rag = advisory?.Tier ?? "pending",
+                message = advisory?.Message ?? "Awaiting scored evidence or teacher review.",
+                passThreshold = advisory?.PassThreshold
+            };
+        }).ToArray();
+        var timingAnalysis = sections.Select(x => new
+        {
+            sectionId = x.sectionAttempt.Id,
+            subtest = x.sectionAttempt.SubtestCode,
+            startedAt = x.sectionAttempt.StartedAt,
+            submittedAt = x.sectionAttempt.SubmittedAt,
+            completedAt = x.sectionAttempt.CompletedAt,
+            deadlineAt = x.sectionAttempt.DeadlineAt,
+            secondsUsed = x.sectionAttempt.StartedAt is not null && (x.sectionAttempt.CompletedAt ?? x.sectionAttempt.SubmittedAt) is not null
+                ? (int?)Math.Max(0, (int)((x.sectionAttempt.CompletedAt ?? x.sectionAttempt.SubmittedAt)!.Value - x.sectionAttempt.StartedAt.Value).TotalSeconds)
+                : null
+        }).ToArray();
+        var weakestCriterion = weakest is null
+            ? new { subtest = "Pending", criterion = "Awaiting evidence", description = "Complete scored sections or wait for expert-reviewed productive sections." }
+            : new { subtest = weakest.name, criterion = "Lowest scaled sub-test", description = $"Prioritise {weakest.name} next; current scaled score is {weakest.scaledScore}/500." };
+
         report.State = AsyncState.Completed;
         report.GeneratedAt = DateTimeOffset.UtcNow;
         report.PayloadJson = JsonSupport.Serialize(new
@@ -634,9 +666,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             overallGrade = overall is null ? null : OetScoring.OetGradeLetterFromScaled(overall.Value),
             summary = BuildMockReportSummary(overall, subTests.Count(x => x.state is "queued" or "in_review")),
             subTests,
-            weakestCriterion = weakest is null
-                ? new { subtest = "Pending", criterion = "Awaiting evidence", description = "Complete scored sections or wait for expert-reviewed productive sections." }
-                : new { subtest = weakest.name, criterion = "Lowest scaled sub-test", description = $"Prioritise {weakest.name} next; current scaled score is {weakest.scaledScore}/500." },
+            weakestCriterion,
             reviewSummary = new
             {
                 queued = reviewRequests.Count(x => x.State == ReviewRequestState.Queued),
@@ -644,6 +674,46 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 completed = reviewRequests.Count(x => x.State == ReviewRequestState.Completed),
                 pending = reviewRequests.Count(x => x.State is ReviewRequestState.Queued or ReviewRequestState.InReview or ReviewRequestState.AwaitingPayment)
             },
+            perModuleReadiness,
+            partScores = subTests.Select(x => new { subtest = x.name, x.rawScore, x.scaledScore, x.grade, x.state }).ToArray(),
+            timingAnalysis,
+            errorCategories = new[]
+            {
+                new
+                {
+                    category = weakestCriterion.criterion,
+                    subtest = weakestCriterion.subtest,
+                    severity = "priority",
+                    description = weakestCriterion.description
+                }
+            },
+            teacherReviewState = new
+            {
+                queued = reviewRequests.Count(x => x.State == ReviewRequestState.Queued),
+                inReview = reviewRequests.Count(x => x.State == ReviewRequestState.InReview),
+                completed = reviewRequests.Count(x => x.State == ReviewRequestState.Completed),
+                pending = reviewRequests.Count(x => x.State is ReviewRequestState.Queued or ReviewRequestState.InReview or ReviewRequestState.AwaitingPayment)
+            },
+            bookingAdvice = BuildMockBookingAdvice(overall),
+            retakeAdvice = new
+            {
+                recommendedWindowDays = 7,
+                nextMockType = "sub",
+                subtest = weakestCriterion.subtest,
+                message = $"Retake a targeted {weakestCriterion.subtest} mock after completing the 7-day remediation plan."
+            },
+            proctoringSummary = new
+            {
+                totalEvents = proctoringEvents.Count,
+                advisoryOnly = true,
+                criticalEvents = proctoringEvents.Count(x => x.Severity == "critical"),
+                warningEvents = proctoringEvents.Count(x => x.Severity == "warning"),
+                byKind = proctoringEvents.GroupBy(x => x.Kind).Select(g => new { kind = g.Key, count = g.Count() }).ToArray(),
+                message = proctoringEvents.Count == 0
+                    ? "No integrity events were recorded. Proctoring is advisory and never blocks submission automatically."
+                    : "Integrity events were recorded for teacher/admin review. They are advisory and did not block submission."
+            },
+            remediationPlan = BuildMockRemediationPlan(report.Id, weakestCriterion.subtest, weakestCriterion.criterion, weakestCriterion.description),
             priorComparison = priorOverall.HasValue && overall.HasValue
                 ? new
                 {
@@ -738,6 +808,47 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         return overall.HasValue
             ? $"The advisory overall mock score is {overall}/500, calculated as the rounded mean of available sub-test scaled scores."
             : "The report is waiting for scored section evidence before calculating an advisory overall score.";
+    }
+
+    private static object BuildMockBookingAdvice(int? overall)
+    {
+        if (!overall.HasValue)
+        {
+            return new { status = "pending", message = "Wait for scored sections and teacher review before booking the official OET.", route = "/mocks/setup" };
+        }
+
+        var advisory = OetScoring.AdvisoryTier(overall.Value);
+        return new
+        {
+            status = advisory.Tier,
+            score = overall.Value,
+            message = advisory.Tier is "green" or "dark-green"
+                ? "Use at least two consistent green mocks before booking the official OET."
+                : "Complete remediation and retake a strict mock before booking.",
+            route = "/billing/exam-booking"
+        };
+    }
+
+    private static object[] BuildMockRemediationPlan(string reportId, string subtest, string criterion, string description)
+    {
+        var normalized = string.IsNullOrWhiteSpace(subtest) ? "reading" : subtest.ToLowerInvariant();
+        var route = normalized switch
+        {
+            var s when s.Contains("listening", StringComparison.OrdinalIgnoreCase) => "/listening",
+            var s when s.Contains("reading", StringComparison.OrdinalIgnoreCase) => "/reading/practice",
+            var s when s.Contains("writing", StringComparison.OrdinalIgnoreCase) => "/writing/library",
+            var s when s.Contains("speaking", StringComparison.OrdinalIgnoreCase) => "/speaking/selection",
+            _ => "/practice"
+        };
+
+        return
+        [
+            new { day = "Day 1", title = "Review every lost mark", description = "Compare answer review, timing notes, and teacher comments before attempting new work.", route = $"/mocks/report/{reportId}" },
+            new { day = "Day 2", title = $"Repair {criterion}", description, route },
+            new { day = "Day 3", title = "Complete a targeted micro-drill", description = $"Focus on {subtest} without full-exam pressure first.", route },
+            new { day = "Day 4", title = "Attempt a sectional mock", description = "Check whether the repair transfers under timed conditions.", route = $"/mocks/setup?type=sub&subtest={Uri.EscapeDataString(normalized)}" },
+            new { day = "Day 5-7", title = "Book tutor review or retake", description = "If Writing or Speaking is involved, request tutor feedback before another readiness mock.", route = "/mocks/setup" }
+        ];
     }
 
     private static string ToDisplaySubtest(string subtest)

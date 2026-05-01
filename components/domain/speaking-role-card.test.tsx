@@ -21,9 +21,11 @@ describe('SpeakingRoleCard', () => {
       />,
     );
 
-    expect(screen.getByRole('region', { name: /role card details/i })).toBeInTheDocument();
-    expect(screen.getByText('Prep: 3 min')).toBeInTheDocument();
-    expect(screen.getByText('Role-play: 5 min')).toBeInTheDocument();
+    const region = screen.getByRole('region', { name: /role card details/i });
+
+    expect(region).toBeInTheDocument();
+    expect(region).toHaveTextContent(/prep:\s*3 min/i);
+    expect(region).toHaveTextContent(/role-play:\s*5 min/i);
     expect(screen.getByText('Find the main concern')).toBeInTheDocument();
     expect(screen.getByText('Reassure and safety-net')).toBeInTheDocument();
     expect(screen.getByText(/not an official OET score/i)).toBeInTheDocument();

@@ -316,7 +316,7 @@ describe('Admin Non-Editor Pages', () => {
 
     expect(await screen.findByRole('main', { name: /content library/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^content library$/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /content items/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /content items/i })).toBeInTheDocument();
     expect(screen.getAllByText('Discharge Letter Set A').length).toBeGreaterThan(0);
   });
 

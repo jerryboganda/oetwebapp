@@ -426,11 +426,30 @@ export interface ListeningReview {
 
 // ═══════════════════ MOCK TYPES ═══════════════════
 
+/**
+ * Canonical OET mock-type taxonomy (spec §1, Wave 1).
+ * Mirrors `MockTypes` constants in `Domain/MockTypes.cs`.
+ */
+export type MockTypeToken =
+  | 'full'
+  | 'lrw'
+  | 'sub'
+  | 'part'
+  | 'diagnostic'
+  | 'final_readiness'
+  | 'remedial';
+
+/** Spec §2 delivery model. */
+export type MockDeliveryMode = 'computer' | 'paper' | 'oet_home';
+
+/** Spec §3 strictness preset. */
+export type MockStrictness = 'learning' | 'exam' | 'final_readiness';
+
 export interface MockConfig {
   id: string;
   title: string;
   bundleId?: string;
-  type: 'full' | 'sub';
+  type: MockTypeToken;
   subType?: SubTest;
   mode: 'practice' | 'exam';
   profession: string;
@@ -438,6 +457,8 @@ export interface MockConfig {
   includeReview: boolean;
   reviewSelection: 'none' | 'writing' | 'speaking' | 'writing_and_speaking' | 'current_subtest';
   targetCountry?: string | null;
+  deliveryMode?: MockDeliveryMode;
+  strictness?: MockStrictness;
 }
 
 export interface MockSessionSection {
@@ -501,6 +522,7 @@ export interface SubTestScore {
 export interface MockReport {
   id: string;
   reportId?: string;
+  mockAttemptId?: string;
   state?: string;
   title: string;
   date: string;
@@ -511,6 +533,49 @@ export interface MockReport {
   weakestCriterion: { subtest: string; criterion: string; description: string };
   priorComparison: { exists: boolean; priorMockName: string; overallTrend: 'up' | 'down' | 'flat'; details: string };
   reviewSummary?: { queued: number; inReview: number; completed: number; pending: number };
+  perModuleReadiness?: Array<{
+    subtest: string;
+    scaledScore?: number | null;
+    grade?: string | null;
+    rag: string;
+    message: string;
+    passThreshold?: number | null;
+  }>;
+  partScores?: Array<{
+    subtest: string;
+    rawScore?: string | null;
+    scaledScore?: number | null;
+    grade?: string | null;
+    state?: string | null;
+  }>;
+  timingAnalysis?: Array<{
+    sectionId: string;
+    subtest: string;
+    startedAt?: string | null;
+    submittedAt?: string | null;
+    completedAt?: string | null;
+    deadlineAt?: string | null;
+    secondsUsed?: number | null;
+  }>;
+  errorCategories?: Array<{
+    category: string;
+    subtest: string;
+    severity: string;
+    description: string;
+  }>;
+  teacherReviewState?: { queued: number; inReview: number; completed: number; pending: number };
+  bookingAdvice?: { status: string; message: string; route?: string; score?: number | null };
+  retakeAdvice?: { recommendedWindowDays: number; nextMockType: string; subtest: string; message: string };
+  proctoringSummary?: {
+    totalEvents: number;
+    advisoryOnly: boolean;
+    criticalEvents: number;
+    warningEvents: number;
+    byKind: Array<{ kind: string; count: number }>;
+    message: string;
+  };
+  remediationPlan?: Array<{ day: string; title: string; description: string; route: string }>;
+  releasePolicy?: 'instant' | 'after_teacher_marking' | 'scheduled' | string;
 }
 
 export interface MockBundleOptionSection {
@@ -526,22 +591,60 @@ export interface MockBundleOption {
   id: string;
   bundleId: string;
   title: string;
-  mockType: 'full' | 'sub';
+  mockType: MockTypeToken;
   subtest?: string | null;
   professionId?: string | null;
   appliesToAllProfessions: boolean;
   estimatedDurationMinutes: number;
   sections: MockBundleOptionSection[];
+  difficulty?: string;
+  sourceStatus?: string;
+  qualityStatus?: string;
+  releasePolicy?: string;
+  topicTags?: string[];
+  skillTags?: string[];
+  watermarkEnabled?: boolean;
+  randomiseQuestions?: boolean;
 }
 
 export interface MockOptions {
-  mockTypes: { id: 'full' | 'sub'; label: string; description: string }[];
+  mockTypes: { id: MockTypeToken; label: string; description: string }[];
   subTypes: { id: string; label: string }[];
   modes: { id: 'exam' | 'practice'; label: string }[];
   professions: { id: string; label: string }[];
   reviewSelections: { id: MockConfig['reviewSelection']; label: string; cost: number }[];
   wallet: { availableCredits: number };
   availableBundles: MockBundleOption[];
+  deliveryModes?: { id: MockDeliveryMode; label: string }[];
+  strictnessOptions?: { id: MockStrictness; label: string; description?: string }[];
+}
+
+export interface MockBooking {
+  id: string;
+  bookingId: string;
+  mockBundleId: string;
+  mockAttemptId?: string | null;
+  title?: string;
+  scheduledStartAt: string;
+  timezoneIana: string;
+  status: string;
+  deliveryMode?: MockDeliveryMode;
+  liveRoomState?: string;
+  consentToRecording?: boolean;
+  rescheduleCount?: number;
+  joinUrl?: string | null;
+  zoomJoinUrl?: string | null;
+  learnerNotes?: string | null;
+  releasePolicy?: string;
+  candidateCardVisible?: boolean;
+  interlocutorCardVisible?: boolean;
+}
+
+export interface MockDiagnosticEntitlement {
+  allowed: boolean;
+  entitlement: string;
+  reason?: string | null;
+  message?: string | null;
 }
 
 // ═══════════════════ PROGRESS & READINESS TYPES ═══════════════════

@@ -288,6 +288,7 @@ export interface AdminBillingPlan {
   isRenewable?: boolean;
   trialDays?: number;
   activeSubscribers: number;
+  diagnosticMockEntitlement?: string;
   status: string;
   includedSubtests?: string[];
   entitlements?: Record<string, unknown>;

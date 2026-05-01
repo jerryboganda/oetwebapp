@@ -94,7 +94,11 @@ public record MockAttemptCreateRequest(
     bool StrictTimer,
     string? ReviewSelection = null,
     string? BundleId = null,
-    string? TargetCountry = null);
+    string? TargetCountry = null,
+    /// <summary>Spec §2 delivery model — computer (default), paper, or oet_home.</summary>
+    string? DeliveryMode = null,
+    /// <summary>Spec §3 strictness — learning, exam (default for non-diagnostic), or final_readiness.</summary>
+    string? Strictness = null);
 
 public record MockSectionStartRequest(Dictionary<string, object?>? ClientState = null);
 
@@ -107,6 +111,53 @@ public record MockSectionCompleteRequest(
     Dictionary<string, object?>? Evidence,
     string? ReviewTurnaroundOption = null);
 
+/// <summary>
+/// Mocks V2 Wave 2 — proctoring telemetry batch.
+/// Frontend sends 1..N events; backend rate-limits to <see cref="OetLearner.Api.Services.MockService.ProctoringEventCap"/> per attempt.
+/// </summary>
+public record MockProctoringEventBatchRequest(IReadOnlyList<MockProctoringEventInput> Events);
+
+public record MockProctoringEventInput(
+    string Kind,
+    DateTimeOffset OccurredAt,
+    string? MockSectionAttemptId = null,
+    string? Severity = null,
+    Dictionary<string, object?>? Metadata = null);
+
+public record MockBookingAssignmentRequest(
+    string? AssignedTutorId = null,
+    string? AssignedInterlocutorId = null,
+    string? Status = null);
+
+public record MockBookingCreateRequest(
+    string MockBundleId,
+    DateTimeOffset ScheduledStartAt,
+    string? TimezoneIana = null,
+    string? DeliveryMode = null,
+    bool ConsentToRecording = false,
+    string? LearnerNotes = null);
+
+public record MockBookingRescheduleRequest(
+    DateTimeOffset ScheduledStartAt,
+    string? TimezoneIana = null);
+
+public record MockBookingUpdateRequest(
+    DateTimeOffset? ScheduledStartAt = null,
+    string? TimezoneIana = null,
+    string? Status = null,
+    bool? ConsentToRecording = null,
+    string? LearnerNotes = null);
+
+// Mocks V2 Wave 6 — Live-room transition (Speaking).
+public record LiveRoomTransitionRequest(string TargetState);
+
+public record MockLeakReportRequest(
+    string? MockBundleId,
+    string? MockAttemptId,
+    string? Reason,
+    string? EvidenceUrl = null,
+    string? PageOrQuestion = null);
+
 public record AdminMockBundleCreateRequest(
     string Title,
     string MockType,
@@ -115,7 +166,15 @@ public record AdminMockBundleCreateRequest(
     bool AppliesToAllProfessions,
     string? SourceProvenance,
     int? Priority,
-    string? TagsCsv);
+    string? TagsCsv,
+    string? Difficulty = null,
+    string? SourceStatus = null,
+    string? QualityStatus = null,
+    string? ReleasePolicy = null,
+    string? TopicTagsCsv = null,
+    string? SkillTagsCsv = null,
+    bool? WatermarkEnabled = null,
+    bool? RandomiseQuestions = null);
 
 public record AdminMockBundleUpdateRequest(
     string? Title,
@@ -126,7 +185,15 @@ public record AdminMockBundleUpdateRequest(
     string? SourceProvenance,
     int? Priority,
     string? TagsCsv,
-    ContentStatus? Status);
+    ContentStatus? Status,
+    string? Difficulty = null,
+    string? SourceStatus = null,
+    string? QualityStatus = null,
+    string? ReleasePolicy = null,
+    string? TopicTagsCsv = null,
+    string? SkillTagsCsv = null,
+    bool? WatermarkEnabled = null,
+    bool? RandomiseQuestions = null);
 
 public record AdminMockBundleSectionRequest(
     string ContentPaperId,

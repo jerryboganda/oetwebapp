@@ -208,6 +208,7 @@ public record AdminBillingPlanCreateRequest(
     bool IsVisible,
     bool IsRenewable,
     int TrialDays,
+    string? DiagnosticMockEntitlement = null,
     string? Status = null,
     string? IncludedSubtestsJson = null,
     string? EntitlementsJson = null);
@@ -225,6 +226,7 @@ public record AdminBillingPlanUpdateRequest(
     bool IsVisible,
     bool IsRenewable,
     int TrialDays,
+    string? DiagnosticMockEntitlement = null,
     string? Status = null,
     string? IncludedSubtestsJson = null,
     string? EntitlementsJson = null);

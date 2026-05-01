@@ -18,6 +18,7 @@ const TRACKED_EVENTS = [
   'revision_submitted',
   'mock_started',
   'mock_completed',
+  'mock_booking_created',
   'review_requested',
   'readiness_viewed',
   'progress_viewed',

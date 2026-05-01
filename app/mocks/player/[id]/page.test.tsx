@@ -35,6 +35,21 @@ vi.mock('@/lib/api', () => ({
   fetchMockSession: mockFetchMockSession,
   startMockSection: mockStartMockSection,
   submitMockSession: mockSubmitMockSession,
+  recordMockProctoringEvents: vi.fn().mockResolvedValue(undefined),
+  MOCK_PROCTORING_KINDS: [
+    'fullscreen_exit',
+    'visibility_hidden',
+    'tab_switch',
+    'paste_blocked',
+    'copy_blocked',
+    'mic_check_passed',
+    'mic_check_failed',
+    'cam_check_passed',
+    'cam_check_failed',
+    'audio_issue_reported',
+    'network_drop',
+    'multiple_displays_detected',
+  ] as const,
 }));
 
 import MockPlayerPage from './page';
@@ -102,5 +117,22 @@ describe('Mock player page', () => {
 
     expect(mockStartMockSection).toHaveBeenCalledWith('mock-1', 'section-reading');
     expect(mockPush).toHaveBeenCalledWith('/reading/paper/paper-reading?mockAttemptId=mock-1&mockSectionId=section-reading');
+  });
+
+  it('surfaces strict workflow policy and blocks report submission until all sections complete', async () => {
+    const user = userEvent.setup();
+    renderWithRouter(<MockPlayerPage />, {
+      params: { id: 'mock-1' },
+      router: { push: mockPush },
+    });
+
+    expect(await screen.findByText('Attempt → Review → Remediation')).toBeInTheDocument();
+    expect(screen.getByText('Part A locks after its window; review is held until full submission.')).toBeInTheDocument();
+    expect(screen.getByText(/0\/1 sections recorded/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /submit mock for report generation/i }));
+
+    expect(mockSubmitMockSession).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/complete 1 remaining section before final report generation/i).length).toBeGreaterThan(0);
   });
 });

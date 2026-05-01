@@ -241,6 +241,7 @@ public partial class AdminService(
         bool IsVisible,
         bool IsRenewable,
         int TrialDays,
+        string? DiagnosticMockEntitlement,
         string? Status,
         string? IncludedSubtestsJson,
         string? EntitlementsJson);
@@ -297,6 +298,7 @@ public partial class AdminService(
         bool IsVisible,
         bool IsRenewable,
         int TrialDays,
+        string DiagnosticMockEntitlement,
         BillingPlanStatus Status,
         string IncludedSubtestsJson,
         string EntitlementsJson);
@@ -353,6 +355,7 @@ public partial class AdminService(
         request.IsVisible,
         request.IsRenewable,
         request.TrialDays,
+        request.DiagnosticMockEntitlement,
         request.Status,
         request.IncludedSubtestsJson,
         request.EntitlementsJson);
@@ -370,6 +373,7 @@ public partial class AdminService(
         request.IsVisible,
         request.IsRenewable,
         request.TrialDays,
+        request.DiagnosticMockEntitlement,
         request.Status,
         request.IncludedSubtestsJson,
         request.EntitlementsJson);
@@ -673,6 +677,17 @@ public partial class AdminService(
         var status = ValidateCatalogEnum(errors, "status", request.Status, fallbackStatus);
         var includedSubtests = ValidateCatalogStringArrayJson(errors, "includedSubtestsJson", request.IncludedSubtestsJson);
         var entitlementsJson = ValidateCatalogObjectJson(errors, "entitlementsJson", request.EntitlementsJson);
+        var diagnosticMockEntitlement = string.IsNullOrWhiteSpace(request.DiagnosticMockEntitlement)
+            ? MockDiagnosticEntitlementService.OnePerLifetime
+            : request.DiagnosticMockEntitlement.Trim().ToLowerInvariant();
+        if (!MockDiagnosticEntitlementService.AllValues.Contains(diagnosticMockEntitlement))
+        {
+            AddCatalogError(
+                errors,
+                "diagnosticMockEntitlement",
+                "invalid",
+                "Diagnostic mock entitlement must be unlimited, one_per_lifetime, one_per_renewal_period, paid_per_use, or disabled.");
+        }
 
         if (request.Price < 0)
         {
@@ -721,6 +736,7 @@ public partial class AdminService(
             request.IsVisible,
             request.IsRenewable,
             request.TrialDays,
+            diagnosticMockEntitlement,
             status,
             includedSubtests.Json,
             entitlementsJson);
@@ -1094,6 +1110,7 @@ public partial class AdminService(
         plan.IsRenewable,
         plan.TrialDays,
         activeSubscribers = plan.ActiveSubscribers,
+        diagnosticMockEntitlement = plan.DiagnosticMockEntitlement,
         status = plan.Status.ToString().ToLowerInvariant(),
         includedSubtests = JsonSupport.Deserialize<List<string>>(plan.IncludedSubtestsJson, []),
         entitlements = JsonSupport.Deserialize<Dictionary<string, object?>>(plan.EntitlementsJson, new Dictionary<string, object?>()),
@@ -3448,6 +3465,7 @@ public partial class AdminService(
             IsVisible = validated.IsVisible,
             IsRenewable = validated.IsRenewable,
             TrialDays = validated.TrialDays,
+            DiagnosticMockEntitlement = validated.DiagnosticMockEntitlement,
             IncludedSubtestsJson = validated.IncludedSubtestsJson,
             EntitlementsJson = validated.EntitlementsJson,
             ActiveSubscribers = 0,
@@ -3489,6 +3507,7 @@ public partial class AdminService(
         plan.IsVisible = validated.IsVisible;
         plan.IsRenewable = validated.IsRenewable;
         plan.TrialDays = validated.TrialDays;
+        plan.DiagnosticMockEntitlement = validated.DiagnosticMockEntitlement;
         plan.IncludedSubtestsJson = validated.IncludedSubtestsJson;
         plan.EntitlementsJson = validated.EntitlementsJson;
         plan.Status = validated.Status;

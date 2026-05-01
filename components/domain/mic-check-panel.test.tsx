@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MicCheckPanel } from './mic-check-panel';
 
@@ -62,10 +62,7 @@ describe('MicCheckPanel', () => {
     (globalThis as unknown as { AudioContext: typeof AudioContext }).AudioContext = MockAudioContext as unknown as typeof AudioContext;
     vi.spyOn(window.URL, 'createObjectURL').mockReturnValue('blob:mic-check');
     vi.spyOn(window.URL, 'revokeObjectURL').mockImplementation(() => undefined);
-    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(function play(this: HTMLMediaElement) {
-      setTimeout(() => this.dispatchEvent(new Event('ended')), 0);
-      return Promise.resolve();
-    });
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
       setTimeout(() => callback(performance.now()), 16);
       return 1;
@@ -79,7 +76,7 @@ describe('MicCheckPanel', () => {
   it('performs a real permission, recording, playback, and noise-check flow before completing', async () => {
     const user = userEvent.setup();
     const onComplete = vi.fn();
-    render(<MicCheckPanel onComplete={onComplete} />);
+    const { container } = render(<MicCheckPanel onComplete={onComplete} />);
 
     await user.click(screen.getByRole('button', { name: 'Allow Access' }));
     expect(await screen.findByText('Microphone Permission')).toBeInTheDocument();
@@ -89,6 +86,11 @@ describe('MicCheckPanel', () => {
     await screen.findByRole('button', { name: 'Play Back' }, { timeout: 5000 });
 
     await user.click(screen.getByRole('button', { name: 'Play Back' }));
+    const audio = container.querySelector('audio');
+    if (!audio) throw new Error('Expected recorded playback audio element to be rendered.');
+    act(() => {
+      audio.dispatchEvent(new Event('ended'));
+    });
     await screen.findByRole('button', { name: 'Check Noise' });
 
     await user.click(screen.getByRole('button', { name: 'Check Noise' }));

@@ -12,7 +12,9 @@ import {
   FileText,
   Headphones,
   PenTool,
-  Mic
+  Mic,
+  ShieldCheck,
+  CalendarCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -20,11 +22,21 @@ import { OetStatementOfResultsCard } from '@/components/domain';
 import { MockVocabularyReview } from '@/components/domain/vocabulary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchMockReport } from '@/lib/api';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  fetchMockReport,
+  reportMockLeak,
+  fetchRemediationPlan,
+  generateRemediationPlan,
+  completeRemediationTask,
+  type RemediationTask,
+} from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
 import { oetGradeFromScaled } from '@/lib/scoring';
 import { mockReportToStatementOfResults } from '@/lib/adapters/oet-sor-adapter';
+import { buildMockRemediationPlan, getMockReadinessDecision } from '@/lib/mocks/workflow';
 
 const SUBTEST_META: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   listening: { icon: Headphones, color: 'text-primary', bg: 'bg-primary/10' },
@@ -57,6 +69,9 @@ function MockReportContent() {
   const id = Array.isArray(params?.id) ? params?.id[0] : params?.id ?? '';
   const [report, setReport] = useState<MockReport | null>(null);
   const [error, setError] = useState('');
+  const [leakState, setLeakState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [serverTasks, setServerTasks] = useState<RemediationTask[] | null>(null);
+  const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('evaluation_viewed', { type: 'mock_report', id });
@@ -64,6 +79,40 @@ function MockReportContent() {
       .then(setReport)
       .catch(() => setError('Could not load report.'));
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const existing = await fetchRemediationPlan();
+        const matched = existing.items.filter((t) => t.mockReportId === id);
+        if (matched.length > 0) {
+          if (!cancelled) setServerTasks(matched);
+          return;
+        }
+        const generated = await generateRemediationPlan(id);
+        if (!cancelled) setServerTasks(generated.items);
+      } catch {
+        // server plan optional — fallback to derived plan
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const handleCompleteTask = async (taskId: string) => {
+    setBusyTaskId(taskId);
+    try {
+      const updated = await completeRemediationTask(taskId);
+      setServerTasks((prev) => (prev ? prev.map((t) => (t.id === updated.id ? updated : t)) : prev));
+    } catch {
+      // swallow — UI re-enables
+    } finally {
+      setBusyTaskId(null);
+    }
+  };
 
   if (error) {
     return (
@@ -88,6 +137,25 @@ function MockReportContent() {
   }
 
   const comp = report.priorComparison;
+  const readiness = getMockReadinessDecision(report);
+  const pendingTeacherReviews = report.reviewSummary
+    ? report.reviewSummary.pending + report.reviewSummary.queued + report.reviewSummary.inReview
+    : report.subTests.filter((test) => test.reviewState && test.reviewState !== 'completed').length;
+  const remediationPlan = report.remediationPlan?.length ? report.remediationPlan : buildMockRemediationPlan(report);
+
+  const handleLeakReport = async () => {
+    setLeakState('sending');
+    try {
+      await reportMockLeak({
+        mockAttemptId: report.mockAttemptId ?? null,
+        reason: 'Learner reported possible leaked or rights-unclear mock content from the report page.',
+      });
+      setLeakState('sent');
+    } catch {
+      setLeakState('idle');
+      setError('Could not send leak report. Please try again.');
+    }
+  };
 
   return (
     <LearnerDashboardShell
@@ -114,6 +182,68 @@ function MockReportContent() {
           </div>
           <h2 className="text-xl font-black text-navy mb-3">Overall Performance</h2>
           <p className="text-sm text-muted max-w-lg leading-relaxed">{report.summary}</p>
+          <div className="mt-5 max-w-2xl rounded-2xl border border-border bg-background-light p-4 text-left">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={readiness.variant} size="sm">{readiness.label}</Badge>
+              <Badge variant="outline" size="sm">Estimated academy report</Badge>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-muted">{readiness.description}</p>
+            <p className="mt-2 text-xs leading-5 text-muted">
+              Do not treat mock results as a guaranteed pass. Use repeated green mock evidence and tutor feedback before booking the official OET.
+            </p>
+          </div>
+        </MotionSection>
+
+        {pendingTeacherReviews > 0 ? (
+          <MotionSection delayIndex={1}>
+            <InlineAlert variant="warning" title="Teacher-marked sections still affect the final readiness report">
+              Listening and Reading evidence may be available immediately, but Writing/Speaking readiness should remain provisional until tutor feedback is returned.
+            </InlineAlert>
+          </MotionSection>
+        ) : null}
+
+        <MotionSection delayIndex={2} className="grid gap-4 lg:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm lg:col-span-2">
+            <div className="mb-4 flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              <h2 className="text-sm font-black uppercase tracking-widest text-muted">V2 readiness and integrity</h2>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(report.perModuleReadiness?.length ? report.perModuleReadiness : []).map((item) => (
+                <div key={item.subtest} className="rounded-xl border border-border bg-background-light p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-bold text-navy">{item.subtest}</p>
+                    <Badge variant={item.rag === 'red' ? 'danger' : item.rag === 'amber' ? 'warning' : item.rag === 'pending' ? 'muted' : 'success'} size="sm">
+                      {item.rag.replace(/-/g, ' ')}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-muted">{item.message}</p>
+                </div>
+              ))}
+              {report.proctoringSummary ? (
+                <div className="rounded-xl border border-border bg-background-light p-4">
+                  <p className="text-sm font-bold text-navy">Proctoring summary</p>
+                  <p className="mt-2 text-xs leading-5 text-muted">{report.proctoringSummary.message}</p>
+                  <p className="mt-2 text-[11px] font-black uppercase tracking-widest text-muted">
+                    {report.proctoringSummary.totalEvents} events / {report.proctoringSummary.warningEvents} warnings
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <CalendarCheck className="h-5 w-5 text-success" />
+              <h2 className="text-sm font-black uppercase tracking-widest text-muted">Booking advice</h2>
+            </div>
+            <p className="text-sm leading-6 text-muted">{report.bookingAdvice?.message ?? readiness.description}</p>
+            {report.retakeAdvice ? (
+              <p className="mt-3 text-xs leading-5 text-muted">{report.retakeAdvice.message}</p>
+            ) : null}
+            <Button className="mt-4 w-full" variant="secondary" onClick={handleLeakReport} loading={leakState === 'sending'} disabled={leakState === 'sent' || !report.mockAttemptId}>
+              {leakState === 'sent' ? 'Leak report sent' : 'Report leaked content'}
+            </Button>
+          </div>
         </MotionSection>
 
         {/* 2. Prior Comparison */}
@@ -205,9 +335,70 @@ function MockReportContent() {
           weakDescription={report.weakestCriterion.description}
         />
 
-        {/* 6. Study Plan CTA */}
+        {/* 6. Remediation Plan — spec requirement: every mock report ends with a concrete next 7-day plan.
+            When server-side W5 RemediationTask plan exists we render it (with completion controls);
+            otherwise we fall back to the deterministic client-derived plan. */}
+        <MotionSection delayIndex={5}>
+          <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Your next 7-day plan</h2>
+          {serverTasks && serverTasks.length > 0 ? (
+            <div className="grid gap-4 lg:grid-cols-5">
+              {serverTasks
+                .slice()
+                .sort((a, b) => a.dayIndex - b.dayIndex)
+                .map((task) => {
+                  const completed = task.status === 'completed';
+                  return (
+                    <div
+                      key={task.id}
+                      className={`group flex flex-col rounded-2xl border bg-surface p-4 shadow-sm transition-all ${completed ? 'border-success/40 opacity-80' : 'border-border hover:border-primary/30 hover:shadow-md'}`}
+                    >
+                      <span className="text-[10px] font-black uppercase tracking-widest text-primary">Day {task.dayIndex}</span>
+                      <h3 className="mt-2 text-sm font-black text-navy">{task.title}</h3>
+                      <p className="mt-2 text-xs leading-5 text-muted">{task.description}</p>
+                      <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+                        {task.routeHref ? (
+                          <Link href={task.routeHref} className="text-[11px] font-black uppercase tracking-widest text-primary hover:underline">
+                            Start
+                          </Link>
+                        ) : <span />}
+                        {completed ? (
+                          <Badge variant="success" size="sm">Done</Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleCompleteTask(task.id)}
+                            loading={busyTaskId === task.id}
+                            disabled={busyTaskId === task.id}
+                          >
+                            Mark done
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-5">
+              {remediationPlan.map((item) => (
+                <Link
+                  key={`${item.day}-${item.title}`}
+                  href={item.route}
+                  className="group rounded-2xl border border-border bg-surface p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+                >
+                  <span className="text-[10px] font-black uppercase tracking-widest text-primary">{item.day}</span>
+                  <h3 className="mt-2 text-sm font-black text-navy transition-colors group-hover:text-primary">{item.title}</h3>
+                  <p className="mt-2 text-xs leading-5 text-muted">{item.description}</p>
+                </Link>
+              ))}
+            </div>
+          )}
+        </MotionSection>
+
+        {/* 7. Study Plan CTA */}
         <MotionSection
-          delayIndex={5}
+          delayIndex={6}
           className="pt-4"
         >
           <div className="bg-navy rounded-2xl p-8 text-center text-white relative overflow-hidden shadow-lg">

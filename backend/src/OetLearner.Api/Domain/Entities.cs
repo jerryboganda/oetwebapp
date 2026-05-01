@@ -767,6 +767,26 @@ public class MockAttempt
     public bool StrictTimer { get; set; } = true;
     public int ReservedReviewCredits { get; set; }
 
+    /// <summary>
+    /// Spec §2 delivery model. Stored lower-case; values from <see cref="MockDeliveryModes"/>.
+    /// Defaults to <c>computer</c> for backwards compatibility with rows pre-Wave-1.
+    /// </summary>
+    [MaxLength(16)]
+    public string DeliveryMode { get; set; } = MockDeliveryModes.Computer;
+
+    /// <summary>
+    /// Spec §3 strictness preset (learning / exam / final_readiness). Drives grader behaviour
+    /// at the sub-test layer (one-play, no hints, timer locking).
+    /// </summary>
+    [MaxLength(32)]
+    public string Strictness { get; set; } = MockStrictness.Exam;
+
+    /// <summary>
+    /// Optional 32-bit randomisation seed (Wave 8) used by graders that support shuffling.
+    /// Null means no shuffling has been applied (legacy rows + non-randomised types).
+    /// </summary>
+    public long? RandomisationSeed { get; set; }
+
     public string ConfigJson { get; set; } = "{}";
     public AttemptState State { get; set; }
     public DateTimeOffset StartedAt { get; set; }
