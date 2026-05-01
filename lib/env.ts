@@ -11,14 +11,14 @@ function trimEnvValue(value: string | undefined): string | null {
 }
 
 export function resolveApiBaseUrl(envSource: NodeJS.ProcessEnv = process.env): string {
-  const explicitClientBaseUrl = trimEnvValue(envSource.NEXT_PUBLIC_API_BASE_URL);
-  if (explicitClientBaseUrl) {
-    return explicitClientBaseUrl.replace(/\/$/, '');
-  }
-
   // Browser requests can safely use the same-origin proxy route.
   if (typeof window !== 'undefined') {
     return PROXY_PATH;
+  }
+
+  const explicitClientBaseUrl = trimEnvValue(envSource.NEXT_PUBLIC_API_BASE_URL);
+  if (explicitClientBaseUrl) {
+    return explicitClientBaseUrl.replace(/\/$/, '');
   }
 
   // Server-side fetches still need an absolute URL during SSR, tests, and route handlers.

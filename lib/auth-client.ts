@@ -8,6 +8,7 @@ import {
   saveStoredSession,
   updateStoredUser,
 } from './auth-storage';
+import { env } from './env';
 import type {
   AuthenticatorSetup,
   AuthSession,
@@ -22,7 +23,7 @@ import type {
 } from './types/auth';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '/api/backend').replace(/\/$/, '');
+const API_BASE_URL = env.apiBaseUrl;
 
 interface AuthErrorPayload {
   code?: string;

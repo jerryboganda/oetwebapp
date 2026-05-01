@@ -60,6 +60,7 @@ describe('auth-client', () => {
     expect(result.status).toBe('authenticated');
     expect(loadStoredSession()).toEqual(session);
     await expect(ensureFreshAccessToken()).resolves.toBe('access-token-1');
+    expect(vi.mocked(global.fetch).mock.calls[0]?.[0]).toBe('/api/backend/v1/auth/sign-in');
   });
 
   it('maps blank 400 sign-in responses to invalid credentials', async () => {
