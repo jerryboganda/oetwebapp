@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, Clock, FileText, PlayCircle, ShieldCheck } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -9,6 +9,8 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { MicCheckPanel } from '@/components/domain/mic-check-panel';
+import { AudioPlaybackCheckPanel } from '@/components/domain/audio-playback-check-panel';
 import { analytics } from '@/lib/analytics';
 import { completeMockSection, fetchMockSession, startMockSection, submitMockSession } from '@/lib/api';
 import type { MockSession } from '@/lib/mock-data';
@@ -20,6 +22,10 @@ import {
   isTeacherMarkedSubtest,
 } from '@/lib/mocks/workflow';
 import { useMockProctoring } from '@/lib/hooks/use-mock-proctoring';
+
+type PreflightKind = 'mic' | 'audio';
+const preflightStorageKey = (kind: PreflightKind, sessionId: string, sectionId: string) =>
+  `mock-preflight:${kind}:${sessionId}:${sectionId}`;
 
 export default function MockPlayerPage() {
   const params = useParams<{ id: string }>();
@@ -59,6 +65,93 @@ export default function MockPlayerPage() {
     blockPaste: Boolean(session && session.config.strictness !== 'learning'),
   });
 
+  // Pre-flight gates per section, keyed by sessionId + sectionId. Speaking
+  // sections require a microphone check; Listening sections require an audio
+  // playback check. Both are hard blocks — the launch button stays disabled
+  // until the relevant gate has emitted a passing event for the current
+  // section. State is mirrored to sessionStorage so a remount inside the
+  // same browser tab does not force the learner to redo the check.
+  const [micCheckPassed, setMicCheckPassed] = useState<Record<string, boolean>>({});
+  const [audioCheckPassed, setAudioCheckPassed] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!session || typeof window === 'undefined') return;
+    try {
+      const nextMic: Record<string, boolean> = {};
+      const nextAudio: Record<string, boolean> = {};
+      let hasMic = false;
+      let hasAudio = false;
+      for (const section of session.sectionStates) {
+        if (section.subtest === 'speaking') {
+          if (window.sessionStorage.getItem(preflightStorageKey('mic', session.sessionId, section.id)) === '1') {
+            nextMic[section.id] = true;
+            hasMic = true;
+          }
+        }
+        if (section.subtest === 'listening') {
+          if (window.sessionStorage.getItem(preflightStorageKey('audio', session.sessionId, section.id)) === '1') {
+            nextAudio[section.id] = true;
+            hasAudio = true;
+          }
+        }
+      }
+      // Only seed state when sessionStorage actually has a prior pass — avoids
+      // an unnecessary re-render after fetch resolves, which would otherwise
+      // race with user-event pointer sequences in tests and the player UI.
+      if (hasMic) setMicCheckPassed((prev) => ({ ...prev, ...nextMic }));
+      if (hasAudio) setAudioCheckPassed((prev) => ({ ...prev, ...nextAudio }));
+    } catch {
+      // sessionStorage may be unavailable in private mode; gates simply require redo.
+    }
+  }, [session]);
+
+  const recordPreflightPass = useCallback(
+    (kind: PreflightKind, sectionId: string) => {
+      if (!session || typeof window === 'undefined') return;
+      try {
+        window.sessionStorage.setItem(preflightStorageKey(kind, session.sessionId, sectionId), '1');
+      } catch {
+        // ignore quota/private-mode errors
+      }
+    },
+    [session],
+  );
+
+  const handleMicCheckComplete = useCallback(() => {
+    if (!selectedSection || selectedSection.subtest !== 'speaking') return;
+    setMicCheckPassed((prev) => ({ ...prev, [selectedSection.id]: true }));
+    recordPreflightPass('mic', selectedSection.id);
+    proctoring.report('mic_check_passed', {
+      metadata: { sectionId: selectedSection.id, subtest: selectedSection.subtest },
+    });
+  }, [selectedSection, recordPreflightPass, proctoring]);
+
+  const handleAudioCheckComplete = useCallback(() => {
+    if (!selectedSection || selectedSection.subtest !== 'listening') return;
+    setAudioCheckPassed((prev) => ({ ...prev, [selectedSection.id]: true }));
+    recordPreflightPass('audio', selectedSection.id);
+    proctoring.report('audio_playback_passed', {
+      metadata: { sectionId: selectedSection.id, subtest: selectedSection.subtest },
+    });
+  }, [selectedSection, recordPreflightPass, proctoring]);
+
+  const handleAudioCheckFail = useCallback(
+    (reason: 'inaudible' | 'browser_unsupported' | 'autoplay_blocked') => {
+      if (!selectedSection || selectedSection.subtest !== 'listening') return;
+      proctoring.report('audio_playback_failed', {
+        severity: 'warning',
+        metadata: { sectionId: selectedSection.id, subtest: selectedSection.subtest, reason },
+      });
+    },
+    [selectedSection, proctoring],
+  );
+
+  const requiresMicGate = selectedSection?.subtest === 'speaking';
+  const requiresAudioGate = selectedSection?.subtest === 'listening';
+  const micGateSatisfied = !requiresMicGate || Boolean(selectedSection && micCheckPassed[selectedSection.id]);
+  const audioGateSatisfied = !requiresAudioGate || Boolean(selectedSection && audioCheckPassed[selectedSection.id]);
+  const canLaunchSelectedSection = Boolean(selectedSection) && micGateSatisfied && audioGateSatisfied;
+
   const handleSubmit = async () => {
     if (!session) return;
     const readiness = getMockSubmissionReadiness(session);
@@ -90,6 +183,14 @@ export default function MockPlayerPage() {
 
   const handleLaunchSection = async () => {
     if (!session || !selectedSection) return;
+    if (selectedSection.subtest === 'speaking' && !micCheckPassed[selectedSection.id]) {
+      setError('Complete the microphone check before launching the Speaking section.');
+      return;
+    }
+    if (selectedSection.subtest === 'listening' && !audioCheckPassed[selectedSection.id]) {
+      setError('Complete the audio playback check before launching the Listening section.');
+      return;
+    }
     setLaunchingSectionId(selectedSection.id);
     setError(null);
     try {
@@ -249,7 +350,42 @@ export default function MockPlayerPage() {
                       </InlineAlert>
                     ) : null}
 
-                    <Button fullWidth onClick={handleLaunchSection} loading={launchingSectionId === selectedSection.id}>
+                    {requiresMicGate && selectedSection ? (
+                      micCheckPassed[selectedSection.id] ? (
+                        <InlineAlert variant="success">
+                          Microphone check complete for this Speaking section.
+                        </InlineAlert>
+                      ) : (
+                        <MicCheckPanel onComplete={handleMicCheckComplete} />
+                      )
+                    ) : null}
+
+                    {requiresAudioGate && selectedSection ? (
+                      audioCheckPassed[selectedSection.id] ? (
+                        <InlineAlert variant="success">
+                          Audio playback confirmed for this Listening section.
+                        </InlineAlert>
+                      ) : (
+                        <AudioPlaybackCheckPanel
+                          onComplete={handleAudioCheckComplete}
+                          onFail={handleAudioCheckFail}
+                        />
+                      )
+                    ) : null}
+
+                    <Button
+                      fullWidth
+                      onClick={handleLaunchSection}
+                      loading={launchingSectionId === selectedSection.id}
+                      disabled={!canLaunchSelectedSection}
+                      title={
+                        !micGateSatisfied
+                          ? 'Complete the microphone check first'
+                          : !audioGateSatisfied
+                          ? 'Complete the audio playback check first'
+                          : undefined
+                      }
+                    >
                       <PlayCircle className="h-4 w-4" />
                       Launch section workspace
                     </Button>

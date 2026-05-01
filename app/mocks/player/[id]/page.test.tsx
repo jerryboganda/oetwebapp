@@ -47,6 +47,8 @@ vi.mock('@/lib/api', () => ({
     'cam_check_passed',
     'cam_check_failed',
     'audio_issue_reported',
+    'audio_playback_passed',
+    'audio_playback_failed',
     'network_drop',
     'multiple_displays_detected',
   ] as const,

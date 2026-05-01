@@ -2042,6 +2042,57 @@ export async function fetchMockReport(mockId: string): Promise<MockReport> {
   return mapMockReport(report);
 }
 
+/**
+ * Download a watermarked PDF of the learner's writing response for a mock.
+ *
+ * Resolves the writing section attempt server-side from the mockAttemptId so
+ * the caller does not need to know the per-subtest attempt id. The browser is
+ * then asked to save the file using a transient object URL.
+ *
+ * The PDF carries a diagonal "PRACTICE COPY" watermark plus an HMAC token in
+ * the metadata and last page. Generation is rate limited (10/day/attempt) and
+ * audited on the server.
+ */
+export async function downloadMockWritingPdf(mockAttemptId: string): Promise<void> {
+  const path = `/v1/mocks/attempts/${encodeURIComponent(mockAttemptId)}/sections/writing/pdf`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path, undefined, { json: false }),
+  }, 60_000);
+
+  if (!response.ok) {
+    let code = 'unknown_error';
+    let message = `Download failed: ${response.status}`;
+    try {
+      const error = await response.json();
+      code = error.code ?? code;
+      message = error.message ?? error.title ?? message;
+    } catch {
+      // non-JSON; surface the status only
+    }
+    throw new ApiError(response.status, code, message, false);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const filenameMatch = /filename="?([^";]+)"?/i.exec(disposition);
+  const filename = filenameMatch?.[1] ?? `writing-${mockAttemptId}-practice.pdf`;
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    // Defer revoke so the browser has time to start the download.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+  }
+}
+
 function mapMockReport(report: ApiRecord): MockReport {
   return {
     id: String(report.id ?? report.reportId ?? ''),
@@ -2409,6 +2460,8 @@ export const MOCK_PROCTORING_KINDS = [
   'cam_check_passed',
   'cam_check_failed',
   'audio_issue_reported',
+  'audio_playback_passed',
+  'audio_playback_failed',
   'network_drop',
   'multiple_displays_detected',
 ] as const;

@@ -373,6 +373,8 @@ public static class MockProctoringKinds
     public const string CamCheckPassed = "cam_check_passed";
     public const string CamCheckFailed = "cam_check_failed";
     public const string AudioIssueReported = "audio_issue_reported";
+    public const string AudioPlaybackPassed = "audio_playback_passed";
+    public const string AudioPlaybackFailed = "audio_playback_failed";
     public const string NetworkDrop = "network_drop";
     public const string MultipleDisplaysDetected = "multiple_displays_detected";
 
@@ -380,7 +382,8 @@ public static class MockProctoringKinds
     {
         FullscreenExit, VisibilityHidden, TabSwitch, PasteBlocked, CopyBlocked,
         MicCheckPassed, MicCheckFailed, CamCheckPassed, CamCheckFailed,
-        AudioIssueReported, NetworkDrop, MultipleDisplaysDetected,
+        AudioIssueReported, AudioPlaybackPassed, AudioPlaybackFailed,
+        NetworkDrop, MultipleDisplaysDetected,
     };
 
     public static readonly IReadOnlySet<string> Severities = new HashSet<string>(StringComparer.Ordinal)
@@ -391,7 +394,7 @@ public static class MockProctoringKinds
     public static string DefaultSeverity(string kind) => kind switch
     {
         TabSwitch or FullscreenExit or VisibilityHidden or MultipleDisplaysDetected => "warning",
-        MicCheckFailed or CamCheckFailed or NetworkDrop or AudioIssueReported => "warning",
+        MicCheckFailed or CamCheckFailed or NetworkDrop or AudioIssueReported or AudioPlaybackFailed => "warning",
         PasteBlocked or CopyBlocked => "info",
         _ => "info",
     };

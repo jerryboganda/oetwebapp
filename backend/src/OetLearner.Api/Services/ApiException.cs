@@ -43,4 +43,7 @@ public sealed class ApiException : Exception
 
     public static ApiException PaymentRequired(string errorCode, string message)
         => new(StatusCodes.Status402PaymentRequired, errorCode, message);
+
+    public static ApiException TooManyRequests(string errorCode, string message)
+        => new(StatusCodes.Status429TooManyRequests, errorCode, message);
 }

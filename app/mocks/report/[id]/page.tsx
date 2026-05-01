@@ -15,6 +15,7 @@ import {
   Mic,
   ShieldCheck,
   CalendarCheck,
+  Download,
 } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -30,6 +31,7 @@ import {
   fetchRemediationPlan,
   generateRemediationPlan,
   completeRemediationTask,
+  downloadMockWritingPdf,
   type RemediationTask,
 } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
@@ -72,6 +74,8 @@ function MockReportContent() {
   const [leakState, setLeakState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [serverTasks, setServerTasks] = useState<RemediationTask[] | null>(null);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
+  const [pdfState, setPdfState] = useState<'idle' | 'downloading' | 'error'>('idle');
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('evaluation_viewed', { type: 'mock_report', id });
@@ -154,6 +158,29 @@ function MockReportContent() {
     } catch {
       setLeakState('idle');
       setError('Could not send leak report. Please try again.');
+    }
+  };
+
+  const handleDownloadWritingPdf = async () => {
+    if (!report.mockAttemptId) return;
+    setPdfState('downloading');
+    setPdfError(null);
+    try {
+      analytics.track('writing_pdf_download_requested', { mockAttemptId: report.mockAttemptId });
+      await downloadMockWritingPdf(report.mockAttemptId);
+      analytics.track('writing_pdf_download_succeeded', { mockAttemptId: report.mockAttemptId });
+      setPdfState('idle');
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Could not download the PDF. Please try again later.';
+      setPdfError(message);
+      setPdfState('error');
+      analytics.track('writing_pdf_download_failed', {
+        mockAttemptId: report.mockAttemptId,
+        message,
+      });
     }
   };
 
@@ -281,23 +308,50 @@ function MockReportContent() {
             {report.subTests.map((test) => {
               const meta = SUBTEST_META[test.id] ?? SUBTEST_META.listening;
               const Icon = meta.icon;
+              const isWriting = test.id === 'writing';
+              const canDownload = isWriting && Boolean(report.mockAttemptId);
               return (
-                <div key={test.id} className="bg-surface rounded-2xl border border-border p-5 flex items-center justify-between shadow-sm">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-2xl ${meta.bg} flex items-center justify-center shrink-0`}>
-                      <Icon className={`w-6 h-6 ${meta.color}`} />
+                <div key={test.id} className="bg-surface rounded-2xl border border-border p-5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-2xl ${meta.bg} flex items-center justify-center shrink-0`}>
+                        <Icon className={`w-6 h-6 ${meta.color}`} />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-navy">{test.name}</h3>
+                        <p className="text-xs text-muted">Raw: {test.rawScore}</p>
+                        {test.reviewState ? (
+                          <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-warning">
+                            Review {test.reviewState.replace(/_/g, ' ')}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-base font-bold text-navy">{test.name}</h3>
-                      <p className="text-xs text-muted">Raw: {test.rawScore}</p>
-                      {test.reviewState ? (
-                        <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-warning">
-                          Review {test.reviewState.replace(/_/g, ' ')}
+                    <span className={`text-2xl font-black ${scoreColor(test.score)}`}>{test.score}</span>
+                  </div>
+                  {canDownload ? (
+                    <div className="mt-4 border-t border-border pt-3">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full"
+                        onClick={handleDownloadWritingPdf}
+                        loading={pdfState === 'downloading'}
+                        disabled={pdfState === 'downloading'}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download practice PDF
+                      </Button>
+                      <p className="mt-2 text-[11px] leading-4 text-muted">
+                        Watermarked “Practice Copy”. For your own study only — not for resale or redistribution.
+                      </p>
+                      {pdfState === 'error' && pdfError ? (
+                        <p className="mt-2 text-[11px] text-danger" role="alert">
+                          {pdfError}
                         </p>
                       ) : null}
                     </div>
-                  </div>
-                  <span className={`text-2xl font-black ${scoreColor(test.score)}`}>{test.score}</span>
+                  ) : null}
                 </div>
               );
             })}

@@ -33,6 +33,11 @@
          request bodies). DO NOT set SendDefaultPii=true - that flag is force-off in
          SentryBootstrap and overriding it would ship raw user data to Sentry. -->
     <PackageReference Include="Sentry.AspNetCore" Version="5.10.0" />
+    <!-- QuestPDF — pure-managed PDF generation (no native deps). Used by
+         IWritingPdfService to produce watermarked Writing PDFs with diagonal
+         "PRACTICE COPY" overlay, per-page footer, invisible HMAC token and
+         signed metadata. License: Community is free up to USD 1M ARR. -->
+    <PackageReference Include="QuestPDF" Version="2024.10.3" />
   </ItemGroup>
 
   <!--
