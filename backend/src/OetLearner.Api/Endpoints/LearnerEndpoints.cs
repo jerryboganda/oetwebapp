@@ -183,7 +183,37 @@ public static class LearnerEndpoints
         v1.MapPost("/mock-attempts/{mockAttemptId}/sections/{sectionId}/complete", async (HttpContext http, string mockAttemptId, string sectionId, MockSectionCompleteRequest request, MockService service, CancellationToken ct) => Results.Ok(await service.CompleteMockSectionAsync(http.UserId(), mockAttemptId, sectionId, request, ct)));
         v1.MapPost("/mock-attempts/{mockAttemptId}/submit", async (HttpContext http, string mockAttemptId, MockService service, CancellationToken ct) => Results.Ok(await service.SubmitMockAttemptAsync(http.UserId(), mockAttemptId, ct)));
         v1.MapPost("/mock-attempts/{mockAttemptId}/cancel", async (HttpContext http, string mockAttemptId, MockService service, CancellationToken ct) => Results.Ok(await service.CancelMockAttemptAsync(http.UserId(), mockAttemptId, ct)));
+        v1.MapPost("/mock-attempts/{mockAttemptId}/proctoring-events", async (HttpContext http, string mockAttemptId, MockProctoringEventBatchRequest request, MockService service, CancellationToken ct) => Results.Ok(await service.RecordProctoringEventsAsync(http.UserId(), mockAttemptId, request, ct)));
         v1.MapGet("/mock-reports/{reportId}", async (HttpContext http, string reportId, MockService service, CancellationToken ct) => Results.Ok(await service.GetMockReportAsync(http.UserId(), reportId, ct)));
+
+        // Mocks V2 Wave 4 — booking
+        v1.MapGet("/mock-bookings", async (HttpContext http, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.ListForUserAsync(http.UserId(), ct)));
+        v1.MapPost("/mock-bookings", async (HttpContext http, MockBookingCreateRequest request, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.CreateAsync(http.UserId(), request, ct)));
+        v1.MapPatch("/mock-bookings/{bookingId}/reschedule", async (HttpContext http, string bookingId, MockBookingRescheduleRequest request, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.RescheduleAsync(http.UserId(), bookingId, request, ct)));
+        v1.MapPatch("/mock-bookings/{bookingId}", async (HttpContext http, string bookingId, MockBookingUpdateRequest request, MockService service, CancellationToken ct) => Results.Ok(await service.UpdateMockBookingAsync(http.UserId(), bookingId, request, ct)));
+        v1.MapPost("/mock-bookings/{bookingId}/cancel", async (HttpContext http, string bookingId, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.CancelAsync(http.UserId(), bookingId, ct)));
+        // Mocks V2 Wave 6 — live-room state transitions (audio-only Speaking room).
+        v1.MapPost("/mock-bookings/{bookingId}/live-room/transition", async (HttpContext http, string bookingId, LiveRoomTransitionRequest request, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.TransitionLiveRoomAsync(http.UserId(), isAdmin: false, bookingId, request.TargetState, ct)));
+
+        // Mocks V2 Wave 5 — 7-day remediation plan from MockReport
+        v1.MapGet("/mocks/remediation-plan", async (HttpContext http, RemediationPlanService plan, CancellationToken ct) => Results.Ok(await plan.GetActivePlanAsync(http.UserId(), ct)));
+        v1.MapPost("/mocks/reports/{reportId}/remediation-plan/generate", async (HttpContext http, string reportId, RemediationPlanService plan, CancellationToken ct) => Results.Ok(await plan.GenerateFromReportAsync(http.UserId(), reportId, ct)));
+        v1.MapPatch("/remediation-tasks/{taskId}/complete", async (HttpContext http, string taskId, RemediationPlanService plan, CancellationToken ct) => Results.Ok(await plan.CompleteTaskAsync(http.UserId(), taskId, ct)));
+
+        // Mocks V2 Wave 7 — Diagnostic-mock entitlement check.
+        v1.MapGet("/mocks/diagnostic/entitlement", async (HttpContext http, MockDiagnosticEntitlementService gate, CancellationToken ct) =>
+        {
+            var decision = await gate.CanStartDiagnosticAsync(http.UserId(), ct);
+            return Results.Ok(new
+            {
+                allowed = decision.Allowed,
+                entitlement = decision.Entitlement,
+                reason = decision.Reason,
+                message = decision.Message,
+            });
+        });
+        v1.MapPost("/mocks/leak-report", async (HttpContext http, MockLeakReportRequest request, MockService service, CancellationToken ct) => Results.Ok(await service.ReportMockLeakAsync(http.UserId(), request, ct)));
+        v1.MapGet("/mocks/diagnostic/study-path", async (HttpContext http, MockService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticStudyPathAsync(http.UserId(), ct)));
 
         var reviews = v1.MapGroup("/reviews");
         reviews.MapGet("/", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewsAsync(http.UserId(), ct)));

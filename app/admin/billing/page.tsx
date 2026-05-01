@@ -78,6 +78,7 @@ interface BillingPlanFormState {
   isVisible: boolean;
   isRenewable: boolean;
   trialDays: string;
+  diagnosticMockEntitlement: string;
   status: string;
   includedSubtestsText: string;
   entitlementsJson: string;
@@ -135,6 +136,7 @@ const defaultPlanForm: BillingPlanFormState = {
   isVisible: true,
   isRenewable: true,
   trialDays: '0',
+  diagnosticMockEntitlement: 'one_per_lifetime',
   status: 'active',
   includedSubtestsText: 'writing, speaking',
   entitlementsJson: '{}',
@@ -415,6 +417,7 @@ function toPlanForm(plan: AdminBillingPlan): BillingPlanFormState {
     isVisible: plan.isVisible ?? true,
     isRenewable: plan.isRenewable ?? true,
     trialDays: String(plan.trialDays ?? 0),
+    diagnosticMockEntitlement: plan.diagnosticMockEntitlement ?? 'one_per_lifetime',
     status: plan.status,
     includedSubtestsText: (plan.includedSubtests ?? []).join(', '),
     entitlementsJson: JSON.stringify(plan.entitlements ?? {}, null, 2),
@@ -1166,6 +1169,10 @@ export default function BillingPage() {
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Visibility</p>
           <p className="mt-1 font-medium text-navy">{plan.isVisible ? 'Visible' : 'Hidden'}</p>
         </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2 sm:col-span-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Diagnostic mocks</p>
+          <p className="mt-1 font-medium text-navy">{(plan.diagnosticMockEntitlement ?? 'one_per_lifetime').replace(/_/g, ' ')}</p>
+        </div>
       </div>
 
       <div className="flex flex-col justify-end gap-2 sm:flex-row">
@@ -1773,6 +1780,7 @@ export default function BillingPage() {
         isVisible: planForm.isVisible,
         isRenewable: planForm.isRenewable,
         trialDays: toNumber(planForm.trialDays),
+        diagnosticMockEntitlement: planForm.diagnosticMockEntitlement,
         status: planForm.status,
         includedSubtestsJson: jsonList(planForm.includedSubtestsText),
         entitlementsJson: safeJsonObject(planForm.entitlementsJson),
@@ -2514,7 +2522,7 @@ export default function BillingPage() {
             <Checkbox label="Visible" checked={planForm.isVisible} onChange={(event) => setPlanForm((current) => ({ ...current, isVisible: event.target.checked }))} />
             <Checkbox label="Renewable" checked={planForm.isRenewable} onChange={(event) => setPlanForm((current) => ({ ...current, isRenewable: event.target.checked }))} />
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-3">
             <Select
               label="Status"
               value={planForm.status}
@@ -2525,6 +2533,18 @@ export default function BillingPage() {
                 { value: 'inactive', label: 'Inactive' },
                 { value: 'archived', label: 'Archived' },
                 { value: 'legacy', label: 'Legacy' },
+              ]}
+            />
+            <Select
+              label="Diagnostic mock entitlement"
+              value={planForm.diagnosticMockEntitlement}
+              onChange={(event) => setPlanForm((current) => ({ ...current, diagnosticMockEntitlement: event.target.value }))}
+              options={[
+                { value: 'unlimited', label: 'Unlimited' },
+                { value: 'one_per_lifetime', label: 'One per lifetime' },
+                { value: 'one_per_renewal_period', label: 'One per renewal period' },
+                { value: 'paid_per_use', label: 'Paid per use' },
+                { value: 'disabled', label: 'Disabled' },
               ]}
             />
             <Input label="Included subtests" value={planForm.includedSubtestsText} onChange={(event) => setPlanForm((current) => ({ ...current, includedSubtestsText: event.target.value }))} hint="Comma-separated codes like writing, speaking" />

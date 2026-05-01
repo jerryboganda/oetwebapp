@@ -2,15 +2,24 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock, FileText, PlayCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, FileText, PlayCircle, ShieldCheck } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { completeMockSection, fetchMockSession, startMockSection, submitMockSession } from '@/lib/api';
 import type { MockSession } from '@/lib/mock-data';
+import {
+  MOCK_REVIEW_RELEASE_STEPS,
+  getMockModePolicy,
+  getMockSectionPolicy,
+  getMockSubmissionReadiness,
+  isTeacherMarkedSubtest,
+} from '@/lib/mocks/workflow';
+import { useMockProctoring } from '@/lib/hooks/use-mock-proctoring';
 
 export default function MockPlayerPage() {
   const params = useParams<{ id: string }>();
@@ -40,9 +49,23 @@ export default function MockPlayerPage() {
     () => session?.sectionStates.find((section) => section.id === selectedSectionId) ?? session?.sectionStates[0] ?? null,
     [selectedSectionId, session],
   );
+  const modePolicy = session ? getMockModePolicy(session.config.mode) : null;
+  const selectedSectionPolicy = session && selectedSection ? getMockSectionPolicy(selectedSection.subtest, session.config.mode) : null;
+  const submissionReadiness = session ? getMockSubmissionReadiness(session) : null;
+  const proctoring = useMockProctoring({
+    attemptId: session?.sessionId ?? null,
+    sectionAttemptId: selectedSection?.sectionAttemptId ?? selectedSection?.id ?? null,
+    enabled: Boolean(session && (session.config.mode === 'exam' || session.config.strictness === 'exam' || session.config.strictness === 'final_readiness')),
+    blockPaste: Boolean(session && session.config.strictness !== 'learning'),
+  });
 
   const handleSubmit = async () => {
     if (!session) return;
+    const readiness = getMockSubmissionReadiness(session);
+    if (!readiness.canSubmit) {
+      setError(readiness.message);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -98,6 +121,15 @@ export default function MockPlayerPage() {
     }
   };
 
+  const handleReportAudioIssue = async () => {
+    proctoring.report('audio_issue_reported', {
+      severity: 'warning',
+      metadata: { sectionId: selectedSection?.id, subtest: selectedSection?.subtest, source: 'mock_player_button' },
+    });
+    await proctoring.flush();
+    setSuccess('Audio issue recorded for tutor/admin review. You can continue; proctoring signals never block submission automatically.');
+  };
+
   return (
     <LearnerDashboardShell pageTitle="Run Your Mock" subtitle="Start, resume, and submit your mock from one place." backHref="/mocks">
       <div className="space-y-8">
@@ -126,7 +158,7 @@ export default function MockPlayerPage() {
               highlights={[
                 { icon: FileText, label: 'Profession', value: session.config.profession },
                 { icon: Clock, label: 'Mode', value: session.config.mode === 'exam' ? 'Exam simulation' : 'Practice simulation' },
-                { icon: CheckCircle2, label: 'Review', value: session.config.reviewSelection.replace(/_/g, ' ') },
+                { icon: CheckCircle2, label: 'Delivery', value: session.config.deliveryMode?.replace(/_/g, ' ') ?? 'computer' },
               ]}
             />
 
@@ -185,15 +217,48 @@ export default function MockPlayerPage() {
                   <div className="space-y-4">
                     <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
                       <p>Strict timer: {session.config.strictTimer ? 'Enabled' : 'Flexible'}</p>
+                      <p className="mt-1">Strictness: {session.config.strictness?.replace(/_/g, ' ') ?? session.config.mode}</p>
+                      <p className="mt-1">Delivery: {session.config.deliveryMode?.replace(/_/g, ' ') ?? 'computer'}</p>
                       <p className="mt-1">Review attached: {selectedSection.reviewSelected ? 'Yes' : 'No'}</p>
                       <p className="mt-1">Content: {selectedSection.contentPaperTitle ?? selectedSection.contentPaperId ?? 'Published section'}</p>
                       <p className="mt-1 break-all">Launch path: <span className="font-mono text-[11px]">{selectedSection.launchRoute}</span></p>
                     </div>
 
+                    {selectedSectionPolicy ? (
+                      <div className="rounded-2xl border border-border bg-background-light p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="info" size="sm">{selectedSectionPolicy.label}</Badge>
+                          <Badge variant={session.config.mode === 'exam' ? 'warning' : 'success'} size="sm">
+                            {session.config.mode === 'exam' ? 'Strict mock' : 'Practice mock'}
+                          </Badge>
+                          {isTeacherMarkedSubtest(selectedSection.subtest) ? (
+                            <Badge variant={selectedSection.reviewSelected ? 'success' : 'warning'} size="sm">
+                              {selectedSection.reviewSelected ? 'Teacher review queued' : 'Teacher review recommended'}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-3 text-sm font-bold text-navy">{selectedSectionPolicy.timing}</p>
+                        <p className="mt-1 text-sm leading-6 text-muted">{selectedSectionPolicy.examRule}</p>
+                        <p className="mt-1 text-sm leading-6 text-muted">{selectedSectionPolicy.reviewRule}</p>
+                      </div>
+                    ) : null}
+
+                    {submissionReadiness ? (
+                      <InlineAlert variant={submissionReadiness.canSubmit ? 'success' : 'warning'}>
+                        {submissionReadiness.completedCount}/{submissionReadiness.totalCount} sections recorded. {submissionReadiness.message}
+                      </InlineAlert>
+                    ) : null}
+
                     <Button fullWidth onClick={handleLaunchSection} loading={launchingSectionId === selectedSection.id}>
                       <PlayCircle className="h-4 w-4" />
                       Launch section workspace
                     </Button>
+
+                    {selectedSection.subtest === 'listening' ? (
+                      <Button variant="secondary" fullWidth onClick={handleReportAudioIssue}>
+                        Report audio issue
+                      </Button>
+                    ) : null}
 
                     {selectedSection.state !== 'completed' ? (
                       <Button variant="secondary" fullWidth onClick={handleCompleteSection} loading={completingSectionId === selectedSection.id}>
@@ -242,6 +307,36 @@ export default function MockPlayerPage() {
                   <p className="text-xs font-black uppercase tracking-widest text-muted">Review selection</p>
                   <p className="mt-2 text-sm font-bold text-navy">{session.config.reviewSelection.replace(/_/g, ' ')}</p>
                 </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <LearnerSurfaceSectionHeader
+                eyebrow="Attempt → Review → Remediation"
+                title="Final reports are released in the right order"
+                description="Auto-scored sections can appear quickly, while Writing and Speaking wait for teacher review when selected."
+                className="mb-4"
+              />
+              <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
+                <div className="rounded-2xl border border-border bg-background-light p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <ShieldCheck className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-navy">{modePolicy?.label ?? 'Mock workflow policy'}</p>
+                      <p className="mt-1 text-sm leading-6 text-muted">{modePolicy?.description}</p>
+                    </div>
+                  </div>
+                </div>
+                <ol className="grid gap-3 sm:grid-cols-2">
+                  {MOCK_REVIEW_RELEASE_STEPS.map((step, index) => (
+                    <li key={step} className="rounded-2xl border border-border bg-background-light p-4">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-primary">Step {index + 1}</span>
+                      <p className="mt-1 text-sm leading-6 text-navy">{step}</p>
+                    </li>
+                  ))}
+                </ol>
               </div>
             </section>
           </>

@@ -130,13 +130,13 @@ public sealed class MockService(LearnerDbContext db)
                 .Select(x => x.State)
                 .ToListAsync(ct);
 
-        var firstFullBundle = bundles.FirstOrDefault(x => x.MockType == "full");
+        var firstFullBundle = bundles.FirstOrDefault(x => MockTypes.IsFullShape(x.MockType));
         var firstFullRoute = firstFullBundle is null
             ? "/mocks/setup"
-            : $"/mocks/setup?bundleId={Uri.EscapeDataString(firstFullBundle.Id)}&type=full";
+            : $"/mocks/setup?bundleId={Uri.EscapeDataString(firstFullBundle.Id)}&type={firstFullBundle.MockType}";
 
         var fullMocks = bundles
-            .Where(x => x.MockType == "full")
+            .Where(x => MockTypes.IsFullShape(x.MockType))
             .Select(bundle =>
             {
                 var attempt = attempts.FirstOrDefault(a => a.MockBundleId == bundle.Id);
@@ -148,7 +148,7 @@ public sealed class MockService(LearnerDbContext db)
             .ToArray();
 
         var subTestMocks = bundles
-            .Where(x => x.MockType == "sub")
+            .Where(x => MockTypes.IsSubShape(x.MockType))
             .Select(bundle =>
             {
                 var attempt = attempts.FirstOrDefault(a => a.MockBundleId == bundle.Id);
@@ -266,14 +266,31 @@ public sealed class MockService(LearnerDbContext db)
         {
             mockTypes = new[]
             {
-                new { id = "full", label = "Full Mock", description = "All four sub-tests in OET order." },
-                new { id = "sub", label = "Single Sub-test", description = "Focus on one published sub-test bundle." }
+                new { id = MockTypes.Full, label = MockTypes.Label(MockTypes.Full), description = "All four sub-tests in OET order." },
+                new { id = MockTypes.Lrw, label = MockTypes.Label(MockTypes.Lrw), description = "Listening, Reading and Writing in one sitting (Speaking scheduled separately)." },
+                new { id = MockTypes.Sub, label = MockTypes.Label(MockTypes.Sub), description = "Focus on one published sub-test bundle." },
+                new { id = MockTypes.Part, label = MockTypes.Label(MockTypes.Part), description = "Single part within a sub-test (e.g. Reading Part A only)." },
+                new { id = MockTypes.Diagnostic, label = MockTypes.Label(MockTypes.Diagnostic), description = "Establish your baseline and unlock a personalised study path." },
+                new { id = MockTypes.FinalReadiness, label = MockTypes.Label(MockTypes.FinalReadiness), description = "Strict full mock taken before booking the real exam." },
+                new { id = MockTypes.Remedial, label = MockTypes.Label(MockTypes.Remedial), description = "Targeted mock generated from your weak-area analysis." },
             },
             subTypes = FullMockOrder.Select(x => new { id = x, label = ToDisplaySubtest(x) }),
             modes = new[]
             {
                 new { id = "exam", label = "Exam" },
                 new { id = "practice", label = "Practice" }
+            },
+            deliveryModes = new[]
+            {
+                new { id = MockDeliveryModes.Computer, label = "On-screen (computer)" },
+                new { id = MockDeliveryModes.OetHome, label = "OET@Home (remote)" },
+                new { id = MockDeliveryModes.Paper, label = "Paper-based" },
+            },
+            strictnessOptions = new[]
+            {
+                new { id = MockStrictness.Learning, label = "Learning", description = "Pause, replay, and hints allowed." },
+                new { id = MockStrictness.Exam, label = "Exam", description = "Strict timers, one-play audio, no hints." },
+                new { id = MockStrictness.FinalReadiness, label = "Final readiness", description = "Strictest preset \u2014 used right before the real exam." },
             },
             professions,
             reviewSelections = new[]
@@ -294,8 +311,11 @@ public sealed class MockService(LearnerDbContext db)
         await EnsureUserAsync(userId, ct);
         var now = DateTimeOffset.UtcNow;
         var mockType = NormalizeMockType(request.MockType);
-        var subType = mockType == "sub" ? NormalizeSubtest(request.SubType) : null;
+        var subType = MockTypes.IsSubShape(mockType) ? NormalizeSubtest(request.SubType) : null;
         var profession = NormalizeProfession(request.Profession);
+        var deliveryMode = NormalizeDeliveryMode(request.DeliveryMode);
+        var strictness = NormalizeStrictness(request.Strictness, mockType);
+        var effectiveStrictTimer = request.StrictTimer || strictness is MockStrictness.Exam or MockStrictness.FinalReadiness;
         var reviewSelection = NormalizeMockReviewSelection(mockType, subType, request.IncludeReview, request.ReviewSelection);
         var reviewCost = ReviewCost(reviewSelection, mockType, subType);
 
@@ -321,15 +341,21 @@ public sealed class MockService(LearnerDbContext db)
         var config = new
         {
             mockType,
+            mockTypeLabel = MockTypes.Label(mockType),
             subType,
             mode = NormalizeMode(request.Mode),
             profession,
+            deliveryMode,
+            strictness,
             includeReview = reviewCost > 0,
-            strictTimer = request.StrictTimer,
+            strictTimer = effectiveStrictTimer,
             reviewSelection,
             bundleId = bundle.Id,
             bundleTitle = bundle.Title,
-            targetCountry = request.TargetCountry
+            targetCountry = request.TargetCountry,
+            releasePolicy = bundle.ReleasePolicy,
+            sourceStatus = bundle.SourceStatus,
+            watermarkEnabled = bundle.WatermarkEnabled
         };
 
         var attempt = new MockAttempt
@@ -338,11 +364,14 @@ public sealed class MockService(LearnerDbContext db)
             UserId = userId,
             MockBundleId = bundle.Id,
             MockType = mockType,
-            SubtestCode = mockType == "sub" ? subType : null,
+            SubtestCode = MockTypes.IsSubShape(mockType) ? subType : null,
             Mode = config.mode,
             Profession = profession,
             ReviewSelection = reviewSelection,
-            StrictTimer = request.StrictTimer,
+            StrictTimer = effectiveStrictTimer,
+            DeliveryMode = deliveryMode,
+            Strictness = strictness,
+            RandomisationSeed = bundle.RandomiseQuestions ? Random.Shared.NextInt64(1, uint.MaxValue) : null,
             ReservedReviewCredits = reviewCost,
             ConfigJson = JsonSupport.Serialize(config),
             State = AttemptState.InProgress,
@@ -363,9 +392,9 @@ public sealed class MockService(LearnerDbContext db)
                 SubtestCode = section.SubtestCode,
                 ContentPaperId = section.ContentPaperId,
                 State = AttemptState.NotStarted,
-                LaunchRoute = BuildLaunchRoute(attempt.Id, section, null)
+                LaunchRoute = BuildLaunchRoute(attempt, section, null)
             };
-            sectionAttempt.LaunchRoute = BuildLaunchRoute(attempt.Id, section, sectionAttempt.Id);
+            sectionAttempt.LaunchRoute = BuildLaunchRoute(attempt, section, sectionAttempt.Id);
             db.MockSectionAttempts.Add(sectionAttempt);
         }
 
@@ -464,7 +493,7 @@ public sealed class MockService(LearnerDbContext db)
             await db.SaveChangesAsync(ct);
         }
 
-        section.LaunchRoute = BuildLaunchRoute(attempt.Id, bundleSection, section.Id);
+        section.LaunchRoute = BuildLaunchRoute(attempt, bundleSection, section.Id);
         return ProjectSectionAttempt(section, bundleSection, attempt);
     }
 
@@ -573,23 +602,394 @@ public sealed class MockService(LearnerDbContext db)
         return await GetMockAttemptAsync(userId, attempt.Id, ct);
     }
 
+    /// <summary>
+    /// Mocks V2 Wave 2 — record a batch of proctoring events for an attempt.
+    /// Rate-limited at <see cref="ProctoringEventCap"/> rows per attempt to prevent abuse.
+    /// </summary>
+    public const int ProctoringEventCap = 250;
+    public const int ProctoringBatchMax = 50;
+
+    public async Task<object> RecordProctoringEventsAsync(
+        string userId,
+        string mockAttemptId,
+        MockProctoringEventBatchRequest request,
+        CancellationToken ct)
+    {
+        if (request is null || request.Events is null || request.Events.Count == 0)
+        {
+            throw ApiException.Validation("invalid_request", "events array is required.");
+        }
+        if (request.Events.Count > ProctoringBatchMax)
+        {
+            throw ApiException.Validation("batch_too_large", $"Up to {ProctoringBatchMax} events per request.");
+        }
+
+        var attempt = await GetMockAttemptOwnedByUserAsync(userId, mockAttemptId, ct);
+
+        var existing = await db.MockProctoringEvents.CountAsync(x => x.MockAttemptId == attempt.Id, ct);
+        var capacity = ProctoringEventCap - existing;
+        if (capacity <= 0)
+        {
+            return new { ok = true, accepted = 0, dropped = request.Events.Count, reason = "cap_reached" };
+        }
+
+        var validSectionIds = await db.MockSectionAttempts
+            .Where(x => x.MockAttemptId == attempt.Id)
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+        var sectionIdSet = validSectionIds.ToHashSet(StringComparer.Ordinal);
+
+        var now = DateTimeOffset.UtcNow;
+        var accepted = 0;
+        var dropped = 0;
+        foreach (var ev in request.Events)
+        {
+            if (accepted >= capacity) { dropped++; continue; }
+            if (string.IsNullOrWhiteSpace(ev.Kind) || !MockProctoringKinds.All.Contains(ev.Kind))
+            {
+                dropped++;
+                continue;
+            }
+            var severity = !string.IsNullOrWhiteSpace(ev.Severity) && MockProctoringKinds.Severities.Contains(ev.Severity)
+                ? ev.Severity!
+                : MockProctoringKinds.DefaultSeverity(ev.Kind);
+            var sectionId = !string.IsNullOrWhiteSpace(ev.MockSectionAttemptId) && sectionIdSet.Contains(ev.MockSectionAttemptId!)
+                ? ev.MockSectionAttemptId
+                : null;
+            var occurredAt = ev.OccurredAt == default ? now : ev.OccurredAt;
+            // Guard against client clock skew: reject far-future timestamps.
+            if (occurredAt > now.AddMinutes(5)) occurredAt = now;
+            var metadata = ev.Metadata is { Count: > 0 }
+                ? JsonSupport.Serialize(ev.Metadata)
+                : "{}";
+
+            db.MockProctoringEvents.Add(new MockProctoringEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                MockAttemptId = attempt.Id,
+                MockSectionAttemptId = sectionId,
+                Kind = ev.Kind,
+                Severity = severity,
+                OccurredAt = occurredAt,
+                MetadataJson = metadata,
+            });
+            accepted++;
+        }
+
+        if (accepted > 0)
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        return new { ok = true, accepted, dropped, capacityRemaining = capacity - accepted };
+    }
+
     public async Task<object> GetMockReportAsync(string userId, string reportId, CancellationToken ct)
     {
-        var report = await db.MockReports.AsNoTracking()
+        var row = await db.MockReports.AsNoTracking()
             .Join(db.MockAttempts.AsNoTracking().Where(x => x.UserId == userId),
                 report => report.MockAttemptId,
                 attempt => attempt.Id,
-                (report, attempt) => report)
-            .FirstOrDefaultAsync(x => x.Id == reportId, ct)
+                (report, attempt) => new { report, attempt })
+            .FirstOrDefaultAsync(x => x.report.Id == reportId, ct)
             ?? throw ApiException.NotFound("mock_report_not_found", "Mock report not found.");
 
-        var payload = JsonSupport.Deserialize<Dictionary<string, object?>>(report.PayloadJson, new Dictionary<string, object?>());
-        payload["id"] = report.Id;
-        payload["reportId"] = report.Id;
-        payload["state"] = ToAsyncState(report.State);
-        payload["generatedAt"] = report.GeneratedAt;
+        var payload = JsonSupport.Deserialize<Dictionary<string, object?>>(row.report.PayloadJson, new Dictionary<string, object?>());
+        payload["id"] = row.report.Id;
+        payload["reportId"] = row.report.Id;
+        payload["state"] = ToAsyncState(row.report.State);
+        payload["generatedAt"] = row.report.GeneratedAt;
         payload["studyPlanUpdateCta"] = new { label = "Update study plan", route = "/study-plan" };
+        await SeedMockRemediationStudyPlanAsync(userId, row.attempt, row.report, payload, ct);
+        await EnrichMockReportPayloadAsync(row.attempt, row.report, payload, ct);
         return payload;
+    }
+
+    public async Task<object> ListMockBookingsAsync(string userId, CancellationToken ct)
+    {
+        await EnsureUserAsync(userId, ct);
+        var rows = await db.MockBookings.AsNoTracking()
+            .Include(x => x.MockBundle)
+            .Where(x => x.UserId == userId)
+            .OrderByDescending(x => x.ScheduledStartAt)
+            .Take(50)
+            .ToListAsync(ct);
+        return new { items = rows.Select(ProjectBookingLearner).ToArray() };
+    }
+
+    public async Task<object> CreateMockBookingAsync(string userId, MockBookingCreateRequest request, CancellationToken ct)
+    {
+        await EnsureUserAsync(userId, ct);
+        var bundle = await db.MockBundles.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == request.MockBundleId && x.Status == ContentStatus.Published, ct)
+            ?? throw ApiException.NotFound("mock_bundle_not_found", "Choose a published mock bundle before booking.");
+
+        if (request.ScheduledStartAt < DateTimeOffset.UtcNow.AddMinutes(15))
+        {
+            throw ApiException.Validation(
+                "mock_booking_too_soon",
+                "Schedule at least 15 minutes ahead so checks and reminders can run.",
+                [new ApiFieldError("scheduledStartAt", "too_soon", "Choose a later time.")]);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var deliveryMode = NormalizeDeliveryMode(request.DeliveryMode);
+        var booking = new MockBooking
+        {
+            Id = $"mock-booking-{Guid.NewGuid():N}",
+            UserId = userId,
+            MockBundleId = bundle.Id,
+            ScheduledStartAt = request.ScheduledStartAt.ToUniversalTime(),
+            TimezoneIana = string.IsNullOrWhiteSpace(request.TimezoneIana) ? "UTC" : request.TimezoneIana.Trim(),
+            Status = MockBookingStatuses.Scheduled,
+            ConsentToRecording = request.ConsentToRecording,
+            DeliveryMode = deliveryMode,
+            LearnerNotes = string.IsNullOrWhiteSpace(request.LearnerNotes) ? null : request.LearnerNotes.Trim(),
+            LiveRoomState = MockLiveRoomStates.Waiting,
+            ZoomMeetingId = $"sandbox-{Guid.NewGuid():N}"[..24],
+            ZoomJoinUrl = $"/mocks/speaking-room/{{bookingId}}",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        booking.ZoomJoinUrl = $"/mocks/speaking-room/{Uri.EscapeDataString(booking.Id)}";
+        db.MockBookings.Add(booking);
+        RecordEvent(userId, "mock_booking_created", new { bookingId = booking.Id, bundleId = bundle.Id, deliveryMode, booking.ScheduledStartAt });
+        await db.SaveChangesAsync(ct);
+        return ProjectBookingLearner(booking, bundle);
+    }
+
+    public async Task<object> UpdateMockBookingAsync(string userId, string bookingId, MockBookingUpdateRequest request, CancellationToken ct)
+    {
+        var booking = await db.MockBookings
+            .Include(x => x.MockBundle)
+            .FirstOrDefaultAsync(x => x.Id == bookingId && x.UserId == userId, ct)
+            ?? throw ApiException.NotFound("mock_booking_not_found", "Mock booking not found.");
+
+        if (request.ScheduledStartAt.HasValue && request.ScheduledStartAt.Value != booking.ScheduledStartAt)
+        {
+            booking.ScheduledStartAt = request.ScheduledStartAt.Value.ToUniversalTime();
+            booking.RescheduleCount += 1;
+        }
+        if (request.TimezoneIana is not null)
+        {
+            booking.TimezoneIana = string.IsNullOrWhiteSpace(request.TimezoneIana) ? booking.TimezoneIana : request.TimezoneIana.Trim();
+        }
+        if (request.Status is not null)
+        {
+            booking.Status = NormalizeBookingStatus(request.Status);
+            if (booking.Status == MockBookingStatuses.Cancelled) booking.CancelledAt = DateTimeOffset.UtcNow;
+            if (booking.Status == MockBookingStatuses.Completed) booking.CompletedAt = DateTimeOffset.UtcNow;
+        }
+        if (request.ConsentToRecording.HasValue) booking.ConsentToRecording = request.ConsentToRecording.Value;
+        if (request.LearnerNotes is not null) booking.LearnerNotes = request.LearnerNotes;
+        booking.UpdatedAt = DateTimeOffset.UtcNow;
+        RecordEvent(userId, "mock_booking_updated", new { bookingId = booking.Id, booking.Status, booking.ScheduledStartAt });
+        await db.SaveChangesAsync(ct);
+        return ProjectBookingLearner(booking, booking.MockBundle);
+    }
+
+    public async Task<object> ListAdminMockBookingsAsync(string? status, CancellationToken ct)
+    {
+        var query = db.MockBookings.AsNoTracking()
+            .Include(x => x.MockBundle)
+            .AsQueryable();
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var normalized = NormalizeBookingStatus(status);
+            query = query.Where(x => x.Status == normalized);
+        }
+        var rows = await query.OrderBy(x => x.ScheduledStartAt).Take(200).ToListAsync(ct);
+        return new { items = rows.Select(ProjectBookingAdmin).ToArray() };
+    }
+
+    public async Task<object> GetAdminMockAnalyticsAsync(CancellationToken ct)
+    {
+        var since = DateTimeOffset.UtcNow.AddDays(-30);
+        var attempts = await db.MockAttempts.AsNoTracking()
+            .Where(x => x.StartedAt >= since)
+            .ToListAsync(ct);
+        var reports = await db.MockReports.AsNoTracking()
+            .Where(x => x.GeneratedAt != null && x.GeneratedAt >= since)
+            .ToListAsync(ct);
+        var reviewAttemptIds = await db.Attempts.AsNoTracking()
+            .Where(x => x.Context == "mock")
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+        List<ReviewRequest> reviewRequests = reviewAttemptIds.Count == 0
+            ? []
+            : await db.ReviewRequests.AsNoTracking()
+                .Where(x => reviewAttemptIds.Contains(x.AttemptId))
+                .ToListAsync(ct);
+        var scored = reports.Select(x => ParsePayloadOverallScore(x.PayloadJson)).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+        var average = scored.Count == 0 ? (double?)null : Math.Round(scored.Average(), 1);
+
+        return new
+        {
+            windowDays = 30,
+            attemptsStarted = attempts.Count,
+            attemptsCompleted = attempts.Count(x => x.State == AttemptState.Completed),
+            completionRate = attempts.Count == 0 ? 0 : Math.Round(attempts.Count(x => x.State == AttemptState.Completed) * 100.0 / attempts.Count, 1),
+            reportsGenerated = reports.Count,
+            averageReadinessScore = average,
+            greenReadinessCount = scored.Count(x => OetScoring.AdvisoryTier(x).Tier is "green" or "dark-green"),
+            markingDelayMetrics = new
+            {
+                queued = reviewRequests.Count(x => x.State == ReviewRequestState.Queued),
+                inReview = reviewRequests.Count(x => x.State == ReviewRequestState.InReview),
+                completed = reviewRequests.Count(x => x.State == ReviewRequestState.Completed),
+                averageTurnaroundHours = reviewRequests
+                    .Where(x => x.CompletedAt.HasValue)
+                    .Select(x => (x.CompletedAt!.Value - x.CreatedAt).TotalHours)
+                    .DefaultIfEmpty(0)
+                    .Average()
+            },
+            learnerRiskListRoute = "/v1/admin/mocks/risk-list"
+        };
+    }
+
+    public async Task<object> GetAdminMockRiskListAsync(CancellationToken ct)
+    {
+        var reports = await db.MockReports.AsNoTracking()
+            .Join(db.MockAttempts.AsNoTracking(),
+                report => report.MockAttemptId,
+                attempt => attempt.Id,
+                (report, attempt) => new { report, attempt })
+            .Where(x => x.report.State == AsyncState.Completed && x.report.GeneratedAt != null)
+            .OrderByDescending(x => x.report.GeneratedAt)
+            .Take(200)
+            .ToListAsync(ct);
+
+        var items = reports
+            .Select(x => new
+            {
+                learnerId = x.attempt.UserId,
+                mockAttemptId = x.attempt.Id,
+                reportId = x.report.Id,
+                generatedAt = x.report.GeneratedAt,
+                score = ParsePayloadOverallScore(x.report.PayloadJson),
+                weakest = ReadWeakestCriterion(JsonSupport.Deserialize(x.report.PayloadJson, new Dictionary<string, object?>()))
+            })
+            .Where(x => !x.score.HasValue || OetScoring.AdvisoryTier(x.score.Value).Tier is "red" or "amber")
+            .Select(x => new
+            {
+                x.learnerId,
+                x.mockAttemptId,
+                x.reportId,
+                x.generatedAt,
+                overallScore = x.score,
+                risk = x.score.HasValue ? OetScoring.AdvisoryTier(x.score.Value).Tier : "pending",
+                weakness = new { x.weakest.Subtest, x.weakest.Criterion, x.weakest.Description },
+                action = "Assign remediation or teacher follow-up"
+            })
+            .Take(50)
+            .ToArray();
+
+        return new { items };
+    }
+
+    public async Task<object> ListExpertMockBookingsAsync(string expertId, CancellationToken ct)
+    {
+        var rows = await db.MockBookings.AsNoTracking()
+            .Include(x => x.MockBundle)
+            .Where(x => x.AssignedTutorId == null || x.AssignedTutorId == expertId || x.AssignedInterlocutorId == expertId)
+            .OrderBy(x => x.ScheduledStartAt)
+            .Take(100)
+            .ToListAsync(ct);
+        return new { items = rows.Select(ProjectBookingExpert).ToArray() };
+    }
+
+    public async Task<object> ReportMockLeakAsync(string userId, MockLeakReportRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.MockBundleId) && string.IsNullOrWhiteSpace(request.MockAttemptId))
+        {
+            throw ApiException.Validation(
+                "mock_leak_report_target_required",
+                "Select the mock bundle or attempt you are reporting.",
+                [new ApiFieldError("mockBundleId", "required", "Provide a bundle or attempt id.")]);
+        }
+
+        MockAttempt? attempt = null;
+        string? bundleId = string.IsNullOrWhiteSpace(request.MockBundleId) ? null : request.MockBundleId.Trim();
+        if (!string.IsNullOrWhiteSpace(request.MockAttemptId))
+        {
+            attempt = await db.MockAttempts.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == request.MockAttemptId && x.UserId == userId, ct)
+                ?? throw ApiException.NotFound("mock_attempt_not_found", "Mock attempt not found.");
+            bundleId ??= attempt.MockBundleId;
+        }
+
+        var notes = JsonSupport.Serialize(new
+        {
+            reason = request.Reason?.Trim(),
+            evidenceUrl = request.EvidenceUrl?.Trim(),
+            pageOrQuestion = request.PageOrQuestion?.Trim()
+        });
+        var review = new MockContentReview
+        {
+            Id = $"mock-review-{Guid.NewGuid():N}",
+            MockBundleId = bundleId,
+            MockAttemptId = attempt?.Id ?? request.MockAttemptId,
+            ReportedByUserId = userId,
+            ReviewType = "leak_report",
+            Severity = "high",
+            Status = "open",
+            Notes = notes,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.MockContentReviews.Add(review);
+        RecordEvent(userId, "mock_leak_reported", new { reviewId = review.Id, bundleId, request.MockAttemptId });
+        await db.SaveChangesAsync(ct);
+        return new { id = review.Id, status = review.Status, severity = review.Severity };
+    }
+
+    public async Task<object> GetDiagnosticStudyPathAsync(string userId, CancellationToken ct)
+    {
+        await EnsureUserAsync(userId, ct);
+        var diagnosticAttemptIds = db.MockAttempts.AsNoTracking()
+            .Where(x => x.UserId == userId && x.MockType == MockTypes.Diagnostic)
+            .Select(x => x.Id);
+        var report = await db.MockReports.AsNoTracking()
+            .Where(x => diagnosticAttemptIds.Contains(x.MockAttemptId) && x.State == AsyncState.Completed)
+            .OrderByDescending(x => x.GeneratedAt)
+            .FirstOrDefaultAsync(ct);
+        var payload = report is null
+            ? new Dictionary<string, object?>()
+            : JsonSupport.Deserialize<Dictionary<string, object?>>(report.PayloadJson, new Dictionary<string, object?>());
+        var weakness = ReadWeakestCriterion(payload);
+        var items = await db.StudyPlanItems.AsNoTracking()
+            .Join(db.StudyPlans.AsNoTracking().Where(x => x.UserId == userId),
+                item => item.StudyPlanId,
+                plan => plan.Id,
+                (item, plan) => item)
+            .Where(x => x.ContentId != null && x.ContentId.StartsWith("mock-remediation:"))
+            .OrderBy(x => x.DueDate)
+            .Take(7)
+            .ToListAsync(ct);
+
+        return new
+        {
+            diagnosticCompleted = report is not null,
+            reportId = report?.Id,
+            weakness,
+            generatedAt = report?.GeneratedAt,
+            items = items.Select(x => new
+            {
+                id = x.Id,
+                title = x.Title,
+                subtest = x.SubtestCode,
+                dueDate = x.DueDate,
+                durationMinutes = x.DurationMinutes,
+                rationale = x.Rationale,
+                route = RouteForSubtest(x.SubtestCode)
+            }).ToArray(),
+            fallback = report is null
+                ? new
+                {
+                    title = "Start a diagnostic mock first",
+                    route = "/mocks/setup?type=diagnostic",
+                    description = "Diagnostic access is plan-configurable. Start from the mock setup page when your plan includes it."
+                }
+                : null
+        };
     }
 
     public async Task<object> ListBundlesAsync(string? status, string? mockType, string? subtest, CancellationToken ct)
@@ -631,7 +1031,7 @@ public sealed class MockService(LearnerDbContext db)
     {
         var now = DateTimeOffset.UtcNow;
         var mockType = NormalizeMockType(request.MockType);
-        var subtest = mockType == "sub" ? NormalizeSubtest(request.SubtestCode) : null;
+        var subtest = MockTypes.IsSubShape(mockType) ? NormalizeSubtest(request.SubtestCode) : null;
         var title = RequireText(request.Title, "title");
         var bundle = new MockBundle
         {
@@ -646,7 +1046,15 @@ public sealed class MockService(LearnerDbContext db)
             SourceProvenance = request.SourceProvenance,
             Priority = request.Priority ?? 0,
             TagsCsv = request.TagsCsv ?? string.Empty,
-            EstimatedDurationMinutes = mockType == "full" ? FullMockOrder.Sum(DefaultTimeLimit) : DefaultTimeLimit(subtest ?? "reading"),
+            Difficulty = NormalizeDifficulty(request.Difficulty),
+            SourceStatus = NormalizeSourceStatus(request.SourceStatus),
+            QualityStatus = NormalizeQualityStatus(request.QualityStatus),
+            ReleasePolicy = NormalizeReleasePolicy(request.ReleasePolicy),
+            TopicTagsCsv = request.TopicTagsCsv ?? string.Empty,
+            SkillTagsCsv = request.SkillTagsCsv ?? string.Empty,
+            WatermarkEnabled = request.WatermarkEnabled ?? true,
+            RandomiseQuestions = request.RandomiseQuestions ?? false,
+            EstimatedDurationMinutes = ComputeBundleDefaultDuration(mockType, subtest),
             CreatedByAdminId = adminId,
             UpdatedByAdminId = adminId,
             CreatedAt = now,
@@ -672,7 +1080,7 @@ public sealed class MockService(LearnerDbContext db)
         }
         if (request.SubtestCode is not null)
         {
-            bundle.SubtestCode = bundle.MockType == "sub" ? NormalizeSubtest(request.SubtestCode) : null;
+            bundle.SubtestCode = MockTypes.IsSubShape(bundle.MockType) ? NormalizeSubtest(request.SubtestCode) : null;
         }
         if (request.ProfessionId is not null)
         {
@@ -685,6 +1093,14 @@ public sealed class MockService(LearnerDbContext db)
         if (request.SourceProvenance is not null) bundle.SourceProvenance = request.SourceProvenance;
         if (request.Priority.HasValue) bundle.Priority = request.Priority.Value;
         if (request.TagsCsv is not null) bundle.TagsCsv = request.TagsCsv;
+        if (request.Difficulty is not null) bundle.Difficulty = NormalizeDifficulty(request.Difficulty);
+        if (request.SourceStatus is not null) bundle.SourceStatus = NormalizeSourceStatus(request.SourceStatus);
+        if (request.QualityStatus is not null) bundle.QualityStatus = NormalizeQualityStatus(request.QualityStatus);
+        if (request.ReleasePolicy is not null) bundle.ReleasePolicy = NormalizeReleasePolicy(request.ReleasePolicy);
+        if (request.TopicTagsCsv is not null) bundle.TopicTagsCsv = request.TopicTagsCsv;
+        if (request.SkillTagsCsv is not null) bundle.SkillTagsCsv = request.SkillTagsCsv;
+        if (request.WatermarkEnabled.HasValue) bundle.WatermarkEnabled = request.WatermarkEnabled.Value;
+        if (request.RandomiseQuestions.HasValue) bundle.RandomiseQuestions = request.RandomiseQuestions.Value;
         if (request.Status.HasValue && request.Status.Value != ContentStatus.Published)
         {
             bundle.Status = request.Status.Value;
@@ -716,7 +1132,7 @@ public sealed class MockService(LearnerDbContext db)
             ?? throw ApiException.NotFound("content_paper_not_found", "Content paper not found.");
 
         var subtest = NormalizeSubtest(paper.SubtestCode);
-        if (bundle.MockType == "sub" && !string.Equals(bundle.SubtestCode, subtest, StringComparison.OrdinalIgnoreCase))
+        if (MockTypes.IsSubShape(bundle.MockType) && !string.Equals(bundle.SubtestCode, subtest, StringComparison.OrdinalIgnoreCase))
         {
             throw ApiException.Validation(
                 "mock_section_subtest_mismatch",
@@ -810,7 +1226,7 @@ public sealed class MockService(LearnerDbContext db)
         {
             query = query.Where(x => x.Id == bundleId);
         }
-        else if (mockType == "sub")
+        else if (MockTypes.IsSubShape(mockType))
         {
             query = query.Where(x => x.SubtestCode == subtest);
         }
@@ -826,9 +1242,9 @@ public sealed class MockService(LearnerDbContext db)
 
         return bundle ?? throw ApiException.NotFound(
             "mock_bundle_not_found",
-            mockType == "sub"
+            MockTypes.IsSubShape(mockType)
                 ? $"No published {ToDisplaySubtest(subtest ?? "reading")} mock bundle is available yet."
-                : "No published full mock bundle is available yet.");
+                : $"No published {MockTypes.Label(mockType).ToLowerInvariant()} bundle is available yet.");
     }
 
     private async Task<MockAttempt> GetMockAttemptOwnedByUserAsync(string userId, string mockAttemptId, CancellationToken ct)
@@ -1016,19 +1432,30 @@ public sealed class MockService(LearnerDbContext db)
             errors.Add(new ApiFieldError("sourceProvenance", "required", "Mock bundle provenance is required before publish."));
         }
 
-        if (bundle.MockType == "full")
+        var requiredSequence = RequiredSubtestSequence(bundle.MockType);
+        if (requiredSequence is not null)
         {
             var actual = sections.Select(x => x.SubtestCode).ToArray();
-            if (!actual.SequenceEqual(FullMockOrder, StringComparer.OrdinalIgnoreCase))
+            if (!actual.SequenceEqual(requiredSequence, StringComparer.OrdinalIgnoreCase))
             {
-                errors.Add(new ApiFieldError("sections", "wrong_order", "Full mock bundles must contain Listening, Reading, Writing, Speaking in that order."));
+                var label = MockTypes.Label(bundle.MockType);
+                var expected = string.Join(", ", requiredSequence.Select(s => char.ToUpperInvariant(s[0]) + s[1..]));
+                errors.Add(new ApiFieldError("sections", "wrong_order", $"{label} bundles must contain {expected} in that order."));
             }
         }
-        else
+        else if (MockTypes.IsSubShape(bundle.MockType))
         {
             if (sections.Count != 1 || !string.Equals(sections[0].SubtestCode, bundle.SubtestCode, StringComparison.OrdinalIgnoreCase))
             {
                 errors.Add(new ApiFieldError("sections", "subtest_required", "Sub-test mock bundles require exactly one section matching the selected sub-test."));
+            }
+        }
+        else
+        {
+            // Diagnostic / Remedial / other flexible-shape bundles: require at least one section.
+            if (sections.Count == 0)
+            {
+                errors.Add(new ApiFieldError("sections", "sections_required", "This mock requires at least one section before publishing."));
             }
         }
 
@@ -1113,7 +1540,15 @@ public sealed class MockService(LearnerDbContext db)
             score = completed ? latestReport?.GetValueOrDefault("overallScore")?.ToString() : null,
             date = latestAttempt?.CompletedAt?.ToString("MMM dd, yyyy"),
             duration = $"{bundle.EstimatedDurationMinutes}m",
-            isRecommended = latestAttempt is null && bundle.MockType == "full",
+            difficulty = bundle.Difficulty,
+            sourceStatus = bundle.SourceStatus,
+            qualityStatus = bundle.QualityStatus,
+            releasePolicy = bundle.ReleasePolicy,
+            topicTags = SplitCsv(bundle.TopicTagsCsv),
+            skillTags = SplitCsv(bundle.SkillTagsCsv),
+            watermarkEnabled = bundle.WatermarkEnabled,
+            randomiseQuestions = bundle.RandomiseQuestions,
+            isRecommended = latestAttempt is null && MockTypes.IsFullShape(bundle.MockType),
             reason = bundle.Status == ContentStatus.Published ? null : "Not published",
             route = $"/mocks/setup?bundleId={Uri.EscapeDataString(bundle.Id)}&type={bundle.MockType}" + (bundle.SubtestCode is null ? string.Empty : $"&subtest={Uri.EscapeDataString(bundle.SubtestCode)}"),
             sectionCount = bundle.Sections.Count,
@@ -1133,6 +1568,14 @@ public sealed class MockService(LearnerDbContext db)
         professionId = bundle.ProfessionId,
         appliesToAllProfessions = bundle.AppliesToAllProfessions,
         estimatedDurationMinutes = bundle.EstimatedDurationMinutes,
+        difficulty = bundle.Difficulty,
+        sourceStatus = bundle.SourceStatus,
+        qualityStatus = bundle.QualityStatus,
+        releasePolicy = bundle.ReleasePolicy,
+        topicTags = SplitCsv(bundle.TopicTagsCsv),
+        skillTags = SplitCsv(bundle.SkillTagsCsv),
+        watermarkEnabled = bundle.WatermarkEnabled,
+        randomiseQuestions = bundle.RandomiseQuestions,
         sections = bundle.Sections.OrderBy(x => x.SectionOrder).Select(x => new
         {
             id = x.Id,
@@ -1158,6 +1601,14 @@ public sealed class MockService(LearnerDbContext db)
         estimatedDurationMinutes = bundle.EstimatedDurationMinutes,
         priority = bundle.Priority,
         tagsCsv = bundle.TagsCsv,
+        difficulty = bundle.Difficulty,
+        sourceStatus = bundle.SourceStatus,
+        qualityStatus = bundle.QualityStatus,
+        releasePolicy = bundle.ReleasePolicy,
+        topicTagsCsv = bundle.TopicTagsCsv,
+        skillTagsCsv = bundle.SkillTagsCsv,
+        watermarkEnabled = bundle.WatermarkEnabled,
+        randomiseQuestions = bundle.RandomiseQuestions,
         sourceProvenance = bundle.SourceProvenance,
         createdAt = bundle.CreatedAt,
         updatedAt = bundle.UpdatedAt,
@@ -1222,6 +1673,356 @@ public sealed class MockService(LearnerDbContext db)
         pendingCredits = Math.Max(0, reservation.ReservedCredits - reservation.ConsumedCredits - reservation.ReleasedCredits),
         reservedAt = reservation.ReservedAt,
         expiresAt = reservation.ExpiresAt
+    };
+
+    private static object ProjectBookingLearner(MockBooking booking)
+        => ProjectBookingLearner(booking, booking.MockBundle);
+
+    private static object ProjectBookingLearner(MockBooking booking, MockBundle? bundle) => new
+    {
+        id = booking.Id,
+        bookingId = booking.Id,
+        mockBundleId = booking.MockBundleId,
+        mockAttemptId = booking.MockAttemptId,
+        title = bundle?.Title ?? "Scheduled mock",
+        scheduledStartAt = booking.ScheduledStartAt,
+        timezoneIana = booking.TimezoneIana,
+        status = booking.Status,
+        deliveryMode = booking.DeliveryMode,
+        liveRoomState = booking.LiveRoomState,
+        consentToRecording = booking.ConsentToRecording,
+        rescheduleCount = booking.RescheduleCount,
+        joinUrl = booking.ZoomJoinUrl,
+        learnerNotes = booking.LearnerNotes,
+        releasePolicy = bundle?.ReleasePolicy ?? MockReleasePolicies.Instant,
+        candidateCardVisible = true,
+        interlocutorCardVisible = false
+    };
+
+    private static object ProjectBookingAdmin(MockBooking booking) => new
+    {
+        id = booking.Id,
+        bookingId = booking.Id,
+        userId = booking.UserId,
+        mockBundleId = booking.MockBundleId,
+        mockBundleTitle = booking.MockBundle?.Title,
+        scheduledStartAt = booking.ScheduledStartAt,
+        timezoneIana = booking.TimezoneIana,
+        status = booking.Status,
+        assignedTutorId = booking.AssignedTutorId,
+        assignedInterlocutorId = booking.AssignedInterlocutorId,
+        deliveryMode = booking.DeliveryMode,
+        liveRoomState = booking.LiveRoomState,
+        consentToRecording = booking.ConsentToRecording,
+        rescheduleCount = booking.RescheduleCount,
+        zoomMeetingId = booking.ZoomMeetingId,
+        learnerNotes = booking.LearnerNotes,
+        releasePolicy = booking.MockBundle?.ReleasePolicy ?? MockReleasePolicies.Instant
+    };
+
+    private static object ProjectBookingExpert(MockBooking booking) => new
+    {
+        id = booking.Id,
+        bookingId = booking.Id,
+        learnerId = booking.UserId,
+        mockBundleId = booking.MockBundleId,
+        mockBundleTitle = booking.MockBundle?.Title,
+        scheduledStartAt = booking.ScheduledStartAt,
+        timezoneIana = booking.TimezoneIana,
+        status = booking.Status,
+        liveRoomState = booking.LiveRoomState,
+        startUrl = booking.ZoomStartUrl,
+        joinUrl = booking.ZoomJoinUrl,
+        consentToRecording = booking.ConsentToRecording,
+        candidateCardVisible = true,
+        interlocutorCardVisible = true,
+        learnerNotes = booking.LearnerNotes
+    };
+
+    private async Task EnrichMockReportPayloadAsync(
+        MockAttempt attempt,
+        MockReport report,
+        Dictionary<string, object?> payload,
+        CancellationToken ct)
+    {
+        var subTests = ReadSubTests(payload);
+        var sections = await db.MockSectionAttempts.AsNoTracking()
+            .Where(x => x.MockAttemptId == attempt.Id)
+            .OrderBy(x => x.StartedAt)
+            .ToListAsync(ct);
+        var proctoringEvents = await db.MockProctoringEvents.AsNoTracking()
+            .Where(x => x.MockAttemptId == attempt.Id)
+            .ToListAsync(ct);
+
+        var perModuleReadiness = subTests.Select(st =>
+        {
+            var name = StringValue(st, "name") ?? StringValue(st, "subtest") ?? "Mock";
+            var score = IntValue(st, "scaledScore") ?? ParseScore(StringValue(st, "score"));
+            var advisory = score.HasValue
+                ? OetScoring.AdvisoryTier(score.Value)
+                : null;
+            return new
+            {
+                subtest = name,
+                scaledScore = score,
+                grade = score.HasValue ? OetScoring.OetGradeLetterFromScaled(score.Value) : null,
+                rag = advisory?.Tier ?? "pending",
+                message = advisory?.Message ?? "Awaiting scored evidence or teacher review.",
+                passThreshold = advisory?.PassThreshold
+            };
+        }).ToArray();
+
+        payload["perModuleReadiness"] = perModuleReadiness;
+        payload["partScores"] = subTests.Select(st => new
+        {
+            subtest = StringValue(st, "name") ?? StringValue(st, "subtest") ?? "Mock",
+            rawScore = StringValue(st, "rawScore") ?? "N/A",
+            scaledScore = IntValue(st, "scaledScore"),
+            grade = StringValue(st, "grade"),
+            state = StringValue(st, "state") ?? "completed"
+        }).ToArray();
+        payload["timingAnalysis"] = sections.Select(section => new
+        {
+            sectionId = section.Id,
+            subtest = section.SubtestCode,
+            startedAt = section.StartedAt,
+            submittedAt = section.SubmittedAt,
+            completedAt = section.CompletedAt,
+            secondsUsed = section.StartedAt is not null && (section.CompletedAt ?? section.SubmittedAt) is not null
+                ? (int?)Math.Max(0, (int)((section.CompletedAt ?? section.SubmittedAt)!.Value - section.StartedAt.Value).TotalSeconds)
+                : null,
+            deadlineAt = section.DeadlineAt
+        }).ToArray();
+        payload["errorCategories"] = BuildReportErrorCategories(payload);
+        payload["teacherReviewState"] = payload.TryGetValue("reviewSummary", out var reviewSummary) ? reviewSummary : new
+        {
+            queued = 0,
+            inReview = 0,
+            completed = 0,
+            pending = 0
+        };
+        payload["bookingAdvice"] = BuildBookingAdvice(payload);
+        payload["retakeAdvice"] = BuildRetakeAdvice(payload);
+        payload["proctoringSummary"] = new
+        {
+            totalEvents = proctoringEvents.Count,
+            advisoryOnly = true,
+            criticalEvents = proctoringEvents.Count(x => x.Severity == "critical"),
+            warningEvents = proctoringEvents.Count(x => x.Severity == "warning"),
+            byKind = proctoringEvents
+                .GroupBy(x => x.Kind)
+                .OrderByDescending(g => g.Count())
+                .Select(g => new { kind = g.Key, count = g.Count() })
+                .ToArray(),
+            message = proctoringEvents.Count == 0
+                ? "No integrity events were recorded. Proctoring is advisory and never blocks submission automatically."
+                : "Integrity events were recorded for teacher/admin review. They are advisory and did not block submission."
+        };
+        payload["releasePolicy"] = ReadConfigValue(attempt.ConfigJson, "releasePolicy") ?? MockReleasePolicies.Instant;
+        payload["remediationPlan"] = BuildServerRemediationPlan(payload, report.Id);
+    }
+
+    private async Task SeedMockRemediationStudyPlanAsync(
+        string userId,
+        MockAttempt attempt,
+        MockReport report,
+        Dictionary<string, object?> payload,
+        CancellationToken ct)
+    {
+        if (report.State != AsyncState.Completed) return;
+        var contentPrefix = $"mock-remediation:{attempt.Id}:";
+        var alreadySeeded = await db.StudyPlanItems.AsNoTracking()
+            .Join(db.StudyPlans.AsNoTracking().Where(x => x.UserId == userId),
+                item => item.StudyPlanId,
+                plan => plan.Id,
+                (item, plan) => item)
+            .AnyAsync(x => x.ContentId != null && x.ContentId.StartsWith(contentPrefix), ct);
+        if (alreadySeeded) return;
+
+        var plan = await db.StudyPlans
+            .Where(x => x.UserId == userId && x.State == AsyncState.Completed)
+            .OrderByDescending(x => x.GeneratedAt)
+            .FirstOrDefaultAsync(ct);
+        var weakness = ReadWeakestCriterion(payload);
+        var weakSubtest = NormalizeSubtestOrDefault(weakness.Subtest);
+        var now = DateTimeOffset.UtcNow;
+        if (plan is null)
+        {
+            plan = new StudyPlan
+            {
+                Id = $"plan-{Guid.NewGuid():N}",
+                UserId = userId,
+                Version = 1,
+                GeneratedAt = now,
+                State = AsyncState.Completed,
+                Checkpoint = "Created from your latest mock report.",
+                WeakSkillFocus = $"{weakness.Subtest}: {weakness.Criterion}",
+                ExamFamilyCode = attempt.ExamFamilyCode,
+                ExamTypeCode = attempt.ExamTypeCode
+            };
+            db.StudyPlans.Add(plan);
+        }
+        else
+        {
+            plan.Version += 1;
+            plan.GeneratedAt = now;
+            plan.Checkpoint = "Updated from your latest mock report.";
+            plan.WeakSkillFocus = $"{weakness.Subtest}: {weakness.Criterion}";
+        }
+
+        var actions = BuildServerRemediationPlan(payload, report.Id).Take(7).ToArray();
+        for (var i = 0; i < actions.Length; i++)
+        {
+            db.StudyPlanItems.Add(new StudyPlanItem
+            {
+                Id = $"study-item-{Guid.NewGuid():N}",
+                StudyPlanId = plan.Id,
+                Title = actions[i].Title,
+                SubtestCode = weakSubtest,
+                DurationMinutes = 30,
+                Rationale = actions[i].Description,
+                DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(i + 1)),
+                Status = StudyPlanItemStatus.NotStarted,
+                Section = i == 0 ? "today" : "thisWeek",
+                ContentId = $"{contentPrefix}{i + 1}",
+                ItemType = "mock_remediation"
+            });
+        }
+        db.AnalyticsEvents.Add(new AnalyticsEventRecord
+        {
+            Id = $"evt-{Guid.NewGuid():N}",
+            UserId = userId,
+            EventName = "mock_remediation_plan_seeded",
+            PayloadJson = JsonSupport.Serialize(new { mockAttemptId = attempt.Id, reportId = report.Id, itemCount = actions.Length }),
+            OccurredAt = now
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static IReadOnlyList<Dictionary<string, object?>> ReadSubTests(Dictionary<string, object?> payload)
+    {
+        if (!payload.TryGetValue("subTests", out var raw) || raw is null) return [];
+        return JsonSupport.Deserialize(JsonSupport.Serialize(raw), new List<Dictionary<string, object?>>());
+    }
+
+    private static (string Subtest, string Criterion, string Description) ReadWeakestCriterion(Dictionary<string, object?> payload)
+    {
+        if (!payload.TryGetValue("weakestCriterion", out var raw) || raw is null)
+        {
+            return ("Reading", "Awaiting evidence", "Complete a mock to generate personalised remediation.");
+        }
+        var dict = JsonSupport.Deserialize(JsonSupport.Serialize(raw), new Dictionary<string, object?>());
+        return (
+            StringValue(dict, "subtest") ?? "Reading",
+            StringValue(dict, "criterion") ?? "Awaiting evidence",
+            StringValue(dict, "description") ?? "Complete a mock to generate personalised remediation.");
+    }
+
+    private static IEnumerable<(string Day, string Title, string Description, string Route)> BuildServerRemediationPlan(
+        Dictionary<string, object?> payload,
+        string reportId)
+    {
+        var weakness = ReadWeakestCriterion(payload);
+        var subtest = weakness.Subtest.ToLowerInvariant();
+        var route = RouteForSubtest(subtest);
+        return
+        [
+            ("Day 1", "Review every lost mark", "Compare answer review, timing notes, and teacher comments before attempting new work.", $"/mocks/report/{Uri.EscapeDataString(reportId)}"),
+            ("Day 2", $"Repair {weakness.Criterion}", weakness.Description, route),
+            ("Day 3", "Complete a targeted micro-drill", $"Focus on {weakness.Subtest} without full-exam pressure first.", route),
+            ("Day 4", "Attempt a sectional mock", "Check whether the repair transfers under timed conditions.", $"/mocks/setup?type=sub&subtest={Uri.EscapeDataString(NormalizeSubtestOrDefault(subtest))}"),
+            ("Day 5-7", "Book tutor review or retake", "If Writing or Speaking is involved, request tutor feedback before another readiness mock.", "/mocks/setup")
+        ];
+    }
+
+    private static object BuildReportErrorCategories(Dictionary<string, object?> payload)
+    {
+        var weakness = ReadWeakestCriterion(payload);
+        return new[]
+        {
+            new
+            {
+                category = weakness.Criterion,
+                subtest = weakness.Subtest,
+                severity = "priority",
+                description = weakness.Description
+            }
+        };
+    }
+
+    private static object BuildBookingAdvice(Dictionary<string, object?> payload)
+    {
+        var score = ParseScore(payload.TryGetValue("overallScore", out var raw) ? raw?.ToString() : null);
+        if (!score.HasValue)
+        {
+            return new { status = "pending", message = "Wait for scored sections and teacher review before booking the official OET.", route = "/mocks/setup" };
+        }
+        var advisory = OetScoring.AdvisoryTier(score.Value);
+        return new
+        {
+            status = advisory.Tier,
+            score,
+            message = advisory.Tier is "green" or "dark-green"
+                ? "Use at least two consistent green mocks before booking the official OET."
+                : "Complete remediation and retake a strict mock before booking.",
+            route = "/billing/exam-booking"
+        };
+    }
+
+    private static object BuildRetakeAdvice(Dictionary<string, object?> payload)
+    {
+        var weakness = ReadWeakestCriterion(payload);
+        return new
+        {
+            recommendedWindowDays = 7,
+            nextMockType = "sub",
+            subtest = NormalizeSubtestOrDefault(weakness.Subtest),
+            message = $"Retake a targeted {weakness.Subtest} mock after completing the 7-day remediation plan."
+        };
+    }
+
+    private static string? ReadConfigValue(string configJson, string key)
+    {
+        var config = JsonSupport.Deserialize(configJson, new Dictionary<string, object?>());
+        return config.TryGetValue(key, out var value) ? value?.ToString() : null;
+    }
+
+    private static string? StringValue(Dictionary<string, object?> dict, string key)
+        => dict.TryGetValue(key, out var value) ? value?.ToString() : null;
+
+    private static int? IntValue(Dictionary<string, object?> dict, string key)
+    {
+        if (!dict.TryGetValue(key, out var value) || value is null) return null;
+        return int.TryParse(value.ToString(), out var parsed) ? parsed : null;
+    }
+
+    private static int? ParseScore(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Contains("pending", StringComparison.OrdinalIgnoreCase)) return null;
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        if (!int.TryParse(digits, out var parsed)) return null;
+        return value.Contains('%', StringComparison.Ordinal) ? Math.Clamp(parsed * 5, OetScoring.ScaledMin, OetScoring.ScaledMax) : parsed;
+    }
+
+    private static int? ParsePayloadOverallScore(string payloadJson)
+    {
+        var payload = JsonSupport.Deserialize(payloadJson, new Dictionary<string, object?>());
+        return ParseScore(payload.TryGetValue("overallScore", out var raw) ? raw?.ToString() : null);
+    }
+
+    private static string NormalizeSubtestOrDefault(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return FullMockOrder.Contains(normalized ?? string.Empty) ? normalized! : "reading";
+    }
+
+    private static string RouteForSubtest(string? subtest) => NormalizeSubtestOrDefault(subtest) switch
+    {
+        "listening" => "/listening",
+        "reading" => "/reading/practice",
+        "writing" => "/writing/library",
+        "speaking" => "/speaking/selection",
+        _ => "/practice"
     };
 
     /// <summary>
@@ -1425,14 +2226,19 @@ public sealed class MockService(LearnerDbContext db)
     }
 
 
-    private static string BuildLaunchRoute(string attemptId, MockBundleSection section, string? sectionAttemptId)
+    private static string BuildLaunchRoute(MockAttempt attempt, MockBundleSection section, string? sectionAttemptId)
     {
+        var attemptId = attempt.Id;
         var query = $"mockAttemptId={Uri.EscapeDataString(attemptId)}";
         if (!string.IsNullOrWhiteSpace(sectionAttemptId))
         {
             query += $"&mockSectionId={Uri.EscapeDataString(sectionAttemptId)}";
         }
         query += $"&paperId={Uri.EscapeDataString(section.ContentPaperId)}";
+        query += $"&mockMode={Uri.EscapeDataString(attempt.Mode)}";
+        query += $"&strictness={Uri.EscapeDataString(attempt.Strictness)}";
+        query += $"&deliveryMode={Uri.EscapeDataString(attempt.DeliveryMode)}";
+        query += $"&strictTimer={(attempt.StrictTimer ? "true" : "false")}";
 
         return section.SubtestCode switch
         {
@@ -1448,25 +2254,30 @@ public sealed class MockService(LearnerDbContext db)
         => selection == "writing_and_speaking" && ProductiveSubtests.Contains(sectionSubtest)
             || selection == "writing" && sectionSubtest == "writing"
             || selection == "speaking" && sectionSubtest == "speaking"
-            || selection == "current_subtest" && mockType == "sub" && string.Equals(subtest, sectionSubtest, StringComparison.OrdinalIgnoreCase);
+            || selection == "current_subtest" && MockTypes.IsSubShape(mockType) && string.Equals(subtest, sectionSubtest, StringComparison.OrdinalIgnoreCase);
 
     private static int ReviewCost(string selection, string mockType, string? subType)
         => selection switch
         {
             "writing_and_speaking" => 2,
             "writing" or "speaking" => 1,
-            "current_subtest" when mockType == "sub" && ProductiveSubtests.Contains(subType ?? string.Empty) => 1,
+            "current_subtest" when MockTypes.IsSubShape(mockType) && ProductiveSubtests.Contains(subType ?? string.Empty) => 1,
             _ => 0
         };
 
     private static string NormalizeMockReviewSelection(string mockType, string? subType, bool includeReview, string? reviewSelection)
     {
         var requestedSelection = (reviewSelection ?? string.Empty).Trim().ToLowerInvariant();
-        if (mockType == "full")
+        if (MockTypes.IsFullShape(mockType))
         {
-            var allowed = new HashSet<string>(["none", "writing", "speaking", "writing_and_speaking"], StringComparer.Ordinal);
+            // LRW excludes Speaking entirely; restrict review selection to writing-only options.
+            var allowed = MockTypes.ExcludesSpeaking(mockType)
+                ? new HashSet<string>(["none", "writing"], StringComparer.Ordinal)
+                : new HashSet<string>(["none", "writing", "speaking", "writing_and_speaking"], StringComparer.Ordinal);
             if (allowed.Contains(requestedSelection)) return requestedSelection;
-            return includeReview ? "writing_and_speaking" : "none";
+            return includeReview
+                ? (MockTypes.ExcludesSpeaking(mockType) ? "writing" : "writing_and_speaking")
+                : "none";
         }
 
         var productiveSubtest = ProductiveSubtests.Contains(subType ?? string.Empty);
@@ -1476,13 +2287,90 @@ public sealed class MockService(LearnerDbContext db)
             : includeReview ? "current_subtest" : "none";
     }
 
+    /// <summary>
+    /// Default total duration when an admin creates a bundle but has not yet authored sections.
+    /// Wave 1: full + final-readiness sum all four subtests, LRW sums the first three (no speaking),
+    /// sub-shape uses the single sub-test’s default. Diagnostic / Remedial default to 60 min.
+    /// </summary>
+    private static int ComputeBundleDefaultDuration(string mockType, string? subtest) => mockType switch
+    {
+        MockTypes.Full or MockTypes.FinalReadiness => FullMockOrder.Sum(DefaultTimeLimit),
+        MockTypes.Lrw => new[] { "listening", "reading", "writing" }.Sum(DefaultTimeLimit),
+        MockTypes.Sub or MockTypes.Part or MockTypes.Remedial => DefaultTimeLimit(subtest ?? "reading"),
+        MockTypes.Diagnostic => 60,
+        _ => 60,
+    };
+
     private static string NormalizeMockType(string? value)
     {
-        var normalized = (value ?? "full").Trim().ToLowerInvariant();
-        return normalized is "full" or "sub"
-            ? normalized
-            : throw ApiException.Validation("invalid_mock_type", "Mock type must be full or sub.", [new ApiFieldError("mockType", "invalid", "Use full or sub.")]);
+        var normalized = (value ?? MockTypes.Full).Trim().ToLowerInvariant();
+        if (MockTypes.IsValid(normalized)) return normalized;
+        // Tolerate the historical alias "subtest" returned by some legacy clients.
+        if (string.Equals(normalized, "subtest", StringComparison.Ordinal)) return MockTypes.Sub;
+        throw ApiException.Validation(
+            "invalid_mock_type",
+            $"Mock type must be one of: {string.Join(", ", MockTypes.All)}.",
+            [new ApiFieldError("mockType", "invalid", "Use a supported OET mock-type token.")]);
     }
+
+    private static string NormalizeDeliveryMode(string? value)
+    {
+        var normalized = (value ?? MockDeliveryModes.Computer).Trim().ToLowerInvariant();
+        return MockDeliveryModes.IsValid(normalized) ? normalized : MockDeliveryModes.Computer;
+    }
+
+    private static string NormalizeStrictness(string? value, string mockType)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+        return MockStrictness.IsValid(normalized) ? normalized : MockTypes.DefaultStrictness(mockType);
+    }
+
+    private static string NormalizeReleasePolicy(string? value)
+    {
+        var normalized = (value ?? MockReleasePolicies.Instant).Trim().ToLowerInvariant();
+        return MockReleasePolicies.IsValid(normalized) ? normalized : MockReleasePolicies.Instant;
+    }
+
+    private static string NormalizeSourceStatus(string? value)
+    {
+        var normalized = (value ?? MockSourceStatuses.NeedsReview).Trim().ToLowerInvariant();
+        return MockSourceStatuses.IsValid(normalized) ? normalized : MockSourceStatuses.NeedsReview;
+    }
+
+    private static string NormalizeQualityStatus(string? value)
+    {
+        var normalized = (value ?? MockQualityStatuses.Draft).Trim().ToLowerInvariant();
+        return MockQualityStatuses.IsValid(normalized) ? normalized : MockQualityStatuses.Draft;
+    }
+
+    private static string NormalizeBookingStatus(string? value)
+    {
+        var normalized = (value ?? MockBookingStatuses.Scheduled).Trim().ToLowerInvariant();
+        return MockBookingStatuses.IsValid(normalized) ? normalized : MockBookingStatuses.Scheduled;
+    }
+
+    private static string NormalizeDifficulty(string? value)
+    {
+        var normalized = (value ?? "exam_ready").Trim().ToLowerInvariant().Replace(" ", "_", StringComparison.Ordinal);
+        return string.IsNullOrWhiteSpace(normalized) ? "exam_ready" : normalized[..Math.Min(normalized.Length, 32)];
+    }
+
+    private static string[] SplitCsv(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>
+    /// Sub-test sequence enforced for the given mock-type at publish-gate time.
+    /// Full + Final-readiness require all four. LRW excludes Speaking. Diagnostic /
+    /// Remedial / Sub / Part have flexible content shapes validated separately.
+    /// </summary>
+    private static IReadOnlyList<string>? RequiredSubtestSequence(string mockType) => mockType switch
+    {
+        MockTypes.Full or MockTypes.FinalReadiness => FullMockOrder,
+        MockTypes.Lrw => ["listening", "reading", "writing"],
+        _ => null,
+    };
 
     private static string NormalizeSubtest(string? value)
     {

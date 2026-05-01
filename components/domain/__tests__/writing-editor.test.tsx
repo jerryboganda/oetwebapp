@@ -3,7 +3,7 @@ import { WritingEditor } from '../writing-editor';
 
 describe('WritingEditor', () => {
   it('shows save-state feedback and respects the font control toggle', () => {
-    render(
+    const { container } = render(
       <WritingEditor
         value="A short practice response"
         onChange={vi.fn()}
@@ -14,7 +14,7 @@ describe('WritingEditor', () => {
       />,
     );
 
-    expect(screen.getByText('4 words')).toBeInTheDocument();
+    expect(container).toHaveTextContent(/4\s*words/i);
     expect(screen.getByText('Saving...')).toBeInTheDocument();
     expect(screen.queryByLabelText('Decrease font size')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Increase font size')).not.toBeInTheDocument();

@@ -316,6 +316,14 @@ public class BillingPlan
 
     public int IncludedCredits { get; set; }
 
+    /// <summary>
+    /// Mocks V2 Wave 7 — Diagnostic-mock entitlement. Configurable per plan.
+    /// Values: <c>unlimited</c>, <c>one_per_lifetime</c>, <c>one_per_renewal_period</c>,
+    /// <c>paid_per_use</c>, <c>disabled</c>.
+    /// </summary>
+    [MaxLength(32)]
+    public string DiagnosticMockEntitlement { get; set; } = "one_per_lifetime";
+
     [MaxLength(2048)]
     public string IncludedSubtestsJson { get; set; } = "[]";
 

@@ -34,6 +34,8 @@ import type {
   MockOptions,
   MockReport,
   MockSession,
+  MockBooking,
+  MockDiagnosticEntitlement,
   ReadinessData,
   ProgressEvidenceSummary,
   TrendPoint,
@@ -50,6 +52,9 @@ import type {
   SettingsSectionData,
   SettingsSectionId,
   SpeakingTranscriptReview,
+  MockTypeToken,
+  MockDeliveryMode,
+  MockStrictness,
 } from './mock-data';
 import {
   WRITING_CRITERION_MAX_SCORES,
@@ -2041,6 +2046,7 @@ function mapMockReport(report: ApiRecord): MockReport {
   return {
     id: String(report.id ?? report.reportId ?? ''),
     reportId: report.reportId ? String(report.reportId) : undefined,
+    mockAttemptId: report.mockAttemptId ? String(report.mockAttemptId) : undefined,
     state: report.state ? String(report.state) : undefined,
     title: String(report.title ?? 'Mock Report'),
     date: String(report.date ?? ''),
@@ -2072,7 +2078,103 @@ function mapMockReport(report: ApiRecord): MockReport {
           pending: Number(report.reviewSummary.pending ?? 0),
         }
       : undefined,
+    perModuleReadiness: asArray(report.perModuleReadiness).map((item: ApiRecord) => ({
+      subtest: String(item.subtest ?? 'Mock'),
+      scaledScore: typeof item.scaledScore === 'number' ? item.scaledScore : null,
+      grade: item.grade ? String(item.grade) : null,
+      rag: String(item.rag ?? 'pending'),
+      message: String(item.message ?? 'Awaiting scored evidence.'),
+      passThreshold: typeof item.passThreshold === 'number' ? item.passThreshold : null,
+    })),
+    partScores: asArray(report.partScores).map((item: ApiRecord) => ({
+      subtest: String(item.subtest ?? 'Mock'),
+      rawScore: item.rawScore ? String(item.rawScore) : null,
+      scaledScore: typeof item.scaledScore === 'number' ? item.scaledScore : null,
+      grade: item.grade ? String(item.grade) : null,
+      state: item.state ? String(item.state) : null,
+    })),
+    timingAnalysis: asArray(report.timingAnalysis).map((item: ApiRecord) => ({
+      sectionId: String(item.sectionId ?? ''),
+      subtest: String(item.subtest ?? 'Mock'),
+      startedAt: item.startedAt ? String(item.startedAt) : null,
+      submittedAt: item.submittedAt ? String(item.submittedAt) : null,
+      completedAt: item.completedAt ? String(item.completedAt) : null,
+      deadlineAt: item.deadlineAt ? String(item.deadlineAt) : null,
+      secondsUsed: typeof item.secondsUsed === 'number' ? item.secondsUsed : null,
+    })),
+    errorCategories: asArray(report.errorCategories).map((item: ApiRecord) => ({
+      category: String(item.category ?? 'Priority issue'),
+      subtest: String(item.subtest ?? 'Mock'),
+      severity: String(item.severity ?? 'priority'),
+      description: String(item.description ?? ''),
+    })),
+    teacherReviewState: report.teacherReviewState
+      ? {
+          queued: Number(report.teacherReviewState.queued ?? 0),
+          inReview: Number(report.teacherReviewState.inReview ?? 0),
+          completed: Number(report.teacherReviewState.completed ?? 0),
+          pending: Number(report.teacherReviewState.pending ?? 0),
+        }
+      : undefined,
+    bookingAdvice: report.bookingAdvice
+      ? {
+          status: String(report.bookingAdvice.status ?? 'pending'),
+          message: String(report.bookingAdvice.message ?? ''),
+          route: report.bookingAdvice.route ? String(report.bookingAdvice.route) : undefined,
+          score: typeof report.bookingAdvice.score === 'number' ? report.bookingAdvice.score : null,
+        }
+      : undefined,
+    retakeAdvice: report.retakeAdvice
+      ? {
+          recommendedWindowDays: Number(report.retakeAdvice.recommendedWindowDays ?? 7),
+          nextMockType: String(report.retakeAdvice.nextMockType ?? 'sub'),
+          subtest: String(report.retakeAdvice.subtest ?? 'reading'),
+          message: String(report.retakeAdvice.message ?? ''),
+        }
+      : undefined,
+    proctoringSummary: report.proctoringSummary
+      ? {
+          totalEvents: Number(report.proctoringSummary.totalEvents ?? 0),
+          advisoryOnly: Boolean(report.proctoringSummary.advisoryOnly ?? true),
+          criticalEvents: Number(report.proctoringSummary.criticalEvents ?? 0),
+          warningEvents: Number(report.proctoringSummary.warningEvents ?? 0),
+          byKind: asArray(report.proctoringSummary.byKind).map((item: ApiRecord) => ({
+            kind: String(item.kind ?? ''),
+            count: Number(item.count ?? 0),
+          })),
+          message: String(report.proctoringSummary.message ?? ''),
+        }
+      : undefined,
+    remediationPlan: asArray(report.remediationPlan).map((item: ApiRecord) => ({
+      day: String(item.day ?? ''),
+      title: String(item.title ?? ''),
+      description: String(item.description ?? ''),
+      route: String(item.route ?? '/study-plan'),
+    })),
+    releasePolicy: report.releasePolicy ? String(report.releasePolicy) : undefined,
   };
+}
+
+const MOCK_TYPE_TOKENS: ReadonlySet<MockTypeToken> = new Set<MockTypeToken>([
+  'full', 'lrw', 'sub', 'part', 'diagnostic', 'final_readiness', 'remedial',
+]);
+function normalizeMockTypeToken(value: unknown): MockTypeToken {
+  const v = typeof value === 'string' ? value.toLowerCase() : '';
+  return MOCK_TYPE_TOKENS.has(v as MockTypeToken) ? (v as MockTypeToken) : 'full';
+}
+const MOCK_DELIVERY_MODES: ReadonlySet<MockDeliveryMode> = new Set<MockDeliveryMode>([
+  'computer', 'paper', 'oet_home',
+]);
+function normalizeMockDeliveryMode(value: unknown): MockDeliveryMode | undefined {
+  const v = typeof value === 'string' ? value.toLowerCase() : '';
+  return MOCK_DELIVERY_MODES.has(v as MockDeliveryMode) ? (v as MockDeliveryMode) : undefined;
+}
+const MOCK_STRICTNESS_OPTIONS: ReadonlySet<MockStrictness> = new Set<MockStrictness>([
+  'learning', 'exam', 'final_readiness',
+]);
+function normalizeMockStrictness(value: unknown): MockStrictness | undefined {
+  const v = typeof value === 'string' ? value.toLowerCase() : '';
+  return MOCK_STRICTNESS_OPTIONS.has(v as MockStrictness) ? (v as MockStrictness) : undefined;
 }
 
 function mapMockSession(session: ApiRecord): MockSession {
@@ -2087,9 +2189,9 @@ function mapMockSession(session: ApiRecord): MockSession {
       id: session.mockAttemptId,
       title: config.mockType === 'full'
         ? String(config.bundleTitle ?? 'Full OET Mock')
-        : `${titleCase(config.subType ?? 'subtest')} Mock`,
+        : String(config.bundleTitle ?? `${titleCase(String(config.subType ?? config.mockType ?? 'mock'))} Mock`),
       bundleId: config.bundleId,
-      type: config.mockType === 'sub' ? 'sub' : 'full',
+      type: normalizeMockTypeToken(config.mockType),
       subType: config.subType ? toSubTest(config.subType) : undefined,
       mode: config.mode === 'practice' ? 'practice' : 'exam',
       profession: titleCase(config.profession ?? 'medicine'),
@@ -2097,6 +2199,8 @@ function mapMockSession(session: ApiRecord): MockSession {
       includeReview: Boolean(config.includeReview),
       reviewSelection: config.reviewSelection ?? 'none',
       targetCountry: config.targetCountry ?? null,
+      deliveryMode: normalizeMockDeliveryMode(config.deliveryMode),
+      strictness: normalizeMockStrictness(config.strictness),
     },
     sectionStates: (session.sectionStates ?? []).map((section: ApiRecord) => ({
       id: String(section.id ?? section.sectionAttemptId ?? section.subtest ?? ''),
@@ -2140,7 +2244,7 @@ export async function fetchMockOptions(): Promise<MockOptions> {
   const options = normalizeRouteValues(await apiRequest<ApiRecord>('/v1/mocks/options'));
   return {
     mockTypes: Array.isArray(options.mockTypes) ? options.mockTypes.map((item: ApiRecord) => ({
-      id: item.id === 'sub' ? 'sub' : 'full',
+      id: normalizeMockTypeToken(item.id),
       label: String(item.label ?? item.id ?? ''),
       description: String(item.description ?? ''),
     })) : [],
@@ -2164,15 +2268,38 @@ export async function fetchMockOptions(): Promise<MockOptions> {
     wallet: {
       availableCredits: Number(options.wallet?.availableCredits ?? 0),
     },
+    deliveryModes: Array.isArray(options.deliveryModes) ? (options.deliveryModes as ApiRecord[])
+      .map((item: ApiRecord): { id: MockDeliveryMode; label: string } | null => {
+        const id = normalizeMockDeliveryMode(item.id);
+        return id ? { id, label: String(item.label ?? id) } : null;
+      })
+      .filter((x): x is { id: MockDeliveryMode; label: string } => x !== null) : [],
+    strictnessOptions: Array.isArray(options.strictnessOptions) ? (options.strictnessOptions as ApiRecord[])
+      .map((item: ApiRecord): { id: MockStrictness; label: string; description?: string } | null => {
+        const id = normalizeMockStrictness(item.id);
+        if (!id) return null;
+        const out: { id: MockStrictness; label: string; description?: string } = { id, label: String(item.label ?? id) };
+        if (item.description) out.description = String(item.description);
+        return out;
+      })
+      .filter((x): x is { id: MockStrictness; label: string; description?: string } => x !== null) : [],
     availableBundles: Array.isArray(options.availableBundles) ? options.availableBundles.map((bundle: ApiRecord) => ({
       id: String(bundle.id ?? bundle.bundleId ?? ''),
       bundleId: String(bundle.bundleId ?? bundle.id ?? ''),
       title: String(bundle.title ?? 'Mock bundle'),
-      mockType: bundle.mockType === 'sub' ? 'sub' : 'full',
+      mockType: normalizeMockTypeToken(bundle.mockType),
       subtest: bundle.subtest ? String(bundle.subtest) : null,
       professionId: bundle.professionId ? String(bundle.professionId) : null,
       appliesToAllProfessions: Boolean(bundle.appliesToAllProfessions),
       estimatedDurationMinutes: Number(bundle.estimatedDurationMinutes ?? 0),
+      difficulty: bundle.difficulty ? String(bundle.difficulty) : undefined,
+      sourceStatus: bundle.sourceStatus ? String(bundle.sourceStatus) : undefined,
+      qualityStatus: bundle.qualityStatus ? String(bundle.qualityStatus) : undefined,
+      releasePolicy: bundle.releasePolicy ? String(bundle.releasePolicy) : undefined,
+      topicTags: asArray(bundle.topicTags).map(String),
+      skillTags: asArray(bundle.skillTags).map(String),
+      watermarkEnabled: typeof bundle.watermarkEnabled === 'boolean' ? bundle.watermarkEnabled : undefined,
+      randomiseQuestions: typeof bundle.randomiseQuestions === 'boolean' ? bundle.randomiseQuestions : undefined,
       sections: Array.isArray(bundle.sections) ? bundle.sections.map((section: ApiRecord) => ({
         id: String(section.id ?? ''),
         subtest: String(section.subtest ?? ''),
@@ -2186,7 +2313,7 @@ export async function fetchMockOptions(): Promise<MockOptions> {
 }
 
 export async function createMockSession(config: {
-  type: 'full' | 'sub';
+  type: MockTypeToken;
   subType?: string;
   mode: 'practice' | 'exam';
   profession: string;
@@ -2194,6 +2321,8 @@ export async function createMockSession(config: {
   reviewSelection: MockConfig['reviewSelection'];
   bundleId?: string;
   targetCountry?: string | null;
+  deliveryMode?: MockDeliveryMode;
+  strictness?: MockStrictness;
 }): Promise<MockSession> {
   const response = normalizeRouteValues(await apiRequest<ApiRecord>('/v1/mock-attempts', {
     method: 'POST',
@@ -2207,6 +2336,8 @@ export async function createMockSession(config: {
       reviewSelection: config.reviewSelection,
       bundleId: config.bundleId ?? null,
       targetCountry: config.targetCountry ?? null,
+      deliveryMode: config.deliveryMode ?? null,
+      strictness: config.strictness ?? null,
     }),
   }));
   return mapMockSession(response);
@@ -2261,6 +2392,232 @@ export async function cancelMockSession(sessionId: string): Promise<MockSession>
     method: 'POST',
   }));
   return mapMockSession(response);
+}
+
+/**
+ * Mocks V2 Wave 2 — proctoring telemetry kinds. Must match backend
+ * `MockProctoringKinds` constants.
+ */
+export const MOCK_PROCTORING_KINDS = [
+  'fullscreen_exit',
+  'visibility_hidden',
+  'tab_switch',
+  'paste_blocked',
+  'copy_blocked',
+  'mic_check_passed',
+  'mic_check_failed',
+  'cam_check_passed',
+  'cam_check_failed',
+  'audio_issue_reported',
+  'network_drop',
+  'multiple_displays_detected',
+] as const;
+export type MockProctoringKind = typeof MOCK_PROCTORING_KINDS[number];
+export type MockProctoringSeverity = 'info' | 'warning' | 'critical';
+
+export interface MockProctoringEventInput {
+  kind: MockProctoringKind;
+  occurredAt: string; // ISO
+  mockSectionAttemptId?: string;
+  severity?: MockProctoringSeverity;
+  metadata?: Record<string, unknown>;
+}
+
+export interface MockProctoringBatchResult {
+  ok: boolean;
+  accepted: number;
+  dropped: number;
+  capacityRemaining?: number;
+  reason?: string;
+}
+
+/**
+ * Send a batch of proctoring events. Backend caps at 50 per request and 250 per attempt.
+ */
+export async function recordMockProctoringEvents(
+  sessionId: string,
+  events: MockProctoringEventInput[],
+): Promise<MockProctoringBatchResult> {
+  if (events.length === 0) return { ok: true, accepted: 0, dropped: 0 };
+  const response = await apiRequest<ApiRecord>(`/v1/mock-attempts/${sessionId}/proctoring-events`, {
+    method: 'POST',
+    body: JSON.stringify({ events }),
+  });
+  return {
+    ok: Boolean(response.ok),
+    accepted: Number(response.accepted ?? 0),
+    dropped: Number(response.dropped ?? 0),
+    capacityRemaining: typeof response.capacityRemaining === 'number' ? response.capacityRemaining : undefined,
+    reason: typeof response.reason === 'string' ? response.reason : undefined,
+  };
+}
+
+function mapMockBooking(item: ApiRecord): MockBooking {
+  return {
+    id: String(item.id ?? item.bookingId ?? ''),
+    bookingId: String(item.bookingId ?? item.id ?? ''),
+    mockBundleId: String(item.mockBundleId ?? ''),
+    mockAttemptId: item.mockAttemptId ? String(item.mockAttemptId) : null,
+    title: item.title ? String(item.title) : item.mockBundleTitle ? String(item.mockBundleTitle) : undefined,
+    scheduledStartAt: String(item.scheduledStartAt ?? ''),
+    timezoneIana: String(item.timezoneIana ?? 'UTC'),
+    status: String(item.status ?? 'scheduled'),
+    deliveryMode: normalizeMockDeliveryMode(item.deliveryMode),
+    liveRoomState: item.liveRoomState ? String(item.liveRoomState) : undefined,
+    consentToRecording: Boolean(item.consentToRecording),
+    rescheduleCount: Number(item.rescheduleCount ?? 0),
+    joinUrl: item.joinUrl ? String(item.joinUrl) : null,
+    zoomJoinUrl: item.zoomJoinUrl ? String(item.zoomJoinUrl) : null,
+    learnerNotes: item.learnerNotes ? String(item.learnerNotes) : null,
+    releasePolicy: item.releasePolicy ? String(item.releasePolicy) : undefined,
+    candidateCardVisible: typeof item.candidateCardVisible === 'boolean' ? item.candidateCardVisible : undefined,
+    interlocutorCardVisible: typeof item.interlocutorCardVisible === 'boolean' ? item.interlocutorCardVisible : undefined,
+  };
+}
+
+export async function fetchMockBookings(): Promise<MockBooking[]> {
+  const response = await apiRequest<ApiRecord>('/v1/mock-bookings');
+  return asArray(response.items).map(mapMockBooking);
+}
+
+export async function createMockBooking(payload: {
+  mockBundleId: string;
+  scheduledStartAt: string;
+  timezoneIana?: string;
+  deliveryMode?: MockDeliveryMode;
+  consentToRecording?: boolean;
+  learnerNotes?: string | null;
+}): Promise<MockBooking> {
+  const response = await apiRequest<ApiRecord>('/v1/mock-bookings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return mapMockBooking(response);
+}
+
+export async function updateMockBooking(bookingId: string, payload: Record<string, unknown>): Promise<MockBooking> {
+  const response = await apiRequest<ApiRecord>(`/v1/mock-bookings/${encodeURIComponent(bookingId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  return mapMockBooking(response);
+}
+
+export async function reportMockLeak(payload: {
+  mockBundleId?: string | null;
+  mockAttemptId?: string | null;
+  reason?: string | null;
+  evidenceUrl?: string | null;
+  pageOrQuestion?: string | null;
+}): Promise<{ id: string; status: string; severity: string }> {
+  const response = await apiRequest<ApiRecord>('/v1/mocks/leak-report', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return {
+    id: String(response.id ?? ''),
+    status: String(response.status ?? 'open'),
+    severity: String(response.severity ?? 'high'),
+  };
+}
+
+export async function fetchMockDiagnosticStudyPath() {
+  return apiRequest<ApiRecord>('/v1/mocks/diagnostic/study-path');
+}
+
+export async function fetchMockDiagnosticEntitlement(): Promise<MockDiagnosticEntitlement> {
+  const response = await apiRequest<ApiRecord>('/v1/mocks/diagnostic/entitlement');
+  return {
+    allowed: Boolean(response.allowed),
+    entitlement: String(response.entitlement ?? 'one_per_lifetime'),
+    reason: typeof response.reason === 'string' ? response.reason : null,
+    message: typeof response.message === 'string' ? response.message : null,
+  };
+}
+
+// ----- Mocks V2 Wave 4 — bookings ------------------------------------------------
+
+export interface MockBookingListResponse {
+  items: MockBooking[];
+  now: string;
+}
+
+export async function fetchMockBookingList(): Promise<MockBookingListResponse> {
+  const response = await apiRequest<ApiRecord>('/v1/mock-bookings');
+  return {
+    items: asArray(response.items).map(mapMockBooking),
+    now: typeof response.now === 'string' ? response.now : new Date().toISOString(),
+  };
+}
+
+export async function rescheduleMockBooking(
+  bookingId: string,
+  scheduledStartAt: string,
+  timezoneIana?: string,
+): Promise<MockBooking> {
+  const response = await apiRequest<ApiRecord>(`/v1/mock-bookings/${bookingId}/reschedule`, {
+    method: 'PATCH',
+    body: JSON.stringify({ scheduledStartAt, timezoneIana }),
+  });
+  return mapMockBooking(response);
+}
+
+export async function cancelMockBooking(bookingId: string): Promise<MockBooking> {
+  const response = await apiRequest<ApiRecord>(`/v1/mock-bookings/${bookingId}/cancel`, {
+    method: 'POST',
+  });
+  return mapMockBooking(response);
+}
+
+export type MockLiveRoomTargetState = 'in_progress' | 'completed' | 'tutor_no_show';
+
+export async function transitionMockBookingLiveRoom(
+  bookingId: string,
+  targetState: MockLiveRoomTargetState,
+): Promise<MockBooking> {
+  const response = await apiRequest<ApiRecord>(`/v1/mock-bookings/${bookingId}/live-room/transition`, {
+    method: 'POST',
+    body: JSON.stringify({ targetState }),
+  });
+  return mapMockBooking(response);
+}
+
+// ----- Mocks V2 Wave 5 — remediation plan ----------------------------------------
+
+export interface RemediationTask {
+  id: string;
+  mockReportId: string;
+  subtestCode: string;
+  weaknessTag: string;
+  title: string;
+  description: string;
+  routeHref?: string | null;
+  dayIndex: number;
+  status: 'pending' | 'completed' | 'skipped';
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+export async function fetchRemediationPlan(): Promise<{ items: RemediationTask[] }> {
+  const response = await apiRequest<ApiRecord>('/v1/mocks/remediation-plan');
+  return { items: asArray(response.items) as unknown as RemediationTask[] };
+}
+
+export async function generateRemediationPlan(reportId: string): Promise<{ items: RemediationTask[]; generated: boolean }> {
+  const response = await apiRequest<ApiRecord>(`/v1/mocks/reports/${reportId}/remediation-plan/generate`, {
+    method: 'POST',
+  });
+  return {
+    items: asArray(response.items) as unknown as RemediationTask[],
+    generated: Boolean(response.generated),
+  };
+}
+
+export async function completeRemediationTask(taskId: string): Promise<RemediationTask> {
+  const response = await apiRequest<ApiRecord>(`/v1/remediation-tasks/${taskId}/complete`, {
+    method: 'PATCH',
+  });
+  return response as unknown as RemediationTask;
 }
 
 export async function fetchReadiness(): Promise<ReadinessData> {
@@ -6620,6 +6977,35 @@ export async function fetchAdminMockBundles(params?: { status?: string; mockType
   return apiRequest(`/v1/admin/mock-bundles${qs ? `?${qs}` : ''}`);
 }
 
+export async function fetchAdminMockItemAnalysis(params?: { bundleId?: string; paperId?: string }) {
+  const q = new URLSearchParams();
+  if (params?.bundleId) q.set('bundleId', params.bundleId);
+  if (params?.paperId) q.set('paperId', params.paperId);
+  const qs = q.toString();
+  return apiRequest(`/v1/admin/mocks/item-analysis${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchAdminMockBookings(params?: { from?: string; to?: string }) {
+  const q = new URLSearchParams();
+  if (params?.from) q.set('from', params.from);
+  if (params?.to) q.set('to', params.to);
+  const qs = q.toString();
+  return apiRequest(`/v1/admin/mocks/bookings${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchAdminMockAnalytics() {
+  return apiRequest('/v1/admin/mocks/analytics');
+}
+
+export async function fetchAdminMockRiskList() {
+  return apiRequest('/v1/admin/mocks/risk-list');
+}
+
+export async function fetchExpertMockBookings() {
+  const response = await apiRequest<ApiRecord>('/v1/expert/mocks/bookings');
+  return asArray(response.items).map(mapMockBooking);
+}
+
 export async function createAdminMockBundle(body: Record<string, unknown>) {
   return apiRequest('/v1/admin/mock-bundles', {
     method: 'POST',
@@ -6644,6 +7030,37 @@ export async function archiveAdminMockBundle(bundleId: string) {
   return apiRequest(`/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}`, {
     method: 'DELETE',
   });
+}
+
+// Mocks V2 Wave 3 — item analysis admin endpoints.
+export interface AdminMockItemAnalysisRow {
+  id: string;
+  subtest: string;
+  label?: string | null;
+  totalAttempts: number;
+  correctCount: number;
+  difficulty: number;
+  distractor: string;
+  flag: string | null;
+  generatedAt: string;
+}
+export interface AdminMockItemAnalysisResponse {
+  bundleId: string;
+  generatedAt: string | null;
+  items: AdminMockItemAnalysisRow[];
+}
+
+export async function fetchAdminMockBundleItemAnalysis(bundleId: string): Promise<AdminMockItemAnalysisResponse> {
+  return apiRequest<AdminMockItemAnalysisResponse>(
+    `/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/item-analysis`,
+  );
+}
+
+export async function recomputeAdminMockBundleItemAnalysis(bundleId: string): Promise<AdminMockItemAnalysisResponse> {
+  return apiRequest<AdminMockItemAnalysisResponse>(
+    `/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/item-analysis/recompute`,
+    { method: 'POST' },
+  );
 }
 
 // ── Writing Coach ───────────────────────────────────────────────────────

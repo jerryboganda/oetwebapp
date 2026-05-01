@@ -75,6 +75,66 @@ public static class MockAdminEndpoints
             Results.Ok(await service.PublishBundleAsync(id, AdminId(http), ct)))
             .RequireAuthorization("AdminContentPublish");
 
+        // Mocks V2 Wave 3 — item analysis dashboard.
+        group.MapGet("/{id}/item-analysis", async (
+            string id,
+            MockItemAnalysisService analysis,
+            CancellationToken ct) =>
+            Results.Ok(await analysis.GetForBundleAsync(id, ct)));
+
+        group.MapPost("/{id}/item-analysis/recompute", async (
+            string id,
+            MockItemAnalysisService analysis,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await analysis.RecomputeAsync(id, AdminId(http), ct)))
+            .RequireAuthorization("AdminContentWrite");
+
+        var adminMocks = app.MapGroup("/v1/admin/mocks")
+            .RequireAuthorization("AdminContentRead")
+            .WithTags("Admin Mocks");
+
+        adminMocks.MapGet("/item-analysis", async (
+            MockItemAnalysisService analysis,
+            CancellationToken ct,
+            [FromQuery] string? bundleId,
+            [FromQuery] string? paperId) =>
+            Results.Ok(await analysis.GetDashboardAsync(bundleId, paperId, ct)));
+
+        adminMocks.MapGet("/analytics", async (MockService service, CancellationToken ct) =>
+            Results.Ok(await service.GetAdminMockAnalyticsAsync(ct)));
+
+        adminMocks.MapGet("/risk-list", async (MockService service, CancellationToken ct) =>
+            Results.Ok(await service.GetAdminMockRiskListAsync(ct)));
+
+        // Mocks V2 Wave 4 — admin booking management.
+        var bookings = app.MapGroup("/v1/admin/mock-bookings")
+            .RequireAuthorization("AdminContentRead")
+            .WithTags("Admin Mock Bookings");
+
+        bookings.MapGet("", async (
+            MockBookingService service,
+            CancellationToken ct,
+            [FromQuery] DateTimeOffset? from,
+            [FromQuery] DateTimeOffset? to) =>
+            Results.Ok(await service.ListForAdminAsync(from, to, ct)));
+
+        bookings.MapPatch("/{bookingId}/assign", async (
+            string bookingId,
+            MockBookingAssignmentRequest request,
+            MockBookingService service,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.AssignStaffAsync(AdminId(http), bookingId, request, ct)))
+            .RequireAuthorization("AdminContentWrite");
+
+        adminMocks.MapGet("/bookings", async (
+            MockBookingService service,
+            CancellationToken ct,
+            [FromQuery] DateTimeOffset? from,
+            [FromQuery] DateTimeOffset? to) =>
+            Results.Ok(await service.ListForAdminAsync(from, to, ct)));
+
         return app;
     }
 

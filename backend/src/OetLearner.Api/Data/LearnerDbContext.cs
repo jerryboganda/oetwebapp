@@ -34,6 +34,11 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<MockBundleSection> MockBundleSections => Set<MockBundleSection>();
     public DbSet<MockSectionAttempt> MockSectionAttempts => Set<MockSectionAttempt>();
     public DbSet<MockReviewReservation> MockReviewReservations => Set<MockReviewReservation>();
+    public DbSet<MockBooking> MockBookings => Set<MockBooking>();
+    public DbSet<MockContentReview> MockContentReviews => Set<MockContentReview>();
+    public DbSet<MockProctoringEvent> MockProctoringEvents => Set<MockProctoringEvent>();
+    public DbSet<MockItemAnalysisSnapshot> MockItemAnalysisSnapshots => Set<MockItemAnalysisSnapshot>();
+    public DbSet<RemediationTask> RemediationTasks => Set<RemediationTask>();
     public DbSet<AnalyticsEventRecord> AnalyticsEvents => Set<AnalyticsEventRecord>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<ApplicationUserAccount> ApplicationUserAccounts => Set<ApplicationUserAccount>();
@@ -440,6 +445,26 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             .WithOne()
             .HasForeignKey<MockReviewReservation>(x => x.MockAttemptId)
             .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<MockBooking>()
+            .HasOne(x => x.MockBundle)
+            .WithMany()
+            .HasForeignKey(x => x.MockBundleId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MockBooking>()
+            .HasOne(x => x.MockAttempt)
+            .WithMany()
+            .HasForeignKey(x => x.MockAttemptId)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<MockContentReview>()
+            .HasOne(x => x.MockBundle)
+            .WithMany()
+            .HasForeignKey(x => x.MockBundleId)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<MockContentReview>()
+            .HasOne(x => x.MockAttempt)
+            .WithMany()
+            .HasForeignKey(x => x.MockAttemptId)
+            .OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<UploadSession>().HasIndex(x => x.AttemptId);
 
         // Expert indexes

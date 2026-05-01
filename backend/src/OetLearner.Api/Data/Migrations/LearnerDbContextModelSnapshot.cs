@@ -1870,6 +1870,11 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<string>("DiagnosticMockEntitlement")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<int>("DisplayOrder")
                         .HasColumnType("integer");
 
@@ -6836,6 +6841,11 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("DeliveryMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("ExamFamilyCode")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -6865,6 +6875,9 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<long?>("RandomisationSeed")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("ReportId")
                         .HasColumnType("text");
 
@@ -6884,6 +6897,11 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<bool>("StrictTimer")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("Strictness")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<DateTimeOffset?>("SubmittedAt")
                         .HasColumnType("timestamp with time zone");
@@ -6906,6 +6924,110 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("MockAttempts");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.MockBooking", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AssignedInterlocutorId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AssignedTutorId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ConsentToRecording")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeliveryMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("LearnerNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("LiveRoomState")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("MockAttemptId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("MockBundleId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("RescheduleCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("ScheduledStartAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("TimezoneIana")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ZoomJoinUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("ZoomMeetingId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ZoomMeetingPassword")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ZoomStartUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MockAttemptId");
+
+                    b.HasIndex("MockBundleId");
+
+                    b.HasIndex("AssignedTutorId", "ScheduledStartAt");
+
+                    b.HasIndex("Status", "ScheduledStartAt");
+
+                    b.HasIndex("UserId", "ScheduledStartAt");
+
+                    b.ToTable("MockBookings");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.MockBundle", b =>
                 {
                     b.Property<string>("Id")
@@ -6924,6 +7046,11 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("CreatedByAdminId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Difficulty")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<int>("EstimatedDurationMinutes")
                         .HasColumnType("integer");
@@ -6953,6 +7080,24 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("PublishedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("QualityStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<bool>("RandomiseQuestions")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ReleasePolicy")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SkillTagsCsv")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -6961,6 +7106,11 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("SourceProvenance")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<string>("SourceStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -6979,12 +7129,20 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("TopicTagsCsv")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UpdatedByAdminId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("WatermarkEnabled")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 
@@ -7044,6 +7202,167 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("MockBundleId", "SubtestCode");
 
                     b.ToTable("MockBundleSections");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.MockContentReview", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MockAttemptId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("MockBundleId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ReportedByUserId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResolvedByAdminId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ReviewType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MockAttemptId");
+
+                    b.HasIndex("MockBundleId");
+
+                    b.HasIndex("ReportedByUserId", "CreatedAt");
+
+                    b.HasIndex("Status", "Severity");
+
+                    b.ToTable("MockContentReviews");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.MockItemAnalysisSnapshot", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("CorrectCount")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("Difficulty")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("DistractorJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Flag")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("GeneratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ItemId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("MockBundleId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SubtestCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("TotalAttempts")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MockBundleId");
+
+                    b.HasIndex("MockBundleId", "SubtestCode");
+
+                    b.HasIndex(new[] { "MockBundleId", "ItemId" }, "UX_MockItemAnalysis_Bundle_Item")
+                        .IsUnique();
+
+                    b.ToTable("MockItemAnalysisSnapshots");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.MockProctoringEvent", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("MetadataJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("MockAttemptId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("MockSectionAttemptId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind");
+
+                    b.HasIndex("MockSectionAttemptId");
+
+                    b.HasIndex("MockAttemptId", "OccurredAt");
+
+                    b.ToTable("MockProctoringEvents");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.MockReport", b =>
@@ -9757,6 +10076,69 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("RefreshTokenRecords");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.RemediationTask", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DayIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("MockReportId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RouteHref")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("SubtestCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("WeaknessTag")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MockReportId");
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.ToTable("RemediationTasks");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.ReviewEscalation", b =>
                 {
                     b.Property<string>("Id")
@@ -10330,6 +10712,150 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("IsActive", "SortOrder");
 
                     b.ToTable("SignupSessionCatalog");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.SpeakingCalibrationSample", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CalibrationNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByAdminId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Difficulty")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("GoldScoresJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProfessionId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceAttemptId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "PublishedAt");
+
+                    b.ToTable("SpeakingCalibrationSamples");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.SpeakingCalibrationScore", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("SampleId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ScoresJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("TotalAbsoluteError")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("TutorId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TutorId");
+
+                    b.HasIndex("SampleId", "TutorId")
+                        .IsUnique();
+
+                    b.ToTable("SpeakingCalibrationScores");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.SpeakingFeedbackComment", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AttemptId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CriterionCode")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("ExpertId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("TranscriptLineIndex")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttemptId", "TranscriptLineIndex");
+
+                    b.ToTable("SpeakingFeedbackComments");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.SpeakingMockSession", b =>
@@ -11950,6 +12476,24 @@ namespace OetLearner.Api.Data.Migrations
                     b.Navigation("MockBundle");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.MockBooking", b =>
+                {
+                    b.HasOne("OetLearner.Api.Domain.MockAttempt", "MockAttempt")
+                        .WithMany()
+                        .HasForeignKey("MockAttemptId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("OetLearner.Api.Domain.MockBundle", "MockBundle")
+                        .WithMany()
+                        .HasForeignKey("MockBundleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MockAttempt");
+
+                    b.Navigation("MockBundle");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.MockBundleSection", b =>
                 {
                     b.HasOne("OetLearner.Api.Domain.ContentPaper", "ContentPaper")
@@ -11967,6 +12511,40 @@ namespace OetLearner.Api.Data.Migrations
                     b.Navigation("ContentPaper");
 
                     b.Navigation("MockBundle");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.MockContentReview", b =>
+                {
+                    b.HasOne("OetLearner.Api.Domain.MockAttempt", "MockAttempt")
+                        .WithMany()
+                        .HasForeignKey("MockAttemptId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("OetLearner.Api.Domain.MockBundle", "MockBundle")
+                        .WithMany()
+                        .HasForeignKey("MockBundleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("MockAttempt");
+
+                    b.Navigation("MockBundle");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.MockProctoringEvent", b =>
+                {
+                    b.HasOne("OetLearner.Api.Domain.MockAttempt", "MockAttempt")
+                        .WithMany()
+                        .HasForeignKey("MockAttemptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OetLearner.Api.Domain.MockSectionAttempt", "MockSectionAttempt")
+                        .WithMany()
+                        .HasForeignKey("MockSectionAttemptId");
+
+                    b.Navigation("MockAttempt");
+
+                    b.Navigation("MockSectionAttempt");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.MockReviewReservation", b =>

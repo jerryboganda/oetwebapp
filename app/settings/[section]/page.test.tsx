@@ -63,7 +63,7 @@ describe('Settings section page', () => {
     /* Wait for async data to load — the hero description is always rendered */
     expect(await screen.findByText('Review and update your profile settings.')).toBeInTheDocument();
     /* Helper card content */
-    expect(screen.getByText('Personal information')).toBeInTheDocument();
+    expect(await screen.findByText('Personal information')).toBeInTheDocument();
     expect(screen.getByText('Your identity details used across the platform.')).toBeInTheDocument();
     /* Identity badge from helper card */
     expect(screen.getAllByText('Identity').length).toBeGreaterThan(0);
@@ -78,7 +78,7 @@ describe('Settings section page', () => {
     expect(container.querySelector('.bg-blue-50.text-blue-700')).toBeTruthy();
   });
 
-  it('renders the privacy section with toggle state pills, helper copy, and rose accents', async () => {
+  it('renders the privacy section with toggle states, helper copy, and rose accents', async () => {
     mockFetchSettingsSection.mockResolvedValue({
       section: 'privacy',
       values: {
@@ -105,8 +105,10 @@ describe('Settings section page', () => {
     expect(screen.getByText('Reviewer Access')).toBeInTheDocument();
     expect(screen.getByText('Consent')).toBeInTheDocument();
     /* Toggle states: storeRecordings=On, storeTranscripts=Off, allowExpertAccess=On */
-    expect(screen.getAllByText('On').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Off').length).toBeGreaterThan(0);
+    expect(screen.getByRole('switch', { name: 'Toggle Store speaking recordings' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Toggle Store transcripts' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Toggle Allow tutor reviewers to access evidence' })).toBeChecked();
+    expect(container).toHaveTextContent('2/4 configured');
     /* Rose-themed accent for privacy section */
     expect(container.querySelector('.bg-rose-50.text-rose-700')).toBeTruthy();
   });
@@ -143,8 +145,11 @@ describe('Settings section page', () => {
     /* Study Pace tag */
     expect(screen.getByText('Study Pace')).toBeInTheDocument();
     /* Mixed states: 5 set (overallGoal, writing:350, speaking:360, listening:380, studyHoursPerWeek:10), 1 not set (reading:'') */
-    expect(screen.getAllByText('Set').length).toBeGreaterThan(0);
-    expect(screen.getByText('Not set')).toBeInTheDocument();
+    expect(container).toHaveTextContent('5/6 configured');
+    expect(screen.getByLabelText('Reading target score')).toHaveValue(null);
+    expect(screen.getByLabelText('Writing target score')).toHaveValue(350);
+    expect(screen.getByLabelText('Speaking target score')).toHaveValue(360);
+    expect(screen.getByLabelText('Listening target score')).toHaveValue(380);
     /* Purple-themed accent for goals section */
     expect(container.querySelector('.bg-purple-50.text-purple-700')).toBeTruthy();
   });
