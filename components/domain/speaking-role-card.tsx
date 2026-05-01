@@ -43,73 +43,106 @@ export function SpeakingRoleCard({
   const roleplayLabel = formatSeconds(roleplayTimeSeconds);
 
   return (
-    <Card className={cn('bg-lavender/30 border-primary/20', className)} role="region" aria-label="Role card details">
-      <div className="space-y-3">
+    <Card className={cn('bg-primary/5 hover:bg-primary/[0.07] transition-colors border border-primary/20 rounded-2xl shadow-sm p-6 sm:p-8', className)} role="region" aria-label="Role card details">
+      <div className="space-y-6">
         {(prepLabel || roleplayLabel) && (
-          <div className="flex flex-wrap gap-2">
-            {prepLabel && <span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold text-primary">Prep: {prepLabel}</span>}
-            {roleplayLabel && <span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold text-primary">Role-play: {roleplayLabel}</span>}
+          <div className="flex flex-wrap gap-2 pb-2">
+            {prepLabel && <span className="rounded-full bg-white shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-black tracking-wide text-primary">PREP: {prepLabel}</span>}
+            {roleplayLabel && <span className="rounded-full bg-white shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-black tracking-wide text-primary">ROLE-PLAY: {roleplayLabel}</span>}
           </div>
         )}
-        <div>
-          <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">Your Role</p>
-          <p className="text-sm font-bold text-navy">{role}</p>
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">Setting</p>
-          <p className="text-sm text-navy">{setting}</p>
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">Patient / Client</p>
-          <p className="text-sm text-navy">{patient}</p>
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">Task</p>
-          <p className="text-sm text-navy">{task}</p>
-        </div>
-        {tasks.length > 0 && (
+        <div className="grid gap-6 md:grid-cols-2">
           <div>
-            <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">Role objectives</p>
-            <ul className="space-y-2">
+            <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+              <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
+              Your Role
+            </p>
+            <p className="text-base font-bold text-navy leading-snug">{role}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+              <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
+              Setting
+            </p>
+            <p className="text-sm font-medium text-navy/90 leading-snug">{setting}</p>
+          </div>
+        </div>
+        
+        <div className="h-px w-full bg-gradient-to-r from-border/80 via-border to-transparent" />
+
+        <div className="grid gap-6 md:grid-cols-2">
+          <div>
+            <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+              <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
+              Patient / Client
+            </p>
+            <p className="text-sm font-medium text-navy/90 leading-relaxed">{patient}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+              <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
+              Task
+            </p>
+            <p className="text-sm font-medium text-navy/90 leading-relaxed">{task}</p>
+          </div>
+        </div>
+
+        {background && (
+          <>
+            <div className="h-px w-full bg-gradient-to-r from-border/80 via-border to-transparent" />
+            <div className="bg-white/60 p-4 rounded-xl border border-primary/10">
+              <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
+                Background
+              </p>
+              <p className="text-sm font-medium text-navy/90 leading-relaxed italic">&quot;{background}&quot;</p>
+            </div>
+          </>
+        )}
+
+        {tasks.length > 0 && (
+          <div className="pt-2">
+            <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+              <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
+              Role Objectives
+            </p>
+            <ul className="grid gap-3">
               {tasks.map((item, index) => (
-                <li key={`${item}-${index}`} className="flex gap-2 text-sm leading-relaxed text-navy">
-                  <span className="font-bold text-primary">{index + 1}.</span>
-                  <span>{item}</span>
+                <li key={`${item}-${index}`} className="flex items-start gap-3 bg-white/50 p-3 rounded-xl border border-primary/10">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-black shrink-0 mt-0.5 shadow-sm">
+                    {index + 1}
+                  </span>
+                  <span className="text-sm font-medium text-navy/90 leading-relaxed">{item}</span>
                 </li>
               ))}
             </ul>
           </div>
         )}
-        {background && (
-          <div>
-            <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">Background</p>
-            <p className="text-sm text-navy">{background}</p>
-          </div>
-        )}
+        
         {(patientEmotion || communicationGoal || clinicalTopic) && (
-          <div className="grid gap-2 rounded-2xl border border-primary/15 bg-white/60 p-3 text-sm text-navy sm:grid-cols-3">
+          <div className="grid gap-3 rounded-xl border border-primary/20 bg-white/80 p-4 shrink-0 sm:grid-cols-3 mt-4 shadow-sm">
             {patientEmotion && (
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Emotion</p>
-                <p className="font-semibold">{patientEmotion}</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-1">Emotion</p>
+                <p className="font-bold text-navy text-sm">{patientEmotion}</p>
               </div>
             )}
             {communicationGoal && (
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Goal</p>
-                <p className="font-semibold">{communicationGoal}</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-1">Goal</p>
+                <p className="font-bold text-navy text-sm">{communicationGoal}</p>
               </div>
             )}
             {clinicalTopic && (
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Topic</p>
-                <p className="font-semibold">{clinicalTopic}</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-1">Topic</p>
+                <p className="font-bold text-navy text-sm">{clinicalTopic}</p>
               </div>
             )}
           </div>
         )}
         {disclaimer && (
-          <p className="rounded-xl bg-white/70 px-3 py-2 text-xs font-semibold leading-relaxed text-muted">
+          <p className="rounded-xl bg-background-light px-4 py-3 text-xs font-bold leading-relaxed text-muted border border-border/60 text-center">
             {disclaimer}
           </p>
         )}

@@ -619,26 +619,30 @@ function LiveSpeakingTaskContent() {
       <main className="relative flex flex-1 flex-col items-center justify-center bg-background-light p-6">
 
         {/* Visualizer / AI State */}
-        <div className="relative z-10 mb-24 flex flex-col items-center gap-12">
+        <div className="relative z-10 mb-24 flex flex-col items-center gap-10">
           <div className="relative">
+            <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent opacity-80 blur-2xl scale-150"></div>
+            
             <motion.div 
-              animate={recordingState === 'recording' ? { scale: [1, 1.05, 1] } : {}}
-              transition={{ repeat: Infinity, duration: 2 }}
-              className={`w-48 h-48 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
-                recordingState === 'recording' ? 'border-danger/30 bg-danger/10 shadow-[0_0_40px_rgba(239,68,68,0.14)]' :
-                recordingState === 'paused' ? 'border-warning/30 bg-amber-50 shadow-[0_0_40px_rgba(245,158,11,0.14)]' : 'border-border bg-surface'
+              animate={recordingState === 'recording' ? { scale: [1, 1.05, 1] } : { scale: [1, 1.02, 1] }}
+              transition={{ repeat: Infinity, duration: recordingState === 'recording' ? 2 : 4 }}
+              className={`w-52 h-52 rounded-full flex items-center justify-center transition-all duration-700 ${
+                recordingState === 'recording' ? 'border-[3px] border-danger/30 bg-danger/5 shadow-[0_0_60px_rgba(239,68,68,0.15)]' :
+                recordingState === 'paused' ? 'border-[3px] border-warning/30 bg-warning/5 shadow-[0_0_60px_rgba(245,158,11,0.1)]' : 
+                'border border-primary/20 bg-primary/5 shadow-[0_0_50px_rgba(124,58,237,0.05)]'
               }`}
             >
-              <div className={`w-40 h-40 rounded-full flex items-center justify-center transition-all ${
-                recordingState === 'recording' ? 'bg-danger/10' :
-                recordingState === 'paused' ? 'bg-warning/10' : 'bg-background-light'
+              <div className={`w-40 h-40 rounded-full flex items-center justify-center transition-all duration-500 shadow-sm ${
+                recordingState === 'recording' ? 'bg-danger/10 shadow-inner' :
+                recordingState === 'paused' ? 'bg-warning/10 shadow-inner' : 
+                'bg-white border border-primary/10'
               }`}>
                 {recordingState === 'recording' ? (
-                  <div className="flex items-center gap-1 h-10 items-end">
+                  <div className="flex items-center gap-1.5 h-12 items-center">
                     {audioLevels.map((level, i) => (
                       <motion.div
                         key={i}
-                        animate={{ height: level }}
+                        animate={{ height: Math.max(8, level * 1.5) }}
                         transition={{ type: 'tween', duration: 0.1 }}
                         className="w-1.5 bg-danger rounded-full"
                       />
@@ -647,7 +651,7 @@ function LiveSpeakingTaskContent() {
                 ) : recordingState === 'paused' ? (
                   <Pause className="w-12 h-12 text-warning" />
                 ) : (
-                  <Mic className="w-12 h-12 text-muted" />
+                  <Mic className="w-12 h-12 text-primary/80" />
                 )}
               </div>
             </motion.div>
@@ -656,7 +660,7 @@ function LiveSpeakingTaskContent() {
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2"
+                className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border border-danger/20 shadow-sm"
               >
                 <div className="w-2 h-2 rounded-full bg-danger animate-pulse" />
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-danger">Recording</span>
@@ -666,7 +670,7 @@ function LiveSpeakingTaskContent() {
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2"
+                className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border border-warning/20 shadow-sm"
               >
                 <div className="w-2 h-2 rounded-full bg-warning" />
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-warning">Paused</span>
@@ -674,89 +678,109 @@ function LiveSpeakingTaskContent() {
             )}
           </div>
 
-          <div className="text-center max-w-md">
-            <h2 className="text-xl font-bold mb-2 text-navy">
+          <div className="text-center max-w-xl mx-auto relative">
+            <h2 className="text-3xl font-black mb-3 text-navy tracking-tight">
               {recordingState === 'idle' ? "Ready to record" :
                recordingState === 'paused' ? "Recording paused" :
                "Recording your response..."}
             </h2>
-            <p className="text-sm text-muted leading-relaxed">
+            <p className="text-sm font-medium text-navy/70 leading-relaxed px-4">
               Complete the tasks on your role card. Your recording will be saved for transcript review and speaking feedback.
             </p>
-            <p className="mt-2 text-xs font-semibold leading-relaxed text-muted">
+            <p className="mt-2 text-xs font-bold leading-relaxed text-muted px-4">
               {card?.disclaimer ?? 'Practice estimate only. This is not an official OET score or result.'}
             </p>
-            <label className="mt-4 flex items-start gap-3 rounded-2xl border border-border bg-white p-4 text-left text-xs leading-relaxed text-muted">
-              <input
-                type="checkbox"
-                checked={recordingConsentAccepted}
-                onChange={(event) => setRecordingConsentAccepted(event.target.checked)}
-                disabled={recordingState !== 'idle'}
-                className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
-              />
-              <span>
-                {compliance?.consentText ?? 'I consent to this speaking recording being stored and processed for transcription, feedback, tutor review, and quality assurance.'}
+            
+            <label className="mt-6 flex flex-col sm:flex-row items-center sm:items-start gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 text-left text-sm leading-relaxed text-navy shadow-sm transition-all hover:border-primary/30 cursor-pointer group">
+              <div className="bg-white p-1 rounded-md border border-primary/20 shadow-sm shrink-0 group-hover:border-primary/40 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={recordingConsentAccepted}
+                  onChange={(event) => setRecordingConsentAccepted(event.target.checked)}
+                  disabled={recordingState !== 'idle'}
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+              </div>
+              <span className="text-xs sm:text-sm font-medium opacity-90">
+                {compliance?.consentText ?? 'By recording you agree that your audio will be processed by our AI evaluator and may be reviewed by a human tutor. Recordings are stored securely and deleted after the configured retention window.'}
               </span>
             </label>
-            <p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted">Captured duration: {elapsedSeconds}s</p>
+            
+            <div className="mt-8">
+              <span className="inline-flex items-center gap-2 bg-navy text-white rounded-full px-4 py-2 text-xs font-black uppercase tracking-[0.15em] shadow-md shadow-navy/20">
+                <span className="opacity-70">Duration</span>
+                <span>{elapsedSeconds}s</span>
+              </span>
+            </div>
           </div>
           
           {/* Manual Recording Controls */}
-          <div className="flex items-center gap-4 mt-4">
+          <div className="flex items-center gap-4 mt-2">
             {recordingState === 'idle' ? (
               <button
                 onClick={handleStartRecording}
                 disabled={!recordingConsentAccepted}
-                className="w-16 h-16 rounded-full bg-danger hover:bg-danger/90 flex items-center justify-center transition-all shadow-lg shadow-danger/20"
+                className="w-[72px] h-[72px] rounded-full bg-danger hover:bg-danger/90 disabled:opacity-50 disabled:hover:bg-danger flex items-center justify-center transition-all shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:scale-105 active:scale-95"
                 aria-label="Start recording"
               >
-                <Mic className="w-6 h-6 text-white" />
+                <Mic className="w-8 h-8 text-white" />
               </button>
             ) : recordingState === 'paused' ? (
               <button
                 onClick={handleStartRecording}
                 disabled={!recordingConsentAccepted}
-                className="w-16 h-16 rounded-full bg-danger hover:bg-danger/90 flex items-center justify-center transition-all shadow-lg shadow-danger/20"
+                className="w-[72px] h-[72px] rounded-full bg-danger hover:bg-danger/90 disabled:opacity-50 disabled:hover:bg-danger flex items-center justify-center transition-all shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:scale-105 active:scale-95"
                 aria-label="Resume recording"
               >
-                <Play className="w-6 h-6 text-white ml-1" />
+                <Play className="w-8 h-8 text-white ml-1.5" />
               </button>
             ) : recordingState === 'recording' ? (
               <button
                 onClick={mode === 'exam' ? handleSubmit : handlePauseRecording}
-                className="w-16 h-16 rounded-full border border-border bg-surface hover:bg-background-light flex items-center justify-center transition-all shadow-sm"
+                className="w-[72px] h-[72px] rounded-full border-2 border-border bg-white hover:bg-background-light hover:border-danger/30 flex items-center justify-center transition-all shadow-lg hover:scale-105 active:scale-95"
                 aria-label={mode === 'exam' ? 'Finish exam recording' : 'Pause recording'}
               >
-                {mode === 'exam' ? <Square className="w-6 h-6 text-danger" /> : <Pause className="w-6 h-6 text-navy" />}
+                {mode === 'exam' ? <Square className="w-8 h-8 text-danger fill-danger" /> : <Pause className="w-8 h-8 text-navy fill-navy" />}
               </button>
             ) : null}
           </div>
         </div>
 
-        {/* Role Card & Notes Toggles */}
-        <div className="absolute bottom-20 sm:bottom-20 left-1/2 -translate-x-1/2 flex gap-3 z-20">
+        {/* Role Card & Notes Toggles (Glassmorphic Dock) */}
+        <div className="fixed bottom-24 sm:bottom-32 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-white/80 backdrop-blur-xl border border-white/50 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.06)] z-20 transition-all hover:shadow-[0_8px_40px_rgba(0,0,0,0.08)]">
           <button 
             onClick={() => setShowRoleCard(!showRoleCard)}
-            className={`px-5 py-3 min-h-[44px] rounded-full text-xs font-bold flex items-center gap-2 transition-all ${
-              showRoleCard ? 'bg-primary text-white shadow-sm' : 'border border-border bg-surface text-navy shadow-sm hover:bg-background-light'
+            className={`px-5 py-2.5 min-h-[44px] rounded-full text-xs font-bold tracking-wide flex items-center gap-2 transition-all ${
+              showRoleCard 
+                ? 'bg-navy text-white shadow-md' 
+                : 'bg-transparent text-navy/80 hover:bg-primary/5 hover:text-primary'
             }`}
           >
-            <FileText className="w-4 h-4" /> Role Card {showRoleCard ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+            <FileText className="w-4 h-4" /> Role Card {showRoleCard ? <ChevronDown className="w-3.5 h-3.5 opacity-70" /> : <ChevronUp className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />}
           </button>
+          
+          <div className="w-px h-6 bg-border/60 mx-1" />
+          
           <button 
             onClick={() => setShowNotes(!showNotes)}
-            className={`px-5 py-3 min-h-[44px] rounded-full text-xs font-bold flex items-center gap-2 transition-all ${
-              showNotes ? 'bg-primary text-white shadow-sm' : 'border border-border bg-surface text-navy shadow-sm hover:bg-background-light'
+            className={`px-5 py-2.5 min-h-[44px] rounded-full text-xs font-bold tracking-wide flex items-center gap-2 transition-all ${
+              showNotes 
+                ? 'bg-navy text-white shadow-md' 
+                : 'bg-transparent text-navy/80 hover:bg-primary/5 hover:text-primary'
             }`}
           >
-            <Edit3 className="w-4 h-4" /> Notes {showNotes ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+            <Edit3 className="w-4 h-4" /> Notes {showNotes ? <ChevronDown className="w-3.5 h-3.5 opacity-70" /> : <ChevronUp className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />}
           </button>
+          
           {/* Wave 5: deep-link into the AI-patient Conversation module
               for unlimited self-practice. Hidden in exam mode where
               learners must complete the timed simulation. */}
-          {mode === 'self' && id ? (
-            <SpeakingSelfPracticeButton taskId={id} label="AI patient" />
-          ) : null}
+          {mode === 'self' && id && (
+            <>
+              <div className="w-px h-6 bg-border/60 mx-1" />
+              <SpeakingSelfPracticeButton taskId={id} label="AI patient" />
+            </>
+          )}
         </div>
 
         {/* Overlays */}
@@ -819,39 +843,49 @@ function LiveSpeakingTaskContent() {
       </main>
 
       {/* Bottom Controls */}
-      <footer className="z-40 border-t border-border/80 bg-white/90 px-8 py-8 pb-[calc(2rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+      <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/40 bg-white/80 px-4 sm:px-8 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] backdrop-blur-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.02)]">
+        <div className="max-w-5xl mx-auto flex items-center justify-between relative">
           <button 
             onClick={handleStop}
             ref={stopTriggerRef}
-            className="flex flex-col items-center gap-2 group"
+            className="flex flex-col items-center gap-2 group transition-all"
             aria-label="Cancel task"
           >
-            <div className="w-14 h-14 rounded-full border border-border bg-surface flex items-center justify-center group-hover:bg-background-light transition-all">
-              <RotateCcw className="w-6 h-6 text-muted group-hover:text-navy" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border border-border bg-surface flex items-center justify-center group-hover:bg-danger/5 group-hover:border-danger/30 transition-all shadow-sm">
+              <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-muted group-hover:text-danger transition-colors" />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-muted group-hover:text-navy">Cancel Task</span>
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-muted group-hover:text-danger transition-colors">Cancel Task</span>
           </button>
 
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-3 absolute left-1/2 -translate-x-1/2">
             <Button
               size="lg"
               onClick={handleSubmit}
               disabled={recordingState === 'idle' || isSubmitting}
-              className="px-12 py-4 rounded-2xl font-black text-lg"
+              className={`px-8 sm:px-14 py-6 sm:py-7 rounded-[1.25rem] font-black text-sm sm:text-lg transition-all duration-300 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
+                recordingState === 'idle' 
+                  ? 'bg-muted/10 text-muted pointer-events-none' 
+                  : 'bg-primary hover:bg-primary/90 text-white shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5'
+              }`}
               ref={submitTriggerRef}
             >
-              {isSubmitting ? 'Submitting...' : 'Submit Recording'}
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  Submitting Payload...
+                </span>
+              ) : 'Submit Recording'}
             </Button>
-            {submitError && (
-              <p role="alert" className="max-w-sm text-center text-xs font-bold leading-relaxed text-danger">
+            {submitError ? (
+              <p role="alert" className="max-w-sm text-center text-xs font-bold leading-relaxed text-danger bg-danger/10 px-3 py-1.5 rounded-lg border border-danger/20">
                 {submitError}
               </p>
+            ) : (
+              <p className="text-[9px] sm:text-[10px] text-muted font-bold uppercase tracking-[0.3em] opacity-80">OET Speaking Simulation</p>
             )}
-            <p className="text-[10px] text-muted font-bold uppercase tracking-[0.3em]">OET Speaking Simulation</p>
           </div>
 
-          <div className="w-14 h-14" /> {/* Spacer for balance */}
+          <div className="w-12 h-12 sm:w-14 sm:h-14" /> {/* Spacer for balance */}
         </div>
       </footer>
 
