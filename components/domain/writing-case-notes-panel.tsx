@@ -41,9 +41,9 @@ export function WritingCaseNotesPanel({
     : {};
 
   return (
-    <div className={cn('flex flex-col h-full bg-surface border-r border-border', className)}>
-      {/* Tabs */}
-      <div className="flex border-b border-border shrink-0" role="tablist" aria-label="Case notes tabs">
+    <div className={cn('flex flex-col h-full bg-white/70 backdrop-blur-2xl border-r border-border/50 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.05)] relative z-10', className)}>
+      {/* Premium Tabs */}
+      <div className="flex p-2 gap-1 border-b border-border/50 shrink-0 bg-navy/5" role="tablist" aria-label="Case notes tabs">
         {(['notes', 'scratchpad', 'checklist'] as const).map((tab) => (
           <button
             key={tab}
@@ -51,8 +51,10 @@ export function WritingCaseNotesPanel({
             role="tab"
             aria-selected={activeTab === tab}
             className={cn(
-              'flex-1 py-3 text-xs font-semibold capitalize transition-colors',
-              activeTab === tab ? 'text-primary border-b-2 border-primary' : 'text-muted hover:text-navy',
+              'flex-1 py-2 text-xs font-bold capitalize transition-all duration-300 rounded-lg relative',
+              activeTab === tab 
+                ? 'text-primary bg-white shadow-sm ring-1 ring-black/5' 
+                : 'text-navy/60 hover:text-navy hover:bg-white/50',
             )}
           >
             {tab === 'notes' ? 'Case Notes' : tab === 'scratchpad' ? 'Scratchpad' : 'Checklist'}
@@ -62,7 +64,7 @@ export function WritingCaseNotesPanel({
 
       {/* Content */}
       <div
-        className={cn('flex-1 overflow-y-auto p-4 text-sm', readingWindowLocked && 'select-none')}
+        className={cn('flex-1 overflow-y-auto p-5 sm:p-6 text-sm', readingWindowLocked && 'select-none')}
         {...blockInteractionProps}
       >
         {activeTab === 'notes' && (
