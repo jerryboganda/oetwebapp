@@ -668,7 +668,7 @@ function fieldStatus(field: FieldConfig, value: string | boolean): { label: stri
 
 function inputClasses(accent: LearnerSurfaceAccent) {
   return cn(
-    'w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-navy outline-none transition-shadow',
+    'w-full rounded-2xl border border-black/5 bg-white/50 backdrop-blur-xl px-5 py-4 text-base font-medium text-navy outline-none transition-all shadow-inner focus:bg-white focus:shadow-md focus:ring-2 focus:ring-primary/20',
     accentStyles[accent].inputFocus,
   );
 }
@@ -699,24 +699,25 @@ function SettingsSectionHelperCard({
   const palette = accentStyles[accent];
 
   return (
-    <section className={cn('overflow-hidden rounded-2xl border shadow-sm', palette.helperSurface)}>
-      <div className={cn('bg-gradient-to-br p-5 sm:p-6', palette.helperGlow)}>
+    <section className={cn('overflow-hidden rounded-[2rem] border/50 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-black/5 bg-white/60 backdrop-blur-3xl relative group', palette.helperSurface)}>
+      <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent,rgba(255,255,255,0.4),transparent)] -translate-x-[150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-in-out pointer-events-none" />
+      <div className={cn('p-6 sm:p-8 relative z-10', palette.helperGlow)}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-4">
-            <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border', palette.softBadge)}>
-              <Icon className="h-5 w-5" />
+          <div className="flex items-start gap-5">
+            <div className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border shadow-md ring-1 ring-white/50 backdrop-blur-md', palette.softBadge)}>
+              <Icon className="h-6 w-6 drop-shadow-sm" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]', palette.badge)}>
+                <Badge className={cn('rounded-full px-3 py-1 text-xs font-black uppercase tracking-widest shadow-sm', palette.badge)}>
                   {helperBadge}
                 </Badge>
-                <Badge variant="muted" className="rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]">
+                <Badge variant="muted" className="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest bg-white/50 backdrop-blur-sm">
                   {configuredFieldCount}/{totalFieldCount} configured
                 </Badge>
               </div>
-              <h2 className="mt-3 text-lg font-bold text-navy">{title}</h2>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">{body}</p>
+              <h2 className="mt-4 text-xl font-black text-navy tracking-tight">{title}</h2>
+              <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-navy/70 font-bold">{body}</p>
             </div>
           </div>
         </div>
@@ -739,29 +740,30 @@ function SettingsSectionForm({
   const palette = accentStyles[accent];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {config.fields.map((field) => {
         const value = fieldValue(data.values, field);
         const status = fieldStatus(field, value);
         const FieldIcon = field.icon;
 
         return (
-          <div key={field.key} className="rounded-2xl border border-border bg-surface p-5 shadow-sm transition-shadow duration-200 hover:shadow-md">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="flex min-w-0 flex-1 items-start gap-4">
-                <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border', palette.softBadge)}>
-                  <FieldIcon className="h-5 w-5" />
+          <div key={field.key} className={cn('rounded-[2rem] border/50 bg-white/70 backdrop-blur-2xl p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-black/5 transition-all duration-300 hover:shadow-[0_8px_40px_rgb(0,0,0,0.08)] hover:-translate-y-0.5 group relative', status.label === 'Not set' ? 'border-dashed border-gray-300 ring-transparent' : 'border-black/5')}>
+            <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none rounded-[2rem]" />
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between relative z-10">
+              <div className="flex min-w-0 flex-1 items-start gap-5">
+                <div className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border shadow-sm transition-all duration-500 ease-out group-hover:scale-110 group-hover:shadow-md ring-1 ring-white/50 backdrop-blur-md', palette.softBadge)}>
+                  <FieldIcon className={cn('h-6 w-6 drop-shadow-sm transition-colors duration-500', Boolean(value) || status.label === 'Set' ? 'text-primary' : '')} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="text-base font-bold text-navy" htmlFor={field.key}>{field.label}</label>
+                    <label className="text-lg font-black text-navy tracking-tight group-hover:text-primary transition-colors" htmlFor={field.key}>{field.label}</label>
                     {renderTag(field.primaryTag, accent, field.primaryTagTone ?? 'section')}
                     {field.secondaryTag ? renderTag(field.secondaryTag, accent, field.secondaryTagTone ?? 'muted') : null}
-                    <Badge variant={status.variant} className="rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]">
+                    <Badge variant={status.variant} className="rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest shadow-sm">
                       {status.label}
                     </Badge>
                   </div>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{field.description}</p>
+                  <p className="mt-2.5 max-w-2xl text-sm leading-relaxed text-navy/70 font-medium">{field.description}</p>
                 </div>
               </div>
 
@@ -771,40 +773,43 @@ function SettingsSectionForm({
                   type="button"
                   onClick={() => onChange(field.key, !Boolean(value))}
                   className={cn(
-                    'relative inline-flex h-8 w-13 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
-                    Boolean(value) ? palette.toggleOn : 'bg-border',
+                    'relative inline-flex h-9 w-16 shrink-0 items-center rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 overflow-hidden shadow-inner ring-1 ring-black/5',
+                    Boolean(value) ? palette.toggleOn : 'bg-navy/10 hover:bg-navy/15',
                     toggleFocusClasses(accent),
                   )}
                   aria-checked={Boolean(value)}
                   aria-label={`Toggle ${field.label}`}
                   role="switch"
                 >
-                  <span className={cn('inline-block h-5.5 w-5.5 transform rounded-full bg-white transition-transform', Boolean(value) ? 'translate-x-6' : 'translate-x-1')} />
+                  <span className={cn('inline-block h-7 w-7 transform rounded-full bg-white shadow-sm transition-transform duration-300 ease-spring', Boolean(value) ? 'translate-x-8' : 'translate-x-1')} />
+                  {Boolean(value) && (
+                    <span className="absolute inset-0 bg-white/20 animate-pulse pointer-events-none" />
+                  )}
                 </button>
               ) : null}
             </div>
 
             {field.type !== 'toggle' ? (
-              <div className="mt-4">
+              <div className="mt-6 relative z-10">
                 {field.type === 'select' ? (
                   <select
                     id={field.key}
-                    className={inputClasses(accent)}
+                    className={cn(inputClasses(accent), 'appearance-none cursor-pointer bg-no-repeat bg-[right_1rem_center] bg-[length:1.2em]') /* optional custom arrow if desired */}
                     value={String(value)}
                     onChange={(event) => onChange(field.key, event.target.value)}
                   >
-                    <option value="">Select an option</option>
+                    <option value="" disabled className="text-navy/30">Select an option…</option>
                     {(field.key === 'professionId' && professionOptions.length > 0
                       ? professionOptions
                       : (field.options ?? [])
                     ).map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
+                      <option key={option.value} value={option.value} className="text-navy font-medium">{option.label}</option>
                     ))}
                   </select>
                 ) : field.type === 'textarea' ? (
                   <textarea
                     id={field.key}
-                    className={cn('min-h-28', inputClasses(accent))}
+                    className={cn('min-h-32 resize-y', inputClasses(accent))}
                     value={String(value)}
                     onChange={(event) => onChange(field.key, event.target.value)}
                   />
@@ -1007,107 +1012,115 @@ export default function LearnerSettingsSectionPage() {
 
   return (
     <LearnerDashboardShell pageTitle={config?.title ?? 'Settings'} subtitle={config?.description ?? 'Manage learner settings'} backHref="/settings">
-      <div className="space-y-8">
-        <Button variant="ghost" className="gap-2" onClick={() => router.push('/settings')}>
-          <ArrowLeft className="h-4 w-4" />
-          Back to Settings
-        </Button>
+      <div className="relative min-h-[calc(100dvh-4rem)]">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
+        
+        <div className="space-y-10 relative z-10 px-4 sm:px-0 pb-20">
+          <Button variant="ghost" className="gap-2 rounded-full hover:bg-navy/5 font-bold mt-4" onClick={() => router.push('/settings')}>
+            <ArrowLeft className="h-4 w-4" />
+            Back to Settings
+          </Button>
 
-        {config ? (
-            <LearnerPageHero
-              eyebrow={config.eyebrow}
-              icon={config.icon}
-              accent={config.accent}
-              title={config.heroTitle ?? config.title}
-              description={`Review and update your ${config.title.toLowerCase()} settings.`}
-            highlights={[
-              { icon: config.icon, label: 'Controls', value: `${config.fields.length} settings` },
-              { icon: Save, label: 'Configured', value: `${configuredFieldCount} set` },
-              { icon: Settings2, label: 'Save state', value: saving ? 'Saving...' : successMessage ? 'Saved' : 'Ready to edit' },
-            ]}
-          />
-        ) : null}
+          {config ? (
+            <div className="bg-white/60 backdrop-blur-2xl p-2 sm:p-2 border-0 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-primary/5 transition-all overflow-hidden relative group rounded-3xl">
+              <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent,rgba(255,255,255,0.4),transparent)] -translate-x-[150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-in-out pointer-events-none" />
+              <LearnerPageHero
+                eyebrow={config.eyebrow}
+                icon={config.icon}
+                accent={config.accent}
+                title={config.heroTitle ?? config.title}
+                description={`Review and update your ${config.title.toLowerCase()} settings.`}
+                highlights={[
+                  { icon: config.icon, label: 'Controls', value: `${config.fields.length} settings` },
+                  { icon: Save, label: 'Configured', value: `${configuredFieldCount} set` },
+                  { icon: Settings2, label: 'Save state', value: saving ? 'Saving...' : successMessage ? 'Saved' : 'Ready to edit' },
+                ]}
+              />
+            </div>
+          ) : null}
 
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-2xl" />)}
-          </div>
-        ) : null}
+          {loading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-3xl bg-white/40" />)}
+            </div>
+          ) : null}
 
-        {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-        {!loading && successMessage ? <InlineAlert variant="success">{successMessage}</InlineAlert> : null}
+          {!loading && error ? <InlineAlert variant="error" className="shadow-sm">{error}</InlineAlert> : null}
+          {!loading && successMessage ? <InlineAlert variant="success" className="shadow-sm">{successMessage}</InlineAlert> : null}
 
-        {!loading && section === 'notifications' && config ? (
-          <>
-            <SettingsSectionHelperCard
-              accent={config.accent}
-              helperBadge={config.helperBadge}
-              icon={config.icon}
-              title={config.helperCardTitle}
-              body={config.helperCardBody}
-              configuredFieldCount={config.fields.length}
-              totalFieldCount={config.fields.length}
-            />
+          {!loading && section === 'notifications' && config ? (
+            <div className="space-y-8 relative z-20">
+              <SettingsSectionHelperCard
+                accent={config.accent}
+                helperBadge={config.helperBadge}
+                icon={config.icon}
+                title={config.helperCardTitle}
+                body={config.helperCardBody}
+                configuredFieldCount={config.fields.length}
+                totalFieldCount={config.fields.length}
+              />
 
-            <NotificationPreferencesPanel
-              description="These controls now use the shared notification service for learners, experts, and admins while preserving learner compatibility settings during rollout."
-            />
-          </>
-        ) : null}
+              <NotificationPreferencesPanel
+                description="These controls now use the shared notification service for learners, experts, and admins while preserving learner compatibility settings during rollout."
+              />
+            </div>
+          ) : null}
 
-        {!loading && section === 'danger-zone' && config ? (
-          <>
-            <SettingsSectionHelperCard
-              accent={config.accent}
-              helperBadge={config.helperBadge}
-              icon={config.icon}
-              title={config.helperCardTitle}
-              body={config.helperCardBody}
-              configuredFieldCount={0}
-              totalFieldCount={0}
-            />
+          {!loading && section === 'danger-zone' && config ? (
+            <div className="space-y-8 relative z-20">
+              <SettingsSectionHelperCard
+                accent={config.accent}
+                helperBadge={config.helperBadge}
+                icon={config.icon}
+                title={config.helperCardTitle}
+                body={config.helperCardBody}
+                configuredFieldCount={0}
+                totalFieldCount={0}
+              />
 
-            <DangerZoneDeleteSection />
-          </>
-        ) : null}
+              <DangerZoneDeleteSection />
+            </div>
+          ) : null}
 
-        {!loading && data && config ? (
-          <>
-            <SettingsSectionHelperCard
-              accent={config.accent}
-              helperBadge={config.helperBadge}
-              icon={config.icon}
-              title={config.helperCardTitle}
-              body={config.helperCardBody}
-              configuredFieldCount={configuredFieldCount}
-              totalFieldCount={config.fields.length}
-            />
+          {!loading && data && config ? (
+            <div className="space-y-8 relative z-20">
+              <SettingsSectionHelperCard
+                accent={config.accent}
+                helperBadge={config.helperBadge}
+                icon={config.icon}
+                title={config.helperCardTitle}
+                body={config.helperCardBody}
+                configuredFieldCount={configuredFieldCount}
+                totalFieldCount={config.fields.length}
+              />
 
-            <SettingsSectionForm accent={config.accent} data={data} onChange={handleChange} />
+              <SettingsSectionForm accent={config.accent} data={data} onChange={handleChange} />
 
-            <div className="rounded-2xl border border-border bg-surface px-5 py-4 shadow-sm">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]', accentStyles[config.accent].badge)}>
-                      {configuredFieldCount}/{config.fields.length} configured
-                    </Badge>
-                    <Badge variant={successMessage ? 'success' : 'muted'} className="rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]">
-                      {saving ? 'Saving...' : successMessage ? 'Saved' : 'Ready to save'}
-                    </Badge>
+              <div className="rounded-[2rem] border border-black/5 bg-white/70 backdrop-blur-2xl px-6 py-5 shadow-lg relative group overflow-hidden mt-10">
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between relative z-10">
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Badge className={cn('rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] shadow-sm', accentStyles[config.accent].badge)}>
+                        {configuredFieldCount}/{config.fields.length} configured
+                      </Badge>
+                      <Badge variant={successMessage ? 'success' : 'muted'} className="rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] bg-white shadow-sm ring-1 ring-black/5">
+                        {saving ? 'Saving...' : successMessage ? 'Saved' : 'Ready to save'}
+                      </Badge>
+                    </div>
+                    <p className="text-sm font-medium text-navy/70 leading-relaxed max-w-xl">
+                      Save when you are ready. Low-bandwidth, transcript, and reminder preferences will be used by the learner app after this update.
+                    </p>
                   </div>
-                  <p className="text-sm text-muted">
-                    Save when you are ready. Low-bandwidth, transcript, and reminder preferences will be used by the learner app after this update.
-                  </p>
+                  <Button onClick={handleSave} loading={saving} size="lg" className="gap-2 rounded-full font-black px-8 shadow-primary/20 shadow-lg group hover:scale-105 transition-all border border-white/20 shrink-0">
+                    <Save className="h-4 w-4" />
+                    Save changes
+                  </Button>
                 </div>
-                <Button onClick={handleSave} loading={saving} className="gap-2">
-                  <Save className="h-4 w-4" />
-                  Save changes
-                </Button>
               </div>
             </div>
-          </>
-        ) : null}
+          ) : null}
+        </div>
       </div>
     </LearnerDashboardShell>
   );
