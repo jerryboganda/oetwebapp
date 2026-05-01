@@ -24,6 +24,7 @@ import {
   revokeAllOtherSessions,
   type ActiveSession,
 } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 function maskIpAddress(ip: string | null): string {
   if (!ip) return 'Unknown';

@@ -668,7 +668,7 @@ function fieldStatus(field: FieldConfig, value: string | boolean): { label: stri
 
 function inputClasses(accent: LearnerSurfaceAccent) {
   return cn(
-    'w-full rounded-2xl border border-black/5 bg-white/50 backdrop-blur-xl px-5 py-4 text-base font-medium text-navy outline-none transition-all shadow-inner focus:bg-white focus:shadow-md focus:ring-2 focus:ring-primary/20',
+    'w-full rounded-2xl border border-black/5 bg-white/60 backdrop-blur-xl px-5 py-4 text-base font-bold text-navy outline-none transition-all shadow-inner focus:bg-white focus:shadow-[0_4px_20px_rgb(0,0,0,0.08)] focus:border-primary focus:ring-4 focus:ring-primary/20',
     accentStyles[accent].inputFocus,
   );
 }
@@ -739,15 +739,78 @@ function SettingsSectionForm({
   const config = SECTION_CONFIG[data.section];
   const palette = accentStyles[accent];
 
+  if (data.section === 'profile') {
+    return (
+      <div className="rounded-[2.5rem] border border-black/5 bg-white/70 backdrop-blur-3xl shadow-[0_8px_40px_rgb(0,0,0,0.06)] relative overflow-hidden group">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/60 to-transparent pointer-events-none" />
+        <div className="relative z-10 flex flex-col">
+          {config.fields.map((field, i) => {
+            const value = fieldValue(data.values, field);
+            const status = fieldStatus(field, value);
+            const FieldIcon = field.icon;
+
+            return (
+              <div key={field.key} className={cn('p-6 sm:p-8 flex flex-col xl:flex-row xl:items-start gap-6 transition-colors duration-500 hover:bg-white/40', i !== config.fields.length - 1 && 'border-b border-black/5')}>
+                <div className="flex min-w-0 flex-1 items-start gap-5">
+                  <div className={cn('flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border shadow-sm ring-1 ring-white/50 backdrop-blur-md', palette.softBadge)}>
+                    <FieldIcon className={cn('h-7 w-7 drop-shadow-sm', status.label === 'Set' ? 'text-primary' : '')} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                      <label className="text-xl font-black text-navy tracking-tight" htmlFor={field.key}>{field.label}</label>
+                      <Badge className={cn('rounded-full px-3 py-1 font-bold text-[10px] uppercase tracking-widest', palette.badge)}>
+                        Personal Info
+                      </Badge>
+                      <Badge variant={status.variant} className="rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest shadow-sm">
+                        {status.label}
+                      </Badge>
+                    </div>
+                    <p className="max-w-xl text-sm leading-relaxed text-navy/70 font-medium">{field.description}</p>
+                  </div>
+                </div>
+                <div className="w-full xl:w-96 shrink-0">
+                  {field.type === 'select' ? (
+                    <select
+                      id={field.key}
+                      className={cn(inputClasses(accent), 'appearance-none cursor-pointer bg-no-repeat bg-[right_1rem_center] bg-[length:1.2em] font-bold h-14')}
+                      value={String(value)}
+                      onChange={(event) => onChange(field.key, event.target.value)}
+                    >
+                      <option value="" disabled className="text-navy/30">Select an option…</option>
+                      {(field.key === 'professionId' && professionOptions.length > 0 ? professionOptions : (field.options ?? [])).map((option) => (
+                        <option key={option.value} value={option.value} className="text-navy font-bold">{option.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      id={field.key}
+                      type={field.type}
+                      className={cn(inputClasses(accent), 'font-bold h-14')}
+                      value={String(value)}
+                      onChange={(event) => onChange(field.key, event.target.value)}
+                      placeholder={`Enter your ${field.label.toLowerCase()}`}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {config.fields.map((field) => {
         const value = fieldValue(data.values, field);
         const status = fieldStatus(field, value);
         const FieldIcon = field.icon;
+        
+        const isStorageOrAudio = field.primaryTag === 'Storage' || field.secondaryTag === 'Audio evidence';
 
         return (
-          <div key={field.key} className={cn('rounded-[2rem] border/50 bg-white/70 backdrop-blur-2xl p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-black/5 transition-all duration-300 hover:shadow-[0_8px_40px_rgb(0,0,0,0.08)] hover:-translate-y-0.5 group relative', status.label === 'Not set' ? 'border-dashed border-gray-300 ring-transparent' : 'border-black/5')}>
+          <div key={field.key} className={cn('rounded-[2rem] border/50 bg-white/70 backdrop-blur-2xl p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-black/5 transition-all duration-500 hover:shadow-[0_8px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1 group relative', status.label === 'Not set' ? 'border-dashed border-gray-300 ring-transparent' : 'border-black/5', data.section === 'privacy' && 'backdrop-blur-xl bg-white/60')}>
             <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none rounded-[2rem]" />
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between relative z-10">
               <div className="flex min-w-0 flex-1 items-start gap-5">
@@ -756,12 +819,15 @@ function SettingsSectionForm({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="text-lg font-black text-navy tracking-tight group-hover:text-primary transition-colors" htmlFor={field.key}>{field.label}</label>
-                    {renderTag(field.primaryTag, accent, field.primaryTagTone ?? 'section')}
-                    {field.secondaryTag ? renderTag(field.secondaryTag, accent, field.secondaryTagTone ?? 'muted') : null}
-                    <Badge variant={status.variant} className="rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest shadow-sm">
-                      {status.label}
-                    </Badge>
+                    <label className="text-xl font-black text-navy tracking-tight group-hover:text-primary transition-colors" htmlFor={field.key}>{field.label}</label>
+                    <div className={cn("inline-flex overflow-hidden rounded-full shadow-sm ring-1 ring-black/5", isStorageOrAudio && "animate-pulse")}>
+                      {renderTag(field.primaryTag, accent, field.primaryTagTone ?? 'section')}
+                    </div>
+                    {field.secondaryTag ? (
+                      <div className={cn("inline-flex overflow-hidden rounded-full shadow-sm ring-1 ring-black/5", isStorageOrAudio && "animate-pulse")}>
+                        {renderTag(field.secondaryTag, accent, field.secondaryTagTone ?? 'muted')}
+                      </div>
+                    ) : null}
                   </div>
                   <p className="mt-2.5 max-w-2xl text-sm leading-relaxed text-navy/70 font-medium">{field.description}</p>
                 </div>
@@ -773,7 +839,7 @@ function SettingsSectionForm({
                   type="button"
                   onClick={() => onChange(field.key, !Boolean(value))}
                   className={cn(
-                    'relative inline-flex h-9 w-16 shrink-0 items-center rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 overflow-hidden shadow-inner ring-1 ring-black/5',
+                    'relative inline-flex h-10 w-20 shrink-0 items-center rounded-full transition-all duration-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-offset-2 overflow-hidden shadow-inner ring-1 ring-black/5',
                     Boolean(value) ? palette.toggleOn : 'bg-navy/10 hover:bg-navy/15',
                     toggleFocusClasses(accent),
                   )}
@@ -781,7 +847,7 @@ function SettingsSectionForm({
                   aria-label={`Toggle ${field.label}`}
                   role="switch"
                 >
-                  <span className={cn('inline-block h-7 w-7 transform rounded-full bg-white shadow-sm transition-transform duration-300 ease-spring', Boolean(value) ? 'translate-x-8' : 'translate-x-1')} />
+                  <span className={cn('inline-block h-8 w-8 transform rounded-full bg-white shadow-[0_2px_10px_rgba(0,0,0,0.1)] transition-transform duration-500 ease-spring', Boolean(value) ? 'translate-x-10' : 'translate-x-1')} />
                   {Boolean(value) && (
                     <span className="absolute inset-0 bg-white/20 animate-pulse pointer-events-none" />
                   )}
@@ -790,11 +856,11 @@ function SettingsSectionForm({
             </div>
 
             {field.type !== 'toggle' ? (
-              <div className="mt-6 relative z-10">
+              <div className="mt-8 relative z-10">
                 {field.type === 'select' ? (
                   <select
                     id={field.key}
-                    className={cn(inputClasses(accent), 'appearance-none cursor-pointer bg-no-repeat bg-[right_1rem_center] bg-[length:1.2em]') /* optional custom arrow if desired */}
+                    className={cn(inputClasses(accent), 'appearance-none cursor-pointer bg-no-repeat bg-[right_1rem_center] bg-[length:1.2em] font-bold')}
                     value={String(value)}
                     onChange={(event) => onChange(field.key, event.target.value)}
                   >
@@ -803,13 +869,13 @@ function SettingsSectionForm({
                       ? professionOptions
                       : (field.options ?? [])
                     ).map((option) => (
-                      <option key={option.value} value={option.value} className="text-navy font-medium">{option.label}</option>
+                      <option key={option.value} value={option.value} className="text-navy font-bold">{option.label}</option>
                     ))}
                   </select>
                 ) : field.type === 'textarea' ? (
                   <textarea
                     id={field.key}
-                    className={cn('min-h-32 resize-y', inputClasses(accent))}
+                    className={cn('min-h-32 resize-y font-bold p-6', inputClasses(accent))}
                     value={String(value)}
                     onChange={(event) => onChange(field.key, event.target.value)}
                   />
@@ -819,7 +885,7 @@ function SettingsSectionForm({
                     type={field.type}
                     min={field.min}
                     max={field.max}
-                    className={inputClasses(accent)}
+                    className={cn(inputClasses(accent), 'font-bold h-14')}
                     value={String(value)}
                     onChange={(event) => onChange(field.key, event.target.value)}
                   />

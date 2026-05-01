@@ -215,42 +215,40 @@ export default function Settings() {
                     return (
                       <div
                         key={item.id}
-                        className={`group relative flex items-center justify-between p-5 transition-all duration-300 
-                          rounded-2xl bg-white/70 backdrop-blur-xl ring-1 shadow-sm 
-                          hover:shadow-md hover:-translate-y-0.5
-                          ${isDanger ? 'ring-danger/20 hover:ring-danger/40 hover:bg-danger/5 shadow-danger/5' : 'ring-black/5 hover:ring-primary/20 hover:bg-white/90 shadow-black/5'}
-                          ${item.type === 'link' ? (isFrozen ? 'cursor-not-allowed opacity-60' : 'cursor-pointer') : ''}
-                        `}
+                        role={item.type === 'link' ? 'button' : 'group'}
+                        tabIndex={item.type === 'link' ? 0 : undefined}
                         onClick={item.type === 'link' ? () => handleOpen(item.id) : undefined}
+                        className={`group relative flex items-center justify-between overflow-hidden rounded-[2rem] p-5 sm:p-8 transition-all duration-500 ${isDanger ? 'bg-danger/5 hover:bg-danger/10 ring-1 ring-danger/10 cursor-pointer' : 'bg-white/60 backdrop-blur-2xl hover:bg-white/90 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] hover:-translate-y-1 ring-1 ring-black/5 cursor-pointer'} ${item.type === 'toggle' ? 'cursor-default hover:-translate-y-0 hover:shadow-sm' : ''} ${item.type === 'link' && isFrozen ? 'cursor-not-allowed opacity-60' : ''}`}
                       >
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5 pr-4 relative z-10 w-full">
-                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border transition-colors duration-300
-                            ${isDanger ? 'bg-danger/10 border-danger/20 group-hover:bg-danger/20' : 'bg-primary/5 border-primary/10 group-hover:bg-primary/10 group-hover:border-primary/20'}`}>
-                            <Icon className={`w-6 h-6 transition-transform duration-300 group-hover:scale-110 ${isDanger ? 'text-danger' : 'text-primary'}`} />
+                        <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none rounded-[2rem]" />
+                        <div className="flex items-start gap-6 relative z-10 w-full pr-4">
+                          <div className={`w-14 h-14 p-4 shrink-0 rounded-2xl flex items-center justify-center transition-all duration-500 relative ring-1 shadow-sm ${isDanger ? 'bg-danger/10 text-danger ring-danger/20' : 'bg-primary/5 text-primary group-hover:bg-primary/10 group-hover:scale-110 ring-primary/20'}`}>
+                            <span className={`absolute inset-0 rounded-2xl transition-all duration-500 scale-100 opacity-0 ${isDanger ? 'bg-danger/20' : 'bg-primary/20'} group-hover:scale-[1.8] group-hover:opacity-100 blur-xl pointer-events-none`} />
+                            <Icon className="w-7 h-7 drop-shadow-sm relative z-10" />
                           </div>
-                          <div>
-                            <h3 className={`text-lg font-black tracking-tight ${isDanger ? 'text-danger' : 'text-navy group-hover:text-primary'}`}>{item.title}</h3>
-                            <p className={`text-sm font-medium mt-0.5 ${isDanger ? 'text-danger/70' : 'text-navy/60'}`}>{item.description}</p>
+                          <div className="min-w-0">
+                            <h3 className={`text-xl font-black tracking-tight ${isDanger ? 'text-danger' : 'text-navy group-hover:text-primary transition-colors'}`}>{item.title}</h3>
+                            <p className={`text-sm font-medium mt-1.5 leading-relaxed ${isDanger ? 'text-danger/70' : 'text-navy/60'}`}>{item.description}</p>
                           </div>
                         </div>
 
-                        <div className="shrink-0 relative z-10 pl-2">
+                        <div className="shrink-0 relative z-10 flex">
                           {item.type === 'link' ? (
-                            <div className={`p-2 rounded-full transition-colors duration-300 ${isDanger ? 'bg-danger/5 group-hover:bg-danger/10' : 'bg-navy/5 group-hover:bg-primary/10'}`}>
-                              <ChevronRight className={`w-5 h-5 ${isDanger ? 'text-danger' : 'text-navy/40 group-hover:text-primary'}`} />
+                            <div className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-colors duration-500 ${isDanger ? 'bg-danger/10 text-danger group-hover:bg-danger/20' : 'bg-white/80 backdrop-blur-sm text-primary/40 group-hover:bg-primary/10 group-hover:text-primary shadow-sm ring-1 ring-black/5'}`}>
+                              <ChevronRight className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" />
                             </div>
                           ) : (
                             <button
                               onClick={() => handleToggle(item.id)}
                               disabled={savingId === item.id || isFrozen}
-                              className={`relative inline-flex h-7 w-14 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 overflow-hidden shadow-inner ${toggles[item.id] ? 'bg-primary' : 'bg-navy/10'}`}
+                              className={`relative inline-flex h-10 w-20 shrink-0 items-center rounded-full transition-all duration-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 focus-visible:ring-offset-2 overflow-hidden shadow-inner ring-1 ring-black/5 ${toggles[item.id] ? 'bg-primary' : 'bg-navy/10 hover:bg-navy/15'}`}
                               role="switch"
                               aria-checked={toggles[item.id]}
                               aria-label={`Toggle ${item.title}`}
                             >
                               <span className="sr-only">Toggle {item.title}</span>
                               <span
-                                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-300 ease-spring ${toggles[item.id] ? 'translate-x-8' : 'translate-x-1'}`}
+                                className={`inline-block h-8 w-8 transform rounded-full bg-white shadow-[0_2px_10px_rgba(0,0,0,0.1)] transition-transform duration-500 ease-spring ${toggles[item.id] ? 'translate-x-10' : 'translate-x-1'}`}
                               />
                             </button>
                           )}
