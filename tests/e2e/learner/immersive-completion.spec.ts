@@ -78,16 +78,9 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await expect(leaveTrigger).toBeFocused();
 
     const submitTrigger = page.getByRole('button', { name: /^submit$/i });
-    await submitTrigger.click();
 
-    const submitDialog = page.getByRole('dialog', { name: /submit your response\?/i });
-    await expect(submitDialog).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(submitDialog).toHaveCount(0);
-    await expect(submitTrigger).toBeFocused();
-
+    // Per Writing Module Spec v1.0: Submit fires immediately, no confirmation modal.
     await submitTrigger.click();
-    await page.getByRole('button', { name: /confirm submit/i }).click();
 
     await expect(page).toHaveURL(/\/writing\/result\?id=/, { timeout: 60000 });
     await waitForSessionGuardToClear(page);

@@ -395,14 +395,14 @@ export default function SpeakingResultSummary() {
                 Use the targeted drill workflow to improve weak sounds, word stress, and intonation.
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
-                <Link href="/pronunciation">
+                <Link href="/recalls/words">
                   <Button variant="outline">
-                    <Mic className="w-4 h-4" /> Open Pronunciation Drills
+                    <Mic className="w-4 h-4" /> Open Recalls Audio
                   </Button>
                 </Link>
-                <Link href={`/pronunciation?focus=phoneme`}>
+                <Link href="/recalls/words">
                   <Button variant="ghost">
-                    Practice weak phonemes
+                    Practice recall words
                   </Button>
                 </Link>
               </div>

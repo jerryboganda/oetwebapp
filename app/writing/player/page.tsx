@@ -8,7 +8,6 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { InlineAlert } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
 import { Timer } from '@/components/ui/timer';
 import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
@@ -21,7 +20,6 @@ import type { WritingTask } from '@/lib/mock-data';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { deriveWritingCaseNotesMarkers, inferWritingLetterType, lintWritingLetter } from '@/lib/rulebook';
 import {
-  getWritingWordCountStatus,
   normalizeWritingPracticeMode,
   WRITING_CRITERIA,
   WRITING_READING_WINDOW_SECONDS,
@@ -56,7 +54,6 @@ export default function WritingPlayer() {
   const [fontSize, setFontSize] = useState(16);
   const [isDistractionFree, setIsDistractionFree] = useState(false);
   const [activeTab, setActiveTab] = useState<'notes' | 'scratchpad' | 'checklist'>('notes');
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [timerRunning, setTimerRunning] = useState(true);
@@ -79,17 +76,18 @@ export default function WritingPlayer() {
     ? { duration: 0.01 }
     : { type: 'spring', stiffness: 420, damping: 38 };
 
-  const wordCount = useMemo(() => content.trim().split(/\s+/).filter(Boolean).length, [content]);
-  const wordCountStatus = useMemo(
-    () => getWritingWordCountStatus(wordCount, task?.targetWordRange),
-    [task?.targetWordRange, wordCount],
-  );
+  // Threshold below which the live rulebook checker stays quiet to avoid noisy
+  // warnings while the candidate is still brainstorming. Character-based so
+  // the platform performs no word-counting logic anywhere.
+  const LINT_MIN_CONTENT_CHARS = 80;
+  const trimmedContentLength = content.trim().length;
+  const lintReady = trimmedContentLength >= LINT_MIN_CONTENT_CHARS;
 
   const inferredLetterType = useMemo(() => inferWritingLetterType(task ?? {}), [task]);
   const caseNotesMarkers = useMemo(() => deriveWritingCaseNotesMarkers(task?.caseNotes), [task?.caseNotes]);
 
   const lintFindings = useMemo(() => {
-    if (!task || wordCount < 20) return [];
+    if (!task || !lintReady) return [];
     const minorAgeMatch = task.caseNotes.match(/\b(\d+)\s*(years? old|year-old)\b/i);
     return lintWritingLetter({
       letterText: content,
@@ -101,10 +99,10 @@ export default function WritingPlayer() {
       patientIsMinor: minorAgeMatch ? Number(minorAgeMatch[1]) < 18 : false,
       caseNotesMarkers,
     });
-  }, [task, wordCount, content, inferredLetterType, caseNotesMarkers]);
+  }, [task, lintReady, content, inferredLetterType, caseNotesMarkers]);
 
-  const lintInactiveMessage = wordCount < 20
-    ? 'The live rulebook checker starts once you have written at least 20 words, so early brainstorming does not create noisy warnings.'
+  const lintInactiveMessage = !lintReady
+    ? 'The live rulebook checker starts once you have written a few sentences, so early brainstorming does not create noisy warnings.'
     : undefined;
 
   useEffect(() => {
@@ -188,13 +186,12 @@ export default function WritingPlayer() {
     }
 
     const submittedContent = latestContentRef.current;
-    const submittedWordCount = submittedContent.trim().split(/\s+/).filter(Boolean).length;
 
     setSubmitting(true);
     setSaveStatus('saving');
     try {
       const result = await submitWritingTask(taskId, submittedContent, practiceMode);
-      analytics.track('task_submitted', { taskId, subtest: 'writing', mode: practiceMode, wordCount: submittedWordCount, wordCountState: wordCountStatus.state });
+      analytics.track('task_submitted', { taskId, subtest: 'writing', mode: practiceMode });
       hasUnsavedChanges.current = false;
       setSaveStatus('saved');
       setTimerRunning(false);
@@ -321,7 +318,7 @@ export default function WritingPlayer() {
                   >
                     <Maximize className="h-5 w-5" />
                   </button>
-                  <Button size={isMobile ? 'sm' : 'md'} onClick={() => setShowSubmitModal(true)} className="shrink-0 whitespace-nowrap touch-target">
+                  <Button size={isMobile ? 'sm' : 'md'} onClick={handleSubmit} loading={submitting} className="shrink-0 whitespace-nowrap touch-target">
                     Submit
                   </Button>
                 </div>
@@ -365,7 +362,7 @@ export default function WritingPlayer() {
               transition={panelTransition}
               className="border-b border-border bg-surface/95 px-4 py-3"
             >
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1.25fr)]">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1.25fr)]">
                 <div className="rounded-2xl border border-border bg-background-light p-3">
                   <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-navy">
                     <ClipboardCheck className="h-4 w-4 text-primary" /> Task brief
@@ -382,17 +379,6 @@ export default function WritingPlayer() {
 
                 <div className="rounded-2xl border border-border bg-background-light p-3">
                   <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-navy">
-                    <BookOpen className="h-4 w-4 text-primary" /> Word count guidance
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={wordCountStatus.variant} size="sm">{wordCount} words</Badge>
-                    <Badge variant={wordCountStatus.variant} size="sm">{wordCountStatus.label}</Badge>
-                  </div>
-                  <p className="mt-2 text-xs leading-5 text-muted">{wordCountStatus.message}</p>
-                </div>
-
-                <div className="rounded-2xl border border-border bg-background-light p-3">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-navy">
                     <GraduationCap className="h-4 w-4 text-primary" /> Rubric workflow
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -403,7 +389,7 @@ export default function WritingPlayer() {
                     ))}
                   </div>
                   <p className="mt-2 text-xs leading-5 text-muted">
-                    AI support is practice-only; final readiness decisions should use criterion-based tutor review.
+                    AI support is practice-only; final readiness decisions should use criterion-based tutor review. Letter length guidance is 180–200 words (body only).
                   </p>
                 </div>
               </div>
@@ -510,7 +496,7 @@ export default function WritingPlayer() {
                         value={content}
                         onChange={handleContentChange}
                         saveStatus={saveStatus === 'idle' ? 'idle' : saveStatus}
-                        wordCountStatus={wordCountStatus}
+
                         fontSize={fontSize}
                         onFontSizeChange={setFontSize}
                         showFontSizeControls={false}
@@ -564,7 +550,7 @@ export default function WritingPlayer() {
                   value={content}
                   onChange={handleContentChange}
                   saveStatus={saveStatus === 'idle' ? 'idle' : saveStatus}
-                  wordCountStatus={wordCountStatus}
+
                   fontSize={fontSize}
                   onFontSizeChange={setFontSize}
                   showFontSizeControls={!isMobile}
@@ -588,20 +574,8 @@ export default function WritingPlayer() {
           </div>
         </main>
 
-        {/* Submit Confirmation Modal */}
-        <Modal open={showSubmitModal} onClose={() => setShowSubmitModal(false)} title="Submit Your Response?">
-          <p className="mb-3 text-sm text-muted">
-            Once submitted, your response enters the writing correction workflow. Automated checks are practice estimates only; tutor review remains the final academy marking path.
-          </p>
-          <InlineAlert variant={wordCountStatus.variant === 'warning' ? 'warning' : 'info'} className="mb-4">
-            {wordCountStatus.message}
-          </InlineAlert>
-          <p className="mb-6 text-sm font-semibold text-navy">Word count: {wordCount} · {wordCountStatus.label}</p>
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button variant="secondary" onClick={() => setShowSubmitModal(false)}>Cancel</Button>
-            <Button loading={submitting} onClick={handleSubmit}>Confirm Submit</Button>
-          </div>
-        </Modal>
+        {/* Submit Confirmation Modal removed: per business requirement,
+            submission is one-tap and the platform performs no word-count checks. */}
 
         {/* Leave Confirmation Modal */}
         <Modal open={showLeaveModal} onClose={() => setShowLeaveModal(false)} title="Leave Writing Task?">

@@ -14,6 +14,8 @@ import {
   type RecallsQuizSession,
   type RecallsQuizItem,
 } from '@/lib/api';
+import { playTransientAudio } from '@/lib/recalls-audio';
+import { useRecallsAudioUpgrade } from './audio-upgrade-modal';
 
 interface QuizRunnerProps {
   mode: RecallQuizModeKey;
@@ -131,35 +133,42 @@ function shuffled<T>(arr: T[]): T[] {
   return copy;
 }
 
-function PlayAudioButton({ termId, src, label }: { termId: string; src: string | null; label: string }) {
-  const [resolved, setResolved] = useState<string | null>(src);
+function PlayAudioButton({
+  termId,
+  label,
+  speed = 'normal',
+}: {
+  termId: string;
+  label: string;
+  speed?: 'normal' | 'sentence';
+}) {
   const [loading, setLoading] = useState(false);
+  const { guardAudio, modal } = useRecallsAudioUpgrade();
   async function play() {
     if (loading) return;
-    if (resolved) {
-      void new Audio(resolved).play().catch(() => undefined);
-      return;
-    }
     setLoading(true);
     try {
-      const r = await fetchRecallsAudio(termId, 'normal');
-      setResolved(r.url);
-      void new Audio(r.url).play().catch(() => undefined);
+      const r = await guardAudio(() => fetchRecallsAudio(termId, speed), { termId });
+      if (!r) return;
+      playTransientAudio(r.url);
     } finally {
       setLoading(false);
     }
   }
   return (
-    <Button
-      type="button"
-      variant="primary"
-      onClick={play}
-      disabled={loading}
-      aria-label={label}
-      className="flex h-12 w-12 items-center justify-center rounded-full p-0"
-    >
-      {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Volume2 className="h-5 w-5" />}
-    </Button>
+    <>
+      <Button
+        type="button"
+        variant="primary"
+        onClick={play}
+        disabled={loading}
+        aria-label={label}
+        className="flex h-12 w-12 items-center justify-center rounded-full p-0"
+      >
+        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Volume2 className="h-5 w-5" />}
+      </Button>
+      {modal}
+    </>
   );
 }
 
@@ -175,7 +184,7 @@ function WordRecognitionCard({ item, onAnswered }: CardProps) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-center gap-3">
-        <PlayAudioButton termId={item.termId} src={item.audioUrl} label="Play term audio" />
+        <PlayAudioButton termId={item.termId} label="Play term audio" />
         <div className="text-xs uppercase tracking-wide text-muted">Listen and pick the correct spelling</div>
       </div>
       <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -288,7 +297,7 @@ function ClinicalSentenceCard({ item, onAnswered }: CardProps) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-center gap-3">
-        <PlayAudioButton termId={item.termId} src={item.audioSentenceUrl ?? item.audioUrl} label="Play sentence" />
+        <PlayAudioButton termId={item.termId} label="Play sentence" speed="sentence" />
         <div className="text-xs uppercase tracking-wide text-muted">Listen and complete</div>
       </div>
       <p className="mt-3 text-sm text-navy">
@@ -350,7 +359,7 @@ function SpellingCard({ item, onAnswered }: CardProps) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-center gap-3">
-        <PlayAudioButton termId={item.termId} src={item.audioUrl} label="Play term" />
+        <PlayAudioButton termId={item.termId} label="Play term" />
         <div className="text-xs uppercase tracking-wide text-muted">Listen &amp; type — British spelling</div>
       </div>
       {item.ipa && <div className="mt-2 text-xs text-muted">{item.ipa}</div>}

@@ -176,10 +176,10 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
 
           {feedback.nextDrillTargetPhoneme && (
             <Link
-              href={`/pronunciation?focus=phoneme&phoneme=${encodeURIComponent(feedback.nextDrillTargetPhoneme)}`}
+              href="/recalls/words"
               className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
-              Find drills for /{feedback.nextDrillTargetPhoneme}/ <ChevronRight className="h-4 w-4" />
+              Practice recall audio for /{feedback.nextDrillTargetPhoneme}/ <ChevronRight className="h-4 w-4" />
             </Link>
           )}
         </section>

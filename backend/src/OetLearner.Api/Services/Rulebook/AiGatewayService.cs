@@ -577,7 +577,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         sb.AppendLine();
         sb.AppendLine("- LISTENING: Grade B at 350/500; raw 30/42 ≡ 350/500 EXACTLY.");
         sb.AppendLine("- READING: Grade B at 350/500; raw 30/42 ≡ 350/500 EXACTLY.");
-        sb.AppendLine($"- WRITING (country-aware): Grade B at {OetScoring.ScaledPassGradeB}/500 for UK/IE/AU/NZ/CA; Grade C+ at {OetScoring.ScaledPassGradeCPlus}/500 for US/QA.");
+        sb.AppendLine($"- WRITING (country-aware): Grade B at {OetScoring.ScaledPassGradeB}/500 for UK/IE/AU/NZ/CA and broad signup categories until a specific regulator is captured; Grade C+ at {OetScoring.ScaledPassGradeCPlus}/500 for US/QA.");
         sb.AppendLine("- SPEAKING: Grade B at 350/500, universal (no country variation).");
         sb.AppendLine();
         sb.AppendLine(ctx.Kind switch

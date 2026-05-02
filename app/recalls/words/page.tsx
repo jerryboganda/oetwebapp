@@ -1,16 +1,28 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { motion } from 'motion/react';
-import { Star, Volume2 } from 'lucide-react';
+import { Lock, Star, Volume2 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { fetchRecallsToday, fetchRecallsQueue, starRecall, fetchRecallsAudio, type RecallsTodayResponse, type RecallsQueueItem, type RecallsStarReason } from '@/lib/api';
+import { Modal } from '@/components/ui/modal';
+import {
+  fetchRecallsToday,
+  fetchRecallsQueue,
+  starRecall,
+  fetchRecallsAudio,
+  isApiError,
+  type RecallsTodayResponse,
+  type RecallsQueueItem,
+  type RecallsStarReason,
+} from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { playTransientAudio } from '@/lib/recalls-audio';
 
 const STAR_REASONS: { key: RecallsStarReason; label: string }[] = [
   { key: 'spelling', label: 'Spelling' },
@@ -32,6 +44,10 @@ export default function RecallsWordsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starOpenFor, setStarOpenFor] = useState<string | null>(null);
+  // Per PRD Phase 2 §2 the click-to-hear feature is paid-only. The backend is
+  // authoritative (returns 402/403 for free learners) — we surface that as an
+  // upgrade modal instead of a silent failure so candidates understand why.
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   useEffect(() => {
     analytics.track('recalls_words_viewed');
@@ -72,13 +88,18 @@ export default function RecallsWordsPage() {
   }
 
   async function handlePlay(it: RecallsQueueItem) {
-    if (it.kind !== 'vocab') return;
+    if (it.kind !== 'vocab' || !it.termId) return;
     try {
-      const url = it.audioUrl ?? (await fetchRecallsAudio(it.id, 'normal')).url;
-      const a = new Audio(url);
-      void a.play().catch(() => undefined);
-    } catch {
-      /* swallow — audio is best-effort */
+      const url = (await fetchRecallsAudio(it.termId, 'normal')).url;
+      playTransientAudio(url);
+      analytics.track('recalls_word_audio_played', { termId: it.termId });
+    } catch (err) {
+      // Backend gates audio behind an active subscription. Surface 402/403 as
+      // an upgrade prompt; treat anything else as a quiet best-effort failure.
+      if (isApiError(err) && (err.status === 402 || err.status === 403)) {
+        analytics.track('recalls_word_audio_blocked', { termId: it.termId, status: err.status });
+        setShowUpgradeModal(true);
+      }
     }
   }
 
@@ -132,7 +153,19 @@ export default function RecallsWordsPage() {
                 )}
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-navy">{it.title}</span>
+                    {it.kind === 'vocab' ? (
+                      // PRD Phase 2 §2: clicking the word itself plays audio.
+                      <button
+                        type="button"
+                        onClick={() => handlePlay(it)}
+                        className="rounded font-semibold text-navy hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label={`Play pronunciation of ${it.title}`}
+                      >
+                        {it.title}
+                      </button>
+                    ) : (
+                      <span className="font-semibold text-navy">{it.title}</span>
+                    )}
                     <Badge variant={it.kind === 'vocab' ? 'info' : 'default'}>{it.kind}</Badge>
                     {it.starred && <Badge variant="warning">Starred · {it.starReason ?? '—'}</Badge>}
                   </div>
@@ -185,6 +218,35 @@ export default function RecallsWordsPage() {
           </div>
         )}
       </div>
+
+      <Modal
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        title="Unlock click-to-hear pronunciation"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Lock className="h-5 w-5" />
+          </div>
+          <p className="text-sm text-muted">
+            Pronunciation audio for recall words is part of the paid plan. Upgrade to listen to every term in your recall
+            list, hear British clinical pronunciation, and unlock the full Recalls drill set.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setShowUpgradeModal(false)}>
+              Not now
+            </Button>
+            <Link
+              href="/billing/upgrade"
+              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+              onClick={() => setShowUpgradeModal(false)}
+            >
+              View upgrade options
+            </Link>
+          </div>
+        </div>
+      </Modal>
     </LearnerDashboardShell>
   );
 }

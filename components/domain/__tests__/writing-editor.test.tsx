@@ -14,7 +14,8 @@ describe('WritingEditor', () => {
       />,
     );
 
-    expect(container).toHaveTextContent(/4\s*words/i);
+    // Per Writing Module Spec v1.0: WritingEditor must NOT render any word-count UI.
+    expect(container).not.toHaveTextContent(/word/i);
     expect(screen.getByText('Saving...')).toBeInTheDocument();
     expect(screen.queryByLabelText('Decrease font size')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Increase font size')).not.toBeInTheDocument();

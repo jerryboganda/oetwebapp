@@ -28,6 +28,7 @@ import { RegisterSecurityStep } from '@/components/auth/register/register-securi
 import { RegisterStepProgress } from '@/components/auth/register/register-step-progress';
 import { countryOptions } from '@/components/auth/country-code-select';
 import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
+import { TARGET_COUNTRY_OPTIONS } from '@/components/auth/register/target-countries';
 
 function readErrorMessage(error: unknown): string {
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
@@ -48,7 +49,7 @@ export function RegisterForm() {
   const [selectedCountryCode, setSelectedCountryCode] = useState('pk');
   const [mobileLocalNumber, setMobileLocalNumber] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { billingPlans, enrollmentSessions, examTypes, professions } = useSignupCatalog();
+  const { examTypes, professions } = useSignupCatalog();
   const nextPath = searchParams.get('next');
   const registrationToken = searchParams.get('registrationToken');
   const externalEmail = searchParams.get('email') ?? '';
@@ -89,15 +90,12 @@ export function RegisterForm() {
       mobileNumber: '',
       password: '',
       professionId: '',
-      sessionId: '',
     },
   });
 
   const selectedExamTypeId = form.watch('examTypeId');
   const selectedProfessionId = form.watch('professionId');
-  const selectedSessionId = form.watch('sessionId');
   const selectedProfession = professions.find((item) => item.id === selectedProfessionId);
-  const selectedSession = enrollmentSessions.find((item) => item.id === selectedSessionId);
 
   const filteredProfessions = useMemo(
     () =>
@@ -107,29 +105,12 @@ export function RegisterForm() {
     [professions, selectedExamTypeId],
   );
 
-  const filteredSessions = useMemo(
-    () =>
-      enrollmentSessions.filter((item) => {
-        if (selectedExamTypeId && item.examTypeId !== selectedExamTypeId) {
-          return false;
-        }
-
-        if (selectedProfessionId && !item.professionIds.includes(selectedProfessionId)) {
-          return false;
-        }
-
-        return true;
-      }),
-    [enrollmentSessions, selectedExamTypeId, selectedProfessionId],
+  // Per PRD Phase 2 §1, the country dropdown is a fixed mandatory list
+  // independent of the signup catalog.
+  const availableCountries = useMemo<readonly string[]>(
+    () => TARGET_COUNTRY_OPTIONS,
+    [],
   );
-
-  const availableCountries = useMemo(() => {
-    const source = selectedProfession?.countryTargets.length
-      ? selectedProfession.countryTargets
-      : filteredProfessions.flatMap((item) => item.countryTargets);
-
-    return Array.from(new Set(source)).filter(Boolean);
-  }, [filteredProfessions, selectedProfession]);
 
   useEffect(() => {
     const dialCode = countryOptions.find((item) => item.value === selectedCountryCode)?.dialCode ?? '';
@@ -161,23 +142,14 @@ export function RegisterForm() {
   }, [filteredProfessions, form, selectedProfessionId]);
 
   useEffect(() => {
-    if (selectedSessionId && filteredSessions.some((item) => item.id === selectedSessionId)) {
-      return;
-    }
-
-    form.setValue('sessionId', filteredSessions[0]?.id ?? '', {
-      shouldDirty: false,
-      shouldValidate: false,
-    });
-  }, [filteredSessions, form, selectedSessionId]);
-
-  useEffect(() => {
     const currentCountry = form.getValues('countryTarget');
     if (currentCountry && availableCountries.includes(currentCountry)) {
       return;
     }
 
-    form.setValue('countryTarget', availableCountries[0] ?? '', {
+    // Force learners to make an explicit choice — the country dropdown is
+    // mandatory and must not be silently auto-filled.
+    form.setValue('countryTarget', '', {
       shouldDirty: false,
       shouldValidate: false,
     });
@@ -186,7 +158,7 @@ export function RegisterForm() {
   const nextStep = async () => {
     const fields = step === 1
       ? (['firstName', 'lastName', 'email', 'mobileNumber'] as const)
-      : (['examTypeId', 'professionId', 'sessionId', 'countryTarget'] as const);
+      : (['examTypeId', 'professionId', 'countryTarget'] as const);
 
     const isValid = await form.trigger(fields);
     if (isValid) {
@@ -215,7 +187,6 @@ export function RegisterForm() {
           mobileNumber: values.mobileNumber.trim(),
           examTypeId: values.examTypeId,
           professionId: values.professionId,
-          sessionId: values.sessionId,
           countryTarget: values.countryTarget,
           agreeToTerms: values.agreeToTerms,
           agreeToPrivacy: values.agreeToPrivacy,
@@ -227,16 +198,11 @@ export function RegisterForm() {
 
       const selectedExam = examTypes.find((item) => item.id === values.examTypeId);
       const selectedProfessionValue = professions.find((item) => item.id === values.professionId);
-      const selectedSessionValue = enrollmentSessions.find((item) => item.id === values.sessionId);
       const params = new URLSearchParams({
         email: values.email,
         fullName: `${values.firstName} ${values.lastName}`.trim(),
         exam: selectedExam?.label ?? 'Exam',
         profession: selectedProfessionValue?.label ?? 'Profession',
-        session: selectedSessionValue?.name ?? 'Session pending',
-        sessionPrice: selectedSessionValue?.priceLabel ?? 'TBC',
-        sessionMode: selectedSessionValue?.deliveryMode ?? 'online',
-        sessionStart: selectedSessionValue?.startDate ?? 'TBC',
         country: values.countryTarget,
         stamp: `${new Intl.DateTimeFormat('en-GB', {
           day: '2-digit',
@@ -301,13 +267,9 @@ export function RegisterForm() {
 
           {step === 2 ? (
             <RegisterEnrollmentStep
-              availableCountries={availableCountries}
-              billingPlans={billingPlans}
               examTypes={examTypes}
               filteredProfessions={filteredProfessions}
-              filteredSessions={filteredSessions}
               form={form}
-              selectedSession={selectedSession}
             />
           ) : null}
 
@@ -317,7 +279,6 @@ export function RegisterForm() {
               form={form}
               selectedExamTypeId={selectedExamTypeId}
               selectedProfession={selectedProfession}
-              selectedSession={selectedSession}
             />
           ) : null}
         </MotionFadeSwitch>

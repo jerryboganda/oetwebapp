@@ -328,13 +328,7 @@
       "title": "Letter length guide 180–200 words",
       "body": "Letter length guide: 180–200 words (body only). Too long = semi-relevant data included. Too short = relevant data missing.",
       "appliesTo": "all",
-      "checkId": "letter_body_length",
-      "params": {
-        "minWords": 160,
-        "idealMin": 180,
-        "idealMax": 200,
-        "maxWords": 230
-      }
+      "checkId": "letter_body_length"
     },
     {
       "id": "R03.9",

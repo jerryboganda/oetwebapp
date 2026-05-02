@@ -17,7 +17,7 @@ vi.mock('@/lib/mobile/haptics', () => ({
   triggerImpactHaptic: vi.fn(),
 }));
 
-import { Sidebar, type NavGroup } from '../sidebar';
+import { Sidebar, learnNavItems, type NavGroup } from '../sidebar';
 
 const adminUser = {
   userId: 'admin-1',
@@ -48,5 +48,12 @@ describe('Sidebar route matching', () => {
 
     expect(screen.getByRole('link', { name: /content generation/i })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: /content library/i })).not.toHaveAttribute('aria-current');
+  });
+
+  it('keeps Recalls as the learner study tab and omits Pronunciation', () => {
+    const labels = learnNavItems.map((item) => item.label);
+
+    expect(labels).toContain('Recalls');
+    expect(labels).not.toContain('Pronunciation');
   });
 });

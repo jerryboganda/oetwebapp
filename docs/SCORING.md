@@ -28,6 +28,7 @@
 | Target country                                                       | Pass mark             |
 | -------------------------------------------------------------------- | --------------------- |
 | **United Kingdom, Ireland, Australia, New Zealand, Canada**          | **350 / 500 (Grade B)** |
+| **Broad registration categories: Gulf Countries, Other Countries**   | **350 / 500 (Grade B)** until a specific regulator/country is captured |
 | **United States of America, Qatar**                                  | **300 / 500 (Grade C+)** |
 
 - Country is **mandatory**. Without it, Writing pass/fail **must not** be
@@ -156,6 +157,7 @@ NZ · New Zealand                                                       → NZ
 CA · Canada                                                            → CA
 US · USA · United States · United States of America · America          → US
 QA · Qatar                                                             → QA
+Gulf Countries · Other Countries                                       → GB (conservative Grade B default)
 ```
 
 Any other input (e.g. `Germany`, `India`, `DE`, empty, null) → `null`. The

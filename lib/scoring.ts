@@ -240,6 +240,11 @@ const COUNTRY_ALIASES: Readonly<Record<string, SupportedWritingCountry>> = {
   // Qatar
   QA: 'QA',
   QATAR: 'QA',
+
+  // Broad registration categories. These are intentionally conservative until
+  // a more specific regulator/country is captured in a later funnel step.
+  'GULF COUNTRIES': 'GB',
+  'OTHER COUNTRIES': 'GB',
 };
 
 /**

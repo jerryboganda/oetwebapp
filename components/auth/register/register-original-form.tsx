@@ -2,7 +2,6 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  IconBook2,
   IconBrandFacebook,
   IconBrandGoogle,
   IconBrandLinkedin,
@@ -21,7 +20,6 @@ import CountryCodeSelect, {
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { PasswordField } from '@/components/auth/password-field';
-import { RegisterPlanPreview } from '@/components/auth/register/register-plan-preview';
 import { buildExternalAuthStartHref, registerLearner } from '@/lib/auth-client';
 import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
 import {
@@ -29,12 +27,18 @@ import {
   type SignupPayloadFormValues,
 } from '@/lib/auth/schemas';
 import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
+import { TARGET_COUNTRY_OPTIONS } from './target-countries';
 
 const stepMeta = [
   { title: 'Personal', caption: 'Name, email, mobile' },
-  { title: 'Enrollment', caption: 'Exam, profession, session' },
+  { title: 'Enrollment', caption: 'Exam, profession, country' },
   { title: 'Security', caption: 'Password, consent, summary' },
 ] as const;
+
+/**
+ * Fixed target-country list per PRD Phase 2 §1. The canonical list now lives
+ * in {@link ./target-countries.ts} and is shared with the legacy register-form.
+ */
 
 function readErrorMessage(error: unknown): string {
   if (
@@ -58,7 +62,7 @@ export function RegisterForm() {
   const [selectedCountryCode, setSelectedCountryCode] = useState('pk');
   const [mobileLocalNumber, setMobileLocalNumber] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { billingPlans, enrollmentSessions, examTypes, externalAuthProviders, professions } = useSignupCatalog();
+  const { examTypes, externalAuthProviders, professions } = useSignupCatalog();
   const nextPath = searchParams.get('next');
   const registrationToken = searchParams.get('registrationToken');
   const externalEmail = searchParams.get('email') ?? '';
@@ -103,15 +107,12 @@ export function RegisterForm() {
       mobileNumber: '',
       password: '',
       professionId: '',
-      sessionId: '',
     },
   });
 
   const selectedExamTypeId = form.watch('examTypeId');
   const selectedProfessionId = form.watch('professionId');
-  const selectedSessionId = form.watch('sessionId');
   const selectedProfession = professions.find((item) => item.id === selectedProfessionId);
-  const selectedSession = enrollmentSessions.find((item) => item.id === selectedSessionId);
 
   const filteredProfessions = useMemo(
     () =>
@@ -121,29 +122,12 @@ export function RegisterForm() {
     [professions, selectedExamTypeId],
   );
 
-  const filteredSessions = useMemo(
-    () =>
-      enrollmentSessions.filter((item) => {
-        if (selectedExamTypeId && item.examTypeId !== selectedExamTypeId) {
-          return false;
-        }
-
-        if (selectedProfessionId && !item.professionIds.includes(selectedProfessionId)) {
-          return false;
-        }
-
-        return true;
-      }),
-    [enrollmentSessions, selectedExamTypeId, selectedProfessionId],
+  // Per PRD Phase 2 §1, the country dropdown is no longer derived from the
+  // signup catalog; it is a fixed mandatory list.
+  const availableCountries = useMemo<readonly string[]>(
+    () => TARGET_COUNTRY_OPTIONS,
+    [],
   );
-
-  const availableCountries = useMemo(() => {
-    const source = selectedProfession?.countryTargets.length
-      ? selectedProfession.countryTargets
-      : filteredProfessions.flatMap((item) => item.countryTargets);
-
-    return Array.from(new Set(source)).filter(Boolean);
-  }, [filteredProfessions, selectedProfession]);
 
   useEffect(() => {
     const dialCode =
@@ -179,23 +163,14 @@ export function RegisterForm() {
   }, [filteredProfessions, form, selectedProfessionId]);
 
   useEffect(() => {
-    if (selectedSessionId && filteredSessions.some((item) => item.id === selectedSessionId)) {
-      return;
-    }
-
-    form.setValue('sessionId', filteredSessions[0]?.id ?? '', {
-      shouldDirty: false,
-      shouldValidate: false,
-    });
-  }, [filteredSessions, form, selectedSessionId]);
-
-  useEffect(() => {
     const currentCountry = form.getValues('countryTarget');
     if (currentCountry && availableCountries.includes(currentCountry)) {
       return;
     }
 
-    form.setValue('countryTarget', availableCountries[0] ?? '', {
+    // Force learners to make an explicit choice — the country dropdown is now
+    // mandatory and must not be silently auto-filled.
+    form.setValue('countryTarget', '', {
       shouldDirty: false,
       shouldValidate: false,
     });
@@ -205,7 +180,7 @@ export function RegisterForm() {
     const fields =
       step === 1
         ? (['firstName', 'lastName', 'email', 'mobileNumber'] as const)
-        : (['examTypeId', 'professionId', 'sessionId', 'countryTarget'] as const);
+        : (['examTypeId', 'professionId', 'countryTarget'] as const);
 
     const isValid = await form.trigger(fields);
     if (isValid) {
@@ -232,7 +207,6 @@ export function RegisterForm() {
           mobileNumber: values.mobileNumber.trim(),
           examTypeId: values.examTypeId,
           professionId: values.professionId,
-          sessionId: values.sessionId,
           countryTarget: values.countryTarget,
           agreeToTerms: values.agreeToTerms,
           agreeToPrivacy: values.agreeToPrivacy,
@@ -244,16 +218,11 @@ export function RegisterForm() {
 
       const selectedExam = examTypes.find((item) => item.id === values.examTypeId);
       const selectedProfessionValue = professions.find((item) => item.id === values.professionId);
-      const selectedSessionValue = enrollmentSessions.find((item) => item.id === values.sessionId);
       const params = new URLSearchParams({
         email: values.email,
         fullName: `${values.firstName} ${values.lastName}`.trim(),
         exam: selectedExam?.label ?? 'Exam',
         profession: selectedProfessionValue?.label ?? 'Profession',
-        session: selectedSessionValue?.name ?? 'Session pending',
-        sessionPrice: selectedSessionValue?.priceLabel ?? 'TBC',
-        sessionMode: selectedSessionValue?.deliveryMode ?? 'online',
-        sessionStart: selectedSessionValue?.startDate ?? 'TBC',
         country: values.countryTarget,
         stamp: `${new Intl.DateTimeFormat('en-GB', {
           day: '2-digit',
@@ -434,21 +403,14 @@ export function RegisterForm() {
             </div>
 
             <div className={styles.field}>
-              <label htmlFor="sessionId">Session</label>
-              <select id="sessionId" className={styles.select} {...form.register('sessionId')}>
-                <option value="">Select session</option>
-                {filteredSessions.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} · {item.priceLabel}
-                  </option>
-                ))}
-              </select>
-              <p className={styles.fieldHint}>{errors.sessionId?.message}</p>
-            </div>
-
-            <div className={styles.field}>
               <label htmlFor="countryTarget">Target Country</label>
-              <select id="countryTarget" className={styles.select} {...form.register('countryTarget')}>
+              <select
+                id="countryTarget"
+                className={styles.select}
+                required
+                aria-required="true"
+                {...form.register('countryTarget')}
+              >
                 <option value="">Select target country</option>
                 {availableCountries.map((item) => (
                   <option key={item} value={item}>
@@ -458,28 +420,6 @@ export function RegisterForm() {
               </select>
               <p className={styles.fieldHint}>{errors.countryTarget?.message}</p>
             </div>
-
-            <div className={styles.summaryCard}>
-              <h4>Session Summary</h4>
-              {selectedSession ? (
-                <>
-                  <p>{selectedSession.name}</p>
-                  <p>
-                    {selectedSession.priceLabel} · {selectedSession.deliveryMode}
-                  </p>
-                  <p>
-                    {selectedSession.startDate} to {selectedSession.endDate}
-                  </p>
-                  <p>
-                    Seats left: {selectedSession.seatsRemaining}/{selectedSession.capacity}
-                  </p>
-                </>
-              ) : (
-                <p>Select a session to preview the cohort summary.</p>
-              )}
-            </div>
-
-            <RegisterPlanPreview billingPlans={billingPlans} />
           </>
         ) : null}
 
@@ -517,7 +457,7 @@ export function RegisterForm() {
 
             <label className={styles.checkbox} htmlFor="marketingOptIn">
               <input id="marketingOptIn" type="checkbox" {...form.register('marketingOptIn')} />
-              <span>Send me session updates and preparation reminders</span>
+              <span>Send me preparation reminders and platform updates</span>
             </label>
 
             <div className={styles.summaryCard}>
@@ -539,12 +479,6 @@ export function RegisterForm() {
                     {examTypes.find((item) => item.id === selectedExamTypeId)?.label ?? 'Exam'} ·{' '}
                     {selectedProfession?.label ?? 'Profession'}
                   </p>
-                </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryIcon}>
-                    <IconBook2 size={14} />
-                  </span>
-                  <p>{selectedSession?.name ?? 'Session not selected yet'}</p>
                 </div>
                 <div className={styles.summaryItem}>
                   <span className={styles.summaryIcon}>

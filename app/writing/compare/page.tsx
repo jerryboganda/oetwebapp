@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, BookOpen, ArrowLeftRight, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -43,13 +43,8 @@ export default function WritingComparePage() {
       .finally(() => setLoading(false));
   }, [resultId, taskId]);
 
-  const wordCount = useMemo(() => {
-    const body = (result as Record<string, unknown> | null)?.letterBody as string | undefined;
-    const modelText = model?.paragraphs?.map(p => p.text).join('\n\n');
-    const learnerWords = body?.split(/\s+/).filter(Boolean).length ?? 0;
-    const modelWords = modelText?.split(/\s+/).filter(Boolean).length ?? 0;
-    return { learner: learnerWords, model: modelWords };
-  }, [result, model]);
+  // Word counting decommissioned per Writing Module Spec v1.0
+  // (Dr. Ahmed Hesham). The compare page no longer surfaces or computes counts.
 
   if (!resultId) {
     return (
@@ -138,7 +133,6 @@ export default function WritingComparePage() {
                 <FileText className="w-5 h-5 text-info" />
                 <h3 className="font-semibold text-navy">Your Response</h3>
               </div>
-              <span className="text-xs text-muted">{wordCount.learner} words</span>
             </div>
             <div className="p-5 text-sm text-navy whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
               {(result as Record<string, unknown> | null)?.letterBody as string ?? 'No response available.'}
@@ -154,7 +148,6 @@ export default function WritingComparePage() {
                 <BookOpen className="w-5 h-5 text-success" />
                 <h3 className="font-semibold text-navy">Model Answer</h3>
               </div>
-              {model && <span className="text-xs text-muted">{wordCount.model} words</span>}
             </div>
             <div className="p-5 text-sm text-navy whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
               {model?.paragraphs?.map(p => p.text).join('\n\n') ?? (
@@ -178,7 +171,7 @@ export default function WritingComparePage() {
                 <li>Compare the opening and closing paragraphs for tone and formality.</li>
                 <li>Note how the model answer organizes key clinical information.</li>
                 <li>Look at transition phrases and cohesive devices used in the model.</li>
-                <li>Pay attention to word count differences — the model aims for conciseness.</li>
+                <li>Notice how the model letter favours conciseness and reader-aware structure (target body length is 180–200 words — guidance only).</li>
               </ul>
             </div>
           </Card>

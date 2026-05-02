@@ -570,7 +570,7 @@ builder.Services.AddScoped<VocabularyDraftService>();
 builder.Services.AddScoped<VocabularyGlossService>();
 builder.Services.AddScoped<AdaptiveDifficultyService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Recalls.RecallsService>();
-builder.Services.AddSingleton<OetLearner.Api.Services.Recalls.IRecallsTtsService, OetLearner.Api.Services.Recalls.MockRecallsTtsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Recalls.IRecallsTtsService, OetLearner.Api.Services.Recalls.RecallsTtsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Recalls.IRecallsAutoSeed, OetLearner.Api.Services.Recalls.RecallsAutoSeed>();
 
 // ── Phase 2 new services ──

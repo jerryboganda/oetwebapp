@@ -17,7 +17,7 @@ const CATEGORY_REDIRECTS: Record<string, string> = {
   grammar: '/grammar',
   vocabulary: '/vocabulary',
   strategies: '/strategies',
-  pronunciation: '/pronunciation',
+  pronunciation: '/recalls/words',
   review: '/lessons',
 };
 

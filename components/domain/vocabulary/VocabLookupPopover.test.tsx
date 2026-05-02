@@ -5,23 +5,27 @@ const {
   mockLookupVocabularyTerm,
   mockAddToMyVocabulary,
   mockRequestVocabularyGloss,
+  mockFetchRecallsAudio,
   mockTrack,
 } = vi.hoisted(() => ({
   mockLookupVocabularyTerm: vi.fn(),
   mockAddToMyVocabulary: vi.fn(),
   mockRequestVocabularyGloss: vi.fn(),
+  mockFetchRecallsAudio: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
 vi.mock('motion/react', () => ({
   motion: new Proxy({}, { get: () => (props: { children?: React.ReactNode }) => <div>{props.children}</div> }),
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useReducedMotion: () => false,
 }));
 
 vi.mock('@/lib/api', () => ({
   lookupVocabularyTerm: mockLookupVocabularyTerm,
   addToMyVocabulary: mockAddToMyVocabulary,
   requestVocabularyGloss: mockRequestVocabularyGloss,
+  fetchRecallsAudio: mockFetchRecallsAudio,
 }));
 
 vi.mock('@/lib/analytics', () => ({

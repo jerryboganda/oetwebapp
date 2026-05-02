@@ -158,7 +158,7 @@ export default function WritingResultSummary() {
               <div className="rounded-2xl border border-border bg-background-light p-4">
                 <Edit3 className="h-5 w-5 text-primary" />
                 <h3 className="mt-3 text-sm font-bold text-navy">2. Rewrite in learning mode</h3>
-                <p className="mt-1 text-xs leading-5 text-muted">Use guided drafting, word-count warnings, and rulebook support to produce a better second version.</p>
+                <p className="mt-1 text-xs leading-5 text-muted">Use guided drafting, reader-aware structure, and rulebook support to produce a better second version.</p>
               </div>
               <div className="rounded-2xl border border-border bg-background-light p-4">
                 <Star className="h-5 w-5 text-primary" />

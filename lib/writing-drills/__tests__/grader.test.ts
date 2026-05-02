@@ -189,8 +189,6 @@ describe('gradeExpansion', () => {
         noteForm: 'pt c/o cough x 3/52',
         mustInclude: ['cough', 'three weeks'],
         mustNotInclude: ['c/o', '3/52'],
-        minWords: 8,
-        maxWords: 30,
         exemplar: 'The patient reports a cough that has persisted for three weeks.',
         rationale: 'expand abbreviations + duration in words',
       },
@@ -213,6 +211,21 @@ describe('gradeExpansion', () => {
     });
     expect(r.passed).toBe(false);
     expect(r.errorTags).toEqual(expect.arrayContaining(['grammar_articles']));
+  });
+
+  it('does not grade expansion answers by word count', () => {
+    const veryShortResult = gradeDrill(drill, {
+      type: 'expansion',
+      answers: { t1: 'Cough for three weeks.' },
+    });
+    expect(veryShortResult.passed).toBe(true);
+
+    const longAnswer = `The patient reports a cough for three weeks ${Array.from({ length: 80 }, () => 'clinically').join(' ')}.`;
+    const veryLongResult = gradeDrill(drill, {
+      type: 'expansion',
+      answers: { t1: longAnswer },
+    });
+    expect(veryLongResult.passed).toBe(true);
   });
 
   it('empty answer flagged missing_key_content', () => {

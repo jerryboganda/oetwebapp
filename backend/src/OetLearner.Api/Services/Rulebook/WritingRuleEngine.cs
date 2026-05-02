@@ -219,17 +219,11 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
 
     private static IEnumerable<LintFinding> DetectBodyLength(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        var count = Regex.Matches(s.Body, @"\b[\w'-]+\b").Count;
-        var min = 160; var max = 230;
-        if (rule.Params.HasValue && rule.Params.Value.ValueKind == System.Text.Json.JsonValueKind.Object)
-        {
-            if (rule.Params.Value.TryGetProperty("minWords", out var mn) && mn.TryGetInt32(out var m)) min = m;
-            if (rule.Params.Value.TryGetProperty("maxWords", out var mx) && mx.TryGetInt32(out var x)) max = x;
-        }
-        if (count < min) yield return new LintFinding(rule.Id, rule.Severity,
-            $"Letter body is {count} words — likely missing relevant data. Target 180–200 words.");
-        if (count > max) yield return new LintFinding(rule.Id, rule.Severity,
-            $"Letter body is {count} words — likely contains semi-relevant data to cut. Target 180–200 words.");
+        // Per Writing Module Technical Specification v1.0 (Dr. Ahmed Hesham),
+        // the platform must NOT evaluate response length. R03.8 remains in the
+        // rulebook as candidate guidance text only and emits zero findings.
+        _ = rule; _ = input; _ = s;
+        yield break;
     }
 
     private static IEnumerable<LintFinding> DetectParagraphCount(OetRule rule, WritingLintInput input, LetterStructure s)

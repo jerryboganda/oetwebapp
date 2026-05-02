@@ -10,8 +10,10 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchDueFlashcards, submitFlashcardReview } from '@/lib/api';
+import { fetchDueFlashcards, fetchRecallsAudio, submitFlashcardReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
+import { playTransientAudio } from '@/lib/recalls-audio';
 import type { VocabularyFlashcard } from '@/lib/types/vocabulary';
 
 const QUALITY_OPTIONS = [
@@ -30,6 +32,7 @@ export default function FlashcardsPage() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ reviewed: 0, easy: 0 });
+  const { guardAudio, modal: audioUpgradeModal } = useRecallsAudioUpgrade();
 
   useEffect(() => {
     analytics.track('flashcards_viewed');
@@ -65,9 +68,10 @@ export default function FlashcardsPage() {
     }
   }
 
-  function playAudio(url: string | null) {
-    if (!url) return;
-    try { void new Audio(url).play(); } catch {/* ignore */}
+  async function playAudio(termId: string) {
+    const response = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
+    if (!response) return;
+    playTransientAudio(response.url);
   }
 
   // Keyboard: Space=flip, 1-4=rate (after flip), Arrow=flip/next.
@@ -106,6 +110,7 @@ export default function FlashcardsPage() {
       </div>
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {audioUpgradeModal}
 
       {loading ? (
         <Skeleton className="h-64 rounded-2xl" />
@@ -165,14 +170,12 @@ export default function FlashcardsPage() {
                   <div className="mb-4 text-xs font-medium uppercase text-primary">Word</div>
                   <div className="mb-2 text-3xl font-bold text-navy">{card.term}</div>
                   {card.ipaPronunciation && <div className="text-sm italic text-muted">{card.ipaPronunciation}</div>}
-                  {card.audioUrl && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); playAudio(card.audioUrl); }}
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
-                    >
-                      <Volume2 className="h-3.5 w-3.5" /> Play audio
-                    </button>
-                  )}
+                  <button
+                    onClick={(event) => { event.stopPropagation(); void playAudio(card.termId); }}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
+                  >
+                    <Volume2 className="h-3.5 w-3.5" /> Play audio
+                  </button>
                   <div className="mt-6 text-xs text-muted">Tap or press Space to reveal</div>
                 </>
               ) : (

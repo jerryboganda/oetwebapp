@@ -64,12 +64,6 @@ export interface WritingTask {
   recipient?: string;
   purpose?: string;
   status?: string;
-  targetWordRange?: {
-    min: number;
-    max: number;
-    warningMin: number;
-    warningMax: number;
-  };
 }
 
 export interface ChecklistItem {
@@ -150,7 +144,6 @@ export interface WritingSubmission {
   taskId: string;
   taskTitle: string;
   content: string;
-  wordCount: number;
   submittedAt: string;
   evalStatus: EvalStatus;
   scoreEstimate?: string;

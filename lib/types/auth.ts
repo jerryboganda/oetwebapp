@@ -60,41 +60,9 @@ export interface SignupProfession {
   description: string;
 }
 
-export interface SignupSession {
-  id: string;
-  name: string;
-  examTypeId: string;
-  professionIds: string[];
-  priceLabel: string;
-  startDate: string;
-  endDate: string;
-  deliveryMode: 'online' | 'hybrid' | 'in-person' | string;
-  capacity: number;
-  seatsRemaining: number;
-}
-
-export interface SignupBillingPlan {
-  id: string;
-  code: string;
-  label: string;
-  description: string;
-  priceAmount: number;
-  currency: string;
-  interval: string;
-  reviewCredits: number;
-  displayOrder: number;
-  isVisible: boolean;
-  isRenewable: boolean;
-  trialDays: number;
-  includedSubtests: string[];
-  entitlements: Record<string, unknown>;
-}
-
 export interface SignupCatalog {
   examTypes: SignupExamType[];
   professions: SignupProfession[];
-  sessions: SignupSession[];
-  billingPlans: SignupBillingPlan[];
   externalAuthProviders: ExternalAuthProvider[];
 }
 
@@ -107,7 +75,6 @@ export interface RegisterLearnerInput {
   mobileNumber: string;
   examTypeId: string;
   professionId: string;
-  sessionId: string;
   countryTarget: string;
   agreeToTerms: boolean;
   agreeToPrivacy: boolean;

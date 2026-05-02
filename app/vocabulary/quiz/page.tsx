@@ -10,8 +10,10 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchVocabQuiz, submitVocabQuiz } from '@/lib/api';
+import { fetchRecallsAudio, fetchVocabQuiz, submitVocabQuiz } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
+import { playTransientAudio } from '@/lib/recalls-audio';
 import type { VocabularyQuizQuestion, VocabularyQuizResult } from '@/lib/types/vocabulary';
 
 const QUIZ_FORMATS = [
@@ -40,6 +42,7 @@ export default function VocabQuizPage() {
   const [error, setError] = useState<string | null>(null);
   const [premiumBlock, setPremiumBlock] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
+  const { guardAudio, modal: audioUpgradeModal } = useRecallsAudioUpgrade();
 
   const startedAtRef = useRef<number>(0);
 
@@ -142,9 +145,10 @@ export default function VocabQuizPage() {
     }
   }
 
-  function playAudio(url: string | null) {
-    if (!url) return;
-    try { void new Audio(url).play(); } catch {/* ignore */}
+  async function playAudio(termId: string) {
+    const response = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
+    if (!response) return;
+    playTransientAudio(response.url);
   }
 
   // Keyboard shortcuts for MCQ formats: 1-4 select, Enter = next when revealed.
@@ -196,6 +200,7 @@ export default function VocabQuizPage() {
       </Card>
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {audioUpgradeModal}
       {premiumBlock && (
         <InlineAlert variant="info" className="mb-4">
           {premiumBlock}{' '}
@@ -269,9 +274,9 @@ export default function VocabQuizPage() {
             <div className="text-2xl font-bold text-navy" role="heading" aria-level={2}>
               {q.prompt}
             </div>
-            {q.format === 'audio_recognition' && q.audioUrl && (
+            {q.format === 'audio_recognition' && (
               <button
-                onClick={() => playAudio(q.audioUrl)}
+                onClick={() => void playAudio(q.termId)}
                 className="mt-4 inline-flex items-center gap-2 rounded-full border border-primary bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
                 aria-label="Play audio again"
               >

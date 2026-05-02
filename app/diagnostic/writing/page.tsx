@@ -38,7 +38,6 @@ export default function DiagnosticWritingPage() {
 
   // Modals
   const [showLeaveModal, setShowLeaveModal] = useState(false);
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showCaseNotesModal, setShowCaseNotesModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -118,7 +117,6 @@ export default function DiagnosticWritingPage() {
       setSaveStatus('failed');
     } finally {
       setSubmitting(false);
-      setShowSubmitModal(false);
     }
   };
 
@@ -129,8 +127,6 @@ export default function DiagnosticWritingPage() {
       router.push('/diagnostic/hub');
     }
   };
-
-  const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
 
   const status: 'loading' | 'error' | 'success' =
     loading ? 'loading' : error ? 'error' : 'success';
@@ -199,7 +195,6 @@ export default function DiagnosticWritingPage() {
                   value={content}
                   onChange={setContent}
                   saveStatus={saveStatus}
-                  wordCount={wordCount}
                   placeholder="Begin writing your response here..."
                   className="flex-1 rounded-3xl overflow-hidden"
                 />
@@ -245,8 +240,9 @@ export default function DiagnosticWritingPage() {
 
                 <Button
                   size="lg"
-                  onClick={() => setShowSubmitModal(true)}
-                  disabled={!content.trim()}
+                  onClick={handleSubmit}
+                  loading={submitting}
+                  disabled={!content.trim() || submitting}
                   className="gap-2 rounded-full px-8 font-black shadow-primary/20 shadow-lg hover:shadow-primary/30 transition-all group overflow-hidden relative"
                 >
                   <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-[150%] group-hover:translate-x-[150%] transition-transform duration-700 ease-in-out" />
@@ -259,30 +255,8 @@ export default function DiagnosticWritingPage() {
         )}
       </AsyncStateWrapper>
 
-      {/* Submit Confirmation Modal */}
-      <Modal
-        open={showSubmitModal}
-        onClose={() => setShowSubmitModal(false)}
-        title="Submit Your Response?"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted">
-            Once submitted, your response will be sent for AI evaluation. You won&apos;t be able to
-            edit it after submission.
-          </p>
-          <p className="text-xs text-navy font-semibold">
-            Word count: {wordCount}
-          </p>
-          <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={() => setShowSubmitModal(false)}>
-              Continue Writing
-            </Button>
-            <Button onClick={handleSubmit} loading={submitting} className="gap-1.5">
-              <Send className="w-3.5 h-3.5" /> Submit
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {/* Submit Confirmation Modal removed: per business requirement,
+          submission is one-tap and the platform performs no word-count checks. */}
 
       <Modal
         open={showCaseNotesModal}

@@ -13,8 +13,11 @@ import {
   fetchVocabularyTerms,
   addToMyVocabulary,
   fetchVocabularyCategories,
+  fetchRecallsAudio,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
+import { playTransientAudio } from '@/lib/recalls-audio';
 import type { VocabularyTerm, VocabularyCategoriesResponse } from '@/lib/types/vocabulary';
 
 // Mobile offline cache — lazy, best-effort; skipped in SSR and when IndexedDB is unavailable.
@@ -30,7 +33,7 @@ async function cacheVocabularyToIndexedDb(terms: unknown[]) {
   } catch {/* offline cache is best-effort */}
 }
 
-type TermRow = Pick<VocabularyTerm, 'id' | 'term' | 'definition' | 'category' | 'difficulty' | 'exampleSentence' | 'ipaPronunciation' | 'audioUrl'>;
+type TermRow = Pick<VocabularyTerm, 'id' | 'term' | 'definition' | 'category' | 'difficulty' | 'exampleSentence' | 'ipaPronunciation'>;
 
 export default function BrowseVocabularyPage() {
   const [terms, setTerms] = useState<TermRow[]>([]);
@@ -43,6 +46,7 @@ export default function BrowseVocabularyPage() {
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<Set<string>>(new Set());
   const [added, setAdded] = useState<Set<string>>(new Set());
+  const { guardAudio, modal: audioUpgradeModal } = useRecallsAudioUpgrade();
 
   const pageSize = 20;
 
@@ -102,12 +106,10 @@ export default function BrowseVocabularyPage() {
     }
   }
 
-  function playAudio(url: string | null) {
-    if (!url) return;
-    try {
-      const a = new Audio(url);
-      void a.play();
-    } catch {/* ignore */}
+  async function playAudio(termId: string) {
+    const response = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
+    if (!response) return;
+    playTransientAudio(response.url);
   }
 
   const totalPages = Math.ceil(total / pageSize);
@@ -122,6 +124,7 @@ export default function BrowseVocabularyPage() {
       </div>
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {audioUpgradeModal}
 
       {/* Filters */}
       <Card className="mb-6 border-border bg-surface p-4">
@@ -183,15 +186,13 @@ export default function BrowseVocabularyPage() {
                     {term.ipaPronunciation && (
                       <span className="text-xs italic text-muted">{term.ipaPronunciation}</span>
                     )}
-                    {term.audioUrl && (
-                      <button
-                        onClick={() => playAudio(term.audioUrl)}
-                        className="inline-flex items-center rounded-full p-1 text-muted transition-colors hover:bg-background-light hover:text-primary"
-                        aria-label={`Play pronunciation of ${term.term}`}
-                      >
-                        <Volume2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => void playAudio(term.id)}
+                      className="inline-flex items-center rounded-full p-1 text-muted transition-colors hover:bg-background-light hover:text-primary"
+                      aria-label={`Play pronunciation of ${term.term}`}
+                    >
+                      <Volume2 className="h-3.5 w-3.5" />
+                    </button>
                     <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">
                       {term.category.replace(/_/g, ' ')}
                     </span>

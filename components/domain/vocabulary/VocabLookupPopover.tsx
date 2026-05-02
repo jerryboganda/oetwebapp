@@ -7,8 +7,11 @@ import {
   lookupVocabularyTerm,
   addToMyVocabulary,
   requestVocabularyGloss,
+  fetchRecallsAudio,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
+import { playTransientAudio } from '@/lib/recalls-audio';
 import type { VocabularyLookupResult, VocabularyGlossResponse } from '@/lib/types/vocabulary';
 
 export type VocabLookupSource =
@@ -60,6 +63,7 @@ export function VocabLookupPopover({
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const { guardAudio, modal: audioUpgradeModal } = useRecallsAudioUpgrade();
 
   useEffect(() => {
     let cancelled = false;
@@ -132,9 +136,10 @@ export function VocabLookupPopover({
     }
   }
 
-  function playAudio(url: string | null) {
-    if (!url) return;
-    try { void new Audio(url).play(); } catch {/* ignore */}
+  async function playAudio(termId: string) {
+    const response = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
+    if (!response) return;
+    playTransientAudio(response.url);
   }
 
   const style: React.CSSProperties | undefined = anchorRect
@@ -196,8 +201,8 @@ export function VocabLookupPopover({
             ipa={lookup.term.ipaPronunciation}
             definition={lookup.term.definition}
             example={lookup.term.exampleSentence}
-            audioUrl={lookup.term.audioUrl}
-            onPlayAudio={() => playAudio(lookup.term!.audioUrl)}
+            canPlayAudio
+            onPlayAudio={() => void playAudio(lookup.term!.id)}
             cta={added ? (
               <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
                 <CheckCircle2 className="h-3.5 w-3.5" /> Saved
@@ -256,7 +261,6 @@ export function VocabLookupPopover({
             ipa={gloss.ipaPronunciation}
             definition={gloss.shortDefinition}
             example={gloss.exampleSentence}
-            audioUrl={null}
             footer={gloss.existingTermId && !added ? (
               <button
                 onClick={() => handleAdd(gloss.existingTermId!)}
@@ -268,6 +272,7 @@ export function VocabLookupPopover({
             ) : undefined}
           />
         )}
+        {audioUpgradeModal}
       </motion.div>
     </AnimatePresence>
   );
@@ -279,7 +284,7 @@ function TermPanel({
   ipa,
   definition,
   example,
-  audioUrl,
+  canPlayAudio = false,
   onPlayAudio,
   cta,
   footer,
@@ -289,7 +294,7 @@ function TermPanel({
   ipa: string | null;
   definition: string;
   example: string | null;
-  audioUrl: string | null;
+  canPlayAudio?: boolean;
   onPlayAudio?: () => void;
   cta?: ReactNode;
   footer?: ReactNode;
@@ -303,7 +308,7 @@ function TermPanel({
       <div className="flex items-center gap-2">
         <span className="text-sm font-bold text-navy">{word}</span>
         {ipa && <span className="text-xs italic text-muted">{ipa}</span>}
-        {audioUrl && onPlayAudio && (
+        {canPlayAudio && onPlayAudio && (
           <button onClick={onPlayAudio} className="rounded-full p-1 text-muted hover:bg-surface hover:text-primary" aria-label="Play pronunciation">
             <Volume2 className="h-3 w-3" />
           </button>

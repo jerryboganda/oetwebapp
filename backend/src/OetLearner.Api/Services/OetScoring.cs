@@ -116,6 +116,11 @@ public static class OetScoring
         // Qatar
         ["QA"] = "QA",
         ["QATAR"] = "QA",
+
+        // Broad registration categories. These are intentionally conservative
+        // until a more specific regulator/country is captured downstream.
+        ["GULF COUNTRIES"] = "GB",
+        ["OTHER COUNTRIES"] = "GB",
     };
 
     /// <summary>

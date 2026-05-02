@@ -155,23 +155,12 @@ const DETECTORS: Record<string, Detector> = {
       : [ruleFinding(rule, 'Allergy status (positive or negative) must be included for atopic conditions (asthma, eczema, hay fever).')];
   },
 
-  // R03.8 — Body length 180–200 words (allow 160–230)
-  letter_body_length(rule, _input, structure) {
-    const words = structure.body.match(WORD_RE) ?? [];
-    const count = words.length;
-    const params = (rule.params as { minWords?: number; maxWords?: number } | undefined) ?? {};
-    const min = params.minWords ?? 160;
-    const max = params.maxWords ?? 230;
-    if (count < min) {
-      return [
-        ruleFinding(rule, `Letter body is ${count} words — likely missing relevant data. Target 180–200 words.`),
-      ];
-    }
-    if (count > max) {
-      return [
-        ruleFinding(rule, `Letter body is ${count} words — likely contains semi-relevant data that should be cut. Target 180–200 words.`),
-      ];
-    }
+  // R03.8 — Body length 180–200 words.
+  //
+  // Per Writing Module Technical Specification v1.0 (Dr. Ahmed Hesham), the
+  // platform must NOT evaluate response length. The rule remains in the
+  // rulebook as candidate guidance text only and emits zero findings.
+  letter_body_length(_rule, _input, _structure) {
     return [];
   },
 

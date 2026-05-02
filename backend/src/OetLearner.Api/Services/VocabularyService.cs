@@ -449,7 +449,7 @@ public class VocabularyService(
                     CorrectIndex: options.FindIndex(o => o == term.Definition),
                     CorrectAnswer: term.Definition,
                     ExampleSentence: term.ExampleSentence,
-                    AudioUrl: term.AudioUrl);
+                    AudioUrl: null);
             }
 
             case "fill_blank":
@@ -471,7 +471,7 @@ public class VocabularyService(
                     CorrectIndex: -1,
                     CorrectAnswer: term.Term,
                     ExampleSentence: term.ExampleSentence,
-                    AudioUrl: term.AudioUrl);
+                    AudioUrl: null);
             }
 
             case "synonym_match":
@@ -507,7 +507,7 @@ public class VocabularyService(
                     CorrectIndex: options.FindIndex(o => string.Equals(o, correct, StringComparison.OrdinalIgnoreCase)),
                     CorrectAnswer: correct,
                     ExampleSentence: term.ExampleSentence,
-                    AudioUrl: term.AudioUrl);
+                    AudioUrl: null);
             }
 
             case "context_usage":
@@ -532,12 +532,11 @@ public class VocabularyService(
                     CorrectIndex: options.FindIndex(o => o == term.ExampleSentence),
                     CorrectAnswer: term.ExampleSentence,
                     ExampleSentence: term.ExampleSentence,
-                    AudioUrl: term.AudioUrl);
+                    AudioUrl: null);
             }
 
             case "audio_recognition":
             {
-                if (string.IsNullOrWhiteSpace(term.AudioUrl)) return null;
                 return new VocabularyQuizQuestionDto(
                     TermId: term.Id,
                     Term: term.Term,
@@ -547,7 +546,7 @@ public class VocabularyService(
                     CorrectIndex: -1,
                     CorrectAnswer: term.Term,
                     ExampleSentence: term.ExampleSentence,
-                    AudioUrl: term.AudioUrl);
+                        AudioUrl: null);
             }
 
             default:
@@ -681,8 +680,8 @@ public class VocabularyService(
         Category: t.Category,
         Difficulty: t.Difficulty,
         IpaPronunciation: t.IpaPronunciation,
-        AudioUrl: t.AudioUrl,
-        AudioMediaAssetId: t.AudioMediaAssetId,
+        AudioUrl: null,
+        AudioMediaAssetId: null,
         ImageUrl: t.ImageUrl,
         Synonyms: ParseStringArray(t.SynonymsJson).ToArray(),
         Collocations: ParseStringArray(t.CollocationsJson).ToArray(),
@@ -697,7 +696,7 @@ public class VocabularyService(
         Category: t.Category,
         Difficulty: t.Difficulty,
         IpaPronunciation: t.IpaPronunciation,
-        AudioUrl: t.AudioUrl,
+        AudioUrl: null,
         ExampleSentence: t.ExampleSentence);
 
     private static MyVocabularyItem ToMyItem(LearnerVocabulary lv, VocabularyTerm term) => new(
@@ -724,7 +723,7 @@ public class VocabularyService(
         ExampleSentence: term.ExampleSentence,
         ContextNotes: term.ContextNotes,
         IpaPronunciation: term.IpaPronunciation,
-        AudioUrl: term.AudioUrl,
+        AudioUrl: null,
         Synonyms: ParseStringArray(term.SynonymsJson).ToArray(),
         Mastery: lv.Mastery);
 

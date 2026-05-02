@@ -31,6 +31,9 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         Assert.True(json.RootElement.TryGetProperty("goals", out var goals));
         Assert.True(goals.TryGetProperty("targetExamDate", out _));
         Assert.True(goals.TryGetProperty("studyHoursPerWeek", out _));
+        Assert.Equal("Australia", goals.GetProperty("targetCountry").GetString());
+        Assert.True(json.RootElement.TryGetProperty("study", out var study));
+        Assert.Equal(goals.GetProperty("targetCountry").GetString(), study.GetProperty("targetCountry").GetString());
     }
 
     [Fact]
@@ -49,6 +52,57 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         using var studyJson = JsonDocument.Parse(await studyResponse.Content.ReadAsStringAsync());
         Assert.Equal("study", studyJson.RootElement.GetProperty("section").GetString());
         Assert.True(studyJson.RootElement.TryGetProperty("values", out _));
+    }
+
+    [Fact]
+    public async Task GoalsPatch_RejectsTargetCountryOutsidePrdList()
+    {
+        using var client = await CreateClientForUserAsync("goals-country-validation-user");
+
+        var response = await client.PatchAsJsonAsync("/v1/learner/goals/", new
+        {
+            targetCountry = "Atlantis"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("country_target_invalid", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task SettingsStudyPatch_RejectsTargetCountryOutsidePrdList()
+    {
+        using var client = await CreateClientForUserAsync("settings-country-validation-user");
+
+        var response = await client.PatchAsJsonAsync("/v1/settings/study", new
+        {
+            values = new Dictionary<string, object?>
+            {
+                ["targetCountry"] = "Atlantis"
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("country_target_invalid", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task SettingsStudyPatch_CanonicalizesTargetCountryFromPrdList()
+    {
+        using var client = await CreateClientForUserAsync("settings-country-canonical-user");
+
+        var response = await client.PatchAsJsonAsync("/v1/settings/study", new
+        {
+            values = new Dictionary<string, object?>
+            {
+                ["targetCountry"] = "usa"
+            }
+        });
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("USA", json.RootElement.GetProperty("values").GetProperty("targetCountry").GetString());
     }
 
     [Fact]

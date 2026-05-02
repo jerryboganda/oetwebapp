@@ -310,7 +310,6 @@ test.describe('Electron desktop surface validation', () => {
       await expect(page.getByText(/saving\.\.\./i)).toBeVisible();
       await expect(page.getByText(/^Saved$/i)).toBeVisible({ timeout: 15_000 });
       await page.getByRole('button', { name: /^submit$/i }).click();
-      await page.getByRole('button', { name: /confirm submit/i }).click();
       await expect(page).toHaveURL(/\/writing\/result\?id=/);
       await expect(page.getByRole('heading', { name: /evaluation summary/i })).toBeVisible();
 

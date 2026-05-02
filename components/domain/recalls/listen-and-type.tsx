@@ -11,11 +11,12 @@ import {
   type RecallsListenTypeResponse,
   type RecallsExplainResponse,
 } from '@/lib/api';
+import { playTransientAudio } from '@/lib/recalls-audio';
+import { useRecallsAudioUpgrade } from './audio-upgrade-modal';
 
 interface ListenAndTypeProps {
   termId: string;
   termHint?: string;
-  audioUrl?: string | null;
   onResult?: (result: RecallsListenTypeResponse) => void;
 }
 
@@ -37,16 +38,15 @@ const ERROR_LABELS: Record<RecallsListenTypeResponse['code'], string> = {
  * accepts the learner's typed answer, and shows the server-classified diff
  * (green / red / strike-through letters) per docs/RECALLS-MODULE-PLAN.md §6.
  */
-export function ListenAndType({ termId, termHint, audioUrl, onResult }: ListenAndTypeProps) {
+export function ListenAndType({ termId, termHint, onResult }: ListenAndTypeProps) {
   const [typed, setTyped] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<RecallsListenTypeResponse | null>(null);
   const [audioLoading, setAudioLoading] = useState(false);
-  const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(audioUrl ?? null);
-  const [slowAudioUrl, setSlowAudioUrl] = useState<string | null>(null);
   const [slowLoading, setSlowLoading] = useState(false);
   const [explain, setExplain] = useState<RecallsExplainResponse | null>(null);
   const [explainLoading, setExplainLoading] = useState(false);
+  const { guardAudio, modal: upgradeModal } = useRecallsAudioUpgrade();
 
   async function handleExplain() {
     if (!result || result.isCorrect || explain || explainLoading) return;
@@ -63,17 +63,11 @@ export function ListenAndType({ termId, termHint, audioUrl, onResult }: ListenAn
 
   async function handlePlay() {
     if (audioLoading) return;
-    if (resolvedAudioUrl) {
-      const a = new Audio(resolvedAudioUrl);
-      void a.play().catch(() => undefined);
-      return;
-    }
     setAudioLoading(true);
     try {
-      const resp = await fetchRecallsAudio(termId, 'normal');
-      setResolvedAudioUrl(resp.url);
-      const a = new Audio(resp.url);
-      void a.play().catch(() => undefined);
+      const resp = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
+      if (!resp) return;
+      playTransientAudio(resp.url);
     } finally {
       setAudioLoading(false);
     }
@@ -81,17 +75,11 @@ export function ListenAndType({ termId, termHint, audioUrl, onResult }: ListenAn
 
   async function handlePlaySlow() {
     if (slowLoading) return;
-    if (slowAudioUrl) {
-      const a = new Audio(slowAudioUrl);
-      void a.play().catch(() => undefined);
-      return;
-    }
     setSlowLoading(true);
     try {
-      const resp = await fetchRecallsAudio(termId, 'slow');
-      setSlowAudioUrl(resp.url);
-      const a = new Audio(resp.url);
-      void a.play().catch(() => undefined);
+      const resp = await guardAudio(() => fetchRecallsAudio(termId, 'slow'), { termId });
+      if (!resp) return;
+      playTransientAudio(resp.url);
     } finally {
       setSlowLoading(false);
     }
@@ -243,6 +231,7 @@ export function ListenAndType({ termId, termHint, audioUrl, onResult }: ListenAn
           </motion.div>
         )}
       </AnimatePresence>
+      {upgradeModal}
     </div>
   );
 }

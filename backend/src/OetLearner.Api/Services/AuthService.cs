@@ -96,8 +96,7 @@ public sealed class AuthService(
         var mobileNumber = RequireTrimmed(request.MobileNumber, "mobile_number_required", "Mobile number is required.");
         var examTypeId = RequireTrimmed(request.ExamTypeId, "exam_type_required", "Exam type is required.");
         var professionId = RequireTrimmed(request.ProfessionId, "profession_required", "Profession is required.");
-        var sessionId = RequireTrimmed(request.SessionId, "session_required", "Session is required.");
-        var countryTarget = RequireTrimmed(request.CountryTarget, "country_target_required", "Target country is required.");
+        var countryTarget = TargetCountryOptions.Canonicalize(request.CountryTarget);
 
         if (string.IsNullOrWhiteSpace(firstName))
         {
@@ -122,7 +121,6 @@ public sealed class AuthService(
         var signupSelection = await ValidateSignupSelectionAsync(
             examTypeId,
             professionId,
-            sessionId,
             countryTarget,
             cancellationToken);
         // Enforce password policy now that we have the resolved email. Placed here (not
@@ -176,7 +174,7 @@ public sealed class AuthService(
             LastName = lastName,
             ExamTypeId = signupSelection.ExamType.Id,
             ProfessionId = signupSelection.Profession.Id,
-            SessionId = signupSelection.Session.Id,
+            SessionId = string.Empty,
             CountryTarget = countryTarget,
             MobileNumber = mobileNumber,
             AgreeToTerms = request.AgreeToTerms ?? false,
@@ -231,55 +229,14 @@ public sealed class AuthService(
             .OrderBy(item => item.SortOrder)
             .ToListAsync(cancellationToken);
 
-        var sessions = await db.SignupSessionCatalog
-            .AsNoTracking()
-            .Where(item => item.IsActive)
-            .OrderBy(item => item.SortOrder)
-            .ToListAsync(cancellationToken);
-
-        var billingPlans = await db.BillingPlans
-            .AsNoTracking()
-            .Where(plan => plan.Status == BillingPlanStatus.Active && plan.IsVisible)
-            .OrderBy(plan => plan.DisplayOrder)
-            .ThenBy(plan => plan.Price)
-            .ThenBy(plan => plan.Name)
-            .Select(plan => new SignupBillingPlanResponse(
-                plan.Id,
-                plan.Code,
-                plan.Name,
-                plan.Description,
-                plan.Price,
-                plan.Currency,
-                plan.Interval,
-                plan.IncludedCredits,
-                plan.DisplayOrder,
-                plan.IsVisible,
-                plan.IsRenewable,
-                plan.TrialDays,
-                DeserializeStringList(plan.IncludedSubtestsJson),
-                JsonSupport.Deserialize<Dictionary<string, object?>>(plan.EntitlementsJson, new Dictionary<string, object?>())))
-            .ToListAsync(cancellationToken);
-
         return new SignupCatalogResponse(
             examTypes,
             professions.Select(item => new SignupProfessionResponse(
                 item.Id,
                 item.Label,
-                DeserializeStringList(item.CountryTargetsJson),
+                TargetCountryOptions.All,
                 DeserializeStringList(item.ExamTypeIdsJson),
                 item.Description)).ToList(),
-            sessions.Select(item => new SignupSessionResponse(
-                item.Id,
-                item.Name,
-                item.ExamTypeId,
-                DeserializeStringList(item.ProfessionIdsJson),
-                item.PriceLabel,
-                item.StartDate,
-                item.EndDate,
-                item.DeliveryMode,
-                item.Capacity,
-                item.SeatsRemaining)).ToList(),
-            billingPlans,
             ExternalAuthProviders.All
                 .Where(provider => externalAuthOptions.Value.GetProvider(provider).Enabled)
                 .ToArray());
@@ -1267,10 +1224,9 @@ public sealed class AuthService(
         return externalAuthTicketService.ReadRegistrationToken(externalRegistrationToken);
     }
 
-    private async Task<(SignupExamTypeCatalog ExamType, SignupProfessionCatalog Profession, SignupSessionCatalog Session)> ValidateSignupSelectionAsync(
+    private async Task<(SignupExamTypeCatalog ExamType, SignupProfessionCatalog Profession)> ValidateSignupSelectionAsync(
         string examTypeId,
         string professionId,
-        string sessionId,
         string countryTarget,
         CancellationToken cancellationToken)
     {
@@ -1284,31 +1240,18 @@ public sealed class AuthService(
             .SingleOrDefaultAsync(item => item.Id == professionId && item.IsActive, cancellationToken)
             ?? throw ApiException.Validation("profession_invalid", "Select a valid profession.");
 
-        var session = await db.SignupSessionCatalog
-            .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == sessionId && item.IsActive, cancellationToken)
-            ?? throw ApiException.Validation("session_invalid", "Select a valid session.");
-
         var professionExamTypes = DeserializeStringList(profession.ExamTypeIdsJson);
         if (!professionExamTypes.Contains(examType.Id, StringComparer.Ordinal))
         {
             throw ApiException.Validation("profession_exam_mismatch", "The selected profession is not available for that exam.");
         }
 
-        var allowedCountries = DeserializeStringList(profession.CountryTargetsJson);
-        if (allowedCountries.Count > 0 && !allowedCountries.Contains(countryTarget, StringComparer.OrdinalIgnoreCase))
+        if (!TargetCountryOptions.Contains(countryTarget))
         {
             throw ApiException.Validation("country_target_invalid", "Select a valid target country.");
         }
 
-        var sessionProfessionIds = DeserializeStringList(session.ProfessionIdsJson);
-        if (!string.Equals(session.ExamTypeId, examType.Id, StringComparison.Ordinal)
-            || !sessionProfessionIds.Contains(profession.Id, StringComparer.Ordinal))
-        {
-            throw ApiException.Validation("session_selection_invalid", "The selected session is not available for this exam and profession.");
-        }
-
-        return (examType, profession, session);
+        return (examType, profession);
     }
 
     private static IReadOnlyList<string> DeserializeStringList(string json)

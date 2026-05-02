@@ -668,7 +668,7 @@ public class AuthFlowsTests
         Assert.Equal("One", registrationProfile.LastName);
         Assert.Equal("oet", registrationProfile.ExamTypeId);
         Assert.Equal("nursing", registrationProfile.ProfessionId);
-        Assert.Equal("session-oet-nursing-apr", registrationProfile.SessionId);
+        Assert.Equal(string.Empty, registrationProfile.SessionId);
         Assert.Equal("Australia", registrationProfile.CountryTarget);
         Assert.Equal("+923001234567", registrationProfile.MobileNumber);
         Assert.True(registrationProfile.AgreeToTerms);
@@ -681,6 +681,112 @@ public class AuthFlowsTests
     }
 
     [Fact]
+    public async Task AuthEndpoints_RegisterLearner_IgnoresLegacySessionSelection()
+    {
+        await using var harness = CreateAuthApiHarness();
+        var email = $"legacy-session-{Guid.NewGuid():N}@example.test";
+
+        var response = await harness.Client.PostAsJsonAsync("/v1/auth/register", new
+        {
+            email,
+            password = "Password123!",
+            role = ApplicationUserRoles.Learner,
+            displayName = "Legacy Session",
+            firstName = "Legacy",
+            lastName = "Session",
+            mobileNumber = "+923001234567",
+            examTypeId = "oet",
+            professionId = "nursing",
+            sessionId = "session-oet-nursing-apr",
+            countryTarget = "Australia",
+            agreeToTerms = true,
+            agreeToPrivacy = true,
+            marketingOptIn = false
+        });
+
+        response.EnsureSuccessStatusCode();
+
+        await using var readDb = new LearnerDbContext(harness.DbOptions);
+        var account = await readDb.ApplicationUserAccounts.SingleAsync(x => x.Email == email);
+        var registrationProfile = await readDb.LearnerRegistrationProfiles.SingleAsync(x => x.ApplicationUserAccountId == account.Id);
+        Assert.Equal(string.Empty, registrationProfile.SessionId);
+    }
+
+    [Theory]
+    [InlineData("United Kingdom")]
+    [InlineData("Ireland")]
+    [InlineData("Scotland")]
+    [InlineData("USA")]
+    [InlineData("Australia")]
+    [InlineData("New Zealand")]
+    [InlineData("Canada")]
+    [InlineData("Gulf Countries")]
+    [InlineData("Other Countries")]
+    public async Task AuthService_RegisterLearner_AcceptsPrdTargetCountryOptionsWithoutSession(string countryTarget)
+    {
+        var harness = CreateAuthServiceHarness();
+        var email = $"learner-{Guid.NewGuid():N}@example.test";
+
+        var session = await harness.Service.RegisterLearnerAsync(
+            CreateLearnerRegisterRequest(
+                email: email,
+                countryTarget: countryTarget));
+
+        Assert.Equal(email, session.CurrentUser.Email);
+
+        await using var readDb = new LearnerDbContext(harness.DbOptions);
+        var account = await readDb.ApplicationUserAccounts.SingleAsync(x => x.Email == email);
+        var registrationProfile = await readDb.LearnerRegistrationProfiles.SingleAsync(x => x.ApplicationUserAccountId == account.Id);
+        Assert.Equal(string.Empty, registrationProfile.SessionId);
+        Assert.Equal(countryTarget, registrationProfile.CountryTarget);
+    }
+
+    [Theory]
+    [InlineData("United Kingdom")]
+    [InlineData("Ireland")]
+    [InlineData("Scotland")]
+    [InlineData("USA")]
+    [InlineData("Australia")]
+    [InlineData("New Zealand")]
+    [InlineData("Canada")]
+    [InlineData("Gulf Countries")]
+    [InlineData("Other Countries")]
+    public async Task AuthEndpoints_RegisterLearner_BootstrapUsesRegisteredTargetCountry(string countryTarget)
+    {
+        await using var harness = CreateAuthApiHarness();
+        var email = $"bootstrap-country-{Guid.NewGuid():N}@example.test";
+
+        var response = await harness.Client.PostAsJsonAsync(
+            "/v1/auth/register",
+            CreateLearnerRegisterRequest(email: email, countryTarget: countryTarget));
+        response.EnsureSuccessStatusCode();
+
+        var session = await response.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
+        Assert.NotNull(session);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/v1/me/bootstrap");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session!.AccessToken);
+
+        var bootstrapResponse = await harness.Client.SendAsync(request);
+        bootstrapResponse.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await bootstrapResponse.Content.ReadAsStringAsync());
+
+        Assert.Equal(countryTarget, json.RootElement.GetProperty("goals").GetProperty("targetCountry").GetString());
+    }
+
+    [Fact]
+    public async Task AuthService_RegisterLearner_RejectsTargetCountryOutsidePrdList()
+    {
+        var harness = CreateAuthServiceHarness();
+
+        var error = await Assert.ThrowsAsync<ApiException>(() => harness.Service.RegisterLearnerAsync(
+            CreateLearnerRegisterRequest(
+                email: $"learner-{Guid.NewGuid():N}@example.test",
+                countryTarget: "Atlantis")));
+
+        Assert.Equal("country_target_invalid", error.ErrorCode);
+    }
+
+    [Fact]
     public async Task AuthService_GetSignupCatalog_ReturnsImportedCatalog()
     {
         var harness = CreateAuthServiceHarness();
@@ -690,7 +796,20 @@ public class AuthFlowsTests
         Assert.Contains(catalog.ExamTypes, item => item.Id == "oet");
         Assert.Contains(catalog.ExamTypes, item => item.Id == "ielts");
         Assert.Contains(catalog.Professions, item => item.Id == "nursing" && item.ExamTypeIds.Contains("oet"));
-        Assert.Contains(catalog.Sessions, item => item.Id == "session-oet-nursing-apr" && item.ProfessionIds.Contains("nursing"));
+        Assert.All(catalog.Professions, item => Assert.Equal(
+            new[]
+            {
+                "United Kingdom",
+                "Ireland",
+                "Scotland",
+                "USA",
+                "Australia",
+                "New Zealand",
+                "Canada",
+                "Gulf Countries",
+                "Other Countries",
+            },
+            item.CountryTargets));
     }
 
     [Fact]
@@ -1015,7 +1134,6 @@ public class AuthFlowsTests
                 "mobileNumber",
                 "examTypeId",
                 "professionId",
-                "sessionId",
                 "countryTarget",
                 "agreeToTerms",
                 "agreeToPrivacy",
@@ -1770,7 +1888,6 @@ public class AuthFlowsTests
         string mobileNumber = "+923001234567",
         string examTypeId = "oet",
         string professionId = "nursing",
-        string sessionId = "session-oet-nursing-apr",
         string countryTarget = "Australia",
         bool agreeToTerms = true,
         bool agreeToPrivacy = true,
@@ -1786,7 +1903,6 @@ public class AuthFlowsTests
             mobileNumber,
             examTypeId,
             professionId,
-            sessionId,
             countryTarget,
             agreeToTerms,
             agreeToPrivacy,

@@ -2,11 +2,9 @@
 
 import {
   IconArrowRight,
-  IconBook2,
   IconBrandWhatsapp,
   IconCalendarEvent,
   IconCheck,
-  IconCreditCard,
   IconLifebuoy,
   IconMail,
   IconMapPin,
@@ -31,10 +29,6 @@ export default function RegisterSuccessPage() {
   const fullName = searchParams.get('fullName') ?? 'New learner';
   const exam = searchParams.get('exam') ?? 'OET';
   const profession = searchParams.get('profession') ?? 'Profession';
-  const session = searchParams.get('session') ?? 'Session pending';
-  const sessionPrice = searchParams.get('sessionPrice') ?? 'TBC';
-  const sessionMode = searchParams.get('sessionMode') ?? 'online';
-  const sessionStart = searchParams.get('sessionStart') ?? 'TBC';
   const country = searchParams.get('country') ?? 'Not selected';
   const registrationStamp = searchParams.get('stamp') ?? 'just now';
   const nextPath = searchParams.get('next');
@@ -94,11 +88,10 @@ export default function RegisterSuccessPage() {
               Enrollment Snapshot
             </span>
             <strong className={styles.successHighlightPrice}>
-              {sessionPrice}
+              {exam}
             </strong>
             <p>
-              {sessionMode} access for the {session} cohort starting{' '}
-              {sessionStart}.
+              {profession} candidate preparing for {country}.
             </p>
             <div className={styles.successHighlightFoot}>
               <span>{country}</span>
@@ -109,7 +102,7 @@ export default function RegisterSuccessPage() {
 
         <div className={styles.successContentGrid}>
           <section className={styles.successSummaryCard}>
-            <h4>Subscription And Enrollment Summary</h4>
+            <h4>Registration Summary</h4>
             <div className={styles.successSummaryGrid}>
               <div className={styles.successSummaryItem}>
                 <span className={styles.summaryIcon}>
@@ -131,20 +124,11 @@ export default function RegisterSuccessPage() {
               </div>
               <div className={styles.successSummaryItem}>
                 <span className={styles.summaryIcon}>
-                  <IconBook2 size={14} />
+                  <IconMapPin size={14} />
                 </span>
                 <div>
-                  <strong>Selected Session</strong>
-                  <p>{session}</p>
-                </div>
-              </div>
-              <div className={styles.successSummaryItem}>
-                <span className={styles.summaryIcon}>
-                  <IconCreditCard size={14} />
-                </span>
-                <div>
-                  <strong>Subscription Snapshot</strong>
-                  <p>{`${sessionPrice} - ${sessionMode}`}</p>
+                  <strong>Target Country</strong>
+                  <p>{country}</p>
                 </div>
               </div>
               <div className={styles.successSummaryItem}>
@@ -152,17 +136,8 @@ export default function RegisterSuccessPage() {
                   <IconCalendarEvent size={14} />
                 </span>
                 <div>
-                  <strong>Session Start</strong>
-                  <p>{sessionStart}</p>
-                </div>
-              </div>
-              <div className={styles.successSummaryItem}>
-                <span className={styles.summaryIcon}>
-                  <IconMapPin size={14} />
-                </span>
-                <div>
-                  <strong>Target Country</strong>
-                  <p>{country}</p>
+                  <strong>Registered</strong>
+                  <p>{registrationStamp}</p>
                 </div>
               </div>
             </div>

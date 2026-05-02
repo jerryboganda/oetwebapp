@@ -5,7 +5,6 @@ import { useRef } from 'react';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import type { Transition } from 'motion/react';
 import { motionTokens } from '@/lib/motion';
-import { Badge, type BadgeProps } from '@/components/ui/badge';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'offline-saved' | 'failed';
 
@@ -13,12 +12,6 @@ interface WritingEditorProps {
   value: string;
   onChange: (value: string) => void;
   saveStatus?: SaveStatus;
-  wordCount?: number;
-  wordCountStatus?: {
-    label: string;
-    message: string;
-    variant: NonNullable<BadgeProps['variant']>;
-  };
   fontSize?: number;
   onFontSizeChange?: (size: number) => void;
   showFontSizeControls?: boolean;
@@ -37,13 +30,12 @@ const saveStatusLabels: Record<SaveStatus, { label: string; color: string }> = {
 };
 
 export function WritingEditor({
-  value, onChange, saveStatus = 'idle', wordCount, wordCountStatus,
+  value, onChange, saveStatus = 'idle',
   fontSize = 16, onFontSizeChange, placeholder = 'Begin writing your response...', disabled, spellCheck = true, className,
   showFontSizeControls = true,
 }: WritingEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prefersReducedMotion = useReducedMotion();
-  const count = wordCount ?? value.trim().split(/\s+/).filter(Boolean).length;
   const statusTransition: Transition = prefersReducedMotion
     ? { duration: 0.01 }
     : motionTokens.spring.item;
@@ -55,14 +47,6 @@ export function WritingEditor({
         {/* Toolbar */}
         <div className="flex items-center justify-between shrink-0 border-b border-border/40 bg-white/60 backdrop-blur-md px-4 py-3 sm:px-6 z-10 transition-all shadow-[0_4px_24px_-12px_rgba(0,0,0,0.05)]">
           <div className="flex flex-wrap items-center gap-3 text-xs text-navy/70">
-            <span className="font-bold bg-white px-3 py-1.5 rounded-full shadow-sm ring-1 ring-black/5 tracking-wide uppercase text-[10px]">
-              <span className="text-primary pr-1">{count}</span> words
-            </span>
-            {wordCountStatus ? (
-              <Badge variant={wordCountStatus.variant} size="sm" title={wordCountStatus.message} className="shadow-sm">
-                {wordCountStatus.label}
-              </Badge>
-            ) : null}
             <AnimatePresence initial={false} mode="wait">
               {saveStatus !== 'idle' ? (
                 <motion.span

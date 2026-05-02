@@ -98,7 +98,6 @@ import type {
   SpeakingAuditInput,
   WritingLintInput,
 } from './rulebook';
-import { DEFAULT_WRITING_TARGET_WORD_RANGE } from './writing/workflow';
 import type {
   VideoLessonDetail,
   VideoLessonListItem,
@@ -804,12 +803,6 @@ async function resolveReviewTarget(submissionId: string): Promise<{ attemptId: s
 }
 
 function mapWritingTask(item: ApiRecord): WritingTask {
-  const targetWordRange = asRecord(item.targetWordRange ?? item.wordCount ?? item.targetBodyWordRange);
-  const targetMin = Number(targetWordRange.min ?? targetWordRange.minimum ?? item.targetWordMin ?? DEFAULT_WRITING_TARGET_WORD_RANGE.min);
-  const targetMax = Number(targetWordRange.max ?? targetWordRange.maximum ?? item.targetWordMax ?? DEFAULT_WRITING_TARGET_WORD_RANGE.max);
-  const warningMin = Number(targetWordRange.warningMin ?? item.wordWarningMin ?? DEFAULT_WRITING_TARGET_WORD_RANGE.warningMin);
-  const warningMax = Number(targetWordRange.warningMax ?? item.wordWarningMax ?? DEFAULT_WRITING_TARGET_WORD_RANGE.warningMax);
-
   return {
     id: item.contentId,
     title: item.title,
@@ -826,12 +819,6 @@ function mapWritingTask(item: ApiRecord): WritingTask {
     recipient: typeof item.recipient === 'string' ? item.recipient : typeof item.recipientName === 'string' ? item.recipientName : undefined,
     purpose: typeof item.purpose === 'string' ? item.purpose : undefined,
     status: typeof item.status === 'string' ? titleCase(item.status) : undefined,
-    targetWordRange: {
-      min: Number.isFinite(targetMin) ? targetMin : DEFAULT_WRITING_TARGET_WORD_RANGE.min,
-      max: Number.isFinite(targetMax) ? targetMax : DEFAULT_WRITING_TARGET_WORD_RANGE.max,
-      warningMin: Number.isFinite(warningMin) ? warningMin : DEFAULT_WRITING_TARGET_WORD_RANGE.warningMin,
-      warningMax: Number.isFinite(warningMax) ? warningMax : DEFAULT_WRITING_TARGET_WORD_RANGE.warningMax,
-    },
   };
 }
 
@@ -1337,7 +1324,6 @@ export async function submitWritingTask(taskId: string, content: string, mode: '
     taskId,
     taskTitle: task.title,
     content,
-    wordCount: content.split(/\s+/).filter(Boolean).length,
     submittedAt: new Date().toISOString(),
     evalStatus: toEvalStatus(submitted.state),
     reviewStatus: 'not_requested',
@@ -1385,7 +1371,6 @@ export async function fetchWritingSubmissions(): Promise<WritingSubmission[]> {
       taskId: item.contentId,
       taskTitle: item.taskName,
       content: '',
-      wordCount: 0,
       submittedAt: item.attemptDate,
       evalStatus: item.evaluationId ? 'completed' : 'processing',
       scoreEstimate: scoreRangeDisplay(item.scoreEstimate),
@@ -4355,13 +4340,13 @@ export interface RecallsTodayResponse {
 export interface RecallsQueueItem {
   kind: 'vocab' | 'review';
   id: string;
+  termId: string | null;
   title: string;
   subtitle: string | null;
   dueDate: string | null;
   starred: boolean;
   starReason: string | null;
   mastery: string;
-  audioUrl: string | null;
   ipa: string | null;
   extraJson: string | null;
 }
@@ -4426,9 +4411,29 @@ export async function submitRecallsListenType(termId: string, typed: string) {
 }
 
 export async function fetchRecallsAudio(termId: string, speed: 'normal' | 'slow' | 'sentence' = 'normal') {
-  return apiRequest<{ url: string; provider: string }>(
-    `/v1/recalls/audio/${encodeURIComponent(termId)}?speed=${speed}`,
-  );
+  const path = `/v1/recalls/audio/${encodeURIComponent(termId)}?speed=${speed}`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    headers: await getHeaders(path, undefined, { json: false }),
+  });
+
+  if (!response.ok) {
+    let code = response.status === 401 ? 'not_authenticated' : response.status === 403 ? 'forbidden' : 'unknown_error';
+    let message = `Request failed: ${response.status}`;
+    try {
+      const error = await response.json();
+      code = error.code ?? code;
+      message = error.message ?? error.title ?? message;
+    } catch {
+      // Non-JSON error bodies are mapped through the status code above.
+    }
+    throw new ApiError(response.status, code, message, isRetryable(response.status));
+  }
+
+  const blob = await response.blob();
+  return {
+    url: URL.createObjectURL(blob),
+    provider: response.headers.get('x-recalls-tts-provider') ?? 'stream',
+  };
 }
 
 export async function fetchRecallsLibrary(opts?: { bucket?: 'starred' | 'weak' | 'mastered' | 'new'; topic?: string }) {
@@ -4468,8 +4473,6 @@ export interface RecallsQuizItem {
   definition: string;
   exampleSentence: string | null;
   blankedSentence: string | null;
-  audioUrl: string | null;
-  audioSentenceUrl: string | null;
   ipa: string | null;
   americanSpelling: string | null;
   starred: boolean;

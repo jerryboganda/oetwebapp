@@ -300,7 +300,7 @@ describe('writing linter — R10.10 "X ago" past simple only', () => {
   });
 });
 
-describe('writing linter — R03.8 / R08.1 length + paragraph count', () => {
+describe('writing linter — R08.1 paragraph count', () => {
   it('flags body with only one paragraph', () => {
     const findings = lintWritingLetter(base({
       letterText: 'Dear Dr Smith,\nRe: Ms A\n\nOne paragraph only.\n\nYours sincerely,\nDoctor',
@@ -308,11 +308,17 @@ describe('writing linter — R03.8 / R08.1 length + paragraph count', () => {
     expect(findings.find((f) => f.ruleId === 'R08.1')).toBeDefined();
   });
 
-  it('flags body that is too short', () => {
-    const findings = lintWritingLetter(base({
+  it('does not emit any R03.8 finding regardless of body length (word-count logic decommissioned per spec v1.0)', () => {
+    const shortFindings = lintWritingLetter(base({
       letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nMs A is 40.\n\nYours sincerely,\nDoctor',
     }));
-    expect(findings.find((f) => f.ruleId === 'R03.8')).toBeDefined();
+    expect(shortFindings.find((f) => f.ruleId === 'R03.8')).toBeUndefined();
+
+    const longBody = Array.from({ length: 60 }, () => 'word').join(' ');
+    const longFindings = lintWritingLetter(base({
+      letterText: `Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\n${longBody} ${longBody} ${longBody} ${longBody} ${longBody}.\n\nYours sincerely,\nDoctor`,
+    }));
+    expect(longFindings.find((f) => f.ruleId === 'R03.8')).toBeUndefined();
   });
 });
 

@@ -135,7 +135,7 @@ function renderScoringSection(ctx: AiGroundingContext): string {
     '',
     '- LISTENING: Grade B at 350/500; raw 30/42 ≡ 350/500 EXACTLY.',
     '- READING: Grade B at 350/500; raw 30/42 ≡ 350/500 EXACTLY.',
-    `- WRITING (country-aware): Grade B at ${OET_SCALED_PASS_B}/500 for UK/IE/AU/NZ/CA; Grade C+ at ${OET_SCALED_PASS_C_PLUS}/500 for US/QA. Without a confirmed country, return "country_required" instead of a grade.`,
+    `- WRITING (country-aware): Grade B at ${OET_SCALED_PASS_B}/500 for UK/IE/AU/NZ/CA and broad signup categories until a specific regulator is captured; Grade C+ at ${OET_SCALED_PASS_C_PLUS}/500 for US/QA. Without a confirmed country, return "country_required" instead of a grade.`,
     '- SPEAKING: Grade B at 350/500, universal (no country variation).',
     '',
     focusLine,

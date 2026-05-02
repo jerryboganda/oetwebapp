@@ -185,7 +185,6 @@ describe('auth-client', () => {
       mobileNumber: '+923001234567',
       examTypeId: 'oet',
       professionId: 'nursing',
-      sessionId: 'session-oet-nursing-apr',
       countryTarget: 'Australia',
       agreeToTerms: true,
       agreeToPrivacy: true,

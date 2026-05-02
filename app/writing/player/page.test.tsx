@@ -10,7 +10,6 @@ interface MockWritingEditorProps {
   saveStatus?: string;
   disabled?: boolean;
   spellCheck?: boolean;
-  wordCountStatus?: { label: string };
 }
 
 const fetchWritingTaskMock = vi.fn();
@@ -59,12 +58,11 @@ vi.mock('@/components/domain/writing-case-notes-panel', () => ({
 }));
 
 vi.mock('@/components/domain/writing-editor', () => ({
-  WritingEditor: ({ saveStatus, disabled, spellCheck, wordCountStatus }: MockWritingEditorProps) => (
+  WritingEditor: ({ saveStatus, disabled, spellCheck }: MockWritingEditorProps) => (
     <div data-testid="writing-editor-shell" data-disabled={String(Boolean(disabled))} data-spellcheck={String(Boolean(spellCheck))}>
       <label htmlFor="writing-editor">Writing editor</label>
       <textarea id="writing-editor" aria-label="Writing editor" />
       <div aria-label="save-status">{saveStatus}</div>
-      <div aria-label="word-count-status">{wordCountStatus?.label}</div>
     </div>
   ),
 }));
@@ -92,7 +90,6 @@ describe('WritingPlayer', () => {
     scenarioType: 'Referral',
     letterType: 'Referral',
     caseNotes: 'Patient details and case notes.',
-    targetWordRange: { min: 180, max: 200, warningMin: 170, warningMax: 220 },
   };
 
   beforeEach(() => {
@@ -125,7 +122,7 @@ describe('WritingPlayer', () => {
     expect(screen.getAllByTestId('writing-editor-shell').every(editor => editor.getAttribute('data-spellcheck') === 'false')).toBe(true);
   });
 
-  it('supports learning mode with elapsed timer, rulebook support, and submit overlay', async () => {
+  it('supports learning mode with elapsed timer, rulebook support, and one-tap submit (no confirmation modal)', async () => {
     renderWithRouter(<WritingPlayer />, { searchParams: new URLSearchParams('taskId=wt-001&mode=learning') });
 
     await waitFor(() => expect(screen.getByText('Practice Writing Request')).toBeInTheDocument());
@@ -142,13 +139,12 @@ describe('WritingPlayer', () => {
     expect(screen.getAllByTestId('writing-editor-shell').every(editor => editor.getAttribute('data-spellcheck') === 'true')).toBe(true);
     expect(screen.getAllByText('Rulebook Review').length).toBeGreaterThan(0);
 
+    // Per Writing Module Spec v1.0: clicking Submit calls submitWritingTask
+    // directly without showing any "Submit Your Response?" confirmation modal.
     await userEvent.click(screen.getByRole('button', { name: /submit/i }));
-    expect(await screen.findByRole('dialog', { name: /submit your response/i })).toBeInTheDocument();
-    expect(screen.getByText(/writing correction workflow/i)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: /submit your response/i })).not.toBeInTheDocument();
-    });
+    await waitFor(() => expect(submitWritingTaskMock).toHaveBeenCalled());
+    expect(screen.queryByRole('dialog', { name: /submit your response/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/word count/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/likely too short/i)).not.toBeInTheDocument();
   });
 });

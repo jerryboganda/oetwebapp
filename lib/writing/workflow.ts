@@ -9,13 +9,6 @@ export const WRITING_READING_WINDOW_SECONDS = 5 * 60;
 export const WRITING_WINDOW_SECONDS = 40 * 60;
 export const WRITING_TOTAL_SECONDS = WRITING_READING_WINDOW_SECONDS + WRITING_WINDOW_SECONDS;
 
-export const DEFAULT_WRITING_TARGET_WORD_RANGE = {
-  min: 180,
-  max: 200,
-  warningMin: 170,
-  warningMax: 220,
-} as const;
-
 export const WRITING_LETTER_TYPES = [
   'Referral',
   'Discharge',
@@ -25,15 +18,6 @@ export const WRITING_LETTER_TYPES = [
 ] as const;
 
 export type WritingLetterType = (typeof WRITING_LETTER_TYPES)[number];
-
-export type WritingWordCountState = 'empty' | 'under-warning' | 'near-target' | 'target' | 'over-warning';
-
-export interface WritingWordCountStatus {
-  state: WritingWordCountState;
-  label: string;
-  message: string;
-  variant: 'muted' | 'info' | 'success' | 'warning';
-}
 
 export interface WritingCriterionDescriptor {
   code: WritingCriterionCode;
@@ -83,64 +67,4 @@ export const WRITING_CRITERIA: readonly WritingCriterionDescriptor[] = [
 
 export function normalizeWritingPracticeMode(value: string | null | undefined): WritingPracticeMode {
   return value?.toLowerCase() === 'learning' ? 'learning' : 'exam';
-}
-
-export interface WritingTargetWordRange {
-  min: number;
-  max: number;
-  warningMin: number;
-  warningMax: number;
-}
-
-export function getWritingWordCountStatus(
-  wordCount: number,
-  range: Partial<WritingTargetWordRange> = DEFAULT_WRITING_TARGET_WORD_RANGE,
-): WritingWordCountStatus {
-  const min = range.min ?? DEFAULT_WRITING_TARGET_WORD_RANGE.min;
-  const max = range.max ?? DEFAULT_WRITING_TARGET_WORD_RANGE.max;
-  const warningMin = range.warningMin ?? DEFAULT_WRITING_TARGET_WORD_RANGE.warningMin;
-  const warningMax = range.warningMax ?? DEFAULT_WRITING_TARGET_WORD_RANGE.warningMax;
-
-  if (wordCount === 0) {
-    return {
-      state: 'empty',
-      label: 'No body words yet',
-      message: `Target body length is ${min}-${max} words. Word count is guidance only, not an automatic fail rule.`,
-      variant: 'muted',
-    };
-  }
-
-  if (wordCount < warningMin) {
-    return {
-      state: 'under-warning',
-      label: 'Likely too short',
-      message: `Below ${warningMin} words: check whether key reader actions and relevant case notes are missing.`,
-      variant: 'warning',
-    };
-  }
-
-  if (wordCount > warningMax) {
-    return {
-      state: 'over-warning',
-      label: 'Likely too long',
-      message: `Above ${warningMax} words: check for irrelevant notes and tighten conciseness. Do not mark down by count alone.`,
-      variant: 'warning',
-    };
-  }
-
-  if (wordCount >= min && wordCount <= max) {
-    return {
-      state: 'target',
-      label: 'Target range',
-      message: `Within the usual ${min}-${max} body-word target. Keep prioritising relevance and accuracy.`,
-      variant: 'success',
-    };
-  }
-
-  return {
-    state: 'near-target',
-    label: 'Near target',
-    message: `Close to the ${min}-${max} body-word target. Word count supports judgment; it is not a standalone score.`,
-    variant: 'info',
-  };
 }

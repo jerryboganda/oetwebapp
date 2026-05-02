@@ -1,11 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ListenAndType } from '@/components/domain/recalls/listen-and-type';
+import { ApiError } from '@/lib/api';
 import * as api from '@/lib/api';
 
 describe('ListenAndType', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     Object.defineProperty(window, 'HTMLMediaElement', {
       writable: true,
       value: class {
@@ -62,5 +64,37 @@ describe('ListenAndType', () => {
     await user.click(screen.getByRole('button', { name: /Check answer/i }));
 
     expect(await screen.findByText(/^Correct$/i)).toBeInTheDocument();
+  });
+
+  it('fetches paid-gated audio before playback', async () => {
+    const fetchAudio = vi.spyOn(api, 'fetchRecallsAudio').mockResolvedValue({
+      url: '/v1/recalls/audio/term-3/file',
+      provider: 'mock',
+    });
+    const play = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('Audio', class {
+      play() {
+        return play();
+      }
+    });
+
+    const user = userEvent.setup();
+    render(<ListenAndType termId="term-3" />);
+    await user.click(screen.getByRole('button', { name: /play british pronunciation/i }));
+
+    expect(fetchAudio).toHaveBeenCalledWith('term-3', 'normal');
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the upgrade modal when the audio gate returns payment required', async () => {
+    vi.spyOn(api, 'fetchRecallsAudio').mockRejectedValue(
+      new ApiError(402, 'subscription_required', 'Pronunciation audio is available for paid candidates only.', false),
+    );
+
+    const user = userEvent.setup();
+    render(<ListenAndType termId="term-4" />);
+    await user.click(screen.getByRole('button', { name: /play british pronunciation/i }));
+
+    expect(await screen.findByText(/upgrade to hear pronunciations/i)).toBeInTheDocument();
   });
 });

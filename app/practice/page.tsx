@@ -32,13 +32,13 @@ const PRACTICE_MODES = [
     href: '/speaking',
     icon: Mic,
     title: 'Speaking Practice',
-    description: 'Role plays, handovers, and pronunciation drills.',
+    description: 'Role plays, handovers, and speaking clarity drills.',
   },
   {
-    href: '/pronunciation',
-    icon: Mic,
-    title: 'Pronunciation Drills',
-    description: 'Record yourself, get phoneme-level feedback, and train weak sounds.',
+    href: '/recalls/words',
+    icon: Headphones,
+    title: 'Recalls Audio',
+    description: 'Click recall words to hear British clinical pronunciation on paid plans.',
   },
   {
     href: '/reading',

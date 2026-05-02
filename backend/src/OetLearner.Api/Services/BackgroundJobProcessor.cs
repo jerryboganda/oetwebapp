@@ -380,18 +380,17 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         var attempt = await db.Attempts.FirstAsync(x => x.Id == job.AttemptId, cancellationToken);
         var evaluation = await db.Evaluations.FirstAsync(x => x.AttemptId == attempt.Id, cancellationToken);
 
-        var wordCount = attempt.DraftContent.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-        var concisenessBand = wordCount switch
-        {
-            < 140 => "3-4/6",
-            <= 220 => "4-5/6",
-            _ => "3/6"
-        };
+        // Per Writing Module Technical Specification v1.0 (Dr. Ahmed Hesham),
+        // the platform must NOT evaluate response length. Scoring bands here
+        // are length-independent placeholder values for the mock evaluation
+        // pipeline; tutor review remains the final marking path.
+        _ = attempt.DraftContent;
+        var concisenessBand = "4-5/6";
 
         evaluation.State = AsyncState.Completed;
-        evaluation.ScoreRange = wordCount > 200 ? "340-370" : "320-350";
-        evaluation.GradeRange = wordCount > 200 ? "B-B+" : "C+-B";
-        evaluation.ConfidenceBand = wordCount > 160 ? ConfidenceBand.Medium : ConfidenceBand.Low;
+        evaluation.ScoreRange = "330-360";
+        evaluation.GradeRange = "C+-B";
+        evaluation.ConfidenceBand = ConfidenceBand.Medium;
         evaluation.StrengthsJson = JsonSupport.Serialize(new[]
         {
             "Your structure stays focused on the receiving clinician.",

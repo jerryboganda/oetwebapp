@@ -82,15 +82,29 @@ export default function RecallsCardsPage() {
               Nothing due. Visit <code className="rounded bg-background px-1 py-0.5">/recalls/words</code> to seed cards.
             </div>
           ) : mode === 'listen_and_type' && current.kind === 'vocab' ? (
-            <ListenAndType
-              key={current.id}
-              termId={current.id}
-              termHint={current.subtitle ?? undefined}
-              audioUrl={current.audioUrl}
-              onResult={() => {
-                setTimeout(() => setIndex((i) => Math.min(i + 1, (queue?.length ?? 1) - 1)), 1200);
-              }}
-            />
+            current.termId ? (
+              <ListenAndType
+                key={current.id}
+                termId={current.termId}
+                termHint={current.subtitle ?? undefined}
+                onResult={() => {
+                  setTimeout(() => setIndex((i) => Math.min(i + 1, (queue?.length ?? 1) - 1)), 1200);
+                }}
+              />
+            ) : (
+              <div className="space-y-3">
+                <InlineAlert variant="warning">
+                  This vocabulary card is missing its term reference. Refresh your Recalls queue or skip this card.
+                </InlineAlert>
+                <button
+                  type="button"
+                  onClick={() => setIndex((i) => Math.min(i + 1, (queue?.length ?? 1) - 1))}
+                  className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+                >
+                  Skip card
+                </button>
+              </div>
+            )
           ) : (
             <QuizRunner mode={mode} limit={10} />
           )}

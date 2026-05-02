@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Recalls;
@@ -16,6 +17,7 @@ namespace OetLearner.Api.Services.Recalls;
 public sealed class RecallsService(
     LearnerDbContext db,
     IRecallsTtsService tts,
+    IFileStorage storage,
     IAiGatewayService gateway)
 {
     /// <summary>Today snapshot — combines vocab + review counters.</summary>
@@ -101,25 +103,25 @@ public sealed class RecallsService(
         queue.AddRange(vocabCards.Select(x => new RecallsQueueItem(
             Kind: "vocab",
             Id: x.lv.Id.ToString(),
+            TermId: x.t.Id,
             Title: x.t.Term,
             Subtitle: x.t.Definition,
             DueDate: x.lv.NextReviewDate,
             Starred: x.lv.Starred,
             StarReason: x.lv.StarReason,
             Mastery: x.lv.Mastery,
-            AudioUrl: x.t.AudioUrl,
             Ipa: x.t.IpaPronunciation,
             ExtraJson: null)));
         queue.AddRange(reviewItems.Select(r => new RecallsQueueItem(
             Kind: "review",
             Id: r.Id,
+            TermId: null,
             Title: r.SourceType,
             Subtitle: null,
             DueDate: r.DueDate,
             Starred: r.Starred,
             StarReason: r.StarReason,
             Mastery: r.Status,
-            AudioUrl: null,
             Ipa: null,
             ExtraJson: r.QuestionJson)));
 
@@ -209,20 +211,28 @@ public sealed class RecallsService(
     public async Task<RecallsAudioResponse> EnsureAudioAsync(
         string termId, string speed, CancellationToken ct)
     {
+        var normalizedSpeed = string.IsNullOrWhiteSpace(speed)
+            ? "normal"
+            : speed.Trim().ToLowerInvariant();
+        if (normalizedSpeed is not ("normal" or "slow" or "sentence"))
+        {
+            throw ApiException.Validation("INVALID_AUDIO_SPEED", "Speed must be normal, slow, or sentence.");
+        }
+
         var term = await db.VocabularyTerms.FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw ApiException.NotFound("TERM_NOT_FOUND", "Term not found.");
 
-        var existing = speed switch
+        var existing = normalizedSpeed switch
         {
             "slow" => term.AudioSlowUrl,
             "sentence" => term.AudioSentenceUrl,
             _ => term.AudioUrl,
         };
-        if (!string.IsNullOrWhiteSpace(existing))
-            return new RecallsAudioResponse(existing, "cached");
+        if (existing is { Length: > 0 } existingKey && IsStoredAudioKey(existingKey) && storage.Exists(existingKey))
+            return new RecallsAudioResponse(existingKey, "cached", ContentTypeFor(existingKey));
 
         RecallsTtsResult result;
-        if (speed == "sentence")
+        if (normalizedSpeed == "sentence")
         {
             result = await tts.GenerateSentenceAsync(
                 term.ExampleSentence ?? term.Term,
@@ -233,14 +243,33 @@ public sealed class RecallsService(
         {
             result = await tts.GenerateWordAsync(
                 term.Term,
-                new RecallsTtsOptions(Speed: speed),
+                new RecallsTtsOptions(Speed: normalizedSpeed),
                 ct);
-            if (speed == "slow") term.AudioSlowUrl = result.Url;
+            if (normalizedSpeed == "slow") term.AudioSlowUrl = result.Url;
             else term.AudioUrl = result.Url;
         }
         term.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
-        return new RecallsAudioResponse(result.Url, result.Provider);
+        return new RecallsAudioResponse(result.Url, result.Provider, result.ContentType);
+    }
+
+    private static bool IsStoredAudioKey(string value)
+        => !string.IsNullOrWhiteSpace(value)
+           && !value.StartsWith("/", StringComparison.Ordinal)
+           && !Uri.TryCreate(value, UriKind.Absolute, out _);
+
+    private static string ContentTypeFor(string storageKey)
+    {
+        var extension = Path.GetExtension(storageKey).ToLowerInvariant();
+        return extension switch
+        {
+            ".mp3" => "audio/mpeg",
+            ".webm" => "audio/webm",
+            ".ogg" => "audio/ogg",
+            ".m4a" => "audio/mp4",
+            ".wav" => "audio/wav",
+            _ => "application/octet-stream",
+        };
     }
 
     /// <summary>
@@ -483,8 +512,6 @@ public sealed class RecallsService(
                 Definition: x.t.Definition,
                 ExampleSentence: x.t.ExampleSentence,
                 BlankedSentence: BlankSentence(x.t.ExampleSentence, x.t.Term),
-                AudioUrl: x.t.AudioUrl,
-                AudioSentenceUrl: x.t.AudioSentenceUrl,
                 Ipa: x.t.IpaPronunciation,
                 AmericanSpelling: x.t.AmericanSpelling,
                 Starred: x.lv.Starred,
@@ -748,13 +775,13 @@ public record RecallsWeakTopic(string Topic, int Total, int WeakCount);
 public record RecallsQueueItem(
     string Kind,
     string Id,
+    string? TermId,
     string Title,
     string? Subtitle,
     DateOnly? DueDate,
     bool Starred,
     string? StarReason,
     string Mastery,
-    string? AudioUrl,
     string? Ipa,
     string? ExtraJson);
 
@@ -773,7 +800,7 @@ public record RecallsListenTypeResponse(
 
 public record RecallsDiffSegment(string Kind, string Text);
 
-public record RecallsAudioResponse(string Url, string Provider);
+public record RecallsAudioResponse(string StorageKey, string Provider, string ContentType);
 
 public record RecallsLibraryResponse(IReadOnlyList<RecallsLibraryItem> Items);
 
@@ -808,8 +835,6 @@ public record RecallsQuizItem(
     string Definition,
     string? ExampleSentence,
     string? BlankedSentence,
-    string? AudioUrl,
-    string? AudioSentenceUrl,
     string? Ipa,
     string? AmericanSpelling,
     bool Starred,

@@ -261,7 +261,7 @@ public partial class LearnerService(
         if (request.PreviousAttempts.HasValue) goal.PreviousAttempts = request.PreviousAttempts.Value;
         if (request.WeakSubtests is not null) goal.WeakSubtestsJson = JsonSupport.Serialize(request.WeakSubtests);
         if (request.StudyHoursPerWeek.HasValue) goal.StudyHoursPerWeek = request.StudyHoursPerWeek.Value;
-        if (request.TargetCountry is not null) goal.TargetCountry = request.TargetCountry;
+        if (request.TargetCountry is not null) goal.TargetCountry = TargetCountryOptions.Canonicalize(request.TargetCountry);
         if (request.TargetOrganization is not null) goal.TargetOrganization = request.TargetOrganization;
         if (request.DraftState is not null) goal.DraftStateJson = JsonSupport.Serialize(request.DraftState);
 
@@ -459,7 +459,7 @@ public partial class LearnerService(
 
             if (request.Values.TryGetValue("targetCountry", out var targetCountry))
             {
-                goal.TargetCountry = ReadString(targetCountry) ?? goal.TargetCountry;
+                goal.TargetCountry = TargetCountryOptions.Canonicalize(ReadString(targetCountry));
             }
 
             if (request.Values.TryGetValue("professionId", out var studyProfessionId))
@@ -1602,11 +1602,11 @@ public partial class LearnerService(
             {
                 new
                 {
-                    id = "pronunciation",
-                    title = "Pronunciation drills",
+                    id = "recalls-audio",
+                    title = "Recalls audio drills",
                     items = new[]
                     {
-                        new { id = "sp-drill-1", title = "Stress important treatment words", route = "/pronunciation" }
+                        new { id = "sp-drill-1", title = "Hear and type important treatment words", route = "/recalls/words" }
                     }
                 },
                 new
@@ -1638,7 +1638,7 @@ public partial class LearnerService(
             },
             supportEntries = new[]
             {
-                new { id = "pronunciation", title = "Pronunciation drills", description = "Target individual sounds and stress patterns before the next role play.", route = "/pronunciation" },
+                new { id = "recalls-audio", title = "Recalls Audio", description = "Click vocabulary words to hear British clinical pronunciation before the next role play.", route = "/recalls/words" },
                 new { id = "conversation", title = "AI Conversation Practice", description = "Use the server-authoritative conversation module for interactive AI patient practice.", route = "/conversation" },
                 new { id = "private-speaking", title = "Private Speaking Sessions", description = "Book human-led speaking support when you need live coaching.", route = "/private-speaking" }
             },
@@ -3251,12 +3251,26 @@ public partial class LearnerService(
         var user = await EnsureUserAsync(userId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var changed = false;
+        var registeredTargetCountry = await ResolveRegisteredTargetCountryAsync(userId, cancellationToken);
 
         var goal = await db.Goals.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
         if (goal is null)
         {
-            goal = CreateDefaultGoal(userId, user.ActiveProfessionId, now);
+            goal = CreateDefaultGoal(userId, user.ActiveProfessionId, registeredTargetCountry, now);
             db.Goals.Add(goal);
+            changed = true;
+        }
+        else if (ShouldRestoreRegisteredTargetCountry(goal, registeredTargetCountry))
+        {
+            goal.TargetCountry = registeredTargetCountry;
+            goal.UpdatedAt = now;
+            changed = true;
+        }
+        else if (TargetCountryOptions.TryCanonicalize(goal.TargetCountry, out var canonicalGoalTargetCountry)
+            && !string.Equals(goal.TargetCountry, canonicalGoalTargetCountry, StringComparison.Ordinal))
+        {
+            goal.TargetCountry = canonicalGoalTargetCountry;
+            goal.UpdatedAt = now;
             changed = true;
         }
 
@@ -3282,6 +3296,27 @@ public partial class LearnerService(
         }
 
         return user;
+    }
+
+    private async Task<string> ResolveRegisteredTargetCountryAsync(string userId, CancellationToken cancellationToken)
+    {
+        var registeredTargetCountry = await db.LearnerRegistrationProfiles
+            .AsNoTracking()
+            .Where(x => x.LearnerUserId == userId)
+            .Select(x => x.CountryTarget)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return TargetCountryOptions.TryCanonicalize(registeredTargetCountry, out var canonical)
+            ? canonical
+            : "Australia";
+    }
+
+    private static bool ShouldRestoreRegisteredTargetCountry(LearnerGoal goal, string registeredTargetCountry)
+    {
+        if (string.IsNullOrWhiteSpace(goal.TargetCountry)) return true;
+        if (goal.SubmittedAt is not null) return false;
+        if (string.Equals(registeredTargetCountry, "Australia", StringComparison.Ordinal)) return false;
+        return string.Equals(goal.TargetCountry, "Australia", StringComparison.OrdinalIgnoreCase);
     }
 
     private static object GoalDto(LearnerGoal goal) => new
@@ -3390,18 +3425,28 @@ public partial class LearnerService(
         return upload;
     }
 
-    private static object SettingsDto(LearnerSettings settings, LearnerGoal goal) => new
+    private static object SettingsDto(LearnerSettings settings, LearnerGoal goal)
     {
-        profile = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.ProfileJson, new Dictionary<string, object?>()),
-        goals = GoalSettingsDto(goal),
-        notifications = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.NotificationsJson, new Dictionary<string, object?>()),
-        privacy = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.PrivacyJson, new Dictionary<string, object?>()),
-        accessibility = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.AccessibilityJson, new Dictionary<string, object?>()),
-        audio = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.AudioJson, new Dictionary<string, object?>()),
-        study = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.StudyJson, new Dictionary<string, object?>())
-    };
+        var study = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.StudyJson, new Dictionary<string, object?>());
+        study["targetExamDate"] = goal.TargetExamDate;
+        study["studyHoursPerWeek"] = goal.StudyHoursPerWeek;
+        study["targetCountry"] = goal.TargetCountry;
+        study["professionId"] = goal.ProfessionId;
+        study["examFamilyCode"] = goal.ExamFamilyCode;
 
-    private static LearnerGoal CreateDefaultGoal(string userId, string? professionId, DateTimeOffset now)
+        return new
+        {
+            profile = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.ProfileJson, new Dictionary<string, object?>()),
+            goals = GoalSettingsDto(goal),
+            notifications = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.NotificationsJson, new Dictionary<string, object?>()),
+            privacy = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.PrivacyJson, new Dictionary<string, object?>()),
+            accessibility = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.AccessibilityJson, new Dictionary<string, object?>()),
+            audio = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.AudioJson, new Dictionary<string, object?>()),
+            study
+        };
+    }
+
+    private static LearnerGoal CreateDefaultGoal(string userId, string? professionId, string targetCountry, DateTimeOffset now)
         => new()
         {
             Id = Guid.NewGuid(),
@@ -3416,7 +3461,7 @@ public partial class LearnerService(
             PreviousAttempts = 0,
             WeakSubtestsJson = JsonSupport.Serialize(new[] { "writing", "speaking" }),
             StudyHoursPerWeek = 10,
-            TargetCountry = "Australia",
+            TargetCountry = targetCountry,
             TargetOrganization = "AHPRA",
             DraftStateJson = JsonSupport.Serialize(new Dictionary<string, object?>()),
             UpdatedAt = now,
@@ -3461,7 +3506,8 @@ public partial class LearnerService(
             StudyJson = JsonSupport.Serialize(new Dictionary<string, object?>
             {
                 ["dailyGoalMinutes"] = 45,
-                ["studyHoursPerWeek"] = goal.StudyHoursPerWeek
+                ["studyHoursPerWeek"] = goal.StudyHoursPerWeek,
+                ["targetCountry"] = goal.TargetCountry
             })
         };
 
@@ -3592,7 +3638,7 @@ public partial class LearnerService(
 
         if (values.TryGetValue("targetCountry", out var targetCountry))
         {
-            goal.TargetCountry = ReadString(targetCountry) ?? goal.TargetCountry;
+            goal.TargetCountry = TargetCountryOptions.Canonicalize(ReadString(targetCountry));
         }
 
         if (values.TryGetValue("targetOrganization", out var targetOrganization))

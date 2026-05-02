@@ -1,5 +1,4 @@
 import {
-  IconBook2,
   IconBriefcase,
   IconMail,
   IconMapPin,
@@ -8,7 +7,7 @@ import type { UseFormReturn } from 'react-hook-form';
 import { PasswordField } from '@/components/auth/password-field';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import type { SignupPayloadFormValues } from '@/lib/auth/schemas';
-import type { SignupExamType, SignupProfession, SignupSession } from '@/lib/types/auth';
+import type { SignupExamType, SignupProfession } from '@/lib/types/auth';
 import { RegisterErrorText } from './register-error-text';
 
 interface RegisterSecurityStepProps {
@@ -16,7 +15,6 @@ interface RegisterSecurityStepProps {
   form: UseFormReturn<SignupPayloadFormValues>;
   selectedExamTypeId: string;
   selectedProfession?: SignupProfession;
-  selectedSession?: SignupSession;
 }
 
 export function RegisterSecurityStep({
@@ -24,7 +22,6 @@ export function RegisterSecurityStep({
   form,
   selectedExamTypeId,
   selectedProfession,
-  selectedSession,
 }: RegisterSecurityStepProps) {
   const {
     formState: { errors },
@@ -78,7 +75,7 @@ export function RegisterSecurityStep({
           type="checkbox"
           {...register('marketingOptIn')}
         />
-        <span>Send me session updates and preparation reminders</span>
+        <span>Send me preparation reminders and platform updates</span>
       </label>
 
       <div className={styles.summaryCard}>
@@ -100,12 +97,6 @@ export function RegisterSecurityStep({
               {examTypes.find((item) => item.id === selectedExamTypeId)?.label ?? 'Exam'} ·{' '}
               {selectedProfession?.label ?? 'Profession'}
             </p>
-          </div>
-          <div className={styles.summaryItem}>
-            <span className={styles.summaryIcon}>
-              <IconBook2 size={14} />
-            </span>
-            <p>{selectedSession?.name ?? 'Session not selected yet'}</p>
           </div>
           <div className={styles.summaryItem}>
             <span className={styles.summaryIcon}>

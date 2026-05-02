@@ -361,7 +361,6 @@ export async function registerLearner(
     mobileNumber: input.mobileNumber,
     examTypeId: input.examTypeId,
     professionId: input.professionId,
-    sessionId: input.sessionId,
     countryTarget: input.countryTarget,
     agreeToTerms: input.agreeToTerms,
     agreeToPrivacy: input.agreeToPrivacy,

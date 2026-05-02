@@ -34,10 +34,6 @@ import type {
 
 const passThreshold = (d: Drill): number => (d.difficulty === 'exam' ? 0.8 : 0.7);
 
-function countWords(s: string): number {
-  return s.trim().split(/\s+/).filter(Boolean).length;
-}
-
 function normalise(s: string): string {
   return s.toLowerCase().replace(/\s+/g, ' ').trim();
 }
@@ -224,16 +220,7 @@ function gradeExpansionTarget(
     };
   }
 
-  const words = countWords(trimmed);
   const reasons: string[] = [];
-
-  if (words < target.minWords) {
-    reasons.push(`Too short (${words} words; aim for at least ${target.minWords}).`);
-    tags.push('missing_key_content');
-  } else if (words > target.maxWords) {
-    reasons.push(`Too long (${words} words; keep it under ${target.maxWords}).`);
-    tags.push('irrelevant_content');
-  }
 
   for (const must of target.mustInclude) {
     if (!containsToken(trimmed, must)) {

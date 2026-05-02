@@ -203,6 +203,8 @@ public class OetScoringTests
     [InlineData("QA", "QA")]
     [InlineData("Qatar", "QA")]
     [InlineData("  qatar  ", "QA")]
+    [InlineData("Gulf Countries", "GB")]
+    [InlineData("Other Countries", "GB")]
     public void NormalizeWritingCountry_Maps_Aliases(string input, string expected)
     {
         Assert.Equal(expected, OetScoring.NormalizeWritingCountry(input));
@@ -229,6 +231,8 @@ public class OetScoringTests
     [InlineData("AU")]
     [InlineData("NZ")]
     [InlineData("CA")]
+    [InlineData("Gulf Countries")]
+    [InlineData("Other Countries")]
     public void GetWritingPassThreshold_GradeB_Countries_Return_350(string country)
     {
         var t = OetScoring.GetWritingPassThreshold(country);

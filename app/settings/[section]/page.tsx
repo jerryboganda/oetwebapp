@@ -48,6 +48,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { fetchSettingsSection, updateSettingsSection } from '@/lib/api';
+import { TARGET_COUNTRY_OPTIONS } from '@/lib/auth/target-countries';
 import { deleteAccount } from '@/lib/auth-client';
 import { useProfessions } from '@/lib/hooks/use-professions';
 import type { LearnerSurfaceAccent } from '@/lib/learner-surface';
@@ -481,13 +482,14 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
       },
       {
         key: 'targetCountry',
-        label: 'Target country or regulator',
-        type: 'text',
-        description: 'Helps describe the exam destination context.',
+        label: 'Target country',
+        type: 'select',
+        description: 'Used for country-aware writing thresholds and study planning.',
         icon: Globe2,
         primaryTag: 'Destination',
-        secondaryTag: 'Regulator context',
+        secondaryTag: 'Required',
         secondaryTagTone: 'muted',
+        options: TARGET_COUNTRY_OPTIONS.map((country) => ({ value: country, label: country })),
       },
       {
         key: 'reminderCadence',

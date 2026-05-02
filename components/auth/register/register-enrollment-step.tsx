@@ -1,28 +1,28 @@
 import type { UseFormReturn } from 'react-hook-form';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
-import { RegisterPlanPreview } from '@/components/auth/register/register-plan-preview';
 import type { SignupPayloadFormValues } from '@/lib/auth/schemas';
-import type { SignupBillingPlan, SignupExamType, SignupProfession, SignupSession } from '@/lib/types/auth';
+import type { SignupExamType, SignupProfession } from '@/lib/types/auth';
 import { RegisterErrorText } from './register-error-text';
+import { TARGET_COUNTRY_OPTIONS } from './target-countries';
 
 interface RegisterEnrollmentStepProps {
-  availableCountries: string[];
-  billingPlans: SignupBillingPlan[];
   examTypes: SignupExamType[];
   filteredProfessions: SignupProfession[];
-  filteredSessions: SignupSession[];
   form: UseFormReturn<SignupPayloadFormValues>;
-  selectedSession?: SignupSession;
 }
 
+/**
+ * Step 2 of the legacy register wizard.
+ *
+ * Per PRD Phase 2 §1 the Session select, Session summary card, and the
+ * "Published Billing Plans" preview have been removed. The country dropdown
+ * is now a fixed mandatory list ({@link ./target-countries.ts}) rather than
+ * being derived from the signup catalog.
+ */
 export function RegisterEnrollmentStep({
-  availableCountries,
-  billingPlans,
   examTypes,
   filteredProfessions,
-  filteredSessions,
   form,
-  selectedSession,
 }: RegisterEnrollmentStepProps) {
   const {
     formState: { errors },
@@ -67,31 +67,16 @@ export function RegisterEnrollmentStep({
       </div>
 
       <div className={styles.field}>
-        <label htmlFor="sessionId">Session</label>
-        <select
-          id="sessionId"
-          className={styles.select}
-          {...register('sessionId')}
-        >
-          <option value="">Select session</option>
-          {filteredSessions.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name} · {item.priceLabel}
-            </option>
-          ))}
-        </select>
-        <RegisterErrorText message={errors.sessionId?.message} />
-      </div>
-
-      <div className={styles.field}>
         <label htmlFor="countryTarget">Target Country</label>
         <select
           id="countryTarget"
           className={styles.select}
+          required
+          aria-required="true"
           {...register('countryTarget')}
         >
           <option value="">Select target country</option>
-          {availableCountries.map((item) => (
+          {TARGET_COUNTRY_OPTIONS.map((item) => (
             <option key={item} value={item}>
               {item}
             </option>
@@ -99,28 +84,6 @@ export function RegisterEnrollmentStep({
         </select>
         <RegisterErrorText message={errors.countryTarget?.message} />
       </div>
-
-      <div className={styles.summaryCard}>
-        <h4>Session Summary</h4>
-        {selectedSession ? (
-          <>
-            <p>{selectedSession.name}</p>
-            <p>
-              {selectedSession.priceLabel} · {selectedSession.deliveryMode}
-            </p>
-            <p>
-              {selectedSession.startDate} to {selectedSession.endDate}
-            </p>
-            <p>
-              Seats left: {selectedSession.seatsRemaining}/{selectedSession.capacity}
-            </p>
-          </>
-        ) : (
-          <p>Select a session to preview the cohort summary.</p>
-        )}
-      </div>
-
-      <RegisterPlanPreview billingPlans={billingPlans} />
     </>
   );
 }

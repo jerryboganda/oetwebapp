@@ -10,7 +10,6 @@ public record RegisterRequest(
     string? MobileNumber = null,
     string? ExamTypeId = null,
     string? ProfessionId = null,
-    string? SessionId = null,
     string? CountryTarget = null,
     bool? AgreeToTerms = null,
     bool? AgreeToPrivacy = null,

@@ -11,6 +11,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { type ExamFamilyCode, type SubTest } from '@/lib/mock-data';
 import { fetchExamFamilies, fetchUserProfile, updateUserProfile } from '@/lib/api';
+import { TARGET_COUNTRY_OPTIONS, isTargetCountry } from '@/lib/auth/target-countries';
 import { useEffect, useMemo, useState } from 'react';
 
 const SUB_TESTS: SubTest[] = ['Writing', 'Speaking', 'Reading', 'Listening'];
@@ -67,7 +68,10 @@ const goalSchema = z.object({
   previousAttempts: z.union([z.coerce.number().min(0).max(20), z.literal('')]).optional(),
   weakSubTests: z.array(z.string()).optional(),
   studyHoursPerWeek: z.union([z.coerce.number().min(1, 'At least 1 hour').max(60), z.literal('')]).optional(),
-  targetCountry: z.string().optional(),
+  targetCountry: z
+    .string()
+    .min(2, 'Select your target country')
+    .refine((value) => Boolean(isTargetCountry(value)), 'Select a valid target country'),
 }).superRefine((data, ctx) => {
   const range = SCORE_RANGES[data.examFamilyCode];
 
@@ -90,15 +94,34 @@ const goalSchema = z.object({
 
 type GoalFormData = z.infer<typeof goalSchema>;
 
-const COUNTRIES = [
-  { value: 'australia', label: 'Australia' },
-  { value: 'uk', label: 'United Kingdom' },
-  { value: 'new-zealand', label: 'New Zealand' },
-  { value: 'ireland', label: 'Ireland' },
-  { value: 'singapore', label: 'Singapore' },
-  { value: 'dubai', label: 'Dubai / UAE' },
-  { value: 'other', label: 'Other' },
-];
+const COUNTRIES = TARGET_COUNTRY_OPTIONS.map((country) => ({
+  value: country,
+  label: country,
+}));
+
+const LEGACY_TARGET_COUNTRY_ALIASES: Readonly<Record<string, string>> = {
+  australia: 'Australia',
+  uk: 'United Kingdom',
+  'united kingdom': 'United Kingdom',
+  ireland: 'Ireland',
+  'new-zealand': 'New Zealand',
+  'new zealand': 'New Zealand',
+  canada: 'Canada',
+  us: 'USA',
+  usa: 'USA',
+  singapore: 'Other Countries',
+  dubai: 'Gulf Countries',
+  'dubai / uae': 'Gulf Countries',
+  uae: 'Gulf Countries',
+  other: 'Other Countries',
+};
+
+function normalizeGoalTargetCountry(value: string | null | undefined): string {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed) return '';
+  if (isTargetCountry(trimmed)) return trimmed;
+  return LEGACY_TARGET_COUNTRY_ALIASES[trimmed.toLowerCase()] ?? '';
+}
 
 function toNullableScore(value: number | '' | undefined): number | null {
   if (value === '' || value === undefined) {
@@ -178,7 +201,7 @@ export default function GoalSetupPage() {
           previousAttempts: profile.previousAttempts > 0 ? profile.previousAttempts : '',
           weakSubTests: profile.weakSubTests ?? [],
           studyHoursPerWeek: profile.studyHoursPerWeek > 0 ? profile.studyHoursPerWeek : '',
-          targetCountry: profile.targetCountry || '',
+          targetCountry: normalizeGoalTargetCountry(profile.targetCountry),
         });
       } catch {
         // Leave defaults if profile bootstrap fails.
@@ -233,7 +256,7 @@ export default function GoalSetupPage() {
         <div>
           <h1 className="text-2xl font-bold text-navy">Set your study goals</h1>
           <p className="text-muted mt-1">
-            Help us personalise your study plan. All fields are optional except profession - you can update them anytime in Settings.
+            Help us personalise your study plan. Profession and target country are required - you can update them anytime in Settings.
           </p>
         </div>
 

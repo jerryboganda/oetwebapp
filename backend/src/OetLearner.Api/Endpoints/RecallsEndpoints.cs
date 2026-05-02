@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using OetLearner.Api.Services.Entitlements;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Recalls;
 
 namespace OetLearner.Api.Endpoints;
@@ -37,10 +39,39 @@ public static class RecallsEndpoints
             Results.Ok(await svc.ListenAndTypeAsync(http.UserId(), request, ct)));
 
         recalls.MapGet("/audio/{termId}", async (
+            HttpContext http,
             string termId,
             [FromQuery] string? speed,
-            RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.EnsureAudioAsync(termId, speed ?? "normal", ct)));
+            RecallsService svc,
+            IFileStorage storage,
+            IEffectiveEntitlementResolver entitlements,
+            CancellationToken ct) =>
+        {
+            // PRD Phase 2 §2 + §3 (Backend Auth Gating): click-to-hear pronunciation
+            // is a paid-tier feature. Free / anonymous-tier learners must be turned
+            // away with 402 Payment Required so the frontend can prompt for upgrade.
+            var userId = http.UserId();
+            http.Response.Headers.CacheControl = "private, no-store";
+            http.Response.Headers.Vary = "Authorization";
+            var snapshot = await entitlements.ResolveAsync(userId, ct);
+            if (!snapshot.HasEligibleSubscription || snapshot.IsFrozen)
+            {
+                return Results.Json(
+                    new
+                    {
+                        code = "subscription_required",
+                        message = "Pronunciation audio is available for paid candidates only.",
+                    },
+                    statusCode: StatusCodes.Status402PaymentRequired);
+            }
+
+            var audio = await svc.EnsureAudioAsync(termId, speed ?? "normal", ct);
+            if (!storage.Exists(audio.StorageKey)) return Results.NotFound();
+
+            http.Response.Headers["X-Recalls-Tts-Provider"] = audio.Provider;
+            var stream = await storage.OpenReadAsync(audio.StorageKey, ct);
+            return Results.Stream(stream, audio.ContentType, enableRangeProcessing: false);
+        });
 
         recalls.MapGet("/library", async (
             HttpContext http,

@@ -168,7 +168,7 @@ public sealed class RemediationPlanService
         {
             new Template("Listening Part B drill", "Two short workplace dialogues with focused note-taking.", "/listening"),
             new Template("Listening Part A consultation drill", "Practice picking out details from a 5-minute consultation.", "/listening"),
-            new Template("Pronunciation focus session", "10 minutes on the sounds you most often miss in dictation.", "/pronunciation"),
+            new Template("Recalls audio focus session", "10 minutes hearing and typing high-risk clinical terms.", "/recalls/words"),
         },
         "reading" => new[]
         {
@@ -185,7 +185,7 @@ public sealed class RemediationPlanService
         "speaking" => new[]
         {
             new Template("Speaking warm-up roleplay", "5-minute scenario focused on your weakest indicator.", "/speaking"),
-            new Template("Pronunciation drill", "Sentence-stress practice on common patient phrases.", "/pronunciation"),
+            new Template("Recalls audio drill", "Hear British clinical pronunciation for common patient phrases and high-risk terms.", "/recalls/words"),
             new Template("Fluency loop", "60-second 'patient explanation' loops, 3 reps.", "/speaking"),
         },
         _ => new[]

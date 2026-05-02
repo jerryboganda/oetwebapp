@@ -203,6 +203,8 @@ describe('OET scoring — normalizeWritingCountry', () => {
     ['QA', 'QA'],
     ['Qatar', 'QA'],
     ['  qatar  ', 'QA'],
+    ['Gulf Countries', 'GB'],
+    ['Other Countries', 'GB'],
   ])('normalizes %s to %s', (input, expected) => {
     expect(normalizeWritingCountry(input)).toBe(expected);
   });
@@ -222,7 +224,7 @@ describe('OET scoring — normalizeWritingCountry', () => {
 });
 
 describe('OET scoring — Writing thresholds (country-aware)', () => {
-  it.each(['GB', 'UK', 'IE', 'AU', 'NZ', 'CA'])(
+  it.each(['GB', 'UK', 'IE', 'AU', 'NZ', 'CA', 'Gulf Countries', 'Other Countries'])(
     'returns 350/Grade B for %s',
     (country) => {
       const t = getWritingPassThreshold(country);

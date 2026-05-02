@@ -162,8 +162,6 @@ export const ExpansionTargetSchema = z.object({
   mustInclude: z.array(z.string().min(1)).min(1),
   // Substrings that should NOT appear (e.g. note-form abbreviations, '-', '/').
   mustNotInclude: z.array(z.string()).default([]),
-  minWords: z.number().int().positive().default(8),
-  maxWords: z.number().int().positive().default(40),
   exemplar: z.string().min(1),
   rationale: z.string().min(1),
 });

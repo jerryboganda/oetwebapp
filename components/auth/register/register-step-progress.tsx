@@ -2,7 +2,7 @@ import styles from '@/components/auth/auth-screen-shell.module.scss';
 
 export const registerStepMeta = [
   { title: 'Personal', caption: 'Name, email, mobile' },
-  { title: 'Enrollment', caption: 'Exam, profession, session' },
+  { title: 'Enrollment', caption: 'Exam, profession, country' },
   { title: 'Security', caption: 'Password, consent, summary' },
 ] as const;
 

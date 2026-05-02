@@ -85,41 +85,8 @@ public class WritingCoachService(LearnerDbContext db)
             }
         }
 
-        // If no template matches but text is long enough, generate a generic suggestion
-        if (suggestions.Count == 0 && text.Length > 100)
-        {
-            var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (words.Length > 180)
-            {
-                var suggestion = new WritingCoachSuggestion
-                {
-                    Id = Guid.NewGuid(),
-                    SessionId = session.Id,
-                    AttemptId = attemptId,
-                    SuggestionType = "conciseness",
-                    OriginalText = string.Join(" ", words.Skip(150).Take(10)),
-                    SuggestedText = "[Consider removing or condensing this section]",
-                    Explanation = "OET writing tasks reward conciseness. Consider whether all detail in this section is necessary for the reader's next actions.",
-                    StartOffset = text.LastIndexOf(words[150], StringComparison.Ordinal),
-                    EndOffset = Math.Min(text.Length, text.LastIndexOf(words[150], StringComparison.Ordinal) + 80),
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
-                db.WritingCoachSuggestions.Add(suggestion);
-                session.SuggestionsGenerated++;
-
-                suggestions.Add(new
-                {
-                    id = suggestion.Id,
-                    type = suggestion.SuggestionType,
-                    originalText = suggestion.OriginalText,
-                    suggestedText = suggestion.SuggestedText,
-                    explanation = suggestion.Explanation,
-                    startOffset = suggestion.StartOffset,
-                    endOffset = suggestion.EndOffset,
-                    resolution = (string?)null
-                });
-            }
-        }
+        // Per Writing Module Technical Specification v1.0, the coach must not
+        // generate generic suggestions from response length or word count.
 
         await db.SaveChangesAsync(ct);
 

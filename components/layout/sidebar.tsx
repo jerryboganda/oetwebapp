@@ -72,7 +72,9 @@ export const learnNavItems: NavItem[] = [
   { href: '/grammar', label: 'Grammar', icon: <BookMarked className="w-5 h-5" />, matchPrefix: '/grammar' },
   { href: '/lessons', label: 'Video Lessons', icon: <Video className="w-5 h-5" />, matchPrefix: '/lessons', featureFlag: 'video_lessons' },
   { href: '/strategies', label: 'Strategies', icon: <Lightbulb className="w-5 h-5" />, matchPrefix: '/strategies', featureFlag: 'strategy_guides' },
-  { href: '/pronunciation', label: 'Pronunciation', icon: <Mic className="w-5 h-5" />, matchPrefix: '/pronunciation' },
+  // Per PRD Phase 2 §2 the dedicated /pronunciation tab is removed and the
+  // pronunciation engine is merged into Recalls — clicking a recall word plays
+  // the audio (gated behind an active subscription server-side).
   { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls' },
   { href: '/conversation', label: 'AI Conversation', icon: <MessageSquare className="w-5 h-5" />, matchPrefix: '/conversation' },
 ];

@@ -62,9 +62,6 @@ export function ExpansionDrillComponent({ drill, onGraded }: ExpansionDrillProps
                   className="w-full rounded-md border border-border p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-background-light"
                   placeholder="Write a complete clinical sentence..."
                 />
-                <div className="text-xs text-muted mt-1">
-                  Target: {target.minWords}–{target.maxWords} words.
-                </div>
               </div>
             ))}
           </div>

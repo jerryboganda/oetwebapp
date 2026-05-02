@@ -14,8 +14,11 @@ import {
   fetchMyVocabulary,
   addToMyVocabulary,
   removeFromMyVocabulary,
+  fetchRecallsAudio,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
+import { playTransientAudio } from '@/lib/recalls-audio';
 import type { VocabularyTerm, LearnerVocabulary } from '@/lib/types/vocabulary';
 
 const MASTERY_COLORS: Record<string, string> = {
@@ -35,6 +38,7 @@ export default function VocabularyTermDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { guardAudio, modal: audioUpgradeModal } = useRecallsAudioUpgrade();
 
   useEffect(() => {
     if (!termId) return;
@@ -91,9 +95,11 @@ export default function VocabularyTermDetailPage() {
     }
   }
 
-  function playAudio() {
-    if (!term?.audioUrl) return;
-    try { void new Audio(term.audioUrl).play(); } catch {/* ignore */}
+  async function playAudio() {
+    if (!term) return;
+    const response = await guardAudio(() => fetchRecallsAudio(term.id, 'normal'), { termId: term.id });
+    if (!response) return;
+    playTransientAudio(response.url);
   }
 
   if (loading) {
@@ -138,6 +144,7 @@ export default function VocabularyTermDetailPage() {
       </div>
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {audioUpgradeModal}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -150,15 +157,13 @@ export default function VocabularyTermDetailPage() {
               className="mb-3"
             />
             <div className="flex flex-wrap items-center gap-3">
-              {term.audioUrl && (
-                <button
-                  onClick={playAudio}
-                  className="inline-flex items-center gap-2 rounded-full bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10"
-                  aria-label={`Play pronunciation of ${term.term}`}
-                >
-                  <Volume2 className="h-4 w-4" /> Play audio
-                </button>
-              )}
+              <button
+                onClick={() => void playAudio()}
+                className="inline-flex items-center gap-2 rounded-full bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10"
+                aria-label={`Play pronunciation of ${term.term}`}
+              >
+                <Volume2 className="h-4 w-4" /> Play audio
+              </button>
             </div>
             <p className="mt-4 text-base text-navy">{term.definition}</p>
             {term.contextNotes && (
