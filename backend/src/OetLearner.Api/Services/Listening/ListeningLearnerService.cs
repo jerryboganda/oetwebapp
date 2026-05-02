@@ -4,12 +4,14 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Recalls;
 
 namespace OetLearner.Api.Services.Listening;
 
 public sealed class ListeningLearnerService(
     LearnerDbContext db,
-    IContentEntitlementService entitlements)
+    IContentEntitlementService entitlements,
+    IRecallsAutoSeed? autoSeed = null)
 {
     private const string Subtest = "listening";
     private const int CanonicalRawMax = OetScoring.ListeningReadingRawMax;
@@ -585,6 +587,29 @@ public sealed class ListeningLearnerService(
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Completed, ct);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, userId, ct);
         await db.SaveChangesAsync(ct);
+
+        // Recalls auto-seed: turn wrong free-text listening answers into
+        // starred SM-2 cards. Best-effort — failures must never break grading.
+        if (autoSeed is not null)
+        {
+            try
+            {
+                var wrongFreeText = review.ItemReview
+                    .Where(item => !item.IsCorrect && !string.IsNullOrWhiteSpace(item.CorrectAnswer))
+                    .Select(item => new RecallsListeningSeedItem(
+                        QuestionId: item.QuestionId,
+                        Type: item.Type,
+                        Prompt: item.Prompt,
+                        LearnerAnswer: item.LearnerAnswer,
+                        CorrectAnswer: item.CorrectAnswer));
+                await autoSeed.SeedFromListeningAsync(userId, attempt.Id, wrongFreeText, ct);
+            }
+            catch
+            {
+                // swallow — auto-seed must not break grading
+            }
+        }
+
         return BuildReview(attempt, source, evaluation);
     }
 

@@ -569,6 +569,9 @@ builder.Services.AddScoped<VocabularyService>();
 builder.Services.AddScoped<VocabularyDraftService>();
 builder.Services.AddScoped<VocabularyGlossService>();
 builder.Services.AddScoped<AdaptiveDifficultyService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Recalls.RecallsService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Recalls.IRecallsTtsService, OetLearner.Api.Services.Recalls.MockRecallsTtsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Recalls.IRecallsAutoSeed, OetLearner.Api.Services.Recalls.RecallsAutoSeed>();
 
 // ── Phase 2 new services ──
 builder.Services.AddScoped<PredictionService>();
@@ -1145,6 +1148,7 @@ app.MapContentHierarchyEndpoints();
 app.MapGamificationEndpoints();
 app.MapReviewItemEndpoints();
 app.MapVocabularyEndpoints();
+app.MapRecallsEndpoints();
 app.MapAdaptiveEndpoints();
 
 // ── Phase 2 new endpoints ──

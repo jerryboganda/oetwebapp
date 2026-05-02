@@ -32,6 +32,15 @@ const nextConfig: NextConfig = {
     return moves.flatMap(([source, destination]) => [
       { source, destination, permanent: true },
       { source: `${source}/:path*`, destination: `${destination}/:path*`, permanent: true },
+    ]).concat([
+      // Recalls consolidation — see docs/RECALLS-MODULE-PLAN.md.
+      // Only the bare landing routes redirect; deeper /vocabulary/* tooling
+      // pages remain accessible until their feature parity ships under /recalls.
+      { source: '/vocabulary', destination: '/recalls/words', permanent: true },
+      { source: '/vocabulary/browse', destination: '/recalls/words', permanent: true },
+      { source: '/vocabulary/flashcards', destination: '/recalls/cards', permanent: true },
+      { source: '/vocabulary/quiz', destination: '/recalls/cards', permanent: true },
+      { source: '/review', destination: '/recalls/cards', permanent: true },
     ]);
   },
   async headers() {

@@ -39,6 +39,10 @@ export const INCLUDED_LEARNER_DASHBOARD_PAGE_PATHS = [
   'app/writing/model/page.tsx',
   'app/writing/result/page.tsx',
   'app/writing/revision/page.tsx',
+  'app/recalls/page.tsx',
+  'app/recalls/words/page.tsx',
+  'app/recalls/cards/page.tsx',
+  'app/recalls/library/page.tsx',
 ] as const;
 
 export const EXCLUDED_IMMERSIVE_LEARNER_PAGE_PATHS = [

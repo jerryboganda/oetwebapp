@@ -27,7 +27,6 @@ import {
   LogOut,
   HelpCircle,
   Brain,
-  Layers,
   Video,
   Lightbulb,
   BookMarked,
@@ -74,8 +73,7 @@ export const learnNavItems: NavItem[] = [
   { href: '/lessons', label: 'Video Lessons', icon: <Video className="w-5 h-5" />, matchPrefix: '/lessons', featureFlag: 'video_lessons' },
   { href: '/strategies', label: 'Strategies', icon: <Lightbulb className="w-5 h-5" />, matchPrefix: '/strategies', featureFlag: 'strategy_guides' },
   { href: '/pronunciation', label: 'Pronunciation', icon: <Mic className="w-5 h-5" />, matchPrefix: '/pronunciation' },
-  { href: '/vocabulary', label: 'Vocabulary', icon: <Layers className="w-5 h-5" />, matchPrefix: '/vocabulary' },
-  { href: '/review', label: 'Review', icon: <Brain className="w-5 h-5" />, matchPrefix: '/review' },
+  { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls' },
   { href: '/conversation', label: 'AI Conversation', icon: <MessageSquare className="w-5 h-5" />, matchPrefix: '/conversation' },
 ];
 

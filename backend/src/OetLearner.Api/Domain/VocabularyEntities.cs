@@ -44,6 +44,19 @@ public class VocabularyTerm
     [MaxLength(256)]
     public string? AudioUrl { get; set; }
 
+    // Slow-speed and full-sentence audio variants for the Recalls "Listen & type" UX.
+    [MaxLength(256)]
+    public string? AudioSlowUrl { get; set; }
+
+    [MaxLength(256)]
+    public string? AudioSentenceUrl { get; set; }
+
+    // British is canonical (`Term`). When the term has a notable American variant
+    // we store it here so the diff classifier can flag `british_variant` errors
+    // (e.g. typed "anemia" against canonical "anaemia").
+    [MaxLength(128)]
+    public string? AmericanSpelling { get; set; }
+
     // Link to a MediaAsset row when the audio was uploaded via the content pipeline.
     [MaxLength(64)]
     public string? AudioMediaAssetId { get; set; }
@@ -98,6 +111,26 @@ public class LearnerVocabulary
     /// </summary>
     [MaxLength(128)]
     public string? SourceRef { get; set; }
+
+    /// <summary>
+    /// Recalls v1: learner-applied star flag. When true the card is prioritised
+    /// in mixed queues and visible in the Starred-only quiz.
+    /// </summary>
+    public bool Starred { get; set; }
+
+    /// <summary>
+    /// Optional reason for starring: spelling | pronunciation | meaning | hearing | confused.
+    /// </summary>
+    [MaxLength(16)]
+    public string? StarReason { get; set; }
+
+    /// <summary>
+    /// Last classified spelling-error code from `POST /v1/recalls/listen-type`.
+    /// One of: correct, case_only, british_variant, missing_letter, extra_letter,
+    /// transposition, double_letter, hyphen, homophone, unknown.
+    /// </summary>
+    [MaxLength(24)]
+    public string? LastErrorTypeCode { get; set; }
 }
 
 /// <summary>

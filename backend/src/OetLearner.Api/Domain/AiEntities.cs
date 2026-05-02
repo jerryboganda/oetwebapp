@@ -208,6 +208,11 @@ public static class AiFeatureCodes
     public const string SummarisePassage = "summarise.passage";
     public const string VocabularyGloss = "vocabulary.gloss";
 
+    // Recalls (vocabulary + spaced-repetition unified surface).
+    // BYOK-eligible — non-scoring explanatory feedback.
+    public const string RecallsMistakeExplain = "recalls.mistake_explain";
+    public const string RecallsRevisionPlan = "recalls.revision_plan";
+
     // Pronunciation analysis (platform-only by default — scoring-critical)
     public const string PronunciationScore = "pronunciation.score";
     public const string PronunciationFeedback = "pronunciation.feedback";

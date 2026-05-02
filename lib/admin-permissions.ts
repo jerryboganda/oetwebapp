@@ -83,4 +83,5 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/webhooks': [AdminPermission.SystemAdmin],
   '/admin/escalations': [AdminPermission.SystemAdmin],
   '/admin/private-speaking': [AdminPermission.ReviewOps],
+  '/admin/recalls/bulk-upload': [AdminPermission.ContentWrite],
 };

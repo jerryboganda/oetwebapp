@@ -605,6 +605,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<VocabularyTerm>().HasIndex(x => new { x.Term, x.ExamTypeCode, x.ProfessionId });
         modelBuilder.Entity<LearnerVocabulary>().HasIndex(x => new { x.UserId, x.NextReviewDate });
         modelBuilder.Entity<LearnerVocabulary>().HasIndex(x => new { x.UserId, x.TermId }).IsUnique();
+        modelBuilder.Entity<LearnerVocabulary>().HasIndex(x => new { x.UserId, x.Starred });
         modelBuilder.Entity<VocabularyQuizResult>().HasIndex(x => new { x.UserId, x.CompletedAt });
 
         // Adaptive difficulty indexes

@@ -4338,6 +4338,210 @@ export async function deleteReviewItem(itemId: string) {
   return apiRequest(`/v1/review/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
 }
 
+// ── Recalls (unified vocabulary + spaced-repetition) ─────────────────────────
+// See docs/RECALLS-MODULE-PLAN.md.
+
+export interface RecallsTodayResponse {
+  dueToday: number;
+  mastered: number;
+  total: number;
+  starred: number;
+  vocabDueToday: number;
+  reviewDueToday: number;
+  readinessScore: number;
+  weakTopics: { topic: string; total: number; weakCount: number }[];
+}
+
+export interface RecallsQueueItem {
+  kind: 'vocab' | 'review';
+  id: string;
+  title: string;
+  subtitle: string | null;
+  dueDate: string | null;
+  starred: boolean;
+  starReason: string | null;
+  mastery: string;
+  audioUrl: string | null;
+  ipa: string | null;
+  extraJson: string | null;
+}
+
+export type RecallsStarReason = 'spelling' | 'pronunciation' | 'meaning' | 'hearing' | 'confused';
+
+export interface RecallsListenTypeResponse {
+  code:
+    | 'correct'
+    | 'case_only'
+    | 'british_variant'
+    | 'missing_letter'
+    | 'extra_letter'
+    | 'transposition'
+    | 'double_letter'
+    | 'hyphen'
+    | 'homophone'
+    | 'unknown';
+  isCorrect: boolean;
+  distance: number;
+  canonical: string;
+  typed: string;
+  americanSpelling: string | null;
+  segments: { kind: 'equal' | 'missing' | 'extra'; text: string }[];
+}
+
+export interface RecallsLibraryItem {
+  cardId: string;
+  termId: string;
+  term: string;
+  definition: string;
+  category: string;
+  mastery: string;
+  starred: boolean;
+  starReason: string | null;
+  lastErrorTypeCode: string | null;
+  intervalDays: number;
+  reviewCount: number;
+  correctCount: number;
+}
+
+export async function fetchRecallsToday() {
+  return apiRequest<RecallsTodayResponse>('/v1/recalls/today');
+}
+
+export async function fetchRecallsQueue(limit = 20) {
+  return apiRequest<RecallsQueueItem[]>(`/v1/recalls/queue?limit=${limit}`);
+}
+
+export async function starRecall(kind: 'vocab' | 'review', id: string, starred: boolean, reason?: RecallsStarReason) {
+  return apiRequest('/v1/recalls/star', {
+    method: 'POST',
+    body: JSON.stringify({ kind, id, starred, reason }),
+  });
+}
+
+export async function submitRecallsListenType(termId: string, typed: string) {
+  return apiRequest<RecallsListenTypeResponse>('/v1/recalls/listen-type', {
+    method: 'POST',
+    body: JSON.stringify({ termId, typed }),
+  });
+}
+
+export async function fetchRecallsAudio(termId: string, speed: 'normal' | 'slow' | 'sentence' = 'normal') {
+  return apiRequest<{ url: string; provider: string }>(
+    `/v1/recalls/audio/${encodeURIComponent(termId)}?speed=${speed}`,
+  );
+}
+
+export async function fetchRecallsLibrary(opts?: { bucket?: 'starred' | 'weak' | 'mastered' | 'new'; topic?: string }) {
+  const p = new URLSearchParams();
+  if (opts?.bucket) p.set('bucket', opts.bucket);
+  if (opts?.topic) p.set('topic', opts.topic);
+  const qs = p.toString();
+  return apiRequest<{ items: RecallsLibraryItem[] }>(`/v1/recalls/library${qs ? `?${qs}` : ''}`);
+}
+
+export interface RecallsExplainResponse {
+  code: string;
+  shortReason: string;
+  longExplanation: string | null;
+  mnemonicHint: string | null;
+}
+
+export async function explainRecallsMistake(termId: string, typed: string) {
+  return apiRequest<RecallsExplainResponse>('/v1/recalls/explain', {
+    method: 'POST',
+    body: JSON.stringify({ termId, typed }),
+  });
+}
+
+export type RecallQuizModeKey =
+  | 'listen_and_type'
+  | 'word_recognition'
+  | 'meaning_check'
+  | 'clinical_sentence'
+  | 'high_risk_spelling'
+  | 'starred_only';
+
+export interface RecallsQuizItem {
+  cardId: string;
+  termId: string;
+  term: string;
+  definition: string;
+  exampleSentence: string | null;
+  blankedSentence: string | null;
+  audioUrl: string | null;
+  audioSentenceUrl: string | null;
+  ipa: string | null;
+  americanSpelling: string | null;
+  starred: boolean;
+  mastery: string;
+  termDistractors: string[];
+  definitionDistractors: string[];
+}
+
+export interface RecallsQuizSession {
+  mode: RecallQuizModeKey;
+  items: RecallsQuizItem[];
+}
+
+export async function fetchRecallsQuiz(mode: RecallQuizModeKey, limit = 10) {
+  const p = new URLSearchParams({ mode, limit: String(limit) });
+  return apiRequest<RecallsQuizSession>(`/v1/recalls/quiz?${p}`);
+}
+
+export interface RecallsBulkUploadRow {
+  term: string;
+  definition: string;
+  exampleSentence?: string;
+  category?: string;
+  difficulty?: string;
+  ipa?: string;
+  americanSpelling?: string;
+  synonymsCsv?: string;
+  examTypeCode?: string;
+  professionId?: string;
+}
+
+export interface RecallsBulkUploadResult {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}
+
+export async function adminBulkUploadRecalls(rows: RecallsBulkUploadRow[]) {
+  return apiRequest<RecallsBulkUploadResult>('/v1/admin/recalls/bulk-upload', {
+    method: 'POST',
+    body: JSON.stringify(rows),
+  });
+}
+
+export interface RecallsWeeklyReport {
+  practisedCount: number;
+  masteredCount: number;
+  spellingAccuracyPct: number;
+  weakestTopic: string | null;
+  mostCommonErrorCode: string | null;
+  mostCommonErrorLabel: string | null;
+  averageReviewsPerCard: number;
+}
+
+export async function fetchRecallsWeeklyReport() {
+  return apiRequest<RecallsWeeklyReport>('/v1/recalls/report/week');
+}
+
+export interface RecallsRevisionPlanResponse {
+  dueToday: number;
+  mastered: number;
+  readinessScore: number;
+  headline: string;
+  steps: string[];
+  aiNarrative: string | null;
+}
+
+export async function fetchRecallsRevisionPlan() {
+  return apiRequest<RecallsRevisionPlanResponse>('/v1/recalls/revision-plan');
+}
+
 // ── Vocabulary ────────────────────────────────────────────────────────────────
 
 export async function fetchVocabularyTerms(params?: { examTypeCode?: string; category?: string; profession?: string; search?: string; page?: number; pageSize?: number }) {

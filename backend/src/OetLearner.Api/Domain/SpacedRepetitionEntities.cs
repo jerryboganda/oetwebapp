@@ -39,4 +39,11 @@ public class ReviewItem
 
     [MaxLength(16)]
     public string Status { get; set; } = "active";         // "active", "mastered", "suspended"
+
+    /// <summary>Recalls v1: learner-applied star flag. Mirrors LearnerVocabulary.Starred.</summary>
+    public bool Starred { get; set; }
+
+    /// <summary>Optional star reason: spelling | pronunciation | meaning | hearing | confused.</summary>
+    [MaxLength(16)]
+    public string? StarReason { get; set; }
 }
