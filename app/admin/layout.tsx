@@ -87,6 +87,7 @@ const adminNavGroups: NavGroup[] = [
     label: 'Billing & growth',
     items: [
       { href: '/admin/billing', label: 'Billing Ops', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/admin/billing' },
+      { href: '/admin/billing/wallet-tiers', label: 'Wallet Tiers', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/admin/billing/wallet-tiers' },
       { href: '/admin/freeze', label: 'Subscription Freezes', icon: <Snowflake className="w-5 h-5" />, matchPrefix: '/admin/freeze' },
       { href: '/admin/flags', label: 'Feature Flags', icon: <Flag className="w-5 h-5" />, matchPrefix: '/admin/flags' },
       { href: '/admin/notifications', label: 'Notifications', icon: <Bell className="w-5 h-5" />, matchPrefix: '/admin/notifications' },

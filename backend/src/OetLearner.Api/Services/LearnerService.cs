@@ -2283,6 +2283,48 @@ public partial class LearnerService(
                 throw ApiException.Validation("billing_quote_expired", "This billing quote has expired.");
             }
 
+            // Bind the quote snapshot to the inbound request so a stale or swapped
+            // quoteId cannot be reused with a different product, plan, coupon, or add-on.
+            var quoteAddOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []);
+            if (!string.IsNullOrWhiteSpace(request.PriceId))
+            {
+                var matchesPlan = !string.IsNullOrWhiteSpace(quoteEntity.PlanCode)
+                    && string.Equals(quoteEntity.PlanCode, request.PriceId, StringComparison.OrdinalIgnoreCase);
+                var matchesAddOn = quoteAddOnCodes.Any(code => string.Equals(code, request.PriceId, StringComparison.OrdinalIgnoreCase));
+                if (!matchesPlan && !matchesAddOn)
+                {
+                    throw ApiException.Validation(
+                        "quote_mismatch",
+                        "The supplied priceId does not match the saved quote.",
+                        [new ApiFieldError("priceId", "mismatch", "Refresh your quote before checking out.")]);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.CouponCode)
+                && !string.Equals(request.CouponCode, quoteEntity.CouponCode, StringComparison.OrdinalIgnoreCase))
+            {
+                throw ApiException.Validation(
+                    "quote_mismatch",
+                    "The supplied couponCode does not match the saved quote.",
+                    [new ApiFieldError("couponCode", "mismatch", "Refresh your quote before checking out.")]);
+            }
+
+            if (request.AddOnCodes is { Count: > 0 })
+            {
+                var requested = request.AddOnCodes
+                    .Where(code => !string.IsNullOrWhiteSpace(code))
+                    .Select(code => code.Trim())
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var saved = new HashSet<string>(quoteAddOnCodes, StringComparer.OrdinalIgnoreCase);
+                if (!requested.SetEquals(saved))
+                {
+                    throw ApiException.Validation(
+                        "quote_mismatch",
+                        "The supplied add-on codes do not match the saved quote.",
+                        [new ApiFieldError("addOnCodes", "mismatch", "Refresh your quote before checking out.")]);
+                }
+            }
+
             quoteResponse = DeserializeQuoteResponse(quoteEntity);
         }
         else
@@ -6448,11 +6490,43 @@ public partial class LearnerService(
             expiresAt = session.ExpiresAt
         };
 
+        // Audit the successful top-up session creation so billing operators can
+        // reconcile against payment-gateway events later.
+        db.BillingEvents.Add(new BillingEvent
+        {
+            Id = $"bill-evt-{Guid.NewGuid():N}",
+            UserId = userId,
+            EventType = "wallet_top_up_session_created",
+            EntityType = "WalletTopUpSession",
+            EntityId = session.SessionId,
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                gateway = session.Gateway,
+                amountDollars = session.AmountDollars,
+                creditsGranted = session.CreditsGranted,
+                bonusCredits = session.BonusCredits,
+                totalCredits = session.TotalCredits
+            }),
+            OccurredAt = DateTimeOffset.UtcNow
+        });
+        await RecordEventAsync(userId, "wallet_top_up_started", new
+        {
+            sessionId = session.SessionId,
+            gateway = session.Gateway,
+            amountDollars = session.AmountDollars,
+            totalCredits = session.TotalCredits
+        }, ct);
+
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             await SaveIdempotentResponseAsync("wallet-top-up", request.IdempotencyKey, response, ct);
         }
 
+        await db.SaveChangesAsync(ct);
+
+        // TODO(Impl E): no learner-facing refund-status endpoint exists yet — add
+        // a regression test that captures current behaviour (refund status is only
+        // observable via /v1/billing/invoices) before introducing a new endpoint.
         return response;
     }
 

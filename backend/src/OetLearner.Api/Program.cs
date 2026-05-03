@@ -558,6 +558,7 @@ builder.Services.AddHttpClient<StripeGateway>();
 builder.Services.AddHttpClient<PayPalGateway>();
 builder.Services.AddScoped<PaymentGatewayService>();
 builder.Services.AddScoped<WalletService>();
+builder.Services.AddScoped<AdminWalletTierService>();
 builder.Services.AddScoped<EngagementService>();
 builder.Services.AddHostedService<BackgroundJobProcessor>();
 

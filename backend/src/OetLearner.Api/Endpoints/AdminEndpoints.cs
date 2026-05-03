@@ -266,6 +266,31 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetBillingPlanVersionsAsync(planId, ct)))
             .WithAdminRead("AdminBillingRead");
 
+        // Wallet top-up tiers — DB-backed CMS for the tiers shown on /billing.
+        // Falls back to BillingOptions.Wallet.TopUpTiers when no DB rows exist.
+        admin.MapGet("/billing/wallet-tiers", async (AdminWalletTierService service, CancellationToken ct)
+            => Results.Ok(await service.ListAsync(ct)))
+            .WithAdminRead("AdminBillingRead");
+
+        admin.MapPut("/billing/wallet-tiers", async (HttpContext http, AdminWalletTierReplaceRequest request, AdminWalletTierService service, AdminService adminService, CancellationToken ct) =>
+            {
+                try
+                {
+                    var result = await service.ReplaceAsync(http.AdminId(), http.AdminName(), request, ct);
+                    return Results.Ok(result);
+                }
+                catch (AdminWalletTierValidationException ex)
+                {
+                    return Results.BadRequest(new
+                    {
+                        code = "wallet_tier_invalid",
+                        message = ex.Message,
+                        errors = ex.Errors,
+                    });
+                }
+            })
+            .WithAdminWrite("AdminBillingWrite");
+
         admin.MapGet("/billing/add-ons", async (AdminService service, CancellationToken ct, string? status)
             => Results.Ok(await service.GetBillingAddOnsAsync(status, ct)))
             .WithAdminRead("AdminBillingRead");

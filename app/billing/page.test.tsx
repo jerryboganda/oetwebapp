@@ -239,4 +239,99 @@ describe('Billing page', () => {
     await waitFor(() => expect(mockCreateBillingCheckoutSession).toHaveBeenCalled());
     openSpy.mockRestore();
   });
+
+  it('blocks rapid double-click on top-up by ignoring overlapping calls', async () => {
+    const user = userEvent.setup();
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    // Make the top-up call hang briefly so the second click overlaps the first.
+    let resolveTopUp: ((value: Record<string, unknown>) => void) | undefined;
+    mockCreateWalletTopUp.mockImplementationOnce(
+      () => new Promise<Record<string, unknown>>((resolve) => { resolveTopUp = resolve; }),
+    );
+
+    renderWithRouter(<BillingPage />);
+
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
+
+    const tenButton = await screen.findByRole('button', { name: /\$10\.00/ });
+    await user.click(tenButton);
+    await user.click(tenButton);
+
+    expect(mockCreateWalletTopUp).toHaveBeenCalledTimes(1);
+
+    resolveTopUp?.({ checkoutUrl: 'https://example.com/top-up', totalCredits: 10 });
+    openSpy.mockRestore();
+  });
+
+  it('switches tab to invoices when clicking "View invoices" on overview', async () => {
+    const user = userEvent.setup();
+    renderWithRouter(<BillingPage />);
+
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /view invoices/i }));
+
+    // The invoices tab is now active.
+    expect(screen.getByRole('tab', { name: /invoices/i })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('shows the dismissible quote bar with a held quote and clears coupon on dismiss', async () => {
+    const user = userEvent.setup();
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    mockFetchBillingQuote.mockResolvedValueOnce({
+      quoteId: 'quote-coupon',
+      status: 'ready',
+      currency: 'AUD',
+      subtotalAmount: 29,
+      discountAmount: 5,
+      totalAmount: 24,
+      planCode: null,
+      couponCode: 'WELCOME10',
+      addOnCodes: ['credits-5'],
+      items: [],
+      expiresAt: '2026-06-27T00:00:00Z',
+      summary: 'Quote ready',
+      validation: {},
+    });
+
+    renderWithRouter(<BillingPage />);
+
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
+
+    const couponInput = screen.getByLabelText(/coupon code/i) as HTMLInputElement;
+    // Type uppercase directly to avoid controlled-input transform races with
+    // user-event keystroke timing.
+    await user.type(couponInput, 'WELCOME10');
+    await waitFor(() => expect(couponInput.value).toContain('W'));
+
+    await user.click(screen.getByRole('button', { name: /purchase credits/i }));
+
+    // Quote bar appears (use the exact eyebrow label inside the quote bar to
+    // avoid colliding with the InlineAlert success message and coupon hint).
+    await waitFor(() => expect(screen.getByText('Validated quote')).toBeInTheDocument());
+
+    // Dismiss it.
+    await user.click(screen.getByRole('button', { name: /dismiss/i }));
+
+    expect(screen.queryByText('Validated quote')).not.toBeInTheDocument();
+    // Coupon should now be cleared because the dismissed quote carried one.
+    expect((screen.getByLabelText(/coupon code/i) as HTMLInputElement).value).toBe('');
+
+    openSpy.mockRestore();
+  });
+
+  it('renders an empty state when no top-up tiers are configured', async () => {
+    mockFetchWalletTopUpTiers.mockResolvedValueOnce({ currency: 'AUD', tiers: [] });
+
+    renderWithRouter(<BillingPage />);
+    const user = userEvent.setup();
+
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
+
+    expect(await screen.findByText(/top-up tiers are not configured yet/i)).toBeInTheDocument();
+    const unavailableButton = screen.getByRole('button', { name: /top up unavailable/i });
+    expect(unavailableButton).toBeDisabled();
+  });
 });

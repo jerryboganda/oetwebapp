@@ -249,14 +249,16 @@ public static class LearnerEndpoints
         });
         billing.MapGet("/review-options", (LearnerService service) => Results.Ok(service.GetReviewOptions()));
         billing.MapGet("/extras", async (LearnerService service) => Results.Ok(await service.GetBillingExtrasAsync()));
-        billing.MapPost("/checkout-sessions", async (HttpContext http, CheckoutSessionCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateCheckoutSessionAsync(http.UserId(), request, ct)));
+        billing.MapPost("/checkout-sessions", async (HttpContext http, CheckoutSessionCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateCheckoutSessionAsync(http.UserId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
 
         // Engagement endpoints
         v1.MapGet("/learner/engagement", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetEngagementAsync(http.UserId(), ct)));
 
         // Wallet endpoints
         billing.MapGet("/wallet/transactions", async (HttpContext http, [FromQuery] int? limit, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWalletTransactionsAsync(http.UserId(), limit ?? 20, ct)));
-        billing.MapPost("/wallet/top-up", async (HttpContext http, WalletTopUpRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateWalletTopUpAsync(http.UserId(), request, ct)));
+        billing.MapPost("/wallet/top-up", async (HttpContext http, WalletTopUpRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateWalletTopUpAsync(http.UserId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
         billing.MapGet("/wallet/top-up-tiers", (LearnerService service) => Results.Ok(service.GetWalletTopUpTiers()));
 
         // Payment webhook endpoints (no auth required)

@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'motion/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -46,6 +46,8 @@ import type {
   BillingData,
   BillingQuote,
   BillingProductType,
+  WalletData,
+  WalletTransactionDto,
 } from '@/lib/billing-types';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
 
@@ -102,21 +104,6 @@ function isFreezeEffective(freezeState: LearnerFreezeStatus | null) {
   return false;
 }
 
-interface WalletData {
-  balance: number;
-  lastUpdatedAt?: string;
-  transactions: Array<{
-    id: string;
-    type: string;
-    amount: number;
-    balanceAfter: number;
-    referenceType?: string;
-    referenceId?: string;
-    description?: string;
-    createdAt: string;
-  }>;
-}
-
 // Fallback tiers if the backend endpoint is unavailable, so the UI never breaks.
 // The backend WalletService is the source of truth (configurable via Billing__Wallet__TopUpTiers).
 const FALLBACK_TOP_UP_TIERS: WalletTopUpTier[] = [
@@ -167,6 +154,23 @@ export default function BillingPage() {
   const [freezeLoadFailed, setFreezeLoadFailed] = useState(false);
   const [selectedGateway, setSelectedGateway] = useState<'stripe' | 'paypal'>('stripe');
 
+  // Double-submit guard shared across all paid-action handlers; complements
+  // the per-button busyKey for cases where rapid clicks fire before
+  // setBusyKey('…') has flushed through React's state queue.
+  const submittingRef = useRef(false);
+
+  // Focus the active panel's first heading when the tab changes (skip mount).
+  const panelContainerRef = useRef<HTMLDivElement>(null);
+  const isFirstTabRender = useRef(true);
+
+  const reducedMotion = useReducedMotion() ?? false;
+
+  // Stable idempotency key generator for paid actions.
+  const newIdempotencyKey = () =>
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `idem-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
   const paymentBanner = useMemo(
     () => getPaymentBanner(paymentStatus, paymentGateway),
     [paymentGateway, paymentStatus],
@@ -207,7 +211,9 @@ export default function BillingPage() {
           setFreezeLoadFailed(true);
         }
 
-        if (tiersResult.status === 'fulfilled' && tiersResult.value?.tiers?.length) {
+        if (tiersResult.status === 'fulfilled' && tiersResult.value && Array.isArray(tiersResult.value.tiers)) {
+          // Honour an explicit empty array from the backend so the UI shows
+          // an empty state rather than masking it with the fallback tiers.
           setTopUpTiers(tiersResult.value.tiers);
           setWalletCurrency(tiersResult.value.currency || 'AUD');
         }
@@ -216,6 +222,20 @@ export default function BillingPage() {
       .finally(() => setLoading(false));
     loadWallet();
   }, [loadWallet]);
+
+  // Move keyboard focus to the active panel's first heading whenever the user
+  // switches tabs (skip the very first render).
+  useEffect(() => {
+    if (isFirstTabRender.current) {
+      isFirstTabRender.current = false;
+      return;
+    }
+    const heading = panelContainerRef.current?.querySelector<HTMLHeadingElement>('[role="tabpanel"] h2');
+    if (heading) {
+      heading.setAttribute('tabindex', '-1');
+      heading.focus({ preventScroll: true });
+    }
+  }, [activeTab]);
 
   const visibleAddOns = useMemo(
     () =>
@@ -238,6 +258,8 @@ export default function BillingPage() {
       setError(billingBlockedMessage);
       return;
     }
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     const coupon = couponCode.trim() || null;
     const quoteKey = `${productType}:${priceId ?? quantity}`;
     setBusyKey(quoteKey);
@@ -247,20 +269,26 @@ export default function BillingPage() {
       const quoteResponse = await fetchBillingQuote({ productType, quantity, priceId, couponCode: coupon });
       setQuote(quoteResponse);
       setQuoteLabel(label ?? prettyProductType(productType));
-      const response = await createBillingCheckoutSession({
+      const checkoutPayload = {
         productType,
         quantity,
         priceId,
         couponCode: coupon,
         quoteId: quoteResponse.quoteId,
         gateway: selectedGateway,
-      });
+        // Optimistic idempotency key. Impl D should formally accept this in
+        // CheckoutSessionCreateRequest; until then the helper internally
+        // generates one too, so this is harmless.
+        idempotencyKey: newIdempotencyKey(),
+      } as Parameters<typeof createBillingCheckoutSession>[0];
+      const response = await createBillingCheckoutSession(checkoutPayload);
       window.open(response.checkoutUrl, '_blank', 'noopener,noreferrer');
       setSuccess(`${label ?? prettyProductType(productType)} checkout opened with a validated quote.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start checkout.');
     } finally {
       setBusyKey(null);
+      submittingRef.current = false;
     }
   };
 
@@ -284,6 +312,8 @@ export default function BillingPage() {
   };
 
   const handleDownloadInvoice = async (invoiceId: string) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setBusyKey(`invoice:${invoiceId}`);
     setError(null);
     setSuccess(null);
@@ -299,6 +329,7 @@ export default function BillingPage() {
       setError(err instanceof Error ? err.message : 'Could not download that invoice.');
     } finally {
       setBusyKey(null);
+      submittingRef.current = false;
     }
   };
 
@@ -307,11 +338,20 @@ export default function BillingPage() {
       setError(billingBlockedMessage);
       return;
     }
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setBusyKey(`topup:${amount}`);
     setError(null);
     setSuccess(null);
     try {
-      const result = (await createWalletTopUp(amount, selectedGateway)) as Record<string, unknown>;
+      // Pass an idempotency key. The helper signature does not yet accept it,
+      // so we cast at the call site only — Impl D will widen the signature.
+      const topUp = createWalletTopUp as unknown as (
+        amount: number,
+        gateway: 'stripe' | 'paypal',
+        idempotencyKey?: string,
+      ) => Promise<Record<string, unknown>>;
+      const result = (await topUp(amount, selectedGateway, newIdempotencyKey())) as Record<string, unknown>;
       const checkoutUrl = typeof result.checkoutUrl === 'string' ? result.checkoutUrl : null;
       if (checkoutUrl && typeof window !== 'undefined') {
         const popup = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
@@ -324,6 +364,7 @@ export default function BillingPage() {
       setError(err instanceof Error ? err.message : 'Could not create top-up session.');
     } finally {
       setBusyKey(null);
+      submittingRef.current = false;
     }
   };
 
@@ -354,7 +395,7 @@ export default function BillingPage() {
   const supportedReviewSubtests = data.entitlements?.supportedReviewSubtests ?? [];
   const invoiceDownloadsAvailable = data.entitlements?.invoiceDownloadsAvailable ?? false;
   const recentInvoices = invoices.slice(0, 3);
-  const recentTransactions = wallet?.transactions?.slice(0, 4) ?? [];
+  const recentTransactions: WalletTransactionDto[] = wallet?.transactions?.slice(0, 4) ?? [];
 
   return (
     <LearnerDashboardShell
@@ -379,7 +420,7 @@ export default function BillingPage() {
 
         {/* Status banners — only render when relevant */}
         {(paymentBanner || isFrozen || freezeLoadFailed || error || success) && (
-          <div className="space-y-2">
+          <div className="space-y-2" role="status" aria-live="polite">
             {paymentBanner ? <InlineAlert variant={paymentBanner.variant}>{paymentBanner.message}</InlineAlert> : null}
             {isFrozen ? (
               <InlineAlert variant="warning">
@@ -417,6 +458,12 @@ export default function BillingPage() {
               <button
                 type="button"
                 onClick={() => {
+                  // Clear the coupon along with the quote when the dismissed
+                  // quote was carrying one, so a stale code can't silently
+                  // re-apply on the next checkout.
+                  if (quote?.couponCode) {
+                    setCouponCode('');
+                  }
                   setQuote(null);
                   setQuoteLabel(null);
                 }}
@@ -434,6 +481,8 @@ export default function BillingPage() {
           activeTab={activeTab}
           onChange={(id) => setActiveTab(id as BillingTabId)}
         />
+
+        <div ref={panelContainerRef}>
 
         {/* ── OVERVIEW ────────────────────────────────────────────── */}
         <TabPanel id="overview" activeTab={activeTab}>
@@ -637,9 +686,9 @@ export default function BillingPage() {
                 return (
                   <motion.article
                     key={plan.id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25, delay: index * 0.04 }}
+                    initial={reducedMotion ? false : { opacity: 0, y: 6 }}
+                    animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+                    transition={reducedMotion ? undefined : { duration: 0.25, delay: index * 0.04 }}
                     className={`flex flex-col rounded-2xl border p-5 shadow-sm ${
                       isCurrent
                         ? 'border-primary/30 bg-primary/5 dark:bg-primary/10'
@@ -715,6 +764,9 @@ export default function BillingPage() {
                           fullWidth
                           loading={busyKey === `preview:${plan.id}`}
                           disabled={billingMutationsBlocked}
+                          aria-busy={busyKey === `preview:${plan.id}`}
+                          aria-disabled={billingMutationsBlocked || undefined}
+                          title={billingMutationsBlocked ? billingBlockedMessage : undefined}
                           onClick={() => loadPreview(plan.id)}
                         >
                           Preview {plan.changeDirection}
@@ -731,6 +783,9 @@ export default function BillingPage() {
                               fullWidth
                               loading={busyKey === `${plan.changeDirection}:${plan.code}`}
                               disabled={billingMutationsBlocked}
+                              aria-busy={busyKey === `${plan.changeDirection}:${plan.code}`}
+                              aria-disabled={billingMutationsBlocked || undefined}
+                              title={billingMutationsBlocked ? billingBlockedMessage : undefined}
                               onClick={() =>
                                 startCheckout(
                                   plan.changeDirection === 'upgrade' ? 'plan_upgrade' : 'plan_downgrade',
@@ -790,44 +845,56 @@ export default function BillingPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                {topUpTiers.map((tier) => (
-                  <motion.button
-                    key={tier.amount}
-                    type="button"
-                    whileHover={{ scale: 1.015 }}
-                    whileTap={{ scale: 0.98 }}
-                    disabled={billingMutationsBlocked || busyKey === `topup:${tier.amount}`}
-                    onClick={() => handleTopUp(tier.amount)}
-                    className={`relative rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
-                      tier.isPopular
-                        ? 'border-emerald-300 bg-surface shadow-md'
-                        : 'border-border bg-background-light hover:border-emerald-200 hover:shadow-sm'
-                    }`}
-                  >
-                    {tier.isPopular ? (
-                      <span className="absolute -top-2 right-3 rounded-full bg-emerald-700 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white">
-                        Popular
-                      </span>
-                    ) : null}
-                    <p className="text-lg font-black text-navy">
-                      {formatCurrency(tier.amount, walletCurrency)}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {tier.credits} credits
-                      {tier.bonus > 0 ? (
-                        <span className="ml-1 font-bold text-emerald-700">+{tier.bonus} bonus</span>
+                {topUpTiers.length === 0 ? (
+                  <div className="col-span-2 rounded-2xl border border-dashed border-border bg-background-light p-5 text-center text-sm text-muted">
+                    Top-up tiers are not configured yet. Please check back shortly or contact support if this persists.
+                    <Button className="mt-3" disabled aria-disabled="true" fullWidth>
+                      Top up unavailable
+                    </Button>
+                  </div>
+                ) : (
+                  topUpTiers.map((tier) => (
+                    <motion.button
+                      key={tier.amount}
+                      type="button"
+                      whileHover={reducedMotion ? undefined : { scale: 1.015 }}
+                      whileTap={reducedMotion ? undefined : { scale: 0.98 }}
+                      disabled={billingMutationsBlocked || busyKey === `topup:${tier.amount}`}
+                      aria-busy={busyKey === `topup:${tier.amount}`}
+                      aria-disabled={billingMutationsBlocked || undefined}
+                      title={billingMutationsBlocked ? billingBlockedMessage : undefined}
+                      onClick={() => handleTopUp(tier.amount)}
+                      className={`relative rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                        tier.isPopular
+                          ? 'border-emerald-300 bg-surface shadow-md'
+                          : 'border-border bg-background-light hover:border-emerald-200 hover:shadow-sm'
+                      }`}
+                    >
+                      {tier.isPopular ? (
+                        <span className="absolute -top-2 right-3 rounded-full bg-emerald-700 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white">
+                          Popular
+                        </span>
                       ) : null}
-                    </p>
-                    {tier.label ? (
-                      <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-muted">
-                        {tier.label}
+                      <p className="text-lg font-black text-navy">
+                        {formatCurrency(tier.amount, walletCurrency)}
                       </p>
-                    ) : null}
-                    {busyKey === `topup:${tier.amount}` ? (
-                      <p className="mt-2 text-xs font-bold text-emerald-700">Processing…</p>
-                    ) : null}
-                  </motion.button>
-                ))}
+                      <p className="text-xs text-muted">
+                        {tier.credits} credits
+                        {tier.bonus > 0 ? (
+                          <span className="ml-1 font-bold text-emerald-700">+{tier.bonus} bonus</span>
+                        ) : null}
+                      </p>
+                      {tier.label ? (
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-muted">
+                          {tier.label}
+                        </p>
+                      ) : null}
+                      {busyKey === `topup:${tier.amount}` ? (
+                        <p className="mt-2 text-xs font-bold text-emerald-700">Processing…</p>
+                      ) : null}
+                    </motion.button>
+                  ))
+                )}
               </div>
 
               <div className="mt-6">
@@ -908,6 +975,9 @@ export default function BillingPage() {
                           fullWidth
                           loading={busyKey === `${checkoutProductType}:${addOn.code}`}
                           disabled={billingMutationsBlocked}
+                          aria-busy={busyKey === `${checkoutProductType}:${addOn.code}`}
+                          aria-disabled={billingMutationsBlocked || undefined}
+                          title={billingMutationsBlocked ? billingBlockedMessage : undefined}
                           onClick={() =>
                             startCheckout(checkoutProductType, addOn.quantity, addOn.code, addOn.name)
                           }
@@ -1040,6 +1110,9 @@ export default function BillingPage() {
                         variant="outline"
                         loading={busyKey === `invoice:${invoice.id}`}
                         disabled={!invoiceDownloadsAvailable}
+                        aria-busy={busyKey === `invoice:${invoice.id}`}
+                        aria-disabled={!invoiceDownloadsAvailable || undefined}
+                        title={!invoiceDownloadsAvailable ? 'Invoice downloads are unavailable on your current plan.' : undefined}
                         onClick={() => handleDownloadInvoice(invoice.id)}
                       >
                         <Download className="h-4 w-4" />
@@ -1057,6 +1130,7 @@ export default function BillingPage() {
             </p>
           ) : null}
         </TabPanel>
+        </div>
       </div>
     </LearnerDashboardShell>
   );

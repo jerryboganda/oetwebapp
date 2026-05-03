@@ -18,6 +18,41 @@ public class WalletService(
 {
     public IReadOnlyList<WalletTopUpTierOption> GetConfiguredTopUpTiers()
     {
+        // DB-backed admin override: when the admin "Wallet Top-Up Tiers" CMS
+        // has at least one *active* row, those replace the appsettings tiers
+        // entirely. The page is at /admin/billing/wallet-tiers and writes go
+        // through AdminWalletTierService → WalletTopUpTierConfigs. Sync EF
+        // read is intentional to preserve this method's existing signature.
+        try
+        {
+            var dbTiers = db.WalletTopUpTierConfigs
+                .AsNoTracking()
+                .Where(c => c.IsActive)
+                .OrderBy(c => c.DisplayOrder)
+                .ThenBy(c => c.Amount)
+                .ToList();
+
+            if (dbTiers.Count > 0)
+            {
+                return dbTiers
+                    .Where(t => t.Amount > 0 && t.Credits >= 0 && t.Bonus >= 0)
+                    .Select(t => new WalletTopUpTierOption
+                    {
+                        Amount = t.Amount,
+                        Credits = t.Credits,
+                        Bonus = t.Bonus,
+                        Label = t.Label,
+                        IsPopular = t.IsPopular,
+                    })
+                    .ToList();
+            }
+        }
+        catch
+        {
+            // Fall through to appsettings fallback if the table isn't reachable
+            // (e.g. migration hasn't applied yet). Behaviour stays unchanged.
+        }
+
         var tiers = billingOptions.Value?.Wallet?.TopUpTiers;
         if (tiers is null || tiers.Count == 0)
         {

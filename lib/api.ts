@@ -3763,6 +3763,54 @@ export async function fetchAdminBillingPlanVersions(planId: string) {
   return apiRequest(`/v1/admin/billing/plans/${encodeURIComponent(planId)}/versions`);
 }
 
+// ── Admin: Wallet Top-Up Tiers (DB-backed CMS) ──
+// Mirrors backend AdminWalletTierService. The GET response includes a
+// `source` discriminator: "database" when at least one row exists, or
+// "appsettings" when the appsettings fallback is being projected.
+
+export interface AdminWalletTierRow {
+  id: string | null;
+  amount: number;
+  credits: number;
+  bonus: number;
+  totalCredits: number;
+  label: string | null;
+  isPopular: boolean;
+  displayOrder: number;
+  isActive: boolean;
+  currency: string;
+}
+
+export interface AdminWalletTiersResponse {
+  source: 'database' | 'appsettings';
+  currency: string;
+  tiers: AdminWalletTierRow[];
+}
+
+export interface AdminWalletTierInput {
+  id?: string | null;
+  amount: number;
+  credits: number;
+  bonus: number;
+  label?: string | null;
+  isPopular: boolean;
+  displayOrder: number;
+  isActive: boolean;
+  currency?: string | null;
+}
+
+export async function fetchAdminWalletTiers(): Promise<AdminWalletTiersResponse> {
+  return apiRequest<AdminWalletTiersResponse>('/v1/admin/billing/wallet-tiers');
+}
+
+export async function replaceAdminWalletTiers(tiers: AdminWalletTierInput[]): Promise<AdminWalletTiersResponse> {
+  return apiRequest<AdminWalletTiersResponse>('/v1/admin/billing/wallet-tiers', {
+    method: 'PUT',
+    body: JSON.stringify({ tiers }),
+  });
+}
+
+
 function normalizeBillingCode(value: string): string {
   return value
     .trim()

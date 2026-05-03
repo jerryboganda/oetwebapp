@@ -1,7 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect } from 'react';
-import { Button } from '@/components/ui';
+import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
+import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { analytics } from '@/lib/analytics';
+import type { AnalyticsEvent } from '@/lib/analytics';
 
 export default function Error({
   error,
@@ -12,24 +17,38 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error('[Billing Error]', error);
+    // 'error_view' is a generic error-surface event used across page-level
+    // error boundaries; cast keeps the call site honest while the central
+    // analytics event union is updated separately.
+    analytics.track('error_view' as AnalyticsEvent, {
+      page: 'billing',
+      message: error.message,
+      digest: error.digest,
+    });
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" role="alert">
-      <div className="text-center max-w-md space-y-4">
-        <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto">
-          <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-          </svg>
+    <LearnerDashboardShell pageTitle="Billing & subscriptions" backHref="/">
+      <div className="space-y-6">
+        <InlineAlert
+          variant="error"
+          title="We couldn't load your billing details"
+        >
+          {error.message || 'An unexpected error occurred while loading billing. Please try again in a moment.'}
+        </InlineAlert>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={reset} variant="primary">
+            Try again
+          </Button>
+          <Link
+            href="/"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-border bg-surface px-4 py-2 text-sm font-bold text-navy transition-colors hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            Back to dashboard
+          </Link>
         </div>
-        <h2 className="text-xl font-semibold text-navy">Billing Error</h2>
-        <p className="text-muted text-sm">
-          An unexpected error occurred. Please try again or contact support if the problem persists.
-        </p>
-        <Button onClick={reset} variant="primary">
-          Try again
-        </Button>
       </div>
-    </div>
+    </LearnerDashboardShell>
   );
 }

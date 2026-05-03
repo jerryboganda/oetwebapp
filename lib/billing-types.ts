@@ -134,3 +134,20 @@ export interface BillingData {
 }
 
 export type BillingProductType = 'review_credits' | 'plan_upgrade' | 'plan_downgrade' | 'addon_purchase';
+
+export interface WalletTransactionDto {
+  id: string;
+  type: string;
+  amount: number;
+  balanceAfter: number;
+  referenceType?: string | null;
+  referenceId?: string | null;
+  description?: string | null;
+  createdAt: string;
+}
+
+export interface WalletData {
+  balance: number;
+  lastUpdatedAt?: string;
+  transactions: WalletTransactionDto[];
+}

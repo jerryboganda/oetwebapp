@@ -235,6 +235,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ListeningUserPolicyOverride> ListeningUserPolicyOverrides => Set<ListeningUserPolicyOverride>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<BillingPlanVersion> BillingPlanVersions => Set<BillingPlanVersion>();
+    public DbSet<WalletTopUpTierConfig> WalletTopUpTierConfigs => Set<WalletTopUpTierConfig>();
     public DbSet<AdminPermissionGrant> AdminPermissionGrants => Set<AdminPermissionGrant>();
     public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
     public DbSet<PermissionTemplate> PermissionTemplates => Set<PermissionTemplate>();
@@ -551,6 +552,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<SubscriptionItem>().HasIndex(x => x.AddOnVersionId);
         modelBuilder.Entity<BillingPlan>().HasIndex(x => x.Code).IsUnique();
         modelBuilder.Entity<BillingPlan>().HasIndex(x => new { x.Status, x.DisplayOrder });
+        modelBuilder.Entity<WalletTopUpTierConfig>().HasIndex(x => new { x.IsActive, x.DisplayOrder });
         modelBuilder.Entity<BillingPlanVersion>().HasIndex(x => new { x.PlanId, x.VersionNumber }).IsUnique();
         modelBuilder.Entity<BillingPlanVersion>().HasIndex(x => x.Code);
         modelBuilder.Entity<BillingAddOn>().HasIndex(x => x.Code).IsUnique();
