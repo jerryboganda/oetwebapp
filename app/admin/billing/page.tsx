@@ -21,6 +21,12 @@ import {
   updateAdminBillingAddOn,
   updateAdminBillingCoupon,
   updateAdminBillingPlan,
+  adminCreateSubscription,
+  adminChangeSubscriptionPlan,
+  adminExtendSubscription,
+  adminCancelSubscription,
+  adminReactivateSubscription,
+  adminSetSubscriptionStatus,
 } from '@/lib/api';
 import {
   getAdminBillingAddOnData,
@@ -523,6 +529,164 @@ export default function BillingPage() {
   const invoiceEvidenceRequestRef = useRef(0);
   const [toast, setToast] = useState<ToastState>(null);
 
+  // Subscription lifecycle action modal — single component drives all six manual
+  // admin actions (create, change-plan, extend, cancel, reactivate, set-status).
+  type SubscriptionActionKind = 'create' | 'change-plan' | 'extend' | 'cancel' | 'reactivate' | 'set-status';
+  type SubscriptionActionState =
+    | { kind: 'create' }
+    | { kind: Exclude<SubscriptionActionKind, 'create'>; subscription: AdminBillingSubscription };
+  const [subscriptionAction, setSubscriptionAction] = useState<SubscriptionActionState | null>(null);
+  const [subscriptionActionForm, setSubscriptionActionForm] = useState({
+    userId: '',
+    planCode: '',
+    grantIncludedCredits: false,
+    resetRenewalDate: true,
+    extendMode: 'add_months' as 'add_days' | 'add_months' | 'absolute',
+    addDays: '30',
+    addMonths: '1',
+    newRenewalAt: '',
+    cancelImmediate: false,
+    status: 'active',
+    reason: '',
+  });
+  const [isSubmittingSubscriptionAction, setIsSubmittingSubscriptionAction] = useState(false);
+
+  function openSubscriptionAction(state: SubscriptionActionState) {
+    setSubscriptionActionForm({
+      userId: state.kind === 'create' ? '' : state.subscription.userId,
+      planCode: state.kind === 'create' ? (plans[0]?.code ?? '') : state.kind === 'change-plan' ? state.subscription.planId : '',
+      grantIncludedCredits: false,
+      resetRenewalDate: true,
+      extendMode: 'add_months',
+      addDays: '30',
+      addMonths: '1',
+      newRenewalAt: '',
+      cancelImmediate: false,
+      status: state.kind === 'set-status' ? state.subscription.status : 'active',
+      reason: '',
+    });
+    setSubscriptionAction(state);
+  }
+
+  function closeSubscriptionAction() {
+    setSubscriptionAction(null);
+    setIsSubmittingSubscriptionAction(false);
+  }
+
+  async function reloadSubscriptions() {
+    try {
+      const result = await getAdminBillingSubscriptionData({
+        status: selectedSubscriptionStatus,
+        search: subscriptionSearch || undefined,
+        pageSize: 100,
+      });
+      setSubscriptions(result.items);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  async function handleSubmitSubscriptionAction() {
+    if (!subscriptionAction) return;
+    setIsSubmittingSubscriptionAction(true);
+    try {
+      const reason = subscriptionActionForm.reason.trim() || undefined;
+      switch (subscriptionAction.kind) {
+        case 'create': {
+          if (!subscriptionActionForm.userId.trim() || !subscriptionActionForm.planCode.trim()) {
+            setToast({ variant: 'error', message: 'User ID and plan are required.' });
+            setIsSubmittingSubscriptionAction(false);
+            return;
+          }
+          await adminCreateSubscription({
+            userId: subscriptionActionForm.userId.trim(),
+            planCode: subscriptionActionForm.planCode,
+            grantIncludedCredits: subscriptionActionForm.grantIncludedCredits,
+            reason,
+          });
+          setToast({ variant: 'success', message: 'Subscription created.' });
+          break;
+        }
+        case 'change-plan': {
+          if (!subscriptionActionForm.planCode) {
+            setToast({ variant: 'error', message: 'Pick a target plan.' });
+            setIsSubmittingSubscriptionAction(false);
+            return;
+          }
+          await adminChangeSubscriptionPlan(subscriptionAction.subscription.id, {
+            planCode: subscriptionActionForm.planCode,
+            resetRenewalDate: subscriptionActionForm.resetRenewalDate,
+            grantIncludedCredits: subscriptionActionForm.grantIncludedCredits,
+            reason,
+          });
+          setToast({ variant: 'success', message: 'Plan changed.' });
+          break;
+        }
+        case 'extend': {
+          const payload: Parameters<typeof adminExtendSubscription>[1] = { reason };
+          if (subscriptionActionForm.extendMode === 'add_days') {
+            const days = Number.parseInt(subscriptionActionForm.addDays, 10);
+            if (!Number.isFinite(days) || days === 0) {
+              setToast({ variant: 'error', message: 'Enter a non-zero day count.' });
+              setIsSubmittingSubscriptionAction(false);
+              return;
+            }
+            payload.addDays = days;
+          } else if (subscriptionActionForm.extendMode === 'add_months') {
+            const months = Number.parseInt(subscriptionActionForm.addMonths, 10);
+            if (!Number.isFinite(months) || months === 0) {
+              setToast({ variant: 'error', message: 'Enter a non-zero month count.' });
+              setIsSubmittingSubscriptionAction(false);
+              return;
+            }
+            payload.addMonths = months;
+          } else {
+            if (!subscriptionActionForm.newRenewalAt) {
+              setToast({ variant: 'error', message: 'Pick a new renewal date.' });
+              setIsSubmittingSubscriptionAction(false);
+              return;
+            }
+            payload.newRenewalAt = new Date(subscriptionActionForm.newRenewalAt).toISOString();
+          }
+          await adminExtendSubscription(subscriptionAction.subscription.id, payload);
+          setToast({ variant: 'success', message: 'Renewal updated.' });
+          break;
+        }
+        case 'cancel': {
+          await adminCancelSubscription(subscriptionAction.subscription.id, {
+            immediate: subscriptionActionForm.cancelImmediate,
+            reason,
+          });
+          setToast({ variant: 'success', message: 'Subscription cancelled.' });
+          break;
+        }
+        case 'reactivate': {
+          await adminReactivateSubscription(subscriptionAction.subscription.id, {
+            resetRenewalDate: subscriptionActionForm.resetRenewalDate,
+            reason,
+          });
+          setToast({ variant: 'success', message: 'Subscription reactivated.' });
+          break;
+        }
+        case 'set-status': {
+          await adminSetSubscriptionStatus(subscriptionAction.subscription.id, {
+            status: subscriptionActionForm.status,
+            reason,
+          });
+          setToast({ variant: 'success', message: 'Status updated.' });
+          break;
+        }
+      }
+      closeSubscriptionAction();
+      await reloadSubscriptions();
+    } catch (error) {
+      console.error(error);
+      const message = error instanceof Error && error.message ? error.message : 'Subscription action failed.';
+      setToast({ variant: 'error', message });
+      setIsSubmittingSubscriptionAction(false);
+    }
+  }
+
   const selectedPlanStatus = planFilters.status?.[0];
   const selectedAddOnStatus = addOnFilters.status?.[0];
   const selectedCouponStatus = couponFilters.status?.[0];
@@ -923,6 +1087,57 @@ export default function BillingPage() {
       key: 'status',
       header: 'Status',
       render: (subscription) => <Badge variant={subscription.status === 'active' ? 'success' : subscription.status === 'trial' ? 'info' : 'muted'}>{subscription.status}</Badge>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (subscription) => (
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openSubscriptionAction({ kind: 'change-plan', subscription })}
+            aria-label={`Change plan for ${subscription.userName}`}
+          >
+            Change plan
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openSubscriptionAction({ kind: 'extend', subscription })}
+            aria-label={`Extend renewal for ${subscription.userName}`}
+          >
+            Extend
+          </Button>
+          {subscription.status === 'cancelled' || subscription.status === 'expired' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openSubscriptionAction({ kind: 'reactivate', subscription })}
+              aria-label={`Reactivate subscription for ${subscription.userName}`}
+            >
+              Reactivate
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openSubscriptionAction({ kind: 'cancel', subscription })}
+              aria-label={`Cancel subscription for ${subscription.userName}`}
+            >
+              Cancel
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openSubscriptionAction({ kind: 'set-status', subscription })}
+            aria-label={`Override status for ${subscription.userName}`}
+          >
+            Set status
+          </Button>
+        </div>
+      ),
     },
   ];
 
@@ -2052,7 +2267,8 @@ export default function BillingPage() {
 
         <AdminRoutePanel
           title="Subscriptions"
-          description="Read-only visibility into active learner subscriptions and attached items."
+          description="Manage active learner subscriptions: change plan, extend renewal, cancel, reactivate, or override status. Every action is audited."
+          actions={<Button variant="outline" size="sm" onClick={() => openSubscriptionAction({ kind: 'create' })}>Create Subscription</Button>}
         >
           <div className="max-w-md">
             <div className="relative">
@@ -2723,6 +2939,157 @@ export default function BillingPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={subscriptionAction !== null}
+        onClose={closeSubscriptionAction}
+        title={
+          subscriptionAction?.kind === 'create' ? 'Create Subscription' :
+          subscriptionAction?.kind === 'change-plan' ? `Change plan — ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'extend' ? `Extend renewal — ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'cancel' ? `Cancel subscription — ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'reactivate' ? `Reactivate — ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'set-status' ? `Override status — ${subscriptionAction.subscription.userName}` :
+          'Subscription action'
+        }
+      >
+        {subscriptionAction ? (
+          <div className="space-y-4 py-2">
+            {subscriptionAction.kind === 'create' ? (
+              <>
+                <Input
+                  label="Learner user ID"
+                  value={subscriptionActionForm.userId}
+                  onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, userId: event.target.value }))}
+                  hint="Find this on the Users page."
+                />
+                <Select
+                  label="Plan"
+                  value={subscriptionActionForm.planCode}
+                  onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, planCode: event.target.value }))}
+                  options={plans.map((plan) => ({ value: plan.code ?? plan.id, label: `${plan.name} (${plan.code ?? plan.id})` }))}
+                />
+                <Checkbox
+                  label="Grant the plan's included credits to the wallet"
+                  checked={subscriptionActionForm.grantIncludedCredits}
+                  onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, grantIncludedCredits: event.target.checked }))}
+                />
+              </>
+            ) : null}
+
+            {subscriptionAction.kind === 'change-plan' ? (
+              <>
+                <p className="text-sm text-muted">Currently on <span className="font-medium text-navy">{subscriptionAction.subscription.planName}</span> ({subscriptionAction.subscription.planId}).</p>
+                <Select
+                  label="Target plan"
+                  value={subscriptionActionForm.planCode}
+                  onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, planCode: event.target.value }))}
+                  options={plans.map((plan) => ({ value: plan.code ?? plan.id, label: `${plan.name} (${plan.code ?? plan.id})` }))}
+                />
+                <div className="flex flex-wrap gap-4">
+                  <Checkbox
+                    label="Reset renewal date to plan duration from now"
+                    checked={subscriptionActionForm.resetRenewalDate}
+                    onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, resetRenewalDate: event.target.checked }))}
+                  />
+                  <Checkbox
+                    label="Grant included credits"
+                    checked={subscriptionActionForm.grantIncludedCredits}
+                    onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, grantIncludedCredits: event.target.checked }))}
+                  />
+                </div>
+              </>
+            ) : null}
+
+            {subscriptionAction.kind === 'extend' ? (
+              <>
+                <p className="text-sm text-muted">Current renewal: {subscriptionAction.subscription.nextRenewalAt ? new Date(subscriptionAction.subscription.nextRenewalAt).toLocaleString() : 'N/A'}</p>
+                <Select
+                  label="Adjustment mode"
+                  value={subscriptionActionForm.extendMode}
+                  onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, extendMode: event.target.value as typeof current.extendMode }))}
+                  options={[
+                    { value: 'add_months', label: 'Add months' },
+                    { value: 'add_days', label: 'Add days' },
+                    { value: 'absolute', label: 'Set explicit date' },
+                  ]}
+                />
+                {subscriptionActionForm.extendMode === 'add_months' ? (
+                  <Input
+                    label="Months to add (negative shortens)"
+                    type="number"
+                    value={subscriptionActionForm.addMonths}
+                    onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, addMonths: event.target.value }))}
+                  />
+                ) : null}
+                {subscriptionActionForm.extendMode === 'add_days' ? (
+                  <Input
+                    label="Days to add (negative shortens)"
+                    type="number"
+                    value={subscriptionActionForm.addDays}
+                    onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, addDays: event.target.value }))}
+                  />
+                ) : null}
+                {subscriptionActionForm.extendMode === 'absolute' ? (
+                  <Input
+                    label="New renewal date/time"
+                    type="datetime-local"
+                    value={subscriptionActionForm.newRenewalAt}
+                    onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, newRenewalAt: event.target.value }))}
+                  />
+                ) : null}
+              </>
+            ) : null}
+
+            {subscriptionAction.kind === 'cancel' ? (
+              <Checkbox
+                label="Cancel immediately (otherwise stays active until renewal date)"
+                checked={subscriptionActionForm.cancelImmediate}
+                onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, cancelImmediate: event.target.checked }))}
+              />
+            ) : null}
+
+            {subscriptionAction.kind === 'reactivate' ? (
+              <Checkbox
+                label="Reset renewal to one plan duration from now"
+                checked={subscriptionActionForm.resetRenewalDate}
+                onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, resetRenewalDate: event.target.checked }))}
+              />
+            ) : null}
+
+            {subscriptionAction.kind === 'set-status' ? (
+              <Select
+                label="Status"
+                value={subscriptionActionForm.status}
+                onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, status: event.target.value }))}
+                options={[
+                  { value: 'trial', label: 'trial' },
+                  { value: 'pending', label: 'pending' },
+                  { value: 'active', label: 'active' },
+                  { value: 'past_due', label: 'past_due' },
+                  { value: 'suspended', label: 'suspended' },
+                  { value: 'cancelled', label: 'cancelled' },
+                  { value: 'expired', label: 'expired' },
+                ]}
+              />
+            ) : null}
+
+            <Textarea
+              label="Reason (recorded in audit log)"
+              value={subscriptionActionForm.reason}
+              onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, reason: event.target.value }))}
+              placeholder="Why is this change being made?"
+            />
+
+            <div className="flex justify-end gap-3 border-t border-border pt-4">
+              <Button variant="outline" onClick={closeSubscriptionAction}>Cancel</Button>
+              <Button onClick={handleSubmitSubscriptionAction} loading={isSubmittingSubscriptionAction}>
+                Confirm
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Modal>
     </AdminRouteWorkspace>
   );

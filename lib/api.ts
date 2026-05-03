@@ -4099,6 +4099,74 @@ export async function fetchAdminBillingSubscriptions(params?: { status?: string;
   return apiRequest(`/v1/admin/billing/subscriptions${q ? `?${q}` : ''}`);
 }
 
+// ── Subscription lifecycle (admin manual actions) ──
+
+export async function adminCreateSubscription(payload: { userId: string; planCode: string; grantIncludedCredits?: boolean; reason?: string }) {
+  return apiRequest('/v1/admin/billing/subscriptions', {
+    method: 'POST',
+    body: JSON.stringify({
+      userId: payload.userId,
+      planCode: payload.planCode,
+      grantIncludedCredits: payload.grantIncludedCredits ?? false,
+      reason: payload.reason ?? null,
+    }),
+  });
+}
+
+export async function adminChangeSubscriptionPlan(subscriptionId: string, payload: { planCode: string; resetRenewalDate?: boolean; grantIncludedCredits?: boolean; reason?: string }) {
+  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/change-plan`, {
+    method: 'POST',
+    body: JSON.stringify({
+      planCode: payload.planCode,
+      resetRenewalDate: payload.resetRenewalDate ?? true,
+      grantIncludedCredits: payload.grantIncludedCredits ?? false,
+      reason: payload.reason ?? null,
+    }),
+  });
+}
+
+export async function adminExtendSubscription(subscriptionId: string, payload: { addDays?: number; addMonths?: number; newRenewalAt?: string; reason?: string }) {
+  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/extend`, {
+    method: 'POST',
+    body: JSON.stringify({
+      addDays: payload.addDays ?? null,
+      addMonths: payload.addMonths ?? null,
+      newRenewalAt: payload.newRenewalAt ?? null,
+      reason: payload.reason ?? null,
+    }),
+  });
+}
+
+export async function adminCancelSubscription(subscriptionId: string, payload: { immediate?: boolean; reason?: string }) {
+  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({
+      immediate: payload.immediate ?? false,
+      reason: payload.reason ?? null,
+    }),
+  });
+}
+
+export async function adminReactivateSubscription(subscriptionId: string, payload: { resetRenewalDate?: boolean; reason?: string } = {}) {
+  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/reactivate`, {
+    method: 'POST',
+    body: JSON.stringify({
+      resetRenewalDate: payload.resetRenewalDate ?? true,
+      reason: payload.reason ?? null,
+    }),
+  });
+}
+
+export async function adminSetSubscriptionStatus(subscriptionId: string, payload: { status: string; reason?: string }) {
+  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/status`, {
+    method: 'POST',
+    body: JSON.stringify({
+      status: payload.status,
+      reason: payload.reason ?? null,
+    }),
+  });
+}
+
 export async function fetchAdminBillingEntitlementDiagnostics() {
   return apiRequest('/v1/admin/billing/entitlement-diagnostics');
 }
@@ -4213,6 +4281,10 @@ export async function fetchAdminTaxonomyImpact(professionId: string) {
 
 export async function activateAdminAIConfig(configId: string) {
   return apiRequest(`/v1/admin/ai-config/${encodeURIComponent(configId)}/activate`, { method: 'POST' });
+}
+
+export async function deleteAdminAIConfig(configId: string) {
+  return apiRequest(`/v1/admin/ai-config/${encodeURIComponent(configId)}`, { method: 'DELETE' });
 }
 
 export async function activateAdminFlag(flagId: string) {

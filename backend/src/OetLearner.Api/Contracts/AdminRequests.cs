@@ -305,6 +305,68 @@ public record AdminBillingCouponUpdateRequest(
     string? ApplicableAddOnCodesJson = null,
     string? Notes = null);
 
+// ── Subscription Lifecycle (Admin manual actions) ──
+
+/// <summary>
+/// Request to manually change a learner's subscription plan from the admin console.
+/// Switches the active subscription to <paramref name="PlanCode"/> (resolved by code or id).
+/// When <paramref name="ResetRenewalDate"/> is true the renewal date is recomputed from the
+/// target plan's duration; otherwise the existing renewal anchor is preserved. When
+/// <paramref name="GrantIncludedCredits"/> is true any plan-included review credits are
+/// granted as a wallet credit ledger entry attributed to this admin action.
+/// </summary>
+public record AdminSubscriptionChangePlanRequest(
+    string PlanCode,
+    bool ResetRenewalDate = true,
+    bool GrantIncludedCredits = false,
+    string? Reason = null);
+
+/// <summary>
+/// Request to extend (or shorten) a subscription's next renewal date.
+/// Exactly one of <paramref name="AddDays"/>, <paramref name="AddMonths"/> or
+/// <paramref name="NewRenewalAt"/> must be provided. Negative add values shorten the term.
+/// </summary>
+public record AdminSubscriptionExtendRequest(
+    int? AddDays = null,
+    int? AddMonths = null,
+    DateTimeOffset? NewRenewalAt = null,
+    string? Reason = null);
+
+/// <summary>
+/// Request to cancel a subscription. <paramref name="Immediate"/> = true marks the
+/// subscription cancelled and ends entitlement now; otherwise cancellation is scheduled
+/// to take effect at the existing renewal date (subscription stays active until then).
+/// </summary>
+public record AdminSubscriptionCancelRequest(
+    bool Immediate = false,
+    string? Reason = null);
+
+/// <summary>
+/// Request to reactivate a cancelled or expired subscription. Renewal is bumped to at
+/// least one duration unit ahead of "now" so the learner is not immediately re-expired.
+/// </summary>
+public record AdminSubscriptionReactivateRequest(
+    bool ResetRenewalDate = true,
+    string? Reason = null);
+
+/// <summary>
+/// Request to set a subscription's status to an explicit value (administrative override
+/// for trial/active/past_due/suspended/cancelled/expired/pending).
+/// </summary>
+public record AdminSubscriptionStatusRequest(
+    string Status,
+    string? Reason = null);
+
+/// <summary>
+/// Request to create a brand-new subscription for a learner who does not currently have
+/// one. Useful for onboarding sponsored, comp'd, or migrated accounts.
+/// </summary>
+public record AdminSubscriptionCreateRequest(
+    string UserId,
+    string PlanCode,
+    bool GrantIncludedCredits = false,
+    string? Reason = null);
+
 // ── Review Ops ──
 
 public record AdminReviewAssignRequest(string ExpertId, string? Reason);

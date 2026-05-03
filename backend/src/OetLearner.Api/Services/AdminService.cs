@@ -1937,18 +1937,30 @@ public partial class AdminService(
         }
 
         var configs = await query.OrderByDescending(a => a.CreatedAt).ToListAsync(ct);
-        var items = configs.Select(a => new
+        var providerCodes = configs.Select(a => a.Provider.Trim().ToLowerInvariant()).Distinct().ToList();
+        var providers = await db.AiProviders
+            .AsNoTracking()
+            .Where(p => providerCodes.Contains(p.Code))
+            .ToDictionaryAsync(p => p.Code, p => p.Name, ct);
+
+        var items = configs.Select(a =>
         {
-            a.Id,
-            model = a.Model,
-            provider = a.Provider,
-            taskType = a.TaskType,
-            status = a.Status.ToString().ToLowerInvariant(),
-            accuracy = a.Accuracy,
-            confidenceThreshold = a.ConfidenceThreshold,
-            routingRule = a.RoutingRule,
-            experimentFlag = a.ExperimentFlag,
-            promptLabel = a.PromptLabel
+            var code = a.Provider.Trim().ToLowerInvariant();
+            var providerName = providers.TryGetValue(code, out var name) ? name : a.Provider;
+            return new
+            {
+                a.Id,
+                model = a.Model,
+                provider = a.Provider,
+                providerName,
+                taskType = a.TaskType,
+                status = a.Status.ToString().ToLowerInvariant(),
+                accuracy = a.Accuracy,
+                confidenceThreshold = a.ConfidenceThreshold,
+                routingRule = a.RoutingRule,
+                experimentFlag = a.ExperimentFlag,
+                promptLabel = a.PromptLabel
+            };
         });
 
         return items;
@@ -1957,6 +1969,11 @@ public partial class AdminService(
     public async Task<object> CreateAIConfigAsync(string adminId, string adminName,
         AdminAIConfigCreateRequest request, CancellationToken ct)
     {
+        var providerCode = request.Provider.Trim().ToLowerInvariant();
+        var providerExists = await db.AiProviders.AnyAsync(p => p.Code == providerCode && p.IsActive, ct);
+        if (!providerExists)
+            throw ApiException.Validation("invalid_provider", "The selected provider is not registered or inactive. Register it at /admin/ai-providers first.");
+
         var id = $"AIC-{Guid.NewGuid():N}"[..12];
         var createdAt = DateTimeOffset.UtcNow;
         var config = new AIConfigVersion
@@ -1996,8 +2013,16 @@ public partial class AdminService(
         var a = await db.AIConfigVersions.FirstOrDefaultAsync(x => x.Id == configId, ct)
                 ?? throw ApiException.NotFound("ai_config_not_found", "AI config not found.");
 
+        if (request.Provider is not null)
+        {
+            var providerCode = request.Provider.Trim().ToLowerInvariant();
+            var providerExists = await db.AiProviders.AnyAsync(p => p.Code == providerCode && p.IsActive, ct);
+            if (!providerExists)
+                throw ApiException.Validation("invalid_provider", "The selected provider is not registered or inactive. Register it at /admin/ai-providers first.");
+            a.Provider = request.Provider;
+        }
+
         if (request.Model is not null) a.Model = request.Model;
-        if (request.Provider is not null) a.Provider = request.Provider;
         if (request.TaskType is not null) a.TaskType = request.TaskType;
         if (request.Status is not null) a.Status = Enum.Parse<AIConfigStatus>(request.Status, true);
         if (request.Accuracy.HasValue) a.Accuracy = request.Accuracy.Value;
@@ -3972,6 +3997,420 @@ public partial class AdminService(
         return new { total, page, pageSize, items };
     }
 
+    // ════════════════════════════════════════════
+    //  Subscription lifecycle (admin manual actions)
+    // ════════════════════════════════════════════
+    //
+    // These endpoints expose the same Subscription state transitions that normally
+    // happen through the checkout / webhook pipeline (see LearnerService.ApplyCheckoutCompletionAsync)
+    // but driven explicitly by an admin operator. Every mutation:
+    //   • Loads the Subscription row by Id (404 if missing).
+    //   • Applies the state change in-process under a single SaveChanges call.
+    //   • Writes an AuditEvent with actor + action + reason for every transition.
+    //   • Returns the canonical projection so the UI can hot-swap the row without a refetch.
+    //
+    // Concurrency: callers retry once on DbUpdateConcurrencyException, mirroring the
+    // pattern used by AdjustUserCreditsAsync.
+
+    public async Task<object> ChangeSubscriptionPlanAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionChangePlanRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.PlanCode))
+        {
+            throw ApiException.Validation("plan_required", "A target plan code is required.");
+        }
+
+        for (var attemptNumber = 0; attemptNumber < 2; attemptNumber++)
+        {
+            try
+            {
+                return await ChangeSubscriptionPlanCoreAsync(adminId, adminName, subscriptionId, request, ct);
+            }
+            catch (DbUpdateConcurrencyException) when (attemptNumber == 0)
+            {
+                db.ChangeTracker.Clear();
+            }
+        }
+
+        throw ApiException.Conflict(
+            "subscription_update_conflict",
+            "The subscription changed while the plan switch was being applied. Please retry.");
+    }
+
+    private async Task<object> ChangeSubscriptionPlanCoreAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionChangePlanRequest request, CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
+            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
+
+        var planCode = request.PlanCode.Trim();
+        var targetPlan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == planCode || p.Id == planCode, ct)
+            ?? throw ApiException.Validation("plan_not_found", $"Billing plan '{planCode}' was not found.");
+
+        var now = DateTimeOffset.UtcNow;
+        var previousPlanId = subscription.PlanId;
+        var previousStatus = subscription.Status;
+
+        subscription.PlanId = targetPlan.Code;
+        subscription.PlanVersionId = null; // admin override is not bound to a payment-time snapshot
+        subscription.PriceAmount = targetPlan.Price;
+        subscription.Currency = targetPlan.Currency;
+        subscription.Interval = targetPlan.Interval;
+        if (subscription.Status is SubscriptionStatus.Cancelled or SubscriptionStatus.Expired or SubscriptionStatus.Suspended)
+        {
+            subscription.Status = SubscriptionStatus.Active;
+        }
+        subscription.ChangedAt = now;
+        if (subscription.StartedAt == default)
+        {
+            subscription.StartedAt = now;
+        }
+
+        if (request.ResetRenewalDate || subscription.NextRenewalAt <= now)
+        {
+            subscription.NextRenewalAt = now.AddMonths(Math.Max(1, targetPlan.DurationMonths));
+        }
+
+        var learner = await db.Users.FirstOrDefaultAsync(u => u.Id == subscription.UserId, ct);
+        if (learner is not null)
+        {
+            learner.CurrentPlanId = targetPlan.Code;
+        }
+
+        var creditedAmount = 0;
+        if (request.GrantIncludedCredits && targetPlan.IncludedCredits > 0)
+        {
+            var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == subscription.UserId, ct);
+            if (wallet is null)
+            {
+                wallet = new Wallet
+                {
+                    Id = $"wallet-{Guid.NewGuid():N}",
+                    UserId = subscription.UserId,
+                    CreditBalance = 0,
+                    LedgerSummaryJson = "[]",
+                    LastUpdatedAt = now
+                };
+                db.Wallets.Add(wallet);
+            }
+            wallet.CreditBalance += targetPlan.IncludedCredits;
+            wallet.LastUpdatedAt = now;
+            // Append-only ledger entry so reconciliation matches the credit-balance
+            // delta. Source = admin override, attributed to the operator.
+            db.WalletTransactions.Add(new WalletTransaction
+            {
+                Id = Guid.NewGuid(),
+                WalletId = wallet.Id,
+                TransactionType = "admin_grant",
+                Amount = targetPlan.IncludedCredits,
+                BalanceAfter = wallet.CreditBalance,
+                ReferenceType = "subscription",
+                ReferenceId = subscription.Id,
+                Description = $"Plan change to {targetPlan.Code}: granted {targetPlan.IncludedCredits} credits",
+                CreatedBy = adminId,
+                CreatedAt = now,
+            });
+            creditedAmount = targetPlan.IncludedCredits;
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        var details = $"Changed plan {previousPlanId} → {targetPlan.Code}"
+            + $"; status {previousStatus} → {subscription.Status}"
+            + (request.ResetRenewalDate ? "; renewal reset" : "")
+            + (creditedAmount > 0 ? $"; granted {creditedAmount} credits" : "")
+            + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}");
+        await LogAuditAsync(adminId, adminName, "Subscription Plan Change", "Subscription", subscriptionId, details, ct);
+
+        return ProjectSubscription(subscription, targetPlan.Name, learner?.DisplayName);
+    }
+
+    public async Task<object> ExtendSubscriptionAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionExtendRequest request, CancellationToken ct)
+    {
+        var providedAxes = (request.AddDays.HasValue ? 1 : 0)
+            + (request.AddMonths.HasValue ? 1 : 0)
+            + (request.NewRenewalAt.HasValue ? 1 : 0);
+        if (providedAxes != 1)
+        {
+            throw ApiException.Validation(
+                "extend_input_invalid",
+                "Provide exactly one of addDays, addMonths or newRenewalAt.");
+        }
+
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
+            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
+
+        var now = DateTimeOffset.UtcNow;
+        var previousRenewal = subscription.NextRenewalAt;
+        var anchor = subscription.NextRenewalAt > now ? subscription.NextRenewalAt : now;
+
+        DateTimeOffset newRenewal;
+        if (request.NewRenewalAt.HasValue)
+        {
+            newRenewal = request.NewRenewalAt.Value;
+        }
+        else if (request.AddDays.HasValue)
+        {
+            newRenewal = anchor.AddDays(request.AddDays.Value);
+        }
+        else
+        {
+            newRenewal = anchor.AddMonths(request.AddMonths!.Value);
+        }
+
+        if (newRenewal <= now.AddYears(-1) || newRenewal >= now.AddYears(50))
+        {
+            throw ApiException.Validation("extend_renewal_out_of_range",
+                "Renewal date must be within a reasonable window (-1y to +50y from now).");
+        }
+
+        subscription.NextRenewalAt = newRenewal;
+        subscription.ChangedAt = now;
+        if (subscription.Status is SubscriptionStatus.Expired or SubscriptionStatus.PastDue && newRenewal > now)
+        {
+            subscription.Status = SubscriptionStatus.Active;
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        var details = $"Renewal {previousRenewal:o} → {newRenewal:o}"
+            + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}");
+        await LogAuditAsync(adminId, adminName, "Subscription Extension", "Subscription", subscriptionId, details, ct);
+
+        var planName = await ResolvePlanNameAsync(subscription.PlanId, ct);
+        var learnerName = await ResolveUserDisplayNameAsync(subscription.UserId, ct);
+        return ProjectSubscription(subscription, planName, learnerName);
+    }
+
+    public async Task<object> CancelSubscriptionAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionCancelRequest request, CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
+            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
+
+        if (subscription.Status == SubscriptionStatus.Cancelled)
+        {
+            throw ApiException.Validation("subscription_already_cancelled", "This subscription is already cancelled.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var previousStatus = subscription.Status;
+        // Immediate cancellation revokes entitlement now (status flip + renewal pulled
+        // forward). Non-immediate ("end-of-period") cancellation preserves the existing
+        // status and renewal anchor so entitlement continues until the natural renewal
+        // date — the scheduled cancellation is recorded in the audit log only. This
+        // matches the contract documented on AdminSubscriptionCancelRequest.
+        if (request.Immediate)
+        {
+            subscription.Status = SubscriptionStatus.Cancelled;
+            subscription.NextRenewalAt = now;
+        }
+        subscription.ChangedAt = now;
+
+        await db.SaveChangesAsync(ct);
+
+        var details = request.Immediate
+            ? $"Cancelled (status {previousStatus} → cancelled, immediate)"
+              + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}")
+            : $"Scheduled cancellation at end-of-period {subscription.NextRenewalAt:o} (status remains {previousStatus})"
+              + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}");
+        await LogAuditAsync(adminId, adminName, "Subscription Cancellation", "Subscription", subscriptionId, details, ct);
+
+        var planName = await ResolvePlanNameAsync(subscription.PlanId, ct);
+        var learnerName = await ResolveUserDisplayNameAsync(subscription.UserId, ct);
+        return ProjectSubscription(subscription, planName, learnerName);
+    }
+
+    public async Task<object> ReactivateSubscriptionAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionReactivateRequest request, CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
+            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
+
+        if (subscription.Status == SubscriptionStatus.Active)
+        {
+            throw ApiException.Validation("subscription_already_active", "This subscription is already active.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var previousStatus = subscription.Status;
+        subscription.Status = SubscriptionStatus.Active;
+        subscription.ChangedAt = now;
+
+        if (request.ResetRenewalDate || subscription.NextRenewalAt <= now)
+        {
+            var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == subscription.PlanId || p.Id == subscription.PlanId, ct);
+            var months = Math.Max(1, plan?.DurationMonths ?? 1);
+            subscription.NextRenewalAt = now.AddMonths(months);
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        var details = $"Reactivated (status {previousStatus} → active; renewal {subscription.NextRenewalAt:o})"
+            + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}");
+        await LogAuditAsync(adminId, adminName, "Subscription Reactivation", "Subscription", subscriptionId, details, ct);
+
+        var planName = await ResolvePlanNameAsync(subscription.PlanId, ct);
+        var learnerName = await ResolveUserDisplayNameAsync(subscription.UserId, ct);
+        return ProjectSubscription(subscription, planName, learnerName);
+    }
+
+    public async Task<object> SetSubscriptionStatusAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionStatusRequest request, CancellationToken ct)
+    {
+        // Normalize wire-format status tokens (e.g. "past_due") into the PascalCase enum names
+        // ("PastDue") that Enum.TryParse expects. Without this strip, valid UI tokens were
+        // rejected as invalid because the underscore form does not exist in the enum.
+        var normalizedStatus = (request.Status ?? string.Empty).Replace("_", string.Empty).Replace("-", string.Empty);
+        if (!Enum.TryParse<SubscriptionStatus>(normalizedStatus, true, out var parsedStatus))
+        {
+            throw ApiException.Validation("subscription_status_invalid",
+                "Status must be one of: trial, pending, active, past_due, suspended, cancelled, expired.");
+        }
+
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
+            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
+
+        var now = DateTimeOffset.UtcNow;
+        var previousStatus = subscription.Status;
+        subscription.Status = parsedStatus;
+        subscription.ChangedAt = now;
+
+        await db.SaveChangesAsync(ct);
+
+        var details = $"Status {previousStatus} → {parsedStatus}"
+            + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}");
+        await LogAuditAsync(adminId, adminName, "Subscription Status Change", "Subscription", subscriptionId, details, ct);
+
+        var planName = await ResolvePlanNameAsync(subscription.PlanId, ct);
+        var learnerName = await ResolveUserDisplayNameAsync(subscription.UserId, ct);
+        return ProjectSubscription(subscription, planName, learnerName);
+    }
+
+    public async Task<object> CreateSubscriptionAsync(string adminId, string adminName,
+        AdminSubscriptionCreateRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.UserId))
+        {
+            throw ApiException.Validation("user_required", "A learner user id is required.");
+        }
+        if (string.IsNullOrWhiteSpace(request.PlanCode))
+        {
+            throw ApiException.Validation("plan_required", "A billing plan code is required.");
+        }
+
+        var learner = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, ct)
+            ?? throw ApiException.NotFound("user_not_found", "User not found.");
+
+        var existing = await db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == request.UserId, ct);
+        if (existing is not null)
+        {
+            throw ApiException.Validation("subscription_exists",
+                "This learner already has a subscription. Use Change Plan instead.");
+        }
+
+        var planCode = request.PlanCode.Trim();
+        var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == planCode || p.Id == planCode, ct)
+            ?? throw ApiException.Validation("plan_not_found", $"Billing plan '{planCode}' was not found.");
+
+        var now = DateTimeOffset.UtcNow;
+        var months = Math.Max(1, plan.DurationMonths);
+        var subscription = new Subscription
+        {
+            Id = $"sub-{Guid.NewGuid():N}",
+            UserId = request.UserId,
+            PlanId = plan.Code,
+            PlanVersionId = null,
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now,
+            NextRenewalAt = now.AddMonths(months),
+            PriceAmount = plan.Price,
+            Currency = plan.Currency,
+            Interval = plan.Interval,
+        };
+        db.Subscriptions.Add(subscription);
+        learner.CurrentPlanId = plan.Code;
+
+        var creditedAmount = 0;
+        if (request.GrantIncludedCredits && plan.IncludedCredits > 0)
+        {
+            var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == request.UserId, ct);
+            if (wallet is null)
+            {
+                wallet = new Wallet
+                {
+                    Id = $"wallet-{Guid.NewGuid():N}",
+                    UserId = request.UserId,
+                    CreditBalance = 0,
+                    LedgerSummaryJson = "[]",
+                    LastUpdatedAt = now
+                };
+                db.Wallets.Add(wallet);
+            }
+            wallet.CreditBalance += plan.IncludedCredits;
+            wallet.LastUpdatedAt = now;
+            db.WalletTransactions.Add(new WalletTransaction
+            {
+                Id = Guid.NewGuid(),
+                WalletId = wallet.Id,
+                TransactionType = "admin_grant",
+                Amount = plan.IncludedCredits,
+                BalanceAfter = wallet.CreditBalance,
+                ReferenceType = "subscription",
+                ReferenceId = subscription.Id,
+                Description = $"Subscription created on {plan.Code}: granted {plan.IncludedCredits} credits",
+                CreatedBy = adminId,
+                CreatedAt = now,
+            });
+            creditedAmount = plan.IncludedCredits;
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        var details = $"Created subscription on plan {plan.Code} for user {request.UserId}"
+            + (creditedAmount > 0 ? $"; granted {creditedAmount} credits" : "")
+            + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}");
+        await LogAuditAsync(adminId, adminName, "Subscription Created", "Subscription", subscription.Id, details, ct);
+
+        return ProjectSubscription(subscription, plan.Name, learner.DisplayName);
+    }
+
+    private async Task<string> ResolvePlanNameAsync(string planRef, CancellationToken ct)
+    {
+        var plan = await db.BillingPlans.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Code == planRef || p.Id == planRef, ct);
+        return plan?.Name ?? planRef;
+    }
+
+    private async Task<string> ResolveUserDisplayNameAsync(string userId, CancellationToken ct)
+    {
+        var user = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.DisplayName })
+            .FirstOrDefaultAsync(ct);
+        return user?.DisplayName ?? userId;
+    }
+
+    private static object ProjectSubscription(Subscription subscription, string? planName, string? userName)
+        => new
+        {
+            subscription.Id,
+            subscription.UserId,
+            userName = userName ?? subscription.UserId,
+            planId = subscription.PlanId,
+            planName = planName ?? subscription.PlanId,
+            status = subscription.Status.ToString().ToLowerInvariant(),
+            subscription.NextRenewalAt,
+            subscription.StartedAt,
+            subscription.ChangedAt,
+            price = subscription.PriceAmount,
+            subscription.Currency,
+            subscription.Interval,
+            addOnCount = 0
+        };
+
     public async Task<AdminBillingEntitlementDiagnosticsResponse> GetBillingEntitlementDiagnosticsAsync(CancellationToken ct)
     {
         var generatedAt = DateTimeOffset.UtcNow;
@@ -5633,6 +6072,26 @@ public partial class AdminService(
             $"AI config {config.Model} for {config.TaskType} was activated.",
             ct);
         return new { id = configId, status = "active" };
+    }
+
+    public async Task<object> DeleteAIConfigAsync(string adminId, string adminName, string configId, CancellationToken ct)
+    {
+        var config = await db.AIConfigVersions.FirstOrDefaultAsync(x => x.Id == configId, ct)
+                     ?? throw ApiException.NotFound("ai_config_not_found", "AI config not found.");
+
+        db.AIConfigVersions.Remove(config);
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(adminId, adminName, "Deleted", "AIConfig", configId,
+            $"Deleted AI config: {config.Model} for {config.TaskType}", ct);
+        await NotifyAdminsAsync(
+            NotificationEventKey.AdminAiConfigChanged,
+            "ai_config",
+            configId,
+            DateTimeOffset.UtcNow.UtcDateTime.Ticks.ToString(),
+            $"AI config {config.Model} for {config.TaskType} was deleted.",
+            ct);
+        return new { id = configId, deleted = true };
     }
 
     // ════════════════════════════════════════════

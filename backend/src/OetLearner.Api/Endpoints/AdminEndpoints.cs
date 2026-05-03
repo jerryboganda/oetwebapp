@@ -154,6 +154,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.ActivateAIConfigAsync(http.AdminId(), http.AdminName(), configId, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        admin.MapDelete("/ai-config/{configId}", async (string configId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.DeleteAIConfigAsync(http.AdminId(), http.AdminName(), configId, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         // ── Feature Flags ───────────────────────────────────
 
         admin.MapGet("/flags", async (AdminService service, CancellationToken ct, string? type)
@@ -326,6 +330,33 @@ public static class AdminEndpoints
         admin.MapGet("/billing/subscriptions", async (AdminService service, CancellationToken ct, string? status, string? search, int? page, int? pageSize)
             => Results.Ok(await service.GetBillingSubscriptionsAsync(status, search, page ?? 1, pageSize ?? 20, ct)))
             .WithAdminRead("AdminBillingRead");
+
+        // Subscription lifecycle (admin manual actions). Each route mutates a single
+        // Subscription row in-process, writes one AuditEvent, and returns the canonical
+        // projection so the UI can update the row without a refetch.
+        admin.MapPost("/billing/subscriptions", async (HttpContext http, AdminSubscriptionCreateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateSubscriptionAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .WithAdminWrite("AdminBillingWrite");
+
+        admin.MapPost("/billing/subscriptions/{subscriptionId}/change-plan", async (string subscriptionId, HttpContext http, AdminSubscriptionChangePlanRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ChangeSubscriptionPlanAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
+            .WithAdminWrite("AdminBillingWrite");
+
+        admin.MapPost("/billing/subscriptions/{subscriptionId}/extend", async (string subscriptionId, HttpContext http, AdminSubscriptionExtendRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ExtendSubscriptionAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
+            .WithAdminWrite("AdminBillingWrite");
+
+        admin.MapPost("/billing/subscriptions/{subscriptionId}/cancel", async (string subscriptionId, HttpContext http, AdminSubscriptionCancelRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CancelSubscriptionAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
+            .WithAdminWrite("AdminBillingWrite");
+
+        admin.MapPost("/billing/subscriptions/{subscriptionId}/reactivate", async (string subscriptionId, HttpContext http, AdminSubscriptionReactivateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ReactivateSubscriptionAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
+            .WithAdminWrite("AdminBillingWrite");
+
+        admin.MapPost("/billing/subscriptions/{subscriptionId}/status", async (string subscriptionId, HttpContext http, AdminSubscriptionStatusRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.SetSubscriptionStatusAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
+            .WithAdminWrite("AdminBillingWrite");
 
         admin.MapGet("/billing/entitlement-diagnostics", async (AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetBillingEntitlementDiagnosticsAsync(ct)))
