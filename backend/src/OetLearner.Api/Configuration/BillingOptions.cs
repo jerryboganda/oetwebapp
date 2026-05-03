@@ -6,6 +6,36 @@ public sealed class BillingOptions
     public bool AllowSandboxFallbacks { get; set; } = false;
     public StripeBillingOptions Stripe { get; set; } = new();
     public PayPalBillingOptions PayPal { get; set; } = new();
+    public WalletBillingOptions Wallet { get; set; } = new();
+}
+
+public sealed class WalletBillingOptions
+{
+    /// <summary>
+    /// Currency used for wallet top-ups. Defaults to AUD to match learner default plans.
+    /// </summary>
+    public string Currency { get; set; } = "AUD";
+
+    /// <summary>
+    /// Configurable wallet top-up tiers. Override via `Billing__Wallet__TopUpTiers__N__Amount` env vars
+    /// or appsettings. Defaults provide the historic 4-tier set so behaviour is unchanged when unset.
+    /// </summary>
+    public List<WalletTopUpTierOption> TopUpTiers { get; set; } = new()
+    {
+        new WalletTopUpTierOption { Amount = 10, Credits = 10, Bonus = 0, Label = "Starter", IsPopular = false },
+        new WalletTopUpTierOption { Amount = 25, Credits = 28, Bonus = 3, Label = "Standard", IsPopular = false },
+        new WalletTopUpTierOption { Amount = 50, Credits = 60, Bonus = 10, Label = "Best value", IsPopular = true },
+        new WalletTopUpTierOption { Amount = 100, Credits = 130, Bonus = 30, Label = "Power", IsPopular = false },
+    };
+}
+
+public sealed class WalletTopUpTierOption
+{
+    public int Amount { get; set; }
+    public int Credits { get; set; }
+    public int Bonus { get; set; }
+    public string? Label { get; set; }
+    public bool IsPopular { get; set; }
 }
 
 public sealed class StripeBillingOptions

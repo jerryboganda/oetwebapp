@@ -8,6 +8,8 @@ const {
   mockCreateWalletTopUp,
   mockDownloadInvoice,
   mockFetchBillingQuote,
+  mockFetchWalletTopUpTiers,
+  mockFetchWalletTransactions,
   mockTrack,
 } = vi.hoisted(() => ({
   mockFetchBilling: vi.fn(),
@@ -17,6 +19,8 @@ const {
   mockCreateWalletTopUp: vi.fn(),
   mockDownloadInvoice: vi.fn(),
   mockFetchBillingQuote: vi.fn(),
+  mockFetchWalletTopUpTiers: vi.fn(),
+  mockFetchWalletTransactions: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -45,6 +49,8 @@ vi.mock('@/lib/api', () => ({
   createWalletTopUp: mockCreateWalletTopUp,
   downloadInvoice: mockDownloadInvoice,
   fetchBillingQuote: mockFetchBillingQuote,
+  fetchWalletTopUpTiers: mockFetchWalletTopUpTiers,
+  fetchWalletTransactions: mockFetchWalletTransactions,
 }));
 
 import BillingPage from './page';
@@ -152,12 +158,22 @@ describe('Billing page', () => {
     mockCreateBillingCheckoutSession.mockResolvedValue({ checkoutUrl: 'https://example.com/checkout' });
     mockCreateWalletTopUp.mockResolvedValue({ checkoutUrl: 'https://example.com/top-up', totalCredits: 10 });
     mockDownloadInvoice.mockResolvedValue('blob:invoice');
+    mockFetchWalletTopUpTiers.mockResolvedValue({
+      currency: 'AUD',
+      tiers: [
+        { amount: 10, credits: 10, bonus: 0, totalCredits: 10, label: 'Starter', isPopular: false },
+        { amount: 25, credits: 28, bonus: 3, totalCredits: 31, label: 'Standard', isPopular: false },
+        { amount: 50, credits: 60, bonus: 10, totalCredits: 70, label: 'Best value', isPopular: true },
+        { amount: 100, credits: 130, bonus: 30, totalCredits: 160, label: 'Power', isPopular: false },
+      ],
+    });
+    mockFetchWalletTransactions.mockResolvedValue({ balance: 0, transactions: [] });
   });
 
   it('renders inside the shared learner dashboard shell', async () => {
     renderWithRouter(<BillingPage />);
 
-    expect(await screen.findByText('Manage subscriptions without billing surprises')).toBeInTheDocument();
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
@@ -167,7 +183,8 @@ describe('Billing page', () => {
 
     renderWithRouter(<BillingPage />);
 
-    expect(await screen.findByText('Manage subscriptions without billing surprises')).toBeInTheDocument();
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
     await user.click(screen.getByRole('button', { name: /^paypal$/i }));
     await user.click(screen.getByRole('button', { name: /purchase credits/i }));
 
@@ -187,9 +204,11 @@ describe('Billing page', () => {
     mockFetchFreezeStatus.mockRejectedValueOnce(new Error('freeze unavailable'));
 
     renderWithRouter(<BillingPage />);
+    const user = userEvent.setup();
 
-    expect(await screen.findByText('Manage subscriptions without billing surprises')).toBeInTheDocument();
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
     expect(screen.getByText(/freeze status could not be verified/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
     expect(screen.getByRole('button', { name: /purchase credits/i })).toBeDisabled();
   });
 
@@ -213,7 +232,8 @@ describe('Billing page', () => {
 
     renderWithRouter(<BillingPage />);
 
-    expect(await screen.findByText('Manage subscriptions without billing surprises')).toBeInTheDocument();
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
     await user.click(screen.getByRole('button', { name: /purchase credits/i }));
 
     await waitFor(() => expect(mockCreateBillingCheckoutSession).toHaveBeenCalled());

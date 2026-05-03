@@ -257,6 +257,7 @@ public static class LearnerEndpoints
         // Wallet endpoints
         billing.MapGet("/wallet/transactions", async (HttpContext http, [FromQuery] int? limit, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWalletTransactionsAsync(http.UserId(), limit ?? 20, ct)));
         billing.MapPost("/wallet/top-up", async (HttpContext http, WalletTopUpRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateWalletTopUpAsync(http.UserId(), request, ct)));
+        billing.MapGet("/wallet/top-up-tiers", (LearnerService service) => Results.Ok(service.GetWalletTopUpTiers()));
 
         // Payment webhook endpoints (no auth required)
         var webhooks = app.MapGroup("/v1/payment/webhooks");

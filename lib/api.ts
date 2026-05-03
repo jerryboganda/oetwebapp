@@ -1070,6 +1070,24 @@ export async function createWalletTopUp(amount: number, gateway: 'stripe' | 'pay
   });
 }
 
+export interface WalletTopUpTier {
+  amount: number;
+  credits: number;
+  bonus: number;
+  totalCredits: number;
+  label: string;
+  isPopular: boolean;
+}
+
+export interface WalletTopUpTiersResponse {
+  currency: string;
+  tiers: WalletTopUpTier[];
+}
+
+export async function fetchWalletTopUpTiers(): Promise<WalletTopUpTiersResponse> {
+  return apiRequest<WalletTopUpTiersResponse>('/v1/billing/wallet/top-up-tiers');
+}
+
 export async function fetchExamFamilies(): Promise<ApiRecord> {
   return apiRequest<ApiRecord>('/v1/reference/exam-families');
 }

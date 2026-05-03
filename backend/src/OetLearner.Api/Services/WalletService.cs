@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
@@ -8,8 +10,31 @@ namespace OetLearner.Api.Services;
 /// Service for wallet ledger operations: credit, debit, balance queries, and top-up session creation.
 /// Ensures all wallet mutations are recorded as append-only WalletTransaction entries.
 /// </summary>
-public class WalletService(LearnerDbContext db, PaymentGatewayService paymentGateways, PlatformLinkService platformLinks)
+public class WalletService(
+    LearnerDbContext db,
+    PaymentGatewayService paymentGateways,
+    PlatformLinkService platformLinks,
+    IOptions<BillingOptions> billingOptions)
 {
+    public IReadOnlyList<WalletTopUpTierOption> GetConfiguredTopUpTiers()
+    {
+        var tiers = billingOptions.Value?.Wallet?.TopUpTiers;
+        if (tiers is null || tiers.Count == 0)
+        {
+            return Array.Empty<WalletTopUpTierOption>();
+        }
+
+        return tiers
+            .Where(t => t.Amount > 0 && t.Credits >= 0 && t.Bonus >= 0)
+            .OrderBy(t => t.Amount)
+            .ToList();
+    }
+
+    public string GetWalletCurrency()
+        => string.IsNullOrWhiteSpace(billingOptions.Value?.Wallet?.Currency)
+            ? "AUD"
+            : billingOptions.Value!.Wallet!.Currency!;
+
     public async Task<WalletBalance> GetBalanceAsync(string userId, CancellationToken ct)
     {
         var wallet = await db.Wallets.AsNoTracking()
@@ -124,30 +149,32 @@ public class WalletService(LearnerDbContext db, PaymentGatewayService paymentGat
         var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == userId, ct)
             ?? throw new InvalidOperationException("Wallet not found.");
 
-        var topUpTiers = new Dictionary<int, (int credits, int bonus)>
+        var configuredTiers = GetConfiguredTopUpTiers();
+        var tier = configuredTiers.FirstOrDefault(t => t.Amount == amountDollars);
+        if (tier is null)
         {
-            [10] = (10, 0),
-            [25] = (28, 3),
-            [50] = (60, 10),
-            [100] = (130, 30)
-        };
+            var validList = configuredTiers.Count == 0
+                ? "(none configured)"
+                : string.Join(", ", configuredTiers.Select(t => t.Amount));
+            throw new ArgumentException($"Invalid top-up amount: {amountDollars}. Valid: {validList}.");
+        }
 
-        if (!topUpTiers.TryGetValue(amountDollars, out var tier))
-            throw new ArgumentException($"Invalid top-up amount: {amountDollars}. Valid: 10, 25, 50, 100.");
+        var currency = GetWalletCurrency();
+        var totalCredits = tier.Credits + tier.Bonus;
 
         var paymentGateway = paymentGateways.GetGateway(gateway);
         var intent = await paymentGateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
             UserId: userId,
             Amount: amountDollars,
-            Currency: "AUD",
+            Currency: currency,
             ProductType: "wallet_top_up",
             ProductId: wallet.Id,
-            Description: $"Wallet top-up: {tier.credits + tier.bonus} credits ({tier.credits} + {tier.bonus} bonus)",
+            Description: $"Wallet top-up: {totalCredits} credits ({tier.Credits} + {tier.Bonus} bonus)",
             Metadata: new Dictionary<string, string>
             {
                 ["wallet_id"] = wallet.Id,
-                ["credits"] = tier.credits.ToString(),
-                ["bonus"] = tier.bonus.ToString()
+                ["credits"] = tier.Credits.ToString(),
+                ["bonus"] = tier.Bonus.ToString()
             },
             SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gateway)}"),
             CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gateway)}")), ct);
@@ -163,14 +190,14 @@ public class WalletService(LearnerDbContext db, PaymentGatewayService paymentGat
             TransactionType = "wallet_top_up",
             Status = "pending",
             Amount = amountDollars,
-            Currency = "AUD",
+            Currency = currency,
             ProductType = "wallet_top_up",
             ProductId = wallet.Id,
             MetadataJson = JsonSupport.Serialize(new
             {
-                credits = tier.credits,
-                bonus = tier.bonus,
-                totalCredits = tier.credits + tier.bonus
+                credits = tier.Credits,
+                bonus = tier.Bonus,
+                totalCredits
             }),
             CreatedAt = now,
             UpdatedAt = now
@@ -182,9 +209,9 @@ public class WalletService(LearnerDbContext db, PaymentGatewayService paymentGat
             SessionId: intent.GatewayTransactionId,
             Gateway: gateway,
             AmountDollars: amountDollars,
-            CreditsGranted: tier.credits,
-            BonusCredits: tier.bonus,
-            TotalCredits: tier.credits + tier.bonus,
+            CreditsGranted: tier.Credits,
+            BonusCredits: tier.Bonus,
+            TotalCredits: totalCredits,
             CheckoutUrl: intent.CheckoutUrl,
             ExpiresAt: now.AddMinutes(30));
     }

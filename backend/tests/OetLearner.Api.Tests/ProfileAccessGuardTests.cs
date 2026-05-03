@@ -62,7 +62,7 @@ public class ProfileAccessGuardTests
         var storageOptions = Options.Create(new StorageOptions { LocalRootPath = storageRoot });
         var mediaStorage = new MediaStorageService(new TestHostEnvironment(storageRoot), storageOptions);
         var paymentGateways = CreatePaymentGatewayService(billingOptions);
-        var walletService = new WalletService(db, paymentGateways, platformLinks);
+        var walletService = new WalletService(db, paymentGateways, platformLinks, billingOptions);
 
         return new LearnerService(db, mediaStorage, platformLinks, null!, walletService, paymentGateways);
     }

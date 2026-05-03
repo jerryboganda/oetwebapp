@@ -6342,6 +6342,24 @@ public partial class LearnerService(
 
     // ── Wallet Transactions ──
 
+    public object GetWalletTopUpTiers()
+    {
+        var tiers = walletService.GetConfiguredTopUpTiers();
+        return new
+        {
+            currency = walletService.GetWalletCurrency(),
+            tiers = tiers.Select(t => new
+            {
+                amount = t.Amount,
+                credits = t.Credits,
+                bonus = t.Bonus,
+                totalCredits = t.Credits + t.Bonus,
+                label = string.IsNullOrWhiteSpace(t.Label) ? $"${t.Amount}" : t.Label,
+                isPopular = t.IsPopular,
+            }).ToList(),
+        };
+    }
+
     public async Task<object> GetWalletTransactionsAsync(string userId, int limit, CancellationToken ct)
     {
         var wallet = await db.Wallets.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == userId, ct);
@@ -6403,10 +6421,17 @@ public partial class LearnerService(
 
         if (request.Amount is not (10 or 25 or 50 or 100))
         {
-            throw ApiException.Validation(
-                "invalid_amount",
-                "Choose a valid top-up amount: $10, $25, $50, or $100.",
-                [new ApiFieldError("amount", "invalid", "Select one of the available top-up amounts.")]);
+            var configuredTiers = walletService.GetConfiguredTopUpTiers();
+            if (!configuredTiers.Any(t => t.Amount == request.Amount))
+            {
+                var validList = configuredTiers.Count == 0
+                    ? "currently unavailable"
+                    : string.Join(", ", configuredTiers.Select(t => $"${t.Amount}"));
+                throw ApiException.Validation(
+                    "invalid_amount",
+                    $"Choose a valid top-up amount ({validList}).",
+                    [new ApiFieldError("amount", "invalid", "Select one of the available top-up amounts.")]);
+            }
         }
 
         var session = await walletService.CreateTopUpSessionAsync(userId, request.Amount, request.Gateway, ct);

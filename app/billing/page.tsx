@@ -5,17 +5,20 @@ import { motion } from 'motion/react';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
+  Calendar,
   CheckCircle2,
+  Clock,
   CreditCard,
   Download,
   FileText,
+  LayoutDashboard,
+  Layers,
   Receipt,
+  ShieldCheck,
   ShoppingCart,
   Sparkles,
   Wallet,
-  Check,
   X,
-  Clock,
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -23,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Input } from '@/components/ui/form-controls';
 import { Skeleton } from '@/components/ui/skeleton';
-import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import {
@@ -34,17 +37,30 @@ import {
   fetchBilling,
   fetchBillingChangePreview,
   fetchBillingQuote,
+  fetchWalletTopUpTiers,
   fetchWalletTransactions,
 } from '@/lib/api';
-import type { BillingChangePreview, BillingData, BillingQuote, BillingProductType } from '@/lib/billing-types';
+import type { WalletTopUpTier } from '@/lib/api';
+import type {
+  BillingChangePreview,
+  BillingData,
+  BillingQuote,
+  BillingProductType,
+} from '@/lib/billing-types';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
 
+// ─── Helpers ─────────────────────────────────────────────────────────
+
 function formatCurrency(amount: number, currency = 'AUD') {
-  return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
+  try {
+    return new Intl.NumberFormat('en-AU', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
 }
 
 function prettyProductType(productType: BillingProductType) {
@@ -55,43 +71,19 @@ function billingAddOnCheckoutProductType(productType: string): BillingProductTyp
   return productType === 'review_credits' ? 'review_credits' : 'addon_purchase';
 }
 
-function formatPlanList(value: string[] | undefined): string {
-  return value && value.length > 0 ? value.join(' / ') : 'None';
-}
-
-function toPlanTruthLabel(value: unknown): boolean {
-  return value === true;
-}
-
 function getPaymentBanner(payment: string | null, gateway: string | null) {
-  if (!payment) {
-    return null;
-  }
-
+  if (!payment) return null;
   const gatewayLabel = gateway ? gateway.charAt(0).toUpperCase() + gateway.slice(1) : 'payment';
-
   switch (payment) {
     case 'success':
-      return {
-        variant: 'success' as const,
-        message: `Your ${gatewayLabel} checkout completed. We will refresh your subscription once the webhook arrives.`,
-      };
+      return { variant: 'success' as const, message: `Your ${gatewayLabel} checkout completed. We'll refresh your subscription once the webhook arrives.` };
     case 'cancelled':
-      return {
-        variant: 'warning' as const,
-        message: `Your ${gatewayLabel} checkout was cancelled before payment. Nothing changed on your subscription.`,
-      };
+      return { variant: 'warning' as const, message: `Your ${gatewayLabel} checkout was cancelled before payment. Nothing changed on your subscription.` };
     case 'failed':
     case 'expired':
-      return {
-        variant: 'error' as const,
-        message: `The ${gatewayLabel} checkout ${payment} before completion. Please start a new validated quote.`,
-      };
+      return { variant: 'error' as const, message: `The ${gatewayLabel} checkout ${payment} before completion. Please start a new validated quote.` };
     default:
-      return {
-        variant: 'info' as const,
-        message: `Checkout status: ${payment}.`,
-      };
+      return { variant: 'info' as const, message: `Checkout status: ${payment}.` };
   }
 }
 
@@ -101,19 +93,12 @@ function normalizeFreezeStatus(status?: string | null) {
 
 function isFreezeEffective(freezeState: LearnerFreezeStatus | null) {
   const currentFreeze = freezeState?.currentFreeze;
-  if (!currentFreeze) {
-    return false;
-  }
-
+  if (!currentFreeze) return false;
   const status = normalizeFreezeStatus(currentFreeze.status);
-  if (status === 'active') {
-    return true;
-  }
-
+  if (status === 'active') return true;
   if (status === 'scheduled' && currentFreeze.scheduledStartAt) {
     return new Date(currentFreeze.scheduledStartAt).getTime() <= Date.now();
   }
-
   return false;
 }
 
@@ -132,14 +117,36 @@ interface WalletData {
   }>;
 }
 
-const TOP_UP_TIERS = [
-  { amount: 10, credits: 10, bonus: 0, label: '$10', popular: false },
-  { amount: 25, credits: 28, bonus: 3, label: '$25', popular: false },
-  { amount: 50, credits: 60, bonus: 10, label: '$50', popular: true },
-  { amount: 100, credits: 130, bonus: 30, label: '$100', popular: false },
-] as const;
+// Fallback tiers if the backend endpoint is unavailable, so the UI never breaks.
+// The backend WalletService is the source of truth (configurable via Billing__Wallet__TopUpTiers).
+const FALLBACK_TOP_UP_TIERS: WalletTopUpTier[] = [
+  { amount: 10, credits: 10, bonus: 0, totalCredits: 10, label: 'Starter', isPopular: false },
+  { amount: 25, credits: 28, bonus: 3, totalCredits: 31, label: 'Standard', isPopular: false },
+  { amount: 50, credits: 60, bonus: 10, totalCredits: 70, label: 'Best value', isPopular: true },
+  { amount: 100, credits: 130, bonus: 30, totalCredits: 160, label: 'Power', isPopular: false },
+];
+
+type BillingTabId = 'overview' | 'plans' | 'credits' | 'invoices';
+
+const BILLING_TABS: Array<{ id: BillingTabId; label: string; icon: React.ReactNode }> = [
+  { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-4 w-4" /> },
+  { id: 'plans', label: 'Plans', icon: <Layers className="h-4 w-4" /> },
+  { id: 'credits', label: 'Credits & Add-ons', icon: <Sparkles className="h-4 w-4" /> },
+  { id: 'invoices', label: 'Invoices', icon: <Receipt className="h-4 w-4" /> },
+];
+
+// ─── Component ───────────────────────────────────────────────────────
 
 export default function BillingPage() {
+  const searchParams = useSearchParams();
+  const paymentStatus = searchParams.get('payment');
+  const paymentGateway = searchParams.get('gateway');
+  const initialTab = (searchParams.get('tab') as BillingTabId | null) ?? 'overview';
+
+  const [activeTab, setActiveTab] = useState<BillingTabId>(
+    BILLING_TABS.some((t) => t.id === initialTab) ? initialTab : 'overview',
+  );
+
   const [data, setData] = useState<BillingData | null>(null);
   const [preview, setPreview] = useState<BillingChangePreview | null>(null);
   const [previewPlanId, setPreviewPlanId] = useState<string | null>(null);
@@ -153,12 +160,13 @@ export default function BillingPage() {
 
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
+  const [topUpTiers, setTopUpTiers] = useState<WalletTopUpTier[]>(FALLBACK_TOP_UP_TIERS);
+  const [walletCurrency, setWalletCurrency] = useState('AUD');
+
   const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
   const [freezeLoadFailed, setFreezeLoadFailed] = useState(false);
   const [selectedGateway, setSelectedGateway] = useState<'stripe' | 'paypal'>('stripe');
-  const searchParams = useSearchParams();
-  const paymentStatus = searchParams.get('payment');
-  const paymentGateway = searchParams.get('gateway');
+
   const paymentBanner = useMemo(
     () => getPaymentBanner(paymentStatus, paymentGateway),
     [paymentGateway, paymentStatus],
@@ -172,7 +180,7 @@ export default function BillingPage() {
   const loadWallet = useCallback(async () => {
     setWalletLoading(true);
     try {
-      const result = await fetchWalletTransactions(20) as unknown as WalletData;
+      const result = (await fetchWalletTransactions(20)) as unknown as WalletData;
       setWallet(result);
     } catch {
       /* wallet is optional, fail silently */
@@ -183,14 +191,14 @@ export default function BillingPage() {
 
   useEffect(() => {
     analytics.track('content_view', { page: 'subscriptions' });
-    Promise.allSettled([fetchBilling(), fetchFreezeStatus()])
-      .then(([billingResult, freezeResult]) => {
+    Promise.allSettled([fetchBilling(), fetchFreezeStatus(), fetchWalletTopUpTiers()])
+      .then(([billingResult, freezeResult, tiersResult]) => {
         if (billingResult.status === 'rejected') {
           throw billingResult.reason;
         }
-
         setData(billingResult.value);
         setQuote(billingResult.value.quote);
+
         if (freezeResult.status === 'fulfilled') {
           setFreezeState(freezeResult.value as LearnerFreezeStatus);
           setFreezeLoadFailed(false);
@@ -198,74 +206,27 @@ export default function BillingPage() {
           setFreezeState(null);
           setFreezeLoadFailed(true);
         }
+
+        if (tiersResult.status === 'fulfilled' && tiersResult.value?.tiers?.length) {
+          setTopUpTiers(tiersResult.value.tiers);
+          setWalletCurrency(tiersResult.value.currency || 'AUD');
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load billing data.'))
       .finally(() => setLoading(false));
     loadWallet();
   }, [loadWallet]);
 
-  const upgradePlans = useMemo(
-    () => (data?.plans ?? []).filter((plan) => plan.changeDirection === 'upgrade'),
-    [data],
-  );
-  const downgradePlans = useMemo(
-    () => (data?.plans ?? []).filter((plan) => plan.changeDirection === 'downgrade'),
-    [data],
-  );
   const visibleAddOns = useMemo(
     () =>
       (data?.addOns ?? []).filter((addOn) => {
-        if (addOn.appliesToAllPlans) {
-          return true;
-        }
-
+        if (addOn.appliesToAllPlans) return true;
         const currentPlanCode = data?.currentPlanCode ?? '';
-        if (!currentPlanCode) {
-          return false;
-        }
-
+        if (!currentPlanCode) return false;
         return addOn.compatiblePlanCodes.includes(currentPlanCode);
       }),
     [data?.addOns, data?.currentPlanCode],
   );
-  const planComparisonRows = useMemo(() => {
-    const plans = data?.plans ?? [];
-
-    return [
-      {
-        feature: 'Price',
-        values: plans.map((plan) => plan.price),
-      },
-      {
-        feature: 'Review credits',
-        values: plans.map((plan) => `${plan.reviewCredits}`),
-      },
-      {
-        feature: 'Included subtests',
-        values: plans.map((plan) => formatPlanList(plan.includedSubtests)),
-      },
-      {
-        feature: 'Visible in catalog',
-        values: plans.map((plan) => plan.isVisible),
-      },
-      {
-        feature: 'Renewable',
-        values: plans.map((plan) => plan.isRenewable),
-      },
-      {
-        feature: 'Trial days',
-        values: plans.map((plan) => (plan.trialDays > 0 ? `${plan.trialDays} days` : 'None')),
-      },
-      {
-        feature: 'Productive reviews',
-        values: plans.map((plan) => toPlanTruthLabel((plan.entitlements ?? {})['productiveSkillReviewsEnabled'])),
-      },
-      {
-        feature: 'Invoice downloads',
-        values: plans.map((plan) => toPlanTruthLabel((plan.entitlements ?? {})['invoiceDownloadsAvailable'])),
-      },
-    ];
-  }, [data?.plans]);
 
   const startCheckout = async (
     productType: BillingProductType,
@@ -286,7 +247,14 @@ export default function BillingPage() {
       const quoteResponse = await fetchBillingQuote({ productType, quantity, priceId, couponCode: coupon });
       setQuote(quoteResponse);
       setQuoteLabel(label ?? prettyProductType(productType));
-      const response = await createBillingCheckoutSession({ productType, quantity, priceId, couponCode: coupon, quoteId: quoteResponse.quoteId, gateway: selectedGateway });
+      const response = await createBillingCheckoutSession({
+        productType,
+        quantity,
+        priceId,
+        couponCode: coupon,
+        quoteId: quoteResponse.quoteId,
+        gateway: selectedGateway,
+      });
       window.open(response.checkoutUrl, '_blank', 'noopener,noreferrer');
       setSuccess(`${label ?? prettyProductType(productType)} checkout opened with a validated quote.`);
     } catch (err) {
@@ -343,17 +311,15 @@ export default function BillingPage() {
     setError(null);
     setSuccess(null);
     try {
-      const result = await createWalletTopUp(amount, selectedGateway) as Record<string, unknown>;
+      const result = (await createWalletTopUp(amount, selectedGateway)) as Record<string, unknown>;
       const checkoutUrl = typeof result.checkoutUrl === 'string' ? result.checkoutUrl : null;
-
       if (checkoutUrl && typeof window !== 'undefined') {
         const popup = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
-        if (!popup) {
-          window.location.assign(checkoutUrl);
-        }
+        if (!popup) window.location.assign(checkoutUrl);
       }
-
-      setSuccess(`Top-up checkout opened. ${result.totalCredits ?? amount} credits will be added after payment is confirmed.`);
+      setSuccess(
+        `Top-up checkout opened. ${result.totalCredits ?? amount} credits will be added after payment is confirmed.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create top-up session.');
     } finally {
@@ -363,9 +329,11 @@ export default function BillingPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Subscriptions" backHref="/">
+      <LearnerDashboardShell pageTitle="Billing & subscriptions" backHref="/">
         <div className="space-y-6">
-          {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-2xl" />)}
+          <Skeleton className="h-44 rounded-2xl" />
+          <Skeleton className="h-12 rounded-2xl" />
+          <Skeleton className="h-64 rounded-2xl" />
         </div>
       </LearnerDashboardShell>
     );
@@ -373,10 +341,8 @@ export default function BillingPage() {
 
   if (!data) {
     return (
-      <LearnerDashboardShell pageTitle="Subscriptions" backHref="/">
-        <div>
-          <InlineAlert variant="error">{error ?? 'Subscription data could not be loaded.'}</InlineAlert>
-        </div>
+      <LearnerDashboardShell pageTitle="Billing & subscriptions" backHref="/">
+        <InlineAlert variant="error">{error ?? 'Subscription data could not be loaded.'}</InlineAlert>
       </LearnerDashboardShell>
     );
   }
@@ -387,470 +353,710 @@ export default function BillingPage() {
   const invoices = data.invoices ?? [];
   const supportedReviewSubtests = data.entitlements?.supportedReviewSubtests ?? [];
   const invoiceDownloadsAvailable = data.entitlements?.invoiceDownloadsAvailable ?? false;
+  const recentInvoices = invoices.slice(0, 3);
+  const recentTransactions = wallet?.transactions?.slice(0, 4) ?? [];
 
   return (
-    <LearnerDashboardShell pageTitle="Subscriptions" subtitle="Manage plans, credits, invoices, and learner entitlements." backHref="/">
-      <div className="space-y-8">
+    <LearnerDashboardShell
+      pageTitle="Billing & subscriptions"
+      subtitle="Manage your plan, credits, invoices, and entitlements in one place."
+      backHref="/"
+    >
+      <div className="space-y-6">
         <LearnerPageHero
-          eyebrow="Subscriptions"
+          eyebrow="Billing"
           icon={CreditCard}
           accent="navy"
-          title="Manage subscriptions without billing surprises"
-          description="Use this page to review entitlements, pricing changes, and payment status before you open checkout."
+          title="Your billing center"
+          description="Review your plan, top up review credits, and download invoices — everything stays validated server-side before checkout opens."
           highlights={[
-            { icon: CreditCard, label: 'Current plan', value: data.currentPlan },
-            { icon: Sparkles, label: 'Review credits', value: `${data.reviewCredits} available` },
-            { icon: ShoppingCart, label: 'Active add-ons', value: `${activeAddOns.length} attached` },
-            { icon: Receipt, label: 'Next renewal', value: new Date(data.nextRenewal).toLocaleDateString() },
+            { icon: ShieldCheck, label: 'Current plan', value: data.currentPlan },
+            { icon: Wallet, label: 'Credit balance', value: walletLoading ? '—' : `${wallet?.balance ?? 0} credits` },
+            { icon: ShoppingCart, label: 'Active add-ons', value: `${activeAddOns.length}` },
+            { icon: Calendar, label: 'Next renewal', value: new Date(data.nextRenewal).toLocaleDateString() },
           ]}
         />
 
-        {paymentBanner ? <InlineAlert variant={paymentBanner.variant}>{paymentBanner.message}</InlineAlert> : null}
-        {isFrozen ? (
-          <InlineAlert variant="warning">
-            Your account is frozen, so checkout, plan changes, and top-ups are paused. Billing history remains visible.
-          </InlineAlert>
-        ) : null}
-        {freezeLoadFailed ? (
-          <InlineAlert variant="error">
-            Freeze status could not be verified, so checkout, plan changes, and top-ups are paused until this page is refreshed successfully.
-          </InlineAlert>
-        ) : null}
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-        {success ? <InlineAlert variant="success">{success}</InlineAlert> : null}
+        {/* Status banners — only render when relevant */}
+        {(paymentBanner || isFrozen || freezeLoadFailed || error || success) && (
+          <div className="space-y-2">
+            {paymentBanner ? <InlineAlert variant={paymentBanner.variant}>{paymentBanner.message}</InlineAlert> : null}
+            {isFrozen ? (
+              <InlineAlert variant="warning">
+                Your account is frozen, so checkout, plan changes, and top-ups are paused. Billing history remains visible.
+              </InlineAlert>
+            ) : null}
+            {freezeLoadFailed ? (
+              <InlineAlert variant="error">
+                Freeze status could not be verified, so checkout, plan changes, and top-ups are paused until this page is refreshed successfully.
+              </InlineAlert>
+            ) : null}
+            {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+            {success ? <InlineAlert variant="success">{success}</InlineAlert> : null}
+          </div>
+        )}
 
-        {/* ── Wallet Section ── */}
-        <section>
-          <LearnerSurfaceSectionHeader
-            eyebrow="Wallet"
-            title="Review credit balance and top up anytime"
-            description="Credits are used for tutor reviews and premium features. Top-up tiers include bonus credits at higher amounts."
-            className="mb-4"
-          />
-          <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">
-            <MotionSection className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-              <div className="flex items-start gap-4">
+        {/* Persistent quote bar — only when a validated quote is held */}
+        {quote ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 shadow-sm dark:border-emerald-300/30 dark:bg-emerald-300/10 dark:text-emerald-100">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-700 dark:text-emerald-200" />
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest">Validated quote</p>
+                  <p className="text-sm font-bold">
+                    {quoteLabel ?? 'Checkout'} · {formatCurrency(quote.totalAmount, quote.currency)}
+                    {quote.discountAmount > 0 ? (
+                      <span className="ml-2 font-semibold">
+                        ({formatCurrency(quote.discountAmount, quote.currency)} off)
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuote(null);
+                  setQuoteLabel(null);
+                }}
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold text-emerald-800 transition-colors hover:bg-emerald-100 dark:text-emerald-100 dark:hover:bg-emerald-300/10"
+              >
+                <X className="h-3 w-3" /> Dismiss
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Section navigation */}
+        <Tabs
+          tabs={BILLING_TABS}
+          activeTab={activeTab}
+          onChange={(id) => setActiveTab(id as BillingTabId)}
+        />
+
+        {/* ── OVERVIEW ────────────────────────────────────────────── */}
+        <TabPanel id="overview" activeTab={activeTab}>
+          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-muted">Current subscription</p>
+                  <h2 className="mt-2 text-2xl font-black text-navy">{data.currentPlan}</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    {data.price} / {data.interval}
+                  </p>
+                  {data.planDescription ? (
+                    <p className="mt-3 max-w-md text-sm leading-6 text-muted">{data.planDescription}</p>
+                  ) : null}
+                </div>
+                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {data.status}
+                </span>
+              </div>
+
+              <dl className="mt-6 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-border bg-background-light p-4">
+                  <dt className="text-[11px] font-black uppercase tracking-widest text-muted">Renews</dt>
+                  <dd className="mt-1 text-sm font-bold text-navy">
+                    {new Date(data.nextRenewal).toLocaleDateString()}
+                  </dd>
+                </div>
+                <div className="rounded-2xl border border-border bg-background-light p-4">
+                  <dt className="text-[11px] font-black uppercase tracking-widest text-muted">Tutor reviews</dt>
+                  <dd className="mt-1 text-sm font-bold text-navy">
+                    {supportedReviewSubtests.length > 0 ? supportedReviewSubtests.join(' + ') : 'Not included'}
+                  </dd>
+                </div>
+                <div className="rounded-2xl border border-border bg-background-light p-4">
+                  <dt className="text-[11px] font-black uppercase tracking-widest text-muted">Invoice access</dt>
+                  <dd className="mt-1 text-sm font-bold text-navy">
+                    {invoiceDownloadsAvailable ? 'Downloads available' : 'Unavailable'}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="mt-6 flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => setActiveTab('plans')}>
+                  Change plan
+                </Button>
+                <Button variant="outline" onClick={() => setActiveTab('credits')}>
+                  <Wallet className="h-4 w-4" /> Top up credits
+                </Button>
+                <Button variant="outline" onClick={() => setActiveTab('invoices')}>
+                  <Receipt className="h-4 w-4" /> View invoices
+                </Button>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-muted">Credit wallet</p>
+                  <h3 className="mt-2 text-3xl font-black text-navy">
+                    {walletLoading ? '—' : (wallet?.balance ?? 0)}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted">review credits available</p>
+                </div>
                 <div className="rounded-2xl bg-success/10 p-3 text-success">
                   <Wallet className="h-5 w-5" />
                 </div>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-widest text-muted">Credit Balance</p>
-                  <h2 className="mt-2 text-4xl font-black text-navy">{walletLoading ? '...' : (wallet?.balance ?? 0)}</h2>
-                  <p className="mt-1 text-sm text-muted">review credits available</p>
-                </div>
               </div>
-              <div className="mt-6 space-y-3">
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Payment method</p>
-                <div className="flex gap-2">
+              <p className="mt-4 text-sm leading-6 text-muted">
+                Credits unlock tutor review for Writing and Speaking. Reading and Listening stay AI-evaluated.
+              </p>
+              <Button className="mt-4" fullWidth onClick={() => setActiveTab('credits')}>
+                Manage credits
+              </Button>
+            </section>
+          </div>
+
+          {/* Recent activity */}
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-black uppercase tracking-widest text-muted">Recent invoices</h3>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('invoices')}
+                  className="text-xs font-bold text-primary transition-colors hover:text-primary/80"
+                >
+                  View all
+                </button>
+              </div>
+              {recentInvoices.length === 0 ? (
+                <p className="mt-4 text-sm text-muted">No invoices yet. They will appear after your first paid checkout.</p>
+              ) : (
+                <ul className="mt-4 space-y-2">
+                  {recentInvoices.map((invoice) => (
+                    <li
+                      key={invoice.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background-light px-4 py-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-lg bg-surface p-2 text-muted">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-navy">
+                            {new Date(invoice.date).toLocaleDateString()}
+                          </p>
+                          <p className="text-[11px] text-muted">
+                            {invoice.amount} · {invoice.id}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                        {invoice.status}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-black uppercase tracking-widest text-muted">Recent credit activity</h3>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('credits')}
+                  className="text-xs font-bold text-primary transition-colors hover:text-primary/80"
+                >
+                  View all
+                </button>
+              </div>
+              {walletLoading ? (
+                <div className="mt-4 space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-12 rounded-xl" />
+                  ))}
+                </div>
+              ) : recentTransactions.length === 0 ? (
+                <div className="mt-4 flex flex-col items-center gap-2 py-6 text-center">
+                  <Clock className="h-7 w-7 text-muted/40" />
+                  <p className="text-sm text-muted">No credit activity yet.</p>
+                </div>
+              ) : (
+                <ul className="mt-4 space-y-2">
+                  {recentTransactions.map((tx) => (
+                    <li
+                      key={tx.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background-light px-4 py-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`rounded-lg p-1.5 ${tx.amount >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}
+                        >
+                          {tx.amount >= 0 ? (
+                            <ArrowDownCircle className="h-4 w-4" />
+                          ) : (
+                            <ArrowUpCircle className="h-4 w-4" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-navy">{tx.description ?? tx.type}</p>
+                          <p className="text-[11px] text-muted">
+                            {new Date(tx.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <p
+                        className={`text-sm font-bold ${tx.amount >= 0 ? 'text-success' : 'text-danger'}`}
+                      >
+                        {tx.amount >= 0 ? '+' : ''}
+                        {tx.amount}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        </TabPanel>
+
+        {/* ── PLANS ───────────────────────────────────────────────── */}
+        <TabPanel id="plans" activeTab={activeTab}>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Plans"
+            title="Compare plans and preview a change"
+            description="Plans are managed by the admin team. Upgrades and downgrades show a server-validated proration before checkout."
+            className="mb-4"
+          />
+
+          {plans.length === 0 ? (
+            <div className="rounded-2xl border border-border bg-surface p-5 text-sm text-muted shadow-sm">
+              No published billing plans are available yet.
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {plans.map((plan, index) => {
+                const isCurrent = plan.changeDirection === 'current';
+                const isPreviewing = previewPlanId === plan.id && preview;
+                return (
+                  <motion.article
+                    key={plan.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: index * 0.04 }}
+                    className={`flex flex-col rounded-2xl border p-5 shadow-sm ${
+                      isCurrent
+                        ? 'border-primary/30 bg-primary/5 dark:bg-primary/10'
+                        : 'border-border bg-surface'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-black uppercase tracking-widest text-muted">
+                          {plan.tier}
+                        </p>
+                        <h3 className="mt-1 text-xl font-black text-navy">{plan.label}</h3>
+                      </div>
+                      {isCurrent ? (
+                        <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
+                          Current
+                        </span>
+                      ) : plan.changeDirection === 'upgrade' ? (
+                        <ArrowUpCircle className="h-5 w-5 text-success" />
+                      ) : (
+                        <ArrowDownCircle className="h-5 w-5 text-amber-500" />
+                      )}
+                    </div>
+
+                    <p className="mt-3 text-sm leading-6 text-muted">{plan.description}</p>
+
+                    <div className="mt-5 rounded-xl border border-border bg-background-light p-4">
+                      <p className="text-2xl font-black text-navy">
+                        {plan.price}
+                        <span className="ml-1 text-sm font-semibold text-muted">/ {plan.interval}</span>
+                      </p>
+                      <p className="mt-1 text-sm text-muted">
+                        {plan.reviewCredits} review credits included
+                      </p>
+                    </div>
+
+                    <ul className="mt-4 space-y-2 text-sm text-navy">
+                      <li className="flex items-start gap-2">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+                        <span>
+                          Tutor reviews for{' '}
+                          <strong>
+                            {plan.includedSubtests && plan.includedSubtests.length > 0
+                              ? plan.includedSubtests.join(' & ')
+                              : 'no subtests'}
+                          </strong>
+                        </span>
+                      </li>
+                      {plan.trialDays > 0 ? (
+                        <li className="flex items-start gap-2">
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+                          <span>{plan.trialDays}-day trial</span>
+                        </li>
+                      ) : null}
+                      {plan.isRenewable ? (
+                        <li className="flex items-start gap-2">
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+                          <span>Auto-renewing</span>
+                        </li>
+                      ) : null}
+                      {(plan.entitlements ?? {})['invoiceDownloadsAvailable'] === true ? (
+                        <li className="flex items-start gap-2">
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+                          <span>Invoice downloads</span>
+                        </li>
+                      ) : null}
+                    </ul>
+
+                    {!isCurrent ? (
+                      <div className="mt-5 space-y-3">
+                        <Button
+                          variant="outline"
+                          fullWidth
+                          loading={busyKey === `preview:${plan.id}`}
+                          disabled={billingMutationsBlocked}
+                          onClick={() => loadPreview(plan.id)}
+                        >
+                          Preview {plan.changeDirection}
+                        </Button>
+                        {isPreviewing ? (
+                          <div className="rounded-xl border border-border bg-background-light p-4 text-sm text-muted">
+                            <p className="font-bold text-navy">{preview.summary}</p>
+                            <p className="mt-2">Prorated: {preview.proratedAmount}</p>
+                            <p className="mt-1">
+                              Effective {new Date(preview.effectiveAt).toLocaleDateString()}
+                            </p>
+                            <Button
+                              className="mt-3"
+                              fullWidth
+                              loading={busyKey === `${plan.changeDirection}:${plan.code}`}
+                              disabled={billingMutationsBlocked}
+                              onClick={() =>
+                                startCheckout(
+                                  plan.changeDirection === 'upgrade' ? 'plan_upgrade' : 'plan_downgrade',
+                                  1,
+                                  plan.code,
+                                  `${plan.label} ${plan.changeDirection}`,
+                                )
+                              }
+                            >
+                              Continue to checkout
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="mt-5 rounded-xl border border-dashed border-border bg-background-light/60 px-4 py-3 text-center text-xs font-bold uppercase tracking-widest text-muted">
+                        Active plan
+                      </div>
+                    )}
+                  </motion.article>
+                );
+              })}
+            </div>
+          )}
+        </TabPanel>
+
+        {/* ── CREDITS & ADD-ONS ─────────────────────────────────── */}
+        <TabPanel id="credits" activeTab={activeTab}>
+          <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+            {/* Top-up panel */}
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <LearnerSurfaceSectionHeader
+                eyebrow="Wallet"
+                title="Top up review credits"
+                description="Bonus credits scale with the tier amount. Tiers and bonuses are configurable from the platform."
+                className="mb-4"
+              />
+
+              <div className="mb-5 flex items-center gap-3">
+                <p className="text-[11px] font-black uppercase tracking-widest text-muted">Pay with</p>
+                <div className="inline-flex rounded-xl border border-border bg-background-light p-1">
                   {(['stripe', 'paypal'] as const).map((gw) => (
-                    <button key={gw} type="button" onClick={() => setSelectedGateway(gw)} className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${selectedGateway === gw ? 'bg-emerald-700 text-white shadow-sm' : 'border border-border bg-background-light text-navy hover:bg-surface'}`}>
+                    <button
+                      key={gw}
+                      type="button"
+                      onClick={() => setSelectedGateway(gw)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                        selectedGateway === gw
+                          ? 'bg-emerald-700 text-white shadow-sm'
+                          : 'text-navy hover:bg-surface'
+                      }`}
+                    >
                       {gw === 'stripe' ? 'Stripe' : 'PayPal'}
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="mt-6 grid grid-cols-2 gap-3">
-                {TOP_UP_TIERS.map((tier) => (
-                  <motion.button key={tier.amount} type="button" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} disabled={billingMutationsBlocked || busyKey === `topup:${tier.amount}`} onClick={() => handleTopUp(tier.amount)} className={`relative rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${tier.popular ? 'border-emerald-300 bg-surface shadow-md' : 'border-border bg-background-light hover:border-emerald-200 hover:shadow-sm'}`}>
-                    {tier.popular ? <span className="absolute -top-2 right-3 rounded-full bg-emerald-700 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white">Popular</span> : null}
-                    <p className="text-lg font-black text-navy">{tier.label}</p>
-                    <p className="text-xs text-muted">{tier.credits} credits{tier.bonus > 0 ? <span className="ml-1 font-bold text-emerald-700">+{tier.bonus} bonus</span> : null}</p>
-                    {busyKey === `topup:${tier.amount}` ? <div className="mt-2 text-xs font-bold text-emerald-700">Processing...</div> : null}
+
+              <div className="grid grid-cols-2 gap-3">
+                {topUpTiers.map((tier) => (
+                  <motion.button
+                    key={tier.amount}
+                    type="button"
+                    whileHover={{ scale: 1.015 }}
+                    whileTap={{ scale: 0.98 }}
+                    disabled={billingMutationsBlocked || busyKey === `topup:${tier.amount}`}
+                    onClick={() => handleTopUp(tier.amount)}
+                    className={`relative rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                      tier.isPopular
+                        ? 'border-emerald-300 bg-surface shadow-md'
+                        : 'border-border bg-background-light hover:border-emerald-200 hover:shadow-sm'
+                    }`}
+                  >
+                    {tier.isPopular ? (
+                      <span className="absolute -top-2 right-3 rounded-full bg-emerald-700 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white">
+                        Popular
+                      </span>
+                    ) : null}
+                    <p className="text-lg font-black text-navy">
+                      {formatCurrency(tier.amount, walletCurrency)}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {tier.credits} credits
+                      {tier.bonus > 0 ? (
+                        <span className="ml-1 font-bold text-emerald-700">+{tier.bonus} bonus</span>
+                      ) : null}
+                    </p>
+                    {tier.label ? (
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-muted">
+                        {tier.label}
+                      </p>
+                    ) : null}
+                    {busyKey === `topup:${tier.amount}` ? (
+                      <p className="mt-2 text-xs font-bold text-emerald-700">Processing…</p>
+                    ) : null}
                   </motion.button>
                 ))}
               </div>
-            </MotionSection>
 
-            <MotionSection delayIndex={1} className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Transaction History</p>
-                <button type="button" onClick={() => loadWallet()} className="text-xs font-bold text-primary transition-colors hover:text-primary/80">Refresh</button>
+              <div className="mt-6">
+                <Input
+                  label="Coupon code (optional)"
+                  value={couponCode}
+                  onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                  placeholder="WELCOME10"
+                  hint="Applied to the next validated quote (add-ons and plan changes)."
+                />
               </div>
-              {walletLoading ? (
-                <div className="mt-4 space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 rounded-xl" />)}</div>
-              ) : !wallet || wallet.transactions.length === 0 ? (
-                <div className="mt-6 flex flex-col items-center gap-3 py-8 text-center">
-                  <Clock className="h-8 w-8 text-muted/40" />
-                  <p className="text-sm text-muted">No transactions yet. Your credit history will appear here.</p>
+            </section>
+
+            {/* Add-ons panel */}
+            <section>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Add-ons"
+                title="Subscription extras compatible with your plan"
+                description="Add-ons follow the same quote → checkout flow as plan changes. Tutor reviews only apply to Writing and Speaking."
+                className="mb-4"
+              />
+              {activeAddOns.length > 0 ? (
+                <div className="mb-4 rounded-2xl border border-primary/15 bg-primary/5 p-4">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-primary">
+                    Active on this account
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {activeAddOns.map((addOn) => (
+                      <li key={addOn.id} className="flex items-center justify-between text-sm">
+                        <span className="font-bold text-navy">{addOn.name}</span>
+                        <span className="text-xs font-bold uppercase tracking-widest text-primary">
+                          ×{addOn.quantity}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {addOns.length > 0 ? (
+                <div className="space-y-3">
+                  {addOns.map((addOn) => {
+                    const checkoutProductType = billingAddOnCheckoutProductType(addOn.productType);
+                    const checkoutLabel =
+                      checkoutProductType === 'review_credits' ? 'Purchase credits' : 'Purchase add-on';
+                    return (
+                      <article
+                        key={addOn.id}
+                        className="rounded-2xl border border-border bg-surface p-5 shadow-sm"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-black uppercase tracking-widest text-muted">
+                              {addOn.productType.replace(/_/g, ' ')}
+                            </p>
+                            <h3 className="mt-1 text-base font-black text-navy">{addOn.name}</h3>
+                            <p className="mt-2 text-sm text-muted">{addOn.description}</p>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-black uppercase tracking-widest text-muted">
+                              <span className="rounded-full bg-background-light px-2.5 py-1">
+                                {addOn.quantity} credits
+                              </span>
+                              <span className="rounded-full bg-background-light px-2.5 py-1">
+                                {addOn.interval}
+                              </span>
+                              {addOn.isRecurring ? (
+                                <span className="rounded-full bg-background-light px-2.5 py-1">
+                                  Recurring
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="rounded-xl bg-background-light px-3 py-2 text-sm font-black text-navy">
+                            {addOn.price}
+                          </div>
+                        </div>
+                        <Button
+                          className="mt-4"
+                          fullWidth
+                          loading={busyKey === `${checkoutProductType}:${addOn.code}`}
+                          disabled={billingMutationsBlocked}
+                          onClick={() =>
+                            startCheckout(checkoutProductType, addOn.quantity, addOn.code, addOn.name)
+                          }
+                        >
+                          <ShoppingCart className="h-4 w-4" />
+                          {checkoutLabel}
+                        </Button>
+                      </article>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-center text-sm text-muted">
+                  No add-ons are compatible with your current plan.
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* Full transaction history */}
+          <section className="mt-6 rounded-2xl border border-border bg-surface p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-black uppercase tracking-widest text-muted">
+                Wallet transaction history
+              </h3>
+              <button
+                type="button"
+                onClick={() => loadWallet()}
+                className="text-xs font-bold text-primary transition-colors hover:text-primary/80"
+              >
+                Refresh
+              </button>
+            </div>
+            {walletLoading ? (
+              <div className="mt-4 space-y-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-12 rounded-xl" />
+                ))}
+              </div>
+            ) : !wallet || wallet.transactions.length === 0 ? (
+              <div className="mt-4 flex flex-col items-center gap-2 py-8 text-center">
+                <Clock className="h-8 w-8 text-muted/40" />
+                <p className="text-sm text-muted">
+                  No transactions yet. Your credit history will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-4 max-h-[420px] overflow-y-auto pr-1">
+                <ul className="space-y-2">
                   {wallet.transactions.map((tx) => (
-                    <div key={tx.id} className="flex items-center justify-between rounded-xl border border-border bg-background-light px-4 py-3">
+                    <li
+                      key={tx.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background-light px-4 py-3"
+                    >
                       <div className="flex items-center gap-3">
-                        <div className={`rounded-lg p-1.5 ${tx.amount >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                          {tx.amount >= 0 ? <ArrowDownCircle className="h-4 w-4" /> : <ArrowUpCircle className="h-4 w-4" />}
+                        <div
+                          className={`rounded-lg p-1.5 ${tx.amount >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}
+                        >
+                          {tx.amount >= 0 ? (
+                            <ArrowDownCircle className="h-4 w-4" />
+                          ) : (
+                            <ArrowUpCircle className="h-4 w-4" />
+                          )}
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-navy">{tx.description ?? tx.type}</p>
-                          <p className="text-[11px] text-muted">{new Date(tx.createdAt).toLocaleDateString()}</p>
+                          <p className="text-[11px] text-muted">
+                            {new Date(tx.createdAt).toLocaleDateString()}
+                          </p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className={`text-sm font-bold ${tx.amount >= 0 ? 'text-success' : 'text-danger'}`}>{tx.amount >= 0 ? '+' : ''}{tx.amount}</p>
+                        <p
+                          className={`text-sm font-bold ${tx.amount >= 0 ? 'text-success' : 'text-danger'}`}
+                        >
+                          {tx.amount >= 0 ? '+' : ''}
+                          {tx.amount}
+                        </p>
                         <p className="text-[11px] text-muted">bal: {tx.balanceAfter}</p>
                       </div>
-                    </div>
+                    </li>
                   ))}
-                </div>
-              )}
-            </MotionSection>
-          </div>
-        </section>
-
-        {/* Visual checkout + active add-ons */}
-        <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-          <MotionSection className="rounded-[28px] border border-primary/20 bg-gradient-to-br from-primary/10 via-surface to-surface p-6 shadow-sm dark:border-primary/25 dark:from-primary/15">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="flex items-start gap-4">
-                <div className="rounded-2xl bg-primary text-white p-3 shadow-sm">
-                  <CreditCard className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-widest text-primary">Validated checkout</p>
-                  <h2 className="mt-1 text-2xl font-black text-navy">Quote builder</h2>
-                  <p className="mt-2 max-w-xl text-sm text-muted">Pick a plan or add-on below, then confirm one server-checked total here.</p>
-                </div>
-              </div>
-              <Button variant="outline" onClick={() => { setCouponCode(''); setQuote(null); setQuoteLabel(null); }}>Reset quote</Button>
-            </div>
-
-            <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-              <Input label="Coupon code" value={couponCode} onChange={(event) => setCouponCode(event.target.value.toUpperCase())} placeholder="WELCOME10" hint="Optional — applied to the next generated quote." />
-              <div className="inline-flex min-h-12 items-center justify-center rounded-2xl border !border-emerald-300 !bg-white px-4 py-3 text-sm font-black !text-emerald-800 shadow-sm shadow-emerald-950/5 dark:!border-emerald-300/30 dark:!bg-slate-950 dark:!text-emerald-100 dark:shadow-none">
-                <CheckCircle2 className="mr-2 inline h-4 w-4 !text-emerald-600 dark:!text-emerald-200" />Server validated
-              </div>
-            </div>
-
-            <div className="mt-6 rounded-[24px] border border-border bg-surface/90 p-5 shadow-inner">
-              {quote ? (
-                <div className="space-y-5">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-muted">Ready quote</p>
-                      <h3 className="mt-1 text-xl font-black text-navy">{quoteLabel ?? 'Checkout'}</h3>
-                      <p className="mt-1 text-sm text-muted">{quote.summary}</p>
-                    </div>
-                    <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-black uppercase tracking-widest text-white dark:bg-white dark:text-slate-950">{quote.status}</span>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-2xl border border-border bg-background-light p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Subtotal</p><p className="mt-2 text-lg font-black text-navy">{formatCurrency(quote.subtotalAmount, quote.currency)}</p></div>
-                    <div className="rounded-2xl border border-border bg-background-light p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Discount</p><p className="mt-2 text-lg font-black text-success">{formatCurrency(quote.discountAmount, quote.currency)}</p></div>
-                    <div className="rounded-2xl border border-primary/20 bg-primary/10 p-4"><p className="text-xs font-black uppercase tracking-widest text-primary">Total</p><p className="mt-2 text-lg font-black text-navy">{formatCurrency(quote.totalAmount, quote.currency)}</p></div>
-                  </div>
-                  <div className="grid gap-2">
-                    {quote.items.map((item) => (
-                      <div key={`${item.code}:${item.kind}`} className="flex items-center justify-between rounded-2xl border border-border bg-background-light px-4 py-3 text-sm">
-                        <div><p className="font-bold text-navy">{item.name}</p><p className="text-xs uppercase tracking-widest text-muted">{item.kind} · {item.code}</p></div>
-                        <p className="font-black text-navy">{formatCurrency(item.amount, item.currency)}</p>
-                      </div>
-                    ))}
-                  </div>
-                  {Object.keys(quote.validation ?? {}).length > 0 ? (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-300/30 dark:bg-amber-300/10 dark:text-amber-100">
-                      <p className="font-black uppercase tracking-widest">Validation</p>
-                      <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(quote.validation, null, 2)}</pre>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="grid gap-3 text-sm text-muted sm:grid-cols-3">
-                  <div className="rounded-2xl border border-border bg-background-light p-4"><p className="font-black text-navy">1. Choose</p><p className="mt-1">Select a plan or add-on.</p></div>
-                  <div className="rounded-2xl border border-border bg-background-light p-4"><p className="font-black text-navy">2. Validate</p><p className="mt-1">Coupon and totals are checked.</p></div>
-                  <div className="rounded-2xl border border-border bg-background-light p-4"><p className="font-black text-navy">3. Checkout</p><p className="mt-1">Pay only after quote review.</p></div>
-                </div>
-              )}
-            </div>
-          </MotionSection>
-
-          <MotionSection delayIndex={1} className="rounded-[28px] border border-primary/15 bg-surface p-6 shadow-sm">
-            <div className="flex items-start gap-4">
-              <div className="rounded-2xl border border-primary/20 bg-primary/10 p-3 text-primary"><Sparkles className="h-5 w-5" /></div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Active add-ons</p>
-                <h2 className="mt-1 text-xl font-black text-navy">Subscription extras</h2>
-                <p className="mt-2 text-sm leading-6 text-muted">Visible, server-backed items attached to this learner account.</p>
-              </div>
-            </div>
-            <div className="mt-5 grid gap-3">
-              {activeAddOns.length > 0 ? activeAddOns.map((addOn) => (
-                <div key={addOn.id} className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
-                  <p className="text-sm font-black text-navy">{addOn.name}</p>
-                  <p className="mt-1 text-xs font-bold uppercase tracking-widest text-primary">Quantity {addOn.quantity}</p>
-                </div>
-              )) : (
-                <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-center">
-                  <p className="text-sm font-black text-navy">No active add-ons</p>
-                  <p className="mt-1 text-xs text-muted">Purchased review credits will appear here.</p>
-                </div>
-              )}
-            </div>
-            <div className="mt-5 rounded-2xl border border-border bg-background-light p-4 text-sm leading-6 text-muted">
-              Add-ons follow the same quote → checkout flow as plan changes.
-            </div>
-          </MotionSection>
-        </section>
-
-        {/* ── Current Plan + Entitlements ── */}
-        <section className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
-          <MotionSection className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Current Plan</p>
-                <h2 className="mt-2 text-2xl font-black text-navy">{data.currentPlan}</h2>
-                <p className="mt-1 text-sm text-muted">{data.price} / {data.interval}</p>
-              </div>
-              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-700"><CheckCircle2 className="h-4 w-4" />{data.status}</span>
-            </div>
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-2xl border border-border bg-background-light p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Next Renewal</p><p className="mt-2 text-sm font-bold text-navy">{new Date(data.nextRenewal).toLocaleDateString()}</p></div>
-              <div className="rounded-2xl border border-border bg-background-light p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Review Coverage</p><p className="mt-2 text-sm font-bold text-navy">{supportedReviewSubtests.join(' + ') || 'None'}</p></div>
-              <div className="rounded-2xl border border-border bg-background-light p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Invoices</p><p className="mt-2 text-sm font-bold text-navy">{invoiceDownloadsAvailable ? 'Downloads available' : 'Unavailable'}</p></div>
-            </div>
-          </MotionSection>
-          <MotionSection delayIndex={1} className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-            <div className="flex items-start gap-4">
-              <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 text-indigo-700"><Sparkles className="h-5 w-5" /></div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Productive Skill Reviews</p>
-                <h2 className="mt-2 text-xl font-black text-navy">Entitlements stay aligned with the OET business model</h2>
-                <p className="mt-2 text-sm leading-6 text-muted">Human review is available only for Writing and Speaking. Reading and Listening stay AI-evaluated and transcript-backed.</p>
-              </div>
-            </div>
-          </MotionSection>
-        </section>
-
-        {/* ── Plan Cards ── */}
-        <section>
-          <LearnerSurfaceSectionHeader eyebrow="Plans" title="Preview a plan change before you commit" description="Upgrade and downgrade actions should explain the proration, included review capacity, and effective date before checkout opens." className="mb-4" />
-          <div className="grid gap-4 lg:grid-cols-3">
-            {plans.map((plan, index) => {
-              const isCurrent = plan.changeDirection === 'current';
-              const isPreviewing = previewPlanId === plan.id && preview;
-              return (
-                <MotionItem
-                  key={plan.id}
-                  delayIndex={index}
-                  className={`rounded-2xl border p-5 shadow-sm ${
-                    isCurrent ? 'border-slate-800 bg-slate-950 text-white dark:border-slate-700' : 'border-border bg-surface'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className={`text-xs font-black uppercase tracking-widest ${isCurrent ? 'text-slate-300' : 'text-muted'}`}>{plan.badge || plan.tier}</p>
-                      <h3 className={`mt-2 text-xl font-black ${isCurrent ? 'text-white' : 'text-navy'}`}>{plan.label}</h3>
-                      <p className={`mt-2 text-sm leading-6 ${isCurrent ? 'text-slate-200' : 'text-muted'}`}>{plan.description}</p>
-                    </div>
-                    {plan.changeDirection === 'upgrade' ? <ArrowUpCircle className="h-5 w-5 text-success" /> : null}
-                    {plan.changeDirection === 'downgrade' ? <ArrowDownCircle className="h-5 w-5 text-amber-500" /> : null}
-                  </div>
-                  <div className={`mt-5 rounded-2xl border p-4 text-sm ${isCurrent ? 'border-white/15 bg-white/10' : 'border-border bg-background-light'}`}>
-                    <p className={`font-black ${isCurrent ? 'text-white' : 'text-navy'}`}>{plan.price} / {plan.interval}</p>
-                    <p className={`mt-1 ${isCurrent ? 'text-slate-200' : 'text-muted'}`}>{plan.reviewCredits} review credits included</p>
-                  </div>
-                  {!isCurrent ? (
-                    <div className="mt-5 space-y-3">
-                      <Button variant="outline" fullWidth loading={busyKey === `preview:${plan.id}`} disabled={billingMutationsBlocked} onClick={() => loadPreview(plan.id)}>Preview {plan.changeDirection}</Button>
-                      {isPreviewing ? (
-                        <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
-                          <p className="font-bold text-navy">{preview.summary}</p>
-                          <p className="mt-2">Prorated charge: {preview.proratedAmount}</p>
-                          <p className="mt-1">Effective date: {new Date(preview.effectiveAt).toLocaleDateString()}</p>
-                          <Button className="mt-4" fullWidth loading={busyKey === `${plan.changeDirection}:${plan.code}`} disabled={billingMutationsBlocked} onClick={() => startCheckout(plan.changeDirection === 'upgrade' ? 'plan_upgrade' : 'plan_downgrade', 1, plan.code, `${plan.label} ${plan.changeDirection}`)}>Continue to checkout</Button>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </MotionItem>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* ── Add-ons + Invoices ── */}
-        <section className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-          <div>
-            <LearnerSurfaceSectionHeader eyebrow="Extras" title="Top up tutor review credits" description="Extras only add tutor review capacity for Writing and Speaking. They don't affect Listening or Reading scoring." className="mb-4" />
-            {addOns.length > 0 ? (
-              <div className="space-y-4">
-                {addOns.map((addOn) => {
-                  const checkoutProductType = billingAddOnCheckoutProductType(addOn.productType);
-                  const checkoutLabel = checkoutProductType === 'review_credits' ? 'Purchase credits' : 'Purchase add-on';
-
-                  return (
-                    <div key={addOn.id} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-xs font-black uppercase tracking-widest text-muted">{addOn.productType.replace(/_/g, ' ')}</p>
-                          <h3 className="mt-2 text-lg font-black text-navy">{addOn.name}</h3>
-                          <p className="mt-2 text-sm text-muted">{addOn.description}</p>
-                        </div>
-                        <div className="rounded-2xl bg-background-light px-4 py-3 text-sm font-black text-navy">{addOn.price}</div>
-                      </div>
-                      <div className="mt-4 flex flex-wrap gap-2 text-xs font-black uppercase tracking-widest text-muted">
-                        <span className="rounded-full bg-background-light px-3 py-1">{addOn.quantity} credits</span>
-                        <span className="rounded-full bg-background-light px-3 py-1">{addOn.interval}</span>
-                        {addOn.isRecurring ? <span className="rounded-full bg-background-light px-3 py-1">Recurring</span> : null}
-                      </div>
-                      <Button className="mt-4" fullWidth loading={busyKey === `${checkoutProductType}:${addOn.code}`} disabled={billingMutationsBlocked} onClick={() => startCheckout(checkoutProductType, addOn.quantity, addOn.code, addOn.name)}>
-                        <ShoppingCart className="h-4 w-4" />{checkoutLabel}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-border bg-surface p-5 text-sm text-muted shadow-sm">
-                No add-ons are compatible with the current plan.
+                </ul>
               </div>
             )}
-          </div>
-          <div>
-            <LearnerSurfaceSectionHeader eyebrow="Invoices" title="Keep billing evidence downloadable" description="Each invoice should be visible, dated, and immediately downloadable without a dead button." className="mb-4" />
-            <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-              {invoices.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted">No invoices yet. Billing history will appear here after the first paid plan or credit purchase.</div>
-              ) : (
-                <div className="divide-y divide-border">
-                  {invoices.map((invoice) => (
-                    <div key={invoice.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="rounded-2xl bg-background-light p-3 text-muted"><FileText className="h-5 w-5" /></div>
-                        <div>
-                          <p className="text-sm font-black text-navy">{new Date(invoice.date).toLocaleDateString()}</p>
-                          <p className="text-sm text-muted">{invoice.amount} | {invoice.id}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-700">{invoice.status}</span>
-                        <Button variant="outline" loading={busyKey === `invoice:${invoice.id}`} onClick={() => handleDownloadInvoice(invoice.id)}>
-                          <Download className="h-4 w-4" />Download invoice
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
+          </section>
+        </TabPanel>
 
-        {/* ── Plan Comparison Matrix ── */}
-        <section>
-          <LearnerSurfaceSectionHeader eyebrow="Compare" title="Feature-by-feature plan comparison" description="Understand exactly what each tier includes before making a change." className="mb-4" />
-          {plans.length > 0 ? (
-            <>
-              <div className="space-y-4 md:hidden">
-                {plans.map((plan, planIndex) => (
-                  <MotionItem
-                    key={plan.id}
-                    delayIndex={planIndex}
-                    className={`rounded-2xl border p-4 shadow-sm ${plan.changeDirection === 'current' ? 'border-primary/20 bg-primary/10 dark:bg-primary/15' : 'border-border bg-surface'}`}
+        {/* ── INVOICES ──────────────────────────────────────────── */}
+        <TabPanel id="invoices" activeTab={activeTab}>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Invoices"
+            title="Billing history"
+            description="Each paid checkout produces an invoice you can download for your records."
+            className="mb-4"
+          />
+          <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+            {invoices.length === 0 ? (
+              <div className="p-10 text-center">
+                <Receipt className="mx-auto h-10 w-10 text-muted/40" />
+                <p className="mt-3 text-sm text-muted">
+                  No invoices yet. They will appear after your first paid checkout.
+                </p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {invoices.map((invoice) => (
+                  <li
+                    key={invoice.id}
+                    className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-4">
+                      <div className="rounded-xl bg-background-light p-3 text-muted">
+                        <FileText className="h-5 w-5" />
+                      </div>
                       <div>
-                        <p className="text-[11px] font-black uppercase tracking-widest text-muted">{plan.tier}</p>
-                        <h3 className="mt-1 text-lg font-black text-navy">{plan.label}</h3>
-                        <p className="mt-1 text-sm text-muted">
-                          {plan.price} / {plan.interval}
+                        <p className="text-sm font-black text-navy">
+                          {new Date(invoice.date).toLocaleDateString()}
+                        </p>
+                        <p className="text-sm text-muted">
+                          {invoice.amount} · {invoice.id}
                         </p>
                       </div>
-                      {plan.changeDirection === 'current' ? (
-                        <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
-                          Current
-                        </span>
-                      ) : null}
                     </div>
-
-                    <div className="mt-4 space-y-2">
-                      {planComparisonRows.map((row) => {
-                        const value = row.values[planIndex];
-
-                        return (
-                          <div key={`${plan.id}:${row.feature}`} className="flex items-start justify-between gap-3 rounded-2xl bg-background-light px-3 py-2">
-                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-muted">{row.feature}</span>
-                            <span className="text-right text-sm font-semibold text-navy">
-                              {typeof value === 'boolean' ? (
-                                value ? <Check className="inline-block h-4 w-4 text-emerald-600" /> : <X className="inline-block h-4 w-4 text-muted/40" />
-                              ) : (
-                                value
-                              )}
-                            </span>
-                          </div>
-                        );
-                      })}
+                    <div className="flex items-center gap-3">
+                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-700">
+                        {invoice.status}
+                      </span>
+                      <Button
+                        variant="outline"
+                        loading={busyKey === `invoice:${invoice.id}`}
+                        disabled={!invoiceDownloadsAvailable}
+                        onClick={() => handleDownloadInvoice(invoice.id)}
+                      >
+                        <Download className="h-4 w-4" />
+                        Download
+                      </Button>
                     </div>
-                  </MotionItem>
+                  </li>
                 ))}
-              </div>
-
-              <MotionSection className="hidden overflow-hidden rounded-2xl border border-border bg-surface shadow-sm md:block">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px] text-sm">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="px-6 py-4 text-left text-xs font-black uppercase tracking-widest text-muted">Feature</th>
-                        {plans.map((plan) => (
-                          <th
-                            key={plan.id}
-                            className={`px-4 py-4 text-center text-xs font-black uppercase tracking-widest ${
-                              plan.changeDirection === 'current' ? 'bg-primary/10 text-primary' : 'text-muted'
-                            }`}
-                          >
-                            <div className="flex flex-col items-center gap-1">
-                              <span>{plan.label}</span>
-                              <span className="text-[10px] font-semibold tracking-normal normal-case">
-                                {plan.price} / {plan.interval}
-                              </span>
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {planComparisonRows.map((row) => (
-                        <tr key={row.feature} className="transition-colors hover:bg-background-light/50">
-                          <td className="px-6 py-3.5 font-semibold text-navy">{row.feature}</td>
-                          {row.values.map((value, index) => {
-                            const plan = plans[index];
-                            const isCurrent = plan?.changeDirection === 'current';
-
-                            return (
-                              <td
-                                key={`${row.feature}:${plan?.id ?? index}`}
-                                className={`px-4 py-3.5 text-center ${
-                                  isCurrent ? 'bg-primary/10' : ''
-                                }`}
-                              >
-                                {typeof value === 'boolean' ? (
-                                  value ? (
-                                    <Check className="mx-auto h-4.5 w-4.5 text-emerald-600" />
-                                  ) : (
-                                    <X className="mx-auto h-4.5 w-4.5 text-muted/40" />
-                                  )
-                                ) : (
-                                  <span className="text-xs font-bold text-navy">{value}</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </MotionSection>
-            </>
-          ) : (
-            <div className="rounded-2xl border border-border bg-surface p-5 text-sm text-muted shadow-sm">
-              No published billing plans are available yet.
-            </div>
-          )}
-        </section>
-
-        {(upgradePlans.length === 0 && downgradePlans.length === 0) ? (
-          <div className="rounded-2xl border border-border bg-surface p-5 text-sm text-muted shadow-sm">Plan changes are not available for the current learner subscription state yet.</div>
-        ) : null}
+              </ul>
+            )}
+          </div>
+          {!invoiceDownloadsAvailable ? (
+            <p className="mt-3 text-xs text-muted">
+              Invoice downloads are unavailable on your current plan. Upgrade to enable downloadable invoices.
+            </p>
+          ) : null}
+        </TabPanel>
       </div>
     </LearnerDashboardShell>
   );
