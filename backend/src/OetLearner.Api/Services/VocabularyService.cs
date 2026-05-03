@@ -680,7 +680,10 @@ public class VocabularyService(
         Category: t.Category,
         Difficulty: t.Difficulty,
         IpaPronunciation: t.IpaPronunciation,
+        AmericanSpelling: t.AmericanSpelling,
         AudioUrl: null,
+        AudioSlowUrl: null,
+        AudioSentenceUrl: null,
         AudioMediaAssetId: null,
         ImageUrl: t.ImageUrl,
         Synonyms: ParseStringArray(t.SynonymsJson).ToArray(),
@@ -696,6 +699,7 @@ public class VocabularyService(
         Category: t.Category,
         Difficulty: t.Difficulty,
         IpaPronunciation: t.IpaPronunciation,
+        AmericanSpelling: t.AmericanSpelling,
         AudioUrl: null,
         ExampleSentence: t.ExampleSentence);
 

@@ -25,7 +25,11 @@ export type VocabFormValues = {
   category: string;
   difficulty: string;
   ipaPronunciation: string;
+  americanSpelling: string;
   audioUrl: string;
+  audioSlowUrl: string;
+  audioSentenceUrl: string;
+  audioMediaAssetId: string;
   imageUrl: string;
   synonyms: string[];
   collocations: string[];
@@ -100,7 +104,11 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
     category: initial?.category ?? 'medical',
     difficulty: initial?.difficulty ?? 'medium',
     ipaPronunciation: initial?.ipaPronunciation ?? '',
+    americanSpelling: initial?.americanSpelling ?? '',
     audioUrl: initial?.audioUrl ?? '',
+    audioSlowUrl: initial?.audioSlowUrl ?? '',
+    audioSentenceUrl: initial?.audioSentenceUrl ?? '',
+    audioMediaAssetId: initial?.audioMediaAssetId ?? '',
     imageUrl: initial?.imageUrl ?? '',
     synonyms: initial?.synonyms ?? [],
     collocations: initial?.collocations ?? [],
@@ -173,6 +181,10 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">IPA Pronunciation</label>
                 <Input value={v.ipaPronunciation} onChange={(e) => setV({ ...v, ipaPronunciation: e.target.value })} placeholder="/ˈ.../" maxLength={64} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-navy">American spelling</label>
+                <Input value={v.americanSpelling} onChange={(e) => setV({ ...v, americanSpelling: e.target.value })} placeholder="e.g. hemorrhage" maxLength={128} />
               </div>
             </div>
 
@@ -249,6 +261,18 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Audio URL</label>
                 <Input value={v.audioUrl} onChange={(e) => setV({ ...v, audioUrl: e.target.value })} placeholder="https://..." />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-navy">Slow audio URL</label>
+                <Input value={v.audioSlowUrl} onChange={(e) => setV({ ...v, audioSlowUrl: e.target.value })} placeholder="https://..." maxLength={256} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-navy">Sentence audio URL</label>
+                <Input value={v.audioSentenceUrl} onChange={(e) => setV({ ...v, audioSentenceUrl: e.target.value })} placeholder="https://..." maxLength={256} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-navy">Audio media asset ID</label>
+                <Input value={v.audioMediaAssetId} onChange={(e) => setV({ ...v, audioMediaAssetId: e.target.value })} placeholder="MediaAsset id" maxLength={64} />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Image URL</label>

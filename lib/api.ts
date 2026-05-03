@@ -5470,10 +5470,11 @@ export async function fetchAdminVocabularyCategories(params?: { examTypeCode?: s
   return apiRequest(`/v1/admin/vocabulary/categories${qs ? `?${qs}` : ''}`);
 }
 
-export async function previewAdminVocabularyImport(file: File) {
+export async function previewAdminVocabularyImport(file: File, importBatchId?: string) {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetchWithTimeout(resolveApiUrl('/v1/admin/vocabulary/import/preview'), {
+  const qs = importBatchId ? `?importBatchId=${encodeURIComponent(importBatchId)}` : '';
+  const response = await fetchWithTimeout(resolveApiUrl(`/v1/admin/vocabulary/import/preview${qs}`), {
     method: 'POST',
     headers: await getHeaders('/v1/admin/vocabulary/import/preview', undefined, { json: false }),
     body: formData,
@@ -5491,10 +5492,12 @@ export async function previewAdminVocabularyImport(file: File) {
   return response.json();
 }
 
-export async function bulkImportAdminVocabulary(file: File, dryRun = false) {
+export async function bulkImportAdminVocabulary(file: File, dryRun = true, importBatchId?: string) {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetchWithTimeout(resolveApiUrl(`/v1/admin/vocabulary/import?dryRun=${dryRun}`), {
+  const params = new URLSearchParams({ dryRun: String(dryRun) });
+  if (importBatchId) params.set('importBatchId', importBatchId);
+  const response = await fetchWithTimeout(resolveApiUrl(`/v1/admin/vocabulary/import?${params.toString()}`), {
     method: 'POST',
     headers: await getHeaders('/v1/admin/vocabulary/import', undefined, { json: false }),
     body: formData,
@@ -5510,6 +5513,51 @@ export async function bulkImportAdminVocabulary(file: File, dryRun = false) {
     throw new ApiError(response.status, code, message, false);
   }
   return response.json();
+}
+
+export async function fetchAdminVocabularyImportBatch(importBatchId: string) {
+  return apiRequest(`/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}`);
+}
+
+export async function exportAdminVocabularyImportBatchCsv(importBatchId: string) {
+  const path = `/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}/export`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path),
+  }, 60_000);
+  if (!response.ok) {
+    throw new ApiError(response.status, 'export_failed', `Export failed: ${response.status}`, false);
+  }
+  return response.blob();
+}
+
+export async function reconcileAdminVocabularyImportBatch(importBatchId: string, file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const path = `/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}/reconcile`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'POST',
+    headers: await getHeaders(path, undefined, { json: false }),
+    body: formData,
+  }, 120_000);
+  if (!response.ok) {
+    let code = 'reconcile_failed';
+    let message = `Reconciliation failed: ${response.status}`;
+    try {
+      const err = await response.json();
+      code = err.code ?? err.errorCode ?? code;
+      message = err.message ?? err.error ?? message;
+    } catch { /* ignore */ }
+    throw new ApiError(response.status, code, message, false);
+  }
+  return response.json();
+}
+
+export async function rollbackAdminVocabularyImportBatch(importBatchId: string, deleteDraftRows = false) {
+  return apiRequest(`/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}/rollback`, {
+    method: 'POST',
+    body: JSON.stringify({ deleteDraftRows }),
+  });
 }
 
 export async function requestAdminVocabularyAiDraft(payload: {

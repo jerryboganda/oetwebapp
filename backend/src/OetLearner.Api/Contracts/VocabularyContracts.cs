@@ -16,7 +16,10 @@ public sealed record VocabularyTermResponse(
     string Category,
     string Difficulty,
     string? IpaPronunciation,
+    string? AmericanSpelling,
     string? AudioUrl,
+    string? AudioSlowUrl,
+    string? AudioSentenceUrl,
     string? AudioMediaAssetId,
     string? ImageUrl,
     string[] Synonyms,
@@ -33,6 +36,7 @@ public sealed record VocabularyTermSummary(
     string Category,
     string Difficulty,
     string? IpaPronunciation,
+    string? AmericanSpelling,
     string? AudioUrl,
     string? ExampleSentence
 );
@@ -222,7 +226,10 @@ public sealed record AdminVocabularyItemCreateRequestV2(
     string Category,
     string? Difficulty,
     string? IpaPronunciation,
+    string? AmericanSpelling,
     string? AudioUrl,
+    string? AudioSlowUrl,
+    string? AudioSentenceUrl,
     string? AudioMediaAssetId,
     string? ImageUrl,
     IReadOnlyList<string>? Synonyms,
@@ -242,7 +249,10 @@ public sealed record AdminVocabularyItemUpdateRequestV2(
     string? Category,
     string? Difficulty,
     string? IpaPronunciation,
+    string? AmericanSpelling,
     string? AudioUrl,
+    string? AudioSlowUrl,
+    string? AudioSentenceUrl,
     string? AudioMediaAssetId,
     string? ImageUrl,
     IReadOnlyList<string>? Synonyms,
@@ -260,11 +270,13 @@ public sealed record AdminVocabularyImportPreviewRow(
     string? Category,
     string? Difficulty,
     string? ProfessionId,
+    string? AmericanSpelling,
     string? ExampleSentence,
     string? Error
 );
 
 public sealed record AdminVocabularyImportPreviewResponse(
+    string ImportBatchId,
     int TotalRows,
     int ValidRows,
     int InvalidRows,
@@ -274,11 +286,52 @@ public sealed record AdminVocabularyImportPreviewResponse(
 );
 
 public sealed record AdminVocabularyImportResponse(
+    string ImportBatchId,
     int Imported,
     int Skipped,
     int Duplicates,
     int FailedRows,
     IReadOnlyList<string> Errors
+);
+
+public sealed record AdminVocabularyImportRollbackRequest(
+    bool DeleteDraftRows = false
+);
+
+public sealed record AdminVocabularyImportRollbackResponse(
+    string ImportBatchId,
+    int TotalMatched,
+    int Deleted,
+    int Archived,
+    int Blocked,
+    IReadOnlyList<string> Errors
+);
+
+public sealed record AdminVocabularyImportReconciliationFieldMismatch(
+    string Field,
+    string? Expected,
+    string? Actual
+);
+
+public sealed record AdminVocabularyImportReconciliationRow(
+    int? LineNumber,
+    string Key,
+    string Status,
+    IReadOnlyList<AdminVocabularyImportReconciliationFieldMismatch> Mismatches,
+    string? Error
+);
+
+public sealed record AdminVocabularyImportReconciliationResponse(
+    string ImportBatchId,
+    int ManifestRows,
+    int StoredRows,
+    int MatchedRows,
+    int MissingRows,
+    int ExtraRows,
+    int MismatchedRows,
+    int InvalidManifestRows,
+    bool Clean,
+    IReadOnlyList<AdminVocabularyImportReconciliationRow> Rows
 );
 
 public sealed record AdminVocabularyAiDraftRequest(

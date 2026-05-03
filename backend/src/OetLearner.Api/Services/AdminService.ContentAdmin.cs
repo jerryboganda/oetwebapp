@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace OetLearner.Api.Services;
@@ -165,6 +166,7 @@ public partial class AdminService
                 v.Category,
                 v.Difficulty,
                 v.ExampleSentence,
+                v.AmericanSpelling,
                 v.Status
             })
         };
@@ -187,7 +189,10 @@ public partial class AdminService
             v.Category,
             v.Difficulty,
             v.IpaPronunciation,
+            v.AmericanSpelling,
             v.AudioUrl,
+            v.AudioSlowUrl,
+            v.AudioSentenceUrl,
             v.AudioMediaAssetId,
             v.ImageUrl,
             v.SynonymsJson,
@@ -220,8 +225,11 @@ public partial class AdminService
             Category = request.Category.Trim(),
             Difficulty = request.Difficulty ?? "medium",
             IpaPronunciation = request.IpaPronunciation,
-            AudioUrl = request.AudioUrl,
-            AudioMediaAssetId = request.AudioMediaAssetId,
+            AmericanSpelling = CleanOptional(request.AmericanSpelling),
+            AudioUrl = CleanOptional(request.AudioUrl),
+            AudioSlowUrl = CleanOptional(request.AudioSlowUrl),
+            AudioSentenceUrl = CleanOptional(request.AudioSentenceUrl),
+            AudioMediaAssetId = CleanOptional(request.AudioMediaAssetId),
             ImageUrl = request.ImageUrl,
             SynonymsJson = JsonSupport.Serialize(request.Synonyms ?? Array.Empty<string>()),
             CollocationsJson = JsonSupport.Serialize(request.Collocations ?? Array.Empty<string>()),
@@ -254,8 +262,11 @@ public partial class AdminService
         if (request.Category is not null) entity.Category = request.Category;
         if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
         if (request.IpaPronunciation is not null) entity.IpaPronunciation = request.IpaPronunciation;
-        if (request.AudioUrl is not null) entity.AudioUrl = request.AudioUrl;
-        if (request.AudioMediaAssetId is not null) entity.AudioMediaAssetId = request.AudioMediaAssetId;
+        if (request.AmericanSpelling is not null) entity.AmericanSpelling = CleanOptional(request.AmericanSpelling);
+        if (request.AudioUrl is not null) entity.AudioUrl = CleanOptional(request.AudioUrl);
+        if (request.AudioSlowUrl is not null) entity.AudioSlowUrl = CleanOptional(request.AudioSlowUrl);
+        if (request.AudioSentenceUrl is not null) entity.AudioSentenceUrl = CleanOptional(request.AudioSentenceUrl);
+        if (request.AudioMediaAssetId is not null) entity.AudioMediaAssetId = CleanOptional(request.AudioMediaAssetId);
         if (request.ImageUrl is not null) entity.ImageUrl = request.ImageUrl;
         if (request.Synonyms is not null) entity.SynonymsJson = JsonSupport.Serialize(request.Synonyms);
         if (request.Collocations is not null) entity.CollocationsJson = JsonSupport.Serialize(request.Collocations);
@@ -385,19 +396,36 @@ public partial class AdminService
     // ── CSV import (RFC-4180 aware) ─────────────────────────────────────
 
     public async Task<AdminVocabularyImportPreviewResponse> PreviewVocabularyImportAsync(
-        IFormFile file, CancellationToken ct)
+        IFormFile file, string? importBatchId, CancellationToken ct)
     {
+        var batchId = NormalizeImportBatchId(importBatchId);
         var rows = await ParseCsvAsync(file, ct);
+        var validation = await BuildVocabularyImportValidationContextAsync(ct);
         var preview = new List<AdminVocabularyImportPreviewRow>(rows.Count);
         var warnings = new List<string>();
         var termsSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var valid = 0; var invalid = 0; var dups = 0;
+        var valid = 0; var invalid = 0; var dups = 0; var existingConflicts = 0;
 
         foreach (var r in rows)
         {
-            var (ok, err) = ValidateCsvRow(r);
-            var duplicate = r.Term is not null && !termsSeen.Add(r.Term.ToLowerInvariant());
-            if (duplicate) { dups++; err = "Duplicate row in this file."; ok = false; }
+            var (ok, err) = ValidateCsvRow(r, batchId, validation);
+            if (ok)
+            {
+                var duplicateKey = PreviewDuplicateKey(r);
+                var duplicate = !termsSeen.Add(duplicateKey);
+                if (duplicate) { dups++; err = "Duplicate row in this file for the same term, exam type, and profession."; ok = false; }
+            }
+            if (ok)
+            {
+                var existing = await FindExistingVocabularyTermForImportAsync(BuildImportKey(r), ct);
+                if (existing is not null)
+                {
+                    existingConflicts++;
+                    dups++;
+                    err = "Existing vocabulary term with the same term, exam type, and profession will be skipped unless reviewed as an update.";
+                    ok = false;
+                }
+            }
             if (ok) valid++; else invalid++;
             preview.Add(new AdminVocabularyImportPreviewRow(
                 LineNumber: r.LineNumber,
@@ -407,14 +435,17 @@ public partial class AdminService
                 Category: r.Category,
                 Difficulty: r.Difficulty,
                 ProfessionId: r.ProfessionId,
+                AmericanSpelling: r.AmericanSpelling,
                 ExampleSentence: r.ExampleSentence,
                 Error: err));
         }
 
         if (valid == 0 && rows.Count > 0) warnings.Add("No rows passed validation.");
-        if (dups > 0) warnings.Add($"{dups} duplicate rows detected in the file.");
+        if (dups > 0) warnings.Add($"{dups} duplicate or conflict row(s) detected.");
+        if (existingConflicts > 0) warnings.Add($"{existingConflicts} row(s) already exist in the database and require conflict review before update.");
 
         return new AdminVocabularyImportPreviewResponse(
+            ImportBatchId: batchId,
             TotalRows: rows.Count,
             ValidRows: valid,
             InvalidRows: invalid,
@@ -424,17 +455,22 @@ public partial class AdminService
     }
 
     public async Task<AdminVocabularyImportResponse> BulkImportVocabularyV2Async(
-        string adminId, string adminName, IFormFile file, bool dryRun, CancellationToken ct)
+        string adminId, string adminName, IFormFile file, bool dryRun, string? importBatchId, CancellationToken ct)
     {
+        var batchId = NormalizeImportBatchId(importBatchId);
+        var fileSha256 = await ComputeFileSha256Async(file, ct);
         await using var tx = await BeginTransactionIfNeededAsync(ct);
         var rows = await ParseCsvAsync(file, ct);
+        var validation = await BuildVocabularyImportValidationContextAsync(ct);
 
         var imported = 0; var skipped = 0; var duplicates = 0; var failed = 0;
         var errors = new List<string>();
+        var cleanRows = new List<CsvVocabRow>();
+        var termsSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var r in rows)
         {
-            var (ok, err) = ValidateCsvRow(r);
+            var (ok, err) = ValidateCsvRow(r, batchId, validation);
             if (!ok)
             {
                 failed++;
@@ -442,58 +478,519 @@ public partial class AdminService
                 continue;
             }
 
-            var existing = await db.VocabularyTerms.FirstOrDefaultAsync(
-                t => t.Term == r.Term && t.ExamTypeCode == (r.ExamTypeCode ?? "oet") && t.ProfessionId == r.ProfessionId, ct);
+            var duplicateKey = PreviewDuplicateKey(r);
+            if (!termsSeen.Add(duplicateKey))
+            {
+                duplicates++;
+                continue;
+            }
+
+            var existing = await FindExistingVocabularyTermForImportAsync(BuildImportKey(r), ct);
             if (existing is not null)
             {
                 duplicates++;
                 continue;
             }
 
-            if (!dryRun)
-            {
-                var id = $"VOC-{Guid.NewGuid():N}"[..12];
-                db.VocabularyTerms.Add(new VocabularyTerm
-                {
-                    Id = id,
-                    Term = r.Term!.Trim(),
-                    Definition = r.Definition!.Trim(),
-                    ExampleSentence = string.IsNullOrWhiteSpace(r.ExampleSentence) ? string.Empty : r.ExampleSentence!.Trim(),
-                    ContextNotes = r.ContextNotes,
-                    ExamTypeCode = r.ExamTypeCode ?? "oet",
-                    ProfessionId = r.ProfessionId,
-                    Category = r.Category ?? "medical",
-                    Difficulty = r.Difficulty ?? "medium",
-                    IpaPronunciation = r.IpaPronunciation,
-                    AudioUrl = r.AudioUrl,
-                    SynonymsJson = string.IsNullOrWhiteSpace(r.SynonymsRaw) ? "[]" : JsonSupport.Serialize(SplitList(r.SynonymsRaw!)),
-                    CollocationsJson = "[]",
-                    RelatedTermsJson = "[]",
-                    SourceProvenance = string.IsNullOrWhiteSpace(r.SourceProvenance)
-                        ? $"CSV import by {adminName} on {DateTimeOffset.UtcNow:yyyy-MM-dd}"
-                        : r.SourceProvenance,
-                    Status = "draft",
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    UpdatedAt = DateTimeOffset.UtcNow,
-                });
-            }
+            cleanRows.Add(r);
             imported++;
         }
 
         skipped = duplicates + failed;
+        if (dryRun)
+        {
+            if (skipped == 0)
+            {
+                await UpsertVocabularyImportDryRunAsync(batchId, fileSha256, imported, ct);
+                await db.SaveChangesAsync(ct);
+                await CommitIfOwnedAsync(tx, ct);
+            }
+
+            return new AdminVocabularyImportResponse(batchId, imported, skipped, duplicates, failed, errors);
+        }
+
+        await RequireMatchingVocabularyImportDryRunAsync(batchId, fileSha256, imported, ct);
+
+        if (skipped > 0)
+        {
+            throw ApiException.Validation(
+                "VOCABULARY_IMPORT_NOT_CLEAN",
+                "Commit is blocked because the import no longer has a clean dry run. Re-run preview and dry run for the same batch before committing.");
+        }
+
+        await EnsureVocabularyImportCommitLedgerAvailableAsync(batchId, ct);
+
+        var importedTermIds = new List<string>(cleanRows.Count);
+        foreach (var r in cleanRows)
+        {
+            var id = $"VOC-{Guid.NewGuid():N}"[..12];
+            db.VocabularyTerms.Add(CreateVocabularyTermFromCsvRow(r, id, batchId));
+            importedTermIds.Add(id);
+        }
+
         if (!dryRun)
         {
+            await CreateVocabularyImportCommitLedgerAsync(batchId, fileSha256, importedTermIds, ct);
             await db.SaveChangesAsync(ct);
             await LogAuditAsync(adminId, adminName, "Bulk Import", "VocabularyTerm", "bulk",
-                $"Imported {imported} vocabulary items, skipped {skipped} (dup={duplicates}, failed={failed}).", ct);
+                $"Batch {batchId}: imported {imported} vocabulary items, skipped {skipped} (dup={duplicates}, failed={failed}).", ct);
             await CommitIfOwnedAsync(tx, ct);
         }
 
-        return new AdminVocabularyImportResponse(imported, skipped, duplicates, failed, errors);
+        return new AdminVocabularyImportResponse(batchId, imported, skipped, duplicates, failed, errors);
+    }
+
+    public async Task<object> GetVocabularyImportBatchSummaryAsync(string importBatchId, CancellationToken ct)
+    {
+        var batchId = NormalizeExistingImportBatchId(importBatchId);
+        var rows = await GetVocabularyImportBatchRowsAsync(batchId, ct);
+
+        var warnings = new List<string>();
+        var active = rows.Count(v => v.Status == "active");
+        var draft = rows.Count(v => v.Status == "draft");
+        var archived = rows.Count(v => v.Status == "archived");
+        if (active > 0) warnings.Add("Batch contains active rows; rollback will not modify active rows.");
+        if (!await VocabularyImportCommitLedgerExistsAsync(batchId, ct)) warnings.Add("No immutable commit ledger was found for this import batch id.");
+        if (rows.Count == 0) warnings.Add("No rows found for this import batch id.");
+
+        return new
+        {
+            importBatchId = batchId,
+            total = rows.Count,
+            draft,
+            active,
+            archived,
+            warnings,
+            rows = rows.Select(v => new
+            {
+                v.Id,
+                v.Term,
+                v.Definition,
+                v.ExampleSentence,
+                v.ContextNotes,
+                v.ExamTypeCode,
+                v.ProfessionId,
+                v.Category,
+                v.Difficulty,
+                v.IpaPronunciation,
+                v.AmericanSpelling,
+                v.AudioUrl,
+                v.AudioSlowUrl,
+                v.AudioSentenceUrl,
+                v.AudioMediaAssetId,
+                v.SynonymsJson,
+                v.CollocationsJson,
+                v.RelatedTermsJson,
+                v.SourceProvenance,
+                v.Status,
+                v.CreatedAt,
+                v.UpdatedAt
+            })
+        };
+    }
+
+    public async Task<(byte[] Bytes, string FileName)> ExportVocabularyImportBatchCsvAsync(string importBatchId, CancellationToken ct)
+    {
+        var batchId = NormalizeExistingImportBatchId(importBatchId);
+        var rows = await GetVocabularyImportBatchRowsAsync(batchId, ct);
+
+        var builder = new StringBuilder();
+        builder.AppendLine("ImportBatchId,Id,Term,Definition,ExampleSentence,ContextNotes,ExamTypeCode,ProfessionId,Category,Difficulty,IpaPronunciation,AmericanSpelling,AudioUrl,AudioSlowUrl,AudioSentenceUrl,AudioMediaAssetId,ImageUrl,SynonymsJson,CollocationsJson,RelatedTermsJson,SourceProvenance,Status,CreatedAt,UpdatedAt");
+        foreach (var row in rows)
+        {
+            builder.AppendJoin(',',
+                EscapeCsv(batchId),
+                EscapeCsv(row.Id),
+                EscapeCsv(row.Term),
+                EscapeCsv(row.Definition),
+                EscapeCsv(row.ExampleSentence),
+                EscapeCsv(row.ContextNotes),
+                EscapeCsv(row.ExamTypeCode),
+                EscapeCsv(row.ProfessionId),
+                EscapeCsv(row.Category),
+                EscapeCsv(row.Difficulty),
+                EscapeCsv(row.IpaPronunciation),
+                EscapeCsv(row.AmericanSpelling),
+                EscapeCsv(row.AudioUrl),
+                EscapeCsv(row.AudioSlowUrl),
+                EscapeCsv(row.AudioSentenceUrl),
+                EscapeCsv(row.AudioMediaAssetId),
+                EscapeCsv(row.ImageUrl),
+                EscapeCsv(row.SynonymsJson),
+                EscapeCsv(row.CollocationsJson),
+                EscapeCsv(row.RelatedTermsJson),
+                EscapeCsv(row.SourceProvenance),
+                EscapeCsv(row.Status),
+                EscapeCsv(row.CreatedAt.ToString("O")),
+                EscapeCsv(row.UpdatedAt.ToString("O")));
+            builder.AppendLine();
+        }
+
+        return (Encoding.UTF8.GetBytes(builder.ToString()), $"vocabulary-import-{batchId}-export.csv");
+    }
+
+    public async Task<AdminVocabularyImportReconciliationResponse> ReconcileVocabularyImportBatchAsync(
+        string importBatchId,
+        IFormFile manifestFile,
+        CancellationToken ct)
+    {
+        var batchId = NormalizeExistingImportBatchId(importBatchId);
+        if (!await VocabularyImportCommitLedgerExistsAsync(batchId, ct))
+            throw ApiException.Validation("VOCABULARY_IMPORT_BATCH_NOT_FOUND", "Reconciliation requires an immutable commit ledger for the import batch.");
+
+        var manifestRows = await ParseCsvAsync(manifestFile, ct);
+        var validation = await BuildVocabularyImportValidationContextAsync(ct);
+        var storedRows = await GetVocabularyImportBatchRowsAsync(batchId, ct);
+        var storedByKey = storedRows.ToDictionary(VocabularyTermDuplicateKey, StringComparer.OrdinalIgnoreCase);
+        var seenManifestKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var reportRows = new List<AdminVocabularyImportReconciliationRow>();
+
+        var matched = 0;
+        var missing = 0;
+        var extra = 0;
+        var mismatched = 0;
+        var invalid = 0;
+
+        foreach (var manifestRow in manifestRows)
+        {
+            var key = PreviewDuplicateKey(manifestRow);
+            var (ok, error) = ValidateCsvRow(manifestRow, batchId, validation);
+            if (!ok)
+            {
+                invalid++;
+                reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                    manifestRow.LineNumber,
+                    key,
+                    "invalid-manifest-row",
+                    Array.Empty<AdminVocabularyImportReconciliationFieldMismatch>(),
+                    error));
+                continue;
+            }
+
+            if (!seenManifestKeys.Add(key))
+            {
+                invalid++;
+                reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                    manifestRow.LineNumber,
+                    key,
+                    "duplicate-manifest-row",
+                    Array.Empty<AdminVocabularyImportReconciliationFieldMismatch>(),
+                    "Duplicate row in the manifest for the same term, exam type, and profession."));
+                continue;
+            }
+
+            if (!storedByKey.TryGetValue(key, out var storedRow))
+            {
+                missing++;
+                reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                    manifestRow.LineNumber,
+                    key,
+                    "missing-stored-row",
+                    Array.Empty<AdminVocabularyImportReconciliationFieldMismatch>(),
+                    "No committed vocabulary term was found for this manifest row."));
+                continue;
+            }
+
+            var mismatches = CompareVocabularyImportRow(manifestRow, storedRow, batchId);
+            if (mismatches.Count == 0)
+            {
+                matched++;
+                reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                    manifestRow.LineNumber,
+                    key,
+                    "matched",
+                    Array.Empty<AdminVocabularyImportReconciliationFieldMismatch>(),
+                    null));
+            }
+            else
+            {
+                mismatched++;
+                reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                    manifestRow.LineNumber,
+                    key,
+                    "mismatched",
+                    mismatches,
+                    null));
+            }
+        }
+
+        foreach (var storedRow in storedRows)
+        {
+            var key = VocabularyTermDuplicateKey(storedRow);
+            if (seenManifestKeys.Contains(key)) continue;
+
+            extra++;
+            reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                null,
+                key,
+                "extra-stored-row",
+                Array.Empty<AdminVocabularyImportReconciliationFieldMismatch>(),
+                "Committed vocabulary term was not present in the manifest."));
+        }
+
+        return new AdminVocabularyImportReconciliationResponse(
+            batchId,
+            manifestRows.Count,
+            storedRows.Count,
+            matched,
+            missing,
+            extra,
+            mismatched,
+            invalid,
+            missing == 0 && extra == 0 && mismatched == 0 && invalid == 0,
+            reportRows);
+    }
+
+    public async Task<AdminVocabularyImportRollbackResponse> RollbackVocabularyImportBatchAsync(
+        string adminId,
+        string adminName,
+        string importBatchId,
+        AdminVocabularyImportRollbackRequest request,
+        CancellationToken ct)
+    {
+        var batchId = NormalizeExistingImportBatchId(importBatchId);
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        var rows = await GetVocabularyImportBatchRowsAsync(batchId, ct);
+        var errors = new List<string>();
+        var deleted = 0;
+        var archived = 0;
+        var blocked = 0;
+
+        if (request.DeleteDraftRows)
+            errors.Add("Physical deletion is disabled for vocabulary import rollback; draft rows are archived instead.");
+
+        if (!await VocabularyImportCommitLedgerExistsAsync(batchId, ct))
+        {
+            throw ApiException.Validation("VOCABULARY_IMPORT_BATCH_NOT_FOUND", "Rollback requires an immutable commit ledger for the import batch.");
+        }
+
+        foreach (var row in rows)
+        {
+            if (row.Status != "draft")
+            {
+                blocked++;
+                if (errors.Count < 20) errors.Add($"{row.Id}: status '{row.Status}' is not draft; not rolled back.");
+                continue;
+            }
+
+            row.Status = "archived";
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            archived++;
+        }
+
+        if (deleted > 0 || archived > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            await LogAuditAsync(adminId, adminName, "Import Rollback", "VocabularyTerm", batchId,
+                $"Rolled back batch {batchId}: deleted={deleted}, archived={archived}, blocked={blocked}.", ct);
+            await CommitIfOwnedAsync(tx, ct);
+        }
+
+        return new AdminVocabularyImportRollbackResponse(batchId, rows.Count, deleted, archived, blocked, errors);
     }
 
     private static IReadOnlyList<string> SplitList(string raw)
         => raw.Split(new[] { '|', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static VocabularyTerm CreateVocabularyTermFromCsvRow(CsvVocabRow row, string id, string importBatchId)
+    {
+        var examType = string.IsNullOrWhiteSpace(row.ExamTypeCode) ? "oet" : row.ExamTypeCode!.Trim();
+        return new VocabularyTerm
+        {
+            Id = id,
+            Term = row.Term!.Trim(),
+            Definition = row.Definition!.Trim(),
+            ExampleSentence = string.IsNullOrWhiteSpace(row.ExampleSentence) ? string.Empty : row.ExampleSentence!.Trim(),
+            ContextNotes = CleanOptional(row.ContextNotes),
+            ExamTypeCode = examType,
+            ProfessionId = CleanOptional(row.ProfessionId),
+            Category = string.IsNullOrWhiteSpace(row.Category) ? "medical" : row.Category!.Trim(),
+            Difficulty = string.IsNullOrWhiteSpace(row.Difficulty) ? "medium" : row.Difficulty!.Trim(),
+            IpaPronunciation = CleanOptional(row.IpaPronunciation),
+            AmericanSpelling = CleanOptional(row.AmericanSpelling),
+            AudioUrl = CleanOptional(row.AudioUrl),
+            AudioSlowUrl = CleanOptional(row.AudioSlowUrl),
+            AudioSentenceUrl = CleanOptional(row.AudioSentenceUrl),
+            AudioMediaAssetId = CleanOptional(row.AudioMediaAssetId),
+            SynonymsJson = string.IsNullOrWhiteSpace(row.SynonymsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.SynonymsRaw!)),
+            CollocationsJson = string.IsNullOrWhiteSpace(row.CollocationsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.CollocationsRaw!)),
+            RelatedTermsJson = string.IsNullOrWhiteSpace(row.RelatedTermsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.RelatedTermsRaw!)),
+            SourceProvenance = BuildBatchSourceProvenance(row.SourceProvenance, importBatchId),
+            Status = "draft",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+    }
+
+    private static async Task<string> ComputeFileSha256Async(IFormFile file, CancellationToken ct)
+    {
+        await using var stream = file.OpenReadStream();
+        var hash = await SHA256.HashDataAsync(stream, ct);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private async Task UpsertVocabularyImportDryRunAsync(string importBatchId, string fileSha256, int imported, CancellationToken ct)
+    {
+        var payload = new VocabularyImportDryRunLedger(importBatchId, fileSha256, imported, DateTimeOffset.UtcNow);
+        await UpsertVocabularyImportLedgerAsync(VocabularyImportDryRunLedgerId(importBatchId), "admin-vocabulary-import-dry-run", importBatchId, payload, ct);
+    }
+
+    private async Task RequireMatchingVocabularyImportDryRunAsync(string importBatchId, string fileSha256, int imported, CancellationToken ct)
+    {
+        var record = await db.IdempotencyRecords.AsNoTracking().FirstOrDefaultAsync(r => r.Id == VocabularyImportDryRunLedgerId(importBatchId), ct);
+        if (record is null)
+            throw ApiException.Validation("VOCABULARY_IMPORT_DRY_RUN_REQUIRED", "A clean dry run for this import batch and file is required before commit.");
+
+        var ledger = JsonSupport.Deserialize<VocabularyImportDryRunLedger?>(record.ResponseJson, null);
+        if (ledger is null || ledger.FileSha256 != fileSha256 || ledger.Imported != imported)
+            throw ApiException.Validation("VOCABULARY_IMPORT_DRY_RUN_MISMATCH", "The commit file does not match the latest clean dry run for this import batch.");
+    }
+
+    private async Task EnsureVocabularyImportCommitLedgerAvailableAsync(string importBatchId, CancellationToken ct)
+    {
+        if (await VocabularyImportCommitLedgerExistsAsync(importBatchId, ct))
+            throw ApiException.Validation("VOCABULARY_IMPORT_BATCH_ALREADY_COMMITTED", "This import batch id has already been committed and cannot be reused.");
+    }
+
+    private async Task CreateVocabularyImportCommitLedgerAsync(string importBatchId, string fileSha256, IReadOnlyList<string> termIds, CancellationToken ct)
+    {
+        await EnsureVocabularyImportCommitLedgerAvailableAsync(importBatchId, ct);
+        var payload = new VocabularyImportCommitLedger(importBatchId, fileSha256, termIds.ToArray(), DateTimeOffset.UtcNow);
+        db.IdempotencyRecords.Add(new IdempotencyRecord
+        {
+            Id = VocabularyImportCommitLedgerId(importBatchId),
+            Scope = "admin-vocabulary-import-commit",
+            Key = importBatchId,
+            ResponseJson = JsonSupport.Serialize(payload),
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+    }
+
+    private async Task UpsertVocabularyImportLedgerAsync(string id, string scope, string key, object payload, CancellationToken ct)
+    {
+        var record = await db.IdempotencyRecords.FirstOrDefaultAsync(r => r.Id == id, ct);
+        if (record is null)
+        {
+            db.IdempotencyRecords.Add(new IdempotencyRecord
+            {
+                Id = id,
+                Scope = scope,
+                Key = key,
+                ResponseJson = JsonSupport.Serialize(payload),
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            return;
+        }
+
+        record.Scope = scope;
+        record.Key = key;
+        record.ResponseJson = JsonSupport.Serialize(payload);
+        record.CreatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private async Task<IReadOnlyList<string>> GetVocabularyImportCommitTermIdsAsync(string importBatchId, CancellationToken ct)
+    {
+        var record = await db.IdempotencyRecords.AsNoTracking().FirstOrDefaultAsync(r => r.Id == VocabularyImportCommitLedgerId(importBatchId), ct);
+        var ledger = JsonSupport.Deserialize<VocabularyImportCommitLedger?>(record?.ResponseJson, null);
+        return ledger?.TermIds ?? Array.Empty<string>();
+    }
+
+    private async Task<bool> VocabularyImportCommitLedgerExistsAsync(string importBatchId, CancellationToken ct)
+        => await db.IdempotencyRecords.AsNoTracking().AnyAsync(r => r.Id == VocabularyImportCommitLedgerId(importBatchId), ct);
+
+    private static string VocabularyImportDryRunLedgerId(string importBatchId)
+        => $"vocab-dryrun:{importBatchId}";
+
+    private static string VocabularyImportCommitLedgerId(string importBatchId)
+        => $"vocab-commit:{importBatchId}";
+
+    private async Task<List<VocabularyTerm>> GetVocabularyImportBatchRowsAsync(string importBatchId, CancellationToken ct)
+    {
+        var termIds = await GetVocabularyImportCommitTermIdsAsync(importBatchId, ct);
+        if (termIds.Count == 0) return [];
+
+        return await db.VocabularyTerms
+            .Where(v => termIds.Contains(v.Id))
+            .OrderBy(v => v.Term)
+            .ThenBy(v => v.Id)
+            .ToListAsync(ct);
+    }
+
+    private static string BuildBatchSourceProvenance(string? sourceProvenance, string importBatchId)
+    {
+        var prefix = BatchProvenancePrefix(importBatchId);
+        var compact = CleanOptional(sourceProvenance);
+        if (compact is null)
+            return $"{prefix}source=admin-vocabulary-import;date={DateTimeOffset.UtcNow:yyyy-MM-dd}";
+        return $"{prefix}{StripExistingBatchPrefix(compact)}";
+    }
+
+    private static string StripExistingBatchPrefix(string value)
+    {
+        if (!value.StartsWith("batch=", StringComparison.OrdinalIgnoreCase)) return value;
+        var delimiter = value.IndexOf(';');
+        return delimiter < 0 ? string.Empty : value[(delimiter + 1)..].TrimStart();
+    }
+
+    private static string BatchProvenancePrefix(string importBatchId)
+        => $"batch={importBatchId};";
+
+    private static string NormalizeImportBatchId(string? importBatchId)
+    {
+        if (string.IsNullOrWhiteSpace(importBatchId))
+            return $"vocab-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..31];
+        return NormalizeExistingImportBatchId(importBatchId);
+    }
+
+    private static string NormalizeExistingImportBatchId(string importBatchId)
+    {
+        var normalized = importBatchId.Trim();
+        if (normalized.Length is < 3 or > 64)
+            throw ApiException.Validation("INVALID_IMPORT_BATCH_ID", "Import batch id must be between 3 and 64 characters.");
+        if (normalized.Any(ch => !(char.IsLetterOrDigit(ch) || ch is '-' or '_' or '.' or ':')))
+            throw ApiException.Validation("INVALID_IMPORT_BATCH_ID", "Import batch id may contain only letters, numbers, dash, underscore, dot, and colon.");
+        return normalized;
+    }
+
+    private static string PreviewDuplicateKey(CsvVocabRow row)
+    {
+        var key = BuildImportKey(row);
+        return $"{key.Term}|{key.ExamTypeCode}|{key.ProfessionId}";
+    }
+
+    private async Task<VocabularyTerm?> FindExistingVocabularyTermForImportAsync(ImportKey key, CancellationToken ct)
+        => await db.VocabularyTerms.FirstOrDefaultAsync(t =>
+            t.Status != "archived" &&
+            t.Term.Trim().ToLower() == key.Term &&
+            t.ExamTypeCode.Trim().ToLower() == key.ExamTypeCode &&
+            (t.ProfessionId == null ? string.Empty : t.ProfessionId.Trim().ToLower()) == key.ProfessionId,
+            ct);
+
+    private static ImportKey BuildImportKey(CsvVocabRow row)
+    {
+        var examType = string.IsNullOrWhiteSpace(row.ExamTypeCode) ? "oet" : row.ExamTypeCode!.Trim();
+        var professionId = CleanOptional(row.ProfessionId) ?? string.Empty;
+        return new ImportKey(NormalizeImportKeyPart(row.Term), NormalizeImportKeyPart(examType), NormalizeImportKeyPart(professionId));
+    }
+
+    private static string NormalizeImportKeyPart(string? value)
+        => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToLowerInvariant();
+
+    private sealed record ImportKey(string Term, string ExamTypeCode, string ProfessionId);
+
+    private sealed record VocabularyImportDryRunLedger(
+        string ImportBatchId,
+        string FileSha256,
+        int Imported,
+        DateTimeOffset ConfirmedAt);
+
+    private sealed record VocabularyImportCommitLedger(
+        string ImportBatchId,
+        string FileSha256,
+        IReadOnlyList<string> TermIds,
+        DateTimeOffset CommittedAt);
+
+    private sealed record CsvVocabRecord(int LineNumber, List<string> Fields);
 
     private sealed record CsvVocabRow(
         int LineNumber,
@@ -505,29 +1002,173 @@ public partial class AdminService
         string? ProfessionId,
         string? ExamTypeCode,
         string? IpaPronunciation,
+        string? AmericanSpelling,
         string? AudioUrl,
+        string? AudioSlowUrl,
+        string? AudioSentenceUrl,
+        string? AudioMediaAssetId,
         string? ContextNotes,
         string? SynonymsRaw,
+        string? CollocationsRaw,
+        string? RelatedTermsRaw,
         string? SourceProvenance);
 
-    private static (bool Ok, string? Error) ValidateCsvRow(CsvVocabRow r)
+    private async Task<VocabularyImportValidationContext> BuildVocabularyImportValidationContextAsync(CancellationToken ct)
+    {
+        var examTypes = await db.ExamTypes.AsNoTracking()
+            .Select(e => new { e.Code, e.Status, e.ProfessionIdsJson })
+            .ToListAsync(ct);
+        var professions = await db.Professions.AsNoTracking()
+            .Where(p => p.Status == "active")
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+
+        var examTypeCodes = examTypes
+            .Where(e => !string.Equals(e.Status, "archived", StringComparison.OrdinalIgnoreCase))
+            .Select(e => e.Code)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var knownProfessionIds = professions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var examTypeProfessionIds = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var examType in examTypes)
+        {
+            var ids = JsonSupport.Deserialize<string[]?>(examType.ProfessionIdsJson, null) ?? Array.Empty<string>();
+            var allowed = ids
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var id in allowed) knownProfessionIds.Add(id);
+            examTypeProfessionIds[examType.Code] = allowed;
+        }
+
+        return new VocabularyImportValidationContext(examTypeCodes, knownProfessionIds, examTypeProfessionIds);
+    }
+
+    private static (bool Ok, string? Error) ValidateCsvRow(
+        CsvVocabRow r,
+        string importBatchId,
+        VocabularyImportValidationContext validation)
     {
         if (string.IsNullOrWhiteSpace(r.Term)) return (false, "Empty 'term'.");
         if (string.IsNullOrWhiteSpace(r.Definition)) return (false, "Empty 'definition'.");
-        if (r.Term.Length > 128) return (false, "Term exceeds 128 characters.");
-        if (r.Definition.Length > 1024) return (false, "Definition exceeds 1024 characters.");
+        if (string.IsNullOrWhiteSpace(r.Category)) return (false, "Empty 'category'. Category must be explicitly approved for the batch.");
+        if (string.IsNullOrWhiteSpace(r.Difficulty)) return (false, "Empty 'difficulty'. Difficulty must be explicitly approved for the batch.");
+        if (r.Term.Trim().Length > 128) return (false, "Term exceeds 128 characters.");
+        if (r.Definition.Trim().Length > 1024) return (false, "Definition exceeds 1024 characters.");
+        if (TrimmedLength(r.ExampleSentence) > 2048) return (false, "Example sentence exceeds 2048 characters.");
+        if (TrimmedLength(r.ContextNotes) > 1024) return (false, "Context notes exceed 1024 characters.");
+        if (TrimmedLength(r.ExamTypeCode) > 16) return (false, "Exam type code exceeds 16 characters.");
+        if (TrimmedLength(r.ProfessionId) > 32) return (false, "Profession id exceeds 32 characters.");
+        if (TrimmedLength(r.Category) > 64) return (false, "Category exceeds 64 characters.");
+        if (TrimmedLength(r.Difficulty) > 16) return (false, "Difficulty exceeds 16 characters.");
+        if (TrimmedLength(r.IpaPronunciation) > 64) return (false, "IPA pronunciation exceeds 64 characters.");
+        if (TrimmedLength(r.AmericanSpelling) > 128) return (false, "American spelling exceeds 128 characters.");
+        if (TrimmedLength(r.AudioUrl) > 256) return (false, "Audio URL exceeds 256 characters.");
+        if (TrimmedLength(r.AudioSlowUrl) > 256) return (false, "Slow audio URL exceeds 256 characters.");
+        if (TrimmedLength(r.AudioSentenceUrl) > 256) return (false, "Sentence audio URL exceeds 256 characters.");
+        if (TrimmedLength(r.AudioMediaAssetId) > 64) return (false, "Audio media asset id exceeds 64 characters.");
+        if (string.IsNullOrWhiteSpace(r.SourceProvenance)) return (false, "Empty 'sourceProvenance'. Source provenance must include a compact source pointer for the batch.");
+        if (TrimmedLength(r.SourceProvenance) > 512) return (false, "Source provenance exceeds 512 characters.");
+        if (!HasCompactSourcePointer(r.SourceProvenance)) return (false, "Source provenance must include a compact source pointer such as src=..., source=..., or manifest=....");
+        if (BuildBatchSourceProvenance(r.SourceProvenance, importBatchId).Length > 512) return (false, "Source provenance plus import batch id exceeds 512 characters.");
+
+        var category = r.Category.Trim();
+        if (!ApprovedVocabularyCategories.Contains(category))
+            return (false, $"Unknown category '{category}'. Use an approved vocabulary taxonomy value or record editorial approval before import.");
+
+        var difficulty = r.Difficulty.Trim();
+        if (!ApprovedVocabularyDifficulties.Contains(difficulty))
+            return (false, $"Unknown difficulty '{difficulty}'. Use easy, medium, or hard.");
+
+        var examTypeCode = string.IsNullOrWhiteSpace(r.ExamTypeCode) ? "oet" : r.ExamTypeCode.Trim();
+        if (!validation.ExamTypeCodes.Contains(examTypeCode))
+            return (false, $"Unknown exam type code '{examTypeCode}'.");
+
+        var professionId = CleanOptional(r.ProfessionId);
+        if (professionId is not null)
+        {
+            if (validation.ExamTypeProfessionIds.TryGetValue(examTypeCode, out var allowedForExam) && allowedForExam.Count > 0)
+            {
+                if (!allowedForExam.Contains(professionId))
+                    return (false, $"Profession id '{professionId}' is not approved for exam type '{examTypeCode}'.");
+            }
+            else if (!validation.KnownProfessionIds.Contains(professionId))
+            {
+                return (false, $"Unknown profession id '{professionId}'.");
+            }
+        }
+
         return (true, null);
     }
+
+    private static readonly HashSet<string> ApprovedVocabularyCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "general",
+        "medical",
+        "anatomy",
+        "pharmacology",
+        "procedures",
+        "symptoms",
+        "conditions",
+        "diagnostics",
+        "clinical_communication",
+        "communication",
+        "nursing_care",
+        "oral_health",
+        "dispensing",
+        "counselling"
+    };
+
+    private static readonly HashSet<string> ApprovedVocabularyDifficulties = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "easy", "medium", "hard"
+    };
+
+    private sealed record VocabularyImportValidationContext(
+        HashSet<string> ExamTypeCodes,
+        HashSet<string> KnownProfessionIds,
+        Dictionary<string, HashSet<string>> ExamTypeProfessionIds);
+
+    private static int TrimmedLength(string? value)
+        => string.IsNullOrWhiteSpace(value) ? 0 : value.Trim().Length;
+
+    private static bool HasCompactSourcePointer(string sourceProvenance)
+    {
+        var compact = StripExistingBatchPrefix(sourceProvenance).Trim();
+        if (compact.Length == 0 || !compact.Contains('=')) return false;
+
+        foreach (var part in compact.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var equalsIndex = part.IndexOf('=');
+            if (equalsIndex <= 0) continue;
+
+            var key = part[..equalsIndex].Trim();
+            var value = part[(equalsIndex + 1)..].Trim().Trim('"', '\'');
+            if (!IsSourcePointerKey(key) || !IsSpecificSourcePointerValue(value)) continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsSourcePointerKey(string key)
+        => key.ToLowerInvariant() is "src" or "source" or "sourcedocumentid" or "document" or "doc" or "manifest";
+
+    private static bool IsSpecificSourcePointerValue(string value)
+        => !string.IsNullOrWhiteSpace(value)
+            && value.ToLowerInvariant() is not "admin-vocabulary-import" and not "csv" and not "import" and not "unknown" and not "n/a" and not "na" and not "none" and not "null" and not "placeholder";
 
     private static async Task<List<CsvVocabRow>> ParseCsvAsync(IFormFile file, CancellationToken ct)
     {
         var rows = new List<CsvVocabRow>();
         using var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8, leaveOpen: false);
-        var headerLine = await reader.ReadLineAsync(ct);
-        if (string.IsNullOrWhiteSpace(headerLine))
+        var records = ParseVocabCsvRecords(await reader.ReadToEndAsync(ct));
+        if (records.Count == 0)
             throw ApiException.Validation("INVALID_CSV", "CSV file is empty or missing header row.");
 
-        var headers = ParseVocabCsvLine(headerLine).Select(h => h.Trim().ToLowerInvariant()).ToArray();
+        var headerRecord = records[0];
+        var headers = headerRecord.Fields.Select(h => h.Trim().ToLowerInvariant()).ToArray();
         int Col(params string[] names)
         {
             foreach (var n in names)
@@ -547,23 +1188,24 @@ public partial class AdminService
         var pi = Col("professionid", "profession");
         var exi = Col("examtypecode", "examtype");
         var ipi = Col("ipapronunciation", "ipa", "pronunciation");
+        var usi = Col("americanspelling", "american", "usspelling", "usvariant");
         var ai = Col("audiourl", "audio");
+        var asi = Col("audioslowurl", "slowaudio", "audioSlow");
+        var ati = Col("audiosentenceurl", "sentenceaudio", "audioSentence");
+        var ami = Col("audiomediaassetid", "audioassetid", "mediaassetid");
         var cni = Col("contextnotes", "context");
-        var sy = Col("synonyms");
+        var sy = Col("synonyms", "synonymscsv");
+        var co = Col("collocations", "collocationscsv");
+        var rt = Col("relatedterms", "relatedtermscsv");
         var sp = Col("sourceprovenance", "provenance");
 
-        string? line;
-        var lineNum = 1;
-        while ((line = await reader.ReadLineAsync(ct)) is not null)
+        foreach (var record in records.Skip(1))
         {
-            lineNum++;
-            if (string.IsNullOrWhiteSpace(line)) continue;
-
-            var cols = ParseVocabCsvLine(line);
+            var cols = record.Fields;
             string? Get(int idx) => idx >= 0 && cols.Count > idx ? cols[idx].Trim() : null;
 
             rows.Add(new CsvVocabRow(
-                LineNumber: lineNum,
+                LineNumber: record.LineNumber,
                 Term: Get(ti),
                 Definition: Get(di),
                 ExampleSentence: Get(ei),
@@ -572,28 +1214,49 @@ public partial class AdminService
                 ProfessionId: Get(pi),
                 ExamTypeCode: Get(exi),
                 IpaPronunciation: Get(ipi),
+                AmericanSpelling: Get(usi),
                 AudioUrl: Get(ai),
+                AudioSlowUrl: Get(asi),
+                AudioSentenceUrl: Get(ati),
+                AudioMediaAssetId: Get(ami),
                 ContextNotes: Get(cni),
                 SynonymsRaw: Get(sy),
+                CollocationsRaw: Get(co),
+                RelatedTermsRaw: Get(rt),
                 SourceProvenance: Get(sp)));
         }
         return rows;
     }
 
-    /// <summary>RFC 4180 CSV line parser with quote escaping.</summary>
-    private static List<string> ParseVocabCsvLine(string line)
+    private static string? CleanOptional(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static List<CsvVocabRecord> ParseVocabCsvRecords(string csvContent)
     {
-        var result = new List<string>();
+        var records = new List<CsvVocabRecord>();
+        var fields = new List<string>();
         var sb = new StringBuilder();
+        var recordLineNumber = 1;
+        var lineNumber = 1;
         var inQuotes = false;
-        for (var i = 0; i < line.Length; i++)
+
+        void AddRecord()
         {
-            var c = line[i];
+            fields.Add(sb.ToString());
+            sb.Clear();
+            if (fields.Any(field => !string.IsNullOrWhiteSpace(field)))
+                records.Add(new CsvVocabRecord(recordLineNumber, fields.ToList()));
+            fields.Clear();
+        }
+
+        for (var i = 0; i < csvContent.Length; i++)
+        {
+            var c = csvContent[i];
             if (inQuotes)
             {
                 if (c == '"')
                 {
-                    if (i + 1 < line.Length && line[i + 1] == '"')
+                    if (i + 1 < csvContent.Length && csvContent[i + 1] == '"')
                     {
                         sb.Append('"');
                         i++;
@@ -605,7 +1268,23 @@ public partial class AdminService
                 }
                 else
                 {
-                    sb.Append(c);
+                    if (c == '\r' || c == '\n')
+                    {
+                        if (c == '\r' && i + 1 < csvContent.Length && csvContent[i + 1] == '\n')
+                        {
+                            sb.Append("\r\n");
+                            i++;
+                        }
+                        else
+                        {
+                            sb.Append(c);
+                        }
+                        lineNumber++;
+                    }
+                    else
+                    {
+                        sb.Append(c);
+                    }
                 }
             }
             else
@@ -613,23 +1292,96 @@ public partial class AdminService
                 if (c == '"') inQuotes = true;
                 else if (c == ',')
                 {
-                    result.Add(sb.ToString());
+                    fields.Add(sb.ToString());
                     sb.Clear();
+                }
+                else if (c == '\r' || c == '\n')
+                {
+                    AddRecord();
+                    if (c == '\r' && i + 1 < csvContent.Length && csvContent[i + 1] == '\n') i++;
+                    lineNumber++;
+                    recordLineNumber = lineNumber;
                 }
                 else sb.Append(c);
             }
         }
-        result.Add(sb.ToString());
-        return result;
+
+        if (inQuotes)
+            throw ApiException.Validation("INVALID_CSV", $"CSV has an unclosed quoted field starting at line {recordLineNumber}.");
+
+        if (fields.Count > 0 || sb.Length > 0)
+            AddRecord();
+
+        return records;
+    }
+
+    private static string VocabularyTermDuplicateKey(VocabularyTerm row)
+        => $"{NormalizeImportKeyPart(row.Term)}|{NormalizeImportKeyPart(row.ExamTypeCode)}|{NormalizeImportKeyPart(row.ProfessionId)}";
+
+    private static IReadOnlyList<AdminVocabularyImportReconciliationFieldMismatch> CompareVocabularyImportRow(
+        CsvVocabRow manifestRow,
+        VocabularyTerm storedRow,
+        string importBatchId)
+    {
+        var expected = CreateVocabularyTermFromCsvRow(manifestRow, "expected", importBatchId);
+        var mismatches = new List<AdminVocabularyImportReconciliationFieldMismatch>();
+
+        void Compare(string field, string? expectedValue, string? actualValue)
+        {
+            if (string.Equals(expectedValue ?? string.Empty, actualValue ?? string.Empty, StringComparison.Ordinal)) return;
+            mismatches.Add(new AdminVocabularyImportReconciliationFieldMismatch(field, expectedValue, actualValue));
+        }
+
+        Compare("term", expected.Term, storedRow.Term);
+        Compare("definition", expected.Definition, storedRow.Definition);
+        Compare("exampleSentence", expected.ExampleSentence, storedRow.ExampleSentence);
+        Compare("contextNotes", expected.ContextNotes, storedRow.ContextNotes);
+        Compare("examTypeCode", expected.ExamTypeCode, storedRow.ExamTypeCode);
+        Compare("professionId", expected.ProfessionId, storedRow.ProfessionId);
+        Compare("category", expected.Category, storedRow.Category);
+        Compare("difficulty", expected.Difficulty, storedRow.Difficulty);
+        Compare("ipaPronunciation", expected.IpaPronunciation, storedRow.IpaPronunciation);
+        Compare("americanSpelling", expected.AmericanSpelling, storedRow.AmericanSpelling);
+        Compare("audioUrl", expected.AudioUrl, storedRow.AudioUrl);
+        Compare("audioSlowUrl", expected.AudioSlowUrl, storedRow.AudioSlowUrl);
+        Compare("audioSentenceUrl", expected.AudioSentenceUrl, storedRow.AudioSentenceUrl);
+        Compare("audioMediaAssetId", expected.AudioMediaAssetId, storedRow.AudioMediaAssetId);
+        Compare("synonymsJson", expected.SynonymsJson, storedRow.SynonymsJson);
+        Compare("collocationsJson", expected.CollocationsJson, storedRow.CollocationsJson);
+        Compare("relatedTermsJson", expected.RelatedTermsJson, storedRow.RelatedTermsJson);
+        CompareSourceProvenance(manifestRow.SourceProvenance, storedRow.SourceProvenance, importBatchId, mismatches);
+        Compare("status", expected.Status, storedRow.Status);
+
+        return mismatches;
+    }
+
+    private static void CompareSourceProvenance(
+        string? manifestSourceProvenance,
+        string? storedSourceProvenance,
+        string importBatchId,
+        List<AdminVocabularyImportReconciliationFieldMismatch> mismatches)
+    {
+        if (string.IsNullOrWhiteSpace(manifestSourceProvenance))
+        {
+            var expectedPrefix = $"{BatchProvenancePrefix(importBatchId)}source=admin-vocabulary-import;date=";
+            if (storedSourceProvenance?.StartsWith(expectedPrefix, StringComparison.Ordinal) == true) return;
+            mismatches.Add(new AdminVocabularyImportReconciliationFieldMismatch("sourceProvenance", expectedPrefix + "yyyy-MM-dd", storedSourceProvenance));
+            return;
+        }
+
+        var expected = BuildBatchSourceProvenance(manifestSourceProvenance, importBatchId);
+        if (!string.Equals(expected, storedSourceProvenance, StringComparison.Ordinal))
+            mismatches.Add(new AdminVocabularyImportReconciliationFieldMismatch("sourceProvenance", expected, storedSourceProvenance));
     }
 
     public async Task<object> BulkImportVocabularyAsync(
         string adminId, string adminName, IFormFile file, CancellationToken ct)
     {
-        // Backward-compat thin wrapper — defaults to dryRun=false.
-        var res = await BulkImportVocabularyV2Async(adminId, adminName, file, dryRun: false, ct);
+        // Backward-compat thin wrapper: keep legacy callers non-committing.
+        var res = await BulkImportVocabularyV2Async(adminId, adminName, file, dryRun: true, importBatchId: null, ct);
         return new
         {
+            importBatchId = res.ImportBatchId,
             imported = res.Imported,
             skipped = res.Skipped,
             duplicates = res.Duplicates,

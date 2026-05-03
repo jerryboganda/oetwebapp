@@ -20,7 +20,11 @@ type Detail = {
   category: string;
   difficulty: string;
   ipaPronunciation: string | null;
+  americanSpelling: string | null;
   audioUrl: string | null;
+  audioSlowUrl: string | null;
+  audioSentenceUrl: string | null;
+  audioMediaAssetId: string | null;
   imageUrl: string | null;
   synonymsJson: string;
   collocationsJson: string;
@@ -82,7 +86,11 @@ export default function AdminVocabularyEditPage() {
     category: detail.category,
     difficulty: detail.difficulty,
     ipaPronunciation: detail.ipaPronunciation ?? '',
+    americanSpelling: detail.americanSpelling ?? '',
     audioUrl: detail.audioUrl ?? '',
+    audioSlowUrl: detail.audioSlowUrl ?? '',
+    audioSentenceUrl: detail.audioSentenceUrl ?? '',
+    audioMediaAssetId: detail.audioMediaAssetId ?? '',
     imageUrl: detail.imageUrl ?? '',
     synonyms: parseJsonArray(detail.synonymsJson),
     collocations: parseJsonArray(detail.collocationsJson),
@@ -102,7 +110,11 @@ export default function AdminVocabularyEditPage() {
       category: values.category,
       difficulty: values.difficulty,
       ipaPronunciation: values.ipaPronunciation,
+      americanSpelling: values.americanSpelling,
       audioUrl: values.audioUrl,
+      audioSlowUrl: values.audioSlowUrl,
+      audioSentenceUrl: values.audioSentenceUrl,
+      audioMediaAssetId: values.audioMediaAssetId,
       imageUrl: values.imageUrl,
       synonyms: values.synonyms,
       collocations: values.collocations,

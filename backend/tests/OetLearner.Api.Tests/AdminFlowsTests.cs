@@ -14,6 +14,8 @@ namespace OetLearner.Api.Tests;
 [Collection("AuthFlows")]
 public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFactory>
 {
+    private const string VocabularyImportCsvHeader = "Term,Definition,ExampleSentence,Category,Difficulty,ProfessionId,ExamTypeCode,AmericanSpelling,AudioUrl,AudioSlowUrl,AudioSentenceUrl,AudioMediaAssetId,Collocations,RelatedTerms,SourceProvenance\n";
+
     private readonly HttpClient _client;
 
     public AdminFlowsTests(FirstPartyAuthTestWebApplicationFactory factory)
@@ -556,6 +558,415 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    // ── Vocabulary Import ─────────────────────
+
+    [Fact]
+    public async Task AdminVocabularyImport_DryRunCommitAndConflictPreview_PreservesRecallFields()
+    {
+        var term = $"recall-import-{Guid.NewGuid():N}";
+        var batchId = $"recalls-preserve-{Guid.NewGuid():N}"[..32];
+        var csv = VocabularyImportCsvHeader
+            + $"{term},\"Recall definition\",\"Recall example sentence.\",medical,medium,medicine,oet,{term}-us,https://cdn.example/audio.mp3,https://cdn.example/audio-slow.mp3,https://cdn.example/audio-sentence.mp3,media-recall-001,\"recall phrase;clinical recall\",\"related one|related two\",\"src=verified-source;p=1;row=1\"\n";
+
+        using (var previewContent = CsvContent(csv, "recalls.csv"))
+        {
+            var preview = await _client.PostAsync($"/v1/admin/vocabulary/import/preview?importBatchId={Uri.EscapeDataString(batchId)}", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(batchId, previewJson.RootElement.GetProperty("importBatchId").GetString());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("duplicateRows").GetInt32());
+        }
+
+        using (var dryRunContent = CsvContent(csv, "recalls.csv"))
+        {
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+            dryRun.EnsureSuccessStatusCode();
+            using var dryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
+            Assert.Equal(batchId, dryRunJson.RootElement.GetProperty("importBatchId").GetString());
+            Assert.Equal(1, dryRunJson.RootElement.GetProperty("imported").GetInt32());
+            Assert.Equal(0, dryRunJson.RootElement.GetProperty("skipped").GetInt32());
+            Assert.Equal(0, dryRunJson.RootElement.GetProperty("failedRows").GetInt32());
+        }
+
+        using (var importContent = CsvContent(csv, "recalls.csv"))
+        {
+            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
+            import.EnsureSuccessStatusCode();
+            using var importJson = JsonDocument.Parse(await import.Content.ReadAsStringAsync());
+            Assert.Equal(batchId, importJson.RootElement.GetProperty("importBatchId").GetString());
+            Assert.Equal(1, importJson.RootElement.GetProperty("imported").GetInt32());
+            Assert.Equal(0, importJson.RootElement.GetProperty("skipped").GetInt32());
+        }
+
+        var list = await _client.GetAsync($"/v1/admin/vocabulary/items?search={Uri.EscapeDataString(term)}");
+        list.EnsureSuccessStatusCode();
+        using var listJson = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+        var item = listJson.RootElement.GetProperty("items").EnumerateArray()
+            .Single(x => x.GetProperty("term").GetString() == term);
+        var id = item.GetProperty("id").GetString()!;
+
+        var detail = await _client.GetAsync($"/v1/admin/vocabulary/items/{id}");
+        detail.EnsureSuccessStatusCode();
+        using var detailJson = JsonDocument.Parse(await detail.Content.ReadAsStringAsync());
+        var root = detailJson.RootElement;
+        Assert.Equal($"{term}-us", root.GetProperty("americanSpelling").GetString());
+        Assert.Equal("https://cdn.example/audio-slow.mp3", root.GetProperty("audioSlowUrl").GetString());
+        Assert.Equal("https://cdn.example/audio-sentence.mp3", root.GetProperty("audioSentenceUrl").GetString());
+        Assert.Equal("media-recall-001", root.GetProperty("audioMediaAssetId").GetString());
+        Assert.Contains("clinical recall", root.GetProperty("collocationsJson").GetString());
+        Assert.Contains("related two", root.GetProperty("relatedTermsJson").GetString());
+
+        var conflictCsv = VocabularyImportCsvHeader
+            + $" {term.ToUpperInvariant()} ,\"Recall definition\",\"Recall example sentence.\",medical,medium,Medicine,OET,{term}-us,https://cdn.example/audio.mp3,https://cdn.example/audio-slow.mp3,https://cdn.example/audio-sentence.mp3,media-recall-001,\"recall phrase;clinical recall\",\"related one|related two\",\"src=verified-source;p=1;row=1\"\n";
+
+        using (var conflictPreviewContent = CsvContent(conflictCsv, "recalls-conflict.csv"))
+        {
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", conflictPreviewContent);
+            preview.EnsureSuccessStatusCode();
+            using var conflictJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(0, conflictJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(1, conflictJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Equal(1, conflictJson.RootElement.GetProperty("duplicateRows").GetInt32());
+            Assert.Contains("Existing vocabulary term", conflictJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+        }
+
+        using (var conflictDryRunContent = CsvContent(conflictCsv, "recalls-conflict.csv"))
+        {
+            var dryRun = await _client.PostAsync("/v1/admin/vocabulary/import?dryRun=true", conflictDryRunContent);
+            dryRun.EnsureSuccessStatusCode();
+            using var conflictDryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
+            Assert.Equal(0, conflictDryRunJson.RootElement.GetProperty("imported").GetInt32());
+            Assert.Equal(1, conflictDryRunJson.RootElement.GetProperty("skipped").GetInt32());
+            Assert.Equal(1, conflictDryRunJson.RootElement.GetProperty("duplicates").GetInt32());
+        }
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_PreviewAndDryRun_BlockSameFileDuplicatesAndOverLimitFields()
+    {
+        var duplicateTerm = $"duplicate-recall-{Guid.NewGuid():N}";
+        var duplicateCsv = VocabularyImportCsvHeader
+            + $"{duplicateTerm},\"Definition\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=1\"\n"
+            + $"{duplicateTerm.ToUpperInvariant()},\"Definition 2\",\"Example 2.\",medical,medium,Medicine,OET,,,,,,,,\"src=unit-test;p=1;row=2\"\n";
+
+        using (var previewContent = CsvContent(duplicateCsv, "recalls-duplicates.csv"))
+        {
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("duplicateRows").GetInt32());
+        }
+
+        using (var dryRunContent = CsvContent(duplicateCsv, "recalls-duplicates.csv"))
+        {
+            var dryRun = await _client.PostAsync("/v1/admin/vocabulary/import?dryRun=true", dryRunContent);
+            dryRun.EnsureSuccessStatusCode();
+            using var dryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
+            Assert.Equal(1, dryRunJson.RootElement.GetProperty("imported").GetInt32());
+            Assert.Equal(1, dryRunJson.RootElement.GetProperty("skipped").GetInt32());
+            Assert.Equal(1, dryRunJson.RootElement.GetProperty("duplicates").GetInt32());
+        }
+
+        var overLimitCategory = new string('c', 65);
+        var overLimitCsv = VocabularyImportCsvHeader
+            + $"limit-recall-{Guid.NewGuid():N},\"Definition\",\"Example.\",{overLimitCategory},medium,medicine,oet,,,,,,,,\"src=unit-test;p=2;row=1\"\n";
+
+        using (var previewContent = CsvContent(overLimitCsv, "recalls-over-limit.csv"))
+        {
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Contains("Category exceeds", previewJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+        }
+
+        using (var dryRunContent = CsvContent(overLimitCsv, "recalls-over-limit.csv"))
+        {
+            var dryRun = await _client.PostAsync("/v1/admin/vocabulary/import?dryRun=true", dryRunContent);
+            dryRun.EnsureSuccessStatusCode();
+            using var dryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
+            Assert.Equal(0, dryRunJson.RootElement.GetProperty("imported").GetInt32());
+            Assert.Equal(1, dryRunJson.RootElement.GetProperty("failedRows").GetInt32());
+        }
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_PreviewSupportsMultilineCsvAndBlocksUnknownTaxonomy()
+    {
+        var multilineTerm = $"multiline-recall-{Guid.NewGuid():N}";
+        var multilineCsv = VocabularyImportCsvHeader
+            + $"{multilineTerm},\"Definition line one\r\nline two with \"\"quoted\"\" detail\",\"Example sentence with, comma.\",medical,medium,medicine,oet,,,,,,\"follow-up call\",\"related A|related B\",\"src=multiline;p=1;row=1\"\n";
+
+        using (var previewContent = CsvContent(multilineCsv, "recalls-multiline.csv"))
+        {
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Contains("line two", previewJson.RootElement.GetProperty("rows")[0].GetProperty("definition").GetString());
+            Assert.Contains("quoted", previewJson.RootElement.GetProperty("rows")[0].GetProperty("definition").GetString());
+        }
+
+        var unknownTaxonomyCsv = VocabularyImportCsvHeader
+            + $"taxonomy-recall-{Guid.NewGuid():N},\"Definition\",\"Example.\",unapproved_bucket,medium,medicine,oet,,,,,,,,\"src=taxonomy;p=1;row=1\"\n";
+
+        using (var previewContent = CsvContent(unknownTaxonomyCsv, "recalls-taxonomy.csv"))
+        {
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Contains("Unknown category", previewJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+        }
+
+        var unknownDifficultyCsv = VocabularyImportCsvHeader
+            + $"difficulty-recall-{Guid.NewGuid():N},\"Definition\",\"Example.\",medical,experimental,medicine,oet,,,,,,,,\"src=difficulty;p=1;row=1\"\n";
+
+        using (var previewContent = CsvContent(unknownDifficultyCsv, "recalls-difficulty.csv"))
+        {
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Contains("Unknown difficulty", previewJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+        }
+
+        var missingSourceCsv = VocabularyImportCsvHeader
+            + $"source-recall-{Guid.NewGuid():N},\"Definition\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\n";
+
+        using (var previewContent = CsvContent(missingSourceCsv, "recalls-missing-source.csv"))
+        {
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Contains("sourceProvenance", previewJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+        }
+
+        var batchOnlySourceCsv = VocabularyImportCsvHeader
+            + $"source-batch-only-{Guid.NewGuid():N},\"Definition\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"batch=old-batch\"\n";
+
+        using (var previewContent = CsvContent(batchOnlySourceCsv, "recalls-batch-only-source.csv"))
+        {
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Contains("compact source pointer", previewJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+        }
+
+        foreach (var genericSource in new[] { "source=admin-vocabulary-import", "source=unknown", "not-source=recalls-src-001", "batch=old-batch;source=admin-vocabulary-import" })
+        {
+            var genericSourceCsv = VocabularyImportCsvHeader
+                + $"generic-source-{Guid.NewGuid():N},\"Definition\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"{genericSource}\"\n";
+
+            using var previewContent = CsvContent(genericSourceCsv, "recalls-generic-source.csv");
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Contains("compact source pointer", previewJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_BatchExportAndRollback_ArchivesDraftRows()
+    {
+        var term = $"batch-recall-{Guid.NewGuid():N}";
+        var batchId = $"recalls-test-{Guid.NewGuid():N}"[..32];
+        var csv = "Term,Definition,ExampleSentence,Category,Difficulty,ProfessionId,ExamTypeCode,AmericanSpelling,AudioUrl,AudioSlowUrl,AudioSentenceUrl,AudioMediaAssetId,SynonymsCsv,Collocations,RelatedTerms,SourceProvenance\n"
+            + $"{term},\"Batch definition\",\"Batch example sentence.\",medical,medium,medicine,oet,{term}-us,,,,,\"batch synonym one|batch synonym two\",\"batch collocation\",\"batch related\",\"src=unit-test;p=1;row=1\"\n";
+
+        using (var dryRunContent = CsvContent(csv, "recalls-batch.csv"))
+        {
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+            dryRun.EnsureSuccessStatusCode();
+        }
+
+        using (var importContent = CsvContent(csv, "recalls-batch.csv"))
+        {
+            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
+            import.EnsureSuccessStatusCode();
+            using var importJson = JsonDocument.Parse(await import.Content.ReadAsStringAsync());
+            Assert.Equal(batchId, importJson.RootElement.GetProperty("importBatchId").GetString());
+            Assert.Equal(1, importJson.RootElement.GetProperty("imported").GetInt32());
+        }
+
+        var summary = await _client.GetAsync($"/v1/admin/vocabulary/import/batches/{Uri.EscapeDataString(batchId)}");
+        summary.EnsureSuccessStatusCode();
+        using (var summaryJson = JsonDocument.Parse(await summary.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal(1, summaryJson.RootElement.GetProperty("total").GetInt32());
+            Assert.Equal(1, summaryJson.RootElement.GetProperty("draft").GetInt32());
+            Assert.Equal(0, summaryJson.RootElement.GetProperty("active").GetInt32());
+            Assert.StartsWith($"batch={batchId};", summaryJson.RootElement.GetProperty("rows")[0].GetProperty("sourceProvenance").GetString());
+        }
+
+        var export = await _client.GetAsync($"/v1/admin/vocabulary/import/batches/{Uri.EscapeDataString(batchId)}/export");
+        export.EnsureSuccessStatusCode();
+        var csvExport = await export.Content.ReadAsStringAsync();
+        Assert.Contains(batchId, csvExport);
+        Assert.Contains(term, csvExport);
+        Assert.Contains("batch synonym two", csvExport);
+        Assert.Contains("batch collocation", csvExport);
+
+        using (var reconcileContent = CsvContent(csv, "recalls-batch-manifest.csv"))
+        {
+            var reconcile = await _client.PostAsync($"/v1/admin/vocabulary/import/batches/{Uri.EscapeDataString(batchId)}/reconcile", reconcileContent);
+            reconcile.EnsureSuccessStatusCode();
+            using var reconcileJson = JsonDocument.Parse(await reconcile.Content.ReadAsStringAsync());
+            Assert.True(reconcileJson.RootElement.GetProperty("clean").GetBoolean());
+            Assert.Equal(1, reconcileJson.RootElement.GetProperty("matchedRows").GetInt32());
+            Assert.Equal(0, reconcileJson.RootElement.GetProperty("mismatchedRows").GetInt32());
+        }
+
+        var mismatchedCsv = csv.Replace("Batch definition", "Changed batch definition", StringComparison.Ordinal);
+        using (var reconcileContent = CsvContent(mismatchedCsv, "recalls-batch-mismatch.csv"))
+        {
+            var reconcile = await _client.PostAsync($"/v1/admin/vocabulary/import/batches/{Uri.EscapeDataString(batchId)}/reconcile", reconcileContent);
+            reconcile.EnsureSuccessStatusCode();
+            using var reconcileJson = JsonDocument.Parse(await reconcile.Content.ReadAsStringAsync());
+            Assert.False(reconcileJson.RootElement.GetProperty("clean").GetBoolean());
+            Assert.Equal(1, reconcileJson.RootElement.GetProperty("mismatchedRows").GetInt32());
+            Assert.Contains(reconcileJson.RootElement.GetProperty("rows").EnumerateArray(), row =>
+                row.GetProperty("status").GetString() == "mismatched"
+                && row.GetProperty("mismatches").EnumerateArray().Any(m => m.GetProperty("field").GetString() == "definition"));
+        }
+
+        var rollback = await _client.PostAsJsonAsync($"/v1/admin/vocabulary/import/batches/{Uri.EscapeDataString(batchId)}/rollback", new { deleteDraftRows = false });
+        rollback.EnsureSuccessStatusCode();
+        using (var rollbackJson = JsonDocument.Parse(await rollback.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal(1, rollbackJson.RootElement.GetProperty("archived").GetInt32());
+            Assert.Equal(0, rollbackJson.RootElement.GetProperty("blocked").GetInt32());
+        }
+
+        var afterRollback = await _client.GetAsync($"/v1/admin/vocabulary/import/batches/{Uri.EscapeDataString(batchId)}");
+        afterRollback.EnsureSuccessStatusCode();
+        using var afterJson = JsonDocument.Parse(await afterRollback.Content.ReadAsStringAsync());
+        Assert.Equal(0, afterJson.RootElement.GetProperty("draft").GetInt32());
+        Assert.Equal(1, afterJson.RootElement.GetProperty("archived").GetInt32());
+
+        var secondTerm = $"batch-recall-reuse-{Guid.NewGuid():N}";
+        var secondCsv = VocabularyImportCsvHeader
+            + $"{secondTerm},\"Second definition\",\"Second example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=2;row=1\"\n";
+
+        using (var secondDryRunContent = CsvContent(secondCsv, "recalls-batch-reuse.csv"))
+        {
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&importBatchId={Uri.EscapeDataString(batchId)}", secondDryRunContent);
+            dryRun.EnsureSuccessStatusCode();
+        }
+
+        using (var secondImportContent = CsvContent(secondCsv, "recalls-batch-reuse.csv"))
+        {
+            var secondImport = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", secondImportContent);
+            Assert.Equal(HttpStatusCode.BadRequest, secondImport.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_CommitRequiresMatchingDryRun()
+    {
+        var term = $"commit-gate-{Guid.NewGuid():N}";
+        var batchId = $"recalls-gate-{Guid.NewGuid():N}"[..32];
+        var csv = VocabularyImportCsvHeader
+            + $"{term},\"Definition\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=gate;p=1;row=1\"\n";
+
+        using (var directCommitContent = CsvContent(csv, "recalls-direct.csv"))
+        {
+            var directCommit = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", directCommitContent);
+            Assert.Equal(HttpStatusCode.BadRequest, directCommit.StatusCode);
+        }
+
+        using (var omittedDryRunContent = CsvContent(csv, "recalls-default.csv"))
+        {
+            var defaultDryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?importBatchId={Uri.EscapeDataString(batchId)}", omittedDryRunContent);
+            defaultDryRun.EnsureSuccessStatusCode();
+            using var defaultJson = JsonDocument.Parse(await defaultDryRun.Content.ReadAsStringAsync());
+            Assert.Equal(1, defaultJson.RootElement.GetProperty("imported").GetInt32());
+        }
+
+        var changedCsv = VocabularyImportCsvHeader
+            + $"{term},\"Changed definition\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=gate;p=1;row=1\"\n";
+        using (var changedCommitContent = CsvContent(changedCsv, "recalls-changed.csv"))
+        {
+            var changedCommit = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", changedCommitContent);
+            Assert.Equal(HttpStatusCode.BadRequest, changedCommit.StatusCode);
+        }
+
+        var list = await _client.GetAsync($"/v1/admin/vocabulary/items?search={Uri.EscapeDataString(term)}");
+        list.EnsureSuccessStatusCode();
+        using var listJson = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+        Assert.DoesNotContain(listJson.RootElement.GetProperty("items").EnumerateArray(), x => x.GetProperty("term").GetString() == term);
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_RollbackBlocksActiveRowsAndNeverDeletes()
+    {
+        var term = $"active-batch-recall-{Guid.NewGuid():N}";
+        var batchId = $"recalls-active-{Guid.NewGuid():N}"[..32];
+        var csv = VocabularyImportCsvHeader
+            + $"{term},\"Active rollback definition\",\"Active example.\",communication,medium,medicine,oet,,,,,,,,\"src=active;p=1;row=1\"\n";
+
+        using (var dryRunContent = CsvContent(csv, "recalls-active.csv"))
+        {
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+            dryRun.EnsureSuccessStatusCode();
+        }
+
+        using (var importContent = CsvContent(csv, "recalls-active.csv"))
+        {
+            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
+            import.EnsureSuccessStatusCode();
+        }
+
+        var list = await _client.GetAsync($"/v1/admin/vocabulary/items?search={Uri.EscapeDataString(term)}");
+        list.EnsureSuccessStatusCode();
+        using var listJson = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+        var id = listJson.RootElement.GetProperty("items").EnumerateArray()
+            .Single(x => x.GetProperty("term").GetString() == term)
+            .GetProperty("id").GetString()!;
+
+        var activate = await _client.PutAsJsonAsync($"/v1/admin/vocabulary/items/{id}", new { status = "active" });
+        activate.EnsureSuccessStatusCode();
+
+        var rollback = await _client.PostAsJsonAsync($"/v1/admin/vocabulary/import/batches/{Uri.EscapeDataString(batchId)}/rollback", new { deleteDraftRows = true });
+        rollback.EnsureSuccessStatusCode();
+        using (var rollbackJson = JsonDocument.Parse(await rollback.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal(0, rollbackJson.RootElement.GetProperty("deleted").GetInt32());
+            Assert.Equal(0, rollbackJson.RootElement.GetProperty("archived").GetInt32());
+            Assert.Equal(1, rollbackJson.RootElement.GetProperty("blocked").GetInt32());
+        }
+
+        var summary = await _client.GetAsync($"/v1/admin/vocabulary/import/batches/{Uri.EscapeDataString(batchId)}");
+        summary.EnsureSuccessStatusCode();
+        using var summaryJson = JsonDocument.Parse(await summary.Content.ReadAsStringAsync());
+        Assert.Equal(1, summaryJson.RootElement.GetProperty("active").GetInt32());
+        Assert.Equal(0, summaryJson.RootElement.GetProperty("archived").GetInt32());
+    }
+
+    [Fact]
+    public async Task AdminRecallsLegacyBulkUpload_IsDisabledForProductionSafety()
+    {
+        var response = await _client.PostAsJsonAsync("/v1/admin/recalls/bulk-upload", Array.Empty<object>());
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("legacy_recalls_import_disabled", json.RootElement.GetProperty("code").GetString());
+    }
+
     // ── Bulk User Import ───────────────────────
 
     [Fact]
@@ -635,6 +1046,13 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         return document.RootElement.TryGetProperty("code", out var codeElement)
             ? codeElement.GetString()
             : null;
+    }
+
+    private static MultipartFormDataContent CsvContent(string csv, string fileName)
+    {
+        var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(csv)), "file", fileName);
+        return content;
     }
 
     private sealed class SqliteAdminWebApplicationFactory(string sqlitePath) : TestWebApplicationFactory

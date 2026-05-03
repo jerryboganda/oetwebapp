@@ -729,13 +729,32 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetVocabularyCategoriesAdminAsync(examTypeCode, professionId, ct)))
             .WithAdminRead("AdminContentRead");
 
-        admin.MapPost("/vocabulary/import/preview", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct)
-            => Results.Ok(await service.PreviewVocabularyImportAsync(file, ct)))
+        admin.MapPost("/vocabulary/import/preview", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct, [FromQuery] string? importBatchId)
+            => Results.Ok(await service.PreviewVocabularyImportAsync(file, importBatchId, ct)))
             .RequireRateLimiting("PerUserWrite").DisableAntiforgery().WithAdminRead("AdminContentRead");
 
-        admin.MapPost("/vocabulary/import", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct, [FromQuery] bool? dryRun)
-            => Results.Ok(await service.BulkImportVocabularyV2Async(http.AdminId(), http.AdminName(), file, dryRun ?? false, ct)))
+        admin.MapPost("/vocabulary/import", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct, [FromQuery] bool? dryRun, [FromQuery] string? importBatchId)
+            => Results.Ok(await service.BulkImportVocabularyV2Async(http.AdminId(), http.AdminName(), file, dryRun ?? true, importBatchId, ct)))
             .RequireRateLimiting("PerUserWrite").DisableAntiforgery().WithAdminRead("AdminContentWrite");
+
+        admin.MapGet("/vocabulary/import/batches/{importBatchId}", async (string importBatchId, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetVocabularyImportBatchSummaryAsync(importBatchId, ct)))
+            .WithAdminRead("AdminContentRead");
+
+        admin.MapGet("/vocabulary/import/batches/{importBatchId}/export", async (string importBatchId, AdminService service, CancellationToken ct) =>
+            {
+                var export = await service.ExportVocabularyImportBatchCsvAsync(importBatchId, ct);
+                return Results.File(export.Bytes, "text/csv; charset=utf-8", export.FileName);
+            })
+            .WithAdminRead("AdminContentRead");
+
+        admin.MapPost("/vocabulary/import/batches/{importBatchId}/reconcile", async (string importBatchId, IFormFile file, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ReconcileVocabularyImportBatchAsync(importBatchId, file, ct)))
+            .RequireRateLimiting("PerUserWrite").DisableAntiforgery().WithAdminRead("AdminContentRead");
+
+        admin.MapPost("/vocabulary/import/batches/{importBatchId}/rollback", async (string importBatchId, HttpContext http, AdminVocabularyImportRollbackRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.RollbackVocabularyImportBatchAsync(http.AdminId(), http.AdminName(), importBatchId, request, ct)))
+            .RequireRateLimiting("PerUserWrite").WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/vocabulary/ai/draft", async (HttpContext http, AdminVocabularyAiDraftRequest request,
             VocabularyDraftService draftSvc, CancellationToken ct) =>

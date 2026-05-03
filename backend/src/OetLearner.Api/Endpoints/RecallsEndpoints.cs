@@ -103,10 +103,12 @@ public static class RecallsEndpoints
 
         // Admin-only: CSV bulk upload of vocabulary terms (spec §8).
         var adminRecalls = app.MapGroup("/v1/admin/recalls").RequireAuthorization("AdminContentWrite");
-        adminRecalls.MapPost("/bulk-upload", async (
-            IReadOnlyList<RecallsBulkUploadRow> rows,
-            RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.BulkUploadAsync(rows, ct)));
+        adminRecalls.MapPost("/bulk-upload", () =>
+            Results.Json(new
+            {
+                code = "legacy_recalls_import_disabled",
+                message = "Legacy Recalls bulk upload is disabled for production safety. Use /v1/admin/vocabulary/import/preview and /v1/admin/vocabulary/import with dryRun first."
+            }, statusCode: StatusCodes.Status409Conflict));
 
         return app;
     }
