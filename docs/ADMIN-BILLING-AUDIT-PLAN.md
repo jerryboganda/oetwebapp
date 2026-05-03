@@ -26,7 +26,25 @@ The admin billing page is a live operational surface, not a mock. It can create 
 
 Learner billing is quote-driven. The learner page loads the current subscription, plans, add-ons, invoices, wallet state, and freeze status. It creates server-priced quotes, opens Stripe or PayPal checkout sessions, and relies on payment webhooks to complete the local subscription, add-on, coupon, invoice, wallet, and billing-event records.
 
-The backend already has useful primitives: `BillingPlan`, `BillingAddOn`, `BillingCoupon`, `BillingCouponRedemption`, `BillingQuote`, `BillingEvent`, `SubscriptionItem`, `PaymentTransaction`, and `PaymentWebhookEvent`. Admin permissions are split into `AdminBillingRead` and `AdminBillingWrite`. The admin billing workspace now also has a read-only provider lifecycle signals panel sourced strictly from sanitized `PaymentWebhookEvent` projections and correlated conservatively to local payment, quote, invoice, subscription, and billing-event evidence.
+The backend already has useful primitives: `BillingPlan`, `BillingAddOn`, `BillingCoupon`, `BillingCouponRedemption`, `BillingQuote`, `BillingEvent`, `SubscriptionItem`, `PaymentTransaction`, `PaymentWebhookEvent`, and `WalletTopUpTierConfig`. Admin permissions are split into `AdminBillingRead` and `AdminBillingWrite`. The admin billing workspace now also has a read-only provider lifecycle signals panel sourced strictly from sanitized `PaymentWebhookEvent` projections and correlated conservatively to local payment, quote, invoice, subscription, and billing-event evidence.
+
+## Wallet Top-Up Tier Operations
+
+- Admin route: `/admin/billing/wallet-tiers`.
+- API routes: `GET /v1/admin/billing/wallet-tiers` requires `AdminBillingRead`; `PUT /v1/admin/billing/wallet-tiers` requires `AdminBillingWrite`.
+- The PUT route is a full-set replacement. It validates at least one active tier, platform wallet currency, positive amount, non-negative credits/bonus/order, label length, and duplicate amount/currency pairs before replacing rows atomically.
+- Every save writes an audit event (`wallet_tiers.replace`) and the learner-facing endpoint immediately reads active rows ordered by display order and amount.
+- Production source-of-truth: once the DB table exists, wallet top-ups fail closed if the table cannot be read. The appsettings tiers are only bootstrap values for empty tables and local configuration, not a silent fallback after DB failures.
+- `20260504120000_HardenWalletTopUpTiers` seeds the historical four AUD tiers into the DB only when the table is empty and creates the unique `(Amount, Currency)` index with `IF NOT EXISTS`, so environments that already applied the earlier wallet-tier migration still receive the hardening.
+
+Operational smoke after deploy:
+
+1. Visit `/admin/billing/wallet-tiers` as a billing-read admin and confirm the page is read-only without `AdminBillingWrite`.
+2. Visit the same page as a billing-write admin and save a no-op tier set.
+3. Visit learner `/billing`, open `Credits & Add-ons`, and confirm the visible tier list and currency match the admin page.
+4. Confirm invalid/duplicate/all-inactive tier saves return structured 400 responses and do not change the learner tier set.
+
+Checkout error note: `quote_mismatch` means the checkout request no longer matches the persisted quote snapshot (`priceId`, `couponCode`, or `addOnCodes`). Client/support action is to refresh or recreate the quote before retrying checkout; do not retry the stale checkout payload.
 
 ## Business Workflow Gaps
 

@@ -14,6 +14,7 @@ export interface WalletTiersEditorProps {
   defaultCurrency: string;
   source: 'database' | 'appsettings';
   onSave: (tiers: AdminWalletTierInput[]) => Promise<void>;
+  canWrite?: boolean;
 }
 
 interface DraftRow {
@@ -39,6 +40,7 @@ interface RowErrors {
 
 let keySeq = 0;
 const nextKey = () => `tier-${++keySeq}`;
+const fieldId = (row: DraftRow, field: string) => `${row.key}-${field}`;
 
 function toDraft(row: AdminWalletTierRow, defaultCurrency: string): DraftRow {
   return {
@@ -70,7 +72,7 @@ function emptyDraft(defaultCurrency: string, displayOrder: number): DraftRow {
   };
 }
 
-function validateRow(row: DraftRow): RowErrors {
+function validateRow(row: DraftRow, defaultCurrency: string): RowErrors {
   const errs: RowErrors = {};
   const amount = Number(row.amount);
   const credits = Number(row.credits);
@@ -91,11 +93,13 @@ function validateRow(row: DraftRow): RowErrors {
   }
   if (!/^[A-Za-z]{3}$/.test(row.currency.trim())) {
     errs.currency = '3-letter ISO';
+  } else if (row.currency.trim().toUpperCase() !== defaultCurrency.toUpperCase()) {
+    errs.currency = `Must be ${defaultCurrency.toUpperCase()}`;
   }
   return errs;
 }
 
-export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSave }: WalletTiersEditorProps) {
+export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSave, canWrite = true }: WalletTiersEditorProps) {
   const [drafts, setDrafts] = useState<DraftRow[]>(() =>
     initialTiers.length > 0
       ? initialTiers.map((t) => toDraft(t, defaultCurrency))
@@ -106,9 +110,9 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
 
   const errorsByKey = useMemo(() => {
     const map = new Map<string, RowErrors>();
-    drafts.forEach((d) => map.set(d.key, validateRow(d)));
+    drafts.forEach((d) => map.set(d.key, validateRow(d, defaultCurrency)));
     return map;
-  }, [drafts]);
+  }, [defaultCurrency, drafts]);
 
   const duplicateAmounts = useMemo(() => {
     const counts = new Map<number, number>();
@@ -122,10 +126,17 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
   }, [drafts]);
 
   const hasErrors = useMemo(() => {
-    if (drafts.length === 0) return false;
+    if (drafts.length === 0) return true;
+    if (!drafts.some((d) => d.isActive)) return true;
     if (duplicateAmounts.size > 0) return true;
     return drafts.some((d) => Object.keys(errorsByKey.get(d.key) ?? {}).length > 0);
   }, [drafts, duplicateAmounts, errorsByKey]);
+
+  const setLevelError = useMemo(() => {
+    if (drafts.length === 0) return 'At least one active tier is required.';
+    if (!drafts.some((d) => d.isActive)) return 'At least one tier must remain active.';
+    return null;
+  }, [drafts]);
 
   const updateRow = useCallback((key: string, patch: Partial<DraftRow>) => {
     setDrafts((prev) => prev.map((row) => (row.key === key ? { ...row, ...patch } : row)));
@@ -140,6 +151,10 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
   }, []);
 
   const handleSave = useCallback(async () => {
+    if (!canWrite) {
+      setFeedback({ tone: 'error', message: 'You have read-only billing access.' });
+      return;
+    }
     if (hasErrors) {
       setFeedback({ tone: 'error', message: 'Fix the validation errors before saving.' });
       return;
@@ -168,7 +183,7 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
     } finally {
       setSaving(false);
     }
-  }, [drafts, hasErrors, onSave]);
+  }, [canWrite, drafts, hasErrors, onSave]);
 
   return (
     <div className="space-y-4" data-testid="wallet-tiers-editor">
@@ -177,6 +192,12 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
           No DB-backed tiers exist yet — these rows reflect the current{' '}
           <code className="rounded bg-white/60 px-1 py-0.5 font-mono text-xs">Billing__Wallet__TopUpTiers</code>{' '}
           values. Save to persist them in the database (the UI then becomes the source of truth).
+        </InlineAlert>
+      ) : null}
+
+      {!canWrite ? (
+        <InlineAlert variant="info" title="Read-only access">
+          You can review wallet top-up tiers, but saving changes requires Billing write permission.
         </InlineAlert>
       ) : null}
 
@@ -192,6 +213,12 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
       {duplicateAmounts.size > 0 ? (
         <InlineAlert variant="error" title="Duplicate amounts">
           The amount(s) {[...duplicateAmounts].join(', ')} appear more than once. Each tier must have a unique amount.
+        </InlineAlert>
+      ) : null}
+
+      {setLevelError ? (
+        <InlineAlert variant="error" title="Tier set incomplete">
+          {setLevelError}
         </InlineAlert>
       ) : null}
 
@@ -215,70 +242,82 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
               {drafts.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-8 text-center text-muted">
-                    No tiers configured. Click “Add tier” to create one.
+                    No tiers configured. Add at least one active tier before saving.
                   </td>
                 </tr>
               ) : (
-                drafts.map((row) => {
+                drafts.map((row, index) => {
                   const rowErrors = errorsByKey.get(row.key) ?? {};
                   const amountIsDup = duplicateAmounts.has(Number(row.amount));
                   return (
                     <tr key={row.key} data-testid="wallet-tier-row" className="align-top">
                       <td className="px-3 py-3">
                         <Input
-                          aria-label="Amount"
+                          id={fieldId(row, 'amount')}
+                          aria-label={`Tier ${index + 1} amount`}
                           inputMode="decimal"
                           value={row.amount}
                           error={rowErrors.amount ?? (amountIsDup ? 'Duplicate' : undefined)}
+                          disabled={!canWrite}
                           onChange={(e) => updateRow(row.key, { amount: e.target.value })}
                           className="w-24"
                         />
                       </td>
                       <td className="px-3 py-3">
                         <Input
-                          aria-label="Currency"
+                          id={fieldId(row, 'currency')}
+                          aria-label={`Tier ${index + 1} currency`}
                           value={row.currency}
                           error={rowErrors.currency}
                           maxLength={3}
+                          disabled={!canWrite}
                           onChange={(e) => updateRow(row.key, { currency: e.target.value.toUpperCase() })}
                           className="w-20 uppercase"
                         />
                       </td>
                       <td className="px-3 py-3">
                         <Input
-                          aria-label="Credits"
+                          id={fieldId(row, 'credits')}
+                          aria-label={`Tier ${index + 1} credits`}
                           inputMode="numeric"
                           value={row.credits}
                           error={rowErrors.credits}
+                          disabled={!canWrite}
                           onChange={(e) => updateRow(row.key, { credits: e.target.value })}
                           className="w-24"
                         />
                       </td>
                       <td className="px-3 py-3">
                         <Input
-                          aria-label="Bonus"
+                          id={fieldId(row, 'bonus')}
+                          aria-label={`Tier ${index + 1} bonus credits`}
                           inputMode="numeric"
                           value={row.bonus}
                           error={rowErrors.bonus}
+                          disabled={!canWrite}
                           onChange={(e) => updateRow(row.key, { bonus: e.target.value })}
                           className="w-24"
                         />
                       </td>
                       <td className="px-3 py-3">
                         <Input
-                          aria-label="Label"
+                          id={fieldId(row, 'label')}
+                          aria-label={`Tier ${index + 1} label`}
                           value={row.label}
                           maxLength={80}
+                          disabled={!canWrite}
                           onChange={(e) => updateRow(row.key, { label: e.target.value })}
                           className="w-40"
                         />
                       </td>
                       <td className="px-3 py-3">
                         <Input
-                          aria-label="Display order"
+                          id={fieldId(row, 'display-order')}
+                          aria-label={`Tier ${index + 1} display order`}
                           inputMode="numeric"
                           value={row.displayOrder}
                           error={rowErrors.displayOrder}
+                          disabled={!canWrite}
                           onChange={(e) => updateRow(row.key, { displayOrder: e.target.value })}
                           className="w-20"
                         />
@@ -286,8 +325,9 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
                       <td className="px-3 py-3">
                         <input
                           type="checkbox"
-                          aria-label="Popular"
+                          aria-label={`Tier ${index + 1} popular`}
                           checked={row.isPopular}
+                          disabled={!canWrite}
                           onChange={(e) => updateRow(row.key, { isPopular: e.target.checked })}
                           className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                         />
@@ -296,8 +336,9 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
                       <td className="px-3 py-3">
                         <input
                           type="checkbox"
-                          aria-label="Active"
+                          aria-label={`Tier ${index + 1} active`}
                           checked={row.isActive}
+                          disabled={!canWrite}
                           onChange={(e) => updateRow(row.key, { isActive: e.target.checked })}
                           className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                         />
@@ -307,6 +348,7 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
                           variant="ghost"
                           size="sm"
                           aria-label={`Remove tier ${row.amount}`}
+                          disabled={!canWrite}
                           onClick={() => removeRow(row.key)}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -322,13 +364,13 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
       </Card>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="secondary" onClick={addRow} type="button">
+        <Button variant="secondary" onClick={addRow} type="button" disabled={!canWrite}>
           <Plus className="mr-1 h-4 w-4" /> Add tier
         </Button>
         <Button
           variant="primary"
           onClick={handleSave}
-          disabled={saving || hasErrors}
+          disabled={!canWrite || saving || hasErrors}
           data-testid="wallet-tiers-save"
         >
           <Save className="mr-1 h-4 w-4" /> {saving ? 'Saving…' : 'Save all tiers'}

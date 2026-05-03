@@ -35,6 +35,12 @@ namespace OetLearner.Api.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_WalletTopUpTierConfigs_Amount_Currency",
+                table: "WalletTopUpTierConfigs",
+                columns: new[] { "Amount", "Currency" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_WalletTopUpTierConfigs_IsActive_DisplayOrder",
                 table: "WalletTopUpTierConfigs",
                 columns: new[] { "IsActive", "DisplayOrder" });

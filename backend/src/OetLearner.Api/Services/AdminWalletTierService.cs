@@ -39,7 +39,7 @@ public sealed class AdminWalletTierValidationException : Exception
 /// Admin-facing CRUD for the DB-backed wallet top-up tier configuration.
 /// Pairs with <see cref="WalletService.GetConfiguredTopUpTiers"/>, which
 /// reads the active rows produced by this service and falls back to
-/// <see cref="WalletBillingOptions.TopUpTiers"/> when none exist.
+/// <see cref="WalletBillingOptions.TopUpTiers"/> only before the DB set is created.
 /// </summary>
 public class AdminWalletTierService(
     LearnerDbContext db,
@@ -49,7 +49,7 @@ public class AdminWalletTierService(
     public string DefaultCurrency
         => string.IsNullOrWhiteSpace(billingOptions.Value?.Wallet?.Currency)
             ? "AUD"
-            : billingOptions.Value!.Wallet!.Currency!;
+            : billingOptions.Value!.Wallet!.Currency!.Trim().ToUpperInvariant();
 
     /// <summary>
     /// Return every configured tier (active + inactive). When the DB is empty
@@ -132,6 +132,10 @@ public class AdminWalletTierService(
         }
 
         var now = timeProvider.GetUtcNow();
+        await using var transaction = string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal)
+            ? null
+            : await db.Database.BeginTransactionAsync(ct);
+
         var existing = await db.WalletTopUpTierConfigs.ToListAsync(ct);
         var keepIds = request.Tiers
             .Where(t => t.Id.HasValue)
@@ -147,9 +151,7 @@ public class AdminWalletTierService(
         var byId = existing.ToDictionary(x => x.Id);
         foreach (var input in request.Tiers)
         {
-            var currency = string.IsNullOrWhiteSpace(input.Currency)
-                ? defaultCurrency
-                : input.Currency.Trim().ToUpperInvariant();
+            var currency = defaultCurrency;
 
             if (input.Id.HasValue && byId.TryGetValue(input.Id.Value, out var row))
             {
@@ -185,8 +187,6 @@ public class AdminWalletTierService(
             }
         }
 
-        await db.SaveChangesAsync(ct);
-
         // Audit: full collection PUT recorded as a single AuditEvent. Mirrors
         // the AdminService.LogAuditAsync convention for resourceType/Action.
         db.AuditEvents.Add(new AuditEvent
@@ -202,6 +202,10 @@ public class AdminWalletTierService(
             Details = $"Replaced wallet top-up tier set with {request.Tiers.Count} tier(s).",
         });
         await db.SaveChangesAsync(ct);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(ct);
+        }
 
         return await ListAsync(ct);
     }
@@ -213,6 +217,15 @@ public class AdminWalletTierService(
         {
             errors.Add("tiers: collection is required.");
             return errors;
+        }
+
+        if (request.Tiers.Count == 0)
+        {
+            errors.Add("tiers: at least one active tier is required.");
+        }
+        else if (!request.Tiers.Any(t => t.IsActive))
+        {
+            errors.Add("tiers: at least one tier must be active.");
         }
 
         for (var i = 0; i < request.Tiers.Count; i++)
@@ -229,6 +242,10 @@ public class AdminWalletTierService(
             if (currency.Length != 3 || !currency.All(char.IsLetter))
             {
                 errors.Add($"{prefix}.currency: must be a 3-letter ISO code.");
+            }
+            else if (!string.Equals(currency, defaultCurrency, StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add($"{prefix}.currency: must match the platform wallet currency ({defaultCurrency}).");
             }
         }
 

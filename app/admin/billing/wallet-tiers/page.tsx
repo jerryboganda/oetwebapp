@@ -14,13 +14,18 @@ import {
   type AdminWalletTiersResponse,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { useAuth } from '@/contexts/auth-context';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 
 type LoadState = 'loading' | 'success' | 'error';
 
 export default function AdminWalletTiersPage() {
+  const { user } = useAuth();
+  const canWriteBilling = hasPermission(user?.adminPermissions, AdminPermission.BillingWrite);
   const [data, setData] = useState<AdminWalletTiersResponse | null>(null);
   const [status, setStatus] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -28,6 +33,7 @@ export default function AdminWalletTiersPage() {
       setData(response);
       setStatus('success');
       setErrorMessage(null);
+      setSaveMessage(null);
     } catch (error) {
       console.error('Failed to load admin wallet top-up tiers', error);
       setErrorMessage(error instanceof Error ? error.message : 'Failed to load wallet top-up tiers.');
@@ -43,6 +49,7 @@ export default function AdminWalletTiersPage() {
         if (cancelled) return;
         setData(response);
         setStatus('success');
+        setSaveMessage(null);
       } catch (error) {
         if (cancelled) return;
         console.error('Failed to load admin wallet top-up tiers', error);
@@ -58,6 +65,7 @@ export default function AdminWalletTiersPage() {
   const handleRefresh = useCallback(() => {
     setStatus('loading');
     setErrorMessage(null);
+    setSaveMessage(null);
     void load();
   }, [load]);
 
@@ -68,6 +76,7 @@ export default function AdminWalletTiersPage() {
   const handleSave = useCallback(async (tiers: AdminWalletTierInput[]) => {
     const updated = await replaceAdminWalletTiers(tiers);
     setData(updated);
+    setSaveMessage('Wallet top-up tiers saved.');
   }, []);
 
   return (
@@ -99,12 +108,21 @@ export default function AdminWalletTiersPage() {
           {errorMessage ?? 'An unexpected error occurred.'}
         </InlineAlert>
       ) : data ? (
+        <>
+        {saveMessage ? (
+          <InlineAlert variant="success" title="Saved">
+            {saveMessage}
+          </InlineAlert>
+        ) : null}
         <WalletTiersEditor
+          key={`${data.source}:${data.tiers.map((tier) => `${tier.id ?? 'new'}:${tier.amount}:${tier.credits}:${tier.bonus}:${tier.currency}:${tier.label}:${tier.displayOrder}:${tier.isPopular}:${tier.isActive}`).join('|')}`}
           initialTiers={data.tiers}
           defaultCurrency={data.currency || 'AUD'}
           source={data.source}
           onSave={handleSave}
+          canWrite={canWriteBilling}
         />
+        </>
       ) : null}
     </AdminRouteWorkspace>
   );

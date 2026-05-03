@@ -48,9 +48,10 @@ function toBooleanValue(value: unknown): boolean {
 
 export async function getScoreGuaranteeData(): Promise<ScoreGuaranteePledge | null> {
   const raw = asRecord(await fetchScoreGuarantee());
-  if (!raw.id) return null;
+  const id = raw.id ?? raw.pledgeId;
+  if (!id) return null;
   return {
-    id: toStringValue(raw.id),
+    id: toStringValue(id),
     userId: toStringValue(raw.userId),
     subscriptionId: toStringValue(raw.subscriptionId),
     baselineScore: toNumberValue(raw.baselineScore),

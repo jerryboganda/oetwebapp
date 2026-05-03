@@ -299,7 +299,7 @@ export default function BillingUpgradePage() {
                           </button>
                         ) : (
                           <Link
-                            href={`/billing?tab=plans&planId=${encodeURIComponent(plan.planId)}`}
+                            href={`/billing?tab=plans&planId=${encodeURIComponent(plan.planCode || plan.planId)}`}
                             aria-label={ctaAriaLabel}
                             className={cn(
                               linkButtonBase,

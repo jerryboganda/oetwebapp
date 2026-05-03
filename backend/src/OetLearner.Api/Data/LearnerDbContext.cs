@@ -552,6 +552,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<SubscriptionItem>().HasIndex(x => x.AddOnVersionId);
         modelBuilder.Entity<BillingPlan>().HasIndex(x => x.Code).IsUnique();
         modelBuilder.Entity<BillingPlan>().HasIndex(x => new { x.Status, x.DisplayOrder });
+        modelBuilder.Entity<WalletTopUpTierConfig>().HasIndex(x => new { x.Amount, x.Currency }).IsUnique();
         modelBuilder.Entity<WalletTopUpTierConfig>().HasIndex(x => new { x.IsActive, x.DisplayOrder });
         modelBuilder.Entity<BillingPlanVersion>().HasIndex(x => new { x.PlanId, x.VersionNumber }).IsUnique();
         modelBuilder.Entity<BillingPlanVersion>().HasIndex(x => x.Code);

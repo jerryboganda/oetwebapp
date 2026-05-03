@@ -3,7 +3,7 @@
 import { getSharedLayoutId, motionTokens } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { motion, useReducedMotion } from 'motion/react';
-import { type KeyboardEvent, type ReactNode } from 'react';
+import { type KeyboardEvent, type ReactNode, useRef } from 'react';
 
 export interface Tab {
   id: string;
@@ -22,26 +22,32 @@ interface TabsProps {
 
 export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }: TabsProps) {
   const reducedMotion = useReducedMotion() ?? false;
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const selectTab = (index: number) => {
+    onChange(tabs[index].id);
+    requestAnimationFrame(() => tabRefs.current[index]?.focus());
+  };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key === 'ArrowRight') {
       event.preventDefault();
-      onChange(tabs[(index + 1) % tabs.length].id);
+      selectTab((index + 1) % tabs.length);
     }
 
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
-      onChange(tabs[(index - 1 + tabs.length) % tabs.length].id);
+      selectTab((index - 1 + tabs.length) % tabs.length);
     }
 
     if (event.key === 'Home') {
       event.preventDefault();
-      onChange(tabs[0].id);
+      selectTab(0);
     }
 
     if (event.key === 'End') {
       event.preventDefault();
-      onChange(tabs[tabs.length - 1].id);
+      selectTab(tabs.length - 1);
     }
   };
 
@@ -57,6 +63,9 @@ export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }
       {tabs.map((tab, index) => (
         <button
           key={tab.id}
+          ref={(node) => {
+            tabRefs.current[index] = node;
+          }}
           id={`tab-${tab.id}`}
           role="tab"
           aria-selected={activeTab === tab.id}

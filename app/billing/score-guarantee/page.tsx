@@ -105,7 +105,7 @@ export default function ScoreGuaranteePage() {
       return;
     }
     const score = parseInt(baselineScore, 10);
-    if (!score || score < 0 || score > 500) {
+    if (Number.isNaN(score) || score < 0 || score > 500) {
       setToast({ variant: 'error', message: 'Enter a valid OET score (0–500).' });
       return;
     }
@@ -129,7 +129,7 @@ export default function ScoreGuaranteePage() {
       return;
     }
     const score = parseInt(actualScore, 10);
-    if (!score || score < 0 || score > 500) {
+    if (Number.isNaN(score) || score < 0 || score > 500) {
       setToast({ variant: 'error', message: 'Enter your actual OET score (0–500).' });
       return;
     }
@@ -173,7 +173,7 @@ export default function ScoreGuaranteePage() {
           icon={Shield}
           accent="emerald"
           title="Score guarantee"
-          description="Improve by 50 OET points within 180 days or claim your money back. Activate the pledge with your current score, then submit your official result if you fall short."
+          description="Improve by 50 OET points within 180 days or claim a platform credit. Activate the pledge with your current score, then submit your official result if you fall short."
           highlights={heroHighlights}
         />
 

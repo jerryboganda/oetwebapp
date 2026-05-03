@@ -29,7 +29,8 @@ public record CreatePaymentIntentRequest(
     string? Description,
     Dictionary<string, string>? Metadata,
     string? SuccessUrl = null,
-    string? CancelUrl = null);
+    string? CancelUrl = null,
+    string? IdempotencyKey = null);
 
 public record PaymentIntentResult(
     string GatewayTransactionId,
@@ -82,6 +83,10 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             HttpMethod.Post,
             new Uri(new Uri(EnsureTrailingSlash(options.ApiBaseUrl)), "v1/checkout/sessions"));
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.SecretKey);
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            message.Headers.TryAddWithoutValidation("Idempotency-Key", request.IdempotencyKey);
+        }
 
         var form = new Dictionary<string, string>
         {
@@ -266,6 +271,10 @@ public sealed class PayPalGateway(HttpClient httpClient, IOptions<BillingOptions
             new Uri(new Uri(EnsureTrailingSlash(GetPayPalApiBaseUrl(options))), "v2/checkout/orders"));
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            message.Headers.TryAddWithoutValidation("PayPal-Request-Id", request.IdempotencyKey);
+        }
 
         var body = new
         {

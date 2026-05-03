@@ -1063,10 +1063,14 @@ export async function fetchWalletTransactions(limit = 20): Promise<ApiRecord> {
   return apiRequest<ApiRecord>(`/v1/billing/wallet/transactions?limit=${limit}`);
 }
 
-export async function createWalletTopUp(amount: number, gateway: 'stripe' | 'paypal'): Promise<ApiRecord> {
+export async function createWalletTopUp(
+  amount: number,
+  gateway: 'stripe' | 'paypal',
+  idempotencyKey?: string,
+): Promise<ApiRecord> {
   return apiRequest<ApiRecord>('/v1/billing/wallet/top-up', {
     method: 'POST',
-    body: JSON.stringify({ amount, gateway }),
+    body: JSON.stringify({ amount, gateway, idempotencyKey: idempotencyKey ?? null }),
   });
 }
 
@@ -3079,6 +3083,7 @@ export async function createBillingCheckoutSession(input: {
   addOnCodes?: string[];
   quoteId?: string | null;
   gateway?: 'stripe' | 'paypal';
+  idempotencyKey?: string;
 }): Promise<{ checkoutUrl: string; checkoutSessionId: string; quoteId?: string | null; totalAmount?: number; currency?: string }> {
   const response = await apiRequest<ApiRecord>('/v1/billing/checkout-sessions', {
     method: 'POST',
@@ -3090,7 +3095,7 @@ export async function createBillingCheckoutSession(input: {
       addOnCodes: input.addOnCodes ?? null,
       quoteId: input.quoteId ?? null,
       gateway: input.gateway ?? null,
-      idempotencyKey: crypto.randomUUID?.() ?? String(Date.now()),
+      idempotencyKey: input.idempotencyKey ?? crypto.randomUUID?.() ?? String(Date.now()),
     }),
   });
   return {

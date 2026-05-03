@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using OetLearner.Api.Contracts;
@@ -31,7 +32,9 @@ public partial class LearnerService(
     PaymentGatewayService paymentGateways)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
+    private const int PaymentIdempotencyKeyMaxLength = 38;
     private static readonly TimeSpan PaymentWebhookProcessingLease = TimeSpan.FromMinutes(5);
+    private static readonly Regex PaymentIdempotencyKeyRegex = new("^[A-Za-z0-9._:-]+$", RegexOptions.Compiled);
 
     public async Task<object> GetMeAsync(string userId, CancellationToken cancellationToken)
     {
@@ -2181,6 +2184,7 @@ public partial class LearnerService(
     public async Task<object> GetBillingQuoteAsync(string userId, BillingQuoteRequest request, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         return await BuildBillingQuoteAsync(userId, request, cancellationToken, persistQuote: true);
     }
 
@@ -2220,15 +2224,6 @@ public partial class LearnerService(
     public async Task<object> CreateCheckoutSessionAsync(string userId, CheckoutSessionCreateRequest request, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
-        {
-            var cached = await GetIdempotentResponseAsync("checkout-session", request.IdempotencyKey, cancellationToken);
-            if (cached is not null)
-            {
-                return cached;
-            }
-        }
-
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
 
         var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
@@ -2266,8 +2261,42 @@ public partial class LearnerService(
                 [new ApiFieldError("gateway", "unsupported", "Choose stripe or paypal.")]);
         }
 
+        var normalizedAddOnCodes = NormalizeCodes(request.AddOnCodes);
+        var idempotencyKey = NormalizeIdempotencyKey(request.IdempotencyKey);
+        var idempotencyRequestHash = idempotencyKey is null
+            ? null
+            : ComputeIdempotencyRequestHash(new
+            {
+                userId,
+                productType = normalizedProductType,
+                request.Quantity,
+                priceId = request.PriceId?.Trim(),
+                couponCode = request.CouponCode?.Trim().ToUpperInvariant(),
+                addOnCodes = normalizedAddOnCodes.OrderBy(code => code, StringComparer.OrdinalIgnoreCase).ToArray(),
+                gateway = gatewayLabel,
+                quoteId = request.QuoteId?.Trim()
+            });
+        if (idempotencyKey is not null && idempotencyRequestHash is not null)
+        {
+            var reservation = await ReservePaymentIdempotencyAsync(
+                "checkout-session",
+                idempotencyKey,
+                userId,
+                idempotencyRequestHash,
+                cancellationToken);
+            if (!reservation.ShouldProcess)
+            {
+                return reservation.CachedResponse!;
+            }
+        }
+
         BillingQuoteResponse quoteResponse;
         BillingQuote quoteEntity;
+        var providerRequestReturned = false;
+        var idempotencyCompleted = false;
+        object? idempotencyResponse = null;
+        try
+        {
         if (!string.IsNullOrWhiteSpace(request.QuoteId))
         {
             quoteEntity = await db.BillingQuotes.FirstOrDefaultAsync(x => x.Id == request.QuoteId && x.UserId == userId, cancellationToken)
@@ -2309,12 +2338,9 @@ public partial class LearnerService(
                     [new ApiFieldError("couponCode", "mismatch", "Refresh your quote before checking out.")]);
             }
 
-            if (request.AddOnCodes is { Count: > 0 })
+            if (normalizedAddOnCodes.Count > 0)
             {
-                var requested = request.AddOnCodes
-                    .Where(code => !string.IsNullOrWhiteSpace(code))
-                    .Select(code => code.Trim())
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var requested = normalizedAddOnCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var saved = new HashSet<string>(quoteAddOnCodes, StringComparer.OrdinalIgnoreCase);
                 if (!requested.SetEquals(saved))
                 {
@@ -2334,7 +2360,7 @@ public partial class LearnerService(
                 request.Quantity,
                 request.PriceId,
                 request.CouponCode,
-                request.AddOnCodes), cancellationToken, persistQuote: true);
+                normalizedAddOnCodes), cancellationToken, persistQuote: true);
             quoteEntity = await db.BillingQuotes.FirstAsync(x => x.Id == quoteResponse.QuoteId && x.UserId == userId, cancellationToken);
         }
 
@@ -2361,11 +2387,42 @@ public partial class LearnerService(
                                         ["coupon_version_id"] = quoteEntity.CouponVersionId ?? string.Empty
                                 },
                                 SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
-                                CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}")),
+                                    CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}"),
+                                    IdempotencyKey: idempotencyKey),
                         cancellationToken);
+                        providerRequestReturned = true;
 
         quoteEntity.CheckoutSessionId = checkoutIntent.GatewayTransactionId;
         quoteEntity.Status = BillingQuoteStatus.Applied;
+
+        var response = new
+        {
+            checkoutSessionId = checkoutIntent.GatewayTransactionId,
+            quoteId = quoteEntity.Id,
+            productType = normalizedProductType,
+            quantity = request.Quantity,
+            targetPlanId = quoteEntity.PlanCode,
+            couponCode = quoteEntity.CouponCode,
+            addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+            subtotalAmount = quoteEntity.SubtotalAmount,
+            discountAmount = quoteEntity.DiscountAmount,
+            totalAmount = quoteEntity.TotalAmount,
+            currency = quoteEntity.Currency,
+            gateway = gatewayLabel,
+            quote = quoteResponse,
+            checkoutUrl = string.IsNullOrWhiteSpace(checkoutIntent.CheckoutUrl)
+                ? platformLinks.BuildCheckoutUrl(
+                    checkoutIntent.GatewayTransactionId,
+                    normalizedProductType,
+                    request.Quantity,
+                    planId: quoteEntity.PlanCode,
+                    couponCode: quoteEntity.CouponCode,
+                    addOnCodes: JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                    quoteId: quoteEntity.Id)
+                : checkoutIntent.CheckoutUrl,
+            state = checkoutIntent.Status
+        };
+        idempotencyResponse = response;
 
         var paymentTransaction = await db.PaymentTransactions.FirstOrDefaultAsync(
             transaction => transaction.GatewayTransactionId == checkoutIntent.GatewayTransactionId,
@@ -2457,33 +2514,13 @@ public partial class LearnerService(
             OccurredAt = DateTimeOffset.UtcNow
         });
 
-        var response = new
+        if (idempotencyKey is not null && idempotencyRequestHash is not null)
         {
-            checkoutSessionId = checkoutIntent.GatewayTransactionId,
-            quoteId = quoteEntity.Id,
-            productType = normalizedProductType,
-            quantity = request.Quantity,
-            targetPlanId = quoteEntity.PlanCode,
-            couponCode = quoteEntity.CouponCode,
-            addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-            subtotalAmount = quoteEntity.SubtotalAmount,
-            discountAmount = quoteEntity.DiscountAmount,
-            totalAmount = quoteEntity.TotalAmount,
-            currency = quoteEntity.Currency,
-            gateway = gatewayLabel,
-            quote = quoteResponse,
-            checkoutUrl = string.IsNullOrWhiteSpace(checkoutIntent.CheckoutUrl)
-                ? platformLinks.BuildCheckoutUrl(
-                    checkoutIntent.GatewayTransactionId,
-                    normalizedProductType,
-                    request.Quantity,
-                    planId: quoteEntity.PlanCode,
-                    couponCode: quoteEntity.CouponCode,
-                    addOnCodes: JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-                    quoteId: quoteEntity.Id)
-                : checkoutIntent.CheckoutUrl,
-            state = checkoutIntent.Status
-        };
+            await CompletePaymentIdempotencyAsync("checkout-session", idempotencyKey, userId, idempotencyRequestHash, response, cancellationToken);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        idempotencyCompleted = true;
 
         await RecordEventAsync(userId, "checkout_started", new
         {
@@ -2496,13 +2533,24 @@ public partial class LearnerService(
             gateway = gatewayLabel
         }, cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
-        {
-            await SaveIdempotentResponseAsync("checkout-session", request.IdempotencyKey, response, cancellationToken);
-        }
-
         await db.SaveChangesAsync(cancellationToken);
         return response;
+        }
+        catch
+        {
+            if (idempotencyKey is not null && idempotencyRequestHash is not null && !idempotencyCompleted)
+            {
+                if (idempotencyResponse is not null)
+                {
+                    await TryCompletePaymentIdempotencyAsync("checkout-session", idempotencyKey, userId, idempotencyRequestHash, idempotencyResponse, cancellationToken);
+                }
+                else if (!providerRequestReturned)
+                {
+                    await RemovePaymentIdempotencyReservationAsync("checkout-session", idempotencyKey, cancellationToken);
+                }
+            }
+            throw;
+        }
     }
 
     public async Task<object> CreateMockAttemptAsync(string userId, MockAttemptCreateRequest request, CancellationToken cancellationToken)
@@ -4386,6 +4434,209 @@ public partial class LearnerService(
             ? null
             : JsonSupport.Deserialize<Dictionary<string, object?>>(record.ResponseJson, new Dictionary<string, object?>());
     }
+
+    private sealed record PaymentIdempotencyReservation(bool ShouldProcess, Dictionary<string, object?>? CachedResponse);
+
+    private static string? NormalizeIdempotencyKey(string? key)
+    {
+        var normalized = key?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        if (normalized.Length > PaymentIdempotencyKeyMaxLength || !PaymentIdempotencyKeyRegex.IsMatch(normalized))
+        {
+            throw ApiException.Validation(
+                "invalid_idempotency_key",
+                $"Idempotency keys must be 1-{PaymentIdempotencyKeyMaxLength} ASCII token characters.",
+                [new ApiFieldError("idempotencyKey", "invalid", "Use letters, numbers, dots, underscores, colons, or hyphens only.")]);
+        }
+
+        return normalized;
+    }
+
+    private static string ComputeIdempotencyRequestHash(object payload)
+    {
+        var json = JsonSupport.Serialize(payload);
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private async Task<PaymentIdempotencyReservation> ReservePaymentIdempotencyAsync(
+        string scope,
+        string key,
+        string userId,
+        string requestHash,
+        CancellationToken cancellationToken)
+    {
+        var existing = await db.IdempotencyRecords.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Scope == scope && x.Key == key, cancellationToken);
+        if (existing is not null)
+        {
+            return ReadPaymentIdempotencyRecord(existing, userId, requestHash);
+        }
+
+        var record = new IdempotencyRecord
+        {
+            Id = $"idem-{Guid.NewGuid():N}",
+            Scope = scope,
+            Key = key,
+            ResponseJson = CreatePaymentIdempotencyEnvelope(userId, requestHash, "processing", response: null),
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        db.IdempotencyRecords.Add(record);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return new PaymentIdempotencyReservation(true, null);
+        }
+        catch (DbUpdateException)
+        {
+            db.Entry(record).State = EntityState.Detached;
+            existing = await db.IdempotencyRecords.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Scope == scope && x.Key == key, cancellationToken);
+            if (existing is not null)
+            {
+                return ReadPaymentIdempotencyRecord(existing, userId, requestHash);
+            }
+
+            throw;
+        }
+    }
+
+    private PaymentIdempotencyReservation ReadPaymentIdempotencyRecord(
+        IdempotencyRecord record,
+        string userId,
+        string requestHash)
+    {
+        using var document = JsonDocument.Parse(record.ResponseJson);
+        var root = document.RootElement;
+
+        if (!root.TryGetProperty("idempotency", out var idempotency))
+        {
+            return new PaymentIdempotencyReservation(
+                false,
+                JsonSupport.Deserialize<Dictionary<string, object?>>(record.ResponseJson, new Dictionary<string, object?>()));
+        }
+
+        var storedUserId = idempotency.TryGetProperty("userId", out var userIdElement) ? userIdElement.GetString() : null;
+        var storedRequestHash = idempotency.TryGetProperty("requestHash", out var hashElement) ? hashElement.GetString() : null;
+        if (!string.Equals(storedUserId, userId, StringComparison.Ordinal)
+            || !string.Equals(storedRequestHash, requestHash, StringComparison.Ordinal))
+        {
+            throw ApiException.Conflict(
+                "idempotency_key_reused",
+                "This idempotency key was already used for a different billing request.",
+                [new ApiFieldError("idempotencyKey", "reused", "Generate a new idempotency key for a changed request.")]);
+        }
+
+        var status = idempotency.TryGetProperty("status", out var statusElement) ? statusElement.GetString() : null;
+        if (string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase)
+            && root.TryGetProperty("response", out var response)
+            && response.ValueKind != JsonValueKind.Null)
+        {
+            var cached = JsonSerializer.Deserialize<Dictionary<string, object?>>(response.GetRawText())
+                ?? new Dictionary<string, object?>();
+            return new PaymentIdempotencyReservation(false, cached);
+        }
+
+        throw ApiException.Conflict(
+            "idempotency_in_progress",
+            "A billing request with this idempotency key is still being prepared. Please retry shortly.",
+            [new ApiFieldError("idempotencyKey", "in_progress", "Retry the same request in a few seconds.")]);
+    }
+
+    private async Task CompletePaymentIdempotencyAsync(
+        string scope,
+        string key,
+        string userId,
+        string requestHash,
+        object response,
+        CancellationToken cancellationToken)
+    {
+        var record = await db.IdempotencyRecords
+            .FirstOrDefaultAsync(x => x.Scope == scope && x.Key == key, cancellationToken);
+        if (record is null)
+        {
+            return;
+        }
+
+        ReadPaymentIdempotencyRecordForCompletion(record, userId, requestHash);
+        record.ResponseJson = CreatePaymentIdempotencyEnvelope(userId, requestHash, "completed", response);
+    }
+
+    private async Task TryCompletePaymentIdempotencyAsync(
+        string scope,
+        string key,
+        string userId,
+        string requestHash,
+        object response,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            db.ChangeTracker.Clear();
+            await CompletePaymentIdempotencyAsync(scope, key, userId, requestHash, response, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // Preserve the original billing error. A later retry with the same
+            // provider idempotency key can still recover at the gateway layer.
+        }
+    }
+
+    private static void ReadPaymentIdempotencyRecordForCompletion(
+        IdempotencyRecord record,
+        string userId,
+        string requestHash)
+    {
+        using var document = JsonDocument.Parse(record.ResponseJson);
+        if (!document.RootElement.TryGetProperty("idempotency", out var idempotency))
+        {
+            return;
+        }
+
+        var storedUserId = idempotency.TryGetProperty("userId", out var userIdElement) ? userIdElement.GetString() : null;
+        var storedRequestHash = idempotency.TryGetProperty("requestHash", out var hashElement) ? hashElement.GetString() : null;
+        if (!string.Equals(storedUserId, userId, StringComparison.Ordinal)
+            || !string.Equals(storedRequestHash, requestHash, StringComparison.Ordinal))
+        {
+            throw ApiException.Conflict("idempotency_key_reused", "This idempotency key belongs to a different request.");
+        }
+    }
+
+    private async Task RemovePaymentIdempotencyReservationAsync(string scope, string key, CancellationToken cancellationToken)
+    {
+        db.ChangeTracker.Clear();
+        var record = await db.IdempotencyRecords.FirstOrDefaultAsync(x => x.Scope == scope && x.Key == key, cancellationToken);
+        if (record is null)
+        {
+            return;
+        }
+
+        db.IdempotencyRecords.Remove(record);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string CreatePaymentIdempotencyEnvelope(
+        string userId,
+        string requestHash,
+        string status,
+        object? response)
+        => JsonSupport.Serialize(new
+        {
+            idempotency = new
+            {
+                version = "payment-v1",
+                userId,
+                requestHash,
+                status
+            },
+            response
+        });
 
     #if false
     private async Task<BillingPlan?> FindBillingPlanAsync(string planCode, CancellationToken cancellationToken)
@@ -6442,15 +6693,6 @@ public partial class LearnerService(
     public async Task<object> CreateWalletTopUpAsync(string userId, WalletTopUpRequest request, CancellationToken ct)
     {
         await EnsureUserAsync(userId, ct);
-        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
-        {
-            var cached = await GetIdempotentResponseAsync("wallet-top-up", request.IdempotencyKey, ct);
-            if (cached is not null)
-            {
-                return cached;
-            }
-        }
-
         await EnsureLearnerMutationAllowedAsync(userId, ct);
 
         if (request.Gateway is not "stripe" and not "paypal")
@@ -6461,22 +6703,38 @@ public partial class LearnerService(
                 [new ApiFieldError("gateway", "invalid", "Select a supported payment method.")]);
         }
 
-        if (request.Amount is not (10 or 25 or 50 or 100))
+        var configuredTiers = walletService.GetConfiguredTopUpTiers();
+        if (!configuredTiers.Any(t => t.Amount == request.Amount))
         {
-            var configuredTiers = walletService.GetConfiguredTopUpTiers();
-            if (!configuredTiers.Any(t => t.Amount == request.Amount))
+            var validList = configuredTiers.Count == 0
+                ? "currently unavailable"
+                : string.Join(", ", configuredTiers.Select(t => $"${t.Amount}"));
+            throw ApiException.Validation(
+                "invalid_amount",
+                $"Choose a valid top-up amount ({validList}).",
+                [new ApiFieldError("amount", "invalid", "Select one of the available top-up amounts.")]);
+        }
+
+        var idempotencyKey = NormalizeIdempotencyKey(request.IdempotencyKey);
+        var idempotencyRequestHash = idempotencyKey is null
+            ? null
+            : ComputeIdempotencyRequestHash(new { userId, request.Amount, gateway = request.Gateway });
+        if (idempotencyKey is not null && idempotencyRequestHash is not null)
+        {
+            var reservation = await ReservePaymentIdempotencyAsync("wallet-top-up", idempotencyKey, userId, idempotencyRequestHash, ct);
+            if (!reservation.ShouldProcess)
             {
-                var validList = configuredTiers.Count == 0
-                    ? "currently unavailable"
-                    : string.Join(", ", configuredTiers.Select(t => $"${t.Amount}"));
-                throw ApiException.Validation(
-                    "invalid_amount",
-                    $"Choose a valid top-up amount ({validList}).",
-                    [new ApiFieldError("amount", "invalid", "Select one of the available top-up amounts.")]);
+                return reservation.CachedResponse!;
             }
         }
 
-        var session = await walletService.CreateTopUpSessionAsync(userId, request.Amount, request.Gateway, ct);
+        var providerRequestReturned = false;
+        var idempotencyCompleted = false;
+        object? idempotencyResponse = null;
+        try
+        {
+        var session = await walletService.CreateTopUpSessionAsync(userId, request.Amount, request.Gateway, idempotencyKey, ct);
+        providerRequestReturned = true;
         var response = new
         {
             sessionId = session.SessionId,
@@ -6489,6 +6747,16 @@ public partial class LearnerService(
             status = "pending_payment",
             expiresAt = session.ExpiresAt
         };
+
+        idempotencyResponse = response;
+
+        if (idempotencyKey is not null && idempotencyRequestHash is not null)
+        {
+            await CompletePaymentIdempotencyAsync("wallet-top-up", idempotencyKey, userId, idempotencyRequestHash, response, ct);
+        }
+
+        await db.SaveChangesAsync(ct);
+        idempotencyCompleted = true;
 
         // Audit the successful top-up session creation so billing operators can
         // reconcile against payment-gateway events later.
@@ -6517,17 +6785,29 @@ public partial class LearnerService(
             totalCredits = session.TotalCredits
         }, ct);
 
-        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
-        {
-            await SaveIdempotentResponseAsync("wallet-top-up", request.IdempotencyKey, response, ct);
-        }
-
         await db.SaveChangesAsync(ct);
 
         // TODO(Impl E): no learner-facing refund-status endpoint exists yet — add
         // a regression test that captures current behaviour (refund status is only
         // observable via /v1/billing/invoices) before introducing a new endpoint.
         return response;
+        }
+        catch
+        {
+            if (idempotencyKey is not null && idempotencyRequestHash is not null && !idempotencyCompleted)
+            {
+                if (idempotencyResponse is not null)
+                {
+                    await TryCompletePaymentIdempotencyAsync("wallet-top-up", idempotencyKey, userId, idempotencyRequestHash, idempotencyResponse, ct);
+                }
+                else if (!providerRequestReturned)
+                {
+                    await RemovePaymentIdempotencyReservationAsync("wallet-top-up", idempotencyKey, ct);
+                }
+            }
+
+            throw;
+        }
     }
 
     // ── Payment Webhooks ──
@@ -7413,19 +7693,27 @@ public partial class LearnerService(
         return new
         {
             active = pledge.Status == "active",
+            id = pledge.Id,
             pledgeId = pledge.Id,
+            userId = pledge.UserId,
+            subscriptionId = pledge.SubscriptionId,
             baselineScore = pledge.BaselineScore,
             guaranteedImprovement = pledge.GuaranteedImprovement,
             status = pledge.Status,
+            proofDocumentUrl = pledge.ProofDocumentUrl,
+            claimNote = pledge.ClaimNote,
+            reviewNote = pledge.ReviewNote,
             activatedAt = pledge.ActivatedAt,
             expiresAt = pledge.ExpiresAt,
             actualScore = pledge.ActualScore,
-            claimSubmittedAt = pledge.ClaimSubmittedAt
+            claimSubmittedAt = pledge.ClaimSubmittedAt,
+            reviewedAt = pledge.ReviewedAt
         };
     }
 
     public async Task<object> ActivateScoreGuaranteeAsync(string userId, ScoreGuaranteeActivateRequest request, CancellationToken ct)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, ct);
         var existing = await db.ScoreGuaranteePledges
             .AnyAsync(p => p.UserId == userId && p.Status == "active", ct);
         if (existing)
@@ -7455,11 +7743,12 @@ public partial class LearnerService(
         db.ScoreGuaranteePledges.Add(pledge);
         await db.SaveChangesAsync(ct);
 
-        return new { pledgeId = pledge.Id, status = "active", expiresAt = pledge.ExpiresAt };
+        return new { id = pledge.Id, pledgeId = pledge.Id, status = "active", expiresAt = pledge.ExpiresAt };
     }
 
     public async Task<object> SubmitScoreGuaranteeClaimAsync(string userId, ScoreGuaranteeClaimRequest request, CancellationToken ct)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, ct);
         var pledge = await db.ScoreGuaranteePledges
             .FirstOrDefaultAsync(p => p.UserId == userId && p.Status == "active", ct)
             ?? throw ApiException.NotFound("no_pledge", "No active score guarantee found.");
@@ -7474,7 +7763,7 @@ public partial class LearnerService(
         pledge.ClaimSubmittedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        return new { pledgeId = pledge.Id, status = "claim_submitted" };
+        return new { id = pledge.Id, pledgeId = pledge.Id, status = "claim_submitted" };
     }
 
     // ════════════════════════════════════════════
@@ -7546,6 +7835,7 @@ public partial class LearnerService(
 
     public async Task<object> GenerateReferralCodeAsync(string userId, CancellationToken ct)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, ct);
         var existing = await db.ReferralRecords
             .FirstOrDefaultAsync(r => r.ReferrerUserId == userId && r.Status == "pending", ct);
 

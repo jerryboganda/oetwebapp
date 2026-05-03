@@ -123,7 +123,7 @@ describe('Billing upgrade page', () => {
     expect(screen.getByRole('heading', { name: 'Plus', level: 3 })).toBeInTheDocument();
 
     const upgradeLink = screen.getByRole('link', { name: /upgrade to plus/i });
-    expect(upgradeLink).toHaveAttribute('href', '/billing?tab=plans&planId=plan-plus');
+    expect(upgradeLink).toHaveAttribute('href', '/billing?tab=plans&planId=plus');
   });
 
   it('disables upgrade actions when the freeze status cannot be verified', async () => {

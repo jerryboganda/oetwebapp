@@ -107,6 +107,37 @@ describe('learner route normalization', () => {
   });
 });
 
+describe('billing wallet top-up API helper', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  it('serializes the caller-supplied idempotency key', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(
+      JSON.stringify({ checkoutUrl: 'https://example.test' }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      },
+    ));
+    globalThis.fetch = fetchMock;
+
+    const { createWalletTopUp } = await import('../api');
+    await createWalletTopUp(25, 'stripe', 'idem-wallet-123');
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({
+      amount: 25,
+      gateway: 'stripe',
+      idempotencyKey: 'idem-wallet-123',
+    });
+  });
+});
+
 describe('readiness mapping', () => {
   const originalFetch = globalThis.fetch;
 

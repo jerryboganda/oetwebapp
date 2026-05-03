@@ -167,13 +167,15 @@ Back up both named volumes before upgrades or VPS maintenance.
 
 ## 7. Updating the deployment
 
-For a clean redeploy that rebuilds all containers without using Docker's build cache and then prunes unused build/image layers, run:
+For a clean redeploy that rebuilds all containers and prunes stale Docker build/image cache, run:
 
 ```bash
 bash ./scripts/deploy-production.sh
 ```
 
-That script preserves named volumes, so PostgreSQL data and uploaded learner files remain intact while the application containers are rebuilt.
+That script preserves named volumes, so PostgreSQL data and uploaded learner files remain intact while the application containers are rebuilt. Its cleanup is intentionally limited to stopped containers, dangling/unused images, and BuildKit/build cache.
+
+Do **not** run `docker compose down -v`, `docker volume prune`, `docker system prune --volumes`, or manually delete `oetwebsite_*` named volumes as part of a normal redeploy. Volume cleanup is a separate destructive maintenance task and requires an explicit backup, restore plan, and approval naming the exact volume.
 
 ```bash
 git pull

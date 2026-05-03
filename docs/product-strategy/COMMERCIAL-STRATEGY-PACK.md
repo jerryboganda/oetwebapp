@@ -31,7 +31,7 @@ The product spans **three user surfaces**: a learner app (60+ routes), an expert
 | **Blended ARPU** | **$33.44 AUD/mo** | MRR ÷ 6,010 [Source: derived] |
 | **Active Plans** | 4 paid + 1 legacy (hidden) | [Source: SeedData.cs] |
 | **Add-on Products** | 3 (credit packs + priority review) | [Source: SeedData.cs] |
-| **Wallet Top-up Tiers** | 4 ($10/$25/$50/$100) | [Source: WalletService.cs] |
+| **Wallet Top-up Tiers** | Admin-configurable (seeded with 4 historical AUD tiers) | [Source: WalletTopUpTierConfig + `/admin/billing/wallet-tiers`] |
 | **Private Speaking** | $50 AUD/session (30 min) | [Source: PrivateSpeakingEntities.cs] |
 | **Revenue Streams** | 5 (subscriptions, credits, wallet, speaking, priority) | [Source: multiple backend files] |
 
@@ -69,6 +69,8 @@ OET is taken by healthcare professionals across 12 professions in 40+ countries.
 
 ### 2.3 Wallet Top-Up Tiers
 
+Wallet top-up tiers are now an admin-configurable catalog managed at `/admin/billing/wallet-tiers`. The historical defaults below are seeded only when the DB tier table is empty; production pricing should be read from `WalletTopUpTierConfigs`, not from this document.
+
 | Amount (AUD) | Base Credits | Bonus Credits | Total Credits | Effective Price/Credit | Multiplier | Savings vs $10 |
 |-----------|----------|---------|-------|------------|----------|---|
 | $10 | 10 | 0 | 10 | **$1.00** | 1.0x | — |
@@ -76,7 +78,7 @@ OET is taken by healthcare professionals across 12 professions in 40+ countries.
 | $50 | 60 | 10 | 70 | **$0.71** | 1.4x | 29% |
 | $100 | 130 | 30 | 160 | **$0.63** | 1.6x | 37% |
 
-[Source: WalletService.cs L127-134]
+[Source: `WalletTopUpTierConfigs`; seeded by `20260504120000_HardenWalletTopUpTiers`]
 
 ### 2.4 Private Speaking Sessions
 

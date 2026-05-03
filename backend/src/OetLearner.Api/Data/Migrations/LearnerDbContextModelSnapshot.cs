@@ -12227,6 +12227,9 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Amount", "Currency")
+                        .IsUnique();
+
                     b.HasIndex("IsActive", "DisplayOrder");
 
                     b.ToTable("WalletTopUpTierConfigs");

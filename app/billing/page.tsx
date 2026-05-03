@@ -65,6 +65,12 @@ function formatCurrency(amount: number, currency = 'AUD') {
   }
 }
 
+function formatOptionalDate(value?: string | null) {
+  if (!value) return 'Not scheduled';
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 'Not scheduled' : new Date(time).toLocaleDateString();
+}
+
 function prettyProductType(productType: BillingProductType) {
   return productType.replace(/_/g, ' ');
 }
@@ -104,15 +110,6 @@ function isFreezeEffective(freezeState: LearnerFreezeStatus | null) {
   return false;
 }
 
-// Fallback tiers if the backend endpoint is unavailable, so the UI never breaks.
-// The backend WalletService is the source of truth (configurable via Billing__Wallet__TopUpTiers).
-const FALLBACK_TOP_UP_TIERS: WalletTopUpTier[] = [
-  { amount: 10, credits: 10, bonus: 0, totalCredits: 10, label: 'Starter', isPopular: false },
-  { amount: 25, credits: 28, bonus: 3, totalCredits: 31, label: 'Standard', isPopular: false },
-  { amount: 50, credits: 60, bonus: 10, totalCredits: 70, label: 'Best value', isPopular: true },
-  { amount: 100, credits: 130, bonus: 30, totalCredits: 160, label: 'Power', isPopular: false },
-];
-
 type BillingTabId = 'overview' | 'plans' | 'credits' | 'invoices';
 
 const BILLING_TABS: Array<{ id: BillingTabId; label: string; icon: React.ReactNode }> = [
@@ -128,6 +125,7 @@ export default function BillingPage() {
   const searchParams = useSearchParams();
   const paymentStatus = searchParams.get('payment');
   const paymentGateway = searchParams.get('gateway');
+  const requestedPlanId = searchParams.get('planId');
   const initialTab = (searchParams.get('tab') as BillingTabId | null) ?? 'overview';
 
   const [activeTab, setActiveTab] = useState<BillingTabId>(
@@ -147,7 +145,7 @@ export default function BillingPage() {
 
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
-  const [topUpTiers, setTopUpTiers] = useState<WalletTopUpTier[]>(FALLBACK_TOP_UP_TIERS);
+  const [topUpTiers, setTopUpTiers] = useState<WalletTopUpTier[]>([]);
   const [walletCurrency, setWalletCurrency] = useState('AUD');
 
   const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
@@ -158,10 +156,6 @@ export default function BillingPage() {
   // the per-button busyKey for cases where rapid clicks fire before
   // setBusyKey('…') has flushed through React's state queue.
   const submittingRef = useRef(false);
-
-  // Focus the active panel's first heading when the tab changes (skip mount).
-  const panelContainerRef = useRef<HTMLDivElement>(null);
-  const isFirstTabRender = useRef(true);
 
   const reducedMotion = useReducedMotion() ?? false;
 
@@ -223,20 +217,6 @@ export default function BillingPage() {
     loadWallet();
   }, [loadWallet]);
 
-  // Move keyboard focus to the active panel's first heading whenever the user
-  // switches tabs (skip the very first render).
-  useEffect(() => {
-    if (isFirstTabRender.current) {
-      isFirstTabRender.current = false;
-      return;
-    }
-    const heading = panelContainerRef.current?.querySelector<HTMLHeadingElement>('[role="tabpanel"] h2');
-    if (heading) {
-      heading.setAttribute('tabindex', '-1');
-      heading.focus({ preventScroll: true });
-    }
-  }, [activeTab]);
-
   const visibleAddOns = useMemo(
     () =>
       (data?.addOns ?? []).filter((addOn) => {
@@ -292,7 +272,7 @@ export default function BillingPage() {
     }
   };
 
-  const loadPreview = async (planId: string) => {
+  const loadPreview = useCallback(async (planId: string) => {
     if (billingMutationsBlocked) {
       setError(billingBlockedMessage);
       return;
@@ -309,7 +289,18 @@ export default function BillingPage() {
     } finally {
       setBusyKey(null);
     }
-  };
+  }, [billingBlockedMessage, billingMutationsBlocked]);
+
+  useEffect(() => {
+    if (loading || !data || activeTab !== 'plans' || !requestedPlanId) {
+      return;
+    }
+
+    const requestedPlan = data.plans.find((plan) => plan.id === requestedPlanId || plan.code === requestedPlanId);
+    if (requestedPlan && previewPlanId !== requestedPlan.id) {
+      void loadPreview(requestedPlan.id);
+    }
+  }, [activeTab, data, loadPreview, loading, previewPlanId, requestedPlanId]);
 
   const handleDownloadInvoice = async (invoiceId: string) => {
     if (submittingRef.current) return;
@@ -344,14 +335,7 @@ export default function BillingPage() {
     setError(null);
     setSuccess(null);
     try {
-      // Pass an idempotency key. The helper signature does not yet accept it,
-      // so we cast at the call site only — Impl D will widen the signature.
-      const topUp = createWalletTopUp as unknown as (
-        amount: number,
-        gateway: 'stripe' | 'paypal',
-        idempotencyKey?: string,
-      ) => Promise<Record<string, unknown>>;
-      const result = (await topUp(amount, selectedGateway, newIdempotencyKey())) as Record<string, unknown>;
+      const result = (await createWalletTopUp(amount, selectedGateway, newIdempotencyKey())) as Record<string, unknown>;
       const checkoutUrl = typeof result.checkoutUrl === 'string' ? result.checkoutUrl : null;
       if (checkoutUrl && typeof window !== 'undefined') {
         const popup = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
@@ -414,7 +398,7 @@ export default function BillingPage() {
             { icon: ShieldCheck, label: 'Current plan', value: data.currentPlan },
             { icon: Wallet, label: 'Credit balance', value: walletLoading ? '—' : `${wallet?.balance ?? 0} credits` },
             { icon: ShoppingCart, label: 'Active add-ons', value: `${activeAddOns.length}` },
-            { icon: Calendar, label: 'Next renewal', value: new Date(data.nextRenewal).toLocaleDateString() },
+            { icon: Calendar, label: 'Next renewal', value: formatOptionalDate(data.nextRenewal) },
           ]}
         />
 
@@ -482,8 +466,6 @@ export default function BillingPage() {
           onChange={(id) => setActiveTab(id as BillingTabId)}
         />
 
-        <div ref={panelContainerRef}>
-
         {/* ── OVERVIEW ────────────────────────────────────────────── */}
         <TabPanel id="overview" activeTab={activeTab}>
           <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -509,7 +491,7 @@ export default function BillingPage() {
                 <div className="rounded-2xl border border-border bg-background-light p-4">
                   <dt className="text-[11px] font-black uppercase tracking-widest text-muted">Renews</dt>
                   <dd className="mt-1 text-sm font-bold text-navy">
-                    {new Date(data.nextRenewal).toLocaleDateString()}
+                    {formatOptionalDate(data.nextRenewal)}
                   </dd>
                 </div>
                 <div className="rounded-2xl border border-border bg-background-light p-4">
@@ -1130,7 +1112,6 @@ export default function BillingPage() {
             </p>
           ) : null}
         </TabPanel>
-        </div>
       </div>
     </LearnerDashboardShell>
   );

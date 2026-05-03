@@ -45,7 +45,7 @@ const learnerRoutes = [
   },
   {
     path: '/billing',
-    heading: /manage subscriptions without billing surprises/i,
+    heading: /your billing center/i,
   },
   {
     path: '/mocks',

@@ -72,7 +72,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         {
             amount = 10,
             gateway = "stripe",
-            idempotencyKey = $"idem-a-{Guid.NewGuid():N}"
+            idempotencyKey = $"a{Guid.NewGuid():N}"
         });
         Assert.True(first.IsSuccessStatusCode, await first.Content.ReadAsStringAsync());
 
@@ -80,7 +80,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         {
             amount = 10,
             gateway = "stripe",
-            idempotencyKey = $"idem-b-{Guid.NewGuid():N}"
+            idempotencyKey = $"b{Guid.NewGuid():N}"
         });
         Assert.True(second.IsSuccessStatusCode, await second.Content.ReadAsStringAsync());
 
@@ -95,6 +95,65 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var transactionCount = await db.PaymentTransactions
             .CountAsync(x => x.LearnerUserId == userId && x.TransactionType == "wallet_top_up");
         Assert.Equal(2, transactionCount);
+    }
+
+    [Fact]
+    public async Task WalletTopUp_SameIdempotencyKeyWithDifferentPayload_IsRejectedAndDoesNotCreateSecondTransaction()
+    {
+        var userId = $"topup-idem-mismatch-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var idempotencyKey = $"m{Guid.NewGuid():N}";
+
+        var first = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
+        {
+            amount = 25,
+            gateway = "stripe",
+            idempotencyKey
+        });
+        Assert.True(first.IsSuccessStatusCode, await first.Content.ReadAsStringAsync());
+
+        var second = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
+        {
+            amount = 50,
+            gateway = "stripe",
+            idempotencyKey
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        using var json = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("idempotency_key_reused", json.RootElement.GetProperty("code").GetString());
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var transactionCount = await db.PaymentTransactions
+            .CountAsync(x => x.LearnerUserId == userId && x.TransactionType == "wallet_top_up");
+        Assert.Equal(1, transactionCount);
+    }
+
+    [Theory]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    [InlineData("idem\rbad")]
+    public async Task WalletTopUp_InvalidIdempotencyKey_IsRejectedBeforeTransactionCreation(string idempotencyKey)
+    {
+        var userId = $"topup-invalid-idem-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+
+        var response = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
+        {
+            amount = 25,
+            gateway = "stripe",
+            idempotencyKey
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("invalid_idempotency_key", json.RootElement.GetProperty("code").GetString());
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var transactionCount = await db.PaymentTransactions
+            .CountAsync(x => x.LearnerUserId == userId && x.TransactionType == "wallet_top_up");
+        Assert.Equal(0, transactionCount);
     }
 
     [Fact]
@@ -156,6 +215,39 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
     }
 
     [Fact]
+    public async Task WalletTopUp_LegacyAmountRemovedFromDbTierSet_IsRejectedWithValidationError()
+    {
+        var userId = $"topup-custom-tier-{Guid.NewGuid():N}";
+        await ReplaceWalletTiersAsync(new WalletTopUpTierConfig
+        {
+            Id = Guid.NewGuid(),
+            Amount = 15,
+            Credits = 16,
+            Bonus = 1,
+            Label = "Custom",
+            IsPopular = false,
+            DisplayOrder = 0,
+            IsActive = true,
+            Currency = "AUD",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+
+        using var client = await CreateClientForUserAsync(userId);
+        var response = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
+        {
+            amount = 10,
+            gateway = "stripe",
+            idempotencyKey = $"idem-custom-{Guid.NewGuid():N}"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("invalid_amount", json.RootElement.GetProperty("code").GetString());
+        Assert.Contains("$15", json.RootElement.GetProperty("message").GetString() ?? string.Empty);
+    }
+
+    [Fact]
     public async Task WalletTopUp_FrozenLearner_IsRejectedWithFreezeCode()
     {
         var userId = $"topup-frozen-{Guid.NewGuid():N}";
@@ -201,5 +293,14 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
         client.DefaultRequestHeaders.Add("X-Debug-Name", userId);
         return client;
+    }
+
+    private async Task ReplaceWalletTiersAsync(params WalletTopUpTierConfig[] tiers)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        db.WalletTopUpTierConfigs.RemoveRange(await db.WalletTopUpTierConfigs.ToListAsync());
+        db.WalletTopUpTierConfigs.AddRange(tiers);
+        await db.SaveChangesAsync();
     }
 }

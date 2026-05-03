@@ -122,7 +122,7 @@ export interface BillingData {
   price: string;
   interval: string;
   status: string;
-  nextRenewal: string;
+  nextRenewal: string | null;
   reviewCredits: number;
   activeAddOns: BillingAddOn[];
   entitlements: BillingEntitlements;

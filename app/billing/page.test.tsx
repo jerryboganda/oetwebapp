@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 const {
   mockFetchBilling,
@@ -259,9 +259,62 @@ describe('Billing page', () => {
     await user.click(tenButton);
 
     expect(mockCreateWalletTopUp).toHaveBeenCalledTimes(1);
+    expect(mockCreateWalletTopUp).toHaveBeenCalledWith(10, 'stripe', expect.stringMatching(/.+/));
 
-    resolveTopUp?.({ checkoutUrl: 'https://example.com/top-up', totalCredits: 10 });
+    await act(async () => {
+      resolveTopUp?.({ checkoutUrl: 'https://example.com/top-up', totalCredits: 10 });
+    });
     openSpy.mockRestore();
+  });
+
+  it('loads a plan preview from upgrade deep links', async () => {
+    mockFetchBilling.mockResolvedValueOnce({
+      currentPlan: 'Free',
+      currentPlanId: 'plan-free',
+      currentPlanCode: 'free',
+      planName: 'Free',
+      planDescription: 'Starter learner plan.',
+      reviewCredits: 0,
+      nextRenewal: null,
+      price: '$0',
+      interval: 'month',
+      status: 'Active',
+      activeAddOns: [],
+      entitlements: { productiveSkillReviewsEnabled: false, supportedReviewSubtests: [], invoiceDownloadsAvailable: false },
+      plans: [
+        {
+          id: 'plan-plus',
+          code: 'plus',
+          badge: 'Upgrade',
+          tier: 'Plus',
+          label: 'Plus',
+          description: 'More reviews.',
+          price: '$79',
+          interval: 'month',
+          reviewCredits: 8,
+          canChangeTo: true,
+          changeDirection: 'upgrade',
+          status: 'active',
+          durationMonths: 1,
+          isVisible: true,
+          isRenewable: true,
+          trialDays: 0,
+          displayOrder: 1,
+          includedSubtests: ['Writing'],
+          entitlements: { productiveSkillReviewsEnabled: true, supportedReviewSubtests: ['Writing'], invoiceDownloadsAvailable: true },
+        },
+      ],
+      addOns: [],
+      coupons: [],
+      quote: null,
+      invoices: [],
+    });
+
+    renderWithRouter(<BillingPage />, { searchParams: new URLSearchParams('tab=plans&planId=plus') });
+
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
+    await waitFor(() => expect(mockFetchBillingChangePreview).toHaveBeenCalledWith('plan-plus'));
+    await waitFor(() => expect(mockFetchBillingChangePreview).toHaveBeenCalledTimes(1));
   });
 
   it('switches tab to invoices when clicking "View invoices" on overview', async () => {

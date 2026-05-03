@@ -19,22 +19,22 @@ public class WalletService(
     public IReadOnlyList<WalletTopUpTierOption> GetConfiguredTopUpTiers()
     {
         // DB-backed admin override: when the admin "Wallet Top-Up Tiers" CMS
-        // has at least one *active* row, those replace the appsettings tiers
-        // entirely. The page is at /admin/billing/wallet-tiers and writes go
-        // through AdminWalletTierService → WalletTopUpTierConfigs. Sync EF
-        // read is intentional to preserve this method's existing signature.
+        // has created rows, those rows become authoritative. An empty active
+        // set means top-ups are unavailable; appsettings are only the bootstrap
+        // fallback before any DB rows exist. Sync EF read is intentional to
+        // preserve this method's existing signature.
         try
         {
-            var dbTiers = db.WalletTopUpTierConfigs
+            var dbRows = db.WalletTopUpTierConfigs
                 .AsNoTracking()
-                .Where(c => c.IsActive)
                 .OrderBy(c => c.DisplayOrder)
                 .ThenBy(c => c.Amount)
                 .ToList();
 
-            if (dbTiers.Count > 0)
+            if (dbRows.Count > 0)
             {
-                return dbTiers
+                return dbRows
+                    .Where(c => c.IsActive)
                     .Where(t => t.Amount > 0 && t.Credits >= 0 && t.Bonus >= 0)
                     .Select(t => new WalletTopUpTierOption
                     {
@@ -49,8 +49,9 @@ public class WalletService(
         }
         catch
         {
-            // Fall through to appsettings fallback if the table isn't reachable
-            // (e.g. migration hasn't applied yet). Behaviour stays unchanged.
+            // Money-path safety: once the endpoint cannot prove the DB tier
+            // state, top-ups fail closed instead of resurrecting stale defaults.
+            return Array.Empty<WalletTopUpTierOption>();
         }
 
         var tiers = billingOptions.Value?.Wallet?.TopUpTiers;
@@ -179,6 +180,7 @@ public class WalletService(
         string userId,
         int amountDollars,
         string gateway,
+        string? idempotencyKey,
         CancellationToken ct)
     {
         var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == userId, ct)
@@ -191,7 +193,10 @@ public class WalletService(
             var validList = configuredTiers.Count == 0
                 ? "(none configured)"
                 : string.Join(", ", configuredTiers.Select(t => t.Amount));
-            throw new ArgumentException($"Invalid top-up amount: {amountDollars}. Valid: {validList}.");
+            throw ApiException.Validation(
+                "invalid_amount",
+                $"Choose a valid top-up amount ({validList}).",
+                [new ApiFieldError("amount", "invalid", "Select one of the available top-up amounts.")]);
         }
 
         var currency = GetWalletCurrency();
@@ -212,7 +217,8 @@ public class WalletService(
                 ["bonus"] = tier.Bonus.ToString()
             },
             SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gateway)}"),
-            CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gateway)}")), ct);
+            CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gateway)}"),
+            IdempotencyKey: idempotencyKey), ct);
 
         var now = DateTimeOffset.UtcNow;
 

@@ -102,6 +102,40 @@ public class AdminWalletTierTests : IClassFixture<FirstPartyAuthTestWebApplicati
     }
 
     [Fact]
+    public async Task Put_RejectsEmptyOrAllInactiveTierSet()
+    {
+        await ClearTiersAsync();
+
+        var empty = await _adminClient.PutAsJsonAsync("/v1/admin/billing/wallet-tiers", new { tiers = Array.Empty<object>() });
+        Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
+
+        var allInactive = await _adminClient.PutAsJsonAsync("/v1/admin/billing/wallet-tiers", new
+        {
+            tiers = new[]
+            {
+                new { amount = 15, credits = 15, bonus = 0, label = "Inactive", isPopular = false, displayOrder = 0, isActive = false, currency = "AUD" },
+            }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, allInactive.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_RejectsTierCurrencyThatDiffersFromWalletCurrency()
+    {
+        await ClearTiersAsync();
+        var payload = new
+        {
+            tiers = new[]
+            {
+                new { amount = 15, credits = 15, bonus = 0, label = "USD", isPopular = false, displayOrder = 0, isActive = true, currency = "USD" },
+            }
+        };
+
+        var response = await _adminClient.PutAsJsonAsync("/v1/admin/billing/wallet-tiers", payload);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Put_RejectsLearnerWithoutBillingPermission()
     {
         var learnerClient = _factory.CreateAuthenticatedClient(SeedData.LearnerEmail, SeedData.LocalSeedPassword, expectedRole: "learner");

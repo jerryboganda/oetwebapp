@@ -1,4 +1,8 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -51,6 +55,36 @@ public class BillingTopUpTiersEndpointTests : IClassFixture<TestWebApplicationFa
         Assert.Contains(100, amounts);
     }
 
+    [Fact]
+    public async Task TopUpTiers_ReturnsEmptySet_WhenDbRowsExistButNoneAreActive()
+    {
+        await ReplaceWalletTiersAsync(new WalletTopUpTierConfig
+        {
+            Id = Guid.NewGuid(),
+            Amount = 15,
+            Credits = 16,
+            Bonus = 1,
+            Label = "Disabled",
+            IsPopular = false,
+            DisplayOrder = 0,
+            IsActive = false,
+            Currency = "AUD",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+
+        var userId = $"topup-tiers-inactive-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+
+        var response = await client.GetAsync("/v1/billing/wallet/top-up-tiers");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, $"status={response.StatusCode} body={body}");
+
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("AUD", json.RootElement.GetProperty("currency").GetString());
+        Assert.Equal(0, json.RootElement.GetProperty("tiers").GetArrayLength());
+    }
+
     private async Task<HttpClient> CreateClientForUserAsync(string userId)
     {
         await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
@@ -59,5 +93,14 @@ public class BillingTopUpTiersEndpointTests : IClassFixture<TestWebApplicationFa
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
         client.DefaultRequestHeaders.Add("X-Debug-Name", userId);
         return client;
+    }
+
+    private async Task ReplaceWalletTiersAsync(params WalletTopUpTierConfig[] tiers)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        db.WalletTopUpTierConfigs.RemoveRange(await db.WalletTopUpTierConfigs.ToListAsync());
+        db.WalletTopUpTierConfigs.AddRange(tiers);
+        await db.SaveChangesAsync();
     }
 }

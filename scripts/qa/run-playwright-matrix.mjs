@@ -101,6 +101,14 @@ const smokeRuns = [
   ...learnerProjectSmokeRuns('mobile-chromium-learner'),
   ...learnerProjectSmokeRuns('mobile-webkit-learner'),
   {
+    label: 'learner: billing smoke on chromium',
+    args: playwrightArgs({
+      files: ['tests/e2e/billing.smoke.spec.ts'],
+      projects: ['chromium-learner'],
+      workers: 1,
+    }),
+  },
+  {
     label: 'learner: chromium-only immersive flows',
     args: playwrightArgs({
       files: [

@@ -1,10 +1,13 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const { mockFetch, mockReplace, api } = vi.hoisted(() => ({
+const { mockFetch, mockReplace, api, authState } = vi.hoisted(() => ({
   mockFetch: vi.fn(),
   mockReplace: vi.fn(),
   api: {} as Record<string, unknown>,
+  authState: {
+    adminPermissions: ['billing:read', 'billing:write'] as string[],
+  },
 }));
 
 vi.mock('@/lib/api', () => {
@@ -15,6 +18,19 @@ vi.mock('@/lib/api', () => {
 
 vi.mock('@/lib/analytics', () => ({
   analytics: { track: vi.fn() },
+}));
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({
+    user: {
+      userId: 'admin-1',
+      email: 'admin@test.com',
+      role: 'admin',
+      displayName: 'Admin',
+      isEmailVerified: true,
+      adminPermissions: authState.adminPermissions,
+    },
+  }),
 }));
 
 import AdminWalletTiersPage from './page';
@@ -60,6 +76,7 @@ const fallbackResponse = {
 describe('AdminWalletTiersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authState.adminPermissions = ['billing:read', 'billing:write'];
   });
 
   it('renders DB-backed tiers and saves an update', async () => {
@@ -143,5 +160,21 @@ describe('AdminWalletTiersPage', () => {
     await waitFor(() => {
       expect(screen.getByText('boom')).toBeInTheDocument();
     });
+  });
+
+  it('renders read-only controls for billing read admins without write permission', async () => {
+    authState.adminPermissions = ['billing:read'];
+    mockFetch.mockResolvedValueOnce(dbResponse);
+
+    render(<AdminWalletTiersPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('wallet-tiers-editor')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Read-only access/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Tier 1 amount')).toBeDisabled();
+    expect(screen.getByTestId('wallet-tiers-save')).toBeDisabled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });
