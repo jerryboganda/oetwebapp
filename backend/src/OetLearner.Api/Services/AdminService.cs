@@ -4012,19 +4012,18 @@ public partial class AdminService(
     // Concurrency: callers retry once on DbUpdateConcurrencyException, mirroring the
     // pattern used by AdjustUserCreditsAsync.
 
-    public async Task<object> ChangeSubscriptionPlanAsync(string adminId, string adminName,
-        string subscriptionId, AdminSubscriptionChangePlanRequest request, CancellationToken ct)
+    // Shared 2-attempt retry wrapper for admin subscription mutations. The first
+    // DbUpdateConcurrencyException clears the change tracker and retries; the second
+    // surface as a 409 so the operator can refresh and try again. All lifecycle
+    // mutations use this so concurrent admin/checkout flows do not silently lose
+    // a write or commit a torn state.
+    private async Task<T> WithSubscriptionConcurrencyRetryAsync<T>(Func<CancellationToken, Task<T>> action, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(request.PlanCode))
-        {
-            throw ApiException.Validation("plan_required", "A target plan code is required.");
-        }
-
         for (var attemptNumber = 0; attemptNumber < 2; attemptNumber++)
         {
             try
             {
-                return await ChangeSubscriptionPlanCoreAsync(adminId, adminName, subscriptionId, request, ct);
+                return await action(ct);
             }
             catch (DbUpdateConcurrencyException) when (attemptNumber == 0)
             {
@@ -4034,7 +4033,20 @@ public partial class AdminService(
 
         throw ApiException.Conflict(
             "subscription_update_conflict",
-            "The subscription changed while the plan switch was being applied. Please retry.");
+            "The subscription changed while the update was being applied. Please retry.");
+    }
+
+    public Task<object> ChangeSubscriptionPlanAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionChangePlanRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.PlanCode))
+        {
+            throw ApiException.Validation("plan_required", "A target plan code is required.");
+        }
+
+        return WithSubscriptionConcurrencyRetryAsync(
+            inner => ChangeSubscriptionPlanCoreAsync(adminId, adminName, subscriptionId, request, inner),
+            ct);
     }
 
     private async Task<object> ChangeSubscriptionPlanCoreAsync(string adminId, string adminName,
@@ -4125,7 +4137,7 @@ public partial class AdminService(
         return ProjectSubscription(subscription, targetPlan.Name, learner?.DisplayName);
     }
 
-    public async Task<object> ExtendSubscriptionAsync(string adminId, string adminName,
+    public Task<object> ExtendSubscriptionAsync(string adminId, string adminName,
         string subscriptionId, AdminSubscriptionExtendRequest request, CancellationToken ct)
     {
         var providedAxes = (request.AddDays.HasValue ? 1 : 0)
@@ -4138,6 +4150,14 @@ public partial class AdminService(
                 "Provide exactly one of addDays, addMonths or newRenewalAt.");
         }
 
+        return WithSubscriptionConcurrencyRetryAsync(
+            inner => ExtendSubscriptionCoreAsync(adminId, adminName, subscriptionId, request, inner),
+            ct);
+    }
+
+    private async Task<object> ExtendSubscriptionCoreAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionExtendRequest request, CancellationToken ct)
+    {
         var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
             ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
 
@@ -4183,7 +4203,13 @@ public partial class AdminService(
         return ProjectSubscription(subscription, planName, learnerName);
     }
 
-    public async Task<object> CancelSubscriptionAsync(string adminId, string adminName,
+    public Task<object> CancelSubscriptionAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionCancelRequest request, CancellationToken ct)
+        => WithSubscriptionConcurrencyRetryAsync(
+            inner => CancelSubscriptionCoreAsync(adminId, adminName, subscriptionId, request, inner),
+            ct);
+
+    private async Task<object> CancelSubscriptionCoreAsync(string adminId, string adminName,
         string subscriptionId, AdminSubscriptionCancelRequest request, CancellationToken ct)
     {
         var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
@@ -4222,7 +4248,13 @@ public partial class AdminService(
         return ProjectSubscription(subscription, planName, learnerName);
     }
 
-    public async Task<object> ReactivateSubscriptionAsync(string adminId, string adminName,
+    public Task<object> ReactivateSubscriptionAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionReactivateRequest request, CancellationToken ct)
+        => WithSubscriptionConcurrencyRetryAsync(
+            inner => ReactivateSubscriptionCoreAsync(adminId, adminName, subscriptionId, request, inner),
+            ct);
+
+    private async Task<object> ReactivateSubscriptionCoreAsync(string adminId, string adminName,
         string subscriptionId, AdminSubscriptionReactivateRequest request, CancellationToken ct)
     {
         var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
@@ -4256,7 +4288,7 @@ public partial class AdminService(
         return ProjectSubscription(subscription, planName, learnerName);
     }
 
-    public async Task<object> SetSubscriptionStatusAsync(string adminId, string adminName,
+    public Task<object> SetSubscriptionStatusAsync(string adminId, string adminName,
         string subscriptionId, AdminSubscriptionStatusRequest request, CancellationToken ct)
     {
         // Normalize wire-format status tokens (e.g. "past_due") into the PascalCase enum names
@@ -4269,6 +4301,14 @@ public partial class AdminService(
                 "Status must be one of: trial, pending, active, past_due, suspended, cancelled, expired.");
         }
 
+        return WithSubscriptionConcurrencyRetryAsync(
+            inner => SetSubscriptionStatusCoreAsync(adminId, adminName, subscriptionId, request, parsedStatus, inner),
+            ct);
+    }
+
+    private async Task<object> SetSubscriptionStatusCoreAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionStatusRequest request, SubscriptionStatus parsedStatus, CancellationToken ct)
+    {
         var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
             ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
 
@@ -4288,7 +4328,7 @@ public partial class AdminService(
         return ProjectSubscription(subscription, planName, learnerName);
     }
 
-    public async Task<object> CreateSubscriptionAsync(string adminId, string adminName,
+    public Task<object> CreateSubscriptionAsync(string adminId, string adminName,
         AdminSubscriptionCreateRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.UserId))
@@ -4300,6 +4340,14 @@ public partial class AdminService(
             throw ApiException.Validation("plan_required", "A billing plan code is required.");
         }
 
+        return WithSubscriptionConcurrencyRetryAsync(
+            inner => CreateSubscriptionCoreAsync(adminId, adminName, request, inner),
+            ct);
+    }
+
+    private async Task<object> CreateSubscriptionCoreAsync(string adminId, string adminName,
+        AdminSubscriptionCreateRequest request, CancellationToken ct)
+    {
         var learner = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, ct)
             ?? throw ApiException.NotFound("user_not_found", "User not found.");
 

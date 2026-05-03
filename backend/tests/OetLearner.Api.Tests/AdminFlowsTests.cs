@@ -333,10 +333,13 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     [Fact]
     public async Task AdminAIConfig_CreateAndUpdate()
     {
+        // Provider must already exist in AiProviders (registry-backed). The seeded
+        // stub is "digitalocean-serverless" — using an unknown code triggers the
+        // invalid_provider validation added in the AI provider registry pass.
         var createResponse = await _client.PostAsJsonAsync("/v1/admin/ai-config", new
         {
             model = "test-model",
-            provider = "TestProvider",
+            provider = "digitalocean-serverless",
             taskType = "writing",
             accuracy = 90.0,
             confidenceThreshold = 0.80

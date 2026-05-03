@@ -117,7 +117,10 @@ public class BillingCheckoutSessionGuardTests : IClassFixture<TestWebApplication
     {
         var userId = $"chk-idem-{Guid.NewGuid():N}";
         using var client = await CreateClientForUserAsync(userId);
-        var idempotencyKey = $"chk-idem-{Guid.NewGuid():N}";
+        // Production validation caps idempotency keys at 38 ASCII token chars; a full
+        // "chk-idem-{N}" string is 41 chars and would be rejected. Use a shortened
+        // unique suffix that stays within the limit.
+        var idempotencyKey = $"chk-{Guid.NewGuid():N}".Substring(0, 36);
 
         var first = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
         {
