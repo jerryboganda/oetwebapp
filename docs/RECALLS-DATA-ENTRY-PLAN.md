@@ -157,7 +157,7 @@ Main remaining gaps:
 - The disabled legacy Recalls uploader used defaults like `general` and `medium`, which can hide missing source data.
 - The Recalls uploader has minimal frontend CSV parsing and is disabled for production use.
 - The safe Vocabulary backend importer now parses full CSV records, including quoted commas, escaped quotes, UTF-8 text, and quoted multiline fields.
-- Batch IDs, batch export, clean dry-run confirmation, commit ledgering, draft archive rollback, and manifest reconciliation now exist for the safe Vocabulary importer.
+- Batch IDs, batch export, clean dry-run confirmation, commit ledgering, draft archive rollback, manifest reconciliation, and frontend reconciliation upload now exist for the safe Vocabulary importer.
 - No two-person verification workflow.
 - Some useful fields are not importable today: durable source trace fields and any future common-mistake or similar-sounding metadata.
 
@@ -428,7 +428,6 @@ Built-in preview now reports composite duplicates by `(term, examTypeCode, profe
 
 Recommended improvement before large entry:
 
-- Add frontend reconciliation upload UX around the implemented backend reconciliation endpoint.
 - Add publish blocking for unresolved reconciliation mismatches.
 - Keep `/v1/admin/recalls/bulk-upload` disabled unless it is rebuilt to the same standard.
 

@@ -5,7 +5,7 @@
 
 ## Current Status
 
-Artifact packet created and safe Vocabulary admin import/CRUD path hardened for Recalls-specific fields, full CSV parsing, required source provenance, taxonomy validation, clean dry-run confirmation, batch IDs, batch export/reconciliation, archive-only draft rollback, and legacy-route safety. Actual data entry is blocked until the recall source documents are supplied or placed in a fixed intake folder.
+Artifact packet created and safe Vocabulary admin import/CRUD path hardened for Recalls-specific fields, full CSV parsing, required source provenance, taxonomy validation, clean dry-run confirmation, batch IDs, batch export/reconciliation, frontend manifest reconciliation, archive-only draft rollback, and legacy-route safety. Actual data entry is blocked until the recall source documents are supplied or placed in a fixed intake folder.
 
 ## Loop Log
 
@@ -23,12 +23,13 @@ Artifact packet created and safe Vocabulary admin import/CRUD path hardened for 
 | 10. Batch controls | Complete | Safe Vocabulary importer now supports import batch IDs, clean dry-run confirmation, immutable commit ledgering, batch summary, CSV export, archive-only draft rollback, and a disabled legacy Recalls bulk endpoint/UI redirect. |
 | 11. Batch validation | Complete | Backend build, TypeScript, ESLint, focused admin import tests, batch rollback/export tests, dry-run gate tests, legacy-route block test, VocabularyService tests, and `git diff --check` passed. |
 | 12. Parser and reconciliation | Complete | Safe Vocabulary importer now supports quoted multiline CSV records, controlled category/difficulty validation, exam/profession reference validation, and server-side manifest reconciliation. |
+| 13. Reconciliation UX | Complete | Admin Vocabulary import page now exposes approved-manifest upload, clean/mismatch reconciliation summary, and mismatch rows; focused Vitest coverage passes for clean and mismatched reports. |
 
 ## Key Findings
 
 - Recalls vocabulary data is backed by `VocabularyTerm`.
 - Preferred route: `/v1/admin/vocabulary/import/preview?importBatchId=<batch>` then `/v1/admin/vocabulary/import?dryRun=true&importBatchId=<batch>` then commit with `dryRun=false&importBatchId=<batch>`.
-- Batch summary, CSV export, server-side manifest reconciliation, and archive-only draft rollback are available under `/v1/admin/vocabulary/import/batches/<batch>` after a committed batch creates its commit ledger.
+- Batch summary, CSV export, approved-manifest reconciliation, and archive-only draft rollback are available from the admin Vocabulary importer UI after a committed batch creates its commit ledger.
 - Legacy route `/v1/admin/recalls/bulk-upload` is disabled for production safety and the admin UI now directs operators to the safe Vocabulary importer.
 - `americanSpelling`, Recalls audio variants, audio media asset ID, collocations, and related terms are wired through the safer Vocabulary importer plus admin create/edit UI; batch export includes them for reconciliation before publish.
 - Full papers, PDFs, audio, scripts, answer keys, writing case notes, model answers, and speaking role cards should not be flattened into Recalls vocabulary rows.
@@ -52,12 +53,11 @@ Artifact packet created and safe Vocabulary admin import/CRUD path hardened for 
 1. Actual recall source documents are not present as chat attachments.
 2. Private batch archive location is not yet chosen.
 3. Publish blocking on unresolved reconciliation mismatches is not yet automated.
-4. Frontend reconciliation upload UX is not yet exposed on the import page.
 
 ## Next Actions
 
 1. Confirm source document location.
 2. Choose the private batch archive location.
 3. Run a 10-20 row pilot batch through the templates and importer preview/dry-run path.
-4. Archive the batch summary/export and reconcile every field against the approved manifest before publish.
+4. Archive the batch summary/export/reconciliation report before publish.
 5. Add publish blocking for unresolved reconciliation mismatches before high-volume recurring imports.

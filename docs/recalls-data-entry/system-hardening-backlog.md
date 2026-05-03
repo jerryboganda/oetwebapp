@@ -30,7 +30,7 @@ Acceptance criteria:
 
 ### P0.3 Add Post-Import Export/Reconciliation Tooling
 
-Status: implemented for the safe Vocabulary importer. Batch summary and CSV export read from the immutable commit ledger and include Recalls-specific fields. `/v1/admin/vocabulary/import/batches/{importBatchId}/reconcile` accepts the approved manifest CSV and reports matched, missing, extra, mismatched, invalid, and duplicate manifest rows.
+Status: implemented for the safe Vocabulary importer. Batch summary and CSV export read from the immutable commit ledger and include Recalls-specific fields. `/v1/admin/vocabulary/import/batches/{importBatchId}/reconcile` accepts the approved manifest CSV and reports matched, missing, extra, mismatched, invalid, and duplicate manifest rows. The admin Vocabulary import page exposes approved-manifest upload and clean/mismatch result review.
 
 Problem: operators need a reliable way to compare imported rows against the approved manifest.
 
@@ -130,7 +130,7 @@ Acceptance criteria:
 
 ### P2.3 Import UI Enhancements
 
-Status: implemented for preview, dry run, commit, batch ID, batch summary, batch export, draft rollback, and safe routing away from the legacy Recalls uploader.
+Status: implemented for preview, dry run, commit, batch ID, batch summary, batch export, manifest reconciliation, draft rollback, and safe routing away from the legacy Recalls uploader.
 
 Acceptance criteria:
 
@@ -139,7 +139,7 @@ Acceptance criteria:
 
 ### P2.4 Focused Tests
 
-Status: implemented for the backend safe Vocabulary importer. Tests cover preview, clean dry run, commit gate, draft status, duplicates/conflicts, provenance, full CSV parsing, taxonomy validation, reconciliation, export, and rollback behavior. Frontend coverage remains future work.
+Status: implemented for the backend safe Vocabulary importer and frontend import page. Backend tests cover preview, clean dry run, commit gate, draft status, duplicates/conflicts, provenance, full CSV parsing, taxonomy validation, reconciliation, export, and rollback behavior. Frontend tests cover approved-manifest reconciliation clean and mismatch states.
 
 Acceptance criteria:
 
