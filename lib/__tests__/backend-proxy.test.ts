@@ -91,14 +91,14 @@ describe('backend proxy helpers', () => {
   });
 
   it('requires a double-submit CSRF token when refresh cookies are proxied', () => {
-    const valid = new Request('https://app.example.com/api/backend/v1/auth/refresh', {
+    const valid = new Request('https://app.example.com/api/backend/v1/submissions', {
       method: 'POST',
       headers: {
         Cookie: 'oet_rt=refresh; oet_csrf=csrf-token',
         'x-csrf-token': 'csrf-token',
       },
     });
-    const invalid = new Request('https://app.example.com/api/backend/v1/auth/refresh', {
+    const invalid = new Request('https://app.example.com/api/backend/v1/submissions', {
       method: 'POST',
       headers: {
         Cookie: 'oet_rt=refresh; oet_csrf=csrf-token',
@@ -108,5 +108,20 @@ describe('backend proxy helpers', () => {
 
     expect(validateProxyCsrf(valid)).toBe(true);
     expect(validateProxyCsrf(invalid)).toBe(false);
+  });
+
+  it('exempts auth bootstrap endpoints from CSRF even with a stale refresh cookie', () => {
+    // Returning user with stale oet_rt cookie but expired/missing oet_csrf
+    // must still be able to sign in / refresh / sign out.
+    for (const authPath of ['v1/auth/sign-in', 'v1/auth/refresh', 'v1/auth/sign-out', 'v1/auth/register']) {
+      const request = new Request(`https://app.example.com/api/backend/${authPath}`, {
+        method: 'POST',
+        headers: {
+          // Stale refresh cookie present, but no matching CSRF header.
+          Cookie: 'oet_rt=stale-refresh',
+        },
+      });
+      expect(validateProxyCsrf(request)).toBe(true);
+    }
   });
 });

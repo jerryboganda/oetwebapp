@@ -9,6 +9,29 @@ const CSRF_COOKIE = 'oet_csrf';
 const REFRESH_COOKIE = 'oet_rt';
 const CSRF_HEADER = 'x-csrf-token';
 
+/**
+ * Auth bootstrap endpoints are exempt from the proxy CSRF check.
+ *
+ * These endpoints are the entry points that establish (or replace) the auth
+ * session and the `oet_csrf` cookie itself. A returning user with a stale
+ * `oet_rt` refresh cookie but no/expired `oet_csrf` cookie would otherwise
+ * be permanently locked out of sign-in until they manually clear cookies.
+ *
+ * The backend still performs its own anti-replay protection on these paths
+ * (single-use refresh-token rotation, password+email validation, MFA, etc.),
+ * so skipping the proxy CSRF here does not weaken the security model.
+ */
+const AUTH_BOOTSTRAP_PATH_PATTERN = /^\/?api\/backend\/v1\/auth(\/|$)/i;
+
+function isAuthBootstrapRequest(request: Request): boolean {
+  try {
+    const { pathname } = new URL(request.url);
+    return AUTH_BOOTSTRAP_PATH_PATTERN.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function validateRequestOrigin(request: Request): boolean {
   const method = request.method.toUpperCase();
   if (CSRF_SAFE_METHODS.has(method)) return true;
@@ -41,6 +64,12 @@ export function validateRequestOrigin(request: Request): boolean {
 export function validateProxyCsrf(request: Request): boolean {
   const method = request.method.toUpperCase();
   if (CSRF_SAFE_METHODS.has(method)) return true;
+
+  // Auth bootstrap endpoints (sign-in, refresh, sign-out, register, MFA, SSO,
+  // password reset, email verification) are exempt — they ARE the mechanism
+  // that establishes the CSRF cookie. A user with a stale refresh cookie but
+  // expired CSRF cookie must still be able to sign in.
+  if (isAuthBootstrapRequest(request)) return true;
 
   const cookies = parseCookieHeader(request.headers.get('cookie'));
   if (!cookies.has(REFRESH_COOKIE)) {
