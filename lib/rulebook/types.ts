@@ -29,7 +29,8 @@ export type ExamProfession =
   | 'occupational-therapy'
   | 'speech-pathology'
   | 'podiatry'
-  | 'dietetics';
+  | 'dietetics'
+  | 'other-allied-health';
 
 export type LetterType =
   | 'routine_referral'

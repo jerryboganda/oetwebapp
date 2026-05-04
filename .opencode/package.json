@@ -1,9 +1,14 @@
 {
-  "type": "commonjs",
   "dependencies": {
+}
     "@code-yeongyu/comment-checker": "^0.7.0",
     "@kilocode/plugin": "7.2.20",
     "@opencode-ai/plugin": "1.4.6",
-    "oh-my-opencode": "^3.17.4"
-  }
+    "oh-my-openagent": "^3.17.13"
+  },
+  "trustedDependencies": [
+    "@ast-grep/cli",
+    "@code-yeongyu/comment-checker",
+    "oh-my-openagent"
+  ]
 }

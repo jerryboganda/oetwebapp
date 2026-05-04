@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import type { AdminWalletTierInput, AdminWalletTierRow } from '@/lib/api';
+import { BillingConfirmDialog } from './confirm-dialog';
 
 export interface WalletTiersEditorProps {
   initialTiers: AdminWalletTierRow[];
@@ -72,6 +73,15 @@ function emptyDraft(defaultCurrency: string, displayOrder: number): DraftRow {
   };
 }
 
+// Server stores amount/credits/bonus as integer cents/credits — reject decimals
+// client-side too so we don't silently round on save.
+function isPositiveInteger(value: number): boolean {
+  return Number.isInteger(value) && value > 0;
+}
+function isNonNegativeInteger(value: number): boolean {
+  return Number.isInteger(value) && value >= 0;
+}
+
 function validateRow(row: DraftRow, defaultCurrency: string): RowErrors {
   const errs: RowErrors = {};
   const amount = Number(row.amount);
@@ -79,17 +89,17 @@ function validateRow(row: DraftRow, defaultCurrency: string): RowErrors {
   const bonus = Number(row.bonus);
   const order = Number(row.displayOrder);
 
-  if (!row.amount || Number.isNaN(amount) || amount <= 0) {
-    errs.amount = 'Must be > 0';
+  if (!row.amount || Number.isNaN(amount) || !isPositiveInteger(amount)) {
+    errs.amount = 'Must be a positive integer (cents)';
   }
-  if (row.credits === '' || Number.isNaN(credits) || credits < 0) {
-    errs.credits = 'Must be ≥ 0';
+  if (row.credits === '' || Number.isNaN(credits) || !isNonNegativeInteger(credits)) {
+    errs.credits = 'Must be a non-negative integer';
   }
-  if (row.bonus === '' || Number.isNaN(bonus) || bonus < 0) {
-    errs.bonus = 'Must be ≥ 0';
+  if (row.bonus === '' || Number.isNaN(bonus) || !isNonNegativeInteger(bonus)) {
+    errs.bonus = 'Must be a non-negative integer';
   }
-  if (row.displayOrder === '' || Number.isNaN(order) || order < 0) {
-    errs.displayOrder = 'Must be ≥ 0';
+  if (row.displayOrder === '' || Number.isNaN(order) || !isNonNegativeInteger(order)) {
+    errs.displayOrder = 'Must be a non-negative integer';
   }
   if (!/^[A-Za-z]{3}$/.test(row.currency.trim())) {
     errs.currency = '3-letter ISO';
@@ -107,6 +117,7 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
   );
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  const [pendingRemoveKey, setPendingRemoveKey] = useState<string | null>(null);
 
   const errorsByKey = useMemo(() => {
     const map = new Map<string, RowErrors>();
@@ -138,6 +149,21 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
     return null;
   }, [drafts]);
 
+  // Tiers should be displayed in ascending amount order so they overlap visually with display
+  // order. Server enforces uniqueness; client previews ordering for usability.
+  const ascendingWarning = useMemo(() => {
+    const amounts = drafts
+      .filter((d) => d.isActive)
+      .map((d) => Number(d.amount))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    for (let i = 1; i < amounts.length; i += 1) {
+      if (amounts[i] <= amounts[i - 1]) {
+        return 'Active tier amounts should be strictly ascending in row order.';
+      }
+    }
+    return null;
+  }, [drafts]);
+
   const updateRow = useCallback((key: string, patch: Partial<DraftRow>) => {
     setDrafts((prev) => prev.map((row) => (row.key === key ? { ...row, ...patch } : row)));
   }, []);
@@ -146,8 +172,18 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
     setDrafts((prev) => [...prev, emptyDraft(defaultCurrency, prev.length)]);
   }, [defaultCurrency]);
 
-  const removeRow = useCallback((key: string) => {
-    setDrafts((prev) => prev.filter((row) => row.key !== key));
+  const requestRemoveRow = useCallback((key: string) => {
+    setPendingRemoveKey(key);
+  }, []);
+
+  const confirmRemoveRow = useCallback(() => {
+    if (!pendingRemoveKey) return;
+    setDrafts((prev) => prev.filter((row) => row.key !== pendingRemoveKey));
+    setPendingRemoveKey(null);
+  }, [pendingRemoveKey]);
+
+  const cancelRemoveRow = useCallback(() => {
+    setPendingRemoveKey(null);
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -220,6 +256,14 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
         <InlineAlert variant="error" title="Tier set incomplete">
           {setLevelError}
         </InlineAlert>
+      ) : null}
+
+      {ascendingWarning ? (
+        <div data-testid="wallet-tier-ascending-warning">
+          <InlineAlert variant="warning" title="Tiers not ascending">
+            {ascendingWarning}
+          </InlineAlert>
+        </div>
       ) : null}
 
       <Card className="overflow-hidden p-0">
@@ -349,7 +393,7 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
                           size="sm"
                           aria-label={`Remove tier ${row.amount}`}
                           disabled={!canWrite}
-                          onClick={() => removeRow(row.key)}
+                          onClick={() => requestRemoveRow(row.key)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -376,6 +420,16 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
           <Save className="mr-1 h-4 w-4" /> {saving ? 'Saving…' : 'Save all tiers'}
         </Button>
       </div>
+
+      <BillingConfirmDialog
+        open={pendingRemoveKey !== null}
+        title="Delete wallet tier?"
+        description="This wallet top-up tier will be removed from the next save. Existing wallet top-ups already linked to this tier will remain unaffected (the tier ID stays referenced server-side), but no new top-ups can be created at this amount."
+        confirmLabel="Remove tier"
+        variant="danger"
+        onConfirm={confirmRemoveRow}
+        onCancel={cancelRemoveRow}
+      />
     </div>
   );
 }

@@ -1,11 +1,18 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Data;
 
 public static class DatabaseConfiguration
 {
     private const string DefaultDevelopmentConnectionString = "Host=localhost;Port=5432;Database=oet_learner_dev;Username=postgres;Password=postgres";
+
+    // Singleton interceptor — stateless, safe to share across DbContext
+    // instances. Slice C billing-hardening: physically blocks any UPDATE or
+    // DELETE on BillingPlanVersion / BillingAddOnVersion / BillingCouponVersion
+    // snapshot rows, regardless of provider (Postgres, Sqlite, InMemory).
+    private static readonly BillingCatalogVersionImmutabilityInterceptor BillingCatalogVersionImmutability = new();
 
     public static string ResolveConnectionString(IConfiguration configuration, bool isDevelopment)
     {
@@ -25,6 +32,8 @@ public static class DatabaseConfiguration
 
     public static void ConfigureDbContext(DbContextOptionsBuilder optionsBuilder, string connectionString)
     {
+        optionsBuilder.AddInterceptors(BillingCatalogVersionImmutability);
+
         if (connectionString.StartsWith("InMemory:", StringComparison.OrdinalIgnoreCase))
         {
             optionsBuilder.UseInMemoryDatabase(connectionString["InMemory:".Length..]);

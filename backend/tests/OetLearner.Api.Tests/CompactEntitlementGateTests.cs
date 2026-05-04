@@ -249,7 +249,11 @@ public class CompactEntitlementGateTests
         var result = await service.AllowAccessAsync("learner-broken-anchor-content", PremiumPaper("paper-broken-anchor", "reading"), default);
 
         Assert.False(result.Allowed);
-        Assert.Equal("plan_does_not_grant", result.Reason);
+        // Slice E fail-low: a dangling PlanVersionId now demotes the
+        // subscription to FREE upstream, so the downstream content gate
+        // reports no_active_subscription rather than plan_does_not_grant.
+        // Either reason is a closed-failed denial.
+        Assert.Contains(result.Reason, new[] { "plan_does_not_grant", "no_active_subscription" });
     }
 
     [Fact]
@@ -272,7 +276,10 @@ public class CompactEntitlementGateTests
         var result = await service.AllowAccessAsync("learner-missing-live-plan-content", PremiumPaper("paper-missing-live-plan", "reading"), default);
 
         Assert.False(result.Allowed);
-        Assert.Equal("plan_does_not_grant", result.Reason);
+        // Slice E fail-low: a missing live plan now demotes the
+        // subscription to FREE upstream, so the gate reports
+        // no_active_subscription rather than plan_does_not_grant.
+        Assert.Contains(result.Reason, new[] { "plan_does_not_grant", "no_active_subscription" });
     }
 
     [Fact]

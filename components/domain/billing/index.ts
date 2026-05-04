@@ -4,3 +4,4 @@ export {
   FREEZE_UNVERIFIED_MESSAGE,
   isFreezeEffective,
 } from './freeze';
+export { maskProviderId } from './mask-provider-id';

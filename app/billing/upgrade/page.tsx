@@ -57,16 +57,10 @@ interface UpgradeData {
   recommendation: string;
 }
 
+import { formatMoneyWhole } from '@/lib/money';
+
 function formatPrice(amount: number, currency: string) {
-  try {
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency: currency || 'AUD',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  } catch {
-    return `${currency || 'AUD'} ${amount.toFixed(0)}`;
-  }
+  return formatMoneyWhole(amount, { currency });
 }
 
 const linkButtonBase =

@@ -172,6 +172,10 @@ public class GrammarServiceTests
     {
         var options = NewInMemoryOptions();
         await using var db = new LearnerDbContext(options);
+        // Slice E hardening: EffectiveEntitlementResolver now fails-low when
+        // a subscription references a non-existent plan. Seed the matching
+        // BillingPlan row so the resolver can confirm the plan is real.
+        db.BillingPlans.Add(new BillingPlan { Id = "pro", Code = "pro", Name = "Pro" });
         db.Subscriptions.Add(new Subscription
         {
             Id = "sub-1",

@@ -1,7 +1,8 @@
 'use client';
 
 import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, AlertTriangle, CreditCard, DollarSign, FileSearch, History as HistoryIcon, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
+import Link from 'next/link';
+import { Activity, AlertTriangle, CreditCard, DollarSign, FileSearch, FileText, History as HistoryIcon, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
 import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -14,6 +15,10 @@ import { Button } from '@/components/ui/button';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Drawer, Modal } from '@/components/ui/modal';
 import { ContentScopePanel } from '@/components/domain/ContentScopePanel';
+import { BillingConfirmDialog } from '@/components/admin/billing/confirm-dialog';
+import { BillingConflictBanner, isConflictError } from '@/components/admin/billing/conflict-banner';
+import { NoBillingPermission } from '@/components/admin/billing/no-billing-permission';
+import { filterCatalogVersionSummary } from '@/components/admin/billing/version-drawer-fields';
 import {
   createAdminBillingAddOn,
   createAdminBillingCoupon,
@@ -44,6 +49,8 @@ import {
   getAdminBillingSubscriptionData,
 } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useAuth } from '@/contexts/auth-context';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import type {
   AdminBillingAddOn,
   AdminBillingCatalogVersionHistory,
@@ -475,6 +482,9 @@ function toCouponForm(coupon: AdminBillingCoupon): BillingCouponFormState {
 
 export default function BillingPage() {
   const { isAuthenticated, role } = useAdminAuth();
+  const { user } = useAuth();
+  const canReadBilling = hasPermission(user?.adminPermissions, AdminPermission.BillingRead, AdminPermission.BillingWrite);
+  const canWriteBilling = hasPermission(user?.adminPermissions, AdminPermission.BillingWrite);
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [planFilters, setPlanFilters] = useState<Record<string, string[]>>({ status: [] });
   const [addOnFilters, setAddOnFilters] = useState<Record<string, string[]>>({ status: [] });
@@ -528,6 +538,21 @@ export default function BillingPage() {
   const [invoiceEvidenceStatus, setInvoiceEvidenceStatus] = useState<PageStatus>('empty');
   const invoiceEvidenceRequestRef = useRef(0);
   const [toast, setToast] = useState<ToastState>(null);
+
+  // 409 conflict banner state — one banner per editor surface so we never
+  // silently overwrite a concurrent admin's catalog edits.
+  type ConflictTarget = { entity: 'plan' | 'add-on' | 'coupon'; detail?: string };
+  const [conflict, setConflict] = useState<ConflictTarget | null>(null);
+
+  // Confirmation dialog state for destructive catalog actions: archive plan,
+  // archive add-on, expire / archive coupon. We submit the underlying save
+  // call only after the admin confirms via `BillingConfirmDialog`.
+  type DestructiveAction =
+    | { kind: 'archive-plan'; status: 'archived' }
+    | { kind: 'archive-add-on'; status: 'archived' }
+    | { kind: 'expire-coupon'; status: 'archived' };
+  const [pendingDestructive, setPendingDestructive] = useState<DestructiveAction | null>(null);
+  const [destructiveConfirmInput, setDestructiveConfirmInput] = useState('');
 
   // Subscription lifecycle action modal — single component drives all six manual
   // admin actions (create, change-plan, extend, cancel, reactivate, set-status).
@@ -1980,6 +2005,18 @@ export default function BillingPage() {
   }
 
   async function handleSavePlan() {
+    // Destructive intent? archive requires explicit confirmation.
+    if (planForm.status === 'archived') {
+      const isAlreadyArchived = editingPlanId
+        ? plans.find((p) => p.id === editingPlanId)?.status === 'archived'
+        : false;
+      if (!isAlreadyArchived && pendingDestructive?.kind !== 'archive-plan') {
+        setPendingDestructive({ kind: 'archive-plan', status: 'archived' });
+        setDestructiveConfirmInput('');
+        return;
+      }
+    }
+
     setIsSavingPlan(true);
     try {
       const payload = {
@@ -2011,16 +2048,34 @@ export default function BillingPage() {
       setIsPlanModalOpen(false);
       setPlanForm(defaultPlanForm);
       setEditingPlanId(null);
+      setPendingDestructive(null);
+      setConflict(null);
       setToast({ variant: 'success', message: editingPlanId ? 'Billing plan updated successfully.' : 'Billing plan created successfully.' });
     } catch (error) {
       console.error(error);
-      setToast({ variant: 'error', message: 'Unable to save this billing plan.' });
+      if (isConflictError(error)) {
+        setConflict({ entity: 'plan', detail: error instanceof Error ? error.message : undefined });
+        setPendingDestructive(null);
+      } else {
+        setToast({ variant: 'error', message: 'Unable to save this billing plan.' });
+      }
     } finally {
       setIsSavingPlan(false);
     }
   }
 
   async function handleSaveAddOn() {
+    if (addOnForm.status === 'archived') {
+      const isAlreadyArchived = editingAddOnId
+        ? addOns.find((a) => a.id === editingAddOnId)?.status === 'archived'
+        : false;
+      if (!isAlreadyArchived && pendingDestructive?.kind !== 'archive-add-on') {
+        setPendingDestructive({ kind: 'archive-add-on', status: 'archived' });
+        setDestructiveConfirmInput('');
+        return;
+      }
+    }
+
     setIsSavingAddOn(true);
     try {
       const payload = {
@@ -2053,16 +2108,34 @@ export default function BillingPage() {
       setIsAddOnModalOpen(false);
       setAddOnForm(defaultAddOnForm);
       setEditingAddOnId(null);
+      setPendingDestructive(null);
+      setConflict(null);
       setToast({ variant: 'success', message: editingAddOnId ? 'Billing add-on updated successfully.' : 'Billing add-on created successfully.' });
     } catch (error) {
       console.error(error);
-      setToast({ variant: 'error', message: 'Unable to save this billing add-on.' });
+      if (isConflictError(error)) {
+        setConflict({ entity: 'add-on', detail: error instanceof Error ? error.message : undefined });
+        setPendingDestructive(null);
+      } else {
+        setToast({ variant: 'error', message: 'Unable to save this billing add-on.' });
+      }
     } finally {
       setIsSavingAddOn(false);
     }
   }
 
   async function handleSaveCoupon() {
+    if (couponForm.status === 'archived') {
+      const isAlreadyArchived = editingCouponId
+        ? coupons.find((c) => c.id === editingCouponId)?.status === 'archived'
+        : false;
+      if (!isAlreadyArchived && pendingDestructive?.kind !== 'expire-coupon') {
+        setPendingDestructive({ kind: 'expire-coupon', status: 'archived' });
+        setDestructiveConfirmInput('');
+        return;
+      }
+    }
+
     setIsSavingCoupon(true);
     try {
       const payload = {
@@ -2094,16 +2167,31 @@ export default function BillingPage() {
       setIsCouponModalOpen(false);
       setCouponForm(defaultCouponForm);
       setEditingCouponId(null);
+      setPendingDestructive(null);
+      setConflict(null);
       setToast({ variant: 'success', message: editingCouponId ? 'Billing coupon updated successfully.' : 'Billing coupon created successfully.' });
     } catch (error) {
       console.error(error);
-      setToast({ variant: 'error', message: 'Unable to save this billing coupon.' });
+      if (isConflictError(error)) {
+        setConflict({ entity: 'coupon', detail: error instanceof Error ? error.message : undefined });
+        setPendingDestructive(null);
+      } else {
+        setToast({ variant: 'error', message: 'Unable to save this billing coupon.' });
+      }
     } finally {
       setIsSavingCoupon(false);
     }
   }
 
   if (!isAuthenticated || role !== 'admin') return null;
+
+  if (!canReadBilling) {
+    return (
+      <AdminRouteWorkspace role="main" aria-label="Billing operations">
+        <NoBillingPermission requiredPermission={AdminPermission.BillingRead} />
+      </AdminRouteWorkspace>
+    );
+  }
 
   return (
     <AdminRouteWorkspace role="main" aria-label="Billing operations">
@@ -2114,21 +2202,41 @@ export default function BillingPage() {
         description="Manage subscription plans, add-ons, coupons, subscriptions, and invoices with live backend data."
         actions={
           <>
-            <Button onClick={() => openPlanEditor()} className="gap-2">
+            <Button onClick={() => openPlanEditor()} className="gap-2" disabled={!canWriteBilling}>
               <CreditCard className="h-4 w-4" />
               Create Plan
             </Button>
-            <Button variant="outline" onClick={() => openAddOnEditor()} className="gap-2">
+            <Button variant="outline" onClick={() => openAddOnEditor()} className="gap-2" disabled={!canWriteBilling}>
               <Package className="h-4 w-4" />
               Create Add-on
             </Button>
-            <Button variant="outline" onClick={() => openCouponEditor()} className="gap-2">
+            <Button variant="outline" onClick={() => openCouponEditor()} className="gap-2" disabled={!canWriteBilling}>
               <Ticket className="h-4 w-4" />
               Create Coupon
             </Button>
+            <Link
+              href="/admin/audit-logs?search=billing"
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-sm font-medium text-navy hover:bg-background-light"
+              data-testid="billing-audit-log-link"
+            >
+              <FileText className="h-4 w-4" />
+              Audit log
+            </Link>
           </>
         }
       />
+
+      {conflict ? (
+        <BillingConflictBanner
+          entityLabel={conflict.entity}
+          detail={conflict.detail}
+          onReload={() => {
+            setConflict(null);
+            void reloadBilling();
+          }}
+          onDismiss={() => setConflict(null)}
+        />
+      ) : null}
 
       <AsyncStateWrapper
         status={pageStatus}
@@ -2467,7 +2575,8 @@ export default function BillingPage() {
             {catalogHistoryStatus === 'success' && catalogHistory ? (
               <div className="space-y-4">
                 {catalogHistory.items.map((version) => {
-                  const summaryEntries = Object.entries(version.summary)
+                  const safeSummary = filterCatalogVersionSummary(version.summary);
+                  const summaryEntries = Object.entries(safeSummary)
                     .filter(([, value]) => value !== null && value !== undefined && value !== '')
                     .slice(0, 6);
 
@@ -3091,6 +3200,41 @@ export default function BillingPage() {
           </div>
         ) : null}
       </Modal>
+
+      <BillingConfirmDialog
+        open={pendingDestructive !== null}
+        title={
+          pendingDestructive?.kind === 'archive-plan' ? 'Archive billing plan?'
+          : pendingDestructive?.kind === 'archive-add-on' ? 'Archive billing add-on?'
+          : pendingDestructive?.kind === 'expire-coupon' ? 'Expire / archive coupon?'
+          : 'Confirm action'
+        }
+        description={
+          pendingDestructive?.kind === 'archive-plan'
+            ? 'Archiving this plan hides it from new checkouts. Existing subscribers stay on it until they change plan or cancel. Catalog version history is preserved.'
+          : pendingDestructive?.kind === 'archive-add-on'
+            ? 'Archiving this add-on hides it from new checkouts. Existing add-on subscribers retain access until their next renewal. Catalog version history is preserved.'
+          : pendingDestructive?.kind === 'expire-coupon'
+            ? 'Expiring this coupon stops future redemptions immediately. Past redemptions are kept for accounting and auditing.'
+            : ''
+        }
+        confirmPhrase="ARCHIVE"
+        confirmInput={destructiveConfirmInput}
+        onConfirmInputChange={setDestructiveConfirmInput}
+        confirmLabel="Yes, proceed"
+        variant="danger"
+        loading={isSavingPlan || isSavingAddOn || isSavingCoupon}
+        onConfirm={() => {
+          if (!pendingDestructive) return;
+          if (pendingDestructive.kind === 'archive-plan') void handleSavePlan();
+          else if (pendingDestructive.kind === 'archive-add-on') void handleSaveAddOn();
+          else if (pendingDestructive.kind === 'expire-coupon') void handleSaveCoupon();
+        }}
+        onCancel={() => {
+          setPendingDestructive(null);
+          setDestructiveConfirmInput('');
+        }}
+      />
     </AdminRouteWorkspace>
   );
 }

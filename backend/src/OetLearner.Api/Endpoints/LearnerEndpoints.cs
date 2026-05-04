@@ -270,7 +270,10 @@ public static class LearnerEndpoints
                 header => header.Key,
                 header => header.Value.ToString(),
                 StringComparer.OrdinalIgnoreCase);
-            return Results.Ok(await service.HandleStripeWebhookAsync(payload, headers, ct));
+            var outcome = await service.HandleStripeWebhookAsync(payload, headers, ct);
+            return LearnerService.IsRejectedWebhookOutcome(outcome)
+                ? Results.StatusCode(StatusCodes.Status400BadRequest)
+                : Results.Ok(outcome);
         });
         webhooks.MapPost("/paypal", async (HttpContext http, LearnerService service, CancellationToken ct) =>
         {
@@ -279,7 +282,10 @@ public static class LearnerEndpoints
                 header => header.Key,
                 header => header.Value.ToString(),
                 StringComparer.OrdinalIgnoreCase);
-            return Results.Ok(await service.HandlePayPalWebhookAsync(payload, headers, ct));
+            var outcome = await service.HandlePayPalWebhookAsync(payload, headers, ct);
+            return LearnerService.IsRejectedWebhookOutcome(outcome)
+                ? Results.StatusCode(StatusCodes.Status400BadRequest)
+                : Results.Ok(outcome);
         });
 
         // Exam family reference

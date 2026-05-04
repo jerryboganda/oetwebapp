@@ -20,6 +20,7 @@ using OetLearner.Api.Hubs;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Observability;
+using OetLearner.Api.Services.Billing;
 
 var builder = WebApplication.CreateBuilder(args);
 // H10: wire Sentry early so host-level startup exceptions are captured. No-op unless Sentry:Dsn is set.
@@ -558,6 +559,8 @@ builder.Services.AddHttpClient<StripeGateway>();
 builder.Services.AddHttpClient<PayPalGateway>();
 builder.Services.AddScoped<PaymentGatewayService>();
 builder.Services.AddScoped<WalletService>();
+builder.Services.AddScoped<RefundService>();
+builder.Services.AddScoped<DisputeService>();
 builder.Services.AddScoped<AdminWalletTierService>();
 builder.Services.AddScoped<EngagementService>();
 builder.Services.AddHostedService<BackgroundJobProcessor>();
@@ -987,6 +990,32 @@ app.UseExceptionHandler(handler =>
                 correlationId
             };
             await context.Response.WriteAsync(JsonSupport.Serialize(conflictPayload));
+            return;
+        }
+
+        // H-D1 (Slice H, May 2026 hardening): Minimal-API model binding throws
+        // BadHttpRequestException for malformed JSON, missing required fields,
+        // wrong primitive types in the body, querystring parse failures, etc.
+        // Without this branch the catch-all below maps it to 500 — leaking an
+        // implementation detail and breaking client retry logic. Map it to a
+        // structured 400 (`invalid_request`) instead. Detail strings are only
+        // included in Development to avoid disclosing schema internals.
+        if (exception is Microsoft.AspNetCore.Http.BadHttpRequestException badRequest)
+        {
+            context.Response.StatusCode = badRequest.StatusCode is >= 400 and < 500
+                ? badRequest.StatusCode
+                : StatusCodes.Status400BadRequest;
+            var badPayload = new
+            {
+                code = "invalid_request",
+                message = app.Environment.IsDevelopment()
+                    ? badRequest.Message
+                    : "The request body or query string could not be parsed.",
+                retryable = false,
+                supportHint = "Check the request shape against the OpenAPI schema and retry.",
+                correlationId
+            };
+            await context.Response.WriteAsync(JsonSupport.Serialize(badPayload));
             return;
         }
 

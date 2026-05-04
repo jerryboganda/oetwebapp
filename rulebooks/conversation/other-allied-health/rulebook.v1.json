@@ -1,0 +1,76 @@
+{
+  "version": "1.0.0",
+  "kind": "conversation",
+  "profession": "other-allied-health",
+  "publishedAt": "2026-04-20T00:00:00Z",
+  "authoritySource": "Dr. Ahmed Hesham — OET Speaking Practice Rulebook for Healthcare Professionals (Medicine) v1",
+  "sections": [
+    { "id": "C01", "title": "Consultation phase structure", "order": 1 },
+    { "id": "C02", "title": "Empathy, rapport & register", "order": 2 },
+    { "id": "C03", "title": "Turn-taking & ping-pong", "order": 3 },
+    { "id": "C04", "title": "Open vs closed questioning", "order": 4 },
+    { "id": "C05", "title": "Explanation, signposting & teach-back", "order": 5 },
+    { "id": "C06", "title": "Fluency & connected speech", "order": 6 },
+    { "id": "C07", "title": "Grammar & expression in spoken English", "order": 7 },
+    { "id": "C08", "title": "Appropriateness & role fidelity", "order": 8 },
+    { "id": "C09", "title": "Safety-netting & red-flag escalation", "order": 9 },
+    { "id": "C10", "title": "Handover (ISBAR) structure", "order": 10 },
+    { "id": "C11", "title": "Filler words & hesitation markers", "order": 11 },
+    { "id": "C12", "title": "Closing & recap", "order": 12 }
+  ],
+  "rules": [
+    { "id": "C01.1", "section": "C01", "severity": "critical", "title": "Open with greeting + identity + role", "body": "Every OET role-play opens with a greeting, your name, and your role.", "appliesTo": ["oet-roleplay"], "exemplarPhrases": ["Good morning, I'm Dr. Ahmed, one of the doctors on the ward today."] },
+    { "id": "C01.2", "section": "C01", "severity": "critical", "title": "Elicit before explaining (ICE)", "body": "Use ICE (Ideas, Concerns, Expectations) before giving explanation. Ask at least one open question about what the patient already knows or worries about.", "appliesTo": ["oet-roleplay"], "exemplarPhrases": ["What do you understand about the results so far?", "What's worrying you most at the moment?"] },
+    { "id": "C01.3", "section": "C01", "severity": "major", "title": "Explain in plain English", "body": "Never use unexplained medical jargon with patients. Define terms immediately when needed.", "appliesTo": ["oet-roleplay"], "exemplarPhrases": ["Hypertension means your blood pressure is higher than we'd like."] },
+    { "id": "C01.4", "section": "C01", "severity": "major", "title": "Check understanding (teach-back)", "body": "After explaining, invite the patient to repeat in their own words.", "appliesTo": ["oet-roleplay"], "exemplarPhrases": ["Just to check I've explained this well — what will you tell your partner when you get home?"] },
+    { "id": "C01.5", "section": "C01", "severity": "major", "title": "Close with plan + safety-net", "body": "Never close without a clear next step, when to return, and confirming any questions.", "appliesTo": ["oet-roleplay"], "exemplarPhrases": ["Is there anything else you'd like to ask before you go?"] },
+
+    { "id": "C02.1", "section": "C02", "severity": "critical", "title": "Acknowledge emotion before information", "body": "When a patient expresses worry, fear, or sadness, acknowledge it before moving to information.", "appliesTo": "all", "exemplarPhrases": ["That sounds really worrying — I can hear how anxious this has made you."] },
+    { "id": "C02.2", "section": "C02", "severity": "major", "title": "Use the patient's name", "body": "Use the patient's name at least twice in a 5-minute encounter.", "appliesTo": "all", "forbiddenPatterns": ["\\bthe patient\\b"] },
+    { "id": "C02.3", "section": "C02", "severity": "major", "title": "Formal spoken register", "body": "Professional but warm. No slang. 'Yeah' acceptable once; 'gonna'/'wanna' are not.", "appliesTo": "all", "forbiddenPatterns": ["\\b(gonna|wanna|gotta|dunno)\\b"] },
+    { "id": "C02.4", "section": "C02", "severity": "minor", "title": "Mirror the patient's language", "body": "If the patient uses a lay term, you may use it too to show listening.", "appliesTo": "all" },
+
+    { "id": "C03.1", "section": "C03", "severity": "critical", "title": "Ping-pong turn structure", "body": "No learner turn should exceed ~120 consecutive words before inviting a response.", "appliesTo": "all", "checkId": "conversation_monologue_detector", "params": { "maxConsecutiveCandidateWords": 120 } },
+    { "id": "C03.2", "section": "C03", "severity": "major", "title": "Invite the patient in", "body": "Use phrases that hand the turn back to the patient.", "appliesTo": "all", "exemplarPhrases": ["Does that make sense so far?"] },
+    { "id": "C03.3", "section": "C03", "severity": "major", "title": "No interruption during patient emotion", "body": "Do not interrupt the patient when they are expressing distress.", "appliesTo": "all" },
+
+    { "id": "C04.1", "section": "C04", "severity": "critical", "title": "Start with open questions", "body": "Begin history-taking with open questions.", "appliesTo": "all", "exemplarPhrases": ["Tell me a bit more about how this started."] },
+    { "id": "C04.2", "section": "C04", "severity": "major", "title": "Narrow to closed questions", "body": "After open questions, narrow with closed questions to confirm specifics.", "appliesTo": "all" },
+    { "id": "C04.3", "section": "C04", "severity": "major", "title": "Avoid leading questions", "body": "Do not lead the patient.", "appliesTo": "all" },
+    { "id": "C04.4", "section": "C04", "severity": "minor", "title": "One question at a time", "body": "Avoid stacking multiple questions in one turn.", "appliesTo": "all" },
+
+    { "id": "C05.1", "section": "C05", "severity": "critical", "title": "Signpost transitions", "body": "Signpost when you change topic. Rewarded heavily in OET Appropriateness.", "appliesTo": "all", "exemplarPhrases": ["Thank you for that. I'd like to move on to…"] },
+    { "id": "C05.2", "section": "C05", "severity": "major", "title": "Chunk information", "body": "Deliver explanations in chunks of 2–3 sentences.", "appliesTo": "all" },
+    { "id": "C05.3", "section": "C05", "severity": "minor", "title": "Use analogies", "body": "Analogies help patients grasp clinical concepts.", "appliesTo": "all" },
+
+    { "id": "C06.1", "section": "C06", "severity": "major", "title": "Natural speech rate 130–160 wpm", "body": "Target 130–160 words per minute.", "appliesTo": "all", "params": { "minWpm": 120, "maxWpm": 180 } },
+    { "id": "C06.2", "section": "C06", "severity": "major", "title": "Link function words", "body": "Natural connected speech.", "appliesTo": "all" },
+    { "id": "C06.3", "section": "C06", "severity": "minor", "title": "Sentence stress on key words", "body": "Stress the key clinical word in each sentence.", "appliesTo": "all" },
+
+    { "id": "C07.1", "section": "C07", "severity": "major", "title": "Contractions OK in speech", "body": "Contractions are NATURAL in spoken English and EXPECTED in OET speaking. Do NOT carry the written-letter no-contractions rule into speech.", "appliesTo": "all" },
+    { "id": "C07.2", "section": "C07", "severity": "major", "title": "Conditionals for uncertainty", "body": "Use first and second conditionals to express uncertainty.", "appliesTo": "all", "exemplarPhrases": ["If your symptoms worsen, please come back."] },
+    { "id": "C07.3", "section": "C07", "severity": "major", "title": "Modal verbs for softening", "body": "Use modals to soften instructions and options.", "appliesTo": "all", "exemplarPhrases": ["You might want to try reducing your salt intake."] },
+    { "id": "C07.4", "section": "C07", "severity": "minor", "title": "Active voice for instructions", "body": "Instructions to the patient should be in the active voice.", "appliesTo": "all" },
+
+    { "id": "C08.1", "section": "C08", "severity": "critical", "title": "Stay in role", "body": "Never break character to discuss the exam or comment meta-linguistically.", "appliesTo": "all" },
+    { "id": "C08.2", "section": "C08", "severity": "critical", "title": "Respect scenario objectives", "body": "Every scenario lists objectives the candidate must cover. All must be addressed before closing.", "appliesTo": "all" },
+    { "id": "C08.3", "section": "C08", "severity": "major", "title": "No meta comments", "body": "Do not turn to the examiner to ask 'is that right?'", "appliesTo": "all" },
+    { "id": "C08.4", "section": "C08", "severity": "major", "title": "Adapt to patient's emotional state", "body": "If the patient is anxious, slow down and use more empathy.", "appliesTo": "all" },
+
+    { "id": "C09.1", "section": "C09", "severity": "critical", "title": "Red-flag escalation", "body": "Red-flag symptoms MUST be acknowledged and escalated in-scenario.", "appliesTo": "all" },
+    { "id": "C09.2", "section": "C09", "severity": "critical", "title": "Safety-net before closing", "body": "Always state explicit safety-netting before closing.", "appliesTo": "all", "exemplarPhrases": ["If the pain returns or you become breathless, please dial 999."] },
+
+    { "id": "C10.1", "section": "C10", "severity": "critical", "title": "ISBAR — Identify", "body": "Begin handover with Identify: your name, role, the patient's name, and the ward/location.", "appliesTo": ["oet-handover"], "exemplarPhrases": ["I'm Dr. Ahmed, the night doctor. I'd like to hand over Mr Patel in Bay 3."] },
+    { "id": "C10.2", "section": "C10", "severity": "critical", "title": "ISBAR — Situation", "body": "State the current situation in one sentence.", "appliesTo": ["oet-handover"] },
+    { "id": "C10.3", "section": "C10", "severity": "critical", "title": "ISBAR — Background", "body": "Relevant history: admission reason, comorbidities, key medications, key investigations.", "appliesTo": ["oet-handover"] },
+    { "id": "C10.4", "section": "C10", "severity": "critical", "title": "ISBAR — Assessment", "body": "Your clinical assessment.", "appliesTo": ["oet-handover"] },
+    { "id": "C10.5", "section": "C10", "severity": "critical", "title": "ISBAR — Recommendation", "body": "Clear recommendation / ask of the receiving clinician.", "appliesTo": ["oet-handover"], "exemplarPhrases": ["Could you please review the repeat troponin at 0600?"] },
+    { "id": "C10.6", "section": "C10", "severity": "major", "title": "Invite questions at the end", "body": "Handover closes with: 'Do you have any questions?'", "appliesTo": ["oet-handover"] },
+
+    { "id": "C11.1", "section": "C11", "severity": "major", "title": "Limit filler words", "body": "Minimise 'um', 'uh', 'like', 'you know'.", "appliesTo": "all", "checkId": "filler_word_density", "params": { "maxPer100Words": 4 } },
+    { "id": "C11.2", "section": "C11", "severity": "minor", "title": "Prefer pauses over fillers", "body": "A brief pause is better than 'um'.", "appliesTo": "all" },
+
+    { "id": "C12.1", "section": "C12", "severity": "major", "title": "Summarise the plan before closing", "body": "Summarise the plan in 2–3 sentences.", "appliesTo": ["oet-roleplay"] },
+    { "id": "C12.2", "section": "C12", "severity": "minor", "title": "Offer written information", "body": "Offer written information where appropriate.", "appliesTo": ["oet-roleplay"] }
+  ]
+}

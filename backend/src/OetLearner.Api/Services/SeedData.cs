@@ -1987,12 +1987,32 @@ public static partial class SeedData
             },
             new SignupProfessionCatalog
             {
+                Id = "physiotherapy",
+                Label = "Physiotherapy",
+                CountryTargetsJson = JsonSupport.Serialize(new[] { "United Kingdom", "Australia", "New Zealand" }),
+                ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
+                Description = "Physiotherapists and physical therapy candidates.",
+                SortOrder = 5,
+                IsActive = true
+            },
+            new SignupProfessionCatalog
+            {
+                Id = "other-allied-health",
+                Label = "Other Allied health profession",
+                CountryTargetsJson = JsonSupport.Serialize(new[] { "United Kingdom", "Australia", "New Zealand", "Ireland", "Canada" }),
+                ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
+                Description = "Other allied health professionals (occupational therapy, dietetics, speech pathology, podiatry, optometry, radiography, etc.).",
+                SortOrder = 6,
+                IsActive = true
+            },
+            new SignupProfessionCatalog
+            {
                 Id = "academic-english",
                 Label = "Academic / General English",
                 CountryTargetsJson = JsonSupport.Serialize(new[] { "Canada", "United Kingdom", "Australia" }),
                 ExamTypeIdsJson = JsonSupport.Serialize(new[] { "ielts" }),
                 Description = "General academic and migration IELTS candidates.",
-                SortOrder = 5,
+                SortOrder = 7,
                 IsActive = true
             });
 

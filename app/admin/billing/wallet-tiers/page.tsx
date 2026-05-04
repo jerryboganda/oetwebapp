@@ -1,12 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Wallet } from 'lucide-react';
+import Link from 'next/link';
+import { FileText, Wallet } from 'lucide-react';
 import { AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WalletTiersEditor } from '@/components/admin/billing/wallet-tiers-editor';
+import { NoBillingPermission } from '@/components/admin/billing/no-billing-permission';
 import {
   fetchAdminWalletTiers,
   replaceAdminWalletTiers,
@@ -21,6 +23,7 @@ type LoadState = 'loading' | 'success' | 'error';
 
 export default function AdminWalletTiersPage() {
   const { user } = useAuth();
+  const canReadBilling = hasPermission(user?.adminPermissions, AdminPermission.BillingRead, AdminPermission.BillingWrite);
   const canWriteBilling = hasPermission(user?.adminPermissions, AdminPermission.BillingWrite);
   const [data, setData] = useState<AdminWalletTiersResponse | null>(null);
   const [status, setStatus] = useState<LoadState>('loading');
@@ -81,6 +84,10 @@ export default function AdminWalletTiersPage() {
 
   return (
     <AdminRouteWorkspace>
+      {!canReadBilling ? (
+        <NoBillingPermission requiredPermission={AdminPermission.BillingRead} />
+      ) : (
+        <>
       <AdminRouteSectionHeader
         eyebrow="Billing"
         icon={Wallet}
@@ -88,13 +95,23 @@ export default function AdminWalletTiersPage() {
         title="Wallet top-up tiers"
         description="Configure the wallet top-up tiers learners see during checkout. Saving replaces the entire active set."
         actions={
-          <Button
-            variant="secondary"
-            onClick={handleRefresh}
-            disabled={status === 'loading'}
-          >
-            {status === 'loading' ? 'Refreshing…' : 'Refresh'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/audit-logs?search=wallet_tier"
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-sm font-medium text-navy hover:bg-background-light"
+              data-testid="wallet-tiers-audit-log-link"
+            >
+              <FileText className="h-4 w-4" />
+              Audit log
+            </Link>
+            <Button
+              variant="secondary"
+              onClick={handleRefresh}
+              disabled={status === 'loading'}
+            >
+              {status === 'loading' ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
         }
       />
 
@@ -124,6 +141,8 @@ export default function AdminWalletTiersPage() {
         />
         </>
       ) : null}
+        </>
+      )}
     </AdminRouteWorkspace>
   );
 }

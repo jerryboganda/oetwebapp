@@ -209,3 +209,16 @@ public record WalletTopUpRequest(
     int Amount,
     string Gateway,
     string? IdempotencyKey = null);
+
+public record RefundIssueRequest(
+    decimal Amount,
+    string Reason,
+    string IdempotencyKey,
+    string? AdminNote = null);
+
+public record AdminWalletSpendRequest(
+    string WalletId,
+    int Amount,
+    string Reason,
+    string? ReferenceId = null,
+    string? IdempotencyKey = null);

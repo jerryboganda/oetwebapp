@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
@@ -25,7 +27,9 @@ public sealed record EffectiveEntitlementSnapshot(
     bool IsFrozen,
     IReadOnlyList<string> Trace);
 
-public sealed class EffectiveEntitlementResolver(LearnerDbContext db) : IEffectiveEntitlementResolver
+public sealed class EffectiveEntitlementResolver(
+    LearnerDbContext db,
+    ILogger<EffectiveEntitlementResolver>? logger = null) : IEffectiveEntitlementResolver
 {
     public async Task<EffectiveEntitlementSnapshot> ResolveAsync(string? userId, CancellationToken ct)
     {
@@ -60,14 +64,74 @@ public sealed class EffectiveEntitlementResolver(LearnerDbContext db) : IEffecti
         }
 
         trace.Add($"subscription.latest.{subscription.Status}");
+
+        // ── Eligibility gate ────────────────────────────────────────────────
+        // Only Active/Trial confer entitlements. Suspended / PastDue /
+        // Pending / Cancelled / Expired all fail-low to FREE. This branch is
+        // single-source-of-truth — never elevate downstream.
         var eligible = subscription.Status is SubscriptionStatus.Active or SubscriptionStatus.Trial;
         var isTrial = subscription.Status == SubscriptionStatus.Trial;
 
         BillingPlan? plan = null;
-        if (eligible && !string.IsNullOrWhiteSpace(subscription.PlanId))
+        var failLowReason = (string?)null;
+
+        if (eligible)
         {
-            plan = await ResolveBillingPlanAsync(subscription.PlanId, ct);
-            trace.Add(plan is null ? "plan.missing" : $"plan.{plan.Code}");
+            if (string.IsNullOrWhiteSpace(subscription.PlanId))
+            {
+                failLowReason = "plan.id_missing";
+            }
+            else
+            {
+                plan = await ResolveBillingPlanAsync(subscription.PlanId, ct);
+                if (plan is null)
+                {
+                    failLowReason = "plan.missing";
+                    trace.Add("plan.missing");
+                }
+                else
+                {
+                    trace.Add($"plan.{plan.Code}");
+
+                    // Malformed entitlements JSON => fail-low. Cannot trust
+                    // any feature flag derived from this row.
+                    if (!string.IsNullOrWhiteSpace(plan.EntitlementsJson)
+                        && !IsValidJsonObject(plan.EntitlementsJson))
+                    {
+                        failLowReason = "entitlements.malformed";
+                        trace.Add("entitlements.malformed");
+                    }
+                    // Snapshot integrity: if a PlanVersionId is recorded on
+                    // the subscription it MUST resolve to an existing version
+                    // row. A dangling pointer = catalog drift = fail-low.
+                    else if (!string.IsNullOrWhiteSpace(subscription.PlanVersionId))
+                    {
+                        var versionExists = await db.BillingPlanVersions.AsNoTracking()
+                            .AnyAsync(v => v.Id == subscription.PlanVersionId, ct);
+                        if (!versionExists)
+                        {
+                            failLowReason = "plan.version.missing";
+                            trace.Add("plan.version.missing");
+                        }
+                    }
+                }
+            }
+        }
+
+        if (failLowReason is not null)
+        {
+            logger?.LogWarning(
+                "EntitlementResolver fail-low userId={UserId} subscriptionId={SubscriptionId} status={Status} planId={PlanId} planVersionId={PlanVersionId} reason={Reason}",
+                userId,
+                subscription.Id,
+                subscription.Status,
+                subscription.PlanId,
+                subscription.PlanVersionId,
+                failLowReason);
+            eligible = false;
+            isTrial = false;
+            plan = null;
+            trace.Add($"fail_low.{failLowReason}");
         }
 
         var addOnCodes = eligible
@@ -94,12 +158,25 @@ public sealed class EffectiveEntitlementResolver(LearnerDbContext db) : IEffecti
             SubscriptionStatus: subscription.Status,
             PlanId: eligible ? subscription.PlanId : null,
             PlanVersionId: eligible ? subscription.PlanVersionId : null,
-            PlanCode: AiQuotaPlanMappingResolver.NormalizeCode(plan?.Code),
+            PlanCode: eligible ? AiQuotaPlanMappingResolver.NormalizeCode(plan?.Code) : null,
             AiQuotaPlanCode: aiQuotaMapping?.Code,
             AiQuotaPlanCodeSource: aiQuotaMapping?.Source,
             ActiveAddOnCodes: addOnCodes,
             IsFrozen: isFrozen,
             Trace: trace);
+    }
+
+    private static bool IsValidJsonObject(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind == JsonValueKind.Object;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static EffectiveEntitlementSnapshot Empty(string? userId, string trace) => new(

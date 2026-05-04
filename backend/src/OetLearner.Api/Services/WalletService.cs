@@ -91,14 +91,49 @@ public class WalletService(
         string? description,
         string? createdBy,
         CancellationToken ct)
+        => await CreditAsync(walletId, amount, transactionType, referenceType, referenceId, description, createdBy, idempotencyKey: null, ct);
+
+    /// <summary>
+    /// Atomically add <paramref name="amount"/> credits to <paramref name="walletId"/>,
+    /// emitting an append-only <see cref="WalletTransaction"/> and an
+    /// <see cref="AuditEvent"/>. The wallet is re-read inside the
+    /// transaction so EF's concurrency token (<see cref="Wallet.LastUpdatedAt"/>)
+    /// detects racing writers and forces a retry.
+    /// </summary>
+    /// <param name="idempotencyKey">
+    /// Optional caller-supplied idempotency key. When provided, replays return the
+    /// cached transaction instead of re-applying the credit.
+    /// </param>
+    public async Task<WalletTransaction> CreditAsync(
+        string walletId,
+        int amount,
+        string transactionType,
+        string? referenceType,
+        string? referenceId,
+        string? description,
+        string? createdBy,
+        string? idempotencyKey,
+        CancellationToken ct)
     {
-        if (amount <= 0)
-            throw new ArgumentException("Credit amount must be positive.", nameof(amount));
+        ValidateMutationAmount(amount, nameof(amount));
+        ValidateTransactionType(transactionType);
+
+        var idempotencyScope = $"wallet-credit:{walletId}";
+        var replay = await TryReplayIdempotentTransactionAsync(idempotencyScope, idempotencyKey, ct);
+        if (replay is not null)
+        {
+            return replay;
+        }
+
+        var providerName = db.Database.ProviderName;
+        var supportsTx = !string.Equals(providerName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal);
+        await using var tx = supportsTx ? await db.Database.BeginTransactionAsync(ct) : null;
 
         var wallet = await db.Wallets.FirstAsync(w => w.Id == walletId, ct);
         var now = DateTimeOffset.UtcNow;
 
-        wallet.CreditBalance += amount;
+        var newBalance = checked(wallet.CreditBalance + amount);
+        wallet.CreditBalance = newBalance;
         wallet.LastUpdatedAt = now;
 
         var transaction = new WalletTransaction
@@ -110,13 +145,26 @@ public class WalletService(
             BalanceAfter = wallet.CreditBalance,
             ReferenceType = referenceType,
             ReferenceId = referenceId,
+            IdempotencyKey = idempotencyKey,
             Description = description ?? $"Credit: +{amount} credits",
             CreatedBy = createdBy ?? "system",
             CreatedAt = now
         };
 
         db.WalletTransactions.Add(transaction);
+
+        WriteAuditEvent(
+            actorId: createdBy ?? "system",
+            action: "wallet.credit",
+            walletId: walletId,
+            transaction: transaction,
+            balanceAfter: wallet.CreditBalance,
+            occurredAt: now);
+
+        await PersistIdempotentReservationAsync(idempotencyScope, idempotencyKey, transaction, ct);
+
         await db.SaveChangesAsync(ct);
+        if (tx is not null) await tx.CommitAsync(ct);
 
         return transaction;
     }
@@ -130,18 +178,56 @@ public class WalletService(
         string? description,
         string? createdBy,
         CancellationToken ct)
+        => await DebitAsync(walletId, amount, transactionType, referenceType, referenceId, description, createdBy, idempotencyKey: null, ct);
+
+    /// <summary>
+    /// Atomically subtract <paramref name="amount"/> credits from
+    /// <paramref name="walletId"/>. Refuses to drive the balance below zero
+    /// even if the in-memory wallet was stale. Emits a
+    /// <see cref="WalletTransaction"/> and an <see cref="AuditEvent"/>.
+    /// </summary>
+    public async Task<WalletTransaction> DebitAsync(
+        string walletId,
+        int amount,
+        string transactionType,
+        string? referenceType,
+        string? referenceId,
+        string? description,
+        string? createdBy,
+        string? idempotencyKey,
+        CancellationToken ct)
     {
-        if (amount <= 0)
-            throw new ArgumentException("Debit amount must be positive.", nameof(amount));
+        ValidateMutationAmount(amount, nameof(amount));
+        ValidateTransactionType(transactionType);
+
+        var idempotencyScope = $"wallet-debit:{walletId}";
+        var replay = await TryReplayIdempotentTransactionAsync(idempotencyScope, idempotencyKey, ct);
+        if (replay is not null)
+        {
+            return replay;
+        }
+
+        var providerName = db.Database.ProviderName;
+        var supportsTx = !string.Equals(providerName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal);
+        await using var tx = supportsTx ? await db.Database.BeginTransactionAsync(ct) : null;
 
         var wallet = await db.Wallets.FirstAsync(w => w.Id == walletId, ct);
 
         if (wallet.CreditBalance < amount)
-            throw new InvalidOperationException($"Insufficient credits: balance={wallet.CreditBalance}, requested={amount}.");
+        {
+            throw new InvalidOperationException(
+                $"Insufficient credits: balance={wallet.CreditBalance}, requested={amount}.");
+        }
 
         var now = DateTimeOffset.UtcNow;
-
-        wallet.CreditBalance -= amount;
+        var newBalance = wallet.CreditBalance - amount;
+        // Belt-and-suspenders: never allow the persisted balance to go negative.
+        if (newBalance < 0)
+        {
+            throw new InvalidOperationException(
+                $"Wallet debit would produce a negative balance: balance={wallet.CreditBalance}, requested={amount}.");
+        }
+        wallet.CreditBalance = newBalance;
         wallet.LastUpdatedAt = now;
 
         var transaction = new WalletTransaction
@@ -153,15 +239,138 @@ public class WalletService(
             BalanceAfter = wallet.CreditBalance,
             ReferenceType = referenceType,
             ReferenceId = referenceId,
+            IdempotencyKey = idempotencyKey,
             Description = description ?? $"Debit: -{amount} credits",
             CreatedBy = createdBy ?? "system",
             CreatedAt = now
         };
 
         db.WalletTransactions.Add(transaction);
+
+        WriteAuditEvent(
+            actorId: createdBy ?? "system",
+            action: "wallet.debit",
+            walletId: walletId,
+            transaction: transaction,
+            balanceAfter: wallet.CreditBalance,
+            occurredAt: now);
+
+        await PersistIdempotentReservationAsync(idempotencyScope, idempotencyKey, transaction, ct);
+
         await db.SaveChangesAsync(ct);
+        if (tx is not null) await tx.CommitAsync(ct);
 
         return transaction;
+    }
+
+    // ── Hardening helpers ──────────────────────────────────────────────────
+
+    private const int MaxMutationAmount = 1_000_000_000; // sanity bound
+
+    private static void ValidateMutationAmount(int amount, string paramName)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentException("Amount must be positive.", paramName);
+        }
+        if (amount > MaxMutationAmount)
+        {
+            throw new ArgumentException(
+                $"Amount {amount} exceeds maximum allowed mutation ({MaxMutationAmount}).",
+                paramName);
+        }
+    }
+
+    private static void ValidateTransactionType(string transactionType)
+    {
+        if (string.IsNullOrWhiteSpace(transactionType))
+        {
+            throw new ArgumentException("Transaction type is required.", nameof(transactionType));
+        }
+        if (transactionType.Length > 32)
+        {
+            throw new ArgumentException("Transaction type must be 32 characters or fewer.", nameof(transactionType));
+        }
+    }
+
+    private async Task<WalletTransaction?> TryReplayIdempotentTransactionAsync(
+        string scope,
+        string? key,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return null;
+        }
+
+        var record = await db.IdempotencyRecords.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Scope == scope && r.Key == key, ct);
+        if (record is null)
+        {
+            return null;
+        }
+
+        // ResponseJson stores the transaction id; load and return it so the
+        // caller observes the original mutation rather than applying a new one.
+        if (Guid.TryParse(record.ResponseJson, out var txId))
+        {
+            return await db.WalletTransactions.AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == txId, ct);
+        }
+
+        return null;
+    }
+
+    private async Task PersistIdempotentReservationAsync(
+        string scope,
+        string? key,
+        WalletTransaction transaction,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return;
+        }
+
+        // Race-tolerant: rely on (Scope, Key) unique index — duplicate adds
+        // surface as DbUpdateException and the caller should retry the read.
+        var exists = await db.IdempotencyRecords
+            .AnyAsync(r => r.Scope == scope && r.Key == key, ct);
+        if (exists)
+        {
+            return;
+        }
+
+        db.IdempotencyRecords.Add(new IdempotencyRecord
+        {
+            Id = $"wallet-idem-{Guid.NewGuid():N}",
+            Scope = scope,
+            Key = key,
+            ResponseJson = transaction.Id.ToString(),
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+    }
+
+    private void WriteAuditEvent(
+        string actorId,
+        string action,
+        string walletId,
+        WalletTransaction transaction,
+        int balanceAfter,
+        DateTimeOffset occurredAt)
+    {
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"AUD-{Guid.NewGuid():N}",
+            OccurredAt = occurredAt,
+            ActorId = actorId,
+            ActorAuthAccountId = null,
+            ActorName = actorId,
+            Action = action,
+            ResourceType = "Wallet",
+            ResourceId = walletId,
+            Details = $"txId={transaction.Id} type={transaction.TransactionType} amount={transaction.Amount} balanceAfter={balanceAfter}",
+        });
     }
 
     public async Task<List<WalletTransaction>> GetTransactionHistoryAsync(
@@ -236,6 +445,7 @@ public class WalletService(
             ProductId = wallet.Id,
             MetadataJson = JsonSupport.Serialize(new
             {
+                providerIntentId = intent.ClientSecret,
                 credits = tier.Credits,
                 bonus = tier.Bonus,
                 totalCredits

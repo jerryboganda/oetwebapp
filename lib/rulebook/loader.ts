@@ -20,9 +20,14 @@ import writingOccupationalTherapyV1 from '../../rulebooks/writing/occupational-t
 import writingSpeechPathologyV1 from '../../rulebooks/writing/speech-pathology/rulebook.v1.json';
 import writingPodiatryV1 from '../../rulebooks/writing/podiatry/rulebook.v1.json';
 import writingDieteticsV1 from '../../rulebooks/writing/dietetics/rulebook.v1.json';
+import writingOtherAlliedHealthV1 from '../../rulebooks/writing/other-allied-health/rulebook.v1.json';
 import speakingMedicineV1 from '../../rulebooks/speaking/medicine/rulebook.v1.json';
+import speakingPhysiotherapyV1 from '../../rulebooks/speaking/physiotherapy/rulebook.v1.json';
+import speakingOtherAlliedHealthV1 from '../../rulebooks/speaking/other-allied-health/rulebook.v1.json';
 import grammarMedicineV1 from '../../rulebooks/grammar/medicine/rulebook.v1.json';
 import grammarNursingV1 from '../../rulebooks/grammar/nursing/rulebook.v1.json';
+import grammarPhysiotherapyV1 from '../../rulebooks/grammar/physiotherapy/rulebook.v1.json';
+import grammarOtherAlliedHealthV1 from '../../rulebooks/grammar/other-allied-health/rulebook.v1.json';
 import writingAssessment from '../../rulebooks/writing/common/assessment-criteria.json';
 import speakingAssessment from '../../rulebooks/speaking/common/assessment-criteria.json';
 import grammarAssessment from '../../rulebooks/grammar/common/assessment-criteria.json';
@@ -52,9 +57,14 @@ const RULEBOOKS: Record<string, Rulebook> = {
   'writing:speech-pathology': writingSpeechPathologyV1 as unknown as Rulebook,
   'writing:podiatry': writingPodiatryV1 as unknown as Rulebook,
   'writing:dietetics': writingDieteticsV1 as unknown as Rulebook,
+  'writing:other-allied-health': writingOtherAlliedHealthV1 as unknown as Rulebook,
   'speaking:medicine': speakingMedicineV1 as unknown as Rulebook,
+  'speaking:physiotherapy': speakingPhysiotherapyV1 as unknown as Rulebook,
+  'speaking:other-allied-health': speakingOtherAlliedHealthV1 as unknown as Rulebook,
   'grammar:medicine': grammarMedicineV1 as unknown as Rulebook,
   'grammar:nursing': grammarNursingV1 as unknown as Rulebook,
+  'grammar:physiotherapy': grammarPhysiotherapyV1 as unknown as Rulebook,
+  'grammar:other-allied-health': grammarOtherAlliedHealthV1 as unknown as Rulebook,
 };
 
 const ASSESSMENT_CRITERIA: Partial<Record<RuleKind, unknown>> = {

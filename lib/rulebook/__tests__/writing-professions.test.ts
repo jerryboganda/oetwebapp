@@ -15,6 +15,7 @@ const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
   'speech-pathology',
   'podiatry',
   'dietetics',
+  'other-allied-health',
 ];
 
 describe('writing rulebooks — Phase D coverage', () => {

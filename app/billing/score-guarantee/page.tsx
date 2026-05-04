@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, Shield, Target, TrendingUp, Upload } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -50,6 +50,11 @@ export default function ScoreGuaranteePage() {
   const [baselineScore, setBaselineScore] = useState('');
   const [actualScore, setActualScore] = useState('');
   const [claimNote, setClaimNote] = useState('');
+
+  // Belt-and-braces double-submit guard. Complements the `isMutating`
+  // disabled state for cases where rapid clicks fire before React has
+  // flushed the disabled prop to the DOM.
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     analytics.track('content_view', { page: 'score-guarantee' });
@@ -104,11 +109,13 @@ export default function ScoreGuaranteePage() {
       setToast({ variant: 'error', message: blockedMessage });
       return;
     }
+    if (submittingRef.current) return;
     const score = parseInt(baselineScore, 10);
     if (Number.isNaN(score) || score < 0 || score > 500) {
       setToast({ variant: 'error', message: 'Enter a valid OET score (0–500).' });
       return;
     }
+    submittingRef.current = true;
     setIsMutating(true);
     try {
       await activateScoreGuarantee(score);
@@ -120,6 +127,7 @@ export default function ScoreGuaranteePage() {
       setToast({ variant: 'error', message: 'Failed to activate guarantee.' });
     } finally {
       setIsMutating(false);
+      submittingRef.current = false;
     }
   }
 
@@ -128,11 +136,13 @@ export default function ScoreGuaranteePage() {
       setToast({ variant: 'error', message: blockedMessage });
       return;
     }
+    if (submittingRef.current) return;
     const score = parseInt(actualScore, 10);
     if (Number.isNaN(score) || score < 0 || score > 500) {
       setToast({ variant: 'error', message: 'Enter your actual OET score (0–500).' });
       return;
     }
+    submittingRef.current = true;
     setIsMutating(true);
     try {
       await submitScoreGuaranteeClaim(score, undefined, claimNote || undefined);
@@ -144,6 +154,7 @@ export default function ScoreGuaranteePage() {
       setToast({ variant: 'error', message: 'Failed to submit claim.' });
     } finally {
       setIsMutating(false);
+      submittingRef.current = false;
     }
   }
 

@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services;
@@ -475,6 +476,47 @@ public partial class AdminService(
                 message,
                 [new ApiFieldError("code", "immutable", "Catalog code cannot be changed after creation.")]);
         }
+    }
+
+    private async Task ThrowIfCatalogCodeChangedWithAuditAsync(
+        string adminId,
+        string adminName,
+        string resourceType,
+        string resourceId,
+        string? requestedCode,
+        string existingCode,
+        string errorCode,
+        string message,
+        CancellationToken ct)
+    {
+        try
+        {
+            ThrowIfCatalogCodeChanged(requestedCode, existingCode, errorCode, message);
+        }
+        catch (ApiException)
+        {
+            await LogCatalogCodeImmutabilityViolationAsync(
+                adminId,
+                adminName,
+                resourceType,
+                resourceId,
+                existingCode,
+                requestedCode,
+                ct);
+            throw;
+        }
+    }
+
+    private static void ApplyAdminSubscriptionStatus(Subscription subscription, SubscriptionStatus target, string reason, DateTimeOffset now)
+    {
+        if (SubscriptionStateMachine.IsLegal(subscription.Status, target))
+        {
+            SubscriptionStateMachine.Transition(subscription, target, reason);
+            return;
+        }
+
+        subscription.Status = target;
+        subscription.ChangedAt = now;
     }
 
     private static string ValidateCatalogText(List<ApiFieldError> errors, string field, string? value, int maxLength, bool required = true)
@@ -3516,7 +3558,7 @@ public partial class AdminService(
         var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Id == planId || p.Code == planId, ct)
             ?? throw ApiException.NotFound("billing_plan_not_found", "Billing plan not found.");
 
-        ThrowIfCatalogCodeChanged(request.Code, plan.Code, "billing_plan_invalid", "Billing plan catalog data is invalid.");
+        await ThrowIfCatalogCodeChangedWithAuditAsync(adminId, adminName, "BillingPlan", plan.Id, request.Code, plan.Code, "billing_plan_invalid", "Billing plan catalog data is invalid.", ct);
         var validated = await ValidateBillingPlanCatalogAsync(ToBillingPlanCatalogInput(request), plan.Id, plan.Status, ct);
         var now = DateTimeOffset.UtcNow;
         var latestVersionNumber = await EnsureBillingPlanVersionBaselineAsync(plan, adminId, adminName, now, ct);
@@ -3628,7 +3670,7 @@ public partial class AdminService(
         var addOn = await db.BillingAddOns.FirstOrDefaultAsync(addOn => addOn.Id == addOnId || addOn.Code == addOnId, ct)
             ?? throw ApiException.NotFound("billing_addon_not_found", "Billing add-on not found.");
 
-        ThrowIfCatalogCodeChanged(request.Code, addOn.Code, "billing_addon_invalid", "Billing add-on catalog data is invalid.");
+        await ThrowIfCatalogCodeChangedWithAuditAsync(adminId, adminName, "BillingAddOn", addOn.Id, request.Code, addOn.Code, "billing_addon_invalid", "Billing add-on catalog data is invalid.", ct);
         var validated = await ValidateBillingAddOnCatalogAsync(ToBillingAddOnCatalogInput(request), addOn.Id, addOn.Status, ct);
         var now = DateTimeOffset.UtcNow;
         var latestVersionNumber = await EnsureBillingAddOnVersionBaselineAsync(addOn, adminId, adminName, now, ct);
@@ -3725,7 +3767,7 @@ public partial class AdminService(
         var coupon = await db.BillingCoupons.FirstOrDefaultAsync(coupon => coupon.Id == couponId || coupon.Code == couponId, ct)
             ?? throw ApiException.NotFound("billing_coupon_not_found", "Billing coupon not found.");
 
-        ThrowIfCatalogCodeChanged(request.Code, coupon.Code, "billing_coupon_invalid", "Billing coupon catalog data is invalid.");
+        await ThrowIfCatalogCodeChangedWithAuditAsync(adminId, adminName, "BillingCoupon", coupon.Id, request.Code, coupon.Code, "billing_coupon_invalid", "Billing coupon catalog data is invalid.", ct);
         var validated = await ValidateBillingCouponCatalogAsync(ToBillingCouponCatalogInput(request), coupon.Id, coupon.Status, ct);
         var now = DateTimeOffset.UtcNow;
         var latestVersionNumber = await EnsureBillingCouponVersionBaselineAsync(coupon, adminId, adminName, now, ct);
@@ -4070,7 +4112,7 @@ public partial class AdminService(
         subscription.Interval = targetPlan.Interval;
         if (subscription.Status is SubscriptionStatus.Cancelled or SubscriptionStatus.Expired or SubscriptionStatus.Suspended)
         {
-            subscription.Status = SubscriptionStatus.Active;
+            ApplyAdminSubscriptionStatus(subscription, SubscriptionStatus.Active, "admin_change_plan", now);
         }
         subscription.ChangedAt = now;
         if (subscription.StartedAt == default)
@@ -4189,7 +4231,7 @@ public partial class AdminService(
         subscription.ChangedAt = now;
         if (subscription.Status is SubscriptionStatus.Expired or SubscriptionStatus.PastDue && newRenewal > now)
         {
-            subscription.Status = SubscriptionStatus.Active;
+            ApplyAdminSubscriptionStatus(subscription, SubscriptionStatus.Active, "admin_extend_subscription", now);
         }
 
         await db.SaveChangesAsync(ct);
@@ -4229,7 +4271,7 @@ public partial class AdminService(
         // matches the contract documented on AdminSubscriptionCancelRequest.
         if (request.Immediate)
         {
-            subscription.Status = SubscriptionStatus.Cancelled;
+            ApplyAdminSubscriptionStatus(subscription, SubscriptionStatus.Cancelled, "admin_cancel_subscription", now);
             subscription.NextRenewalAt = now;
         }
         subscription.ChangedAt = now;
@@ -4267,8 +4309,7 @@ public partial class AdminService(
 
         var now = DateTimeOffset.UtcNow;
         var previousStatus = subscription.Status;
-        subscription.Status = SubscriptionStatus.Active;
-        subscription.ChangedAt = now;
+        ApplyAdminSubscriptionStatus(subscription, SubscriptionStatus.Active, "admin_reactivate_subscription", now);
 
         if (request.ResetRenewalDate || subscription.NextRenewalAt <= now)
         {
@@ -4314,8 +4355,7 @@ public partial class AdminService(
 
         var now = DateTimeOffset.UtcNow;
         var previousStatus = subscription.Status;
-        subscription.Status = parsedStatus;
-        subscription.ChangedAt = now;
+        SubscriptionStateMachine.Transition(subscription, parsedStatus, "admin_set_subscription_status");
 
         await db.SaveChangesAsync(ct);
 

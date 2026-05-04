@@ -13,6 +13,15 @@ public class WalletTopUpTierConfig
     [Key]
     public Guid Id { get; set; }
 
+    /// <summary>
+    /// Stable, immutable kebab-case identifier for this tier. Used to refer
+    /// to a tier across catalog versions and audit trails. Once set on a row
+    /// the slug must never change (admin updates rejected by
+    /// <see cref="Services.AdminWalletTierService"/>).
+    /// </summary>
+    [MaxLength(64)]
+    public string? Slug { get; set; }
+
     /// <summary>Top-up amount in whole units of <see cref="Currency"/> (matches WalletService dollar units).</summary>
     public int Amount { get; set; }
 

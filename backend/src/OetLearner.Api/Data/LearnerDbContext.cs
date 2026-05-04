@@ -75,6 +75,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<PaymentWebhookEvent> PaymentWebhookEvents => Set<PaymentWebhookEvent>();
+    // Slice B (billing-hardening) — refund + dispute lifecycle.
+    public DbSet<OrderRefund> OrderRefunds => Set<OrderRefund>();
+    public DbSet<PaymentDispute> PaymentDisputes => Set<PaymentDispute>();
 
     // Expert Console entities
     public DbSet<ExpertUser> ExpertUsers => Set<ExpertUser>();
@@ -316,6 +319,10 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<StudyPlanItem>().HasIndex(x => new { x.StudyPlanId, x.Section, x.Status });
         modelBuilder.Entity<BackgroundJobItem>().HasIndex(x => new { x.State, x.AvailableAt });
         modelBuilder.Entity<Invoice>().HasIndex(x => new { x.UserId, x.IssuedAt });
+        modelBuilder.Entity<Invoice>()
+            .HasIndex(x => new { x.UserId, x.Number })
+            .IsUnique()
+            .HasFilter("\"Number\" IS NOT NULL");
         modelBuilder.Entity<AnalyticsEventRecord>().HasIndex(x => new { x.UserId, x.EventName, x.OccurredAt });
         // Platform-wide funnels (no user filter) need leading EventName.
         modelBuilder.Entity<AnalyticsEventRecord>().HasIndex(x => new { x.EventName, x.OccurredAt });
@@ -554,6 +561,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<BillingPlan>().HasIndex(x => new { x.Status, x.DisplayOrder });
         modelBuilder.Entity<WalletTopUpTierConfig>().HasIndex(x => new { x.Amount, x.Currency }).IsUnique();
         modelBuilder.Entity<WalletTopUpTierConfig>().HasIndex(x => new { x.IsActive, x.DisplayOrder });
+        modelBuilder.Entity<WalletTopUpTierConfig>().HasIndex(x => x.Slug).IsUnique().HasFilter("\"Slug\" IS NOT NULL");
         modelBuilder.Entity<BillingPlanVersion>().HasIndex(x => new { x.PlanId, x.VersionNumber }).IsUnique();
         modelBuilder.Entity<BillingPlanVersion>().HasIndex(x => x.Code);
         modelBuilder.Entity<BillingAddOn>().HasIndex(x => x.Code).IsUnique();
@@ -712,6 +720,10 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
 
         // Wallet transaction indexes
         modelBuilder.Entity<WalletTransaction>().HasIndex(x => new { x.WalletId, x.CreatedAt });
+        modelBuilder.Entity<WalletTransaction>()
+            .HasIndex(x => new { x.WalletId, x.IdempotencyKey })
+            .IsUnique()
+            .HasFilter("\"IdempotencyKey\" IS NOT NULL");
         modelBuilder.Entity<WalletTransaction>()
             .HasIndex(x => new { x.WalletId, x.TransactionType, x.ReferenceType, x.ReferenceId })
             .IsUnique()

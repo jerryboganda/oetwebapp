@@ -636,6 +636,8 @@ public class Invoice
     [MaxLength(64)]
     public string UserId { get; set; } = default!;
 
+    public int? Number { get; set; }
+
     public DateTimeOffset IssuedAt { get; set; }
     public decimal Amount { get; set; }
     public string Currency { get; set; } = "AUD";

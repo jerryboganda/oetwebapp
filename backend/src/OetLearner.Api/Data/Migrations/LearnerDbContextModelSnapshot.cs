@@ -5305,6 +5305,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset>("IssuedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("Number")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PlanVersionId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -5337,6 +5340,10 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("QuoteId");
 
                     b.HasIndex("UserId", "IssuedAt");
+
+                    b.HasIndex("UserId", "Number")
+                        .IsUnique()
+                        .HasFilter("\"Number\" IS NOT NULL");
 
                     b.ToTable("Invoices");
                 });
@@ -12218,6 +12225,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<string>("Slug")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -12231,6 +12242,10 @@ namespace OetLearner.Api.Data.Migrations
                         .IsUnique();
 
                     b.HasIndex("IsActive", "DisplayOrder");
+
+                    b.HasIndex("Slug")
+                        .IsUnique()
+                        .HasFilter("\"Slug\" IS NOT NULL");
 
                     b.ToTable("WalletTopUpTierConfigs");
                 });
@@ -12258,6 +12273,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<string>("ReferenceId")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
@@ -12281,6 +12300,10 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("WalletId");
 
                     b.HasIndex("WalletId", "CreatedAt");
+
+                    b.HasIndex("WalletId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
 
                     b.HasIndex("WalletId", "TransactionType", "ReferenceType", "ReferenceId")
                         .IsUnique()

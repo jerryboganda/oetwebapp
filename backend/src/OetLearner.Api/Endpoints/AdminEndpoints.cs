@@ -5,6 +5,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Billing;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -295,6 +296,41 @@ public static class AdminEndpoints
             })
             .WithAdminWrite("AdminBillingWrite");
 
+        admin.MapPost("/billing/wallets/spend", async (HttpContext http, AdminWalletSpendRequest request, WalletService service, CancellationToken ct) =>
+        {
+            try
+            {
+                var transaction = await service.DebitAsync(
+                    request.WalletId,
+                    request.Amount,
+                    "manual_adjustment",
+                    "manual",
+                    request.ReferenceId,
+                    request.Reason,
+                    http.AdminId(),
+                    request.IdempotencyKey,
+                    ct);
+                return Results.Ok(new
+                {
+                    transaction.Id,
+                    transaction.WalletId,
+                    transaction.Amount,
+                    transaction.BalanceAfter,
+                    transaction.ReferenceId,
+                    transaction.CreatedAt
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = "wallet_spend_invalid", message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Conflict(new { error = "wallet_spend_not_allowed", message = ex.Message });
+            }
+        })
+            .WithAdminWrite("AdminBillingWrite");
+
         admin.MapGet("/billing/add-ons", async (AdminService service, CancellationToken ct, string? status)
             => Results.Ok(await service.GetBillingAddOnsAsync(status, ct)))
             .WithAdminRead("AdminBillingRead");
@@ -378,6 +414,84 @@ public static class AdminEndpoints
         admin.MapGet("/billing/payment-transactions", async (AdminService service, CancellationToken ct,
             string? status, string? gateway, string? transactionType, string? search, int? page, int? pageSize)
             => Results.Ok(await service.GetBillingPaymentTransactionsAsync(status, gateway, transactionType, search, page ?? 1, pageSize ?? 20, ct)))
+            .WithAdminRead("AdminBillingRead");
+
+        admin.MapPost("/billing/payment-transactions/{transactionId}/refund", async (
+            string transactionId,
+            HttpContext http,
+            RefundIssueRequest request,
+            RefundService service,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                return Results.Ok(await service.IssueRefundAsync(new RefundRequest(
+                    transactionId,
+                    request.Amount,
+                    request.Reason,
+                    request.IdempotencyKey,
+                    http.AdminId(),
+                    http.AdminName(),
+                    request.AdminNote), ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = "refund_invalid", message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Conflict(new { error = "refund_not_allowed", message = ex.Message });
+            }
+        })
+            .WithAdminWrite("AdminBillingWrite");
+
+        admin.MapGet("/billing/disputes", async (LearnerDbContext db, CancellationToken ct,
+            string? status, string? gateway, string? search, int? page, int? pageSize) =>
+        {
+            var currentPage = Math.Max(1, page ?? 1);
+            var take = Math.Clamp(pageSize ?? 20, 1, 100);
+            var query = db.PaymentDisputes.AsNoTracking();
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                query = query.Where(dispute => dispute.Status == status);
+            }
+            if (!string.IsNullOrWhiteSpace(gateway))
+            {
+                query = query.Where(dispute => dispute.Gateway == gateway);
+            }
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                query = query.Where(dispute => dispute.GatewayDisputeId.Contains(search) || dispute.PaymentTransactionId.Contains(search) || dispute.LearnerUserId.Contains(search));
+            }
+
+            var total = await query.CountAsync(ct);
+            var items = await query
+                .OrderByDescending(dispute => dispute.UpdatedAt)
+                .Skip((currentPage - 1) * take)
+                .Take(take)
+                .Select(dispute => new
+                {
+                    dispute.Id,
+                    dispute.PaymentTransactionId,
+                    dispute.LearnerUserId,
+                    dispute.SubscriptionId,
+                    dispute.Gateway,
+                    dispute.GatewayDisputeId,
+                    dispute.Status,
+                    dispute.Reason,
+                    dispute.AmountDisputed,
+                    dispute.Currency,
+                    dispute.EntitlementsFrozen,
+                    dispute.OpenedAt,
+                    dispute.FundsWithdrawnAt,
+                    dispute.ResolvedAt,
+                    dispute.CreatedAt,
+                    dispute.UpdatedAt
+                })
+                .ToListAsync(ct);
+
+            return Results.Ok(new { items, page = currentPage, pageSize = take, total });
+        })
             .WithAdminRead("AdminBillingRead");
 
         admin.MapGet("/billing/provider-lifecycle-signals", async (AdminService service, CancellationToken ct,

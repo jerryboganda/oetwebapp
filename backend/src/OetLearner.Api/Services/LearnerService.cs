@@ -4,9 +4,12 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services;
@@ -29,7 +32,9 @@ public partial class LearnerService(
     PlatformLinkService platformLinks,
     NotificationService notifications,
     WalletService walletService,
-    PaymentGatewayService paymentGateways)
+    PaymentGatewayService paymentGateways,
+    DisputeService? disputeService = null,
+    IOptions<BillingOptions>? billingOptions = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
@@ -2311,6 +2316,13 @@ public partial class LearnerService(
                 await db.SaveChangesAsync(cancellationToken);
                 throw ApiException.Validation("billing_quote_expired", "This billing quote has expired.");
             }
+            EnsureQuoteIsFulfillable(quoteEntity, now);
+            if (quoteEntity.Status == BillingQuoteStatus.Applied && !string.IsNullOrWhiteSpace(quoteEntity.CheckoutSessionId))
+            {
+                throw ApiException.Conflict(
+                    "billing_quote_already_applied",
+                    "This billing quote is already attached to a checkout session. Refresh your cart before starting a new checkout.");
+            }
 
             // Bind the quote snapshot to the inbound request so a stale or swapped
             // quoteId cannot be reused with a different product, plan, coupon, or add-on.
@@ -2452,6 +2464,7 @@ public partial class LearnerService(
                 {
                     quoteId = quoteEntity.Id,
                     productType = normalizedProductType,
+                    providerIntentId = checkoutIntent.ClientSecret,
                     purchaseTarget,
                     addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
                     planCode = quoteEntity.PlanCode,
@@ -2474,6 +2487,7 @@ public partial class LearnerService(
         {
             quoteId = quoteEntity.Id,
             productType = normalizedProductType,
+            providerIntentId = checkoutIntent.ClientSecret,
             purchaseTarget,
             addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
             planCode = quoteEntity.PlanCode,
@@ -5682,6 +5696,8 @@ public partial class LearnerService(
                     $"Unknown billing plan '{request.PriceId}'.",
                     [new ApiFieldError("priceId", "unknown", "Choose a published billing plan.")]);
 
+            AdminService.EnsurePlanCanStartNewSubscription(targetPlan);
+
             planCode = targetPlan.Code;
             snapshotPlan = targetPlan;
             var referencePlan = currentPlan ?? targetPlan;
@@ -5937,7 +5953,7 @@ public partial class LearnerService(
             TotalAmount = total,
             Status = BillingQuoteStatus.Created,
             CreatedAt = now,
-            ExpiresAt = now.AddMinutes(30),
+            ExpiresAt = now.Add(BillingQuoteDefaultLifetime),
             SnapshotJson = JsonSupport.Serialize(new
             {
                 items,
@@ -5961,15 +5977,6 @@ public partial class LearnerService(
                     await LockBillingCouponForReservationAsync(coupon, now, cancellationToken);
                     await ReleaseExpiredCouponReservationsAsync(coupon, now, cancellationToken);
 
-                    var lockedCouponRedemptionCount = await CountCouponRedemptionsAsync(coupon, userId: null, cancellationToken);
-                    if (coupon.UsageLimitTotal is not null && lockedCouponRedemptionCount >= coupon.UsageLimitTotal.Value)
-                    {
-                        throw ApiException.Validation(
-                            "coupon_exhausted",
-                            "The coupon usage limit has been reached.",
-                            [new ApiFieldError("couponCode", "usage_limit", "Choose a different coupon.")]);
-                    }
-
                     var lockedPerUserRedemptionCount = await CountCouponRedemptionsAsync(coupon, userId, cancellationToken);
                     if (coupon.UsageLimitPerUser is not null && lockedPerUserRedemptionCount >= coupon.UsageLimitPerUser.Value)
                     {
@@ -5977,6 +5984,15 @@ public partial class LearnerService(
                             "coupon_user_limit",
                             "You have already used this coupon.",
                             [new ApiFieldError("couponCode", "user_limit", "This coupon can only be used once per user.")]);
+                    }
+
+                    var couponReservation = await BillingCouponRedemptionAtomic.TryReserveAsync(db, coupon.Id, now, cancellationToken);
+                    if (!couponReservation.Reserved)
+                    {
+                        throw ApiException.Validation(
+                            couponReservation.RejectionCode ?? "coupon_exhausted",
+                            "The coupon could not be reserved.",
+                            [new ApiFieldError("couponCode", "usage_limit", "Choose a different coupon.")]);
                     }
                 }
 
@@ -6011,12 +6027,6 @@ public partial class LearnerService(
                         RedeemedAt = now
                     });
 
-                    var trackedCoupon = await db.BillingCoupons.FirstOrDefaultAsync(x => x.Code == coupon.Code, cancellationToken);
-                    if (trackedCoupon is not null)
-                    {
-                        trackedCoupon.RedemptionCount += 1;
-                        trackedCoupon.UpdatedAt = now;
-                    }
                 }
 
                 await db.SaveChangesAsync(cancellationToken);
@@ -6818,6 +6828,9 @@ public partial class LearnerService(
     public Task<object> HandlePayPalWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
         => HandlePaymentWebhookAsync("paypal", payload, headers, ct);
 
+    public static bool IsRejectedWebhookOutcome(object outcome)
+        => outcome.GetType().GetProperty("received")?.GetValue(outcome) is false;
+
     public static string? GetPaymentWebhookRetryBlockedReason(PaymentWebhookEvent evt)
     {
         if (!string.Equals(evt.ProcessingStatus, "failed", StringComparison.OrdinalIgnoreCase))
@@ -6926,6 +6939,8 @@ public partial class LearnerService(
             retryEvent.Id,
             retryEvent.GatewayTransactionId,
             retryEvent.NormalizedStatus,
+            InferWebhookCategory(retryEvent.EventType),
+            retryEvent.GatewayEventId,
             ct);
 
         return new PaymentWebhookRetryResult(
@@ -6958,6 +6973,19 @@ public partial class LearnerService(
                 EventType: "handler_exception",
                 Processed: false,
                 Error: ex.Message);
+        }
+
+        if (!result.Processed)
+        {
+            return new
+            {
+                received = false,
+                gateway = gatewayName,
+                eventId = result.EventId,
+                eventType = result.EventType,
+                error = result.Error ?? "Webhook verification failed.",
+                state = "rejected"
+            };
         }
 
         var webhookEvent = await db.PaymentWebhookEvents
@@ -7002,7 +7030,7 @@ public partial class LearnerService(
         };
 
         webhookEvent.EventType = result.EventType;
-        webhookEvent.PayloadJson = result.Processed ? payload : "{}";
+        webhookEvent.PayloadJson = result.Processed ? result.SafePayloadJson ?? "{}" : "{}";
         webhookEvent.PayloadSha256 = ComputePayloadSha256(payload);
         webhookEvent.ParserVersion = PaymentWebhookParserVersion;
         webhookEvent.VerificationStatus = result.Processed ? "verified" : "failed";
@@ -7012,7 +7040,7 @@ public partial class LearnerService(
         webhookEvent.AttemptCount += 1;
         webhookEvent.LastAttemptedAt = receivedAt;
         webhookEvent.ErrorMessage = result.Processed ? null : result.Error ?? "Webhook verification failed.";
-        webhookEvent.ProcessingStatus = result.Processed ? "processing" : "failed";
+        webhookEvent.ProcessingStatus = result.Processed ? "processing" : ResolveWebhookFailureStatus(webhookEvent.AttemptCount);
         webhookEvent.ProcessedAt = result.Processed ? null : DateTimeOffset.UtcNow;
         if (db.Entry(webhookEvent).State == EntityState.Detached)
         {
@@ -7021,23 +7049,12 @@ public partial class LearnerService(
 
         await db.SaveChangesAsync(ct);
 
-        if (!result.Processed)
-        {
-            return new
-            {
-                received = false,
-                gateway = gatewayName,
-                eventId = result.EventId,
-                eventType = result.EventType,
-                error = webhookEvent.ErrorMessage,
-                state = webhookEvent.ProcessingStatus
-            };
-        }
-
         var applied = await ApplyVerifiedPaymentWebhookEventAsync(
             webhookEvent.Id,
             result.GatewayTransactionId,
             result.NormalizedStatus,
+            result.EventCategory,
+            result.GatewayObjectId,
             ct);
 
         return new
@@ -7057,6 +7074,8 @@ public partial class LearnerService(
         Guid eventId,
         string? gatewayTransactionId,
         string? normalizedStatus,
+        string? eventCategory,
+        string? gatewayObjectId,
         CancellationToken ct)
     {
         await using var tx = await BeginTransactionIfNeededAsync(ct);
@@ -7076,7 +7095,8 @@ public partial class LearnerService(
             }
 
             var paymentTransaction = await db.PaymentTransactions
-                .FirstOrDefaultAsync(x => x.GatewayTransactionId == gatewayTransactionId, ct);
+                .FirstOrDefaultAsync(x => x.GatewayTransactionId == gatewayTransactionId
+                    || (x.MetadataJson != null && x.MetadataJson.Contains(gatewayTransactionId)), ct);
 
             if (paymentTransaction is null)
             {
@@ -7091,6 +7111,26 @@ public partial class LearnerService(
             var targetStatus = string.IsNullOrWhiteSpace(normalizedStatus)
                 ? paymentTransaction.Status
                 : normalizedStatus.Trim().ToLowerInvariant();
+
+            if (string.Equals(eventCategory, PaymentWebhookCategories.Dispute, StringComparison.OrdinalIgnoreCase)
+                && disputeService is not null
+                && targetStatus.StartsWith("dispute_", StringComparison.OrdinalIgnoreCase))
+            {
+                await disputeService.RecordSignalAsync(new DisputeWebhookSignal(
+                    paymentTransaction.Gateway,
+                    string.IsNullOrWhiteSpace(gatewayObjectId) ? webhookEvent.GatewayEventId : gatewayObjectId,
+                    paymentTransaction.GatewayTransactionId,
+                    targetStatus,
+                    paymentTransaction.Amount,
+                    paymentTransaction.Currency,
+                    webhookEvent.EventType), ct);
+                webhookEvent.ProcessingStatus = "completed";
+                webhookEvent.ErrorMessage = null;
+                webhookEvent.ProcessedAt = now;
+                await db.SaveChangesAsync(ct);
+                await CommitIfOwnedAsync(tx, ct);
+                return MapWebhookRetryResult(webhookEvent);
+            }
 
             if (string.Equals(paymentTransaction.Status, "completed", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(targetStatus, "completed", StringComparison.OrdinalIgnoreCase))
@@ -7143,7 +7183,7 @@ public partial class LearnerService(
 
             db.ChangeTracker.Clear();
             var webhookEvent = await db.PaymentWebhookEvents.FirstAsync(e => e.Id == eventId, ct);
-            webhookEvent.ProcessingStatus = "failed";
+            webhookEvent.ProcessingStatus = ResolveWebhookFailureStatus(webhookEvent.AttemptCount);
             webhookEvent.ErrorMessage = ex.Message;
             webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
@@ -7182,6 +7222,26 @@ public partial class LearnerService(
             "failed" => "still_failed",
             _ => processingStatus
         };
+
+    private string ResolveWebhookFailureStatus(int attemptCount)
+        => attemptCount >= Math.Max(1, billingOptions?.Value.WebhookMaxAttempts ?? 5)
+            ? "dead_letter"
+            : "failed";
+
+    private static string InferWebhookCategory(string eventType)
+    {
+        if (eventType.Contains("dispute", StringComparison.OrdinalIgnoreCase))
+        {
+            return PaymentWebhookCategories.Dispute;
+        }
+
+        if (eventType.Contains("refund", StringComparison.OrdinalIgnoreCase))
+        {
+            return PaymentWebhookCategories.Refund;
+        }
+
+        return PaymentWebhookCategories.Payment;
+    }
 
     private static string ComputePayloadSha256(string payload)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
@@ -7222,6 +7282,7 @@ public partial class LearnerService(
                 Currency = transaction.Currency,
                 Status = "Paid",
                 Description = $"Wallet top-up: {credits} credits + {bonus} bonus credits",
+                Number = await AllocateInvoiceNumberAsync(transaction.LearnerUserId, invoiceId, ct),
                 CheckoutSessionId = transaction.GatewayTransactionId
             });
         }
@@ -7264,6 +7325,8 @@ public partial class LearnerService(
         var catalogSnapshot = DeserializeQuoteCatalogSnapshot(quote);
         var addOnVersionIds = DeserializeAddOnVersionIds(quote);
         var now = DateTimeOffset.UtcNow;
+        EnsureQuoteIsFulfillable(quote, now);
+        await EnsureQuoteSnapshotMatchesCurrentCatalogAsync(quote, ct);
 
         if (!string.IsNullOrWhiteSpace(quote.PlanCode) && string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase))
         {
@@ -7290,7 +7353,7 @@ public partial class LearnerService(
             {
                 subscription.PlanId = targetPlan.Code;
                 subscription.PlanVersionId = quote.PlanVersionId;
-                subscription.Status = SubscriptionStatus.Active;
+                SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "checkout_completed");
                 subscription.PriceAmount = targetPlan.Price;
                 subscription.Currency = targetPlan.Currency;
                 subscription.Interval = targetPlan.Interval;
@@ -7409,6 +7472,7 @@ public partial class LearnerService(
             {
                 Id = invoiceId,
                 UserId = transaction.LearnerUserId,
+                Number = await AllocateInvoiceNumberAsync(transaction.LearnerUserId, invoiceId, ct),
                 IssuedAt = now,
                 Amount = quote.TotalAmount,
                 Currency = quote.Currency,
@@ -7431,6 +7495,7 @@ public partial class LearnerService(
             existingInvoice.CouponVersionId ??= quote.CouponVersionId;
             existingInvoice.QuoteId ??= quote.Id;
             existingInvoice.CheckoutSessionId ??= transaction.GatewayTransactionId;
+            existingInvoice.Number ??= await AllocateInvoiceNumberAsync(transaction.LearnerUserId, invoiceId, ct);
         }
 
         quote.Status = BillingQuoteStatus.Completed;

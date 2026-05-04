@@ -409,6 +409,7 @@ public class SubscriptionItem
 // ── Wallet Transaction Ledger ──
 
 [Index(nameof(WalletId))]
+[Index(nameof(WalletId), nameof(IdempotencyKey), IsUnique = true)]
 public class WalletTransaction
 {
     [Key]
@@ -430,6 +431,9 @@ public class WalletTransaction
 
     [MaxLength(128)]
     public string? ReferenceId { get; set; }
+
+    [MaxLength(128)]
+    public string? IdempotencyKey { get; set; }
 
     [MaxLength(256)]
     public string? Description { get; set; }

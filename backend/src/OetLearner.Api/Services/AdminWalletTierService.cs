@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
@@ -18,6 +19,11 @@ public sealed class AdminWalletTierInput
     public int DisplayOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public string? Currency { get; set; }
+    /// <summary>
+    /// Stable kebab-case identifier (e.g. "starter", "best-value"). Required
+    /// for new tiers; immutable once persisted.
+    /// </summary>
+    public string? Slug { get; set; }
 }
 
 public sealed class AdminWalletTierReplaceRequest
@@ -46,6 +52,14 @@ public class AdminWalletTierService(
     IOptions<BillingOptions> billingOptions,
     TimeProvider timeProvider)
 {
+    /// <summary>
+    /// Strict kebab-case slug: lowercase ASCII letters / digits separated by single
+    /// hyphens. No leading/trailing hyphen, no double hyphens. Length 2-64.
+    /// </summary>
+    private static readonly Regex SlugRegex = new(
+        "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        RegexOptions.Compiled);
+
     public string DefaultCurrency
         => string.IsNullOrWhiteSpace(billingOptions.Value?.Wallet?.Currency)
             ? "AUD"
@@ -99,6 +113,7 @@ public class AdminWalletTierService(
             tiers = rows.Select(r => new
             {
                 id = (Guid?)r.Id,
+                slug = r.Slug,
                 amount = r.Amount,
                 credits = r.Credits,
                 bonus = r.Bonus,
@@ -125,11 +140,6 @@ public class AdminWalletTierService(
         CancellationToken ct)
     {
         var defaultCurrency = DefaultCurrency;
-        var errors = ValidatePayload(request, defaultCurrency);
-        if (errors.Count > 0)
-        {
-            throw new AdminWalletTierValidationException(errors);
-        }
 
         var now = timeProvider.GetUtcNow();
         await using var transaction = string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal)
@@ -137,6 +147,13 @@ public class AdminWalletTierService(
             : await db.Database.BeginTransactionAsync(ct);
 
         var existing = await db.WalletTopUpTierConfigs.ToListAsync(ct);
+
+        var errors = ValidatePayload(request, defaultCurrency, existing);
+        if (errors.Count > 0)
+        {
+            throw new AdminWalletTierValidationException(errors);
+        }
+
         var keepIds = request.Tiers
             .Where(t => t.Id.HasValue)
             .Select(t => t.Id!.Value)
@@ -152,9 +169,25 @@ public class AdminWalletTierService(
         foreach (var input in request.Tiers)
         {
             var currency = defaultCurrency;
+            var normalizedSlug = string.IsNullOrWhiteSpace(input.Slug)
+                ? null
+                : input.Slug.Trim().ToLowerInvariant();
 
             if (input.Id.HasValue && byId.TryGetValue(input.Id.Value, out var row))
             {
+                // Slug is immutable once persisted: a non-null existing slug
+                // wins over the inbound value, even if the caller tries to
+                // change it. New slugs may be set on rows that previously
+                // lacked one (legacy bootstrap data).
+                if (!string.IsNullOrWhiteSpace(row.Slug))
+                {
+                    // Ignore inbound slug to enforce immutability.
+                }
+                else if (normalizedSlug is not null)
+                {
+                    row.Slug = normalizedSlug;
+                }
+
                 row.Amount = input.Amount;
                 row.Credits = input.Credits;
                 row.Bonus = input.Bonus;
@@ -171,6 +204,7 @@ public class AdminWalletTierService(
                 db.WalletTopUpTierConfigs.Add(new WalletTopUpTierConfig
                 {
                     Id = Guid.NewGuid(),
+                    Slug = normalizedSlug,
                     Amount = input.Amount,
                     Credits = input.Credits,
                     Bonus = input.Bonus,
@@ -210,7 +244,10 @@ public class AdminWalletTierService(
         return await ListAsync(ct);
     }
 
-    private static List<string> ValidatePayload(AdminWalletTierReplaceRequest request, string defaultCurrency)
+    private static List<string> ValidatePayload(
+        AdminWalletTierReplaceRequest request,
+        string defaultCurrency,
+        IReadOnlyList<WalletTopUpTierConfig> existingRows)
     {
         var errors = new List<string>();
         if (request.Tiers is null)
@@ -228,13 +265,18 @@ public class AdminWalletTierService(
             errors.Add("tiers: at least one tier must be active.");
         }
 
+        var existingById = existingRows.ToDictionary(r => r.Id);
+
         for (var i = 0; i < request.Tiers.Count; i++)
         {
             var t = request.Tiers[i];
             var prefix = $"tiers[{i}]";
             if (t.Amount <= 0) errors.Add($"{prefix}.amount: must be greater than zero.");
+            if (t.Amount > 1_000_000) errors.Add($"{prefix}.amount: exceeds maximum allowed (1,000,000).");
             if (t.Credits < 0) errors.Add($"{prefix}.credits: must be zero or positive.");
+            if (t.Credits > 10_000_000) errors.Add($"{prefix}.credits: exceeds maximum allowed (10,000,000).");
             if (t.Bonus < 0) errors.Add($"{prefix}.bonus: must be zero or positive.");
+            if (t.Bonus > 10_000_000) errors.Add($"{prefix}.bonus: exceeds maximum allowed (10,000,000).");
             if (t.DisplayOrder < 0) errors.Add($"{prefix}.displayOrder: must be zero or positive.");
             if (t.Label is { Length: > 80 }) errors.Add($"{prefix}.label: max length is 80.");
 
@@ -247,8 +289,40 @@ public class AdminWalletTierService(
             {
                 errors.Add($"{prefix}.currency: must match the platform wallet currency ({defaultCurrency}).");
             }
+
+            // Slug rules: required for new rows; must be valid kebab-case;
+            // immutable for existing rows once a non-null slug is persisted.
+            var slugInput = string.IsNullOrWhiteSpace(t.Slug) ? null : t.Slug.Trim().ToLowerInvariant();
+            var existingRow = t.Id.HasValue && existingById.TryGetValue(t.Id.Value, out var er) ? er : null;
+            var existingSlug = existingRow?.Slug;
+
+            if (existingRow is null)
+            {
+                // New row. Slug is optional but must be valid kebab-case if provided.
+                if (slugInput is not null && (slugInput.Length is < 2 or > 64 || !SlugRegex.IsMatch(slugInput)))
+                {
+                    errors.Add($"{prefix}.slug: must be lowercase kebab-case (a-z, 0-9, single hyphens), 2-64 chars.");
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(existingSlug))
+            {
+                // Existing row with a slug already set: reject any attempt to change it.
+                if (slugInput is not null && !string.Equals(slugInput, existingSlug, StringComparison.Ordinal))
+                {
+                    errors.Add($"{prefix}.slug: is immutable; expected '{existingSlug}', got '{slugInput}'.");
+                }
+            }
+            else if (slugInput is not null)
+            {
+                // Existing row without a slug being given one for the first time.
+                if (slugInput.Length is < 2 or > 64 || !SlugRegex.IsMatch(slugInput))
+                {
+                    errors.Add($"{prefix}.slug: must be lowercase kebab-case (a-z, 0-9, single hyphens), 2-64 chars.");
+                }
+            }
         }
 
+        // Duplicate amount within payload.
         var dupeAmounts = request.Tiers
             .GroupBy(t => t.Amount)
             .Where(g => g.Count() > 1)
@@ -257,6 +331,43 @@ public class AdminWalletTierService(
         foreach (var amount in dupeAmounts)
         {
             errors.Add($"tiers: duplicate amount {amount} is not allowed.");
+        }
+
+        // Duplicate slug within payload (compare against effective slug:
+        // payload value if provided, otherwise the persisted value).
+        var effectiveSlugs = request.Tiers
+            .Select(t =>
+            {
+                var s = string.IsNullOrWhiteSpace(t.Slug) ? null : t.Slug.Trim().ToLowerInvariant();
+                if (s is not null) return s;
+                return t.Id.HasValue && existingById.TryGetValue(t.Id.Value, out var er) ? er.Slug : null;
+            })
+            .Where(s => s is not null)
+            .ToList();
+        var dupeSlugs = effectiveSlugs
+            .GroupBy(s => s!)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+        foreach (var slug in dupeSlugs)
+        {
+            errors.Add($"tiers: duplicate slug '{slug}' is not allowed.");
+        }
+
+        // Strictly ascending DisplayOrder among active tiers (sorted by amount).
+        // Catches ranges that would render in a confusing/overlapping way.
+        var activeOrdered = request.Tiers
+            .Where(t => t.IsActive)
+            .OrderBy(t => t.Amount)
+            .Select(t => t.DisplayOrder)
+            .ToList();
+        for (var i = 1; i < activeOrdered.Count; i++)
+        {
+            if (activeOrdered[i] <= activeOrdered[i - 1])
+            {
+                errors.Add("tiers: active tiers must have strictly ascending displayOrder when sorted by amount (no overlapping ranges).");
+                break;
+            }
         }
 
         return errors;

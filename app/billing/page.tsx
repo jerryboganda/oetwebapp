@@ -50,19 +50,13 @@ import type {
   WalletTransactionDto,
 } from '@/lib/billing-types';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
+import { formatMoney } from '@/lib/money';
+import { maskProviderId } from '@/components/domain/billing';
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 function formatCurrency(amount: number, currency = 'AUD') {
-  try {
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    return `${currency} ${amount.toFixed(2)}`;
-  }
+  return formatMoney(amount, { currency });
 }
 
 function formatOptionalDate(value?: string | null) {
@@ -574,7 +568,7 @@ export default function BillingPage() {
                             {new Date(invoice.date).toLocaleDateString()}
                           </p>
                           <p className="text-[11px] text-muted">
-                            {invoice.amount} · {invoice.id}
+                            {invoice.amount} · <span title={`Invoice reference (masked)`}>{maskProviderId(invoice.id)}</span>
                           </p>
                         </div>
                       </div>
@@ -1080,7 +1074,7 @@ export default function BillingPage() {
                           {new Date(invoice.date).toLocaleDateString()}
                         </p>
                         <p className="text-sm text-muted">
-                          {invoice.amount} · {invoice.id}
+                          {invoice.amount} · <span title={`Invoice reference (masked)`}>{maskProviderId(invoice.id)}</span>
                         </p>
                       </div>
                     </div>

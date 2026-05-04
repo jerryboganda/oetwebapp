@@ -60,6 +60,20 @@ export const professions: Profession[] = [
     description: "Dental professionals and dentistry applicants.",
   },
   {
+    id: "physiotherapy",
+    label: "Physiotherapy",
+    countryTargets: [...TARGET_COUNTRY_OPTIONS],
+    examTypeIds: ["oet"],
+    description: "Physiotherapists and physical therapy candidates.",
+  },
+  {
+    id: "other-allied-health",
+    label: "Other Allied health profession",
+    countryTargets: [...TARGET_COUNTRY_OPTIONS],
+    examTypeIds: ["oet"],
+    description: "Other allied health professionals (occupational therapy, dietetics, speech pathology, podiatry, optometry, radiography, etc.).",
+  },
+  {
     id: "academic-english",
     label: "Academic / General English",
     countryTargets: [...TARGET_COUNTRY_OPTIONS],

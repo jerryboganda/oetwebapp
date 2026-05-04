@@ -1,0 +1,120 @@
+{
+  "version": "1.0.0",
+  "kind": "grammar",
+  "profession": "other-allied-health",
+  "publishedAt": "2026-04-19T00:00:00Z",
+  "authoritySource": "Dr. Ahmed Hesham — OET / IELTS / PTE Grammar Rulebook for Healthcare Professionals v1",
+  "sections": [
+    { "id": "G01", "title": "Tense Foundations", "order": 1 },
+    { "id": "G02", "title": "Present Perfect vs. Past Simple", "order": 2 },
+    { "id": "G03", "title": "Passive Voice in Clinical Contexts", "order": 3 },
+    { "id": "G04", "title": "Articles for Medical Nouns", "order": 4 },
+    { "id": "G05", "title": "Subject–Verb Agreement", "order": 5 },
+    { "id": "G06", "title": "Conditionals in Consultation Language", "order": 6 },
+    { "id": "G07", "title": "Register, Formality & Forbidden Labels", "order": 7 },
+    { "id": "G08", "title": "Linkers & Punctuation", "order": 8 },
+    { "id": "G09", "title": "Prepositions & Time Markers", "order": 9 },
+    { "id": "G10", "title": "Concession & Contrast", "order": 10 },
+    { "id": "G11", "title": "Reported Speech in Medical Narratives", "order": 11 },
+    { "id": "G12", "title": "Numeracy, Units & Clinical Values", "order": 12 }
+  ],
+  "rules": [
+    { "id": "G01.1", "section": "G01", "severity": "critical", "title": "Visits in past simple", "body": "Describe every completed consultation in the past simple. 'The patient presented with chest pain' — never 'The patient has presented with chest pain' for a single completed visit.", "appliesTo": "all", "exemplarPhrases": ["Mrs Jones presented with a three-day history of cough.", "The patient reported intermittent headaches."], "examples": { "good": ["Mr Patel attended clinic three weeks ago with back pain."], "bad": ["Mr Patel has attended clinic three weeks ago with back pain."] } },
+    { "id": "G01.2", "section": "G01", "severity": "critical", "title": "Resolved surgery is past simple", "body": "All resolved conditions and completed surgical procedures use past simple. Never present perfect for surgery.", "appliesTo": "all", "exemplarPhrases": ["She underwent a laparoscopic cholecystectomy in 2018.", "He had an appendicectomy at age 12."], "examples": { "bad": ["She has undergone a cholecystectomy in 2018."], "good": ["She underwent a cholecystectomy in 2018."] } },
+    { "id": "G01.3", "section": "G01", "severity": "major", "title": "Ongoing facts in present simple", "body": "Use the present simple for ongoing medical, social, and family history — conditions still true at the time of writing.", "appliesTo": "all", "exemplarPhrases": ["She has hypertension.", "He smokes 20 cigarettes per day."] },
+    { "id": "G01.4", "section": "G01", "severity": "major", "title": "Smoking/drinking with duration = present perfect continuous", "body": "Smoking and drinking with a duration use present perfect continuous; without duration they use present simple.", "appliesTo": "all", "exemplarPhrases": ["She has been smoking for 20 years.", "He drinks alcohol socially."] },
+    { "id": "G01.5", "section": "G01", "severity": "major", "title": "Medical records take present simple reveal/show", "body": "Use present simple after 'Mr X's medical records' — 'reveal', 'show', 'indicate'.", "appliesTo": "all", "exemplarPhrases": ["Mr Jones' medical records reveal a history of asthma."] },
+    { "id": "G01.6", "section": "G01", "severity": "minor", "title": "Over the last X first sentence = present perfect", "body": "When a paragraph opens with 'Over the last [X]', the first sentence uses present perfect; remaining sentences may drop to past simple.", "appliesTo": "all" },
+
+    { "id": "G02.1", "section": "G02", "severity": "critical", "title": "Since + starting point = present perfect", "body": "Sentences with 'since' + a starting point require present perfect. Never past simple.", "appliesTo": "all", "checkId": "since_requires_present_perfect", "exemplarPhrases": ["She has had hypertension since 2010.", "He has been on insulin since last year."], "examples": { "good": ["She has been diabetic since 2015."], "bad": ["She is diabetic since 2015.", "She was diabetic since 2015."] } },
+    { "id": "G02.2", "section": "G02", "severity": "critical", "title": "For + duration = present perfect", "body": "Sentences with 'for' + a duration require present perfect.", "appliesTo": "all", "checkId": "for_duration_requires_present_perfect", "exemplarPhrases": ["She has had hypertension for five years.", "He has been taking metformin for three months."], "examples": { "bad": ["She has hypertension for five years."], "good": ["She has had hypertension for five years."] } },
+    { "id": "G02.3", "section": "G02", "severity": "critical", "title": "X ago = past simple", "body": "'[X] ago' always requires past simple. Present perfect with 'ago' is ungrammatical.", "appliesTo": "all", "checkId": "ago_requires_past_simple", "exemplarPhrases": ["He presented three weeks ago.", "She was diagnosed two years ago."], "examples": { "bad": ["She has presented three weeks ago."], "good": ["She presented three weeks ago."] } },
+    { "id": "G02.4", "section": "G02", "severity": "major", "title": "Present perfect for symptoms still present", "body": "Use present perfect only when the symptom is still present at the time of writing. Never use present perfect for vital-sign values.", "appliesTo": "all", "exemplarPhrases": ["She has been experiencing fatigue for two weeks."] },
+    { "id": "G02.5", "section": "G02", "severity": "major", "title": "Avoid past perfect", "body": "Past perfect (had + past participle) is poorly rewarded in clinical letters. Prefer the -ING form or a noun phrase.", "appliesTo": "all", "exemplarPhrases": ["She reported having headaches.", "She described a history of headaches."] },
+
+    { "id": "G03.1", "section": "G03", "severity": "major", "title": "Clinical admission = passive", "body": "Admissions use the passive voice with 'admitted to ... with'. Never 'was presented' as passive of 'presented'.", "appliesTo": "all", "checkId": "discharge_admitted_with_past_simple", "forbiddenPatterns": ["\\bwas presented\\b"], "exemplarPhrases": ["Mr Jones was admitted to St Mary's Hospital with chest pain."] },
+    { "id": "G03.2", "section": "G03", "severity": "major", "title": "Prescribed/advised in passive", "body": "Treatment verbs 'prescribe', 'advise', 'refer', 'review' read naturally in the passive when the agent is clinical staff.", "appliesTo": "all", "exemplarPhrases": ["She was prescribed amoxicillin 500 mg three times a day.", "He was advised on lifestyle modification."] },
+    { "id": "G03.3", "section": "G03", "severity": "minor", "title": "Passive keeps focus on patient/result", "body": "Use passive to keep focus on the patient or the investigation result, not the staff member who performed it.", "appliesTo": "all", "exemplarPhrases": ["An ECG was performed, which revealed ST elevation."] },
+    { "id": "G03.4", "section": "G03", "severity": "minor", "title": "Passive not mandatory in every sentence", "body": "Do not force every sentence into passive. Mix passive and active to retain clarity.", "appliesTo": "all" },
+
+    { "id": "G04.1", "section": "G04", "severity": "major", "title": "Diseases take no article", "body": "Named conditions take no article: 'She has hypertension', 'He developed pneumonia'. Do not write 'a hypertension' or 'the pneumonia'.", "appliesTo": "all", "exemplarPhrases": ["She has asthma.", "He was diagnosed with type 2 diabetes mellitus."] },
+    { "id": "G04.2", "section": "G04", "severity": "major", "title": "Symptom + article article rules", "body": "Countable symptoms take 'a': 'a headache', 'a cough'. Uncountable symptoms take no article: 'nausea', 'fatigue', 'dizziness'.", "appliesTo": "all", "exemplarPhrases": ["She complained of a headache and nausea.", "He reported fatigue and dizziness."] },
+    { "id": "G04.3", "section": "G04", "severity": "minor", "title": "Body parts take possessive pronoun", "body": "Body parts generally take a possessive pronoun rather than 'the': 'her left knee', not 'the left knee', when belonging to the patient.", "appliesTo": "all", "exemplarPhrases": ["The examination of her left knee revealed effusion."] },
+    { "id": "G04.4", "section": "G04", "severity": "minor", "title": "Investigations with an initial vowel sound take 'an'", "body": "Use 'an' before abbreviations whose first spoken letter is a vowel sound: 'an ECG', 'an MRI', 'an X-ray', 'an ENT referral'.", "appliesTo": "all", "exemplarPhrases": ["An ECG was performed.", "An MRI of the brain was arranged."] },
+    { "id": "G04.5", "section": "G04", "severity": "minor", "title": "Level takes article; count takes none", "body": "'Glucose level' can take an article ('an increased glucose level'). Plural counts take no article ('increased white cell counts').", "appliesTo": "all" },
+
+    { "id": "G05.1", "section": "G05", "severity": "critical", "title": "Agreement with closest subject after 'or'", "body": "When two subjects are connected by 'or', the verb agrees with the CLOSER subject. 'Neither Mr Jones nor his parents are aware' (parents → plural).", "appliesTo": "all", "exemplarPhrases": ["Neither the GP nor the parents are aware of the results."] },
+    { "id": "G05.2", "section": "G05", "severity": "critical", "title": "Reverse rule with 'along with' / 'together with' / 'in addition to'", "body": "'Along with', 'together with', 'as well as' and 'in addition to' do NOT change the number of the subject. The verb agrees with the word BEFORE the linker.", "appliesTo": "all", "exemplarPhrases": ["Mr Jones, along with his wife, was informed of the diagnosis."] },
+    { "id": "G05.3", "section": "G05", "severity": "major", "title": "Collective nouns take singular", "body": "'Team', 'staff', 'family', 'committee' take a singular verb in OET letters.", "appliesTo": "all", "exemplarPhrases": ["The team was consulted regarding further management."] },
+    { "id": "G05.4", "section": "G05", "severity": "major", "title": "Medical plurals agree plural", "body": "'Symptoms', 'investigations', 'medications' are plural and take plural verbs.", "appliesTo": "all", "exemplarPhrases": ["Her symptoms have persisted despite treatment."] },
+
+    { "id": "G06.1", "section": "G06", "severity": "major", "title": "Zero conditional for clinical facts", "body": "Zero conditional (if + present simple, present simple) describes predictable medical facts.", "appliesTo": "all", "exemplarPhrases": ["If blood pressure rises above 140/90, antihypertensive therapy is indicated."] },
+    { "id": "G06.2", "section": "G06", "severity": "major", "title": "First conditional for likely outcomes", "body": "First conditional (if + present simple, will + base) describes likely outcomes of the current plan.", "appliesTo": "all", "exemplarPhrases": ["If her symptoms persist, we will arrange further imaging."] },
+    { "id": "G06.3", "section": "G06", "severity": "minor", "title": "Second conditional for hypotheticals", "body": "Second conditional (if + past simple, would + base) describes hypothetical management.", "appliesTo": "all", "exemplarPhrases": ["If she were to experience further chest pain, she would need to attend the emergency department."] },
+    { "id": "G06.4", "section": "G06", "severity": "minor", "title": "Third conditional for retrospective comment", "body": "Third conditional describes past hypothetical outcomes; use sparingly in clinical letters.", "appliesTo": "all" },
+
+    { "id": "G07.1", "section": "G07", "severity": "critical", "title": "No contractions in clinical letters", "body": "Never use contractions in OET, IELTS General (formal) or PTE writing. Write 'do not', 'cannot', 'I am', 'have not'.", "appliesTo": "all", "checkId": "no_contractions", "forbiddenPatterns": ["\\b(can't|don't|won't|didn't|isn't|aren't|wasn't|weren't|haven't|hasn't|I'm|you're|we're|they're|it's|doesn't)\\b"] },
+    { "id": "G07.2", "section": "G07", "severity": "critical", "title": "Never use 'the patient' in body", "body": "Never refer to the patient as 'the patient' in the body of a letter. Use title + last name for adults, first name for children, or a pronoun.", "appliesTo": "all", "checkId": "body_forbidden_phrase_the_patient", "forbiddenPatterns": ["\\bthe patient\\b"] },
+    { "id": "G07.3", "section": "G07", "severity": "critical", "title": "No 'smoker' / 'drinker' labels", "body": "Never label patients 'smoker' or 'drinker'. Write 'she smokes' or 'he drinks alcohol socially'.", "appliesTo": "all", "forbiddenPatterns": ["\\b(smoker|drinker)\\b"] },
+    { "id": "G07.4", "section": "G07", "severity": "critical", "title": "Conditions lowercase (except eponymous)", "body": "Medical conditions are lowercase: hypertension, asthma, type 2 diabetes. Eponymous diseases keep the capital: Parkinson's, Crohn's, Alzheimer's.", "appliesTo": "all", "checkId": "conditions_lowercase", "examples": { "good": ["Mr Jones has hypertension and type 2 diabetes."], "bad": ["Mr Jones has Hypertension and Type 2 Diabetes."] } },
+    { "id": "G07.5", "section": "G07", "severity": "major", "title": "Replace colloquial with clinical", "body": "Replace colloquial terms: 'tired' → 'fatigued'; 'bad' → 'poor'/'inadequate'; 'sick' → 'unwell'.", "appliesTo": "all" },
+    { "id": "G07.6", "section": "G07", "severity": "major", "title": "No patient labels (anxious, non-compliant)", "body": "Never label patients 'anxious', 'non-compliant'. Describe behaviour: 'she expressed concern', 'he reported difficulty adhering'.", "appliesTo": "all", "forbiddenPatterns": ["\\b(non-compliant|noncompliant)\\b"] },
+    { "id": "G07.7", "section": "G07", "severity": "minor", "title": "Use 'gentleman' / 'lady' in appositives", "body": "In appositive clauses, use 'gentleman' and 'lady' rather than 'man' and 'woman'.", "appliesTo": "all", "exemplarPhrases": ["Mrs Miller, a 65-year-old lady, presented with chest pain."] },
+
+    { "id": "G08.1", "section": "G08", "severity": "critical", "title": "However = semicolon before, comma after", "body": "The adverb 'however' joining two independent clauses takes a semicolon before and a comma after. Pattern: '…; however, …'.", "appliesTo": "all", "checkId": "linker_however_punctuation", "exemplarPhrases": ["She completed the course; however, her symptoms persisted."] },
+    { "id": "G08.2", "section": "G08", "severity": "major", "title": "Therefore / Thus = semicolon before, comma after", "body": "'Therefore' and 'thus' joining clauses follow the same pattern as 'however': '…; therefore, …'.", "appliesTo": "all", "checkId": "linker_therefore_punctuation", "exemplarPhrases": ["Her HbA1c rose to 9.2%; therefore, insulin was initiated."] },
+    { "id": "G08.3", "section": "G08", "severity": "major", "title": "In addition = semicolon before, comma after", "body": "'In addition' joining two independent clauses takes a semicolon before and a comma after.", "appliesTo": "all", "checkId": "linker_in_addition_punctuation", "exemplarPhrases": ["She was advised on lifestyle modification; in addition, dietetic review was arranged."] },
+    { "id": "G08.4", "section": "G08", "severity": "minor", "title": "In addition to = no preceding punctuation", "body": "'In addition to', 'along with', 'as well as', 'together with' are NOT adverbials. No preceding comma/semicolon; followed by a noun phrase or -ING form.", "appliesTo": "all", "exemplarPhrases": ["In addition to lifestyle advice, metformin was commenced."] },
+    { "id": "G08.5", "section": "G08", "severity": "minor", "title": "As (meaning because) takes a comma", "body": "When 'as' means 'because' in mid-sentence, a comma precedes it.", "appliesTo": "all", "exemplarPhrases": ["She was referred urgently, as her symptoms had progressed."] },
+    { "id": "G08.6", "section": "G08", "severity": "major", "title": "Max 1–2 linkers per paragraph", "body": "Do not use more than 1–2 inter-sentence linkers per paragraph. Excessive linkers reduce the Conciseness and Clarity score.", "appliesTo": "all", "checkId": "linker_density", "params": { "maxPerParagraph": 2 } },
+    { "id": "G08.7", "section": "G08", "severity": "minor", "title": "Sentence length guide 15–25 words", "body": "Target 15–25 words per sentence. Do not chain three or more clauses. Avoid comma splices.", "appliesTo": "all", "checkId": "sentence_length_guard", "params": { "minWords": 8, "maxWords": 30 } },
+
+    { "id": "G09.1", "section": "G09", "severity": "critical", "title": "Treatment FOR not FROM", "body": "Use 'treatment for', 'admitted for', 'referred for', 'managed for'. Never 'treatment from' / 'admitted from'.", "appliesTo": "all", "checkId": "treatment_for_not_from", "forbiddenPatterns": ["\\b(treated|admitted|referred|managed) from\\b"] },
+    { "id": "G09.2", "section": "G09", "severity": "major", "title": "On + date; in + month/year; at + time", "body": "Use 'on' with dates, 'in' with months or years, 'at' with clock times.", "appliesTo": "all", "exemplarPhrases": ["She was admitted on 15 March.", "The procedure was performed in 2018.", "The appointment is at 10:30 a.m."] },
+    { "id": "G09.3", "section": "G09", "severity": "minor", "title": "Preferred 'three months ago' over dates", "body": "Prefer elapsed-time phrases ('three months ago', 'two weeks prior') over exact dates in body paragraphs.", "appliesTo": "all" },
+    { "id": "G09.4", "section": "G09", "severity": "major", "title": "Duration adjective hyphenated and singular", "body": "Duration used as adjective before a noun: hyphenate and keep singular. 'A six-month history of acne' — not 'a six months history'.", "appliesTo": "all", "exemplarPhrases": ["A three-week history of cough."] },
+
+    { "id": "G10.1", "section": "G10", "severity": "major", "title": "Despite + noun / -ING", "body": "'Despite' is followed by a noun or an -ING form, NOT a full clause.", "appliesTo": "all", "exemplarPhrases": ["Despite the medication, her symptoms persisted.", "Despite taking the antibiotics, she continued to deteriorate."] },
+    { "id": "G10.2", "section": "G10", "severity": "major", "title": "Although + full clause", "body": "'Although' is followed by a full clause (subject + verb).", "appliesTo": "all", "exemplarPhrases": ["Although the medication was prescribed, her symptoms persisted."] },
+    { "id": "G10.3", "section": "G10", "severity": "minor", "title": "Whereas contrasts parallel ideas", "body": "'Whereas' contrasts two parallel ideas; use sparingly.", "appliesTo": "all" },
+
+    { "id": "G11.1", "section": "G11", "severity": "major", "title": "Reported speech uses -ING or noun phrase", "body": "After 'reported', 'mentioned', 'stated', 'described', use -ING or a noun phrase rather than a nested past perfect clause.", "appliesTo": "all", "exemplarPhrases": ["She reported having headaches.", "He described a history of chest pain."] },
+    { "id": "G11.2", "section": "G11", "severity": "minor", "title": "Avoid 'had had'", "body": "'Had had' is grammatical but poorly rewarded in clinical letters. Prefer -ING or a noun phrase.", "appliesTo": "all" },
+    { "id": "G11.3", "section": "G11", "severity": "major", "title": "Advised to / counselled regarding", "body": "Use 'advised to adopt', 'counselled regarding' — never 'instructed to adopt'.", "appliesTo": "all", "exemplarPhrases": ["She was advised to adopt lifestyle modifications.", "He was counselled regarding alcohol intake."] },
+
+    { "id": "G12.1", "section": "G12", "severity": "critical", "title": "Latin abbreviations MUST be translated", "body": "Translate Latin dose abbreviations: od/om → once a day; bd/bid → twice a day; tds/tid → three times a day; qds/qid → four times a day; stat → immediately; prn → as needed.", "appliesTo": "all", "checkId": "latin_abbreviations_translated", "params": { "map": { "od": "once a day", "om": "once a day", "bd": "twice a day", "bid": "twice a day", "tds": "three times a day", "tid": "three times a day", "qds": "four times a day", "qid": "four times a day", "stat": "immediately", "prn": "as needed" } } },
+    { "id": "G12.2", "section": "G12", "severity": "major", "title": "Always pair values with units", "body": "Clinical values always include their unit: 'glucose of 7.8 mmol/L', 'BP 150/90 mmHg', '38.5 °C'. Never write the reference range in the letter.", "appliesTo": "all" },
+    { "id": "G12.3", "section": "G12", "severity": "minor", "title": "Numbers 1–9 words; 10+ numerals", "body": "Numbers 1–9 in running text are spelled out; 10 and above are numerals. Always use numerals with units.", "appliesTo": "all" },
+    { "id": "G12.4", "section": "G12", "severity": "minor", "title": "Never abbreviate the year", "body": "Never abbreviate the year (write 2026, not '26).", "appliesTo": "all", "checkId": "year_not_abbreviated" },
+    { "id": "G12.5", "section": "G12", "severity": "minor", "title": "Single-digit dates take leading zero", "body": "Dates 1–9 always carry a leading zero: 01, 02, …, 09.", "appliesTo": "all" },
+    { "id": "G12.6", "section": "G12", "severity": "major", "title": "Oral in full; IM/IV/SC/SL abbreviations acceptable", "body": "Write 'oral' in full (never 'PO'); IM, IV, SC, SL abbreviations are acceptable.", "appliesTo": "all", "forbiddenPatterns": ["\\bPO\\b"] }
+  ],
+  "tables": {
+    "latinAbbreviations": {
+      "od": "once a day",
+      "om": "once a day",
+      "bd": "twice a day",
+      "bid": "twice a day",
+      "tds": "three times a day",
+      "tid": "three times a day",
+      "qds": "four times a day",
+      "qid": "four times a day",
+      "stat": "immediately",
+      "prn": "as needed",
+      "ASAP": "at your earliest convenience"
+    },
+    "linkerPunctuation": {
+      "however":    { "preceding": ";", "following": "," },
+      "therefore":  { "preceding": ";", "following": "," },
+      "thus":       { "preceding": ";", "following": "," },
+      "in addition":{ "preceding": ";", "following": "," }
+    },
+    "tenseQuickReference": {
+      "since":  "present perfect",
+      "for":    "present perfect",
+      "ago":    "past simple",
+      "over the last": "present perfect (first sentence)",
+      "surgery": "past simple"
+    }
+  }
+}

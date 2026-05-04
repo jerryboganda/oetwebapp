@@ -4,6 +4,19 @@ public sealed class BillingOptions
 {
     public string? CheckoutBaseUrl { get; set; }
     public bool AllowSandboxFallbacks { get; set; } = false;
+
+    /// <summary>
+    /// Maximum age (in seconds) tolerated for the timestamp embedded in a webhook
+    /// signature header before the request is rejected as a replay. Default 300.
+    /// </summary>
+    public int WebhookMaxAgeSeconds { get; set; } = 300;
+
+    /// <summary>
+    /// Maximum number of local processing attempts before a verified webhook is
+    /// promoted to the dead-letter status surface for admin attention.
+    /// </summary>
+    public int WebhookMaxAttempts { get; set; } = 5;
+
     public StripeBillingOptions Stripe { get; set; } = new();
     public PayPalBillingOptions PayPal { get; set; } = new();
     public WalletBillingOptions Wallet { get; set; } = new();

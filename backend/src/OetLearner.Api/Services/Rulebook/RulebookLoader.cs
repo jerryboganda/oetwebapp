@@ -163,6 +163,7 @@ public enum ExamProfession
     SpeechPathology,
     Podiatry,
     Dietetics,
+    OtherAlliedHealth,
 }
 
 public enum RuleSeverity { Critical, Major, Minor, Info }
