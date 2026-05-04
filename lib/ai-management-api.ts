@@ -29,7 +29,7 @@ export type AiQuotaRolloverPolicy = 'Expire' | 'RolloverCapped' | 'RolloverFull'
 export type AiOveragePolicy = 'Deny' | 'AllowWithCharge' | 'AutoUpgrade' | 'DegradeToSmallerModel';
 export type AiKillSwitchScope = 'PlatformKeysOnly' | 'AllCalls';
 export type AiCredentialMode = 'Auto' | 'ByokOnly' | 'PlatformOnly';
-export type AiProviderDialect = 'OpenAiCompatible' | 'Anthropic' | 'Mock';
+export type AiProviderDialect = 'OpenAiCompatible' | 'Anthropic' | 'Cloudflare' | 'Mock';
 export type AiCredentialStatus = 'Active' | 'Invalid' | 'Revoked';
 
 export interface AiUsageRow {

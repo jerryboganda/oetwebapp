@@ -9,6 +9,12 @@ public enum AiProviderDialect
 {
     OpenAiCompatible = 0,
     Anthropic = 1,
+    /// <summary>
+    /// Cloudflare Workers AI native API. Uses POST {BaseUrl}/run/{model}
+    /// with a CF-specific request/response shape; auth is Bearer token.
+    /// BaseUrl format: https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai
+    /// </summary>
+    Cloudflare = 2,
     Mock = 99,
 }
 

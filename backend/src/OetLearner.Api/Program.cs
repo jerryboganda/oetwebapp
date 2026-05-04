@@ -734,6 +734,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.RegistryBackedProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.AnthropicProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
+    OetLearner.Api.Services.Rulebook.CloudflareWorkersAiProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCreditService,
     OetLearner.Api.Services.AiManagement.AiCreditService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiCreditRenewalWorker>();

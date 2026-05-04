@@ -111,6 +111,38 @@ public sealed class AiGatewayService(
             provider = providers.FirstOrDefault(p => string.Equals(p.Name, request.Provider, StringComparison.OrdinalIgnoreCase));
         }
 
+        // No explicit pin → consult the provider registry to honor the active
+        // highest-priority row's dialect. Without this, a Cloudflare or
+        // Anthropic row registered as the top failover entry would be ignored
+        // because the gateway would always grab the first non-mock concrete
+        // implementation in DI registration order.
+        if (provider is null && providerRegistry is not null)
+        {
+            try
+            {
+                var topRow = (await providerRegistry.ListActiveAsync(ct)).FirstOrDefault();
+                if (topRow is not null)
+                {
+                    var preferredName = topRow.Dialect switch
+                    {
+                        AiProviderDialect.Cloudflare => "cloudflare",
+                        AiProviderDialect.Anthropic => "anthropic",
+                        AiProviderDialect.OpenAiCompatible => "registry",
+                        _ => null,
+                    };
+                    if (preferredName is not null)
+                    {
+                        provider = providers.FirstOrDefault(p => string.Equals(p.Name, preferredName, StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+            }
+            catch
+            {
+                // Registry lookup failure must not block the call — fall back
+                // to the legacy first-non-mock selection below.
+            }
+        }
+
         // If the caller did not pin a provider, prefer the first real provider
         // over the mock fallback so configured production deployments use the
         // actual model path by default.

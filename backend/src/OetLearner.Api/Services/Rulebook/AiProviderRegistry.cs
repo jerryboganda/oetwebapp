@@ -79,7 +79,12 @@ public sealed class RegistryBackedProvider(
         var apiKey = request.ApiKeyOverride;
         string? reasoningEffort = null;
 
-        var providers = await registry.ListActiveAsync(ct);
+        // Filter by OpenAI-compatible dialect so a Cloudflare or Anthropic row
+        // sitting at a lower failover priority does not get called via the
+        // OpenAI dispatch path with a request shape it cannot understand.
+        var providers = (await registry.ListActiveAsync(ct))
+            .Where(p => p.Dialect == AiProviderDialect.OpenAiCompatible)
+            .ToList();
         var first = providers.FirstOrDefault();
         if (first is not null)
         {
@@ -92,7 +97,7 @@ public sealed class RegistryBackedProvider(
             return (baseUrl, apiKey, reasoningEffort ?? options.Value.ReasoningEffort);
 
         if (first is null)
-            throw new InvalidOperationException("No active AI provider registered.");
+            throw new InvalidOperationException("No active OpenAI-compatible AI provider registered.");
 
         baseUrl ??= first.BaseUrl;
         apiKey ??= await registry.GetPlatformKeyAsync(first.Code, ct)
@@ -250,5 +255,123 @@ public sealed class AnthropicProvider(
         }
 
         return new AiProviderCompletion { Text = sb.ToString(), Usage = usage };
+    }
+}
+
+/// <summary>
+/// Cloudflare Workers AI native API adapter.
+/// <para>
+/// Calls <c>POST {BaseUrl}/run/{model}</c> where <c>BaseUrl</c> is stored as
+/// <c>https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai</c>. The
+/// account id is part of the BaseUrl rather than a separate column so the
+/// existing <see cref="AiProvider"/> schema does not need to grow a new field.
+/// </para>
+/// <para>
+/// Auth is a standard Bearer token (Cloudflare API token with Workers AI
+/// permission). Models use the CF-prefixed naming convention
+/// (e.g. <c>@cf/meta/llama-3.1-8b-instruct</c>).
+/// </para>
+/// </summary>
+public sealed class CloudflareWorkersAiProvider(
+    IHttpClientFactory httpClientFactory,
+    IAiProviderRegistry registry) : IAiModelProvider
+{
+    public string Name => "cloudflare";
+
+    public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
+    {
+        var (baseUrl, apiKey) = await ResolveCredentialsAsync(request, ct);
+
+        var model = request.Model;
+        if (string.IsNullOrWhiteSpace(model))
+            throw new InvalidOperationException("Cloudflare Workers AI requires an explicit model (e.g. @cf/meta/llama-3.1-8b-instruct).");
+
+        // CF model ids commonly start with "@cf/...". The path segment is
+        // appended verbatim — the leading "@" is valid in URL paths and
+        // CF's routing accepts it without escaping.
+        var client = httpClientFactory.CreateClient("AiRegistryClient");
+        client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+        var payload = new
+        {
+            messages = new object[]
+            {
+                new { role = "system", content = request.SystemPrompt },
+                new { role = "user", content = request.UserPrompt },
+            },
+            temperature = request.Temperature,
+            max_tokens = request.MaxTokens ?? 1024,
+            stream = false,
+        };
+
+        using var response = await client.PostAsync(
+            $"run/{model}",
+            new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+            ct);
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Cloudflare Workers AI call failed: {(int)response.StatusCode} {response.ReasonPhrase}. Body: {body}");
+
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        // CF response shape:
+        // { "result": { "response": "...", "usage": { "prompt_tokens": N, "completion_tokens": N } },
+        //   "success": true, "errors": [], "messages": [] }
+        if (root.TryGetProperty("success", out var successEl) && !successEl.GetBoolean())
+        {
+            var errMsg = root.TryGetProperty("errors", out var errs) ? errs.GetRawText() : body;
+            throw new InvalidOperationException($"Cloudflare Workers AI returned success=false: {errMsg}");
+        }
+
+        if (!root.TryGetProperty("result", out var result))
+            throw new InvalidOperationException($"Cloudflare Workers AI response missing 'result'. Body: {body}");
+
+        // Most chat models return { response: "..." }; some streaming-style
+        // models also return choices[]. Handle both shapes defensively.
+        string text = string.Empty;
+        if (result.TryGetProperty("response", out var resp) && resp.ValueKind == JsonValueKind.String)
+        {
+            text = resp.GetString() ?? string.Empty;
+        }
+        else if (result.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+        {
+            var msg = choices[0].GetProperty("message");
+            text = msg.TryGetProperty("content", out var c) ? c.GetString() ?? string.Empty : string.Empty;
+        }
+
+        AiUsage? usage = null;
+        if (result.TryGetProperty("usage", out var usageEl))
+        {
+            usage = new AiUsage
+            {
+                PromptTokens = usageEl.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0,
+                CompletionTokens = usageEl.TryGetProperty("completion_tokens", out var ctEl) ? ctEl.GetInt32() : 0,
+            };
+        }
+
+        return new AiProviderCompletion { Text = text, Usage = usage };
+    }
+
+    private async Task<(string baseUrl, string apiKey)> ResolveCredentialsAsync(AiProviderRequest request, CancellationToken ct)
+    {
+        var baseUrl = request.BaseUrlOverride;
+        var apiKey = request.ApiKeyOverride;
+        if (!string.IsNullOrWhiteSpace(baseUrl) && !string.IsNullOrWhiteSpace(apiKey))
+            return (baseUrl, apiKey);
+
+        // Pick the highest-priority active CF row. Filtering by Dialect keeps
+        // this provider tightly bound to its registry rows and prevents an
+        // OpenAI-compat row from being fed Cloudflare's request shape.
+        var registered = (await registry.ListActiveAsync(ct))
+            .FirstOrDefault(p => p.Dialect == AiProviderDialect.Cloudflare)
+            ?? throw new InvalidOperationException("Cloudflare Workers AI provider is not registered. Add a row in /admin/ai-providers with Dialect=Cloudflare.");
+
+        baseUrl ??= registered.BaseUrl;
+        apiKey ??= await registry.GetPlatformKeyAsync(registered.Code, ct)
+            ?? throw new InvalidOperationException("Platform API key missing for Cloudflare Workers AI.");
+        return (baseUrl, apiKey);
     }
 }
