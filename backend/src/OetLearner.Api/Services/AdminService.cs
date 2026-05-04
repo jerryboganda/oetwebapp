@@ -2001,7 +2001,8 @@ public partial class AdminService(
                 confidenceThreshold = a.ConfidenceThreshold,
                 routingRule = a.RoutingRule,
                 experimentFlag = a.ExperimentFlag,
-                promptLabel = a.PromptLabel
+                promptLabel = a.PromptLabel,
+            confidencePolicy = JsonSupport.Deserialize<Dictionary<string, object>>(a.ConfidencePolicyJson, new Dictionary<string, object>())
             };
         });
 
@@ -2032,6 +2033,9 @@ public partial class AdminService(
             RoutingRule = request.RoutingRule ?? "",
             ExperimentFlag = request.ExperimentFlag ?? "",
             PromptLabel = request.PromptLabel ?? "",
+            ConfidencePolicyJson = request.ConfidencePolicy is not null
+                ? JsonSupport.Serialize(request.ConfidencePolicy)
+                : "{}",
             CreatedBy = adminName,
             CreatedAt = createdAt
         };
@@ -2072,6 +2076,8 @@ public partial class AdminService(
         if (request.RoutingRule is not null) a.RoutingRule = request.RoutingRule;
         if (request.ExperimentFlag is not null) a.ExperimentFlag = request.ExperimentFlag;
         if (request.PromptLabel is not null) a.PromptLabel = request.PromptLabel;
+        if (request.ConfidencePolicy is not null)
+            a.ConfidencePolicyJson = JsonSupport.Serialize(request.ConfidencePolicy);
         var updatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 

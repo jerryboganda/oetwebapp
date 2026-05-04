@@ -52,3 +52,127 @@ Updated: 2026-05-02
 - Final `npx tsc --noEmit` and `npm run lint` passed after cleanup.
 - Final `npm run build` passed with the existing Prisma/OpenTelemetry/Sentry dynamic-import warning.
 - Independent final review found no blocking PRD gaps across registration, target-country propagation, settings/goals enforcement, scoring, and Recalls audio.
+
+---
+
+# Product Strategy Documents (01-07) Implementation Phase
+
+Updated: 2026-05-02
+
+## Scope
+
+Complete implementation of remaining tasks from the 7 product strategy documents, grouped into 7 parallel tracks by domain.
+
+## Track 1: Billing & Entitlements — COMPLETED
+
+- **OET Tier Packaging Landing Page** (`/billing/plans`): Created learner-facing tier comparison (Free / Core / Plus / Review) with feature matrices, monthly/annual toggle, and checkout routing to existing billing infrastructure.
+- **Entitlement Category System** (`lib/entitlement-categories.ts`): Defined canonical entitlement categories (diagnostic, practice_questions, ai_evaluation, mock_exams, expert_review, etc.) and tier-to-entitlement mapping for Free, Core, Plus, and Review tiers. Includes exam-family overrides for IELTS (reduced mocks) and PTE (deferred entitlements).
+- **Exam-family packaging strategy foundation**: Tier entitlement mapping supports OET (full), IELTS (partial), and PTE (deferred) per Document 07.
+
+## Track 2: Exam-Family Core Abstraction — COMPLETED
+
+- **Exam-Family Scoring Dispatcher** (`lib/exam-family-scoring.ts`): Shared-core module that dispatches score formatting, grade display, target validation, and readiness band mapping to the correct exam-specific module (OET, IELTS, PTE). Prevents hardcoded OET assumptions in shared workflows.
+- **IELTS Scoring Module** (`lib/ielts-scoring.ts`): Full IELTS band scoring with 0-9 scale, 0.5 increments, raw→band mapping for Listening/Reading, weighted Writing band (Task 1 40% / Task 2 60%), Speaking band, overall band, Academic vs General pathway labels, and score validation.
+- **PTE Scoring Foundation** (`lib/pte-scoring.ts`): PTE types and helpers (10-90 scale, clamping, validation, readiness bands) as deferred foundation per product strategy.
+- **Goals page IELTS pathway integration**: Added Academic/General Training selection to the goals form, stored in `UserProfile.ieltsPathway`, and wired through the API submission.
+
+## Track 3: AI Trust & Expert SLA — COMPLETED
+
+- **Admin AI Escalation Stats Types** (`lib/types/admin.ts`): Added `AdminAIEscalationStats` (total evaluations, escalation rate, divergence, subtest breakdown, 30-day trend) and `AdminAIConfidencePolicy` (band thresholds, human-review recommendation, learner/provenance labels, disclaimer) to the `AdminAIConfig` type.
+- **Admin AI Config Escalation Visibility** (`app/admin/ai-config/page.tsx`): Added escalation rate summary card and per-config escalation column to the DataTable. Displays rate badges with color-coded thresholds (<5% success, <15% warning, ≥15% danger).
+- **Admin AI Confidence Policy Controls** (`app/admin/ai-config/page.tsx`): Extended the create/edit modal with a full Confidence Policy section: band selector, min/max thresholds, human-review checkbox, learner label, provenance label, and disclaimer fields.
+
+## Track 4: OET Flagship Deepening — COMPLETED
+
+- **Profession-Specific Writing Remediation** (`lib/writing-remediation-professions.ts`): Comprehensive profession-aware coaching tips for Medicine, Nursing, Dentistry, Pharmacy, Physiotherapy, Occupational Therapy, Dietetics, Speech Pathology, Radiography, Podiatry, Optometry, and Veterinary. Each includes criterion code, title, description, weak/strong examples, and priority.
+- **Writing Result Integration** (`app/writing/result/page.tsx` + `components/domain/profession-remediation-callout.tsx`): Fetches the user's profession from their profile and displays profession-specific coaching callout with weak vs strong example boxes directly on the writing result page.
+- **Profession-Specific Speaking Coaching** (`lib/speaking-coaching-professions.ts`): Speaking coaching guidance for Medicine, Nursing, Dentistry, Pharmacy, and Physiotherapy covering relationship_building, information_gathering, and explanation_planning criteria with actionable drill suggestions.
+
+## Track 5: IELTS Operational Layer — COMPLETED
+
+- **IELTS Scoring Module** (see Track 2): Full canonical IELTS scoring with official band mappings and Academic/General pathway support.
+- **IELTS Guide Landing Page** (`/app/ielts-guide/page.tsx`): Learner-facing IELTS guide explaining the four skills, band scale, Academic vs General distinction, shared OET core engine, Writing task weighting, and deferred-feature transparency.
+- **Goals IELTS Pathway Selection**: Academic/General Training dropdown added to goals form with exam-family-conditional display.
+
+## Track 6: Content Ops & Analytics — COMPLETED
+
+- **Content Provenance & QA Types** (`lib/content-provenance.ts`): Structured types for ContentSource (manual_expert, ai_draft, ai_draft_expert_review, import_bulk, etc.), ContentLifecycleStage, ContentProvenanceRecord, ContentStalenessAssessment, RubricCriterionCoverage, RubricCoverageReport, ContentPerformanceMetrics, and ContentPerformanceSummary.
+- **Content Staleness UI Component** (`components/domain/content-staleness-card.tsx`): Reusable admin card for displaying staleness assessment with action buttons (Refresh, Archive), badge coloring, rubric coverage gaps, and usage metrics.
+- **Provenance Integration**: Content provenance types ready for integration with existing admin content surfaces (`/admin/content/*`).
+
+## Track 7: Infrastructure & Quality — COMPLETED
+
+- **E2E 401 Noise Suppression** (`tests/e2e/prod-smoke.spec.ts`): Added expected-unauth endpoint filtering (`/v1/auth/me`, `/v1/auth/session`, `/v1/notifications`, `/v1/unread-count`) to the response listener so legitimate auth-status probes no longer pollute smoke-run logs.
+
+## Validation Completed
+
+- `npx tsc --noEmit` passed (0 errors).
+- `npm run lint` passed (0 errors).
+- Full Vitest suite passed (all files, all tests).
+- `npm run build` passed (all static pages generated, exit 0).
+
+---
+
+# Backend Implementation (ASP.NET Core) — COMPLETED
+
+## Track 1: Server-Side Entitlement Enforcement
+
+- **TierEntitlementEnforcer** (`backend/src/OetLearner.Api/Services/Entitlements/TierEntitlementEnforcer.cs`): Full server-side entitlement enforcement service implementing the canonical tier-to-entitlement mapping (Free/Core/Plus/Review) with exam-family overrides for IELTS (reduced mocks) and PTE (deferred entitlements). Includes freeze override logic that strips all paid entitlements when an account is frozen.
+- **Interface**: `ITierEntitlementEnforcer` with `HasEntitlementAsync`, `GetLimitAsync`, `GetEffectiveEntitlementsAsync`, `GetEffectiveLimitsAsync`.
+- **DI Registration**: Scoped service wired in `Program.cs`.
+
+## Track 2: AI Escalation Stats Aggregation
+
+- **AIEscalationStatsService** (`backend/src/OetLearner.Api/Services/AIEscalationStatsService.cs`): Aggregates `ReviewEscalation` data to produce per-config and overall escalation statistics including total evaluations, escalation rate, mean divergence, subtest breakdown, and 30-day daily trend.
+- **Endpoints** (`backend/src/OetLearner.Api/Endpoints/AiEscalationAdminEndpoints.cs`):
+  - `GET /v1/admin/ai-config/escalation-stats?configId={id}`
+  - `GET /v1/admin/ai-config/escalation-stats/configs`
+  - `GET /v1/admin/ai-config/escalation-stats/{taskType}`
+- **Entity Extensions**: Added `ConfigId`, `AttemptId` to `ReviewEscalation`; added `CreatedAt`, `ModelVersionId` to `Evaluation` for correlation tracking.
+
+## Track 3: IELTS Mock Engine
+
+- **IeltsMockEngine** (`backend/src/OetLearner.Api/Services/IeltsMockEngine.cs`): Full IELTS-specific scoring engine with:
+  - Writing Task 1 evaluation (graph/table/diagram analysis, 40% weight)
+  - Writing Task 2 evaluation (opinion/discussion/problem-solution, 60% weight)
+  - Overall band computation (rounded to 0.5)
+  - IELTS-native report generation with strengths/weaknesses/next-steps
+  - Academic vs General Training pathway awareness
+- **Interface**: `IIeltsMockEngine` with `EvaluateWritingTask1`, `EvaluateWritingTask2`, `ComputeOverall`, `GenerateReport`.
+
+## Track 4: PTE Scoring Engine
+
+- **PteScoring** (`backend/src/OetLearner.Api/Services/PteScoring.cs`): Full PTE Academic scoring foundation:
+  - 10-90 scale clamping
+  - Raw-to-PTE scaling with configurable min/max
+  - Communicative skills (Listening, Reading, Speaking, Writing)
+  - Enabling skills (Grammar, Oral Fluency, Pronunciation, Spelling, Vocabulary, Written Discourse)
+  - Overall score computation (average of all 10 scores)
+  - Skill level labels and pass/fail determination
+- **Interface**: `IPteScoring` with `ClampScore`, `ScaleToPte`, `EvaluateCommunicativeSkills`, `EvaluateEnablingSkills`, `ComputeOverall`, `GetSkillLevel`, `IsPassing`.
+
+## Track 5: Content Staleness Batch Job
+
+- **ContentStalenessService** (`backend/src/OetLearner.Api/Services/ContentStalenessJob.cs`): Service that computes staleness assessments for all published content based on:
+  - Days since last edit
+  - Days since last usage
+  - Usage count in last 90 days
+  - Rubric coverage percentage
+  - Recommended action (no_action, minor_refresh, major_revision, archive)
+- **ContentStalenessWorker** (`backend/src/OetLearner.Api/Services/ContentStalenessJob.cs`): Hosted background service that runs daily at 3 AM UTC to scan all published content.
+- **Endpoints** (`backend/src/OetLearner.Api/Endpoints/ContentStalenessEndpoints.cs`):
+  - `GET /v1/admin/content/staleness`
+  - `GET /v1/admin/content/{contentId}/staleness`
+
+## Track 6: AI Confidence Policy (Admin AI Config)
+
+- **Entity Extension**: Added `ConfidencePolicyJson` to `AIConfigVersion` entity to persist band thresholds, human-review flags, and learner/provenance labels.
+- **Request DTOs**: Extended `AdminAIConfigCreateRequest` and `AdminAIConfigUpdateRequest` with `AdminAIConfidencePolicyRequest` (band, min/max thresholds, humanReview flag, learnerLabel, provenanceLabel, disclaimer).
+- **AdminService Updates**: `GetAIConfigListAsync`, `CreateAIConfigAsync`, and `UpdateAIConfigAsync` now serialize/deserialize confidence policy JSON.
+
+## Backend Validation Completed
+
+- `dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj` passed (0 errors, 0 warnings).
+- All new services registered in DI container (`Program.cs`).
+- All new endpoint groups mapped in application pipeline.
+- Entity changes compatible with existing EF Core model.

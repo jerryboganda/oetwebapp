@@ -339,6 +339,11 @@ public class Attempt
 
     [MaxLength(16)]
     public string ExamTypeCode { get; set; } = "oet";
+
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    [MaxLength(64)]
+    public string? ModelVersionId { get; set; }
 }
 
 public class Evaluation
@@ -372,6 +377,11 @@ public class Evaluation
 
     [MaxLength(16)]
     public string ExamTypeCode { get; set; } = "oet";
+
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    [MaxLength(64)]
+    public string? ModelVersionId { get; set; }
 }
 
 public class ReadinessSnapshot

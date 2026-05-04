@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Bot, Cpu, Edit3, PlayCircle, Plus, Trash2 } from 'lucide-react';
+import { Bot, Cpu, Edit3, PlayCircle, Plus, ShieldAlert, Trash2 } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -32,6 +32,13 @@ interface AIConfigFormState {
   routingRule: string;
   experimentFlag: string;
   promptLabel: string;
+  confidencePolicyBand: string;
+  confidencePolicyMin: string;
+  confidencePolicyMax: string;
+  confidencePolicyHumanReview: boolean;
+  confidencePolicyLearnerLabel: string;
+  confidencePolicyProvenanceLabel: string;
+  confidencePolicyDisclaimer: string;
 }
 
 const defaultFormState: AIConfigFormState = {
@@ -45,6 +52,13 @@ const defaultFormState: AIConfigFormState = {
   routingRule: 'Escalate to tutor review below threshold',
   experimentFlag: '',
   promptLabel: '',
+  confidencePolicyBand: 'medium',
+  confidencePolicyMin: '0.6',
+  confidencePolicyMax: '0.8',
+  confidencePolicyHumanReview: true,
+  confidencePolicyLearnerLabel: 'Medium confidence practice estimate',
+  confidencePolicyProvenanceLabel: 'AI-assisted practice evaluation',
+  confidencePolicyDisclaimer: 'This is a practice estimate only and not an official exam score.',
 };
 
 export default function AIConfigPage() {
@@ -112,8 +126,11 @@ export default function AIConfigPage() {
     const averageAccuracy = configs.length > 0
       ? Math.round((configs.reduce((sum, config) => sum + config.accuracy, 0) / configs.length) * 100)
       : 0;
+    const totalEvaluations = configs.reduce((sum, config) => sum + (config.escalationStats?.totalEvaluations ?? 0), 0);
+    const totalEscalations = configs.reduce((sum, config) => sum + (config.escalationStats?.escalationsTriggered ?? 0), 0);
+    const overallEscalationRate = totalEvaluations > 0 ? (totalEscalations / totalEvaluations) * 100 : 0;
 
-    return { active, testing, deprecated, averageAccuracy };
+    return { active, testing, deprecated, averageAccuracy, totalEvaluations, totalEscalations, overallEscalationRate };
   }, [configs]);
 
   const filterGroups: FilterGroup[] = [
@@ -165,6 +182,25 @@ export default function AIConfigPage() {
       ),
     },
     {
+      key: 'escalation',
+      header: 'Escalation Rate',
+      render: (config) => {
+        const stats = config.escalationStats;
+        if (!stats) {
+          return <span className="text-xs text-muted">No data</span>;
+        }
+        const rate = stats.escalationRatePercent;
+        return (
+          <div className="space-y-1">
+            <Badge variant={rate < 5 ? 'success' : rate < 15 ? 'warning' : 'danger'} size="sm">
+              {rate.toFixed(1)}%
+            </Badge>
+            <p className="text-xs text-muted">{stats.escalationsTriggered} / {stats.totalEvaluations} evals</p>
+          </div>
+        );
+      },
+    },
+    {
       key: 'status',
       header: 'Status',
       render: (config) => (
@@ -205,6 +241,7 @@ export default function AIConfigPage() {
   }
 
   function openEditModal(config: AdminAIConfig) {
+    const policy = config.confidencePolicy;
     setForm({
       id: config.id,
       model: config.model,
@@ -216,6 +253,13 @@ export default function AIConfigPage() {
       routingRule: config.routingRule,
       experimentFlag: config.experimentFlag,
       promptLabel: config.promptLabel,
+      confidencePolicyBand: policy?.band ?? 'medium',
+      confidencePolicyMin: policy ? String(policy.minThreshold) : '0.6',
+      confidencePolicyMax: policy ? String(policy.maxThreshold) : '0.8',
+      confidencePolicyHumanReview: policy?.recommendsHumanReview ?? true,
+      confidencePolicyLearnerLabel: policy?.learnerLabel ?? 'Medium confidence practice estimate',
+      confidencePolicyProvenanceLabel: policy?.provenanceLabel ?? 'AI-assisted practice evaluation',
+      confidencePolicyDisclaimer: policy?.disclaimer ?? 'This is a practice estimate only and not an official exam score.',
     });
     setIsModalOpen(true);
   }
@@ -272,6 +316,15 @@ export default function AIConfigPage() {
         routingRule: form.routingRule,
         experimentFlag: form.experimentFlag,
         promptLabel: form.promptLabel,
+        confidencePolicy: {
+          band: form.confidencePolicyBand,
+          minThreshold: Number(form.confidencePolicyMin || 0),
+          maxThreshold: Number(form.confidencePolicyMax || 0),
+          recommendsHumanReview: form.confidencePolicyHumanReview,
+          learnerLabel: form.confidencePolicyLearnerLabel,
+          provenanceLabel: form.confidencePolicyProvenanceLabel,
+          disclaimer: form.confidencePolicyDisclaimer,
+        },
       };
 
       if (form.id) {
@@ -323,11 +376,17 @@ export default function AIConfigPage() {
           />
         }
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <AdminRouteSummaryCard label="Active Configs" value={metrics.active} icon={<PlayCircle className="h-5 w-5" />} />
           <AdminRouteSummaryCard label="Testing Configs" value={metrics.testing} icon={<Bot className="h-5 w-5" />} tone={metrics.testing > 0 ? 'warning' : 'default'} />
           <AdminRouteSummaryCard label="Deprecated" value={metrics.deprecated} icon={<Cpu className="h-5 w-5" />} />
           <AdminRouteSummaryCard label="Average Accuracy" value={`${metrics.averageAccuracy}%`} icon={<Cpu className="h-5 w-5" />} />
+          <AdminRouteSummaryCard
+            label="Escalation Rate"
+            value={metrics.totalEvaluations > 0 ? `${metrics.overallEscalationRate.toFixed(1)}%` : 'N/A'}
+            icon={<ShieldAlert className="h-5 w-5" />}
+            tone={metrics.overallEscalationRate > 15 ? 'danger' : metrics.overallEscalationRate > 5 ? 'warning' : 'default'}
+          />
         </div>
 
         <AdminRoutePanel title="Configuration Registry" description="Live model metadata, thresholds, routing rules, and activation controls all come from the admin AI config endpoints.">
@@ -397,6 +456,69 @@ export default function AIConfigPage() {
               { value: 'deprecated', label: 'Deprecated' },
             ]}
           />
+
+          <div className="border-t border-border pt-4">
+            <h4 className="text-sm font-bold text-navy mb-3">Confidence Policy</h4>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Select
+                label="Band"
+                value={form.confidencePolicyBand}
+                onChange={(event) => setForm((current) => ({ ...current, confidencePolicyBand: event.target.value }))}
+                options={[
+                  { value: 'high', label: 'High' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'low', label: 'Low' },
+                  { value: 'unknown', label: 'Unknown' },
+                ]}
+              />
+              <div className="flex items-center gap-2">
+                <input
+                  id="humanReview"
+                  type="checkbox"
+                  checked={form.confidencePolicyHumanReview}
+                  onChange={(e) => setForm((current) => ({ ...current, confidencePolicyHumanReview: e.target.checked }))}
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                />
+                <label htmlFor="humanReview" className="text-sm text-navy cursor-pointer">
+                  Recommend human review in this band
+                </label>
+              </div>
+              <Input
+                label="Min Threshold"
+                type="number"
+                min={0}
+                max={1}
+                step="0.01"
+                value={form.confidencePolicyMin}
+                onChange={(event) => setForm((current) => ({ ...current, confidencePolicyMin: event.target.value }))}
+              />
+              <Input
+                label="Max Threshold"
+                type="number"
+                min={0}
+                max={1}
+                step="0.01"
+                value={form.confidencePolicyMax}
+                onChange={(event) => setForm((current) => ({ ...current, confidencePolicyMax: event.target.value }))}
+              />
+              <Input
+                label="Learner Label"
+                value={form.confidencePolicyLearnerLabel}
+                onChange={(event) => setForm((current) => ({ ...current, confidencePolicyLearnerLabel: event.target.value }))}
+              />
+              <Input
+                label="Provenance Label"
+                value={form.confidencePolicyProvenanceLabel}
+                onChange={(event) => setForm((current) => ({ ...current, confidencePolicyProvenanceLabel: event.target.value }))}
+              />
+            </div>
+            <Input
+              label="Disclaimer"
+              value={form.confidencePolicyDisclaimer}
+              onChange={(event) => setForm((current) => ({ ...current, confidencePolicyDisclaimer: event.target.value }))}
+              className="mt-3"
+            />
+          </div>
 
           <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>

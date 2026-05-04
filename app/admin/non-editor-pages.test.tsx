@@ -146,6 +146,22 @@ vi.mock('@/lib/hooks/use-current-user', () => ({
   }),
 }));
 
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({
+    user: {
+      userId: 'admin-1',
+      displayName: 'Admin User',
+      email: 'admin@example.com',
+      isEmailVerified: true,
+      isAuthenticatorEnabled: false,
+      adminPermissions: ['content:create', 'content:edit', 'content:publish', 'content:publisher_approval', 'content:archive', 'content:delete', 'user:manage', 'user:invite', 'billing:read', 'billing:write'],
+    },
+    isAuthenticated: true,
+    isLoading: false,
+  }),
+  AuthProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
 vi.mock('@/lib/admin', () => ({
   getAdminDashboardData: admin.getAdminDashboardData,
   getAdminAIConfigData: admin.getAdminAIConfigData,

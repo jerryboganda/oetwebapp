@@ -52,4 +52,16 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!--
+    Recalls Content Pack v1 (2026-05-05). Versioned vocabulary JSON files loaded
+    by RecallsContentSeeder at boot. Copied to publish output so the seeder finds
+    them in containerised deploys.
+  -->
+  <ItemGroup>
+    <None Include="Data\SeedData\recalls\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

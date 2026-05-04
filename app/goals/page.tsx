@@ -57,8 +57,14 @@ const SCORE_RANGES: Record<ExamFamilyCode, { min: number; max: number; label: st
 
 const scoreField = z.union([z.coerce.number(), z.literal('')]).optional();
 
+const IELTS_PATHWAY_OPTIONS = [
+  { value: 'academic', label: 'Academic' },
+  { value: 'general', label: 'General Training' },
+] as const;
+
 const goalSchema = z.object({
   examFamilyCode: z.enum(['oet', 'ielts', 'pte']),
+  ieltsPathway: z.enum(['academic', 'general']).optional(),
   profession: z.string().min(1, 'Please select your profession'),
   examDate: z.string().optional(),
   targetWriting: scoreField,
@@ -192,6 +198,7 @@ export default function GoalSetupPage() {
 
         reset({
           examFamilyCode: profile.examFamilyCode ?? 'oet',
+          ieltsPathway: profile.ieltsPathway ?? undefined,
           profession: profile.profession || '',
           examDate: profile.examDate || '',
           targetWriting: profile.targetScores.Writing ?? '',
@@ -233,6 +240,7 @@ export default function GoalSetupPage() {
 
       await updateUserProfile({
         examFamilyCode: data.examFamilyCode as ExamFamilyCode,
+        ieltsPathway: data.ieltsPathway,
         profession: data.profession,
         examDate: data.examDate || null,
         targetScores,
@@ -270,6 +278,15 @@ export default function GoalSetupPage() {
               {...register('examFamilyCode')}
               error={errors.examFamilyCode?.message}
             />
+            {selectedExamFamily === 'ielts' && (
+              <Select
+                label="IELTS Pathway"
+                options={[...IELTS_PATHWAY_OPTIONS]}
+                placeholder="Select Academic or General Training..."
+                {...register('ieltsPathway')}
+                error={errors.ieltsPathway?.message}
+              />
+            )}
             <p className="text-sm text-muted">{examFamilyCopy.helperText}</p>
           </section>
 

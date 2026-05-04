@@ -61,6 +61,13 @@ public static class DatabaseBootstrapper
         // Idempotent: skipped if RulebookVersions already has rows.
         await OetLearner.Api.Services.Rulebooks.RulebookSeeder.EnsureAsync(db, environment, cancellationToken);
 
+        // Recalls Content Pack v1 — hydrate VocabularyTerm rows from versioned
+        // JSON in Data/SeedData/recalls/*.json. Idempotent. Never deletes. Default
+        // status='draft' so admins gate learner exposure. Survives container
+        // rebuilds because Git is the source of truth.
+        await OetLearner.Api.Services.Recalls.RecallsContentSeeder.EnsureAsync(
+            db, environment, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, cancellationToken);
+
         // Demo/test data (mock user, goals, settings) only in development or when explicitly enabled
         if (seedDemoData)
         {
@@ -437,7 +444,10 @@ public static class DatabaseBootstrapper
                         ADD COLUMN IF NOT EXISTS "AudioMediaAssetId" character varying(64),
                         ADD COLUMN IF NOT EXISTS "SourceProvenance" character varying(512),
                         ADD COLUMN IF NOT EXISTS "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
-                        ADD COLUMN IF NOT EXISTS "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now();
+                        ADD COLUMN IF NOT EXISTS "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                        ADD COLUMN IF NOT EXISTS "CommonMistakesJson" text NOT NULL DEFAULT '[]',
+                        ADD COLUMN IF NOT EXISTS "SimilarSoundingJson" text NOT NULL DEFAULT '[]',
+                        ADD COLUMN IF NOT EXISTS "OetSubtestTagsJson" text NOT NULL DEFAULT '[]';
 
                     ALTER TABLE IF EXISTS {vocabularyTable}
                         ALTER COLUMN "Category" TYPE character varying(64);
@@ -490,6 +500,9 @@ public static class DatabaseBootstrapper
             await AddSqliteColumnIfMissingAsync(db, "VocabularyTerms", @"""SourceProvenance"" TEXT NULL", cancellationToken);
             await AddSqliteColumnIfMissingAsync(db, "VocabularyTerms", @"""CreatedAt"" TEXT NOT NULL DEFAULT '0001-01-01T00:00:00.0000000+00:00'", cancellationToken);
             await AddSqliteColumnIfMissingAsync(db, "VocabularyTerms", @"""UpdatedAt"" TEXT NOT NULL DEFAULT '0001-01-01T00:00:00.0000000+00:00'", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "VocabularyTerms", @"""CommonMistakesJson"" TEXT NOT NULL DEFAULT '[]'", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "VocabularyTerms", @"""SimilarSoundingJson"" TEXT NOT NULL DEFAULT '[]'", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "VocabularyTerms", @"""OetSubtestTagsJson"" TEXT NOT NULL DEFAULT '[]'", cancellationToken);
             await AddSqliteColumnIfMissingAsync(db, "LearnerVocabularies", @"""SourceRef"" TEXT NULL", cancellationToken);
             await AddSqliteColumnIfMissingAsync(db, "VocabularyQuizResults", @"""Format"" TEXT NOT NULL DEFAULT 'definition_match'", cancellationToken);
 

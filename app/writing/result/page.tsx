@@ -13,6 +13,7 @@ import { MotionSection } from '@/components/ui/motion-primitives';
 import { fetchWritingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingResult } from '@/lib/mock-data';
+import ProfessionRemediationCallout from '@/components/domain/profession-remediation-callout';
 
 export default function WritingResultSummary() {
   const searchParams = useSearchParams();
@@ -194,6 +195,8 @@ export default function WritingResultSummary() {
             </div>
           </Card>
         </MotionSection>
+
+        <ProfessionRemediationCallout />
 
         <LearnerSurfaceSectionHeader
           eyebrow="What to do next"

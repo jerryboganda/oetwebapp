@@ -146,7 +146,8 @@ public record AdminAIConfigCreateRequest(
     double ConfidenceThreshold,
     string? RoutingRule,
     string? ExperimentFlag,
-    string? PromptLabel);
+    string? PromptLabel,
+    AdminAIConfidencePolicyRequest? ConfidencePolicy = null);
 
 public record AdminAIConfigUpdateRequest(
     string? Model,
@@ -157,7 +158,17 @@ public record AdminAIConfigUpdateRequest(
     double? ConfidenceThreshold,
     string? RoutingRule,
     string? ExperimentFlag,
-    string? PromptLabel);
+    string? PromptLabel,
+    AdminAIConfidencePolicyRequest? ConfidencePolicy = null);
+
+public record AdminAIConfidencePolicyRequest(
+    string Band,
+    double MinThreshold,
+    double MaxThreshold,
+    bool RecommendsHumanReview,
+    string LearnerLabel,
+    string ProvenanceLabel,
+    string Disclaimer);
 
 // ── Feature Flags ──
 

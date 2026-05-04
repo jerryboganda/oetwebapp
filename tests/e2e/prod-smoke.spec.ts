@@ -78,6 +78,10 @@ test('prod — learner journey end-to-end', async ({ page, context }) => {
     if (status >= 500) {
       apiFailures.push(`[${currentSurface}] ${status} ${url}`);
     } else if (status >= 400) {
+      // Filter expected 401 noise from auth-status probes and preload calls
+      // that legitimately return 401 when the session is not yet established.
+      const expectedUnauthPaths = /\/v1\/(auth\/(me|session|check)|notifications|unread-count)/i;
+      if (status === 401 && expectedUnauthPaths.test(url)) return;
       fourXx.push(`[${currentSurface}] ${status} ${url}`);
     }
   });

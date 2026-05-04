@@ -68,6 +68,28 @@ public class VocabularyTerm
     public string CollocationsJson { get; set; } = "[]";
     public string RelatedTermsJson { get; set; } = "[]";
 
+    /// <summary>
+    /// Recalls Content Pack v1 (2026-05-05): plausible learner mistakes for this
+    /// term. Inputs to the spelling-diff classifier and "common error" hints.
+    /// JSON array of strings, e.g. ["hemorrhage", "hemmorhage"] for "haemorrhage".
+    /// </summary>
+    public string CommonMistakesJson { get; set; } = "[]";
+
+    /// <summary>
+    /// Recalls Content Pack v1 (2026-05-05): similar-sounding distractors for the
+    /// word-recognition quiz mode. JSON array of strings.
+    /// </summary>
+    public string SimilarSoundingJson { get; set; } = "[]";
+
+    /// <summary>
+    /// Recalls Content Pack v1 (2026-05-05): the OET-subtest dimension of the
+    /// matrix tag system (the functional dimension lives in <see cref="Category"/>).
+    /// JSON array of subtest codes, e.g. ["listening_a", "reading_c"].
+    /// Allowed values: listening_a, listening_b, listening_c, reading_a,
+    /// reading_b, reading_c, writing, speaking.
+    /// </summary>
+    public string OetSubtestTagsJson { get; set; } = "[]";
+
     [MaxLength(512)]
     public string? SourceProvenance { get; set; }           // Required at publish
 

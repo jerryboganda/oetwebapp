@@ -23,6 +23,7 @@ export interface UserProfile {
   displayName: string;
   profession: string;
   examFamilyCode: ExamFamilyCode;
+  ieltsPathway?: 'academic' | 'general' | null;
   examDate: string | null;
   targetScores: Record<SubTest, number | null>;
   previousAttempts: number;

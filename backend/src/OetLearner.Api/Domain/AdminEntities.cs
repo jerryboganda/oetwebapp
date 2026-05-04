@@ -60,6 +60,10 @@ public class AIConfigVersion
     [MaxLength(128)]
     public string PromptLabel { get; set; } = default!;
 
+    /// <summary>JSON blob for confidence policy: band, min/max thresholds, humanReview flag, learner/provenance labels, disclaimer.</summary>
+    [MaxLength(2048)]
+    public string ConfidencePolicyJson { get; set; } = "{}";
+
     [MaxLength(512)]
     public string? ChangeNote { get; set; }
 
@@ -248,6 +252,12 @@ public class ReviewEscalation
     public string? ResolutionNote { get; set; }
 
     public int? FinalScore { get; set; }
+
+    [MaxLength(64)]
+    public string? ConfigId { get; set; }
+
+    [MaxLength(64)]
+    public string? AttemptId { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ResolvedAt { get; set; }

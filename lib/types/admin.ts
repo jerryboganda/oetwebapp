@@ -142,6 +142,37 @@ export interface AdminAIConfig {
   routingRule: string;
   experimentFlag: string;
   promptLabel: string;
+  /** Escalation statistics for this AI config (populated by backend analytics). */
+  escalationStats?: AdminAIEscalationStats | null;
+  /** Confidence policy applied to evaluations using this config. */
+  confidencePolicy?: AdminAIConfidencePolicy | null;
+}
+
+export interface AdminAIEscalationStats {
+  totalEvaluations: number;
+  escalationsTriggered: number;
+  escalationRatePercent: number;
+  avgDivergence: number | null;
+  bySubtest: Record<string, { evaluations: number; escalations: number; avgDivergence: number | null }>;
+  trendLast30Days: { date: string; evaluations: number; escalations: number }[];
+  generatedAt: string;
+}
+
+export interface AdminAIConfidencePolicy {
+  /** Band label: high / medium / low / unknown. */
+  band: string;
+  /** Minimum confidence threshold (0–1) for this band. */
+  minThreshold: number;
+  /** Maximum confidence threshold (0–1) for this band. */
+  maxThreshold: number;
+  /** Whether evaluations in this band should trigger human-review recommendation. */
+  recommendsHumanReview: boolean;
+  /** Display label shown to learners. */
+  learnerLabel: string;
+  /** Provenance label shown to learners. */
+  provenanceLabel: string;
+  /** Non-official score disclaimer for this band. */
+  disclaimer: string;
 }
 
 export interface AdminFlag {

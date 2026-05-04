@@ -1175,6 +1175,7 @@ app.MapReadingLearnerEndpoints();
 app.MapListeningLearnerEndpoints();
 app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
+app.MapContentStalenessEndpoints();
 
 // ── Phase 1 new endpoints ──
 app.MapGamificationEndpoints();
