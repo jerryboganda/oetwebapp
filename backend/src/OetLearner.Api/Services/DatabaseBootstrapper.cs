@@ -50,6 +50,7 @@ public static class DatabaseBootstrapper
 
         await EnsureAdminSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureExpertSchemaCompatibilityAsync(db, cancellationToken);
+        await EnsureAttemptSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureVocabularySchemaCompatibilityAsync(db, cancellationToken);
         await EnsurePronunciationSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureFreezePolicyAsync(db, cancellationToken);
@@ -292,6 +293,65 @@ public static class DatabaseBootstrapper
         await db.Database.ExecuteSqlRawAsync(
             $"""UPDATE {qualifiedTableName} SET "ChecklistItemsJson" = '[]' WHERE "ChecklistItemsJson" IS NULL OR "ChecklistItemsJson" = '';""",
             cancellationToken);
+    }
+
+    private static async Task EnsureAttemptSchemaCompatibilityAsync(LearnerDbContext db, CancellationToken cancellationToken)
+    {
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
+        var attemptTable = GetQualifiedTableName(db.Model.FindEntityType(typeof(Attempt)));
+        if (string.IsNullOrWhiteSpace(attemptTable))
+        {
+            return;
+        }
+
+        var providerName = db.Database.ProviderName ?? string.Empty;
+        if (db.Database.IsNpgsql())
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                $"""
+                ALTER TABLE IF EXISTS {attemptTable}
+                    ADD COLUMN IF NOT EXISTS "CreatedAt" timestamp with time zone NOT NULL DEFAULT now();
+
+                ALTER TABLE IF EXISTS {attemptTable}
+                    ADD COLUMN IF NOT EXISTS "ModelVersionId" character varying(64);
+
+                UPDATE {attemptTable}
+                SET "CreatedAt" = COALESCE("CreatedAt", "StartedAt", now());
+                """,
+                cancellationToken);
+
+            return;
+        }
+
+        if (providerName.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            await AddSqliteColumnIfMissingAsync(
+                db,
+                "Attempts",
+                @"""CreatedAt"" TEXT NOT NULL DEFAULT '0001-01-01T00:00:00.0000000+00:00'",
+                cancellationToken);
+
+            await AddSqliteColumnIfMissingAsync(
+                db,
+                "Attempts",
+                @"""ModelVersionId"" TEXT NULL",
+                cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE "Attempts"
+                SET "CreatedAt" = CASE
+                    WHEN "CreatedAt" IS NULL OR "CreatedAt" = '' OR "CreatedAt" = '0001-01-01T00:00:00.0000000+00:00'
+                    THEN COALESCE("StartedAt", '0001-01-01T00:00:00.0000000+00:00')
+                    ELSE "CreatedAt"
+                END;
+                """,
+                cancellationToken);
+        }
     }
 
     private static async Task EnsurePronunciationSchemaCompatibilityAsync(LearnerDbContext db, CancellationToken cancellationToken)
