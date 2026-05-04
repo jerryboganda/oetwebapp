@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Modal } from '@/components/ui/modal';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAnalytics } from '@/hooks/use-analytics';
-import { fetchListeningTask, submitListeningAnswers } from '@/lib/api';
+import { fetchDiagnosticTaskId, fetchListeningTask, submitListeningAnswers } from '@/lib/api';
 import type { ListeningTask, Question } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
 import {
@@ -24,9 +24,6 @@ import {
   Volume2,
 } from 'lucide-react';
 
-const DIAGNOSTIC_LISTENING_TASK_ID = 'lt-001';
-const LOCAL_STORAGE_KEY = `diag-listening-answers-${DIAGNOSTIC_LISTENING_TASK_ID}`;
-
 export default function DiagnosticListeningPage() {
   const router = useRouter();
   const { track } = useAnalytics();
@@ -34,6 +31,7 @@ export default function DiagnosticListeningPage() {
   const [task, setTask] = useState<ListeningTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [taskId, setTaskId] = useState<string | null>(null);
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -50,15 +48,17 @@ export default function DiagnosticListeningPage() {
     try {
       setLoading(true);
       setError(undefined);
-      const t = await fetchListeningTask(DIAGNOSTIC_LISTENING_TASK_ID);
+      const resolvedId = await fetchDiagnosticTaskId('Listening');
+      setTaskId(resolvedId);
+      const t = await fetchListeningTask(resolvedId);
       setTask(t);
       setAudioDuration(t.duration);
       // Restore saved answers
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      const saved = localStorage.getItem(`diag-listening-answers-${resolvedId}`);
       if (saved) {
         try { setAnswers(JSON.parse(saved)); } catch { /* ignore */ }
       }
-      track('task_started', { subTest: 'Listening', mode: 'diagnostic', taskId: DIAGNOSTIC_LISTENING_TASK_ID });
+      track('task_started', { subTest: 'Listening', mode: 'diagnostic', taskId: resolvedId });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load listening task');
     } finally {
@@ -70,10 +70,10 @@ export default function DiagnosticListeningPage() {
 
   // Persist answers on every change
   useEffect(() => {
-    if (Object.keys(answers).length > 0) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(answers));
+    if (Object.keys(answers).length > 0 && taskId) {
+      localStorage.setItem(`diag-listening-answers-${taskId}`, JSON.stringify(answers));
     }
-  }, [answers]);
+  }, [answers, taskId]);
 
   // Simulated audio playback
   const togglePlay = () => {
@@ -116,12 +116,12 @@ export default function DiagnosticListeningPage() {
   };
 
   const handleSubmit = async () => {
-    if (!task) return;
+    if (!task || !taskId) return;
     try {
       setSubmitting(true);
-      await submitListeningAnswers(DIAGNOSTIC_LISTENING_TASK_ID, answers);
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
-      track('task_submitted', { subTest: 'Listening', mode: 'diagnostic', taskId: DIAGNOSTIC_LISTENING_TASK_ID });
+      await submitListeningAnswers(taskId, answers);
+      localStorage.removeItem(`diag-listening-answers-${taskId}`);
+      track('task_submitted', { subTest: 'Listening', mode: 'diagnostic', taskId });
       router.push('/diagnostic/hub');
     } catch {
       setError('Submission failed. Please try again.');

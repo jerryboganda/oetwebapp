@@ -27,7 +27,7 @@ const sections: LegalSection[] = [
     id: 'about',
     title: 'About these Terms',
     lead:
-      'These Terms of Service form a binding agreement between you and OET with Dr Ahmed Hesham (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) covering your use of our learner platform, mobile and desktop apps, websites, and related services (together, the &quot;Service&quot;). By creating an account or using the Service you accept these Terms.',
+      'These Terms of Service form a binding agreement between you and OET with Dr Ahmed Hesham ("we", "us", "our") covering your use of our learner platform, mobile and desktop apps, websites, and related services (together, the "Service"). By creating an account or using the Service you accept these Terms.',
     bullets: [
       <>
         These Terms apply alongside our <strong>Privacy Notice</strong>, the

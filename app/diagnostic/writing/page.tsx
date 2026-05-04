@@ -11,11 +11,10 @@ import { Timer } from '@/components/ui/timer';
 import { Modal } from '@/components/ui/modal';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAnalytics } from '@/hooks/use-analytics';
-import { fetchWritingTask, fetchWritingChecklist, submitWritingDraft, submitWritingTask } from '@/lib/api';
+import { fetchDiagnosticTaskId, fetchWritingTask, fetchWritingChecklist, submitWritingDraft, submitWritingTask } from '@/lib/api';
 import type { WritingTask, ChecklistItem } from '@/lib/mock-data';
 import { Send, LogOut, Save, CheckCircle2 } from 'lucide-react';
 
-const DIAGNOSTIC_WRITING_TASK_ID = 'wt-001';
 const AUTO_SAVE_DELAY = 3000; // 3s debounce
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'offline-saved' | 'failed';
@@ -29,6 +28,7 @@ export default function DiagnosticWritingPage() {
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [taskId, setTaskId] = useState<string | null>(null);
 
   // Editor state
   const [content, setContent] = useState('');
@@ -53,16 +53,18 @@ export default function DiagnosticWritingPage() {
     try {
       setLoading(true);
       setError(undefined);
+      const resolvedId = await fetchDiagnosticTaskId('Writing');
+      setTaskId(resolvedId);
       const [t, cl] = await Promise.all([
-        fetchWritingTask(DIAGNOSTIC_WRITING_TASK_ID),
+        fetchWritingTask(resolvedId),
         fetchWritingChecklist(),
       ]);
       setTask(t);
       setChecklist(cl);
       // Restore local draft
-      const draft = localStorage.getItem(`diag-writing-draft-${DIAGNOSTIC_WRITING_TASK_ID}`);
+      const draft = localStorage.getItem(`diag-writing-draft-${resolvedId}`);
       if (draft) setContent(draft);
-      track('task_started', { subTest: 'Writing', mode: 'diagnostic', taskId: DIAGNOSTIC_WRITING_TASK_ID });
+      track('task_started', { subTest: 'Writing', mode: 'diagnostic', taskId: resolvedId });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load writing task');
     } finally {
@@ -74,15 +76,15 @@ export default function DiagnosticWritingPage() {
 
   // Auto-save with debounce
   useEffect(() => {
-    if (!content || loading) return;
+    if (!content || loading || !taskId) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       try {
         setSaveStatus('saving');
         // Save locally first
-        localStorage.setItem(`diag-writing-draft-${DIAGNOSTIC_WRITING_TASK_ID}`, content);
+        localStorage.setItem(`diag-writing-draft-${taskId}`, content);
         // Then attempt server save
-        await submitWritingDraft(DIAGNOSTIC_WRITING_TASK_ID, content);
+        await submitWritingDraft(taskId, content);
         setSaveStatus('saved');
       } catch {
         // If server fails, we still have the local save
@@ -92,7 +94,7 @@ export default function DiagnosticWritingPage() {
     return () => {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     };
-  }, [content, loading]);
+  }, [content, loading, taskId]);
 
   // Warn on leave with unsaved changes
   useEffect(() => {
@@ -106,12 +108,12 @@ export default function DiagnosticWritingPage() {
   }, [content, saveStatus]);
 
   const handleSubmit = async () => {
-    if (!content.trim()) return;
+    if (!content.trim() || !taskId) return;
     try {
       setSubmitting(true);
-      await submitWritingTask(DIAGNOSTIC_WRITING_TASK_ID, content);
-      localStorage.removeItem(`diag-writing-draft-${DIAGNOSTIC_WRITING_TASK_ID}`);
-      track('task_submitted', { subTest: 'Writing', mode: 'diagnostic', taskId: DIAGNOSTIC_WRITING_TASK_ID });
+      await submitWritingTask(taskId, content);
+      localStorage.removeItem(`diag-writing-draft-${taskId}`);
+      track('task_submitted', { subTest: 'Writing', mode: 'diagnostic', taskId });
       router.push('/diagnostic/hub');
     } catch {
       setSaveStatus('failed');

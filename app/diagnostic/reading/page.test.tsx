@@ -1,5 +1,6 @@
 import { screen } from '@testing-library/react';
-const { mockFetchReadingTask, mockSubmitReadingAnswers, mockTrack } = vi.hoisted(() => ({
+const { mockFetchDiagnosticTaskId, mockFetchReadingTask, mockSubmitReadingAnswers, mockTrack } = vi.hoisted(() => ({
+  mockFetchDiagnosticTaskId: vi.fn(),
   mockFetchReadingTask: vi.fn(),
   mockSubmitReadingAnswers: vi.fn(),
   mockTrack: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('@/hooks/use-analytics', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
+  fetchDiagnosticTaskId: mockFetchDiagnosticTaskId,
   fetchReadingTask: mockFetchReadingTask,
   submitReadingAnswers: mockSubmitReadingAnswers,
 }));
@@ -32,6 +34,7 @@ import { renderWithRouter } from '@/tests/test-utils';
 describe('Diagnostic reading page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchDiagnosticTaskId.mockResolvedValue('rt-001');
     mockFetchReadingTask.mockResolvedValue({
       id: 'rt-001',
       title: 'Diagnostic Reading Task',

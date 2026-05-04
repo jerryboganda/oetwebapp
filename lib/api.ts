@@ -3170,6 +3170,7 @@ export async function fetchDiagnosticSession(): Promise<DiagnosticSession> {
       status: item.state,
       estimatedDuration: minutesToLabel(item.estimatedDurationMinutes),
       completedAt: item.completedAt,
+      contentId: item.contentId ?? item.taskId ?? undefined,
     })),
   };
 }
@@ -3186,8 +3187,36 @@ export async function startDiagnostic(): Promise<DiagnosticSession> {
       status: item.state,
       estimatedDuration: minutesToLabel(item.estimatedDurationMinutes),
       completedAt: item.completedAt,
+      contentId: item.contentId ?? item.taskId ?? undefined,
     })),
   };
+}
+
+const LEGACY_DIAGNOSTIC_TASK_IDS: Record<SubTest, string> = {
+  Writing: 'wt-001',
+  Speaking: 'st-001',
+  Reading: 'rt-001',
+  Listening: 'lt-001',
+};
+
+/**
+ * Fetches the diagnostic task ID for a given sub-test.
+ * Tries the backend diagnostic content endpoint first; falls back to legacy
+ * hardcoded IDs if the endpoint is unavailable or returns no task.
+ *
+ * TODO: Remove legacy fallback once /v1/diagnostic/tasks is fully deployed.
+ */
+export async function fetchDiagnosticTaskId(subTest: SubTest): Promise<string> {
+  try {
+    const response = await apiRequest<ApiRecord>(`/v1/diagnostic/tasks?subtest=${encodeURIComponent(subTest)}`);
+    const taskId = response.taskId ?? response.contentId ?? null;
+    if (taskId) return String(taskId);
+  } catch {
+    // Backend endpoint not ready yet — fall through to legacy fallback.
+  }
+  const fallback = LEGACY_DIAGNOSTIC_TASK_IDS[subTest];
+  console.warn(`[Diagnostic] Dynamic task endpoint unavailable for ${subTest}. Using legacy fallback ${fallback}.`);
+  return fallback;
 }
 
 export async function fetchDiagnosticResults(): Promise<DiagnosticResult[]> {

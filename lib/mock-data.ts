@@ -1,6 +1,9 @@
 // ──────────────────────────────────────────────
-// Centralized mock data & types for the OET Learner App
-// Replace with real API responses when backend is ready
+// Canonical domain types for the OET Learner App
+//
+// These types define the frontend contract for API responses and component
+// props across the learner, expert, and admin surfaces. They are imported
+// by lib/api.ts and consumed throughout the application.
 // ──────────────────────────────────────────────
 
 // ═══════════════════ SHARED TYPES ═══════════════════
@@ -852,6 +855,7 @@ export interface DiagnosticSubTest {
   status: TaskStatus;
   estimatedDuration: string;
   completedAt?: string;
+  contentId?: string;
 }
 
 export interface DiagnosticSession {

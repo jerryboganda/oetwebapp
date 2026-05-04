@@ -13,7 +13,7 @@ import { Timer } from '@/components/ui/timer';
 import { Modal } from '@/components/ui/modal';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAnalytics } from '@/hooks/use-analytics';
-import { fetchRoleCard, submitSpeakingRecording } from '@/lib/api';
+import { fetchDiagnosticTaskId, fetchRoleCard, submitSpeakingRecording } from '@/lib/api';
 import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
 import type { RoleCard } from '@/lib/mock-data';
 import {
@@ -31,8 +31,6 @@ import {
   Volume2,
 } from 'lucide-react';
 
-const DIAGNOSTIC_SPEAKING_TASK_ID = 'st-001';
-
 type SpeakingPhase = 'mic-check' | 'role-card' | 'recording' | 'review' | 'uploading' | 'done';
 
 export default function DiagnosticSpeakingPage() {
@@ -43,6 +41,7 @@ export default function DiagnosticSpeakingPage() {
   const [roleCard, setRoleCard] = useState<RoleCard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [taskId, setTaskId] = useState<string | null>(null);
   const [phase, setPhase] = useState<SpeakingPhase>('mic-check');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -63,7 +62,9 @@ export default function DiagnosticSpeakingPage() {
     try {
       setLoading(true);
       setError(undefined);
-      const card = await fetchRoleCard(DIAGNOSTIC_SPEAKING_TASK_ID);
+      const resolvedId = await fetchDiagnosticTaskId('Speaking');
+      setTaskId(resolvedId);
+      const card = await fetchRoleCard(resolvedId);
       setRoleCard(card);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load speaking task');
@@ -95,7 +96,9 @@ export default function DiagnosticSpeakingPage() {
   }, [isNativePlatform, previewUrl]);
 
   const handleMicCheckComplete = () => {
-    track('task_started', { subTest: 'Speaking', mode: 'diagnostic', taskId: DIAGNOSTIC_SPEAKING_TASK_ID });
+    if (taskId) {
+      track('task_started', { subTest: 'Speaking', mode: 'diagnostic', taskId });
+    }
     setPhase('role-card');
   };
 
@@ -220,8 +223,9 @@ export default function DiagnosticSpeakingPage() {
         throw new Error('No diagnostic speaking audio was captured.');
       }
 
+      if (!taskId) throw new Error('No diagnostic speaking task ID available.');
       await submitSpeakingRecording(
-        DIAGNOSTIC_SPEAKING_TASK_ID,
+        taskId,
         recordedBlobRef.current,
         recordingSeconds || 120,
         'exam',
@@ -233,7 +237,7 @@ export default function DiagnosticSpeakingPage() {
       clearInterval(interval);
       setUploadProgress(100);
 
-      track('task_submitted', { subTest: 'Speaking', mode: 'diagnostic', taskId: DIAGNOSTIC_SPEAKING_TASK_ID });
+      track('task_submitted', { subTest: 'Speaking', mode: 'diagnostic', taskId });
       setPhase('done');
 
       setTimeout(() => router.push('/diagnostic/hub'), 1500);

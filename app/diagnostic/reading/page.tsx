@@ -10,7 +10,7 @@ import { Timer } from '@/components/ui/timer';
 import { Modal } from '@/components/ui/modal';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAnalytics } from '@/hooks/use-analytics';
-import { fetchReadingTask, submitReadingAnswers } from '@/lib/api';
+import { fetchDiagnosticTaskId, fetchReadingTask, submitReadingAnswers } from '@/lib/api';
 import type { ReadingTask, Question } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
 import {
@@ -22,9 +22,6 @@ import {
   BookOpen,
 } from 'lucide-react';
 
-const DIAGNOSTIC_READING_TASK_ID = 'rt-001';
-const LOCAL_STORAGE_KEY = `diag-reading-answers-${DIAGNOSTIC_READING_TASK_ID}`;
-
 export default function DiagnosticReadingPage() {
   const router = useRouter();
   const { track } = useAnalytics();
@@ -32,6 +29,7 @@ export default function DiagnosticReadingPage() {
   const [task, setTask] = useState<ReadingTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [taskId, setTaskId] = useState<string | null>(null);
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -44,14 +42,16 @@ export default function DiagnosticReadingPage() {
     try {
       setLoading(true);
       setError(undefined);
-      const t = await fetchReadingTask(DIAGNOSTIC_READING_TASK_ID);
+      const resolvedId = await fetchDiagnosticTaskId('Reading');
+      setTaskId(resolvedId);
+      const t = await fetchReadingTask(resolvedId);
       setTask(t);
       // Restore saved answers
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      const saved = localStorage.getItem(`diag-reading-answers-${resolvedId}`);
       if (saved) {
         try { setAnswers(JSON.parse(saved)); } catch { /* ignore */ }
       }
-      track('task_started', { subTest: 'Reading', mode: 'diagnostic', taskId: DIAGNOSTIC_READING_TASK_ID });
+      track('task_started', { subTest: 'Reading', mode: 'diagnostic', taskId: resolvedId });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load reading task');
     } finally {
@@ -63,10 +63,10 @@ export default function DiagnosticReadingPage() {
 
   // Persist answers on every change
   useEffect(() => {
-    if (Object.keys(answers).length > 0) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(answers));
+    if (Object.keys(answers).length > 0 && taskId) {
+      localStorage.setItem(`diag-reading-answers-${taskId}`, JSON.stringify(answers));
     }
-  }, [answers]);
+  }, [answers, taskId]);
 
   const questions = task?.questions ?? [];
   const question = questions[currentQ] as Question | undefined;
@@ -77,12 +77,12 @@ export default function DiagnosticReadingPage() {
   };
 
   const handleSubmit = async () => {
-    if (!task) return;
+    if (!task || !taskId) return;
     try {
       setSubmitting(true);
-      await submitReadingAnswers(DIAGNOSTIC_READING_TASK_ID, answers);
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
-      track('task_submitted', { subTest: 'Reading', mode: 'diagnostic', taskId: DIAGNOSTIC_READING_TASK_ID });
+      await submitReadingAnswers(taskId, answers);
+      localStorage.removeItem(`diag-reading-answers-${taskId}`);
+      track('task_submitted', { subTest: 'Reading', mode: 'diagnostic', taskId });
       router.push('/diagnostic/hub');
     } catch {
       setError('Submission failed. Please try again.');
