@@ -15,10 +15,11 @@ import {
   Activity, 
   PieChart, 
   Users, 
-  CreditCard, 
+  CreditCard,
   Bell,
-  Flag, 
+  Flag,
   ShieldCheck,
+  Server,
   Upload,
   Copy,
   Image as ImageIcon,
@@ -73,6 +74,7 @@ const adminNavGroups: NavGroup[] = [
     label: 'AI & automation',
     items: [
       { href: '/admin/ai-config', label: 'AI Eval Config', icon: <Cpu className="w-5 h-5" />, matchPrefix: '/admin/ai-config' },
+      { href: '/admin/ai-providers', label: 'AI Providers', icon: <Server className="w-5 h-5" />, matchPrefix: '/admin/ai-providers' },
       { href: '/admin/ai-usage', label: 'AI Usage & Budget', icon: <Cpu className="w-5 h-5" />, matchPrefix: '/admin/ai-usage' },
     ],
   },
@@ -230,6 +232,10 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/ai-config')) {
     return 'AI Eval Config';
+  }
+
+  if (pathname.startsWith('/admin/ai-providers')) {
+    return 'AI Providers';
   }
 
   if (pathname.startsWith('/admin/review-ops')) {

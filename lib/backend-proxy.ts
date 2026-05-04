@@ -130,7 +130,13 @@ export function validateProxyPathSegments(pathSegments: string[]): string[] {
 }
 
 export function resolveProxyTarget(pathSegments: string[], searchParams: URLSearchParams, baseUrl = DEFAULT_PROXY_TARGET): string {
-  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  // Trim whitespace defensively: env values set via `cmd /k set FOO=val&& ...`
+  // capture a trailing space before the `&&`, which would otherwise produce
+  // an invalid URL like "http://host:port /v1/..." and a 500 from fetch().
+  const normalizedBaseUrl = (baseUrl ?? DEFAULT_PROXY_TARGET).trim().replace(/\/$/, '');
+  if (!normalizedBaseUrl) {
+    throw new Error('Invalid proxy base URL.');
+  }
   const normalizedPath = validateProxyPathSegments(pathSegments).join('/');
   const search = searchParams.toString();
   return `${normalizedBaseUrl}/${normalizedPath}${search ? `?${search}` : ''}`;

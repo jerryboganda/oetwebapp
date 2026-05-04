@@ -60,6 +60,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/criteria': [AdminPermission.ContentRead],
   '/admin/rulebooks': [AdminPermission.ContentRead],
   '/admin/ai-config': [AdminPermission.AiConfig],
+  '/admin/ai-providers': [AdminPermission.AiConfig],
   '/admin/ai-usage': [AdminPermission.AiConfig],
   '/admin/review-ops': [AdminPermission.ReviewOps],
   '/admin/notifications': [AdminPermission.SystemAdmin],

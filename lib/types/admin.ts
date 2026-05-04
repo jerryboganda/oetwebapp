@@ -134,6 +134,7 @@ export interface AdminAIConfig {
   id: string;
   model: string;
   provider: string;
+  providerName?: string;
   taskType: string;
   status: 'active' | 'testing' | 'deprecated';
   accuracy: number;

@@ -385,6 +385,7 @@ export async function getAdminAIConfigData(params?: Parameters<typeof fetchAdmin
     id: toStringValue(item.id),
     model: toStringValue(item.model),
     provider: toStringValue(item.provider),
+    providerName: toStringValue(item.providerName),
     taskType: toStringValue(item.taskType),
     status: (toStringValue(item.status, 'testing') as AdminAIConfig['status']),
     accuracy: toNumberValue(item.accuracy),

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Cpu, Gauge, Power, RefreshCw, Server, ShieldCheck } from 'lucide-react';
+import { AlertCircle, Cpu, Gauge, Power, RefreshCw, ShieldCheck } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,6 @@ import {
   fetchAiAnomalies,
   fetchAiGlobalPolicy,
   fetchAiPlans,
-  fetchAiProviders,
   fetchAiUsage,
   fetchAiUsageSummary,
   fetchAiUsageTrend,
@@ -26,11 +25,7 @@ import {
   createAiPlan,
   updateAiPlan,
   deactivateAiPlan,
-  createAiProvider,
-  updateAiProvider,
-  deactivateAiProvider,
   type AiGlobalPolicy,
-  type AiProviderRow,
   type AiQuotaPlan,
   type AiUsagePage,
   type AiUsageSummaryRow,
@@ -43,7 +38,6 @@ const TABS = [
   { id: 'usage', label: 'Usage', icon: <Gauge className="w-4 h-4" /> },
   { id: 'budget', label: 'Budget & Kill-switch', icon: <Power className="w-4 h-4" /> },
   { id: 'plans', label: 'Quota Plans', icon: <ShieldCheck className="w-4 h-4" /> },
-  { id: 'providers', label: 'Providers', icon: <Server className="w-4 h-4" /> },
   { id: 'anomalies', label: 'Anomalies', icon: <AlertCircle className="w-4 h-4" /> },
 ];
 
@@ -80,7 +74,6 @@ export default function AiUsagePage() {
       {activeTab === 'usage' && <UsagePanel onToast={setToast} />}
       {activeTab === 'budget' && <BudgetPanel onToast={setToast} />}
       {activeTab === 'plans' && <PlansPanel onToast={setToast} />}
-      {activeTab === 'providers' && <ProvidersPanel onToast={setToast} />}
       {activeTab === 'anomalies' && <AnomaliesPanel onToast={setToast} />}
 
       {toast && (
@@ -431,113 +424,6 @@ function PlanEditor({ value, onChange }: { value: AiQuotaPlan; onChange: (p: AiQ
         Active
       </label>
     </div>
-  );
-}
-
-// ═════════════════════════════════════════════════════════════════════════
-function ProvidersPanel({ onToast }: { onToast: (t: ToastState) => void }) {
-  const [status, setStatus] = useState<PageStatus>('loading');
-  const [rows, setRows] = useState<AiProviderRow[]>([]);
-  const [editing, setEditing] = useState<(AiProviderRow & { apiKey?: string }) | null>(null);
-  const [creating, setCreating] = useState(false);
-
-  const load = useCallback(async () => {
-    try { setRows(await fetchAiProviders()); setStatus('success'); } catch { setStatus('error'); }
-  }, []);
-  useEffect(() => { queueMicrotask(() => { void load(); }); }, [load]);
-
-  const save = async () => {
-    if (!editing) return;
-    try {
-      const payload = { ...editing } as Record<string, unknown>;
-      if (creating) await createAiProvider(payload);
-      else await updateAiProvider(editing.id, payload);
-      onToast({ variant: 'success', message: creating ? 'Provider registered.' : 'Provider updated.' });
-      setEditing(null); setCreating(false); await load();
-    } catch (e) { onToast({ variant: 'error', message: `Save failed: ${(e as Error).message}` }); }
-  };
-
-  const deactivate = async (id: string) => {
-    try { await deactivateAiProvider(id); onToast({ variant: 'success', message: 'Provider deactivated.' }); await load(); }
-    catch (e) { onToast({ variant: 'error', message: `Failed: ${(e as Error).message}` }); }
-  };
-
-  const columns: Column<AiProviderRow>[] = [
-    { key: 'code', header: 'Code', render: (p) => <span className="font-mono">{p.code}</span> },
-    { key: 'name', header: 'Name', render: (p) => p.name },
-    { key: 'd', header: 'Dialect', render: (p) => p.dialect },
-    { key: 'u', header: 'Base URL', render: (p) => <span className="text-xs text-muted">{p.baseUrl}</span> },
-    { key: 'k', header: 'Key', render: (p) => <span className="font-mono text-xs">{p.apiKeyHint}</span> },
-    { key: 'pr', header: 'Price 1k in/out', render: (p) => `${fmtUsd(p.pricePer1kPromptTokens)}/${fmtUsd(p.pricePer1kCompletionTokens)}` },
-    { key: 'pri', header: 'Priority', render: (p) => p.failoverPriority },
-    { key: 'a', header: 'Active', render: (p) => <Badge variant={p.isActive ? 'success' : 'muted'}>{p.isActive ? 'Yes' : 'No'}</Badge> },
-    {
-      key: 'acts', header: 'Actions', render: (p) => (
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => { setEditing({ ...p, apiKey: '' }); setCreating(false); }}>Edit</Button>
-          {p.isActive && <Button variant="ghost" size="sm" onClick={() => void deactivate(p.id)}>Deactivate</Button>}
-        </div>
-      ),
-    },
-  ];
-
-  return (
-    <AsyncStateWrapper status={status}>
-      <div className="flex justify-end mt-4">
-        <Button variant="primary" onClick={() => {
-          setCreating(true);
-          setEditing({
-            id: '', code: '', name: '', dialect: 'OpenAiCompatible',
-            baseUrl: '', apiKeyHint: '', defaultModel: '', allowedModelsCsv: '',
-            pricePer1kPromptTokens: 0, pricePer1kCompletionTokens: 0,
-            retryCount: 2, circuitBreakerThreshold: 5, circuitBreakerWindowSeconds: 30,
-            failoverPriority: 100, isActive: true,
-            createdAt: '', updatedAt: '', apiKey: '',
-          });
-        }}>+ Register provider</Button>
-      </div>
-      <AdminRoutePanel title="AI providers">
-        <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id || p.code} />
-      </AdminRoutePanel>
-      {editing && (
-        <Modal open={true} onClose={() => { setEditing(null); setCreating(false); }} title={creating ? 'Register provider' : `Edit ${editing.code}`}>
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Code" value={editing.code} onChange={(e) => setEditing({ ...editing, code: e.target.value })} />
-            <Input label="Name" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
-            <Select label="Dialect" value={editing.dialect}
-              onChange={(e) => setEditing({ ...editing, dialect: e.target.value as AiProviderRow['dialect'] })}
-              options={[
-                { value: 'OpenAiCompatible', label: 'OpenAI-compatible' },
-                { value: 'Anthropic', label: 'Anthropic' },
-                { value: 'Mock', label: 'Mock (dev only)' },
-              ]} />
-            <Input label="Base URL" value={editing.baseUrl} onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })} />
-            <Input label={creating ? 'API key' : 'API key (leave blank to keep)'} type="password" value={editing.apiKey ?? ''} onChange={(e) => setEditing({ ...editing, apiKey: e.target.value })} />
-            <Input label="Default model" value={editing.defaultModel} onChange={(e) => setEditing({ ...editing, defaultModel: e.target.value })} />
-            <Select label="Reasoning effort" value={editing.reasoningEffort ?? ''}
-              onChange={(e) => setEditing({ ...editing, reasoningEffort: e.target.value || null })}
-              options={[
-                { value: '', label: 'Inherit AI__ReasoningEffort env default' },
-                { value: 'low', label: 'low' },
-                { value: 'medium', label: 'medium' },
-                { value: 'high', label: 'high' },
-              ]} />
-            <Input label="Price / 1k prompt tokens (USD)" type="number" step="0.0001" value={editing.pricePer1kPromptTokens} onChange={(e) => setEditing({ ...editing, pricePer1kPromptTokens: Number(e.target.value) })} />
-            <Input label="Price / 1k completion tokens (USD)" type="number" step="0.0001" value={editing.pricePer1kCompletionTokens} onChange={(e) => setEditing({ ...editing, pricePer1kCompletionTokens: Number(e.target.value) })} />
-            <Input label="Retry count" type="number" value={editing.retryCount} onChange={(e) => setEditing({ ...editing, retryCount: Number(e.target.value) })} />
-            <Input label="Failover priority" type="number" value={editing.failoverPriority} onChange={(e) => setEditing({ ...editing, failoverPriority: Number(e.target.value) })} />
-            <label className="col-span-2 flex items-center gap-2">
-              <input type="checkbox" checked={editing.isActive} onChange={(e) => setEditing({ ...editing, isActive: e.target.checked })} />
-              Active
-            </label>
-          </div>
-          <div className="flex gap-3 mt-4">
-            <Button variant="primary" onClick={() => void save()}>Save</Button>
-            <Button variant="ghost" onClick={() => { setEditing(null); setCreating(false); }}>Cancel</Button>
-          </div>
-        </Modal>
-      )}
-    </AsyncStateWrapper>
   );
 }
 

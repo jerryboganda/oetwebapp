@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Bot, Cpu, Edit3, PlayCircle, Plus } from 'lucide-react';
+import { Bot, Cpu, Edit3, PlayCircle, Plus, Trash2 } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -12,10 +12,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
-import { activateAdminAIConfig, createAdminAIConfig, updateAdminAIConfig } from '@/lib/api';
+import { activateAdminAIConfig, createAdminAIConfig, updateAdminAIConfig, deleteAdminAIConfig } from '@/lib/api';
 import { getAdminAIConfigData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminAIConfig } from '@/lib/types/admin';
+import { fetchAiProviders, type AiProviderRow } from '@/lib/ai-management-api';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -56,6 +57,11 @@ export default function AIConfigPage() {
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [providerOptions, setProviderOptions] = useState<Array<{ value: string; label: string }>>([
+    { value: 'openai', label: 'OpenAI' },
+    { value: 'anthropic', label: 'Anthropic' },
+    { value: 'google', label: 'Google' },
+  ]);
 
   const selectedStatus = filters.status?.[0];
 
@@ -65,11 +71,25 @@ export default function AIConfigPage() {
     async function loadConfigs() {
       setPageStatus('loading');
       try {
-        const items = await getAdminAIConfigData({ status: selectedStatus });
+        const [items, providers] = await Promise.all([
+          getAdminAIConfigData({ status: selectedStatus }),
+          fetchAiProviders().catch(() => [] as AiProviderRow[]),
+        ]);
         if (cancelled) return;
 
         setConfigs(items);
         setPageStatus(items.length > 0 ? 'success' : 'empty');
+
+        // Merge registered providers into the dropdown so custom
+        // OpenAI-compatible endpoints (NVIDIA NIM, Groq, …) appear.
+        const base = [
+          { value: 'openai', label: 'OpenAI' },
+          { value: 'anthropic', label: 'Anthropic' },
+          { value: 'google', label: 'Google' },
+        ];
+        const registered = providers.map((p) => ({ value: p.code, label: `${p.name} (${p.code})` }));
+        const merged = [...base, ...registered.filter((r) => !base.some((b) => b.value === r.value))];
+        setProviderOptions(merged);
       } catch (error) {
         console.error(error);
         if (!cancelled) {
@@ -115,7 +135,7 @@ export default function AIConfigPage() {
       render: (config) => (
         <div className="space-y-1">
           <p className="font-medium text-navy">{config.model}</p>
-          <p className="text-sm text-muted">{config.provider}</p>
+          <p className="text-sm text-muted">{config.providerName ?? config.provider}</p>
         </div>
       ),
     },
@@ -169,6 +189,11 @@ export default function AIConfigPage() {
               Activate
             </Button>
           ) : null}
+          {config.status === 'deprecated' ? (
+            <Button variant="ghost" size="sm" className="text-danger" onClick={() => handleDelete(config.id)}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -219,6 +244,18 @@ export default function AIConfigPage() {
       setToast({ variant: 'error', message: 'Unable to activate this configuration.' });
     } finally {
       setActivatingId(null);
+    }
+  }
+
+  async function handleDelete(configId: string) {
+    if (!window.confirm('Delete this AI configuration permanently?')) return;
+    try {
+      await deleteAdminAIConfig(configId);
+      await reloadConfigs();
+      setToast({ variant: 'success', message: 'AI configuration deleted.' });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to delete this configuration.' });
     }
   }
 
@@ -302,16 +339,19 @@ export default function AIConfigPage() {
       <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? 'Edit AI Configuration' : 'New AI Configuration'}>
         <div className="space-y-4 py-2">
           <Input label="Model Name" value={form.model} onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))} />
-          <Select
-            label="Provider"
-            value={form.provider}
-            onChange={(event) => setForm((current) => ({ ...current, provider: event.target.value }))}
-            options={[
-              { value: 'openai', label: 'OpenAI' },
-              { value: 'anthropic', label: 'Anthropic' },
-              { value: 'google', label: 'Google' },
-            ]}
-          />
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Select
+                label="Provider"
+                value={form.provider}
+                onChange={(event) => setForm((current) => ({ ...current, provider: event.target.value }))}
+                options={providerOptions}
+              />
+            </div>
+            <Button variant="outline" size="sm" className="mb-0.5" onClick={() => window.open('/admin/ai-providers', '_blank')}>
+              Manage providers
+            </Button>
+          </div>
           <Select
             label="Task Type"
             value={form.taskType}
