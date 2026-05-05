@@ -130,6 +130,7 @@ public partial class AdminService
         };
 
         db.SignupProfessionCatalog.Add(item);
+        await SyncProfessionTaxonomyAsync(item, ct);
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Created", "SignupProfession", item.Id, $"Created signup profession: {item.Label}", ct);
         return item;
@@ -153,6 +154,7 @@ public partial class AdminService
         item.SortOrder = request.SortOrder ?? item.SortOrder;
         item.IsActive = request.IsActive ?? item.IsActive;
 
+        await SyncProfessionTaxonomyAsync(item, ct);
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Updated", "SignupProfession", item.Id, $"Updated signup profession: {item.Label}", ct);
         return item;
@@ -163,9 +165,40 @@ public partial class AdminService
         var item = await db.SignupProfessionCatalog.FirstOrDefaultAsync(row => row.Id == id, ct)
             ?? throw ApiException.NotFound("signup_profession_not_found", "Signup profession not found.");
         item.IsActive = isActive;
+        await SyncProfessionTaxonomyAsync(item, ct);
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, isActive ? "Activated" : "Archived", "SignupProfession", item.Id, $"{(isActive ? "Activated" : "Archived")} signup profession: {item.Label}", ct);
         return new { item.Id, item.IsActive };
+    }
+
+    /// <summary>
+    /// Mirrors a SignupProfessionCatalog row into the legacy <c>Professions</c>
+    /// taxonomy table (<see cref="ProfessionReference"/>) so the signup catalog
+    /// is the single platform-wide source of truth for the profession registry
+    /// (content tagging, mock plans, criteria mapping, etc.). Tracked changes
+    /// are flushed by the caller's <c>SaveChangesAsync</c>.
+    /// </summary>
+    private async Task SyncProfessionTaxonomyAsync(SignupProfessionCatalog item, CancellationToken ct)
+    {
+        var existing = await db.Professions.FirstOrDefaultAsync(p => p.Id == item.Id, ct);
+        var status = item.IsActive ? "active" : "archived";
+
+        if (existing is null)
+        {
+            db.Professions.Add(new ProfessionReference
+            {
+                Id = item.Id,
+                Code = item.Id,
+                Label = item.Label,
+                Status = status,
+                SortOrder = item.SortOrder
+            });
+            return;
+        }
+
+        existing.Label = item.Label;
+        existing.Status = status;
+        existing.SortOrder = item.SortOrder;
     }
 
     private static IReadOnlyList<string> ReadStringList(string json)

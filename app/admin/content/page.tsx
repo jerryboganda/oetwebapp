@@ -189,9 +189,9 @@ const hubSections: HubSection[] = [
         icon: <ScrollText className="h-5 w-5" />,
       },
       {
-        href: '/admin/taxonomy',
-        label: 'Professions',
-        description: 'Profession registry that tags every paper, lesson, and rubric.',
+        href: '/admin/signup-catalog',
+        label: 'Signup Catalog & Professions',
+        description: 'Single source of truth for the profession registry that tags every paper, lesson, and rubric.',
         icon: <Users className="h-5 w-5" />,
       },
     ],

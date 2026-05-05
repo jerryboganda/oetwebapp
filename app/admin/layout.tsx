@@ -9,7 +9,6 @@ import { useMemo } from 'react';
 import { 
   LayoutDashboard,
   Library, 
-  ListTree, 
   ClipboardList,
   Target, 
   Cpu, 
@@ -57,7 +56,8 @@ const adminNavGroups: NavGroup[] = [
   {
     label: 'Governance & rubrics',
     items: [
-      { href: '/admin/taxonomy', label: 'Professions', icon: <ListTree className="w-5 h-5" />, matchPrefix: '/admin/taxonomy' },
+      // Profession registry is now managed via /admin/signup-catalog (single source of truth);
+      // writes there are mirrored into the legacy Professions taxonomy table by the backend.
       { href: '/admin/signup-catalog', label: 'Signup Catalog', icon: <ClipboardList className="w-5 h-5" />, matchPrefix: '/admin/signup-catalog' },
       { href: '/admin/criteria', label: 'Rubrics & Criteria', icon: <Target className="w-5 h-5" />, matchPrefix: '/admin/criteria' },
       { href: '/admin/rulebooks', label: 'Rulebooks', icon: <BookOpenText className="w-5 h-5" />, matchPrefix: '/admin/rulebooks' },
