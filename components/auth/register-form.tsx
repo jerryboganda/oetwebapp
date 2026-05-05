@@ -105,11 +105,9 @@ export function RegisterForm() {
     [professions, selectedExamTypeId],
   );
 
-  // Per PRD Phase 2 §1, the country dropdown is a fixed mandatory list
-  // independent of the signup catalog.
   const availableCountries = useMemo<readonly string[]>(
-    () => TARGET_COUNTRY_OPTIONS,
-    [],
+    () => selectedProfession?.countryTargets?.length ? selectedProfession.countryTargets : TARGET_COUNTRY_OPTIONS,
+    [selectedProfession],
   );
 
   useEffect(() => {
@@ -267,6 +265,7 @@ export function RegisterForm() {
 
           {step === 2 ? (
             <RegisterEnrollmentStep
+              availableCountries={availableCountries}
               examTypes={examTypes}
               filteredProfessions={filteredProfessions}
               form={form}

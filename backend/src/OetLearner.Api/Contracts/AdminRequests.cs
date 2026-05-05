@@ -121,6 +121,25 @@ public record AdminTaxonomyUpdateRequest(
     string? Type,
     string? Status);
 
+// ── Signup Catalog ──
+
+public record AdminSignupExamTypeCatalogRequest(
+    string? Id,
+    string? Code,
+    string? Label,
+    string? Description,
+    int? SortOrder,
+    bool? IsActive);
+
+public record AdminSignupProfessionCatalogRequest(
+    string? Id,
+    string? Label,
+    string? Description,
+    IReadOnlyList<string>? ExamTypeIds,
+    IReadOnlyList<string>? CountryTargets,
+    int? SortOrder,
+    bool? IsActive);
+
 // ── Criteria ──
 
 public record AdminCriterionCreateRequest(

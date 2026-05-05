@@ -123,6 +123,44 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetTaxonomyImpactSummaryAsync(professionId, ct)))
             .WithAdminRead("AdminContentRead");
 
+        // ── Signup Catalog (registration exam types + professions) ─────────────
+
+        admin.MapGet("/signup-catalog", async (AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetSignupCatalogAdminAsync(ct)))
+            .WithAdminRead("AdminContentRead");
+
+        admin.MapPost("/signup-catalog/exam-types", async (HttpContext http, AdminSignupExamTypeCatalogRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateSignupExamTypeAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPut("/signup-catalog/exam-types/{id}", async (string id, HttpContext http, AdminSignupExamTypeCatalogRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateSignupExamTypeAsync(http.AdminId(), http.AdminName(), id, request, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/signup-catalog/exam-types/{id}/archive", async (string id, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.SetSignupExamTypeStatusAsync(http.AdminId(), http.AdminName(), id, false, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/signup-catalog/exam-types/{id}/activate", async (string id, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.SetSignupExamTypeStatusAsync(http.AdminId(), http.AdminName(), id, true, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/signup-catalog/professions", async (HttpContext http, AdminSignupProfessionCatalogRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateSignupProfessionAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPut("/signup-catalog/professions/{id}", async (string id, HttpContext http, AdminSignupProfessionCatalogRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateSignupProfessionAsync(http.AdminId(), http.AdminName(), id, request, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/signup-catalog/professions/{id}/archive", async (string id, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.SetSignupProfessionStatusAsync(http.AdminId(), http.AdminName(), id, false, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/signup-catalog/professions/{id}/activate", async (string id, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.SetSignupProfessionStatusAsync(http.AdminId(), http.AdminName(), id, true, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         // ── Criteria / Rubric ──────────────────────────────
 
         admin.MapGet("/criteria", async (AdminService service, CancellationToken ct, string? subtest, string? status)

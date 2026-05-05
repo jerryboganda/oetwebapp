@@ -234,7 +234,9 @@ public sealed class AuthService(
             professions.Select(item => new SignupProfessionResponse(
                 item.Id,
                 item.Label,
-                TargetCountryOptions.All,
+                DeserializeStringList(item.CountryTargetsJson).Count > 0
+                    ? DeserializeStringList(item.CountryTargetsJson)
+                    : TargetCountryOptions.All,
                 DeserializeStringList(item.ExamTypeIdsJson),
                 item.Description)).ToList(),
             ExternalAuthProviders.All
@@ -1249,6 +1251,13 @@ public sealed class AuthService(
         if (!TargetCountryOptions.Contains(countryTarget))
         {
             throw ApiException.Validation("country_target_invalid", "Select a valid target country.");
+        }
+
+        var professionCountryTargets = DeserializeStringList(profession.CountryTargetsJson);
+        if (professionCountryTargets.Count > 0
+            && !professionCountryTargets.Contains(countryTarget, StringComparer.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation("profession_country_mismatch", "The selected target country is not available for that profession.");
         }
 
         return (examType, profession);

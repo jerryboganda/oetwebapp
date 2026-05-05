@@ -57,6 +57,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/content/grammar/lessons/new': [AdminPermission.ContentWrite],
   '/admin/content/pronunciation': [AdminPermission.ContentRead],
   '/admin/taxonomy': [AdminPermission.ContentRead],
+  '/admin/signup-catalog': [AdminPermission.ContentRead],
   '/admin/criteria': [AdminPermission.ContentRead],
   '/admin/rulebooks': [AdminPermission.ContentRead],
   '/admin/ai-config': [AdminPermission.AiConfig],

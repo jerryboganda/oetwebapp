@@ -121,6 +121,30 @@ export interface AdminTaxonomyImpact {
   safeToArchive: boolean;
 }
 
+export interface AdminSignupExamTypeCatalogItem {
+  id: string;
+  code: string;
+  label: string;
+  description: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface AdminSignupProfessionCatalogItem {
+  id: string;
+  label: string;
+  description: string;
+  examTypeIds: string[];
+  countryTargets: string[];
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface AdminSignupCatalogResponse {
+  examTypes: AdminSignupExamTypeCatalogItem[];
+  professions: AdminSignupProfessionCatalogItem[];
+}
+
 export interface AdminCriterion {
   id: string;
   name: string;

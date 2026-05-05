@@ -3,9 +3,9 @@ import styles from '@/components/auth/auth-screen-shell.module.scss';
 import type { SignupPayloadFormValues } from '@/lib/auth/schemas';
 import type { SignupExamType, SignupProfession } from '@/lib/types/auth';
 import { RegisterErrorText } from './register-error-text';
-import { TARGET_COUNTRY_OPTIONS } from './target-countries';
 
 interface RegisterEnrollmentStepProps {
+  availableCountries: readonly string[];
   examTypes: SignupExamType[];
   filteredProfessions: SignupProfession[];
   form: UseFormReturn<SignupPayloadFormValues>;
@@ -20,6 +20,7 @@ interface RegisterEnrollmentStepProps {
  * being derived from the signup catalog.
  */
 export function RegisterEnrollmentStep({
+  availableCountries,
   examTypes,
   filteredProfessions,
   form,
@@ -76,7 +77,7 @@ export function RegisterEnrollmentStep({
           {...register('countryTarget')}
         >
           <option value="">Select target country</option>
-          {TARGET_COUNTRY_OPTIONS.map((item) => (
+          {availableCountries.map((item) => (
             <option key={item} value={item}>
               {item}
             </option>

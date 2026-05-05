@@ -38,6 +38,7 @@ function EnrollmentHarness() {
     <>
       <RegisterStepProgress step={2} />
       <RegisterEnrollmentStep
+        availableCountries={['United Kingdom']}
         examTypes={[{ id: 'oet', label: 'OET', code: 'OET', description: 'Occupational English Test' }]}
         filteredProfessions={[{ id: 'nursing', label: 'Nursing', countryTargets: [], examTypeIds: ['oet'], description: 'Nursing pathway' }]}
         form={form}
@@ -69,7 +70,7 @@ describe('RegisterForm', () => {
     expect(countryCodeSelect).toBeInTheDocument();
   });
 
-  it('keeps the streamlined enrollment step free of session wording and catalog-derived countries', () => {
+  it('keeps the streamlined enrollment step free of session wording and filters countries by profession catalog', () => {
     renderWithRouter(<EnrollmentHarness />);
 
     expect(screen.getByText(/exam, profession, country/i)).toBeInTheDocument();
@@ -80,14 +81,6 @@ describe('RegisterForm', () => {
     expect(within(targetCountry).getAllByRole('option').map((option) => option.textContent)).toEqual([
       'Select target country',
       'United Kingdom',
-      'Ireland',
-      'Scotland',
-      'USA',
-      'Australia',
-      'New Zealand',
-      'Canada',
-      'Gulf Countries',
-      'Other Countries',
     ]);
     expect(screen.queryByRole('combobox', { name: /^session$/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/published billing plans/i)).not.toBeInTheDocument();

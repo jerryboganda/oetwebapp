@@ -1949,7 +1949,7 @@ public static partial class SeedData
             {
                 Id = "nursing",
                 Label = "Nursing",
-                CountryTargetsJson = JsonSupport.Serialize(new[] { "Australia", "New Zealand" }),
+                CountryTargetsJson = "[]",
                 ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
                 Description = "Registered nurse and clinical nursing candidates.",
                 SortOrder = 1,
@@ -1959,7 +1959,7 @@ public static partial class SeedData
             {
                 Id = "medicine",
                 Label = "Medicine",
-                CountryTargetsJson = JsonSupport.Serialize(new[] { "United Kingdom", "Australia" }),
+                CountryTargetsJson = "[]",
                 ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
                 Description = "Doctors and physicians preparing for healthcare pathways.",
                 SortOrder = 2,
@@ -1969,7 +1969,7 @@ public static partial class SeedData
             {
                 Id = "pharmacy",
                 Label = "Pharmacy",
-                CountryTargetsJson = JsonSupport.Serialize(new[] { "Ireland", "Australia" }),
+                CountryTargetsJson = "[]",
                 ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
                 Description = "Pharmacists and pharmacy practice candidates.",
                 SortOrder = 3,
@@ -1979,7 +1979,7 @@ public static partial class SeedData
             {
                 Id = "dentistry",
                 Label = "Dentistry",
-                CountryTargetsJson = JsonSupport.Serialize(new[] { "United Kingdom", "New Zealand" }),
+                CountryTargetsJson = "[]",
                 ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
                 Description = "Dental professionals and dentistry applicants.",
                 SortOrder = 4,
@@ -1989,7 +1989,7 @@ public static partial class SeedData
             {
                 Id = "physiotherapy",
                 Label = "Physiotherapy",
-                CountryTargetsJson = JsonSupport.Serialize(new[] { "United Kingdom", "Australia", "New Zealand" }),
+                CountryTargetsJson = "[]",
                 ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
                 Description = "Physiotherapists and physical therapy candidates.",
                 SortOrder = 5,
@@ -1999,7 +1999,7 @@ public static partial class SeedData
             {
                 Id = "other-allied-health",
                 Label = "Other Allied health profession",
-                CountryTargetsJson = JsonSupport.Serialize(new[] { "United Kingdom", "Australia", "New Zealand", "Ireland", "Canada" }),
+                CountryTargetsJson = "[]",
                 ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
                 Description = "Other allied health professionals (occupational therapy, dietetics, speech pathology, podiatry, optometry, radiography, etc.).",
                 SortOrder = 6,
@@ -2009,7 +2009,7 @@ public static partial class SeedData
             {
                 Id = "academic-english",
                 Label = "Academic / General English",
-                CountryTargetsJson = JsonSupport.Serialize(new[] { "Canada", "United Kingdom", "Australia" }),
+                CountryTargetsJson = "[]",
                 ExamTypeIdsJson = JsonSupport.Serialize(new[] { "ielts" }),
                 Description = "General academic and migration IELTS candidates.",
                 SortOrder = 7,

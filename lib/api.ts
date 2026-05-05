@@ -3638,6 +3638,61 @@ export async function archiveAdminTaxonomy(professionId: string) {
   return apiRequest(`/v1/admin/taxonomy/${encodeURIComponent(professionId)}/archive`, { method: 'POST' });
 }
 
+export interface AdminSignupExamTypePayload {
+  id: string;
+  code: string;
+  label: string;
+  description?: string;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export interface AdminSignupProfessionPayload {
+  id: string;
+  label: string;
+  description?: string;
+  examTypeIds?: string[];
+  countryTargets?: string[];
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export async function fetchAdminSignupCatalog() {
+  return apiRequest('/v1/admin/signup-catalog');
+}
+
+export async function createAdminSignupExamType(payload: AdminSignupExamTypePayload) {
+  return apiRequest('/v1/admin/signup-catalog/exam-types', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateAdminSignupExamType(id: string, payload: AdminSignupExamTypePayload) {
+  return apiRequest(`/v1/admin/signup-catalog/exam-types/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
+export async function archiveAdminSignupExamType(id: string) {
+  return apiRequest(`/v1/admin/signup-catalog/exam-types/${encodeURIComponent(id)}/archive`, { method: 'POST' });
+}
+
+export async function activateAdminSignupExamType(id: string) {
+  return apiRequest(`/v1/admin/signup-catalog/exam-types/${encodeURIComponent(id)}/activate`, { method: 'POST' });
+}
+
+export async function createAdminSignupProfession(payload: AdminSignupProfessionPayload) {
+  return apiRequest('/v1/admin/signup-catalog/professions', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateAdminSignupProfession(id: string, payload: AdminSignupProfessionPayload) {
+  return apiRequest(`/v1/admin/signup-catalog/professions/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
+export async function archiveAdminSignupProfession(id: string) {
+  return apiRequest(`/v1/admin/signup-catalog/professions/${encodeURIComponent(id)}/archive`, { method: 'POST' });
+}
+
+export async function activateAdminSignupProfession(id: string) {
+  return apiRequest(`/v1/admin/signup-catalog/professions/${encodeURIComponent(id)}/activate`, { method: 'POST' });
+}
+
 export async function fetchAdminCriteria(params?: { subtest?: string; status?: string }) {
   const qs = new URLSearchParams();
   if (params?.subtest) qs.set('subtest', params.subtest);
