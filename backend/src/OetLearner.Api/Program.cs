@@ -520,6 +520,19 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<MockService>();
 builder.Services.AddScoped<MockBookingService>();
+// DI hotfix (2026-05-06): these services are consumed directly by minimal-API
+// endpoint handlers but were not registered, causing ASP.NET to fall back to
+// inferring them as Body parameters and aborting host startup with
+// "Body was inferred but the method does not allow inferred body parameters".
+builder.Services.AddScoped<RemediationPlanService>();
+builder.Services.AddScoped<AdminWalletTierService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Content.MediaAssetAccessService>();
+builder.Services.AddScoped<MockDiagnosticEntitlementService>();
+builder.Services.AddScoped<MockItemAnalysisService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Recalls.RecallsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.RefundService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.RulebookAdminService>();
+builder.Services.AddScoped<SpeakingTutorCalibrationService>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<ExpertOnboardingService>();
