@@ -17,6 +17,8 @@ import {
   fetchAdminVocabularyItems,
   deleteAdminVocabularyItem,
   fetchAdminVocabularyCategories,
+  fetchAdminVocabularyRecallSets,
+  type AdminRecallSetSummary,
 } from '@/lib/api';
 
 type VocabRow = {
@@ -49,7 +51,9 @@ export default function AdminVocabularyPage() {
   const [category, setCategory] = useState<string>('');
   const [profession, setProfession] = useState<string>('');
   const [status, setStatus] = useState<string>('');
+  const [recallSet, setRecallSet] = useState<string>('');
   const [categories, setCategories] = useState<Array<{ category: string; total: number }>>([]);
+  const [recallSets, setRecallSets] = useState<AdminRecallSetSummary[]>([]);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
@@ -58,6 +62,9 @@ export default function AdminVocabularyPage() {
         const c = (d as { categories?: Array<{ category: string; total: number }> }).categories ?? [];
         setCategories(c);
       })
+      .catch(() => {});
+    fetchAdminVocabularyRecallSets()
+      .then(d => setRecallSets(d.sets ?? []))
       .catch(() => {});
   }, []);
 
@@ -71,6 +78,7 @@ export default function AdminVocabularyPage() {
           category: category || undefined,
           status: status || undefined,
           search: search || undefined,
+          recallSet: recallSet || undefined,
           page,
           pageSize,
         });
@@ -85,7 +93,7 @@ export default function AdminVocabularyPage() {
       }
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [search, category, profession, status, page, pageSize]);
+  }, [search, category, profession, status, recallSet, page, pageSize]);
 
   async function handleDelete(id: string, term: string) {
     if (!confirm(`Delete "${term}"? Referenced terms will be archived instead.`)) return;
@@ -206,6 +214,38 @@ export default function AdminVocabularyPage() {
               <option value="archived">Archived</option>
             </select>
           </div>
+
+          {recallSets.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted">Recall set:</span>
+              <button
+                type="button"
+                onClick={() => { setRecallSet(''); setPage(1); }}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  recallSet === ''
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border bg-surface text-muted hover:border-border-hover hover:text-navy'
+                }`}
+              >
+                All
+              </button>
+              {recallSets.map((s) => (
+                <button
+                  key={s.code}
+                  type="button"
+                  onClick={() => { setRecallSet(s.code); setPage(1); }}
+                  title={`${s.description} — active ${s.active}, draft ${s.draft}, archived ${s.archived}`}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    recallSet === s.code
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-surface text-muted hover:border-border-hover hover:text-navy'
+                  }`}
+                >
+                  {s.shortLabel} ({s.total})
+                </button>
+              ))}
+            </div>
+          )}
 
           <AsyncStateWrapper status={pageStatus}>
             <DataTable columns={columns} data={rows} keyExtractor={(r) => r.id} />

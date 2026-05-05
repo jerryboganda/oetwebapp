@@ -64,4 +64,16 @@
     </None>
   </ItemGroup>
 
+  <!--
+    Recall-set tag packs (year/source dimension, 2026-05). Loaded by
+    RecallSetTagSeeder at boot to apply year/source tags to existing
+    VocabularyTerm rows. Tag-only — never creates new terms.
+  -->
+  <ItemGroup>
+    <None Include="Data\SeedData\recall-sets\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

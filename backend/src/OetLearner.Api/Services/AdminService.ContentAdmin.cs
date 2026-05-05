@@ -136,7 +136,8 @@ public partial class AdminService
     // ════════════════════════════════════════════
 
     public async Task<object> GetVocabularyItemsAsync(
-        string? profession, string? category, string? status, string? search, int page, int pageSize, CancellationToken ct)
+        string? profession, string? category, string? status, string? search, int page, int pageSize, CancellationToken ct,
+        string? recallSet = null)
     {
         var query = db.VocabularyTerms.AsQueryable();
 
@@ -148,6 +149,13 @@ public partial class AdminService
             query = query.Where(v => v.Status == status);
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(v => v.Term.Contains(search) || v.Definition.Contains(search));
+
+        var normalisedSet = OetLearner.Api.Domain.RecallSetCodes.Normalise(recallSet);
+        if (normalisedSet is not null)
+        {
+            var needle = $"\"{normalisedSet}\"";
+            query = query.Where(v => v.RecallSetCodesJson.Contains(needle));
+        }
 
         var total = await query.CountAsync(ct);
         var items = await ToOrderedListDescendingAsync(query, v => v.Id, ct, skip: (page - 1) * pageSize, take: pageSize);
@@ -365,6 +373,70 @@ public partial class AdminService
             .ToList();
 
         return new { examTypeCode, professionId, categories = groups };
+    }
+
+    /// <summary>
+    /// Admin view of the recall-set registry: canonical metadata plus per-set
+    /// counts split by status (active / draft / archived).
+    /// </summary>
+    public async Task<object> GetRecallSetsAdminAsync(
+        string? examTypeCode, string? professionId, CancellationToken ct)
+    {
+        var query = db.VocabularyTerms.AsQueryable();
+        if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
+        if (!string.IsNullOrEmpty(professionId)) query = query.Where(t => t.ProfessionId == professionId);
+
+        var rows = await query
+            .Where(t => t.RecallSetCodesJson != null && t.RecallSetCodesJson != "[]")
+            .Select(t => new { t.RecallSetCodesJson, t.Status })
+            .ToListAsync(ct);
+
+        var counts = new Dictionary<string, (int active, int draft, int archived)>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            try
+            {
+                var list = System.Text.Json.JsonSerializer.Deserialize<List<string>>(row.RecallSetCodesJson) ?? new List<string>();
+                foreach (var raw in list)
+                {
+                    var c = OetLearner.Api.Domain.RecallSetCodes.Normalise(raw);
+                    if (c is null) continue;
+                    (int active, int draft, int archived) t = counts.TryGetValue(c, out var current)
+                        ? current
+                        : (0, 0, 0);
+                    counts[c] = row.Status switch
+                    {
+                        "active" => (t.active + 1, t.draft, t.archived),
+                        "draft" => (t.active, t.draft + 1, t.archived),
+                        "archived" => (t.active, t.draft, t.archived + 1),
+                        _ => t,
+                    };
+                }
+            }
+            catch { /* malformed row ignored */ }
+        }
+
+        var sets = OetLearner.Api.Domain.RecallSetCodes.Metadata
+            .OrderBy(m => m.SortOrder)
+            .Select(m =>
+            {
+                var (active, draft, archived) = counts.TryGetValue(m.Code, out var n) ? n : (0, 0, 0);
+                return new
+                {
+                    code = m.Code,
+                    displayName = m.DisplayName,
+                    shortLabel = m.ShortLabel,
+                    description = m.Description,
+                    sortOrder = m.SortOrder,
+                    active,
+                    draft,
+                    archived,
+                    total = active + draft + archived,
+                };
+            })
+            .ToList();
+
+        return new { examTypeCode, professionId, sets };
     }
 
     public async Task<object> DeleteVocabularyItemAsync(

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "recallSetCode": "2023-2025",
+  "examTypeCode": "OET",
+  "displayName": "January 2023 — End of 2025",
+  "sourceProvenance": "PLACEHOLDER — source PDF was named in the request but not attached. Admins should populate `terms` with the verbatim wordlist from the 'Jan 2023 → End of 2025 recalls' PDF and redeploy. The seeder will then tag matching VocabularyTerm rows on next boot.",
+  "_notes": "Tag-only pack. Empty `terms` is a no-op for the seeder. Add lowercase trimmed term names — duplicates with other recall sets are EXPECTED (multi-tag) and harmless.",
+  "terms": []
+}

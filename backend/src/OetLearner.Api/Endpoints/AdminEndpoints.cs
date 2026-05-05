@@ -912,8 +912,8 @@ public static class AdminEndpoints
         // ── Vocabulary Admin CRUD ────────────────────────
 
         admin.MapGet("/vocabulary/items", async (AdminService service, CancellationToken ct,
-            string? profession, string? category, string? status, string? search, int? page, int? pageSize)
-            => Results.Ok(await service.GetVocabularyItemsAsync(profession, category, status, search, page ?? 1, pageSize ?? 20, ct)))
+            string? profession, string? category, string? status, string? search, int? page, int? pageSize, string? recallSet)
+            => Results.Ok(await service.GetVocabularyItemsAsync(profession, category, status, search, page ?? 1, pageSize ?? 20, ct, recallSet)))
             .WithAdminRead("AdminContentRead");
 
         admin.MapGet("/vocabulary/items/{itemId}", async (string itemId, AdminService service, CancellationToken ct)
@@ -935,6 +935,14 @@ public static class AdminEndpoints
         admin.MapGet("/vocabulary/categories", async (AdminService service, CancellationToken ct,
             string? examTypeCode, string? professionId)
             => Results.Ok(await service.GetVocabularyCategoriesAdminAsync(examTypeCode, professionId, ct)))
+            .WithAdminRead("AdminContentRead");
+
+        // Recall-set registry (year/source dimension) with admin-side counts
+        // by status. Companion to /vocabulary/categories. See
+        // backend/src/OetLearner.Api/Domain/RecallSetCodes.cs.
+        admin.MapGet("/vocabulary/recall-sets", async (AdminService service, CancellationToken ct,
+            string? examTypeCode, string? professionId)
+            => Results.Ok(await service.GetRecallSetsAdminAsync(examTypeCode, professionId, ct)))
             .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/vocabulary/import/preview", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct, [FromQuery] string? importBatchId)

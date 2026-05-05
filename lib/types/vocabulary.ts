@@ -21,6 +21,12 @@ export interface VocabularyTerm {
   relatedTerms: string[];
   sourceProvenance: string | null;
   status: 'active' | 'draft' | 'archived' | string;
+  /**
+   * Year/source dimension — multi-tag of recall-set codes (`old`, `2023-2025`,
+   * `2026`, …). Empty array if the term has not been classified into any
+   * curated recall PDF yet.
+   */
+  recallSetCodes?: string[];
 }
 
 export interface VocabularyTermSummary {

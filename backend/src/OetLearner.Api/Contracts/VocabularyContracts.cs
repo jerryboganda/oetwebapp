@@ -26,7 +26,29 @@ public sealed record VocabularyTermResponse(
     string[] Collocations,
     string[] RelatedTerms,
     string? SourceProvenance,
-    string Status
+    string Status,
+    /// <summary>
+    /// Recalls Content Pack v1: year/source dimension. Multi-tag — a term may
+    /// appear in several historical recall PDFs (e.g. ["old","2026"]).
+    /// Empty array means the term is not part of any curated recall set yet.
+    /// </summary>
+    string[] RecallSetCodes
+);
+
+/// <summary>One row in the canonical recall-set registry response.</summary>
+public sealed record RecallSetSummaryResponse(
+    string Code,
+    string DisplayName,
+    string ShortLabel,
+    string Description,
+    int SortOrder,
+    int TermCount
+);
+
+public sealed record RecallSetsListResponse(
+    string ExamTypeCode,
+    string? ProfessionId,
+    IReadOnlyList<RecallSetSummaryResponse> Sets
 );
 
 public sealed record VocabularyTermSummary(

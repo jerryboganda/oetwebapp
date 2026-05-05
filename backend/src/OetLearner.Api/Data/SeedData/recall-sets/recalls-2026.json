@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "recallSetCode": "2026",
+  "examTypeCode": "OET",
+  "displayName": "January 2026 onwards",
+  "sourceProvenance": "Dr Hesham — 'RECENT UPDATED LISTENING RECALLS FROM JANUARY 2026' PDF (2026-05 ingest)",
+  "_notes": "Tag-only pack. Multi-tag: terms that also appear in older PDFs are tagged in both packs (e.g. 'depression', 'bunion', 'ginger'). The seeder is idempotent and will not duplicate.",
+  "terms": [
+    "dribbling", "depression", "yoga", "golf", "grinding sensation",
+    "independence", "nightmares", "sudden", "steroid injections", "left knee",
+    "neck", "counsellor", "eyesight", "constipation", "blinking",
+    "pounding sound", "bloody sputum", "irritable", "gastric flu",
+    "debilitating", "fitful", "multivitamins", "palpitations", "stiff",
+    "cloudy", "limp", "bunion", "ginger", "cycling", "wrist", "swimming",
+    "Isolated", "garlic"
+  ]
+}

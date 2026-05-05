@@ -69,6 +69,13 @@ public static class DatabaseBootstrapper
         await OetLearner.Api.Services.Recalls.RecallsContentSeeder.EnsureAsync(
             db, environment, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, cancellationToken);
 
+        // Recalls year/source dimension — apply recall-set codes (old / 2023-2025 / 2026)
+        // to existing VocabularyTerm rows by name. Idempotent multi-tag. See
+        // backend/src/OetLearner.Api/Domain/RecallSetCodes.cs and the Data/SeedData/recall-sets/*.json
+        // packs (one per historical recall PDF).
+        await OetLearner.Api.Services.Recalls.RecallSetTagSeeder.EnsureAsync(
+            db, environment, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, cancellationToken);
+
         // Demo/test data (mock user, goals, settings) only in development or when explicitly enabled
         if (seedDemoData)
         {

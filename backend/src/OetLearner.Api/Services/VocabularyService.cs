@@ -27,7 +27,8 @@ public class VocabularyService(
         string? search,
         int page,
         int pageSize,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? recallSet = null)
     {
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
         if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
@@ -39,12 +40,74 @@ public class VocabularyService(
             query = query.Where(t => t.Term.Contains(s) || t.Definition.Contains(s));
         }
 
+        // Recall-set filter — string-contains over the JSON array column. Cheap
+        // first-cut; if hot we move it to a normalised join table later.
+        var normalisedSet = OetLearner.Api.Domain.RecallSetCodes.Normalise(recallSet);
+        if (normalisedSet is not null)
+        {
+            var needle = $"\"{normalisedSet}\"";
+            query = query.Where(t => t.RecallSetCodesJson.Contains(needle));
+        }
+
         var total = await query.CountAsync(ct);
         var items = await query.OrderBy(t => t.Term)
             .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
 
         var mapped = items.Select(Map).ToList();
         return new VocabularyTermsPageResponse(total, page, pageSize, mapped, mapped);
+    }
+
+    /// <summary>
+    /// Recall-set registry with live counts. Returns the canonical set list from
+    /// <see cref="OetLearner.Api.Domain.RecallSetCodes"/> (so the UI is stable
+    /// even before any term is tagged) joined with the per-set count of active
+    /// vocabulary terms carrying that code.
+    /// </summary>
+    public async Task<RecallSetsListResponse> GetRecallSetsAsync(
+        string? examTypeCode,
+        string? profession,
+        CancellationToken ct)
+    {
+        var resolvedExam = string.IsNullOrWhiteSpace(examTypeCode) ? "oet" : examTypeCode;
+
+        var query = db.VocabularyTerms.Where(t => t.Status == "active");
+        if (!string.IsNullOrWhiteSpace(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
+        if (!string.IsNullOrWhiteSpace(profession)) query = query.Where(t => t.ProfessionId == profession);
+
+        // Pull only the JSON column for cheap in-memory tally.
+        var rawCodes = await query
+            .Where(t => t.RecallSetCodesJson != null && t.RecallSetCodesJson != "[]")
+            .Select(t => t.RecallSetCodesJson)
+            .ToListAsync(ct);
+
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var json in rawCodes)
+        {
+            try
+            {
+                var list = JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+                foreach (var raw in list)
+                {
+                    var c = OetLearner.Api.Domain.RecallSetCodes.Normalise(raw);
+                    if (c is null) continue;
+                    counts[c] = counts.TryGetValue(c, out var n) ? n + 1 : 1;
+                }
+            }
+            catch { /* malformed row ignored */ }
+        }
+
+        var sets = OetLearner.Api.Domain.RecallSetCodes.Metadata
+            .OrderBy(m => m.SortOrder)
+            .Select(m => new RecallSetSummaryResponse(
+                Code: m.Code,
+                DisplayName: m.DisplayName,
+                ShortLabel: m.ShortLabel,
+                Description: m.Description,
+                SortOrder: m.SortOrder,
+                TermCount: counts.TryGetValue(m.Code, out var n) ? n : 0))
+            .ToList();
+
+        return new RecallSetsListResponse(resolvedExam, profession, sets);
     }
 
     public async Task<VocabularyTermResponse> GetTermAsync(string termId, CancellationToken ct)
@@ -690,7 +753,8 @@ public class VocabularyService(
         Collocations: ParseStringArray(t.CollocationsJson).ToArray(),
         RelatedTerms: ParseStringArray(t.RelatedTermsJson).ToArray(),
         SourceProvenance: t.SourceProvenance,
-        Status: t.Status);
+        Status: t.Status,
+        RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray());
 
     private static VocabularyTermSummary MapSummary(VocabularyTerm t) => new(
         Id: t.Id,

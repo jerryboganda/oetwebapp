@@ -14,6 +14,8 @@ import {
   addToMyVocabulary,
   fetchVocabularyCategories,
   fetchRecallsAudio,
+  fetchVocabularyRecallSets,
+  type RecallSetSummary,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
@@ -38,6 +40,8 @@ type TermRow = Pick<VocabularyTerm, 'id' | 'term' | 'definition' | 'category' | 
 export default function BrowseVocabularyPage() {
   const [terms, setTerms] = useState<TermRow[]>([]);
   const [categories, setCategories] = useState<Array<{ category: string; termCount: number }>>([]);
+  const [recallSets, setRecallSets] = useState<RecallSetSummary[]>([]);
+  const [recallSet, setRecallSet] = useState('');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [page, setPage] = useState(1);
@@ -57,6 +61,7 @@ export default function BrowseVocabularyPage() {
       const data = await fetchVocabularyTerms({
         examTypeCode: 'oet',
         category: category || undefined,
+        recallSet: recallSet || undefined,
         search: search || undefined,
         page,
         pageSize,
@@ -71,7 +76,7 @@ export default function BrowseVocabularyPage() {
     } finally {
       setLoading(false);
     }
-  }, [category, page, pageSize, search]);
+  }, [category, page, pageSize, recallSet, search]);
 
   useEffect(() => {
     analytics.track('vocab_browse_viewed');
@@ -81,6 +86,10 @@ export default function BrowseVocabularyPage() {
         const d = data as VocabularyCategoriesResponse;
         setCategories(d.categories ?? []);
       })
+      .catch(() => {/* non-fatal */});
+    // Load recall-set registry (year/source dimension).
+    fetchVocabularyRecallSets({ examTypeCode: 'oet' })
+      .then((data) => setRecallSets(data.sets ?? []))
       .catch(() => {/* non-fatal */});
   }, []);
 
@@ -158,6 +167,37 @@ export default function BrowseVocabularyPage() {
             ))}
           </select>
         </div>
+        {recallSets.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">Recall set:</span>
+            <button
+              type="button"
+              onClick={() => { setRecallSet(''); setPage(1); }}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                recallSet === ''
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border bg-background-light text-muted hover:border-border-hover hover:text-navy'
+              }`}
+            >
+              All
+            </button>
+            {recallSets.map((s) => (
+              <button
+                key={s.code}
+                type="button"
+                onClick={() => { setRecallSet(s.code); setPage(1); }}
+                title={s.description}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  recallSet === s.code
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border bg-background-light text-muted hover:border-border-hover hover:text-navy'
+                }`}
+              >
+                {s.shortLabel}{s.termCount > 0 ? ` (${s.termCount})` : ''}
+              </button>
+            ))}
+          </div>
+        )}
       </Card>
 
       {loading ? (

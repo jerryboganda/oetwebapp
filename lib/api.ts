@@ -4774,12 +4774,13 @@ export async function fetchRecallsRevisionPlan() {
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────
 
-export async function fetchVocabularyTerms(params?: { examTypeCode?: string; category?: string; profession?: string; search?: string; page?: number; pageSize?: number }) {
+export async function fetchVocabularyTerms(params?: { examTypeCode?: string; category?: string; profession?: string; search?: string; recallSet?: string; page?: number; pageSize?: number }) {
   const p = new URLSearchParams();
   if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
   if (params?.category) p.set('category', params.category);
   if (params?.profession) p.set('profession', params.profession);
   if (params?.search) p.set('search', params.search);
+  if (params?.recallSet) p.set('recallSet', params.recallSet);
   if (params?.page) p.set('page', String(params.page));
   if (params?.pageSize) p.set('pageSize', String(params.pageSize));
   return apiRequest(`/v1/vocabulary/terms?${p}`);
@@ -4800,6 +4801,33 @@ export async function fetchVocabularyCategories(params?: { examTypeCode?: string
   if (params?.profession) p.set('profession', params.profession);
   const qs = p.toString();
   return apiRequest(`/v1/vocabulary/categories${qs ? `?${qs}` : ''}`);
+}
+
+/**
+ * Recall-set registry (year/source dimension). Returns the canonical 3-set
+ * list (`old`, `2023-2025`, `2026`) with live term counts. Stable even when
+ * no terms are tagged yet — admin/learner UIs can render the chips eagerly.
+ * See `backend/src/OetLearner.Api/Domain/RecallSetCodes.cs`.
+ */
+export interface RecallSetSummary {
+  code: string;
+  displayName: string;
+  shortLabel: string;
+  description: string;
+  sortOrder: number;
+  termCount: number;
+}
+export interface RecallSetsResponse {
+  examTypeCode: string;
+  professionId: string | null;
+  sets: RecallSetSummary[];
+}
+export async function fetchVocabularyRecallSets(params?: { examTypeCode?: string; profession?: string }): Promise<RecallSetsResponse> {
+  const p = new URLSearchParams();
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.profession) p.set('profession', params.profession);
+  const qs = p.toString();
+  return apiRequest(`/v1/vocabulary/recall-sets${qs ? `?${qs}` : ''}`) as Promise<RecallSetsResponse>;
 }
 
 export async function fetchVocabularyStats() {
@@ -5652,6 +5680,7 @@ export async function fetchSpeakingDrills(filters?: {
 
 export async function fetchAdminVocabularyItems(params?: {
   profession?: string; category?: string; status?: string; search?: string;
+  recallSet?: string;
   page?: number; pageSize?: number;
 }) {
   const p = new URLSearchParams();
@@ -5659,10 +5688,38 @@ export async function fetchAdminVocabularyItems(params?: {
   if (params?.category) p.set('category', params.category);
   if (params?.status) p.set('status', params.status);
   if (params?.search) p.set('search', params.search);
+  if (params?.recallSet) p.set('recallSet', params.recallSet);
   if (params?.page) p.set('page', String(params.page));
   if (params?.pageSize) p.set('pageSize', String(params.pageSize));
   const qs = p.toString();
   return apiRequest(`/v1/admin/vocabulary/items${qs ? `?${qs}` : ''}`);
+}
+
+/**
+ * Admin recall-set registry: canonical 3-set list with per-status counts
+ * (active / draft / archived / total). See `RecallSetCodes` on the backend.
+ */
+export interface AdminRecallSetSummary {
+  code: string;
+  displayName: string;
+  shortLabel: string;
+  description: string;
+  sortOrder: number;
+  active: number;
+  draft: number;
+  archived: number;
+  total: number;
+}
+export async function fetchAdminVocabularyRecallSets(params?: { examTypeCode?: string; professionId?: string }) {
+  const p = new URLSearchParams();
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.professionId) p.set('professionId', params.professionId);
+  const qs = p.toString();
+  return apiRequest(`/v1/admin/vocabulary/recall-sets${qs ? `?${qs}` : ''}`) as Promise<{
+    examTypeCode: string | null;
+    professionId: string | null;
+    sets: AdminRecallSetSummary[];
+  }>;
 }
 
 export async function fetchAdminVocabularyItem(itemId: string) {

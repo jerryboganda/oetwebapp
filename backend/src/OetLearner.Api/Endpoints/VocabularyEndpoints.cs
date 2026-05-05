@@ -18,6 +18,7 @@ public static class VocabularyEndpoints
             [FromQuery] string? category,
             [FromQuery] string? profession,
             [FromQuery] string? search,
+            [FromQuery] string? recallSet,
             [FromQuery] int page,
             [FromQuery] int pageSize,
             VocabularyService svc, CancellationToken ct) =>
@@ -26,7 +27,16 @@ public static class VocabularyEndpoints
                 category, profession, search,
                 page <= 0 ? 1 : page,
                 pageSize <= 0 ? 20 : Math.Min(pageSize, 100),
-                ct)));
+                ct,
+                recallSet)));
+
+        // Recall-set registry (year/source dimension). Public to authenticated
+        // learners so the browse + recalls UI can render filter chips.
+        vocab.MapGet("/recall-sets", async (
+            [FromQuery] string? examTypeCode,
+            [FromQuery] string? profession,
+            VocabularyService svc, CancellationToken ct) =>
+            Results.Ok(await svc.GetRecallSetsAsync(examTypeCode, profession, ct)));
 
         vocab.MapGet("/terms/lookup", async (
             [FromQuery] string q,

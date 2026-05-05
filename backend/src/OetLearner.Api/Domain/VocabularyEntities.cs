@@ -90,6 +90,16 @@ public class VocabularyTerm
     /// </summary>
     public string OetSubtestTagsJson { get; set; } = "[]";
 
+    /// <summary>
+    /// Recalls Content Pack v1 (2026-05-05): the year/source dimension of the
+    /// matrix tag system. Multi-tag — a term may belong to several historical
+    /// recall PDFs (e.g. "headaches" appears in old, 2023-2025 and 2026 sets).
+    /// JSON array of canonical codes from <see cref="RecallSetCodes"/>, e.g.
+    /// ["old", "2026"]. Empty array means the term is not part of any curated
+    /// recall set yet.
+    /// </summary>
+    public string RecallSetCodesJson { get; set; } = "[]";
+
     [MaxLength(512)]
     public string? SourceProvenance { get; set; }           // Required at publish
 
