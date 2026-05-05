@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, BookOpen, Plus, Save, X } from 'lucide-react';
@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useProfessions } from '@/lib/hooks/use-professions';
+import { fetchAdminVocabularyRecallSets } from '@/lib/api';
 
 export type VocabFormValues = {
   term: string;
@@ -34,6 +35,10 @@ export type VocabFormValues = {
   synonyms: string[];
   collocations: string[];
   relatedTerms: string[];
+  recallSetCodes: string[];
+  commonMistakes: string[];
+  similarSounding: string[];
+  oetSubtestTags: string[];
   sourceProvenance: string;
   status: 'draft' | 'active' | 'archived';
 };
@@ -52,7 +57,20 @@ const CATEGORIES = [
   'dispensing', 'counselling',
 ];
 
+const OET_SUBTEST_TAGS = [
+  { value: 'listening_a', label: 'Listening A' },
+  { value: 'listening_b', label: 'Listening B' },
+  { value: 'listening_c', label: 'Listening C' },
+  { value: 'reading_a', label: 'Reading A' },
+  { value: 'reading_b', label: 'Reading B' },
+  { value: 'reading_c', label: 'Reading C' },
+  { value: 'writing', label: 'Writing' },
+  { value: 'speaking', label: 'Speaking' },
+] as const;
+
 const PROFESSIONS_FALLBACK_HEAD = [{ value: '', label: 'General (all)' }] as const;
+
+type RecallSetOption = { code: string; displayName: string };
 
 
 function TagInput({ value, onChange, placeholder, label }: { value: string[]; onChange: (v: string[]) => void; placeholder: string; label: string }) {
@@ -94,6 +112,30 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
   const router = useRouter();
   const { options: professionOptions } = useProfessions();
   const PROFESSIONS = [...PROFESSIONS_FALLBACK_HEAD, ...professionOptions];
+  const [recallSetOptions, setRecallSetOptions] = useState<RecallSetOption[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetchAdminVocabularyRecallSets({ examTypeCode: 'oet' });
+        if (cancelled) return;
+        const sets = (res as { sets?: Array<{ code?: string; displayName?: string }> })?.sets ?? [];
+        setRecallSetOptions(
+          sets
+            .filter((s): s is { code: string; displayName?: string } => typeof s.code === 'string')
+            .map(s => ({ code: s.code, displayName: s.displayName ?? s.code }))
+        );
+      } catch {
+        // fall back to canonical codes
+        setRecallSetOptions([
+          { code: 'old', displayName: 'Old Recalls + Most Common Words' },
+          { code: '2023-2025', displayName: 'January 2023 — End of 2025' },
+          { code: '2026', displayName: 'January 2026 onwards' },
+        ]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const [v, setV] = useState<VocabFormValues>({
     term: initial?.term ?? '',
     definition: initial?.definition ?? '',
@@ -113,6 +155,10 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
     synonyms: initial?.synonyms ?? [],
     collocations: initial?.collocations ?? [],
     relatedTerms: initial?.relatedTerms ?? [],
+    recallSetCodes: initial?.recallSetCodes ?? [],
+    commonMistakes: initial?.commonMistakes ?? [],
+    similarSounding: initial?.similarSounding ?? [],
+    oetSubtestTags: initial?.oetSubtestTags ?? [],
     sourceProvenance: initial?.sourceProvenance ?? '',
     status: (initial?.status as VocabFormValues['status']) ?? 'draft',
   });
@@ -287,6 +333,65 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
               <TagInput label="Related terms" value={v.relatedTerms} onChange={(s) => setV({ ...v, relatedTerms: s })} placeholder="Add related term…" />
             </div>
 
+            {/* Recall set tags */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-navy">Recall sets (year tags)</label>
+              <div className="flex flex-wrap gap-2">
+                {recallSetOptions.map(opt => {
+                  const checked = v.recallSetCodes.includes(opt.code);
+                  return (
+                    <button
+                      key={opt.code}
+                      type="button"
+                      onClick={() => setV({
+                        ...v,
+                        recallSetCodes: checked
+                          ? v.recallSetCodes.filter(c => c !== opt.code)
+                          : [...v.recallSetCodes, opt.code],
+                      })}
+                      className={`rounded-full border px-3 py-1 text-xs transition ${checked ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-muted hover:border-primary/40'}`}
+                      aria-pressed={checked}
+                    >
+                      {opt.displayName}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-xs text-muted">Tag this term with one or more recall sets so learners can filter by year.</p>
+            </div>
+
+            {/* OET subtest tags */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-navy">OET subtest tags</label>
+              <div className="flex flex-wrap gap-2">
+                {OET_SUBTEST_TAGS.map(opt => {
+                  const checked = v.oetSubtestTags.includes(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setV({
+                        ...v,
+                        oetSubtestTags: checked
+                          ? v.oetSubtestTags.filter(c => c !== opt.value)
+                          : [...v.oetSubtestTags, opt.value],
+                      })}
+                      className={`rounded-full border px-3 py-1 text-xs transition ${checked ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-muted hover:border-primary/40'}`}
+                      aria-pressed={checked}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Common mistakes + similar sounding */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <TagInput label="Common mistakes" value={v.commonMistakes} onChange={(s) => setV({ ...v, commonMistakes: s })} placeholder="e.g. spelt 'embolus' instead of 'embolism'…" />
+              <TagInput label="Similar sounding" value={v.similarSounding} onChange={(s) => setV({ ...v, similarSounding: s })} placeholder="e.g. ileum / ilium…" />
+            </div>
+
             {/* Provenance + status */}
             <div className="grid gap-4 md:grid-cols-2">
               <div>
@@ -301,13 +406,20 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Status</label>
                 <div className="flex items-center gap-2">
+                  <select
+                    value={v.status}
+                    onChange={(e) => setV({ ...v, status: e.target.value as VocabFormValues['status'] })}
+                    className="rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize"
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="active">Active (publish gate enforced)</option>
+                    <option value="archived">Archived</option>
+                  </select>
                   <Badge variant={v.status === 'active' ? 'success' : v.status === 'draft' ? 'warning' : 'muted'}>
                     {v.status}
                   </Badge>
-                  <span className="text-xs text-muted">
-                    Publish via the button below (enforces publish gate).
-                  </span>
                 </div>
+                <p className="mt-1 text-xs text-muted">Setting status to “active” on save will run the publish gate. Use the Publish button below to active-and-validate in one step.</p>
               </div>
             </div>
 

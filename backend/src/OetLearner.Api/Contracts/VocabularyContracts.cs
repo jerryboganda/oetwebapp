@@ -257,6 +257,10 @@ public sealed record AdminVocabularyItemCreateRequestV2(
     IReadOnlyList<string>? Synonyms,
     IReadOnlyList<string>? Collocations,
     IReadOnlyList<string>? RelatedTerms,
+    IReadOnlyList<string>? RecallSetCodes,
+    IReadOnlyList<string>? CommonMistakes,
+    IReadOnlyList<string>? SimilarSounding,
+    IReadOnlyList<string>? OetSubtestTags,
     string? SourceProvenance,
     string? Status
 );
@@ -280,6 +284,10 @@ public sealed record AdminVocabularyItemUpdateRequestV2(
     IReadOnlyList<string>? Synonyms,
     IReadOnlyList<string>? Collocations,
     IReadOnlyList<string>? RelatedTerms,
+    IReadOnlyList<string>? RecallSetCodes,
+    IReadOnlyList<string>? CommonMistakes,
+    IReadOnlyList<string>? SimilarSounding,
+    IReadOnlyList<string>? OetSubtestTags,
     string? SourceProvenance,
     string? Status
 );

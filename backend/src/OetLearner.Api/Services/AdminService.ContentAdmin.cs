@@ -206,6 +206,10 @@ public partial class AdminService
             v.SynonymsJson,
             v.CollocationsJson,
             v.RelatedTermsJson,
+            v.RecallSetCodesJson,
+            v.CommonMistakesJson,
+            v.SimilarSoundingJson,
+            v.OetSubtestTagsJson,
             v.SourceProvenance,
             v.Status,
             v.CreatedAt,
@@ -242,6 +246,10 @@ public partial class AdminService
             SynonymsJson = JsonSupport.Serialize(request.Synonyms ?? Array.Empty<string>()),
             CollocationsJson = JsonSupport.Serialize(request.Collocations ?? Array.Empty<string>()),
             RelatedTermsJson = JsonSupport.Serialize(request.RelatedTerms ?? Array.Empty<string>()),
+            RecallSetCodesJson = JsonSupport.Serialize(NormaliseRecallSetCodes(request.RecallSetCodes)),
+            CommonMistakesJson = JsonSupport.Serialize(request.CommonMistakes ?? Array.Empty<string>()),
+            SimilarSoundingJson = JsonSupport.Serialize(request.SimilarSounding ?? Array.Empty<string>()),
+            OetSubtestTagsJson = JsonSupport.Serialize(NormaliseOetSubtestTags(request.OetSubtestTags)),
             SourceProvenance = request.SourceProvenance,
             Status = string.IsNullOrWhiteSpace(request.Status) ? "draft" : request.Status,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -279,6 +287,10 @@ public partial class AdminService
         if (request.Synonyms is not null) entity.SynonymsJson = JsonSupport.Serialize(request.Synonyms);
         if (request.Collocations is not null) entity.CollocationsJson = JsonSupport.Serialize(request.Collocations);
         if (request.RelatedTerms is not null) entity.RelatedTermsJson = JsonSupport.Serialize(request.RelatedTerms);
+        if (request.RecallSetCodes is not null) entity.RecallSetCodesJson = JsonSupport.Serialize(NormaliseRecallSetCodes(request.RecallSetCodes));
+        if (request.CommonMistakes is not null) entity.CommonMistakesJson = JsonSupport.Serialize(request.CommonMistakes);
+        if (request.SimilarSounding is not null) entity.SimilarSoundingJson = JsonSupport.Serialize(request.SimilarSounding);
+        if (request.OetSubtestTags is not null) entity.OetSubtestTagsJson = JsonSupport.Serialize(NormaliseOetSubtestTags(request.OetSubtestTags));
         if (request.SourceProvenance is not null) entity.SourceProvenance = request.SourceProvenance;
 
         if (request.Status is not null)
@@ -319,6 +331,51 @@ public partial class AdminService
 
     private static void EnforceVocabularyPublishGate(VocabularyTerm e)
         => EnforceVocabularyPublishGate(e.Term, e.Definition, e.ExampleSentence, e.Category, e.SourceProvenance, e.IpaPronunciation, e.AudioUrl);
+
+    /// <summary>
+    /// Allowed OET subtest tags. Mirrors the canonical question-set vocabulary
+    /// surfaced in the learner UI; reject anything outside this list to keep
+    /// admin-supplied tags trustworthy.
+    /// </summary>
+    private static readonly HashSet<string> AllowedOetSubtestTags = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "listening_a", "listening_b", "listening_c",
+        "reading_a", "reading_b", "reading_c",
+        "writing", "speaking",
+    };
+
+    private static IReadOnlyList<string> NormaliseRecallSetCodes(IReadOnlyList<string>? codes)
+    {
+        if (codes is null || codes.Count == 0) return Array.Empty<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>(codes.Count);
+        foreach (var raw in codes)
+        {
+            var normalised = OetLearner.Api.Domain.RecallSetCodes.Normalise(raw);
+            if (normalised is null)
+                throw ApiException.Validation("VOCAB_RECALL_SET_INVALID",
+                    $"Unknown recall-set code '{raw}'. Allowed: {string.Join(", ", OetLearner.Api.Domain.RecallSetCodes.All)}.");
+            if (seen.Add(normalised)) result.Add(normalised);
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<string> NormaliseOetSubtestTags(IReadOnlyList<string>? tags)
+    {
+        if (tags is null || tags.Count == 0) return Array.Empty<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>(tags.Count);
+        foreach (var raw in tags)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var lower = raw.Trim().ToLowerInvariant();
+            if (!AllowedOetSubtestTags.Contains(lower))
+                throw ApiException.Validation("VOCAB_OET_SUBTEST_TAG_INVALID",
+                    $"Unknown OET subtest tag '{raw}'. Allowed: {string.Join(", ", AllowedOetSubtestTags)}.");
+            if (seen.Add(lower)) result.Add(lower);
+        }
+        return result;
+    }
 
     private static void EnforceVocabularyPublishGate(
         string term, string definition, string example, string category,

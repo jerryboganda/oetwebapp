@@ -29,6 +29,10 @@ type Detail = {
   synonymsJson: string;
   collocationsJson: string;
   relatedTermsJson: string;
+  recallSetCodesJson: string;
+  commonMistakesJson: string;
+  similarSoundingJson: string;
+  oetSubtestTagsJson: string;
   sourceProvenance: string | null;
   status: 'draft' | 'active' | 'archived';
 };
@@ -95,6 +99,10 @@ export default function AdminVocabularyEditPage() {
     synonyms: parseJsonArray(detail.synonymsJson),
     collocations: parseJsonArray(detail.collocationsJson),
     relatedTerms: parseJsonArray(detail.relatedTermsJson),
+    recallSetCodes: parseJsonArray(detail.recallSetCodesJson),
+    commonMistakes: parseJsonArray(detail.commonMistakesJson),
+    similarSounding: parseJsonArray(detail.similarSoundingJson),
+    oetSubtestTags: parseJsonArray(detail.oetSubtestTagsJson),
     sourceProvenance: detail.sourceProvenance ?? '',
     status: detail.status,
   };
@@ -119,7 +127,12 @@ export default function AdminVocabularyEditPage() {
       synonyms: values.synonyms,
       collocations: values.collocations,
       relatedTerms: values.relatedTerms,
+      recallSetCodes: values.recallSetCodes,
+      commonMistakes: values.commonMistakes,
+      similarSounding: values.similarSounding,
+      oetSubtestTags: values.oetSubtestTags,
       sourceProvenance: values.sourceProvenance,
+      status: values.status,
     });
   }
 

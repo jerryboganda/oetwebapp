@@ -24,8 +24,12 @@ export default function AdminVocabularyNewPage() {
       synonyms: values.synonyms,
       collocations: values.collocations,
       relatedTerms: values.relatedTerms,
+      recallSetCodes: values.recallSetCodes,
+      commonMistakes: values.commonMistakes,
+      similarSounding: values.similarSounding,
+      oetSubtestTags: values.oetSubtestTags,
       sourceProvenance: values.sourceProvenance || undefined,
-      status: 'draft',
+      status: values.status,
     });
   }
 
