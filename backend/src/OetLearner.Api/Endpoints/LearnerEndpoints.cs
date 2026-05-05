@@ -5,6 +5,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
 using OetLearner.Api.Services.Reading;
 
@@ -154,8 +155,9 @@ public static class LearnerEndpoints
             HttpContext http,
             LearnerDbContext db,
             IReadingPolicyService policy,
+            IContentEntitlementService contentEntitlements,
             CancellationToken ct) =>
-            Results.Ok(await GetStructuredReadingHomeAsync(http.UserId(), db, policy, ct)));
+            Results.Ok(await GetStructuredReadingHomeAsync(http.UserId(), db, policy, contentEntitlements, ct)));
         reading.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingTaskAsync(contentId, ct)));
         reading.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateReadingAttemptAsync(http.UserId(), request, ct)));
         reading.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingAttemptAsync(http.UserId(), attemptId, ct)));
@@ -458,6 +460,7 @@ public static class LearnerEndpoints
         string userId,
         LearnerDbContext db,
         IReadingPolicyService policyService,
+        IContentEntitlementService contentEntitlements,
         CancellationToken ct)
     {
         var policy = await policyService.ResolveForUserAsync(userId, ct);
@@ -477,6 +480,15 @@ public static class LearnerEndpoints
             if (validation.IsPublishReady) readyPapers.Add(paper);
         }
 
+        var accessByPaper = new Dictionary<string, ContentEntitlementResult>(StringComparer.Ordinal);
+        foreach (var paper in readyPapers)
+        {
+            accessByPaper[paper.Id] = await contentEntitlements.AllowAccessAsync(userId, paper, ct);
+        }
+
+        var accessibleReadyPapers = readyPapers
+            .Where(p => accessByPaper.TryGetValue(p.Id, out var access) && access.Allowed)
+            .ToList();
         var paperIds = readyPapers.Select(p => p.Id).ToList();
         var parts = await db.ReadingParts.AsNoTracking()
             .Where(p => paperIds.Contains(p.PaperId))
@@ -494,7 +506,7 @@ public static class LearnerEndpoints
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var paperTitles = readyPapers.ToDictionary(p => p.Id, p => p.Title);
-        var safeDrills = BuildReadingSafeDrills(readyPapers, attempts, partsByPaper, paperTitles, policy);
+        var safeDrills = BuildReadingSafeDrills(accessibleReadyPapers, attempts, partsByPaper, paperTitles, policy);
         var activeAttempts = attempts
             .Where(a => a.Status == ReadingAttemptStatus.InProgress)
             .Take(3)
@@ -545,7 +557,8 @@ public static class LearnerEndpoints
             })
             .ToList();
 
-        var papers = readyPapers.Select(p =>
+        var papers = new List<object>();
+        foreach (var p in readyPapers)
         {
             partsByPaper.TryGetValue(p.Id, out var paperParts);
             paperParts ??= new List<ReadingPart>();
@@ -556,7 +569,10 @@ public static class LearnerEndpoints
                     .OrderByDescending(a => a.SubmittedAt ?? a.LastActivityAt)
                     .FirstOrDefault()
                 : null;
-            return new
+            var access = accessByPaper.TryGetValue(p.Id, out var resolvedAccess)
+                ? resolvedAccess
+                : new ContentEntitlementResult(false, "plan_does_not_grant", null, $"subtest:{p.SubtestCode}");
+            papers.Add(new
             {
                 id = p.Id,
                 p.Title,
@@ -571,6 +587,13 @@ public static class LearnerEndpoints
                 totalPoints = paperParts.Sum(part => part.Questions.Sum(q => q.Points)),
                 partATimerMinutes = policy.PartATimerMinutes,
                 partBCTimerMinutes = policy.PartBCTimerMinutes,
+                entitlement = new
+                {
+                    allowed = access.Allowed,
+                    reason = access.Reason,
+                    currentTier = access.CurrentTier,
+                    requiredScope = access.RequiredScope,
+                },
                 lastAttempt = lastAttempt is null ? null : new
                 {
                     attemptId = lastAttempt.Id,
@@ -583,8 +606,8 @@ public static class LearnerEndpoints
                         ? $"/reading/paper/{p.Id}/results?attemptId={lastAttempt.Id}"
                         : $"/reading/paper/{p.Id}?attemptId={lastAttempt.Id}",
                 },
-            };
-        }).ToList();
+            });
+        }
 
         return new
         {

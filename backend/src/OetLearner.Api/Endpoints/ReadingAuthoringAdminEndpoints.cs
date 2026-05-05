@@ -203,8 +203,16 @@ public static class ReadingAuthoringAdminEndpoints
         // ── Phase 4 — review-state lifecycle ─────────────────────────────
         group.MapGet("/questions/{questionId}/review-history", async (
             string paperId, string questionId,
-            IReadingReviewService reviewSvc, CancellationToken ct) =>
+            IReadingReviewService reviewSvc, LearnerDbContext db, CancellationToken ct) =>
         {
+            var match = await db.ReadingQuestions.AsNoTracking()
+                .Where(q => q.Id == questionId)
+                .Join(db.ReadingParts.AsNoTracking(), q => q.ReadingPartId, p => p.Id, (q, p) => p.PaperId)
+                .FirstOrDefaultAsync(ct);
+            if (match is null) return Results.NotFound();
+            if (!string.Equals(match, paperId, StringComparison.Ordinal))
+                return Results.BadRequest(new { error = "Question does not belong to this paper." });
+
             var history = await reviewSvc.GetHistoryAsync(questionId, ct);
             return Results.Ok(history);
         });

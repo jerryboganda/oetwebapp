@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Download, FileText, Plus, RefreshCw, Trash2, AlertTriangle, Upload } from 'lucide-react';
+import { ArrowDown, ArrowUp, CheckCircle2, Download, FileText, History, Plus, RefreshCw, ShieldCheck, Trash2, AlertTriangle, Upload } from 'lucide-react';
 import { AdminRoutePanel } from '@/components/domain/admin-route-surface';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,11 @@ import {
   importReadingStructureManifest,
   removeReadingQuestion,
   removeReadingText,
-  upsertReadingPart,
+  reorderReadingQuestions,
+  reorderReadingTexts,
+  setReadingQuestionDistractors,
+  getReadingQuestionReviewHistory,
+  transitionReadingQuestionReviewState,
   upsertReadingQuestion,
   upsertReadingText,
   validateReadingPaper,
@@ -25,6 +29,9 @@ import {
   type ReadingQuestionAdminDto,
   type ReadingStructureManifestDto,
   type ReadingQuestionType,
+  type ReadingReviewLogEntryDto,
+  type ReadingReviewState,
+  type ReadingDistractorCategory,
   type ReadingStructureAdminDto,
   type ReadingTextDto,
   type ReadingValidationReport,
@@ -44,11 +51,25 @@ const QUESTION_TYPE_LABELS: Record<ReadingQuestionType, string> = {
   MultipleChoice4: '4-option MCQ (Part C)',
 };
 
-const PART_EXPECTED: Record<ReadingPartCode, { items: number; minutes: number; label: string }> = {
-  A: { items: 20, minutes: 15, label: 'Part A (matching / short-answer)' },
-  B: { items: 6, minutes: 45, label: 'Part B (3-option MCQ)' },
-  C: { items: 16, minutes: 45, label: 'Part C (4-option MCQ)' },
+const PART_EXPECTED: Record<ReadingPartCode, { items: number; texts: number; minutes: number; label: string; textLabel: string }> = {
+  A: { items: 20, texts: 4, minutes: 15, label: 'Part A (matching / short-answer)', textLabel: '4 related texts' },
+  B: { items: 6, texts: 6, minutes: 45, label: 'Part B (3-option MCQ)', textLabel: '6 short extracts' },
+  C: { items: 16, texts: 2, minutes: 45, label: 'Part C (4-option MCQ)', textLabel: '2 long passages' },
 };
+
+const REVIEW_STATES: ReadingReviewState[] = ['Draft', 'AcademicReview', 'MedicalReview', 'LanguageReview', 'Pilot', 'Published', 'Retired'];
+
+const DISTRACTOR_CATEGORY_OPTIONS: Array<{ value: ReadingDistractorCategory; label: string }> = [
+  { value: 'Opposite', label: 'Opposite' },
+  { value: 'TooBroad', label: 'Too broad' },
+  { value: 'TooSpecific', label: 'Too specific' },
+  { value: 'WrongSpeaker', label: 'Wrong speaker/source' },
+  { value: 'NotInText', label: 'Not in text' },
+  { value: 'DistortedDetail', label: 'Distorted detail' },
+  { value: 'OutOfScope', label: 'Out of scope' },
+];
+
+type ReviewHistoryState = { question: ReadingQuestionAdminDto; entries: ReadingReviewLogEntryDto[] };
 
 export function ReadingStructureEditor({ paperId }: Props) {
   const [structure, setStructure] = useState<ReadingStructureAdminDto | null>(null);
@@ -60,6 +81,7 @@ export function ReadingStructureEditor({ paperId }: Props) {
   const [savingDraft, setSavingDraft] = useState(false);
   const [manifestModal, setManifestModal] = useState<ManifestModalState | null>(null);
   const [manifestBusy, setManifestBusy] = useState(false);
+  const [reviewHistory, setReviewHistory] = useState<ReviewHistoryState | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -104,7 +126,7 @@ export function ReadingStructureEditor({ paperId }: Props) {
   const saveQuestion = async (draft: QuestionDraft) => {
     setSavingDraft(true);
     try {
-      await upsertReadingQuestion(paperId, {
+      const saved = await upsertReadingQuestion(paperId, {
         id: draft.id,
         readingPartId: draft.readingPartId,
         readingTextId: draft.readingTextId,
@@ -119,6 +141,9 @@ export function ReadingStructureEditor({ paperId }: Props) {
         explanationMarkdown: draft.explanationMarkdown,
         skillTag: draft.skillTag,
       });
+      if (draft.questionType === 'MultipleChoice3' || draft.questionType === 'MultipleChoice4') {
+        await setReadingQuestionDistractors(paperId, saved.id, parseDistractorJson(draft.optionDistractorsJson));
+      }
       setQuestionDraft(null);
       await load();
     } catch (e) {
@@ -138,6 +163,51 @@ export function ReadingStructureEditor({ paperId }: Props) {
     } finally {
       setManifestBusy(false);
     }
+  };
+
+  const reorderTexts = async (part: ReadingPartAdminDto, textId: string, direction: -1 | 1) => {
+    const ordered = [...part.texts].sort((a, b) => a.displayOrder - b.displayOrder);
+    const index = ordered.findIndex((text) => text.id === textId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= ordered.length) return;
+    [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]];
+    await reorderReadingTexts(paperId, part.id, ordered.map((text) => text.id));
+    await load();
+  };
+
+  const reorderQuestions = async (part: ReadingPartAdminDto, questionId: string, direction: -1 | 1) => {
+    const ordered = [...part.questions].sort((a, b) => a.displayOrder - b.displayOrder);
+    const index = ordered.findIndex((question) => question.id === questionId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= ordered.length) return;
+    [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]];
+    await reorderReadingQuestions(paperId, part.id, ordered.map((question) => question.id));
+    await load();
+  };
+
+  const advanceQuestionToPublished = async (question: ReadingQuestionAdminDto) => {
+    const current = question.reviewState ?? 'Draft';
+    const currentIndex = REVIEW_STATES.indexOf(current);
+    const publishedIndex = REVIEW_STATES.indexOf('Published');
+    if (current === 'Retired' || currentIndex < 0 || currentIndex >= publishedIndex) return;
+    for (const nextState of REVIEW_STATES.slice(currentIndex + 1, publishedIndex + 1)) {
+      await transitionReadingQuestionReviewState(paperId, question.id, {
+        toState: nextState,
+        note: 'Advanced from the Reading admin structure editor.',
+      });
+    }
+    await load();
+  };
+
+  const advancePartToPublished = async (part: ReadingPartAdminDto) => {
+    for (const question of part.questions) {
+      await advanceQuestionToPublished(question);
+    }
+  };
+
+  const openReviewHistory = async (question: ReadingQuestionAdminDto) => {
+    const entries = await getReadingQuestionReviewHistory(paperId, question.id);
+    setReviewHistory({ question, entries });
   };
 
   const importManifest = async (value: string) => {
@@ -213,19 +283,20 @@ export function ReadingStructureEditor({ paperId }: Props) {
           <PartEditor
             key={part.id}
             part={part}
-            onEditPartSettings={async (mins, instr) => {
-              await upsertReadingPart(paperId, part.partCode, { timeLimitMinutes: mins, instructions: instr });
-              await load();
-            }}
             onAddText={() => setTextDraft({
               id: null, readingPartId: part.id, displayOrder: part.texts.length + 1,
               title: '', source: '', bodyHtml: '', wordCount: 0, topicTag: null,
             })}
             onEditText={(t) => setTextDraft({ ...t })}
             onRemoveText={async (id) => { await removeReadingText(paperId, id); await load(); }}
+            onMoveText={(id, direction) => void reorderTexts(part, id, direction)}
             onAddQuestion={() => setQuestionDraft(defaultQuestionDraftFor(part))}
             onEditQuestion={(q) => setQuestionDraft({ ...q })}
             onRemoveQuestion={async (id) => { await removeReadingQuestion(paperId, id); await load(); }}
+            onMoveQuestion={(id, direction) => void reorderQuestions(part, id, direction)}
+            onAdvanceQuestion={(question) => void advanceQuestionToPublished(question)}
+            onAdvancePart={() => void advancePartToPublished(part)}
+            onOpenReviewHistory={(question) => void openReviewHistory(question)}
           />
         ))}
       </div>
@@ -258,6 +329,13 @@ export function ReadingStructureEditor({ paperId }: Props) {
           onChange={setManifestModal}
           onClose={() => setManifestModal(null)}
           onImport={() => void importManifest(manifestModal.value)}
+        />
+      )}
+
+      {reviewHistory && (
+        <ReviewHistoryModal
+          state={reviewHistory}
+          onClose={() => setReviewHistory(null)}
         />
       )}
     </AdminRoutePanel>
@@ -304,21 +382,29 @@ function ManifestJsonModal({ state, busy, onChange, onClose, onImport }: {
 // ── Part block ──────────────────────────────────────────────────────────
 
 function PartEditor({
-  part, onEditPartSettings,
+  part,
   onAddText, onEditText, onRemoveText,
+  onMoveText,
   onAddQuestion, onEditQuestion, onRemoveQuestion,
+  onMoveQuestion, onAdvanceQuestion, onAdvancePart, onOpenReviewHistory,
 }: {
   part: ReadingPartAdminDto;
-  onEditPartSettings: (mins: number | null, instr: string | null) => Promise<void>;
   onAddText: () => void;
   onEditText: (t: ReadingTextDto) => void;
   onRemoveText: (id: string) => Promise<void>;
+  onMoveText: (id: string, direction: -1 | 1) => void;
   onAddQuestion: () => void;
   onEditQuestion: (q: ReadingQuestionAdminDto) => void;
   onRemoveQuestion: (id: string) => Promise<void>;
+  onMoveQuestion: (id: string, direction: -1 | 1) => void;
+  onAdvanceQuestion: (q: ReadingQuestionAdminDto) => void;
+  onAdvancePart: () => void;
+  onOpenReviewHistory: (q: ReadingQuestionAdminDto) => void;
 }) {
   const expected = PART_EXPECTED[part.partCode];
   const short = Math.max(0, expected.items - part.questions.length);
+  const textShort = Math.max(0, expected.texts - part.texts.length);
+  const unpublishedCount = part.questions.filter((q) => (q.reviewState ?? 'Draft') !== 'Published').length;
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-5 space-y-4">
@@ -326,16 +412,22 @@ function PartEditor({
         <div>
           <h3 className="font-black text-lg text-navy">{expected.label}</h3>
           <p className="text-xs text-muted">
-            {part.timeLimitMinutes} min · {part.questions.length}/{expected.items} items
+            {part.timeLimitMinutes} min · {part.texts.length}/{expected.texts} text units ({expected.textLabel}) · {part.questions.length}/{expected.items} items
+            {textShort > 0 && <span className="text-red-600"> · {textShort} more text unit(s) needed</span>}
             {short > 0 && <span className="text-red-600"> · {short} more needed</span>}
           </p>
         </div>
-        <Input
-          type="number"
-          label="Time limit (min)"
-          value={part.timeLimitMinutes}
-          onChange={(e) => void onEditPartSettings(Number(e.target.value) || expected.minutes, part.instructions)}
-        />
+        <div className="flex flex-wrap items-end gap-2">
+          {unpublishedCount > 0 ? (
+            <Button variant="secondary" size="sm" onClick={onAdvancePart}>
+              <ShieldCheck className="w-4 h-4" /> Publish {unpublishedCount}
+            </Button>
+          ) : <Badge variant="success">All questions published</Badge>}
+          <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted">
+            <span className="block font-bold text-navy">Timer</span>
+            {expected.minutes} min fixed{part.partCode === 'B' || part.partCode === 'C' ? ' · shared B+C block' : ''}
+          </div>
+        </div>
       </div>
 
       <section>
@@ -349,15 +441,22 @@ function PartEditor({
           ? <p className="text-sm text-muted">No texts yet.</p>
           : (
             <ul className="space-y-1">
-              {part.texts.map((t) => (
+              {[...part.texts].sort((a, b) => a.displayOrder - b.displayOrder).map((t, index, list) => (
                 <li key={t.id} className="flex items-center justify-between py-1 text-sm">
                   <span className="flex items-center gap-2">
+                    <Badge variant="info">{t.displayOrder}</Badge>
                     <FileText className="w-4 h-4 text-muted" />
                     <span className="font-medium">{t.title || '(untitled)'}</span>
                     <span className="text-muted">· {t.wordCount} words</span>
                     {!t.source && <Badge variant="warning">No source</Badge>}
                   </span>
                   <span className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => onMoveText(t.id, -1)} disabled={index === 0} aria-label={`Move ${t.title || 'text'} up`}>
+                      <ArrowUp className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => onMoveText(t.id, 1)} disabled={index === list.length - 1} aria-label={`Move ${t.title || 'text'} down`}>
+                      <ArrowDown className="w-4 h-4" />
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => onEditText(t)}>Edit</Button>
                     <Button variant="ghost" size="sm" onClick={() => void onRemoveText(t.id)}>
                       <Trash2 className="w-4 h-4" />
@@ -380,14 +479,30 @@ function PartEditor({
           ? <p className="text-sm text-muted">No questions yet.</p>
           : (
             <ul className="space-y-1">
-              {part.questions.map((q) => (
+              {[...part.questions].sort((a, b) => a.displayOrder - b.displayOrder).map((q, index, list) => (
                 <li key={q.id} className="flex items-center justify-between py-1 text-sm">
-                  <span className="flex items-center gap-2 min-w-0">
+                  <span className="flex flex-wrap items-center gap-2 min-w-0">
                     <Badge variant="info">{q.displayOrder}</Badge>
                     <Badge variant="muted">{QUESTION_TYPE_LABELS[q.questionType]}</Badge>
+                    <Badge variant={q.reviewState === 'Published' ? 'success' : 'warning'}>{q.reviewState ?? 'Draft'}</Badge>
+                    {q.skillTag ? <Badge variant="info">{q.skillTag}</Badge> : null}
                     <span className="truncate max-w-md">{q.stem}</span>
                   </span>
-                  <span className="flex gap-1">
+                  <span className="flex flex-wrap justify-end gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => onMoveQuestion(q.id, -1)} disabled={index === 0} aria-label={`Move question ${q.displayOrder} up`}>
+                      <ArrowUp className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => onMoveQuestion(q.id, 1)} disabled={index === list.length - 1} aria-label={`Move question ${q.displayOrder} down`}>
+                      <ArrowDown className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => onOpenReviewHistory(q)}>
+                      <History className="w-4 h-4" /> History
+                    </Button>
+                    {q.reviewState !== 'Published' && q.reviewState !== 'Retired' ? (
+                      <Button variant="secondary" size="sm" onClick={() => onAdvanceQuestion(q)}>
+                        <ShieldCheck className="w-4 h-4" /> Publish
+                      </Button>
+                    ) : null}
                     <Button variant="ghost" size="sm" onClick={() => onEditQuestion(q)}>Edit</Button>
                     <Button variant="ghost" size="sm" onClick={() => void onRemoveQuestion(q.id)}>
                       <Trash2 className="w-4 h-4" />
@@ -452,6 +567,8 @@ function QuestionEditorModal({ draft, texts, saving, onChange, onClose, onSave }
   const isMatching = draft.questionType === 'MatchingTextReference';
 
   const optionCount = draft.questionType === 'MultipleChoice3' ? 3 : 4;
+  const correctLetter = parseJsonString(draft.correctAnswerJson, 'A');
+  const distractors = useMemo(() => parseDistractorJson(draft.optionDistractorsJson), [draft.optionDistractorsJson]);
   const options = useMemo(() => {
     try { return JSON.parse(draft.optionsJson || '[]'); }
     catch { return []; }
@@ -472,6 +589,9 @@ function QuestionEditorModal({ draft, texts, saving, onChange, onClose, onSave }
           onChange={(e) => onChange({ ...draft, displayOrder: Number(e.target.value) })} />
         <Input type="number" label="Points" value={draft.points}
           onChange={(e) => onChange({ ...draft, points: Math.max(1, Number(e.target.value)) })} />
+        <Input label="Skill tag" value={draft.skillTag ?? ''}
+          onChange={(e) => onChange({ ...draft, skillTag: e.target.value || null })}
+          placeholder="part-a-scan | inference | vocabulary | reference" />
 
         {texts.length > 0 && (
           <Select
@@ -506,19 +626,43 @@ function QuestionEditorModal({ draft, texts, saving, onChange, onClose, onSave }
             })}
             <Select
               label="Correct answer"
-              value={JSON.parse(draft.correctAnswerJson || '""') as string}
+              value={correctLetter}
               onChange={(e) => onChange({ ...draft, correctAnswerJson: JSON.stringify(e.target.value) })}
               options={Array.from({ length: optionCount }).map((_, i) => {
                 const l = String.fromCharCode(65 + i);
                 return { value: l, label: l };
               })}
             />
+            <div className="mt-3 space-y-2 rounded-lg border border-border bg-background-light p-3">
+              <p className="text-xs font-bold uppercase text-muted">Distractor metadata</p>
+              {Array.from({ length: optionCount }).map((_, i) => {
+                const letter = String.fromCharCode(65 + i);
+                if (letter === correctLetter) {
+                  return <p key={letter} className="text-xs text-muted">{letter} is the correct answer; no distractor tag needed.</p>;
+                }
+                return (
+                  <Select
+                    key={letter}
+                    label={`Option ${letter}`}
+                    value={distractors[letter] ?? ''}
+                    onChange={(event) => {
+                      const next = { ...distractors };
+                      const value = event.target.value as ReadingDistractorCategory | '';
+                      if (value) next[letter] = value;
+                      else delete next[letter];
+                      onChange({ ...draft, optionDistractorsJson: Object.keys(next).length ? JSON.stringify(next) : null });
+                    }}
+                    options={[{ value: '', label: 'Not tagged' }, ...DISTRACTOR_CATEGORY_OPTIONS]}
+                  />
+                );
+              })}
+            </div>
           </div>
         )}
 
         {isShort && (
           <div className="space-y-2">
-            <Input label="Correct answer" value={JSON.parse(draft.correctAnswerJson || '""')}
+            <Input label="Correct answer" value={parseJsonString(draft.correctAnswerJson, '')}
               onChange={(e) => onChange({ ...draft, correctAnswerJson: JSON.stringify(e.target.value) })} />
             <Input label="Accepted synonyms (comma separated)"
               value={draft.acceptedSynonymsJson
@@ -582,5 +726,66 @@ function defaultQuestionDraftFor(part: ReadingPartAdminDto): QuestionDraft {
     caseSensitive: false,
     explanationMarkdown: null,
     skillTag: null,
+    optionDistractorsJson: null,
+    reviewState: 'Draft',
+    latestReviewNote: null,
   };
+}
+
+function ReviewHistoryModal({ state, onClose }: { state: ReviewHistoryState; onClose: () => void }) {
+  return (
+    <Modal open={true} onClose={onClose} title={`Review history: question ${state.question.displayOrder}`} size="lg">
+      <div className="space-y-4">
+        {state.entries.length === 0 ? (
+          <p className="text-sm text-muted">No review transitions recorded yet.</p>
+        ) : (
+          <ul className="space-y-3">
+            {state.entries.map((entry) => (
+              <li key={entry.id} className="rounded-lg border border-border bg-background-light p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="muted">{entry.fromState}</Badge>
+                  <span className="text-muted">to</span>
+                  <Badge variant={entry.toState === 'Published' ? 'success' : 'info'}>{entry.toState}</Badge>
+                  <span className="text-xs text-muted">{new Date(entry.transitionedAt).toLocaleString()}</span>
+                </div>
+                <p className="mt-2 text-xs text-muted">Reviewer: {entry.reviewerDisplayName ?? entry.reviewerUserId}</p>
+                {entry.note ? <p className="mt-1 text-sm text-navy">{entry.note}</p> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex justify-end">
+          <Button variant="primary" onClick={onClose}>Close</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function parseJsonString(value: string, fallback: string): string {
+  try {
+    const parsed = JSON.parse(value || 'null');
+    return typeof parsed === 'string' ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function parseDistractorJson(value?: string | null): Partial<Record<string, ReadingDistractorCategory>> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const result: Partial<Record<string, ReadingDistractorCategory>> = {};
+    const allowed = new Set(DISTRACTOR_CATEGORY_OPTIONS.map((option) => option.value));
+    for (const [rawKey, rawValue] of Object.entries(parsed)) {
+      const key = rawKey.trim().toUpperCase();
+      if (!/^[A-D]$/.test(key)) continue;
+      if (typeof rawValue === 'string' && allowed.has(rawValue as ReadingDistractorCategory)) {
+        result[key] = rawValue as ReadingDistractorCategory;
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
 }

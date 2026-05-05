@@ -115,6 +115,79 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Validator_rejects_non_official_text_topology()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+
+        var parts = await db.ReadingParts.Where(p => p.PaperId == "p1").ToListAsync();
+        var partA = parts.First(p => p.PartCode == ReadingPartCode.A);
+        var partB = parts.First(p => p.PartCode == ReadingPartCode.B);
+        var partC = parts.First(p => p.PartCode == ReadingPartCode.C);
+        var tA = await structure.UpsertTextAsync(new ReadingTextUpsert(null, partA.Id, 1, "Text A", "BMJ", "<p>A</p>", 10, null), "admin", default);
+        var tB = await structure.UpsertTextAsync(new ReadingTextUpsert(null, partB.Id, 1, "Text B", "NHS", "<p>B</p>", 20, null), "admin", default);
+        var tC = await structure.UpsertTextAsync(new ReadingTextUpsert(null, partC.Id, 1, "Text C", "Lancet", "<p>C</p>", 300, null), "admin", default);
+
+        for (var i = 1; i <= 20; i++)
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(null, partA.Id, tA.Id, i, 1, ReadingQuestionType.ShortAnswer, $"A{i}", "[]", $"\"a{i}\"", null, false, null, null), "admin", default);
+        for (var i = 1; i <= 6; i++)
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(null, partB.Id, tB.Id, i, 1, ReadingQuestionType.MultipleChoice3, $"B{i}", "[\"a\",\"b\",\"c\"]", "\"A\"", null, false, null, null), "admin", default);
+        for (var i = 1; i <= 16; i++)
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(null, partC.Id, tC.Id, i, 1, ReadingQuestionType.MultipleChoice4, $"C{i}", "[\"a\",\"b\",\"c\",\"d\"]", "\"A\"", null, false, null, null), "admin", default);
+        foreach (var q in await db.ReadingQuestions.ToListAsync()) q.ReviewState = ReadingReviewState.Published;
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "part_A_text_count");
+        Assert.Contains(report.Issues, i => i.Code == "part_B_text_count");
+        Assert.Contains(report.Issues, i => i.Code == "part_C_text_count");
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validator_rejects_wrong_question_type_for_part()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partB = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.B);
+        var firstB = await db.ReadingQuestions.FirstAsync(q => q.ReadingPartId == partB.Id && q.DisplayOrder == 1);
+        firstB.QuestionType = ReadingQuestionType.MultipleChoice4;
+        firstB.OptionsJson = "[\"a\",\"b\",\"c\",\"d\"]";
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "part_B_question_type" && i.TargetId == firstB.Id);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validator_rejects_non_official_time_limit()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partC = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.C);
+        partC.TimeLimitMinutes = 30;
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "part_C_time_limit" && i.TargetId == partC.Id);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Manifest_import_replaces_structure_and_preserves_text_links()
     {
         var (db, structure, _, _, _) = Build();
@@ -136,7 +209,10 @@ public class ReadingAuthoringTests
         var imported = await structure.ExportManifestAsync("target", default);
         var partA = imported.Parts.Single(p => p.PartCode == ReadingPartCode.A);
         Assert.Equal(20, partA.Questions.Count);
-        Assert.All(partA.Questions, q => Assert.Equal(1, q.ReadingTextDisplayOrder));
+        Assert.Equal(new[] { 1, 2, 3, 4 }, partA.Questions
+            .Select(q => q.ReadingTextDisplayOrder ?? 0)
+            .Distinct()
+            .OrderBy(x => x));
         await db.DisposeAsync();
     }
 
@@ -233,6 +309,7 @@ public class ReadingAuthoringTests
             "u1",
             db,
             policy,
+            new ContentEntitlementService(db, new EffectiveEntitlementResolver(db)),
             CancellationToken.None,
         })!;
         var home = await task;
@@ -996,33 +1073,44 @@ public class ReadingAuthoringTests
         var partB = parts.First(p => p.PartCode == ReadingPartCode.B);
         var partC = parts.First(p => p.PartCode == ReadingPartCode.C);
 
-        // At least one text per part with a source
-        var tA = await structure.UpsertTextAsync(new ReadingTextUpsert(
-            null, partA.Id, 1, "Text 1", "BMJ", "<p>text</p>", 10, null), "admin", default);
-        var tB = await structure.UpsertTextAsync(new ReadingTextUpsert(
-            null, partB.Id, 1, "Text B", "NHS", "<p>text</p>", 20, null), "admin", default);
-        var tC = await structure.UpsertTextAsync(new ReadingTextUpsert(
-            null, partC.Id, 1, "Text C", "Lancet", "<p>text</p>", 300, null), "admin", default);
+        var textsA = new List<ReadingText>();
+        var textsB = new List<ReadingText>();
+        var textsC = new List<ReadingText>();
+        for (var i = 1; i <= 4; i++)
+        {
+            textsA.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partA.Id, i, $"Text A{i}", "BMJ", "<p>text</p>", 10, null), "admin", default));
+        }
+        for (var i = 1; i <= 6; i++)
+        {
+            textsB.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partB.Id, i, $"Extract B{i}", "NHS", "<p>text</p>", 20, null), "admin", default));
+        }
+        for (var i = 1; i <= 2; i++)
+        {
+            textsC.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partC.Id, i, $"Text C{i}", "Lancet", "<p>text</p>", 300, null), "admin", default));
+        }
 
         // Part A: 20 short-answer questions
         for (var i = 1; i <= 20; i++)
         {
             await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
-                null, partA.Id, tA.Id, i, 1, ReadingQuestionType.ShortAnswer,
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.ShortAnswer,
                 $"PA-Q{i}", "[]", $"\"ans{i}\"", null, false, null, null), "admin", default);
         }
         // Part B: 6 MCQ3
         for (var i = 1; i <= 6; i++)
         {
             await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
-                null, partB.Id, tB.Id, i, 1, ReadingQuestionType.MultipleChoice3,
+                null, partB.Id, textsB[i - 1].Id, i, 1, ReadingQuestionType.MultipleChoice3,
                 $"PB-Q{i}", "[\"a\",\"b\",\"c\"]", "\"B\"", null, false, null, null), "admin", default);
         }
         // Part C: 16 MCQ4
         for (var i = 1; i <= 16; i++)
         {
             await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
-                null, partC.Id, tC.Id, i, 1, ReadingQuestionType.MultipleChoice4,
+                null, partC.Id, textsC[(i - 1) / 8].Id, i, 1, ReadingQuestionType.MultipleChoice4,
                 $"PC-Q{i}", "[\"a\",\"b\",\"c\",\"d\"]", "\"C\"", null, false, null, null), "admin", default);
         }
 

@@ -7,6 +7,7 @@ import {
   Clock,
   FileText,
   ListChecks,
+  Lock,
   PlayCircle,
   Sparkles,
   Target,
@@ -373,28 +374,32 @@ function ActiveAttemptsSection({ attempts }: { attempts: ReadingHomeAttemptDto[]
 function paperCard(paper: ReadingHomePaperDto, attempts: ReadingHomeAttemptDto[]): LearnerSurfaceCardModel {
   const active = attempts.find((attempt) => attempt.paperId === paper.id && attempt.canResume);
   const lastSubmitted = paper.lastAttempt?.status === 'Submitted' ? paper.lastAttempt : null;
+  const locked = paper.entitlement ? !paper.entitlement.allowed : false;
   return {
     kind: 'task',
     sourceType: 'backend_task',
-    accent: 'blue',
-    eyebrow: paper.difficulty || 'Reading Paper',
-    eyebrowIcon: BookOpen,
+    accent: locked ? 'amber' : 'blue',
+    eyebrow: locked ? 'Subscription required' : paper.difficulty || 'Reading Paper',
+    eyebrowIcon: locked ? Lock : BookOpen,
     title: paper.title,
-    description: `Full structured Reading paper with ${paper.totalPoints} points and timed Part A/B/C flow.`,
+    description: locked
+      ? 'This structured Reading paper is ready, but your current package does not include it yet.'
+      : `Full structured Reading paper with ${paper.totalPoints} points and timed Part A/B/C flow.`,
     metaItems: [
       { icon: Clock, label: `${paper.partATimerMinutes + paper.partBCTimerMinutes} mins` },
       { icon: ListChecks, label: `${paper.partACount + paper.partBCount + paper.partCCount} questions` },
+      ...(locked && paper.entitlement?.requiredScope ? [{ icon: Lock, label: paper.entitlement.requiredScope }] : []),
     ],
     primaryAction: {
-      label: active ? 'Resume paper' : 'Start paper',
-      href: active?.route ?? paper.route,
+      label: locked ? 'View packages' : active ? 'Resume paper' : 'Start paper',
+      href: locked ? '/billing' : active?.route ?? paper.route,
     },
-    secondaryAction: lastSubmitted ? {
+    secondaryAction: !locked && lastSubmitted ? {
       label: 'Review latest result',
       href: lastSubmitted.route,
       variant: 'outline',
     } : undefined,
-    statusLabel: active ? 'In progress' : undefined,
+    statusLabel: locked ? 'Locked' : active ? 'In progress' : undefined,
   };
 }
 

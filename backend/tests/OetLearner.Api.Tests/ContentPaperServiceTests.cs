@@ -130,17 +130,29 @@ public class ContentPaperServiceTests
         var partB = parts.First(p => p.PartCode == ReadingPartCode.B);
         var partC = parts.First(p => p.PartCode == ReadingPartCode.C);
 
-        var textA = await structure.UpsertTextAsync(new ReadingTextUpsert(
-            null, partA.Id, 1, "Part A text", "NHS", "<p>Part A</p>", 80, null), "admin-1", default);
-        var textB = await structure.UpsertTextAsync(new ReadingTextUpsert(
-            null, partB.Id, 1, "Part B text", "BMJ", "<p>Part B</p>", 80, null), "admin-1", default);
-        var textC = await structure.UpsertTextAsync(new ReadingTextUpsert(
-            null, partC.Id, 1, "Part C text", "Lancet", "<p>Part C</p>", 320, null), "admin-1", default);
+        var textsA = new List<ReadingText>();
+        var textsB = new List<ReadingText>();
+        var textsC = new List<ReadingText>();
+        for (var i = 1; i <= 4; i++)
+        {
+            textsA.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partA.Id, i, $"Part A text {i}", "NHS", "<p>Part A</p>", 80, null), "admin-1", default));
+        }
+        for (var i = 1; i <= 6; i++)
+        {
+            textsB.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partB.Id, i, $"Part B extract {i}", "BMJ", "<p>Part B</p>", 80, null), "admin-1", default));
+        }
+        for (var i = 1; i <= 2; i++)
+        {
+            textsC.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partC.Id, i, $"Part C text {i}", "Lancet", "<p>Part C</p>", 320, null), "admin-1", default));
+        }
 
         for (var i = 1; i <= 20; i++)
         {
             await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
-                null, partA.Id, textA.Id, i, 1, ReadingQuestionType.ShortAnswer,
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.ShortAnswer,
                 $"Part A question {i}", "[]", $"\"answer-{i}\"", null, false, null, "detail"),
                 "admin-1", default);
         }
@@ -148,7 +160,7 @@ public class ContentPaperServiceTests
         for (var i = 1; i <= 6; i++)
         {
             await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
-                null, partB.Id, textB.Id, i, 1, ReadingQuestionType.MultipleChoice3,
+                null, partB.Id, textsB[i - 1].Id, i, 1, ReadingQuestionType.MultipleChoice3,
                 $"Part B question {i}", "[\"A\",\"B\",\"C\"]", "\"A\"", null, false, null, "purpose"),
                 "admin-1", default);
         }
@@ -156,7 +168,7 @@ public class ContentPaperServiceTests
         for (var i = 1; i <= 16; i++)
         {
             await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
-                null, partC.Id, textC.Id, i, 1, ReadingQuestionType.MultipleChoice4,
+                null, partC.Id, textsC[(i - 1) / 8].Id, i, 1, ReadingQuestionType.MultipleChoice4,
                 $"Part C question {i}", "[\"A\",\"B\",\"C\",\"D\"]", "\"B\"", null, false, null, "inference"),
                 "admin-1", default);
         }

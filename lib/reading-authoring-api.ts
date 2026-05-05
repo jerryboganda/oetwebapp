@@ -21,6 +21,24 @@ export type ReadingQuestionType =
   | 'MultipleChoice3'
   | 'MultipleChoice4';
 
+export type ReadingReviewState =
+  | 'Draft'
+  | 'AcademicReview'
+  | 'MedicalReview'
+  | 'LanguageReview'
+  | 'Pilot'
+  | 'Published'
+  | 'Retired';
+
+export type ReadingDistractorCategory =
+  | 'Opposite'
+  | 'TooBroad'
+  | 'TooSpecific'
+  | 'WrongSpeaker'
+  | 'NotInText'
+  | 'DistortedDetail'
+  | 'OutOfScope';
+
 export type ReadingAttemptStatus = 'InProgress' | 'Submitted' | 'Expired' | 'Abandoned';
 
 export interface ReadingTextDto {
@@ -48,6 +66,26 @@ export interface ReadingQuestionAdminDto {
   caseSensitive: boolean;
   explanationMarkdown: string | null;
   skillTag: string | null;
+  optionDistractorsJson?: string | null;
+  reviewState?: ReadingReviewState;
+  latestReviewNote?: string | null;
+}
+
+export interface ReadingReviewLogEntryDto {
+  id: string;
+  fromState: ReadingReviewState;
+  toState: ReadingReviewState;
+  reviewerUserId: string;
+  reviewerDisplayName: string | null;
+  note: string | null;
+  transitionedAt: string;
+}
+
+export interface ReadingReviewTransitionResultDto {
+  questionId: string;
+  fromState: ReadingReviewState;
+  toState: ReadingReviewState;
+  transitionedAt: string;
 }
 
 export interface ReadingQuestionLearnerDto {
@@ -100,6 +138,8 @@ export interface ReadingStructureManifestDto {
       explanationMarkdown: string | null;
       skillTag: string | null;
       readingTextDisplayOrder: number | null;
+      optionDistractorsJson?: string | null;
+      reviewState?: ReadingReviewState;
     }>;
   }>;
 }
@@ -161,6 +201,12 @@ export interface ReadingHomePaperDto {
   totalPoints: number;
   partATimerMinutes: number;
   partBCTimerMinutes: number;
+  entitlement?: {
+    allowed: boolean;
+    reason: string;
+    currentTier: string | null;
+    requiredScope: string | null;
+  };
   lastAttempt: {
     attemptId: string;
     status: ReadingAttemptStatus;
@@ -530,6 +576,27 @@ export const reorderReadingQuestions = (paperId: string, partId: string, ordered
   api<void>(`/v1/admin/papers/${paperId}/reading/parts/${partId}/reorder-questions`, {
     method: 'POST', body: JSON.stringify({ orderedIds }),
   });
+
+export const setReadingQuestionDistractors = (
+  paperId: string,
+  questionId: string,
+  distractors: Partial<Record<string, ReadingDistractorCategory>>,
+) => api<{ id: string; optionDistractorsJson: string | null }>(
+  `/v1/admin/papers/${paperId}/reading/questions/${questionId}/distractors`,
+  { method: 'PUT', body: JSON.stringify({ distractors }) },
+);
+
+export const getReadingQuestionReviewHistory = (paperId: string, questionId: string) =>
+  api<ReadingReviewLogEntryDto[]>(`/v1/admin/papers/${paperId}/reading/questions/${questionId}/review-history`);
+
+export const transitionReadingQuestionReviewState = (
+  paperId: string,
+  questionId: string,
+  body: { toState: ReadingReviewState; note?: string | null; isAdminOverride?: boolean },
+) => api<ReadingReviewTransitionResultDto>(
+  `/v1/admin/papers/${paperId}/reading/questions/${questionId}/review-transition`,
+  { method: 'POST', body: JSON.stringify({ note: null, isAdminOverride: false, ...body }) },
+);
 
 export const validateReadingPaper = (paperId: string) =>
   api<ReadingValidationReport>(`/v1/admin/papers/${paperId}/reading/validate`);

@@ -185,6 +185,14 @@ public sealed class ReadingStructureService : IReadingStructureService
             [ReadingPartCode.C] = (16, 45),
         };
 
+    private static readonly IReadOnlyDictionary<ReadingPartCode, int> CanonicalTextCounts =
+        new Dictionary<ReadingPartCode, int>
+        {
+            [ReadingPartCode.A] = 4,
+            [ReadingPartCode.B] = 6,
+            [ReadingPartCode.C] = 2,
+        };
+
     /// <summary>Max raw score for a fully-assembled Reading paper.</summary>
     public const int CanonicalMaxRawScore = 42;
 
@@ -604,7 +612,44 @@ public sealed class ReadingStructureService : IReadingStructureService
         foreach (var part in parts)
         {
             var questionCount = part.Questions.Count;
-            var (expected, _) = CanonicalShape[part.PartCode];
+            var (expected, expectedMinutes) = CanonicalShape[part.PartCode];
+            var texts = await db.ReadingTexts.AsNoTracking()
+                .Where(t => t.ReadingPartId == part.Id)
+                .OrderBy(t => t.DisplayOrder)
+                .ToListAsync(ct);
+            if (part.TimeLimitMinutes != expectedMinutes)
+            {
+                issues.Add(new(
+                    Code: $"part_{part.PartCode}_time_limit",
+                    Severity: "error",
+                    Message: $"Part {part.PartCode} has a {part.TimeLimitMinutes}-minute limit, expected {expectedMinutes} minute(s).",
+                    TargetId: part.Id));
+            }
+            var expectedTextCount = CanonicalTextCounts[part.PartCode];
+            if (texts.Count != expectedTextCount)
+            {
+                issues.Add(new(
+                    Code: $"part_{part.PartCode}_text_count",
+                    Severity: "error",
+                    Message: $"Part {part.PartCode} has {texts.Count} text unit(s), expected {expectedTextCount}.",
+                    TargetId: part.Id));
+            }
+            if (!HasContiguousDisplayOrders(texts.Select(t => t.DisplayOrder)))
+            {
+                issues.Add(new(
+                    Code: $"part_{part.PartCode}_text_order",
+                    Severity: "error",
+                    Message: $"Part {part.PartCode} text display orders must be unique and contiguous from 1.",
+                    TargetId: part.Id));
+            }
+            if (!HasContiguousDisplayOrders(part.Questions.Select(q => q.DisplayOrder)))
+            {
+                issues.Add(new(
+                    Code: $"part_{part.PartCode}_question_order",
+                    Severity: "error",
+                    Message: $"Part {part.PartCode} question display orders must be unique and contiguous from 1.",
+                    TargetId: part.Id));
+            }
             if (questionCount != expected)
             {
                 issues.Add(new(
@@ -619,9 +664,27 @@ public sealed class ReadingStructureService : IReadingStructureService
                 case ReadingPartCode.B: partB = questionCount; break;
                 case ReadingPartCode.C: partC = questionCount; break;
             }
+            var textIds = texts.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
             foreach (var q in part.Questions)
             {
                 totalPoints += q.Points;
+                if (!IsQuestionTypeAllowedForPart(part.PartCode, q.QuestionType))
+                {
+                    issues.Add(new(
+                        Code: $"part_{part.PartCode}_question_type",
+                        Severity: "error",
+                        Message: $"Part {part.PartCode} question {q.DisplayOrder} uses {q.QuestionType}, which is not valid for this part.",
+                        TargetId: q.Id));
+                }
+                if (part.PartCode is ReadingPartCode.B or ReadingPartCode.C
+                    && (q.ReadingTextId is null || !textIds.Contains(q.ReadingTextId)))
+                {
+                    issues.Add(new(
+                        Code: $"part_{part.PartCode}_question_text_required",
+                        Severity: "error",
+                        Message: $"Part {part.PartCode} question {q.DisplayOrder} must reference one of this part's text units.",
+                        TargetId: q.Id));
+                }
                 try
                 {
                     ValidateQuestionPayload(q.QuestionType, q.OptionsJson, q.CorrectAnswerJson, q.AcceptedSynonymsJson);
@@ -632,7 +695,28 @@ public sealed class ReadingStructureService : IReadingStructureService
                 }
             }
 
-            if (questionCount > 0 && part.Questions.All(q => q.ReadingTextId is null))
+            if (part.PartCode is ReadingPartCode.B or ReadingPartCode.C)
+            {
+                var expectedPerText = part.PartCode == ReadingPartCode.B ? 1 : 8;
+                var questionsByText = part.Questions
+                    .Where(q => q.ReadingTextId is not null)
+                    .GroupBy(q => q.ReadingTextId!)
+                    .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+                foreach (var text in texts)
+                {
+                    var count = questionsByText.TryGetValue(text.Id, out var n) ? n : 0;
+                    if (count != expectedPerText)
+                    {
+                        issues.Add(new(
+                            Code: $"part_{part.PartCode}_questions_per_text",
+                            Severity: "error",
+                            Message: $"Part {part.PartCode} text {text.DisplayOrder} has {count} linked question(s), expected {expectedPerText}.",
+                            TargetId: text.Id));
+                    }
+                }
+            }
+
+            if (part.PartCode == ReadingPartCode.A && questionCount > 0 && part.Questions.All(q => q.ReadingTextId is null))
             {
                 issues.Add(new($"part_{part.PartCode}_no_texts", "warning",
                     $"No questions in Part {part.PartCode} reference a text — OK for matching, suspicious for MCQ.",
@@ -640,9 +724,6 @@ public sealed class ReadingStructureService : IReadingStructureService
             }
 
             // Every text must have a source for copyright
-            var texts = await db.ReadingTexts.AsNoTracking()
-                .Where(t => t.ReadingPartId == part.Id)
-                .ToListAsync(ct);
             foreach (var t in texts.Where(x => string.IsNullOrWhiteSpace(x.Source)))
             {
                 issues.Add(new("text_missing_source", "error",
@@ -681,6 +762,23 @@ public sealed class ReadingStructureService : IReadingStructureService
         var isReady = !issues.Any(i => i.Severity == "error");
         return new ReadingValidationReport(isReady, issues, counts);
     }
+
+    private static bool HasContiguousDisplayOrders(IEnumerable<int> orders)
+    {
+        var list = orders.OrderBy(x => x).ToList();
+        if (list.Count == 0) return true;
+        return list.SequenceEqual(Enumerable.Range(1, list.Count));
+    }
+
+    private static bool IsQuestionTypeAllowedForPart(ReadingPartCode partCode, ReadingQuestionType questionType) => partCode switch
+    {
+        ReadingPartCode.A => questionType is ReadingQuestionType.MatchingTextReference
+            or ReadingQuestionType.ShortAnswer
+            or ReadingQuestionType.SentenceCompletion,
+        ReadingPartCode.B => questionType == ReadingQuestionType.MultipleChoice3,
+        ReadingPartCode.C => questionType == ReadingQuestionType.MultipleChoice4,
+        _ => false,
+    };
 
     // ── JSON shape validation ────────────────────────────────────────────
     //
