@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { ArrowLeft, ArrowRight, BarChart3, BookOpen, CheckCircle2, Target } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, BarChart3, Target, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
-import { Button, Stepper } from '@/components/ui';
-import { LearnerDashboardShell } from '@/components/layout';
+import { useCallback, useEffect, useState } from 'react';
+import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
+import { Button } from '@/components/ui/button';
+import { MotionFadeSwitch } from '@/components/ui/motion-primitives';
+import { Stepper } from '@/components/ui/stepper';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { completeOnboarding, fetchOnboardingState, startOnboarding } from '@/lib/api';
 
@@ -135,16 +136,11 @@ export default function OnboardingPage() {
           </div>
 
           {/* Card */}
-          <AnimatePresence mode="wait" custom={direction}>
-            <motion.div
-              key={step.id}
-              custom={direction}
-              initial={{ opacity: 0, x: direction * 60 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: direction * -60 }}
-              transition={{ duration: 0.25 }}
-              className="bg-surface rounded-2xl p-6 md:p-10 shadow-clinical"
-            >
+          <MotionFadeSwitch
+            activeKey={step.id}
+            direction={direction as 1 | -1}
+            className="bg-surface rounded-2xl p-6 md:p-10 shadow-clinical"
+          >
               {/* Icon */}
               <div className="w-14 h-14 rounded-xl bg-lavender flex items-center justify-center mb-6">
                 <Icon className="w-7 h-7 text-primary" />
@@ -162,8 +158,7 @@ export default function OnboardingPage() {
                   </li>
                 ))}
               </ul>
-            </motion.div>
-          </AnimatePresence>
+          </MotionFadeSwitch>
 
           {/* Navigation */}
           <div className="flex items-center justify-between">

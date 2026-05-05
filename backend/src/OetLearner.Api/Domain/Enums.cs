@@ -146,7 +146,12 @@ public enum JobType
     PrivateSpeakingZoomCreate,           // Create Zoom meeting after payment confirmation
     PrivateSpeakingBookingConfirmation,  // Send booking confirmation notifications
     PrivateSpeakingReminder,             // Session reminder notifications
-    PrivateSpeakingReservationExpiry     // Expire unpaid reservations
+    PrivateSpeakingReservationExpiry,     // Expire unpaid reservations
+
+    // ── Subscription Lifecycle & Engagement ──
+    SubscriptionLifecycleCheck,          // Check upcoming renewals, expiries, past-due
+    SlaAlertCheck,                       // Check approaching review deadlines
+    DripCampaignDispatch                 // Send drip campaign emails
 }
 
 public enum ConfidenceBand

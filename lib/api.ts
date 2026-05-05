@@ -3768,6 +3768,27 @@ export async function exportAdminAuditLogs(params?: { action?: string; actor?: s
   };
 }
 
+export interface AdminSponsorDto {
+  id: string;
+  name: string;
+  type: string;
+  contactEmail: string;
+  organizationName?: string;
+  status: string;
+  createdAt: string;
+  learnerCount?: number;
+}
+
+export async function fetchAdminSponsors(params?: { status?: string; search?: string; page?: number; pageSize?: number }): Promise<{ items: AdminSponsorDto[]; total?: number; page?: number; pageSize?: number }> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.search) qs.set('search', params.search);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+  const q = qs.toString();
+  return apiRequest(`/v1/admin/sponsors${q ? `?${q}` : ''}`);
+}
+
 export async function fetchAdminUsers(params?: { role?: string; status?: string; search?: string; page?: number; pageSize?: number }) {
   const qs = new URLSearchParams();
   if (params?.role) qs.set('role', params.role);

@@ -4327,6 +4327,22 @@ public partial class AdminService(
               + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}");
         await LogAuditAsync(adminId, adminName, "Subscription Cancellation", "Subscription", subscriptionId, details, ct);
 
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerSubscriptionCancelled,
+            subscription.UserId,
+            "Subscription",
+            subscription.Id,
+            now.UtcDateTime.ToString("yyyy-MM-dd"),
+            new Dictionary<string, object?>
+            {
+                ["message"] = request.Immediate
+                    ? "Your subscription has been cancelled immediately."
+                    : $"Your subscription is scheduled to cancel at the end of your current billing period ({subscription.NextRenewalAt:yyyy-MM-dd}).",
+                ["planName"] = subscription.PlanId,
+                ["status"] = subscription.Status.ToString().ToLowerInvariant()
+            },
+            ct);
+
         var planName = await ResolvePlanNameAsync(subscription.PlanId, ct);
         var learnerName = await ResolveUserDisplayNameAsync(subscription.UserId, ct);
         return ProjectSubscription(subscription, planName, learnerName);

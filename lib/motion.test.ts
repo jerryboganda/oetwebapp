@@ -10,6 +10,9 @@ import {
   getMobileResumeMotion,
   getMotionDelay,
   getMotionPresenceMode,
+  getProgressFillTransition,
+  getRealtimeValueTransition,
+  getRecordingPulseTransition,
   getSharedLayoutId,
   getSurfaceMotion,
   getSurfaceTransition,
@@ -175,6 +178,28 @@ describe('motion helpers', () => {
   it('returns instant fade-switch for reduced motion', () => {
     const transition = getFadeSwitchTransition(true);
     expect(transition).toMatchObject({ duration: motionTokens.duration.instant });
+  });
+
+  it('uses named progress and realtime transitions with reduced-motion fallbacks', () => {
+    expect(getProgressFillTransition(false)).toMatchObject({
+      duration: motionTokens.duration.slow,
+      ease: motionTokens.ease.entrance,
+    });
+    expect(getRealtimeValueTransition(false)).toMatchObject({
+      duration: motionTokens.duration.instant,
+      ease: motionTokens.ease.standard,
+    });
+    expect(getProgressFillTransition(true)).toMatchObject({ duration: motionTokens.duration.instant });
+    expect(getRealtimeValueTransition(true)).toMatchObject({ duration: motionTokens.duration.instant });
+  });
+
+  it('uses a named recording pulse with reduced-motion fallback', () => {
+    expect(getRecordingPulseTransition(false)).toMatchObject({
+      duration: 2,
+      repeat: Infinity,
+      ease: motionTokens.ease.subtle,
+    });
+    expect(getRecordingPulseTransition(true)).toMatchObject({ duration: motionTokens.duration.instant });
   });
 
   /* ─── Platform-adaptive microinteractions ─── */

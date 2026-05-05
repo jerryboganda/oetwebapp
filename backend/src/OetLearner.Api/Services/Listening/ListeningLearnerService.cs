@@ -220,6 +220,23 @@ public sealed class ListeningLearnerService(
 
         // Hardening: individual paper DTO extraction reads free-form ExtractedTextJson; one malformed
         // paper must not take the whole endpoint down.
+        // Per-paper subscription gate signal — projected into the home DTO so the UI can render a
+        // "Premium" lock badge without firing /v1/listening/papers/{id}/session and getting a 402.
+        var requiresSubscriptionByPaperId = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var paper in papers)
+        {
+            try
+            {
+                var access = await entitlements.AllowAccessAsync(userId, paper, ct);
+                requiresSubscriptionByPaperId[paper.Id] = !access.Allowed;
+            }
+            catch (Exception)
+            {
+                // Fail-closed visually (show lock) rather than fail the whole endpoint.
+                requiresSubscriptionByPaperId[paper.Id] = true;
+            }
+        }
+
         var paperDtos = new List<object>();
         foreach (var paper in papers)
         {
@@ -230,7 +247,8 @@ public sealed class ListeningLearnerService(
                 paperDtos.Add(PaperHomeDto(
                     paper,
                     BuildPaperLastAttemptDto(paper.Id, lastGeneric, lastRelational),
-                    relationalQuestionCounts.GetValueOrDefault(paper.Id)));
+                    relationalQuestionCounts.GetValueOrDefault(paper.Id),
+                    requiresSubscriptionByPaperId.GetValueOrDefault(paper.Id, false)));
             }
             catch (Exception)
             {
@@ -1802,7 +1820,7 @@ public sealed class ListeningLearnerService(
         };
     }
 
-    private static object PaperHomeDto(ContentPaper paper, object? lastAttempt, int relationalQuestionCount)
+    private static object PaperHomeDto(ContentPaper paper, object? lastAttempt, int relationalQuestionCount, bool requiresSubscription)
     {
         var roles = paper.Assets.Where(a => a.IsPrimary).Select(a => a.Role).ToHashSet();
         var questions = ExtractQuestions(JsonSupport.Deserialize<Dictionary<string, object?>>(paper.ExtractedTextJson, new Dictionary<string, object?>()).GetValueOrDefault("listeningQuestions")).ToList();
@@ -1819,6 +1837,7 @@ public sealed class ListeningLearnerService(
             sourceKind = "content_paper",
             objectiveReady = questionCount > 0,
             questionCount,
+            requiresSubscription,
             assetReadiness = new
             {
                 audio = roles.Contains(PaperAssetRole.Audio),

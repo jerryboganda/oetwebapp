@@ -45,11 +45,18 @@ public sealed class AiCredentialResolver(
         AiFeatureCodes.MockFullGrade,
     };
 
-    /// <summary>Admin-only features that must never use BYOK.</summary>
+    /// <summary>Admin-only features that must never use BYOK. Mirrors
+    /// docs/AI-USAGE-POLICY.md §5 — every <c>admin.*</c> feature code must
+    /// appear here, otherwise BYOK could route an admin extraction call
+    /// to a learner-supplied key (security regression).</summary>
     private static readonly HashSet<string> PlatformOnlyFeatures = new(StringComparer.OrdinalIgnoreCase)
     {
         AiFeatureCodes.AdminContentGeneration,
         AiFeatureCodes.AdminGrammarDraft,
+        AiFeatureCodes.AdminPronunciationDraft,
+        AiFeatureCodes.AdminVocabularyDraft,
+        AiFeatureCodes.AdminConversationDraft,
+        AiFeatureCodes.AdminListeningDraft,
     };
 
     public async Task<AiCredentialResolution> ResolveAsync(

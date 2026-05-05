@@ -15,6 +15,12 @@ export interface ListeningHomePaperDto {
   sourceKind: 'content_paper';
   objectiveReady: boolean;
   questionCount: number;
+  /**
+   * True when the current learner's subscription does not grant access to this
+   * paper. Surfaced by the home endpoint so the UI can render a Premium lock
+   * badge instead of letting the learner click through to a 402.
+   */
+  requiresSubscription?: boolean;
   assetReadiness: {
     audio: boolean;
     questionPaper: boolean;

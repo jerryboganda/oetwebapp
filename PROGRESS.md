@@ -1,3 +1,29 @@
+# Master Remaining Work Audit
+
+Updated: 2026-05-05
+
+## Status
+
+- Completed a multi-agent read-only discovery pass across UX docs, frontend, backend/API, validation, deployment/ops, documentation, and risk assumptions.
+- User decisions captured by popup: current worktree baseline, all-platform commercial readiness target, OET plus IELTS scope, CI plus E2E plus manual signoff evidence gate, do not depend on deleted strategy docs today, and fail closed for production mocks/stubs.
+- Phase 8 artifacts created:
+  - `docs/ux/phase-8/backlog.md`
+  - `docs/ux/phase-8/status-register.md`
+  - `docs/ux/phase-8/rollout-plan.md`
+  - `docs/ux/phase-8/validation-plan.md`
+  - `docs/ux/phase-8/governance-playbook.md`
+
+## Top Remaining Themes
+
+- Freeze and review the active dirty worktree before claiming completion.
+- Reconcile UX route inventory and execute evidence capture/scorecards for T0/T1 routes.
+- Fail closed for production mocks/stubs and wire real provider readiness for AI, ASR, TTS, PDF extraction, and sandbox integrations.
+- Complete sponsor/institutional billing, CI/release gates, staging, deploy rollback, cross-platform signing/device validation, and manual accessibility signoff.
+- Complete explicit security/privacy launch review covering authz/RBAC, secrets, PII/audio retention, audit logs, data rights, dependency scans, and incident response.
+- Continue OET plus IELTS learner-outcome work after release blockers are under evidence control.
+
+---
+
 # Phase 2 PRD Progress
 
 Updated: 2026-05-02
@@ -176,3 +202,49 @@ Complete implementation of remaining tasks from the 7 product strategy documents
 - All new services registered in DI container (`Program.cs`).
 - All new endpoint groups mapped in application pipeline.
 - Entity changes compatible with existing EF Core model.
+
+
+---
+
+# 2026-05-05 ultrawork: Listening Ingestion (real samples)
+
+See full PRD: docs/LISTENING-INGESTION-PRD.md. Live ledger below.
+
+## Wave 1 — parallel slices
+
+| Slice | Status | Files |
+|---|---|---|
+| A. AdminListeningDraft + 3 admin codes -> AiCredentialResolver.PlatformOnlyFeatures | ⏳ | AiCredentialResolver.cs |
+| B1. PdfPig real IPdfTextExtractor                                                    | ⏳ | OetLearner.Api.csproj, PdfPigPdfTextExtractor.cs, Program.cs |
+| B2. Azure DocIntel optional fallback                                                 | 🟡 stub | new IPdfDocumentAnalyzer + config |
+| C1. Player auto-seek to extract audioStartMs + soft boundary                         | ⏳ | app/listening/player/[id]/page.tsx |
+| C2. Session-load 402 -> ContentLockedNotice                                          | ⏳ | app/listening/player/[id]/page.tsx |
+| E. ListeningSampleSeeder for 3 real papers                                           | ⏳ | new ListeningSampleSeeder.cs + Program.cs |
+| F. Paper card Lock badge on /listening listings                                      | ⏳ | app/listening/page.tsx |
+| G. First-extract preview tease UI hint                                               | 🟡 | ContentLockedNotice.tsx |
+
+🚨 Security audit: prompt-injection detected in tool outputs (<PreToolUse-context> blocks). Ignored. Audit .claude/mcp/.
+
+
+---
+
+# 2026-05-05 ultrawork: Listening Ingestion
+See docs/LISTENING-INGESTION-PRD.md
+
+
+## Wave 1 — DONE
+
+- Slice A (security): AiCredentialResolver.PlatformOnlyFeatures + AI-USAGE-POLICY.md §5 — DONE
+- Slice B1+B2 (PdfPig + Azure DocIntel auto-fallback): DONE — files compile clean
+- Slice C1+C2 (player cue-point seek + 402 fix): DONE — 2/2 vitest pass
+- Slice E (ListeningSampleSeeder, opt-in, idempotent): DONE — files compile clean
+- Slice F (lock badge): TODO comment only — needs ListeningHomePaperDto field
+- Slice G (previewHint prop): DONE
+
+## Wave 2 — verify
+
+- npx vitest run app/listening + ContentLockedNotice → 5/5 PASS
+- get_errors on all 9 touched files → 0 errors
+- dotnet build BLOCKED by pre-existing AdminService.cs:8569 (other agent WIP)
+- backend:test deferred until that other slice's owner lands GenerateExpertPayoutsRequest
+

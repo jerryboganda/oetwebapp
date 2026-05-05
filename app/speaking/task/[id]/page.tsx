@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Mic, Square, RotateCcw, CheckCircle2, AlertCircle,
   FileText, Edit3, ChevronUp, ChevronDown,
@@ -17,6 +17,7 @@ import { fetchRoleCard, fetchSpeakingCompliance, submitSpeakingRecording, type S
 import { analytics } from '@/lib/analytics';
 import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
 import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
+import { getRealtimeValueTransition, getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
 import type { RoleCard } from '@/lib/mock-data';
 
 // --- Types ---
@@ -25,6 +26,9 @@ type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 type RecordingState = 'idle' | 'recording' | 'paused' | 'finished';
 
 function LiveSpeakingTaskContent() {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const realtimeTransition = getRealtimeValueTransition(reducedMotion);
+  const recordingPulseTransition = getRecordingPulseTransition(reducedMotion);
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -624,12 +628,11 @@ function LiveSpeakingTaskContent() {
             <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent opacity-80 blur-2xl scale-150"></div>
             
             <motion.div 
-              animate={recordingState === 'recording' ? { scale: [1, 1.05, 1] } : { scale: [1, 1.02, 1] }}
-              transition={{ repeat: Infinity, duration: recordingState === 'recording' ? 2 : 4 }}
-              className={`w-52 h-52 rounded-full flex items-center justify-center transition-all duration-700 ${
-                recordingState === 'recording' ? 'border-[3px] border-danger/30 bg-danger/5 shadow-[0_0_60px_rgba(239,68,68,0.15)]' :
-                recordingState === 'paused' ? 'border-[3px] border-warning/30 bg-warning/5 shadow-[0_0_60px_rgba(245,158,11,0.1)]' : 
-                'border border-primary/20 bg-primary/5 shadow-[0_0_50px_rgba(124,58,237,0.05)]'
+              animate={recordingState === 'recording' && !reducedMotion ? { scale: [1, 1.05, 1] } : {}}
+              transition={recordingPulseTransition}
+              className={`w-48 h-48 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
+                recordingState === 'recording' ? 'border-danger/30 bg-danger/10 shadow-[0_0_40px_rgba(239,68,68,0.14)]' :
+                recordingState === 'paused' ? 'border-warning/30 bg-amber-50 shadow-[0_0_40px_rgba(245,158,11,0.14)]' : 'border-border bg-surface'
               }`}
             >
               <div className={`w-40 h-40 rounded-full flex items-center justify-center transition-all duration-500 shadow-sm ${
@@ -642,8 +645,8 @@ function LiveSpeakingTaskContent() {
                     {audioLevels.map((level, i) => (
                       <motion.div
                         key={i}
-                        animate={{ height: Math.max(8, level * 1.5) }}
-                        transition={{ type: 'tween', duration: 0.1 }}
+                        animate={{ height: level }}
+                        transition={realtimeTransition}
                         className="w-1.5 bg-danger rounded-full"
                       />
                     ))}

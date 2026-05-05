@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import {
-  CheckCircle2, AlertCircle, TrendingUp, Zap, Target, Loader2, FileText, Mic, UserCheck, ChevronRight, Headphones,
-} from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, FileText, Headphones, Loader2, Mic, Target, TrendingUp, UserCheck, Zap } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
+import { useEffect, useState } from 'react';
+import { getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -42,6 +41,8 @@ function criterionLabel(code: string) {
 }
 
 export default function SpeakingResultSummary() {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const recordingPulseTransition = getRecordingPulseTransition(reducedMotion);
   const params = useParams();
   const id = params?.id as string;
   const [analysing, setAnalysing] = useState(true);
@@ -116,7 +117,11 @@ export default function SpeakingResultSummary() {
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: '40%' }}
-                    transition={{ duration: 1, delay: index * 0.2, repeat: Infinity, repeatType: 'reverse' }}
+                    transition={{
+                      ...recordingPulseTransition,
+                      delay: reducedMotion ? 0 : index * 0.2,
+                      repeatType: 'reverse',
+                    }}
                     className="h-1.5 bg-primary/20 rounded-full overflow-hidden"
                   >
                     <div className="h-full bg-primary w-full" />

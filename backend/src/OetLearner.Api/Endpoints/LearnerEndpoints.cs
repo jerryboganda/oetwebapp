@@ -15,6 +15,10 @@ public static class LearnerEndpoints
 {
     public static IEndpointRouteBuilder MapLearnerEndpoints(this IEndpointRouteBuilder app)
     {
+        // Public endpoints (no auth required)
+        var publicV1 = app.MapGroup("/v1/public");
+        publicV1.MapGet("/plans", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingPlansAsync(string.Empty, ct)));
+
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
 
         v1.MapGet("/me", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMeAsync(http.UserId(), ct)));
@@ -253,6 +257,10 @@ public static class LearnerEndpoints
         billing.MapGet("/extras", async (LearnerService service) => Results.Ok(await service.GetBillingExtrasAsync()));
         billing.MapPost("/checkout-sessions", async (HttpContext http, CheckoutSessionCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateCheckoutSessionAsync(http.UserId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
+        billing.MapPost("/cancel", async (HttpContext http, [FromQuery] bool immediate, LearnerService service, CancellationToken ct) => Results.Ok(await service.CancelOwnSubscriptionAsync(http.UserId(), immediate, ct)))
+            .RequireRateLimiting("PerUserWrite");
+        billing.MapPost("/reactivate", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.ReactivateOwnSubscriptionAsync(http.UserId(), ct)))
+            .RequireRateLimiting("PerUserWrite");
 
         // Engagement endpoints
         v1.MapGet("/learner/engagement", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetEngagementAsync(http.UserId(), ct)));
@@ -448,6 +456,27 @@ public static class LearnerEndpoints
         v1.MapGet("/learner/escalations/{escalationId}", async (string escalationId, HttpContext http, LearnerService service, CancellationToken ct)
             => Results.Ok(await service.GetEscalationDetailsAsync(http.UserId(), escalationId, ct)))
             .RequireAuthorization("LearnerOnly");
+
+        // ── IELTS Mock Evaluation ───────────────────────
+
+        v1.MapPost("/ielts/writing/task1", async (HttpContext http, IeltsWritingTask1Request req, IIeltsMockEngine engine, CancellationToken ct) =>
+        {
+            var result = engine.EvaluateWritingTask1(new IeltsWritingTask1Input(req.Content, req.GraphType, req.WordCount, req.TargetBand));
+            return Results.Ok(result);
+        }).RequireAuthorization("LearnerOnly");
+
+        v1.MapPost("/ielts/writing/task2", async (HttpContext http, IeltsWritingTask2Request req, IIeltsMockEngine engine, CancellationToken ct) =>
+        {
+            var result = engine.EvaluateWritingTask2(new IeltsWritingTask2Input(req.Content, req.Prompt, req.EssayType, req.WordCount, req.TargetBand));
+            return Results.Ok(result);
+        }).RequireAuthorization("LearnerOnly");
+
+        v1.MapPost("/ielts/overall", async (HttpContext http, IeltsModuleResultsRequest req, IIeltsMockEngine engine, CancellationToken ct) =>
+        {
+            var overall = engine.ComputeOverall(new IeltsModuleResults(req.ListeningBand, req.ReadingBand, req.WritingBand, req.SpeakingBand));
+            var report = engine.GenerateReport(overall, req.Pathway);
+            return Results.Ok(new { overall, report });
+        }).RequireAuthorization("LearnerOnly");
 
         return app;
     }

@@ -388,5 +388,5 @@ Default agents: `universal`, `codex`, `claude-code`.
 
 - **`jcodemunch-mcp`**: Preferred for code navigation. See `.claude/mcp/jcodemunch/CLAUDE.md`.
 - **`context-mode`**: Installed globally. Use `ctx stats`, `ctx doctor`, `ctx upgrade`, `ctx purge` for context management.
-- **`cc_token_saver_mcp`**: Route short tasks to local LLM first. Launches from `.claude/mcp/cc_token_saver_mcp/launch.py`.
 - VS Code routing lives in `.vscode/mcp.json` and `.github/hooks/context-mode.json`.
+- **`cc_token_saver_mcp`** (REMOVED 2026-05-06): Routing layer was causing latency without measurable savings. The MCP server source still lives at `.claude/mcp/cc_token_saver_mcp/launch.py` for archival; do not re-register in `.vscode/mcp.json`.

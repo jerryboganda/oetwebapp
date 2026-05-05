@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, MonitorCheck, Printer, Sparkles, Target, TrendingUp, Volume2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, Lock, MonitorCheck, Printer, Sparkles, Target, TrendingUp, Volume2 } from 'lucide-react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
@@ -347,12 +347,23 @@ export default function ListeningHome() {
               {papers.length > 0 ? (
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   {papers.map((paper, index) => {
+                    // Slice F (paper-card lock badge):
+                    // The home payload now carries a per-paper
+                    // `requiresSubscription` flag projected from
+                    // `IContentEntitlementService.AllowAccessAsync` in
+                    // `ListeningLearnerService.GetHomeAsync`. We surface a
+                    // "Premium" lock badge in the card eyebrow when access
+                    // is gated, so the learner sees the gate before they
+                    // click through and trip the 402 in the player.
+                    const locked = paper.requiresSubscription === true;
                     const card: LearnerSurfaceCardModel = {
                       kind: 'task',
                       sourceType: 'backend_task',
-                      accent: paper.objectiveReady ? 'indigo' : 'amber',
-                      eyebrow: paper.objectiveReady ? 'Published Paper' : 'Assets Ready',
-                      eyebrowIcon: Volume2,
+                      accent: locked ? 'amber' : (paper.objectiveReady ? 'indigo' : 'amber'),
+                      eyebrow: locked
+                        ? 'Premium — Subscription Required'
+                        : (paper.objectiveReady ? 'Published Paper' : 'Assets Ready'),
+                      eyebrowIcon: locked ? Lock : Volume2,
                       title: paper.title,
                       description: paper.objectiveReady
                         ? 'Start a server-authoritative Listening attempt with autosave and post-submit review.'

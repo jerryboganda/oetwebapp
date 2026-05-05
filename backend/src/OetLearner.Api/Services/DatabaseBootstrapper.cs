@@ -53,8 +53,6 @@ public static class DatabaseBootstrapper
         await EnsureAttemptSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureVocabularySchemaCompatibilityAsync(db, cancellationToken);
         await EnsurePronunciationSchemaCompatibilityAsync(db, cancellationToken);
-        await EnsureSignupAttributionSchemaCompatibilityAsync(db, cancellationToken);
-        await EnsureReviewRequestCompensationSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureFreezePolicyAsync(db, cancellationToken);
 
         // Reference data (professions, subtests, criteria, content) is always seeded
@@ -584,86 +582,6 @@ public static class DatabaseBootstrapper
             await db.Database.ExecuteSqlRawAsync(
                 """CREATE INDEX IF NOT EXISTS "IX_VocabularyQuizResults_UserId_CompletedAt" ON "VocabularyQuizResults" ("UserId", "CompletedAt");""",
                 cancellationToken);
-        }
-    }
-
-    private static async Task EnsureSignupAttributionSchemaCompatibilityAsync(LearnerDbContext db, CancellationToken cancellationToken)
-    {
-        if (!db.Database.IsRelational())
-        {
-            return;
-        }
-
-        var entity = db.Model.FindEntityType(typeof(LearnerRegistrationProfile));
-        var tableName = GetQualifiedTableName(entity);
-        if (string.IsNullOrWhiteSpace(tableName))
-        {
-            return;
-        }
-
-        var providerName = db.Database.ProviderName ?? string.Empty;
-
-        if (db.Database.IsNpgsql())
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                $"""
-                ALTER TABLE IF EXISTS {tableName}
-                    ADD COLUMN IF NOT EXISTS "UtmSource" character varying(128),
-                    ADD COLUMN IF NOT EXISTS "UtmMedium" character varying(128),
-                    ADD COLUMN IF NOT EXISTS "UtmCampaign" character varying(256),
-                    ADD COLUMN IF NOT EXISTS "UtmTerm" character varying(128),
-                    ADD COLUMN IF NOT EXISTS "UtmContent" character varying(128),
-                    ADD COLUMN IF NOT EXISTS "ReferrerUrl" character varying(512),
-                    ADD COLUMN IF NOT EXISTS "LandingPath" character varying(512);
-                """,
-                cancellationToken);
-            return;
-        }
-
-        if (providerName.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
-        {
-            await AddSqliteColumnIfMissingAsync(db, "LearnerRegistrationProfiles", "\"UtmSource\" TEXT NULL", cancellationToken);
-            await AddSqliteColumnIfMissingAsync(db, "LearnerRegistrationProfiles", "\"UtmMedium\" TEXT NULL", cancellationToken);
-            await AddSqliteColumnIfMissingAsync(db, "LearnerRegistrationProfiles", "\"UtmCampaign\" TEXT NULL", cancellationToken);
-            await AddSqliteColumnIfMissingAsync(db, "LearnerRegistrationProfiles", "\"UtmTerm\" TEXT NULL", cancellationToken);
-            await AddSqliteColumnIfMissingAsync(db, "LearnerRegistrationProfiles", "\"UtmContent\" TEXT NULL", cancellationToken);
-            await AddSqliteColumnIfMissingAsync(db, "LearnerRegistrationProfiles", "\"ReferrerUrl\" TEXT NULL", cancellationToken);
-            await AddSqliteColumnIfMissingAsync(db, "LearnerRegistrationProfiles", "\"LandingPath\" TEXT NULL", cancellationToken);
-        }
-    }
-
-    private static async Task EnsureReviewRequestCompensationSchemaCompatibilityAsync(LearnerDbContext db, CancellationToken cancellationToken)
-    {
-        if (!db.Database.IsRelational())
-        {
-            return;
-        }
-
-        var entity = db.Model.FindEntityType(typeof(ReviewRequest));
-        var tableName = GetQualifiedTableName(entity);
-        if (string.IsNullOrWhiteSpace(tableName))
-        {
-            return;
-        }
-
-        var providerName = db.Database.ProviderName ?? string.Empty;
-
-        if (db.Database.IsNpgsql())
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                $"""
-                ALTER TABLE IF EXISTS {tableName}
-                    ADD COLUMN IF NOT EXISTS "ReviewerCompensation" numeric NOT NULL DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS "CompensationPaid" boolean NOT NULL DEFAULT false;
-                """,
-                cancellationToken);
-            return;
-        }
-
-        if (providerName.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
-        {
-            await AddSqliteColumnIfMissingAsync(db, "ReviewRequests", "\"ReviewerCompensation\" REAL NOT NULL DEFAULT 0", cancellationToken);
-            await AddSqliteColumnIfMissingAsync(db, "ReviewRequests", "\"CompensationPaid\" INTEGER NOT NULL DEFAULT 0", cancellationToken);
         }
     }
 

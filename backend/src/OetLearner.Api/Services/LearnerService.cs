@@ -2972,20 +2972,28 @@ public partial class LearnerService(
 
     public async Task<object> GetBillingPlansAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
-        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var normalizedSubscriptionPlanId = NormalizeBillingCode(subscription.PlanId);
+        var isPublic = string.IsNullOrWhiteSpace(userId);
+        Subscription? subscription = null;
+        if (!isPublic)
+        {
+            await EnsureUserAsync(userId, cancellationToken);
+            subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+        }
+
+        var normalizedSubscriptionPlanId = subscription is not null ? NormalizeBillingCode(subscription.PlanId) : string.Empty;
         var plans = await db.BillingPlans.AsNoTracking()
-            .Where(plan => plan.IsVisible || plan.Code.ToLower() == normalizedSubscriptionPlanId)
+            .Where(plan => plan.IsVisible || (subscription != null && plan.Code.ToLower() == normalizedSubscriptionPlanId))
             .OrderBy(plan => plan.DisplayOrder)
             .ThenBy(plan => plan.Price)
             .ToListAsync(cancellationToken);
-        var currentPlan = plans.FirstOrDefault(plan => string.Equals(plan.Code, subscription.PlanId, StringComparison.OrdinalIgnoreCase))
-            ?? plans.FirstOrDefault(plan => plan.Status == BillingPlanStatus.Active)
-            ?? plans.FirstOrDefault();
+        var currentPlan = subscription is not null
+            ? (plans.FirstOrDefault(plan => string.Equals(plan.Code, subscription.PlanId, StringComparison.OrdinalIgnoreCase))
+                ?? plans.FirstOrDefault(plan => plan.Status == BillingPlanStatus.Active)
+                ?? plans.FirstOrDefault())
+            : plans.FirstOrDefault(plan => plan.Status == BillingPlanStatus.Active) ?? plans.FirstOrDefault();
         return new
         {
-            currentPlanId = subscription.PlanId,
+            currentPlanId = subscription?.PlanId,
             currentPlanCode = currentPlan?.Code,
             items = plans.Select(plan => new
             {
@@ -2997,8 +3005,8 @@ public partial class LearnerService(
                 price = new { amount = plan.Price, currency = plan.Currency, interval = plan.Interval },
                 reviewCredits = plan.IncludedCredits,
                 mockReportsIncluded = true,
-                canChangeTo = plan.Status == BillingPlanStatus.Active && !string.Equals(plan.Code, subscription.PlanId, StringComparison.OrdinalIgnoreCase),
-                changeDirection = string.Equals(plan.Code, subscription.PlanId, StringComparison.OrdinalIgnoreCase)
+                canChangeTo = plan.Status == BillingPlanStatus.Active && (subscription is null || !string.Equals(plan.Code, subscription.PlanId, StringComparison.OrdinalIgnoreCase)),
+                changeDirection = subscription is not null && string.Equals(plan.Code, subscription.PlanId, StringComparison.OrdinalIgnoreCase)
                     ? "current"
                     : plan.Price > (currentPlan?.Price ?? plan.Price)
                         ? "upgrade"
@@ -3013,7 +3021,8 @@ public partial class LearnerService(
                 isRenewable = plan.IsRenewable,
                 trialDays = plan.TrialDays,
                 includedSubtests = JsonSupport.Deserialize<List<string>>(plan.IncludedSubtestsJson, []),
-                entitlements = JsonSupport.Deserialize<Dictionary<string, object?>>(plan.EntitlementsJson, new Dictionary<string, object?>())
+                entitlements = JsonSupport.Deserialize<Dictionary<string, object?>>(plan.EntitlementsJson, new Dictionary<string, object?>()
+                )
             })
         };
     }
@@ -3044,6 +3053,102 @@ public partial class LearnerService(
                 : $"Switching to {targetPlan.Name} lowers your billing amount by {Math.Abs(delta):0.00} {subscription.Currency}.",
             currentCreditsIncluded = currentPlan.IncludedCredits,
             targetCreditsIncluded = targetPlan.IncludedCredits
+        };
+    }
+
+    public async Task<object> CancelOwnSubscriptionAsync(string userId, bool immediate, CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
+        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+
+        if (subscription.Status == SubscriptionStatus.Cancelled)
+        {
+            throw ApiException.Validation("subscription_already_cancelled", "Your subscription is already cancelled.");
+        }
+
+        if (subscription.Status == SubscriptionStatus.Expired)
+        {
+            throw ApiException.Validation("subscription_expired", "Your subscription has already expired.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var previousStatus = subscription.Status;
+
+        if (immediate)
+        {
+            SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Cancelled, "learner_self_cancel_immediate");
+            subscription.NextRenewalAt = now;
+        }
+        subscription.ChangedAt = now;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerSubscriptionCancelled,
+            userId,
+            "Subscription",
+            subscription.Id,
+            now.UtcDateTime.ToString("yyyy-MM-dd"),
+            new Dictionary<string, object?>
+            {
+                ["message"] = immediate
+                    ? "Your subscription has been cancelled immediately."
+                    : $"Your subscription is scheduled to cancel at the end of your current billing period ({subscription.NextRenewalAt:yyyy-MM-dd}).",
+                ["planName"] = subscription.PlanId,
+                ["status"] = subscription.Status.ToString().ToLowerInvariant()
+            },
+            cancellationToken);
+
+        return new
+        {
+            subscriptionId = subscription.Id,
+            status = ToSubscriptionState(subscription.Status),
+            cancelledAt = now,
+            effectiveEndAt = subscription.NextRenewalAt,
+            immediate
+        };
+    }
+
+    public async Task<object> ReactivateOwnSubscriptionAsync(string userId, CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
+        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+
+        if (subscription.Status != SubscriptionStatus.Cancelled)
+        {
+            throw ApiException.Validation("subscription_not_cancelled", "Only cancelled subscriptions can be reactivated.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "learner_self_reactivate");
+        subscription.ChangedAt = now;
+        if (subscription.NextRenewalAt <= now)
+        {
+            subscription.NextRenewalAt = now.AddMonths(1);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerSubscriptionChanged,
+            userId,
+            "Subscription",
+            subscription.Id,
+            now.UtcDateTime.ToString("yyyy-MM-dd"),
+            new Dictionary<string, object?>
+            {
+                ["message"] = "Your subscription has been reactivated.",
+                ["planName"] = subscription.PlanId,
+                ["status"] = "active"
+            },
+            cancellationToken);
+
+        return new
+        {
+            subscriptionId = subscription.Id,
+            status = ToSubscriptionState(subscription.Status),
+            reactivatedAt = now,
+            nextRenewalAt = subscription.NextRenewalAt
         };
     }
 
@@ -7538,6 +7643,34 @@ public partial class LearnerService(
             planCode = quote.PlanCode,
             totalAmount = quote.TotalAmount
         }, ct);
+
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerPaymentSucceeded,
+            transaction.LearnerUserId,
+            "PaymentTransaction",
+            transaction.GatewayTransactionId,
+            now.UtcDateTime.ToString("yyyy-MM-dd"),
+            new Dictionary<string, object?>
+            {
+                ["amount"] = quote.TotalAmount,
+                ["currency"] = quote.Currency,
+                ["planName"] = quote.PlanCode
+            },
+            ct);
+
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerSubscriptionChanged,
+            transaction.LearnerUserId,
+            "Subscription",
+            subscription.Id,
+            now.UtcDateTime.ToString("yyyy-MM-dd"),
+            new Dictionary<string, object?>
+            {
+                ["message"] = $"Your subscription to {quote.PlanCode} is now active.",
+                ["planName"] = quote.PlanCode,
+                ["status"] = "active"
+            },
+            ct);
     }
 
     private async Task MarkCheckoutFailedAsync(PaymentTransaction transaction, CancellationToken ct)
@@ -7587,6 +7720,20 @@ public partial class LearnerService(
             }),
             OccurredAt = DateTimeOffset.UtcNow
         }, ct);
+
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerPaymentFailed,
+            transaction.LearnerUserId,
+            "PaymentTransaction",
+            transaction.GatewayTransactionId,
+            DateTimeOffset.UtcNow.UtcDateTime.ToString("yyyy-MM-dd"),
+            new Dictionary<string, object?>
+            {
+                ["amount"] = quote.TotalAmount,
+                ["currency"] = quote.Currency,
+                ["message"] = "Your payment could not be processed. Update your billing details to avoid subscription interruption."
+            },
+            ct);
     }
 
     private async Task AddBillingEventIfMissingAsync(BillingEvent billingEvent, CancellationToken ct)

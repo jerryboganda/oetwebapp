@@ -33,9 +33,16 @@ export function readContentLockedMessage(err: unknown, fallback = 'This paper re
  */
 export function ContentLockedNotice({
   message,
+  previewHint,
   className,
 }: {
   message: string;
+  /**
+   * Optional small tease line shown beneath the CTA — e.g. for the
+   * "first-extract-free" preview hook on premium-locked papers.
+   * When omitted, the notice renders unchanged from its previous form.
+   */
+  previewHint?: string;
   className?: string;
 }) {
   return (
@@ -52,6 +59,9 @@ export function ContentLockedNotice({
       <Link href="/billing" prefetch={false}>
         <Button variant="primary">View plans</Button>
       </Link>
+      {previewHint ? (
+        <p className="mt-3 text-xs text-amber-800/80">{previewHint}</p>
+      ) : null}
     </div>
   );
 }

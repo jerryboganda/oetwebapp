@@ -59,6 +59,7 @@ public static class SubscriptionStateMachine
             [SubscriptionStatus.Cancelled] = new HashSet<SubscriptionStatus>
             {
                 SubscriptionStatus.Cancelled,
+                SubscriptionStatus.Active,    // self-serve reactivation
                 SubscriptionStatus.Expired,
             },
             [SubscriptionStatus.Expired] = new HashSet<SubscriptionStatus>

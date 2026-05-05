@@ -20,7 +20,6 @@ using OetLearner.Api.Hubs;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Observability;
-using OetLearner.Api.Services.Billing;
 
 var builder = WebApplication.CreateBuilder(args);
 // H10: wire Sentry early so host-level startup exceptions are captured. No-op unless Sentry:Dsn is set.
@@ -495,21 +494,12 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminContentPublisherApproval", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "content:publisher_approval", "content:publish", "system_admin")));
-    options.AddPolicy("AdminContentPublishRequestsRead", policy => policy
-        .RequireAuthenticatedUser().RequireRole("admin")
-        .RequireAssertion(ctx => HasAdminPermission(ctx, "content:editor_review", "content:publisher_approval", "content:publish", "system_admin")));
     options.AddPolicy("AdminBillingRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "system_admin")));
     options.AddPolicy("AdminBillingWrite", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "system_admin")));
-    options.AddPolicy("AdminFreezeRead", policy => policy
-        .RequireAuthenticatedUser().RequireRole("admin")
-        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "billing:write", "users:read", "users:write", "system_admin")));
-    options.AddPolicy("AdminFreezeWrite", policy => policy
-        .RequireAuthenticatedUser().RequireRole("admin")
-        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "users:write", "system_admin")));
     options.AddPolicy("AdminUsersRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "users:read", "system_admin")));
@@ -529,16 +519,10 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<MockService>();
-builder.Services.AddScoped<MockItemAnalysisService>();
-builder.Services.AddScoped<MockBookingService>();
-builder.Services.AddScoped<RemediationPlanService>();
-builder.Services.AddScoped<MockDiagnosticEntitlementService>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
-builder.Services.AddScoped<IWritingPdfService, WritingPdfService>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<ExpertOnboardingService>();
 builder.Services.AddScoped<AdminService>();
-builder.Services.AddScoped<SpeakingTutorCalibrationService>();
 builder.Services.AddScoped<SponsorService>();
 builder.Services.AddScoped<ContentHierarchyService>();
 builder.Services.AddScoped<ContentDeduplicationService>();
@@ -547,7 +531,6 @@ builder.Services.AddScoped<MockDiagnosticService>();
 builder.Services.AddScoped<ContentImportService>();
 builder.Services.AddScoped<ContentSearchService>();
 builder.Services.AddScoped<MediaNormalizationService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Content.MediaAssetAccessService>();
 builder.Services.AddScoped<VideoLessonService>();
 builder.Services.AddScoped<StrategyGuideService>();
 builder.Services.AddScoped<NotificationService>();
@@ -559,9 +542,6 @@ builder.Services.AddHttpClient<StripeGateway>();
 builder.Services.AddHttpClient<PayPalGateway>();
 builder.Services.AddScoped<PaymentGatewayService>();
 builder.Services.AddScoped<WalletService>();
-builder.Services.AddScoped<RefundService>();
-builder.Services.AddScoped<DisputeService>();
-builder.Services.AddScoped<AdminWalletTierService>();
 builder.Services.AddScoped<EngagementService>();
 builder.Services.AddHostedService<BackgroundJobProcessor>();
 
@@ -573,9 +553,6 @@ builder.Services.AddScoped<VocabularyService>();
 builder.Services.AddScoped<VocabularyDraftService>();
 builder.Services.AddScoped<VocabularyGlossService>();
 builder.Services.AddScoped<AdaptiveDifficultyService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Recalls.RecallsService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Recalls.IRecallsTtsService, OetLearner.Api.Services.Recalls.RecallsTtsService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Recalls.IRecallsAutoSeed, OetLearner.Api.Services.Recalls.RecallsAutoSeed>();
 
 // ── Phase 2 new services ──
 builder.Services.AddScoped<PredictionService>();
@@ -676,12 +653,6 @@ builder.Services.Configure<OetLearner.Api.Configuration.DataRetentionOptions>(
     builder.Configuration.GetSection("DataRetention"));
 builder.Services.AddHostedService<OetLearner.Api.Services.DataRetentionWorker>();
 
-// Wave 7 of docs/SPEAKING-MODULE-PLAN.md - speaking compliance copy +
-// audio retention. Bound to the "Speaking:Compliance" config section.
-builder.Services.Configure<OetLearner.Api.Configuration.SpeakingComplianceOptions>(
-    builder.Configuration.GetSection("Speaking:Compliance"));
-builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.SpeakingAudioRetentionWorker>();
-
 // Partition-maintenance worker: keeps next-month range partitions pre-created
 // for candidate time-ordered tables (AnalyticsEvents, AuditEvents, AiUsageRecords).
 // No-op on SQLite and no-op on a Postgres DB whose tables are not yet partitioned.
@@ -690,14 +661,8 @@ builder.Services.AddHostedService<OetLearner.Api.Services.PartitionMaintenanceWo
 // OET rulebook engine + grounded AI gateway. These services are the single
 // source of truth for rule enforcement and for every AI call: no code path
 // invokes a model without a rulebook-grounded prompt built here.
-//
-// Two-layer loader: RulebookLoader is a singleton that owns the immutable
-// embedded-JSON cache; DbBackedRulebookLoader is the public IRulebookLoader
-// (scoped because it touches the DbContext) and prefers Published DB rows
-// with a 60s in-process cache, falling back to JSON when no DB row exists.
-builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.RulebookLoader>();
-builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IRulebookLoader,
-    OetLearner.Api.Services.Rulebook.DbBackedRulebookLoader>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IRulebookLoader,
+    OetLearner.Api.Services.Rulebook.RulebookLoader>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.WritingRuleEngine>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.SpeakingRuleEngine>();
 builder.Services.AddHttpClient("AiOpenAiCompatible", client =>
@@ -723,10 +688,6 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiUsageRecorder,
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiQuotaService,
     OetLearner.Api.Services.AiManagement.AiQuotaService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Entitlements.IEffectiveEntitlementResolver,
-    OetLearner.Api.Services.Entitlements.EffectiveEntitlementResolver>();
-builder.Services.AddScoped<OetLearner.Api.Services.Entitlements.ITierEntitlementEnforcer,
-    OetLearner.Api.Services.Entitlements.TierEntitlementEnforcer>();
 builder.Services.AddHttpClient("AiCredentialValidator");
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCredentialVault,
     OetLearner.Api.Services.AiManagement.AiCredentialVault>();
@@ -739,8 +700,6 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.RegistryBackedProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.AnthropicProvider>();
-builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
-    OetLearner.Api.Services.Rulebook.CloudflareWorkersAiProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCreditService,
     OetLearner.Api.Services.AiManagement.AiCreditService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiCreditRenewalWorker>();
@@ -794,57 +753,17 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingGradingServic
     OetLearner.Api.Services.Reading.ReadingGradingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAttemptService,
     OetLearner.Api.Services.Reading.ReadingAttemptService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService,
-    OetLearner.Api.Services.Reading.ReadingReviewService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAnalyticsService,
-    OetLearner.Api.Services.Reading.ReadingAnalyticsService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi,
-    OetLearner.Api.Services.Reading.StubReadingExtractionAi>();
-builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionService,
-    OetLearner.Api.Services.Reading.ReadingExtractionService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPathwayService,
-    OetLearner.Api.Services.Reading.ReadingPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningLearnerService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPathwayService,
-    OetLearner.Api.Services.Listening.ListeningPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningStructureService,
     OetLearner.Api.Services.Listening.ListeningStructureService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAuthoringService,
-    OetLearner.Api.Services.Listening.ListeningAuthoringService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAnalyticsService,
-    OetLearner.Api.Services.Listening.ListeningAnalyticsService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningCurriculumService,
-    OetLearner.Api.Services.Listening.ListeningCurriculumService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionService,
-    OetLearner.Api.Services.Listening.ListeningExtractionService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningBackfillService,
-    OetLearner.Api.Services.Listening.ListeningBackfillService>();
-// Grounded AI extraction is the production default once an AI provider is
-// configured (AI__ApiKey or AI__BaseUrl). Otherwise we fall back to the
-// deterministic stub so the admin UI works end-to-end on dev machines and
-// the 600+ unit tests stay offline. The grounded impl itself catches all
-// failure modes and returns IsStub=true with a reason, so flipping this DI
-// line is safe even before a real key is wired up.
-{
-    var aiKey = builder.Configuration["AI:ApiKey"] ?? builder.Configuration["AI__ApiKey"];
-    var aiBase = builder.Configuration["AI:BaseUrl"] ?? builder.Configuration["AI__BaseUrl"];
-    var aiConfigured = !string.IsNullOrWhiteSpace(aiKey) || !string.IsNullOrWhiteSpace(aiBase);
-    if (aiConfigured)
-    {
-        builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionAi,
-            OetLearner.Api.Services.Listening.GroundedListeningExtractionAi>();
-    }
-    else
-    {
-        builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionAi,
-            OetLearner.Api.Services.Listening.StubListeningExtractionAi>();
-    }
-}
-builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentEntitlementService,
-    OetLearner.Api.Services.Content.ContentEntitlementService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.RulebookAdminService>();
+// Listening sample ingester (Slice E of docs/LISTENING-INGESTION-PRD.md).
+// Disabled by default — operator opts in via Seed:ListeningSamples:Enabled=true.
+builder.Services.Configure<OetLearner.Api.Services.Listening.ListeningSampleSeederOptions>(
+    builder.Configuration.GetSection(OetLearner.Api.Services.Listening.ListeningSampleSeederOptions.SectionName));
+builder.Services.AddScoped<
+    OetLearner.Api.Services.Listening.IListeningSampleSeeder,
+    OetLearner.Api.Services.Listening.ListeningSampleSeeder>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Reading.ReadingAttemptExpireWorker>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningAttemptExpireWorker>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
     OetLearner.Api.Services.Rulebook.AiGatewayService>();
@@ -995,32 +914,6 @@ app.UseExceptionHandler(handler =>
             return;
         }
 
-        // H-D1 (Slice H, May 2026 hardening): Minimal-API model binding throws
-        // BadHttpRequestException for malformed JSON, missing required fields,
-        // wrong primitive types in the body, querystring parse failures, etc.
-        // Without this branch the catch-all below maps it to 500 — leaking an
-        // implementation detail and breaking client retry logic. Map it to a
-        // structured 400 (`invalid_request`) instead. Detail strings are only
-        // included in Development to avoid disclosing schema internals.
-        if (exception is Microsoft.AspNetCore.Http.BadHttpRequestException badRequest)
-        {
-            context.Response.StatusCode = badRequest.StatusCode is >= 400 and < 500
-                ? badRequest.StatusCode
-                : StatusCodes.Status400BadRequest;
-            var badPayload = new
-            {
-                code = "invalid_request",
-                message = app.Environment.IsDevelopment()
-                    ? badRequest.Message
-                    : "The request body or query string could not be parsed.",
-                retryable = false,
-                supportHint = "Check the request shape against the OpenAPI schema and retry.",
-                correlationId
-            };
-            await context.Response.WriteAsync(JsonSupport.Serialize(badPayload));
-            return;
-        }
-
         app.Logger.LogError(
             exception,
             "Unhandled exception while processing {Method} {Path}. CorrelationId: {CorrelationId}",
@@ -1162,28 +1055,22 @@ app.MapNotificationEndpoints();
 app.MapLearnerEndpoints();
 app.MapExpertEndpoints();
 app.MapAdminEndpoints();
-app.MapWritingPdfEndpoints();
-app.MapSpeakingCalibrationEndpoints();
 app.MapAiUsageAdminEndpoints();
 app.MapAiMeEndpoints();
 app.MapContentPapersAdminEndpoints();
 app.MapMockAdminEndpoints();
 app.MapContentPapersLearnerEndpoints();
-app.MapReadingAnalyticsAdminEndpoints();
 app.MapReadingAuthoringAdminEndpoints();
 app.MapListeningAuthoringAdminEndpoints();
-app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
 app.MapListeningLearnerEndpoints();
 app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
-app.MapContentStalenessEndpoints();
 
 // ── Phase 1 new endpoints ──
 app.MapGamificationEndpoints();
 app.MapReviewItemEndpoints();
 app.MapVocabularyEndpoints();
-app.MapRecallsEndpoints();
 app.MapAdaptiveEndpoints();
 
 // ── Phase 2 new endpoints ──
@@ -1208,7 +1095,6 @@ app.MapPrivateSpeakingEndpoints();
 
 // ── Rulebook + Writing linter + Speaking auditor + Grounded AI gateway ──
 app.MapRulebookEndpoints();
-app.MapRulebookAdminEndpoints();
 
 // ── Media Management ──
 app.MapMediaEndpoints();
@@ -1234,6 +1120,27 @@ await using (var scope = app.Services.CreateAsyncScope())
         .GetRequiredService<Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.AiProviderOptions>>()
         .Value;
     await DatabaseBootstrapper.SynchroniseAiProviderFromEnvAsync(db, dp, aiOpts);
+}
+
+// Listening sample ingester (Slice E of docs/LISTENING-INGESTION-PRD.md).
+// Reads `Project Real Content/Listening (..)/Listening Sample {1,2,3}/` and
+// registers each as a Draft ContentPaper with all 4 required asset roles
+// (Audio + QuestionPaper + AudioScript + AnswerKey). Idempotent (SHA-256 +
+// slug). Disabled by default; non-fatal on failure so a missing asset folder
+// never breaks startup.
+using (var seedScope = app.Services.CreateScope())
+{
+    var listeningSeeder = seedScope.ServiceProvider
+        .GetRequiredService<OetLearner.Api.Services.Listening.IListeningSampleSeeder>();
+    try
+    {
+        await listeningSeeder.SeedAsync(CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>()
+            .LogWarning(ex, "Listening sample seeder failed (non-fatal)");
+    }
 }
 
 app.Run();

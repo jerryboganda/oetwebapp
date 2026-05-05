@@ -12,10 +12,13 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { useReducedMotion } from 'motion/react';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionCollapse } from '@/components/ui/motion-primitives';
 import { analytics } from '@/lib/analytics';
 import { fetchSpeakingCompliance, postSpeakingDeviceCheck, type SpeakingComplianceCopy } from '@/lib/api';
 import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
+import { getRealtimeValueTransition, prefersReducedMotion } from '@/lib/motion';
 
 declare global {
   interface Window {
@@ -26,6 +29,8 @@ declare global {
 type CheckStatus = 'pending' | 'checking' | 'success' | 'warning' | 'error';
 
 function MicEnvironmentCheckContent() {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const realtimeTransition = getRealtimeValueTransition(reducedMotion);
   const searchParams = useSearchParams();
   const router = useRouter();
   const taskId = searchParams?.get('taskId') || 'st-001';
@@ -538,27 +543,20 @@ function MicEnvironmentCheckContent() {
                     key={i}
                     className={`flex-1 rounded-t-sm ${isNoisy ? 'bg-warning' : 'bg-primary'}`}
                     animate={{ height: `${height}%` }}
-                    transition={{ duration: 0.1 }}
+                    transition={realtimeTransition}
                   />
                 );
               })}
             </div>
 
-            <AnimatePresence>
-              {isNoisy && (
-                <motion.div 
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="mt-4 flex items-start gap-3 rounded-2xl border border-warning/30 bg-amber-50 p-3"
-                >
+            <MotionCollapse open={isNoisy} className="mt-4">
+                <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-amber-50 p-3">
                   <AlertTriangle className="w-5 h-5 text-warning shrink-0" />
                   <p className="text-xs text-warning leading-relaxed">
                     <strong>High background noise detected.</strong> For the best results, please move to a quieter location or use a headset with a microphone.
                   </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
+            </MotionCollapse>
           </section>
 
           {/* Action Button */}

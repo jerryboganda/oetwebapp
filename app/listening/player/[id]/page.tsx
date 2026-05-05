@@ -126,7 +126,16 @@ function PlayerContent() {
         analytics.track('task_started', { subtest: 'listening', taskId: id, attemptId: data.attempt?.attemptId, mode });
       })
       .catch((err) => {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Could not load this Listening task.');
+        if (cancelled) return;
+        // C2 — surface the same content_locked upsell when the *session*
+        // endpoint returns HTTP 402, not just when starting the attempt.
+        if (isContentLockedError(err)) {
+          setContentLockedMessage(
+            readContentLockedMessage(err, 'This listening paper requires an active subscription.'),
+          );
+          return;
+        }
+        setLoadError(err instanceof Error ? err.message : 'Could not load this Listening task.');
       })
       .finally(() => {
         if (!cancelled) setLoadingTask(false);
@@ -273,6 +282,10 @@ function PlayerContent() {
   const currentExtracts = currentSection
     ? extracts.filter((extract) => extract.partCode === currentSection || (currentSection === 'B' && extract.partCode === 'B'))
     : [];
+  // C1 — first extract of the active section drives audio cue points.
+  // Multiple extracts (Part B) just play through; we only enforce the
+  // outermost window of the first one to keep the player simple.
+  const activeExtract = currentExtracts[0] ?? null;
   const isLastSection = currentSection !== null && currentSectionIndex >= sectionsInPaper.length - 1;
   const currentSectionReviewSeconds = currentSection ? LISTENING_REVIEW_SECONDS[currentSection] : 0;
 
@@ -305,6 +318,26 @@ function PlayerContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, reviewSecondsRemaining, hasStarted, currentSection]);
 
+  // C1 — auto-seek the audio element to the active extract's audioStartMs
+  // whenever the section changes or the audio phase begins. Only runs when
+  // the extract has both start/end cue points authored. Practice mode keeps
+  // full scrub freedom; the soft end-of-extract boundary below only fires in
+  // exam mode (canScrub === false).
+  useEffect(() => {
+    if (phase !== 'audio') return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    const startMs = activeExtract?.audioStartMs;
+    const endMs = activeExtract?.audioEndMs;
+    if (startMs == null || endMs == null || endMs <= startMs) return;
+    try {
+      audio.currentTime = Math.max(0, startMs / 1000);
+    } catch {
+      // Some browsers throw if metadata isn't loaded yet — onLoadedMetadata
+      // re-runs this effect via the activeExtract dependency.
+    }
+  }, [activeExtract, phase]);
+
   const confirmNextFromAudio = () => {
     if (!currentSection) return;
     if (currentSectionReviewSeconds > 0) {
@@ -336,7 +369,10 @@ function PlayerContent() {
     return (
       <AppShell pageTitle="Listening Task" distractionFree>
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
-          <ContentLockedNotice message={contentLockedMessage} />
+          <ContentLockedNotice
+            message={contentLockedMessage}
+            previewHint="Tip: subscribers get the first extract of every paper to preview before committing."
+          />
           <Link href="/listening"><Button variant="ghost">Back to Listening</Button></Link>
         </div>
       </AppShell>
@@ -377,7 +413,26 @@ function PlayerContent() {
         <audio
           ref={audioRef}
           src={session.paper.audioUrl ?? undefined}
-          onTimeUpdate={() => audioRef.current && setProgress(audioRef.current.currentTime)}
+          onTimeUpdate={() => {
+            const audio = audioRef.current;
+            if (!audio) return;
+            setProgress(audio.currentTime);
+            // C1 — soft enforcement of the active extract's audioEndMs in
+            // exam mode. Practice mode keeps full scrub freedom. We only
+            // pause; the existing review-window timer takes over from there.
+            const startMs = activeExtract?.audioStartMs;
+            const endMs = activeExtract?.audioEndMs;
+            if (
+              session?.modePolicy.canScrub === false
+              && startMs != null
+              && endMs != null
+              && endMs > startMs
+              && audio.currentTime * 1000 >= endMs
+              && !audio.paused
+            ) {
+              audio.pause();
+            }
+          }}
           onLoadedMetadata={() => {
             if (!audioRef.current) return;
             setDuration(audioRef.current.duration);

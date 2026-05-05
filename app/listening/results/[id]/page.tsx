@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, FileText, Loader2, Quote, Target, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
+import { MotionCollapse, MotionItem, MotionList, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { getListeningResult, type ListeningReviewDto } from '@/lib/listening-api';
@@ -94,9 +95,7 @@ function ListeningResultsContent() {
   return (
     <LearnerDashboardShell pageTitle="Listening Results" subtitle={result.paper.title} backHref="/listening">
       <div className="space-y-8 pb-24">
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+        <MotionSection
           className="rounded-2xl border border-border bg-surface p-8 shadow-sm sm:p-10"
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -128,10 +127,10 @@ function ListeningResultsContent() {
               <p className="mt-2 text-sm font-bold capitalize text-navy">{result.transcriptAccess.state.replace(/_/g, ' ')}</p>
             </div>
           </div>
-        </motion.section>
+        </MotionSection>
 
         {result.recommendedNextDrill ? (
-          <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          <MotionSection delayIndex={1}>
             <h2 className="mb-4 text-sm font-black uppercase tracking-widest text-muted">Recommended Next Step</h2>
             <Link href={result.recommendedNextDrill.launchRoute} className="group block rounded-2xl border border-primary/30 bg-primary/10 p-6 transition-all hover:border-primary/40 hover:shadow-md">
               <div className="flex items-start gap-4">
@@ -151,16 +150,16 @@ function ListeningResultsContent() {
                 </div>
               </div>
             </Link>
-          </motion.section>
+          </MotionSection>
         ) : null}
 
-        <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+        <MotionSection delayIndex={2}>
           <h2 className="mb-4 text-sm font-black uppercase tracking-widest text-muted">Detailed Review</h2>
-          <div className="space-y-4">
-            {result.itemReview.map((item) => {
+          <MotionList className="space-y-4">
+            {result.itemReview.map((item, index) => {
               const isExpanded = expandedItems[item.questionId];
               return (
-                <div key={item.questionId} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+                <MotionItem key={item.questionId} delayIndex={index} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
                   <button
                     onClick={() => toggleItem(item.questionId)}
                     aria-expanded={isExpanded}
@@ -184,14 +183,7 @@ function ListeningResultsContent() {
                     </div>
                   </button>
 
-                  <AnimatePresence>
-                    {isExpanded ? (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-border"
-                      >
+                  <MotionCollapse open={isExpanded} className="border-t border-border">
                         <div className="space-y-6 bg-background-light/50 p-5 sm:p-6">
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className={`rounded-xl border p-4 ${item.isCorrect ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'}`}>
@@ -253,14 +245,12 @@ function ListeningResultsContent() {
                             </div>
                           ) : null}
                         </div>
-                      </motion.div>
-                    ) : null}
-                  </AnimatePresence>
-                </div>
+                  </MotionCollapse>
+                </MotionItem>
               );
             })}
-          </div>
-        </motion.section>
+          </MotionList>
+        </MotionSection>
 
         <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

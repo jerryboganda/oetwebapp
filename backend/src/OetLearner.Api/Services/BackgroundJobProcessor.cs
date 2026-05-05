@@ -6,6 +6,8 @@ namespace OetLearner.Api.Services;
 
 public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<BackgroundJobProcessor> logger) : BackgroundService
 {
+    private DateTimeOffset _lastReconciliationAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan ReconciliationInterval = TimeSpan.FromHours(1);
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -101,6 +103,15 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         }
 
         await ReconcileFreezeLifecycleAsync(scope.ServiceProvider, db, cancellationToken);
+
+        if (now - _lastReconciliationAt >= ReconciliationInterval)
+        {
+            _lastReconciliationAt = now;
+            var notifications = scope.ServiceProvider.GetRequiredService<NotificationService>();
+            await RunSubscriptionLifecycleCheckAsync(db, notifications, cancellationToken);
+            await RunSlaAlertCheckAsync(db, notifications, cancellationToken);
+            await RunDripCampaignDispatchAsync(db, notifications, cancellationToken);
+        }
     }
 
     private static async Task ExecuteJobAsync(IServiceProvider services, LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
@@ -174,6 +185,15 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 await psSvc.ExpireStaleReservationsAsync(cancellationToken);
                 break;
             }
+            case JobType.SubscriptionLifecycleCheck:
+                await RunSubscriptionLifecycleCheckAsync(db, notifications, cancellationToken);
+                break;
+            case JobType.SlaAlertCheck:
+                await RunSlaAlertCheckAsync(db, notifications, cancellationToken);
+                break;
+            case JobType.DripCampaignDispatch:
+                await RunDripCampaignDispatchAsync(db, notifications, cancellationToken);
+                break;
         }
     }
 
@@ -1160,5 +1180,158 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         // Pronunciation analysis is handled inline in PronunciationService.SubmitDrillAttemptAsync
         // This handler exists for future production integration with Azure Speech SDK async processing
         return Task.CompletedTask;
+    }
+
+    private static async Task RunSubscriptionLifecycleCheckAsync(LearnerDbContext db, NotificationService notifications, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var renewalWindow = now.AddDays(7);
+
+        // Renewal reminders: Active subscriptions renewing within 7 days
+        var renewingSoon = await db.Subscriptions
+            .AsNoTracking()
+            .Where(s => s.Status == SubscriptionStatus.Active
+                && s.NextRenewalAt > now
+                && s.NextRenewalAt <= renewalWindow)
+            .ToListAsync(cancellationToken);
+
+        foreach (var sub in renewingSoon)
+        {
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerRenewalComing,
+                sub.UserId,
+                "Subscription",
+                sub.Id,
+                now.UtcDateTime.ToString("yyyy-MM-dd"),
+                new Dictionary<string, object?>
+                {
+                    ["message"] = $"Your subscription renews on {sub.NextRenewalAt:yyyy-MM-dd}.",
+                    ["planName"] = sub.PlanId,
+                    ["renewalDate"] = sub.NextRenewalAt.ToString("O")
+                },
+                cancellationToken);
+        }
+
+        // Expired subscriptions: status should be flipped to expired
+        var expired = await db.Subscriptions
+            .AsNoTracking()
+            .Where(s => s.Status == SubscriptionStatus.Active
+                && s.NextRenewalAt <= now)
+            .ToListAsync(cancellationToken);
+
+        foreach (var sub in expired)
+        {
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerSubscriptionChanged,
+                sub.UserId,
+                "Subscription",
+                sub.Id,
+                now.UtcDateTime.ToString("yyyy-MM-dd"),
+                new Dictionary<string, object?>
+                {
+                    ["message"] = "Your subscription has expired. Renew to keep your study plan and premium features.",
+                    ["planName"] = sub.PlanId,
+                    ["status"] = "expired"
+                },
+                cancellationToken);
+        }
+    }
+
+    private static async Task RunSlaAlertCheckAsync(LearnerDbContext db, NotificationService notifications, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        // Alert experts 24h before SLA deadline
+        var alertThreshold = now.AddHours(24);
+
+        // Map turnaround options to hours for SLA calculation
+        static int TurnaroundHours(string option) => option?.ToLowerInvariant() switch
+        {
+            "24h" or "24hour" or "24-hour" or "1day" => 24,
+            "48h" or "48hour" or "48-hour" or "2day" => 48,
+            "72h" or "72hour" or "72-hour" or "3day" => 72,
+            "7day" or "7-day" or "1week" => 168,
+            _ => 72
+        };
+
+        var approachingDeadline = await db.ReviewRequests
+            .AsNoTracking()
+            .Where(r => r.State == ReviewRequestState.InReview)
+            .Join(
+                db.ExpertReviewAssignments.AsNoTracking().Where(a => a.ClaimState == ExpertAssignmentState.Claimed && a.AssignedReviewerId != null),
+                r => r.Id,
+                a => a.ReviewRequestId,
+                (r, a) => new { Request = r, Assignment = a })
+            .ToListAsync(cancellationToken);
+
+        foreach (var item in approachingDeadline)
+        {
+            var slaDeadline = item.Request.CreatedAt.AddHours(TurnaroundHours(item.Request.TurnaroundOption));
+            if (slaDeadline > now && slaDeadline <= alertThreshold && !string.IsNullOrWhiteSpace(item.Assignment.AssignedReviewerId))
+            {
+                await notifications.CreateForExpertAsync(
+                    NotificationEventKey.ExpertReviewOverdue,
+                    item.Assignment.AssignedReviewerId!,
+                    "ReviewRequest",
+                    item.Request.Id,
+                    now.UtcDateTime.ToString("yyyy-MM-dd"),
+                    new Dictionary<string, object?>
+                    {
+                        ["reviewRequestId"] = item.Request.Id,
+                        ["message"] = $"Review {item.Request.Id} is approaching its SLA deadline ({slaDeadline:yyyy-MM-dd HH:mm})."
+                    },
+                    cancellationToken);
+            }
+        }
+    }
+
+    private static async Task RunDripCampaignDispatchAsync(LearnerDbContext db, NotificationService notifications, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var today = now.UtcDateTime.ToString("yyyy-MM-dd");
+
+        // Credit depletion nudge: learners with low credits
+        var lowCreditThreshold = 3;
+        var lowCreditLearners = await db.Wallets
+            .AsNoTracking()
+            .Where(w => w.CreditBalance < lowCreditThreshold)
+            .ToListAsync(cancellationToken);
+
+        foreach (var wallet in lowCreditLearners)
+        {
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerCreditsLow,
+                wallet.UserId,
+                "Wallet",
+                wallet.Id,
+                today,
+                new Dictionary<string, object?>
+                {
+                    ["message"] = $"You have {wallet.CreditBalance} review credits left. Top up to keep submitting for expert feedback."
+                },
+                cancellationToken);
+        }
+
+        // Inactive learner nudge: no activity in 7 days
+        var inactiveThreshold = now.AddDays(-7);
+        var inactiveLearners = await db.Users
+            .AsNoTracking()
+            .Where(u => u.LastActiveAt < inactiveThreshold
+                && u.Role == ApplicationUserRoles.Learner)
+            .ToListAsync(cancellationToken);
+
+        foreach (var user in inactiveLearners)
+        {
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerInactiveNudge,
+                user.Id,
+                "User",
+                user.Id,
+                today,
+                new Dictionary<string, object?>
+                {
+                    ["message"] = "We miss you! Come back to continue your OET preparation."
+                },
+                cancellationToken);
+        }
     }
 }

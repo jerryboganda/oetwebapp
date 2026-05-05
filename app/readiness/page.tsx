@@ -22,8 +22,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchReadiness, fetchReadinessRisk } from '@/lib/api';
 import type { ReadinessData } from '@/lib/mock-data';
-import { analytics } from '@/lib/analytics';
+import { useReducedMotion } from 'motion/react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { analytics } from '@/lib/analytics';
+import { getMotionDelay, getProgressFillTransition, prefersReducedMotion } from '@/lib/motion';
 
 const SUBTEST_ICONS: Record<string, React.ElementType> = {
   reading:   FileText,
@@ -33,6 +35,8 @@ const SUBTEST_ICONS: Record<string, React.ElementType> = {
 };
 
 export default function ReadinessCenter() {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const progressTransition = getProgressFillTransition(reducedMotion);
   const [data, setData] = useState<ReadinessData | null>(null);
   const [riskData, setRiskData] = useState<{ riskProbability: number; riskLevel: string; factors: { label: string; severity: string; impact: number; description: string }[]; recommendation: string } | null>(null);
   const [error, setError] = useState('');
@@ -217,7 +221,10 @@ export default function ReadinessCenter() {
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${factor.impact}%` }}
-                      transition={{ duration: 0.8, delay: 0.4 }}
+                      transition={{
+                        ...progressTransition,
+                        delay: getMotionDelay(1, reducedMotion, 0.4),
+                      }}
                       className={`h-full rounded-full ${sevToken.bar}`}
                     />
                   </div>
@@ -279,7 +286,10 @@ export default function ReadinessCenter() {
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${test.readiness}%` }}
-                          transition={{ duration: 1, delay: 0.5 + idx * 0.1, ease: 'easeOut' }}
+                          transition={{
+                            ...progressTransition,
+                            delay: getMotionDelay(idx, reducedMotion, 0.5),
+                          }}
                           className={`h-full rounded-full ${test.barColor}`}
                         />
                       </div>
