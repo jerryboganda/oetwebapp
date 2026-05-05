@@ -26,33 +26,18 @@ namespace OetLearner.Api.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "CommonMistakesJson",
-                table: "VocabularyTerms",
-                type: "text",
-                nullable: false,
-                defaultValue: "[]");
-
-            migrationBuilder.AddColumn<string>(
-                name: "SimilarSoundingJson",
-                table: "VocabularyTerms",
-                type: "text",
-                nullable: false,
-                defaultValue: "[]");
-
-            migrationBuilder.AddColumn<string>(
-                name: "OetSubtestTagsJson",
-                table: "VocabularyTerms",
-                type: "text",
-                nullable: false,
-                defaultValue: "[]");
-
-            migrationBuilder.AddColumn<string>(
-                name: "RecallSetCodesJson",
-                table: "VocabularyTerms",
-                type: "text",
-                nullable: false,
-                defaultValue: "[]");
+            // Idempotent: some columns may have been added by an earlier partial deploy.
+            // PostgreSQL ALTER TABLE ... ADD COLUMN IF NOT EXISTS is safe and atomic.
+            migrationBuilder.Sql(@"
+                ALTER TABLE ""VocabularyTerms""
+                    ADD COLUMN IF NOT EXISTS ""CommonMistakesJson"" text NOT NULL DEFAULT '[]';
+                ALTER TABLE ""VocabularyTerms""
+                    ADD COLUMN IF NOT EXISTS ""SimilarSoundingJson"" text NOT NULL DEFAULT '[]';
+                ALTER TABLE ""VocabularyTerms""
+                    ADD COLUMN IF NOT EXISTS ""OetSubtestTagsJson"" text NOT NULL DEFAULT '[]';
+                ALTER TABLE ""VocabularyTerms""
+                    ADD COLUMN IF NOT EXISTS ""RecallSetCodesJson"" text NOT NULL DEFAULT '[]';
+            ");
         }
 
         /// <inheritdoc />
