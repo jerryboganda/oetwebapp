@@ -64,7 +64,7 @@ public class ProfileAccessGuardTests
         var paymentGateways = CreatePaymentGatewayService(billingOptions);
         var walletService = new WalletService(db, paymentGateways, platformLinks, billingOptions);
 
-        return new LearnerService(db, mediaStorage, platformLinks, null!, walletService, paymentGateways);
+        return new LearnerService(db, mediaStorage, platformLinks, null!, walletService, paymentGateways, null!);
     }
 
     private static ExpertService CreateExpertService(LearnerDbContext db)

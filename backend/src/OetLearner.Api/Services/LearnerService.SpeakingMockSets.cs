@@ -241,19 +241,20 @@ public partial class LearnerService
 
         var bothFinished = eval1 is { State: AsyncState.Completed } && eval2 is { State: AsyncState.Completed };
         int? combinedScaled = null;
-        string combinedBandCode = OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBand.NotReady);
+        string combinedBandCode = ScoringService.ReadinessBandCode("oet", 0);
 
         if (bothFinished)
         {
-            var s1 = ReadSpeakingBandFromAnalysis(
-                (await db.Attempts.FirstAsync(x => x.Id == session.Attempt1Id, cancellationToken)).AnalysisJson).estimatedScaledScore;
-            var s2 = ReadSpeakingBandFromAnalysis(
-                (await db.Attempts.FirstAsync(x => x.Id == session.Attempt2Id, cancellationToken)).AnalysisJson).estimatedScaledScore;
+            var attempt1 = await db.Attempts.FirstAsync(x => x.Id == session.Attempt1Id, cancellationToken);
+            var attempt2 = await db.Attempts.FirstAsync(x => x.Id == session.Attempt2Id, cancellationToken);
+            var family1 = NormalizeExamFamilyCode(attempt1.ExamFamilyCode);
+            var family2 = NormalizeExamFamilyCode(attempt2.ExamFamilyCode);
+            var s1 = ReadSpeakingBandFromAnalysis(attempt1.AnalysisJson, family1).estimatedScaledScore;
+            var s2 = ReadSpeakingBandFromAnalysis(attempt2.AnalysisJson, family2).estimatedScaledScore;
             if (s1.HasValue && s2.HasValue)
             {
                 combinedScaled = (int)Math.Round((s1.Value + s2.Value) / 2.0, MidpointRounding.AwayFromZero);
-                combinedBandCode = OetScoring.SpeakingReadinessBandCode(
-                    OetScoring.SpeakingReadinessBandFromScaled(combinedScaled.Value));
+                combinedBandCode = ScoringService.ReadinessBandCode(family1, combinedScaled.Value);
             }
 
             // Persist a snapshot the first time both halves complete so the
@@ -311,7 +312,8 @@ public partial class LearnerService
             .OrderByDescending(x => x.LastTransitionAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var (scaled, bandCode, _) = ReadSpeakingBandFromAnalysis(attempt.AnalysisJson);
+        var examFamilyCode = NormalizeExamFamilyCode(attempt.ExamFamilyCode);
+        var (scaled, bandCode, _) = ReadSpeakingBandFromAnalysis(attempt.AnalysisJson, examFamilyCode);
 
         return (new
         {

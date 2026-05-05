@@ -1592,6 +1592,33 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetSpeakingCalibrationDriftAsync(minSubmissions ?? 1, ct)))
             .WithAdminRead("AdminContentRead");
 
+        // ── Expert Reviewer Payouts ──
+        admin.MapGet("/expert-payouts", async (AdminService service, CancellationToken ct,
+                string? status, string? reviewerId, int? page, int? pageSize)
+            => Results.Ok(await service.GetExpertPayoutsAsync(status, reviewerId, page ?? 1, pageSize ?? 20, ct)))
+            .WithAdminRead("AdminBillingRead");
+
+        admin.MapPost("/expert-payouts/generate", async (HttpContext http, GenerateExpertPayoutsRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GenerateExpertPayoutsAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .WithAdminWrite("AdminBillingWrite");
+
+        admin.MapPost("/expert-payouts/{payoutId}/approve", async (string payoutId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ApproveExpertPayoutAsync(http.AdminId(), http.AdminName(), payoutId, ct)))
+            .WithAdminWrite("AdminBillingWrite");
+
+        admin.MapPost("/expert-payouts/{payoutId}/mark-paid", async (string payoutId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.MarkExpertPayoutPaidAsync(http.AdminId(), http.AdminName(), payoutId, ct)))
+            .WithAdminWrite("AdminBillingWrite");
+
+        // ── Payment Reconciliation ──
+        admin.MapGet("/payment-reconciliation/stale", async (AdminService service, CancellationToken ct, int? hours)
+            => Results.Ok(await service.GetStalePaymentTransactionsAsync(hours ?? 24, ct)))
+            .WithAdminRead("AdminBillingRead");
+
+        admin.MapPost("/payment-reconciliation/{transactionId}/reconcile", async (string transactionId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ReconcilePaymentTransactionAsync(http.AdminId(), http.AdminName(), transactionId, ct)))
+            .WithAdminWrite("AdminBillingWrite");
+
         return app;
     }
 
@@ -1607,3 +1634,4 @@ public record AdminCommunityPinRequest(bool IsPinned);
 public record AdminCommunityLockRequest(bool IsLocked);
 public record AdminRoleCreateRequest(string Name, string Description, string[] Permissions);
 public record AdminRoleUpdateRequest(string Name, string Description, string[] Permissions);
+public record GenerateExpertPayoutsRequest(DateTimeOffset? PayPeriodStart, DateTimeOffset? PayPeriodEnd, decimal? DefaultCompensationPerReview);

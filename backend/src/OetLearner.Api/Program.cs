@@ -725,6 +725,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiQuotaService,
     OetLearner.Api.Services.AiManagement.AiQuotaService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Entitlements.IEffectiveEntitlementResolver,
     OetLearner.Api.Services.Entitlements.EffectiveEntitlementResolver>();
+builder.Services.AddScoped<OetLearner.Api.Services.Entitlements.ITierEntitlementEnforcer,
+    OetLearner.Api.Services.Entitlements.TierEntitlementEnforcer>();
 builder.Services.AddHttpClient("AiCredentialValidator");
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCredentialVault,
     OetLearner.Api.Services.AiManagement.AiCredentialVault>();

@@ -629,3 +629,44 @@ public class ReferralRecord
     public DateTimeOffset? ActivatedAt { get; set; }
     public DateTimeOffset? RewardedAt { get; set; }
 }
+
+/// <summary>Expert reviewer payout batch — aggregates completed reviews per reviewer for a pay period.</summary>
+[Index(nameof(ReviewerId))]
+[Index(nameof(Status))]
+[Index(nameof(PayPeriodStart), nameof(PayPeriodEnd))]
+public class ExpertReviewerPayout
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReviewerId { get; set; } = default!;
+
+    public DateTimeOffset PayPeriodStart { get; set; }
+    public DateTimeOffset PayPeriodEnd { get; set; }
+
+    public int ReviewCount { get; set; }
+    public decimal TotalCompensation { get; set; }
+    public decimal TotalLearnerPrice { get; set; }
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "pending";
+    // pending | approved | paid | disputed
+
+    [MaxLength(512)]
+    public string? AdminNote { get; set; }
+
+    [MaxLength(64)]
+    public string? ApprovedByAdminId { get; set; }
+
+    [MaxLength(128)]
+    public string? ApprovedByAdminName { get; set; }
+
+    public DateTimeOffset? ApprovedAt { get; set; }
+    public DateTimeOffset? PaidAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>JSON array of review request ids included in this payout.</summary>
+    public string ReviewRequestIdsJson { get; set; } = "[]";
+}

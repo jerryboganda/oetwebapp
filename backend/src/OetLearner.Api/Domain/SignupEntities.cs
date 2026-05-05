@@ -41,6 +41,29 @@ public class LearnerRegistrationProfile
     public bool AgreeToTerms { get; set; }
     public bool AgreeToPrivacy { get; set; }
     public bool MarketingOptIn { get; set; }
+
+    // ── UTM / Acquisition Attribution ──
+    [MaxLength(128)]
+    public string? UtmSource { get; set; }
+
+    [MaxLength(128)]
+    public string? UtmMedium { get; set; }
+
+    [MaxLength(256)]
+    public string? UtmCampaign { get; set; }
+
+    [MaxLength(128)]
+    public string? UtmTerm { get; set; }
+
+    [MaxLength(128)]
+    public string? UtmContent { get; set; }
+
+    [MaxLength(512)]
+    public string? ReferrerUrl { get; set; }
+
+    [MaxLength(512)]
+    public string? LandingPath { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 

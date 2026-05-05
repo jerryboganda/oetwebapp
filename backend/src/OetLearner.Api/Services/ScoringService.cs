@@ -124,4 +124,85 @@ public class ScoringService
         var clamped = Math.Clamp(rawScore, 0, 9);
         return Math.Round(clamped * 2, MidpointRounding.AwayFromZero) / 2.0;
     }
+
+    /// <summary>
+    /// Return a grade label for a scaled score in the context of a specific exam family.
+    /// </summary>
+    public static string GradeLabel(string examFamilyCode, double scaledScore)
+    {
+        var code = (examFamilyCode ?? "oet").Trim().ToLowerInvariant();
+        return code switch
+        {
+            "oet" => OetGrade(scaledScore),
+            "ielts" => $"Band {IeltsBand(scaledScore)}",
+            "pte" => $"{Math.Round(scaledScore)} / 90",
+            _ => $"{Math.Round(scaledScore)}"
+        };
+    }
+
+    /// <summary>
+    /// Return the pass threshold for a given exam family.
+    /// </summary>
+    public static double PassThreshold(string examFamilyCode)
+    {
+        var code = (examFamilyCode ?? "oet").Trim().ToLowerInvariant();
+        return code switch
+        {
+            "oet" => 350,
+            "ielts" => 7.0,
+            "pte" => 65,
+            _ => 60
+        };
+    }
+
+    /// <summary>
+    /// Return the max rubric score for a given exam family.
+    /// </summary>
+    public static double RubricMax(string examFamilyCode)
+    {
+        var code = (examFamilyCode ?? "oet").Trim().ToLowerInvariant();
+        return code switch
+        {
+            "oet" => 500,
+            "ielts" => 9,
+            "pte" => 90,
+            _ => 100
+        };
+    }
+
+    /// <summary>
+    /// Map a scaled score to a readiness band for the given exam family.
+    /// </summary>
+    public static string ReadinessBandCode(string examFamilyCode, double scaledScore)
+    {
+        var code = (examFamilyCode ?? "oet").Trim().ToLowerInvariant();
+        return code switch
+        {
+            "oet" => OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled((int)scaledScore)),
+            "ielts" => scaledScore switch
+            {
+                < 5.0 => "not_ready",
+                < 6.0 => "developing",
+                < 7.0 => "borderline",
+                < 8.0 => "exam_ready",
+                _ => "strong"
+            },
+            "pte" => scaledScore switch
+            {
+                < 36 => "not_ready",
+                < 50 => "developing",
+                < 65 => "borderline",
+                < 80 => "exam_ready",
+                _ => "strong"
+            },
+            _ => scaledScore switch
+            {
+                < 40 => "not_ready",
+                < 50 => "developing",
+                < 60 => "borderline",
+                < 80 => "exam_ready",
+                _ => "strong"
+            }
+        };
+    }
 }

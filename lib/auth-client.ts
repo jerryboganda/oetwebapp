@@ -366,6 +366,13 @@ export async function registerLearner(
     agreeToPrivacy: input.agreeToPrivacy,
     marketingOptIn: input.marketingOptIn,
     externalRegistrationToken: input.externalRegistrationToken ?? null,
+    utmSource: input.utmSource ?? null,
+    utmMedium: input.utmMedium ?? null,
+    utmCampaign: input.utmCampaign ?? null,
+    utmTerm: input.utmTerm ?? null,
+    utmContent: input.utmContent ?? null,
+    referrerUrl: input.referrerUrl ?? null,
+    landingPath: input.landingPath ?? null,
   });
   if (options?.persistSession !== false) {
     saveStoredSession(session, 'local');

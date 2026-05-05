@@ -33,12 +33,18 @@ public sealed class WalletBillingOptions
     /// Configurable wallet top-up tiers. Override via `Billing__Wallet__TopUpTiers__N__Amount` env vars
     /// or appsettings. Defaults provide the historic 4-tier set so behaviour is unchanged when unset.
     /// </summary>
+    /// <summary>
+    /// Unified credit-economy tiers priced at a sustainable mid-range ($2–$5/credit).
+    /// Volume bonuses reward larger top-ups while keeping every tier within a
+    /// narrow, learner-trustworthy price band.  Eliminates the old 16× gap between
+    /// wallet ($0.63/credit) and add-on ($9–$10/credit) pricing.
+    /// </summary>
     public List<WalletTopUpTierOption> TopUpTiers { get; set; } = new()
     {
-        new WalletTopUpTierOption { Amount = 10, Credits = 10, Bonus = 0, Label = "Starter", IsPopular = false },
-        new WalletTopUpTierOption { Amount = 25, Credits = 28, Bonus = 3, Label = "Standard", IsPopular = false },
-        new WalletTopUpTierOption { Amount = 50, Credits = 60, Bonus = 10, Label = "Best value", IsPopular = true },
-        new WalletTopUpTierOption { Amount = 100, Credits = 130, Bonus = 30, Label = "Power", IsPopular = false },
+        new WalletTopUpTierOption { Amount = 10, Credits = 3, Bonus = 0, Label = "Starter", IsPopular = false },
+        new WalletTopUpTierOption { Amount = 25, Credits = 8, Bonus = 1, Label = "Standard", IsPopular = false },
+        new WalletTopUpTierOption { Amount = 50, Credits = 16, Bonus = 4, Label = "Best value", IsPopular = true },
+        new WalletTopUpTierOption { Amount = 100, Credits = 35, Bonus = 10, Label = "Power", IsPopular = false },
     };
 }
 

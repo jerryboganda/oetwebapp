@@ -478,6 +478,13 @@ public class ReviewRequest
     public string PaymentSource { get; set; } = default!;
 
     public decimal PriceSnapshot { get; set; }
+
+    /// <summary>Compensation owed to the expert reviewer for this request (AUD).</summary>
+    public decimal ReviewerCompensation { get; set; }
+
+    /// <summary>Whether the reviewer compensation has been marked as paid.</summary>
+    public bool CompensationPaid { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string EligibilitySnapshotJson { get; set; } = "{}";

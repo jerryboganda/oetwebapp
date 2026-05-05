@@ -180,6 +180,13 @@ public sealed class AuthService(
             AgreeToTerms = request.AgreeToTerms ?? false,
             AgreeToPrivacy = request.AgreeToPrivacy ?? false,
             MarketingOptIn = request.MarketingOptIn ?? false,
+            UtmSource = request.UtmSource,
+            UtmMedium = request.UtmMedium,
+            UtmCampaign = request.UtmCampaign,
+            UtmTerm = request.UtmTerm,
+            UtmContent = request.UtmContent,
+            ReferrerUrl = request.ReferrerUrl,
+            LandingPath = request.LandingPath,
             CreatedAt = now,
             UpdatedAt = now
         };

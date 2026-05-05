@@ -153,6 +153,17 @@ function shouldIgnoreClientErrorResponseText(text: string, options: DiagnosticEx
     return true;
   }
 
+  // During middleware auth redirects, in-flight API prefetch requests from the
+  // client may receive 401 before the redirect completes. These are expected
+  // auth-redirect noise, not correctness defects.
+  if (
+    options.allowAuthRedirectNoise
+    && text.startsWith('401 :: ')
+    && text.includes('/api/backend/v1/')
+  ) {
+    return true;
+  }
+
   if (
     options.allowNextDevNoise
     && text.startsWith('500 :: ')

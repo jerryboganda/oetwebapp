@@ -80,6 +80,13 @@ export interface RegisterLearnerInput {
   agreeToPrivacy: boolean;
   marketingOptIn: boolean;
   externalRegistrationToken?: string | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  utmTerm?: string | null;
+  utmContent?: string | null;
+  referrerUrl?: string | null;
+  landingPath?: string | null;
 }
 
 export interface ExternalRegistrationPrompt {

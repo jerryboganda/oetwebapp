@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Endpoints;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
 
@@ -1515,6 +1516,7 @@ public partial class AdminService(
                 legacyPlans,
                 activeSubscribers
             },
+            revenue = ComputeRevenueMetrics(db, now, activeSubscribers),
             flags = new
             {
                 total = totalFlags,
@@ -1529,6 +1531,40 @@ public partial class AdminService(
                 riskCases = failedJobs + reviewFailures,
                 evaluationCount
             }
+        };
+    }
+
+    private static object ComputeRevenueMetrics(LearnerDbContext db, DateTimeOffset now, int activeSubscribers)
+    {
+        var plans = db.BillingPlans.AsNoTracking().Where(p => p.Status == BillingPlanStatus.Active).ToList();
+        var monthlyMrr = plans
+            .Where(p => p.Interval == "monthly" && p.Price > 0)
+            .Sum(p => p.Price * p.ActiveSubscribers);
+        var yearlyMrr = plans
+            .Where(p => p.Interval == "yearly" && p.Price > 0)
+            .Sum(p => p.Price * p.ActiveSubscribers / 12m);
+        var totalMrr = monthlyMrr + yearlyMrr;
+        var arpu = activeSubscribers > 0 ? Math.Round(totalMrr / activeSubscribers, 2) : 0m;
+
+        return new
+        {
+            mrr = Math.Round(totalMrr, 2),
+            currency = plans.FirstOrDefault()?.Currency ?? "AUD",
+            activeSubscribers,
+            arpu,
+            planBreakdown = plans
+                .Where(p => p.ActiveSubscribers > 0)
+                .Select(p => new
+                {
+                    planCode = p.Code,
+                    planName = p.Name,
+                    subscribers = p.ActiveSubscribers,
+                    planMrr = p.Interval == "monthly"
+                        ? Math.Round(p.Price * p.ActiveSubscribers, 2)
+                        : Math.Round(p.Price * p.ActiveSubscribers / 12m, 2),
+                })
+                .ToList(),
+            computedAt = now,
         };
     }
 
@@ -8469,6 +8505,252 @@ var draftTimeEstimates = drafts.Select(d =>
             revenueByPlan,
             monthlyTrend,
             generatedAt = now
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // R5: Expert Reviewer Payouts
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetExpertPayoutsAsync(string? status, string? reviewerId, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.ExpertReviewerPayouts.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(p => p.Status == status);
+        if (!string.IsNullOrWhiteSpace(reviewerId))
+            query = query.Where(p => p.ReviewerId == reviewerId);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(p => p.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return new
+        {
+            total,
+            page,
+            pageSize,
+            items = items.Select(p => new
+            {
+                p.Id,
+                p.ReviewerId,
+                p.PayPeriodStart,
+                p.PayPeriodEnd,
+                p.ReviewCount,
+                p.TotalCompensation,
+                p.TotalLearnerPrice,
+                p.Status,
+                p.ApprovedByAdminName,
+                p.ApprovedAt,
+                p.PaidAt,
+                p.CreatedAt,
+            }),
+        };
+    }
+
+    public async Task<object> GenerateExpertPayoutsAsync(string adminId, string adminName, GenerateExpertPayoutsRequest request, CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow();
+        var periodEnd = request.PayPeriodEnd ?? now;
+        var periodStart = request.PayPeriodStart ?? periodEnd.AddDays(-30);
+        var defaultComp = request.DefaultCompensationPerReview ?? 5.00m;
+
+        var completedReviews = await db.ReviewRequests
+            .AsNoTracking()
+            .Where(r => r.State == ReviewRequestState.Completed
+                && r.CompletedAt != null
+                && r.CompletedAt >= periodStart
+                && r.CompletedAt < periodEnd
+                && !r.CompensationPaid
+                && r.ReviewerCompensation >= 0)
+            .ToListAsync(ct);
+
+        if (completedReviews.Count == 0)
+        {
+            return new { generated = 0, message = "No eligible completed reviews found for the pay period." };
+        }
+
+        // Group by reviewer (ExpertReviewAssignment holds reviewer info; here we approximate by assignment)
+        var reviewIds = completedReviews.Select(r => r.Id).ToList();
+        var assignments = await db.ExpertReviewAssignments
+            .AsNoTracking()
+            .Where(a => reviewIds.Contains(a.ReviewRequestId) && a.ClaimState == ExpertAssignmentState.Claimed)
+            .ToListAsync(ct);
+
+        var reviewerGroups = assignments
+            .Where(a => !string.IsNullOrWhiteSpace(a.AssignedReviewerId))
+            .GroupBy(a => a.AssignedReviewerId!)
+            .Select(g => new
+            {
+                ReviewerId = g.Key,
+                ReviewRequestIds = g.Select(a => a.ReviewRequestId).Distinct().ToList(),
+            })
+            .ToList();
+
+        var createdPayouts = new List<ExpertReviewerPayout>();
+        foreach (var group in reviewerGroups)
+        {
+            var reviewRequestIds = group.ReviewRequestIds;
+            var reviews = completedReviews.Where(r => reviewRequestIds.Contains(r.Id)).ToList();
+            var totalComp = reviews.Sum(r => r.ReviewerCompensation > 0 ? r.ReviewerCompensation : defaultComp);
+            var totalPrice = reviews.Sum(r => r.PriceSnapshot);
+
+            var payout = new ExpertReviewerPayout
+            {
+                Id = $"payout_{Guid.NewGuid():N}",
+                ReviewerId = group.ReviewerId,
+                PayPeriodStart = periodStart,
+                PayPeriodEnd = periodEnd,
+                ReviewCount = reviews.Count,
+                TotalCompensation = totalComp,
+                TotalLearnerPrice = totalPrice,
+                Status = "pending",
+                ReviewRequestIdsJson = System.Text.Json.JsonSerializer.Serialize(reviewRequestIds),
+                CreatedAt = now,
+            };
+
+            db.ExpertReviewerPayouts.Add(payout);
+            createdPayouts.Add(payout);
+        }
+
+        await db.SaveChangesAsync(ct);
+        return new
+        {
+            generated = createdPayouts.Count,
+            totalCompensation = createdPayouts.Sum(p => p.TotalCompensation),
+            payouts = createdPayouts.Select(p => new { p.Id, p.ReviewerId, p.ReviewCount, p.TotalCompensation }),
+        };
+    }
+
+    public async Task<object> ApproveExpertPayoutAsync(string adminId, string adminName, string payoutId, CancellationToken ct)
+    {
+        var payout = await db.ExpertReviewerPayouts.FirstOrDefaultAsync(p => p.Id == payoutId, ct)
+            ?? throw ApiException.NotFound("payout_not_found", "Payout not found.");
+
+        if (!string.Equals(payout.Status, "pending", StringComparison.OrdinalIgnoreCase))
+            throw ApiException.Conflict("payout_not_pending", "Only pending payouts can be approved.");
+
+        payout.Status = "approved";
+        payout.ApprovedByAdminId = adminId;
+        payout.ApprovedByAdminName = adminName;
+        payout.ApprovedAt = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        return new { payout.Id, payout.Status, payout.ApprovedAt };
+    }
+
+    public async Task<object> MarkExpertPayoutPaidAsync(string adminId, string adminName, string payoutId, CancellationToken ct)
+    {
+        var payout = await db.ExpertReviewerPayouts.FirstOrDefaultAsync(p => p.Id == payoutId, ct)
+            ?? throw ApiException.NotFound("payout_not_found", "Payout not found.");
+
+        if (!string.Equals(payout.Status, "approved", StringComparison.OrdinalIgnoreCase))
+            throw ApiException.Conflict("payout_not_approved", "Only approved payouts can be marked as paid.");
+
+        payout.Status = "paid";
+        payout.PaidAt = timeProvider.GetUtcNow();
+
+        // Mark underlying review requests as compensation paid
+        var reviewIds = System.Text.Json.JsonSerializer.Deserialize<List<string>>(payout.ReviewRequestIdsJson) ?? [];
+        if (reviewIds.Count > 0)
+        {
+            await db.ReviewRequests
+                .Where(r => reviewIds.Contains(r.Id) && !r.CompensationPaid)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(r => r.CompensationPaid, true),
+                    ct);
+        }
+
+        await db.SaveChangesAsync(ct);
+        return new { payout.Id, payout.Status, payout.PaidAt };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // R6: Payment Reconciliation
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetStalePaymentTransactionsAsync(int hours, CancellationToken ct)
+    {
+        var threshold = DateTimeOffset.UtcNow.AddHours(-Math.Max(1, hours));
+        var stale = await db.PaymentTransactions
+            .AsNoTracking()
+            .Where(t => t.Status == "pending" && t.CreatedAt < threshold)
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(100)
+            .Select(t => new
+            {
+                t.Id,
+                t.GatewayTransactionId,
+                t.Gateway,
+                t.Status,
+                t.Amount,
+                t.Currency,
+                t.TransactionType,
+                t.LearnerUserId,
+                t.CreatedAt,
+                ageHours = Math.Round((DateTimeOffset.UtcNow - t.CreatedAt).TotalHours, 1),
+            })
+            .ToListAsync(ct);
+
+        var totalValue = stale.Sum(t => t.Amount);
+        return new
+        {
+            threshold,
+            count = stale.Count,
+            totalValue,
+            currency = stale.FirstOrDefault()?.Currency ?? "AUD",
+            transactions = stale,
+        };
+    }
+
+    public async Task<object> ReconcilePaymentTransactionAsync(string adminId, string adminName, string transactionId, CancellationToken ct)
+    {
+        _ = Guid.TryParse(transactionId, out var transactionGuid);
+        var transaction = await db.PaymentTransactions
+            .FirstOrDefaultAsync(t => (transactionGuid != Guid.Empty && t.Id == transactionGuid) || t.GatewayTransactionId == transactionId, ct)
+            ?? throw ApiException.NotFound("transaction_not_found", "Payment transaction not found.");
+
+        var existingWebhooks = await db.PaymentWebhookEvents
+            .AsNoTracking()
+            .Where(e => e.GatewayTransactionId == transaction.GatewayTransactionId
+                && e.ProcessingStatus == "completed")
+            .OrderByDescending(e => e.ProcessedAt)
+            .ToListAsync(ct);
+
+        var latestCompletedWebhook = existingWebhooks.FirstOrDefault();
+        if (latestCompletedWebhook is not null)
+        {
+            // Replay the latest completed webhook to re-apply side effects idempotently
+            var result = await learnerService.ApplyVerifiedPaymentWebhookEventAsync(
+                latestCompletedWebhook.Id,
+                latestCompletedWebhook.GatewayTransactionId,
+                latestCompletedWebhook.NormalizedStatus,
+                eventCategory: null,
+                gatewayObjectId: null,
+                ct);
+
+            return new
+            {
+                reconciled = true,
+                source = "webhook_replay",
+                transactionId = transaction.Id,
+                gatewayTransactionId = transaction.GatewayTransactionId,
+                previousStatus = transaction.Status,
+                newStatus = result.Status,
+                processedAt = result.ProcessingStatus,
+                admin = adminName,
+            };
+        }
+
+        return new
+        {
+            reconciled = false,
+            source = (string?)null,
+            transactionId = transaction.Id,
+            gatewayTransactionId = transaction.GatewayTransactionId,
+            currentStatus = transaction.Status,
+            reason = "No completed webhook found for this transaction. Manual gateway lookup required.",
         };
     }
 }

@@ -14,7 +14,14 @@ public record RegisterRequest(
     bool? AgreeToTerms = null,
     bool? AgreeToPrivacy = null,
     bool? MarketingOptIn = null,
-    string? ExternalRegistrationToken = null);
+    string? ExternalRegistrationToken = null,
+    string? UtmSource = null,
+    string? UtmMedium = null,
+    string? UtmCampaign = null,
+    string? UtmTerm = null,
+    string? UtmContent = null,
+    string? ReferrerUrl = null,
+    string? LandingPath = null);
 
 public record PasswordSignInRequest(
     string Email,

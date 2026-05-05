@@ -248,6 +248,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ScoreGuaranteePledge> ScoreGuaranteePledges => Set<ScoreGuaranteePledge>();
     public DbSet<ReferralRecord> ReferralRecords => Set<ReferralRecord>();
     public DbSet<ExpertAnnotationTemplate> ExpertAnnotationTemplates => Set<ExpertAnnotationTemplate>();
+    public DbSet<ExpertReviewerPayout> ExpertReviewerPayouts => Set<ExpertReviewerPayout>();
     public DbSet<ScheduleException> ScheduleExceptions => Set<ScheduleException>();
     public DbSet<StudyCommitment> StudyCommitments => Set<StudyCommitment>();
     public DbSet<LearnerCertificate> LearnerCertificates => Set<LearnerCertificate>();

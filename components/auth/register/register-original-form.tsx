@@ -21,6 +21,7 @@ import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { PasswordField } from '@/components/auth/password-field';
 import { buildExternalAuthStartHref, registerLearner } from '@/lib/auth-client';
+import { captureAttribution, readAttribution } from '@/lib/attribution';
 import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
 import {
   signupPayloadSchema,
@@ -190,11 +191,16 @@ export function RegisterForm() {
     setStep((current) => (current === 3 ? 2 : 1));
   };
 
+  useEffect(() => {
+    captureAttribution();
+  }, []);
+
   const handleSubmit = form.handleSubmit(async (values) => {
     setIsSubmitting(true);
     setErrorMessage(null);
 
     try {
+      const attribution = readAttribution();
       await registerLearner(
         {
           email: values.email.trim(),
@@ -210,6 +216,13 @@ export function RegisterForm() {
           agreeToPrivacy: values.agreeToPrivacy,
           marketingOptIn: values.marketingOptIn,
           externalRegistrationToken: registrationToken,
+          utmSource: attribution.utmSource,
+          utmMedium: attribution.utmMedium,
+          utmCampaign: attribution.utmCampaign,
+          utmTerm: attribution.utmTerm,
+          utmContent: attribution.utmContent,
+          referrerUrl: attribution.referrer,
+          landingPath: attribution.landingPath,
         },
         { persistSession: false },
       );
