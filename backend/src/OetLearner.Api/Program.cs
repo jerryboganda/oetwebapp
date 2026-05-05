@@ -533,6 +533,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Recalls.RecallsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.RefundService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.RulebookAdminService>();
 builder.Services.AddScoped<SpeakingTutorCalibrationService>();
+builder.Services.AddScoped<IIeltsMockEngine, IeltsMockEngine>();
+builder.Services.AddScoped<OetLearner.Api.Services.Entitlements.IEffectiveEntitlementResolver, OetLearner.Api.Services.Entitlements.EffectiveEntitlementResolver>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<ExpertOnboardingService>();
