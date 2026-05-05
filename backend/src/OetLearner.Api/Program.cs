@@ -535,6 +535,25 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.RulebookAdminServic
 builder.Services.AddScoped<SpeakingTutorCalibrationService>();
 builder.Services.AddScoped<IIeltsMockEngine, IeltsMockEngine>();
 builder.Services.AddScoped<OetLearner.Api.Services.Entitlements.IEffectiveEntitlementResolver, OetLearner.Api.Services.Entitlements.EffectiveEntitlementResolver>();
+// 15 service interfaces consumed by endpoint handlers but missing from DI;
+// without these, minimal-API falls back to inferring them as Body params and
+// crashes the host on startup with "Body was inferred but the method does not
+// allow inferred body parameters".
+builder.Services.AddScoped<OetLearner.Api.Services.IAIEscalationStatsService, OetLearner.Api.Services.AIEscalationStatsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentEntitlementService, OetLearner.Api.Services.Content.ContentEntitlementService>();
+builder.Services.AddScoped<OetLearner.Api.Services.IContentStalenessService, OetLearner.Api.Services.ContentStalenessService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAnalyticsService, OetLearner.Api.Services.Listening.ListeningAnalyticsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAuthoringService, OetLearner.Api.Services.Listening.ListeningAuthoringService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningBackfillService, OetLearner.Api.Services.Listening.ListeningBackfillService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningCurriculumService, OetLearner.Api.Services.Listening.ListeningCurriculumService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionService, OetLearner.Api.Services.Listening.ListeningExtractionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPathwayService, OetLearner.Api.Services.Listening.ListeningPathwayService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAnalyticsService, OetLearner.Api.Services.Reading.ReadingAnalyticsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionService, OetLearner.Api.Services.Reading.ReadingExtractionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPathwayService, OetLearner.Api.Services.Reading.ReadingPathwayService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService, OetLearner.Api.Services.Reading.ReadingReviewService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Recalls.IRecallsTtsService, OetLearner.Api.Services.Recalls.RecallsTtsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.IWritingPdfService, OetLearner.Api.Services.WritingPdfService>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<ExpertOnboardingService>();
