@@ -3273,7 +3273,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
     // ── Annotation Templates ─────────────────────────────────────────
 
     public async Task<List<ExpertAnnotationTemplate>> GetAnnotationTemplatesAsync(
-        string expertId, string? subtestCode, string? criterionCode, CancellationToken ct)
+        string expertId, string? subtestCode, string? criterionCode, string? search, CancellationToken ct)
     {
         var query = db.ExpertAnnotationTemplates
             .Where(t => t.CreatedByExpertId == expertId || t.IsShared)
@@ -3283,6 +3283,11 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             query = query.Where(t => t.SubtestCode == subtestCode);
         if (!string.IsNullOrWhiteSpace(criterionCode))
             query = query.Where(t => t.CriterionCode == criterionCode);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLowerInvariant();
+            query = query.Where(t => t.Label.ToLower().Contains(term) || t.TemplateText.ToLower().Contains(term));
+        }
 
         return await query.OrderByDescending(t => t.UsageCount).ThenBy(t => t.Label).ToListAsync(ct);
     }
@@ -3849,6 +3854,222 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         await db.SaveChangesAsync(ct);
 
         return new { id = reply.Id, isExpertVerified = true };
+    }
+
+    // ── Amend submitted review ────────────────────────────────────────
+
+    public async Task<ExpertReviewAmendResponse> AmendReviewAsync(string reviewRequestId, string reviewerId, ExpertReviewAmendRequest request, CancellationToken ct)
+    {
+        var eligibility = await GetAmendEligibilityAsync(reviewRequestId, reviewerId, ct);
+        if (!eligibility.CanAmend)
+            throw ApiException.Validation("amend_not_eligible", eligibility.Reason ?? "Cannot amend this review.");
+
+        var context = await LoadWriteContextAsync(reviewRequestId, reviewerId, ct);
+        if (context.ReviewRequest.State != ReviewRequestState.Completed)
+            throw ApiException.Validation("review_not_completed", "Only completed reviews can be amended.");
+
+        var draft = await db.ExpertReviewDrafts
+            .FirstOrDefaultAsync(d => d.ReviewRequestId == reviewRequestId && d.ReviewerId == reviewerId, ct);
+        if (draft is null)
+            throw ApiException.NotFound("draft_not_found", "No submitted draft found for this review.");
+
+        var beforeSnapshot = new
+        {
+            scores = JsonSupport.Deserialize<Dictionary<string, int>>(draft.RubricEntriesJson, new Dictionary<string, int>()),
+            comments = JsonSupport.Deserialize<Dictionary<string, string>>(draft.CriterionCommentsJson, new Dictionary<string, string>()),
+            finalComment = draft.FinalCommentDraft
+        };
+
+        var updatedScores = NormalizeScores(request.Scores, context.ReviewRequest.SubtestCode);
+        var updatedComments = NormalizeCriterionComments(request.CriterionComments, context.ReviewRequest.SubtestCode);
+        var updatedFinal = NormalizeFinalComment(request.FinalComment, required: true);
+
+        draft.RubricEntriesJson = JsonSupport.Serialize(updatedScores);
+        draft.CriterionCommentsJson = JsonSupport.Serialize(updatedComments);
+        draft.FinalCommentDraft = updatedFinal;
+        draft.Version += 1;
+        draft.DraftSavedAt = DateTimeOffset.UtcNow;
+
+        var amend = new ExpertReviewAmend
+        {
+            Id = $"era-{Guid.NewGuid():N}",
+            ReviewRequestId = reviewRequestId,
+            ReviewerId = reviewerId,
+            BeforeSnapshotJson = JsonSupport.Serialize(beforeSnapshot),
+            AfterSnapshotJson = JsonSupport.Serialize(new { scores = updatedScores, comments = updatedComments, finalComment = updatedFinal }),
+            AmendNumber = eligibility.AmendsUsed + 1,
+            AmendedAt = DateTimeOffset.UtcNow
+        };
+        db.Set<ExpertReviewAmend>().Add(amend);
+
+        await LogExpertAuditAsync(reviewerId, context.Expert.DisplayName, "Amended Review", reviewRequestId, $"Amend #{amend.AmendNumber}", ct);
+        await RecordExpertEventAsync(reviewerId, "expert_review_amended", new { reviewRequestId, amendNumber = amend.AmendNumber }, ct);
+        await db.SaveChangesAsync(ct);
+
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerReviewCompleted,
+            context.Attempt.UserId,
+            "review_request",
+            reviewRequestId,
+            DateTimeOffset.UtcNow.UtcDateTime.Ticks.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["attemptId"] = context.Attempt.Id,
+                ["reviewRequestId"] = reviewRequestId,
+                ["message"] = $"Your {context.ReviewRequest.SubtestCode} review has been updated by the expert."
+            },
+            ct);
+
+        logger.LogInformation("Expert {ReviewerId} amended review {ReviewRequestId} (amend #{AmendNumber})", reviewerId, reviewRequestId, amend.AmendNumber);
+        return new ExpertReviewAmendResponse(reviewRequestId, amend.AmendNumber, amend.AmendedAt);
+    }
+
+    public async Task<ExpertAmendEligibilityResponse> GetAmendEligibilityAsync(string reviewRequestId, string reviewerId, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+
+        var reviewRequest = await db.ReviewRequests.AsNoTracking()
+            .FirstOrDefaultAsync(rr => rr.Id == reviewRequestId, ct);
+        if (reviewRequest is null)
+            throw ApiException.NotFound("review_not_found", "Review request not found.");
+
+        if (reviewRequest.State != ReviewRequestState.Completed)
+            return new ExpertAmendEligibilityResponse(false, 0, 2, null, "Review is not yet completed.");
+
+        var assignment = await db.ExpertReviewAssignments.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ReviewRequestId == reviewRequestId && (a.AssignedReviewerId == reviewerId || a.ReassignedFrom == reviewerId), ct);
+        if (assignment is null)
+            return new ExpertAmendEligibilityResponse(false, 0, 2, null, "You were not assigned to this review.");
+
+        var completedAt = reviewRequest.CompletedAt ?? DateTimeOffset.MinValue;
+        var hoursSinceCompletion = (DateTimeOffset.UtcNow - completedAt).TotalHours;
+
+        if (hoursSinceCompletion > 24)
+            return new ExpertAmendEligibilityResponse(false, 0, 2, null, "The 24-hour amend window has passed.");
+
+        var amendCount = await db.Set<ExpertReviewAmend>()
+            .CountAsync(a => a.ReviewRequestId == reviewRequestId, ct);
+
+        if (amendCount >= 2)
+            return new ExpertAmendEligibilityResponse(false, amendCount, 2, null, "Maximum number of amends (2) has been reached.");
+
+        var hoursRemaining = 24 - hoursSinceCompletion;
+        return new ExpertAmendEligibilityResponse(true, amendCount, 2, hoursRemaining, null);
+    }
+
+    // ── Rework chain history ──────────────────────────────────────────
+
+    public async Task<ExpertReworkChainResponse> GetReworkChainAsync(string reviewRequestId, string reviewerId, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+
+        var assignment = await db.ExpertReviewAssignments.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ReviewRequestId == reviewRequestId && (a.AssignedReviewerId == reviewerId || a.ReassignedFrom == reviewerId), ct)
+            ?? throw ApiException.Forbidden("not_your_review", "You are not assigned to this review.");
+
+        var drafts = await db.ExpertReviewDrafts
+            .AsNoTracking()
+            .Where(d => d.ReviewRequestId == reviewRequestId)
+            .OrderBy(d => d.DraftSavedAt)
+            .ToListAsync(ct);
+
+        if (drafts.Count == 0)
+            return new ExpertReworkChainResponse(reviewRequestId, []);
+
+        var reviewerIds = drafts.Select(d => d.ReviewerId).Distinct().ToList();
+        var reviewers = await db.ExpertUsers.AsNoTracking()
+            .Where(e => reviewerIds.Contains(e.Id))
+            .ToDictionaryAsync(e => e.Id, ct);
+
+        var chain = new List<ExpertReworkChainIterationResponse>();
+        for (var i = 0; i < drafts.Count; i++)
+        {
+            var d = drafts[i];
+            var scores = JsonSupport.Deserialize<Dictionary<string, int>>(d.RubricEntriesJson, new Dictionary<string, int>());
+            reviewers.TryGetValue(d.ReviewerId, out var reviewer);
+            chain.Add(new ExpertReworkChainIterationResponse(
+                i + 1,
+                d.State,
+                scores,
+                d.FinalCommentDraft,
+                d.DraftSavedAt,
+                reviewer?.DisplayName));
+        }
+
+        return new ExpertReworkChainResponse(reviewRequestId, chain);
+    }
+
+    // ── Bulk review operations ────────────────────────────────────────
+
+    public async Task<ExpertBulkClaimResponse> BulkClaimReviewsAsync(string reviewerId, ExpertBulkClaimRequest request, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+
+        if (request.ReviewRequestIds is null || request.ReviewRequestIds.Count == 0)
+            throw ApiException.Validation("no_review_ids", "At least one review request ID is required.");
+
+        const int maxBulkClaim = 10;
+        if (request.ReviewRequestIds.Count > maxBulkClaim)
+            throw ApiException.Validation("bulk_limit_exceeded", $"Cannot claim more than {maxBulkClaim} reviews at once.");
+
+        var claimed = new List<string>();
+        var failed = new List<string>();
+
+        foreach (var id in request.ReviewRequestIds)
+        {
+            try
+            {
+                await ClaimReviewAsync(id, reviewerId, ct);
+                claimed.Add(id);
+            }
+            catch
+            {
+                failed.Add(id);
+            }
+        }
+
+        var activeCount = await db.ExpertReviewAssignments
+            .CountAsync(a => a.AssignedReviewerId == reviewerId && a.ClaimState == ExpertAssignmentState.Claimed, ct);
+
+        string? warning = null;
+        if (activeCount > maxBulkClaim * 2)
+            warning = "You have a high number of active reviews. Consider completing some before claiming more.";
+
+        var expert = await EnsureExpertAsync(reviewerId, ct);
+        await LogExpertAuditAsync(reviewerId, expert.DisplayName, "Bulk Claim", null, $"Claimed {claimed.Count}, failed {failed.Count}", ct);
+        await RecordExpertEventAsync(reviewerId, "expert_bulk_claim", new { claimedCount = claimed.Count, failedCount = failed.Count }, ct);
+
+        return new ExpertBulkClaimResponse(claimed, failed, warning);
+    }
+
+    public async Task<ExpertBulkClaimResponse> BulkReleaseReviewsAsync(string reviewerId, ExpertBulkReleaseRequest request, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+
+        if (request.ReviewRequestIds is null || request.ReviewRequestIds.Count == 0)
+            throw ApiException.Validation("no_review_ids", "At least one review request ID is required.");
+
+        var released = new List<string>();
+        var failed = new List<string>();
+
+        foreach (var id in request.ReviewRequestIds)
+        {
+            try
+            {
+                await ReleaseReviewAsync(id, reviewerId, ct);
+                released.Add(id);
+            }
+            catch
+            {
+                failed.Add(id);
+            }
+        }
+
+        var expert = await EnsureExpertAsync(reviewerId, ct);
+        await LogExpertAuditAsync(reviewerId, expert.DisplayName, "Bulk Release", null, $"Released {released.Count}, failed {failed.Count}", ct);
+        await RecordExpertEventAsync(reviewerId, "expert_bulk_release", new { releasedCount = released.Count, failedCount = failed.Count }, ct);
+
+        return new ExpertBulkClaimResponse(released, failed, null);
     }
 
     private sealed record ReadContext(

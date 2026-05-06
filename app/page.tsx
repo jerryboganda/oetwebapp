@@ -30,6 +30,10 @@ import {
   WeakestLinkCard,
 } from '@/components/domain';
 import { AiUsageWidget } from '@/components/domain/AiUsageWidget';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
+import { LearnerFreshnessIndicator } from '@/components/domain/learner-freshness-indicator';
+import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { PronunciationDashboardTile } from '@/components/domain/pronunciation';
 import { AsyncStateWrapper } from '@/components/state';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
@@ -65,7 +69,7 @@ export default function Dashboard() {
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
   const { data, error, reload, status } = useDashboardHome();
-  const { home, profile, readiness, tasks, engagement } = data;
+  const { home, profile, readiness, tasks, engagement, loadedAt } = data;
   const freeze = home?.freeze?.currentFreeze ?? null;
 
   const todayTasks = tasks.filter((task) => task.section === 'today');
@@ -79,6 +83,7 @@ export default function Dashboard() {
     ? Math.round(readinessSubTests.reduce((sum, subTest) => sum + subTest.readiness, 0) / readinessSubTests.length)
     : 0;
   const readinessRecentTrend = liveReadiness?.evidence?.recentTrend ?? 'Trend data will appear after more practice.';
+  const readinessUpdatedAt = liveReadiness?.evidence?.lastUpdated ?? loadedAt;
 
   const dashboardHeroHighlights = [
     {
@@ -160,17 +165,18 @@ export default function Dashboard() {
         status={asyncStatus}
         onRetry={reload}
         errorMessage={error ?? undefined}
-        partialMessage={error ?? 'Some dashboard data could not be loaded right now. The rest of your workspace is still available.'}
-        emptyContent={
-          <div className="space-y-3 py-12 text-center">
-            <p className="text-sm font-bold text-navy">Welcome to OET Prep</p>
-            <p className="text-xs text-muted">Complete onboarding to get started.</p>
-            <Button size="sm" onClick={() => router.push('/onboarding')}>
-              Start Onboarding
-            </Button>
-          </div>
-        }
-      >
+          partialMessage={error ?? 'Some dashboard data could not be loaded right now. The rest of your workspace is still available.'}
+          loadingContent={<LearnerSkeleton variant="dashboard" />}
+          emptyContent={
+            <LearnerEmptyState
+              icon={Sparkles}
+              title="Welcome to your OET workspace"
+              description="Complete onboarding to personalize your dashboard, or set goals first if you already know your exam target."
+              primaryAction={{ label: 'Start Onboarding', href: '/onboarding' }}
+              secondaryAction={{ label: 'Set Goals', href: '/goals' }}
+            />
+          }
+        >
         <div className="space-y-6">
           <LearnerPageHero
             eyebrow="Current Focus"
@@ -179,6 +185,7 @@ export default function Dashboard() {
             title="Keep today's priorities and exam signals in view"
               description="Decide your next action, check your readiness, and move forward with confidence."
             highlights={dashboardHeroHighlights}
+            aside={loadedAt ? <LearnerFreshnessIndicator updatedAt={loadedAt} source="loaded" staleAfterMinutes={30} /> : undefined}
           />
 
           {freeze ? (
@@ -230,21 +237,18 @@ export default function Dashboard() {
               </MotionItem>
             ) : null}
             {!nextActionCard && !nextMockCard ? (
-              <Card className="border-dashed border-border bg-surface shadow-sm lg:col-span-2">
-                <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-bold text-navy">No live dashboard priorities yet</p>
-                    <p className="mt-1 text-xs text-muted">
-                      Complete onboarding, practice, or generate a study plan to populate this area with real next actions.
-                    </p>
-                  </div>
-                  <Button size="sm" onClick={() => router.push('/study-plan')}>
-                    Open Study Plan <ArrowRight className="ml-1 h-3.5 w-3.5" />
-                  </Button>
-                </CardContent>
-              </Card>
+              <LearnerEmptyState
+                className="lg:col-span-2"
+                icon={Sparkles}
+                title="No live dashboard priorities yet"
+                description="Complete onboarding, take a diagnostic, or open your study plan to create the evidence that powers next actions."
+                primaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
+                secondaryAction={{ label: 'Take Diagnostic', href: '/diagnostic' }}
+              />
             ) : null}
           </div>
+
+          <LearnerSkillSwitcher compact />
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
             <div className="space-y-6 lg:col-span-8">
@@ -253,9 +257,12 @@ export default function Dashboard() {
                   title="Today&apos;s Study Plan"
                   description={`${completedToday} of ${todayTasks.length} scheduled tasks completed.`}
                   action={(
-                    <Button variant="ghost" size="sm" onClick={() => router.push('/study-plan')}>
-                      View Full Plan <ArrowRight className="ml-1 h-4 w-4" />
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <LearnerFreshnessIndicator updatedAt={loadedAt} source="loaded" staleAfterMinutes={30} />
+                      <Button variant="ghost" size="sm" onClick={() => router.push('/study-plan')}>
+                        View Full Plan <ArrowRight className="ml-1 h-4 w-4" />
+                      </Button>
+                    </div>
                   )}
                   className="mb-4"
                 />
@@ -298,14 +305,14 @@ export default function Dashboard() {
                       </motion.div>
                     );
                   }) : (
-                    <Card className="border-dashed border-border bg-surface shadow-sm">
-                      <CardContent className="p-5">
-                        <p className="text-sm font-bold text-navy">No live tasks scheduled today</p>
-                        <p className="mt-1 text-xs text-muted">
-                          Tasks will appear here from your server-backed study plan after onboarding or new practice evidence.
-                        </p>
-                      </CardContent>
-                    </Card>
+                    <LearnerEmptyState
+                      compact
+                      icon={Calendar}
+                      title="No live tasks scheduled today"
+                      description="Tasks appear from your server-backed study plan after onboarding, diagnostics, or new practice evidence."
+                      primaryAction={{ label: 'Build Study Plan', href: '/study-plan' }}
+                      secondaryAction={{ label: 'Start Practice', href: '/writing' }}
+                    />
                   )}
                 </div>
               </section>
@@ -342,7 +349,10 @@ export default function Dashboard() {
               {liveReadiness ? (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Test Readiness</CardTitle>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <CardTitle>Test Readiness</CardTitle>
+                      <LearnerFreshnessIndicator updatedAt={readinessUpdatedAt} staleAfterMinutes={1440} />
+                    </div>
                   </CardHeader>
                   <CardContent className="flex flex-col items-center space-y-3 text-center">
                     <ReadinessMeter

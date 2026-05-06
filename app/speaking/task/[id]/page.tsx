@@ -32,8 +32,11 @@ function LiveSpeakingTaskContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const id = params?.id as string;
+  const rawId = params?.id;
+  const id = typeof rawId === 'string' ? rawId : '';
   const requestedMode = searchParams?.get('mode');
+  const mockSessionId = searchParams?.get('mockSession') ?? undefined;
+  const mockAttemptId = searchParams?.get('attemptId') ?? undefined;
   const mode: TaskMode = requestedMode === 'exam' ? 'exam' : 'self';
 
   // --- Card State ---
@@ -43,6 +46,11 @@ function LiveSpeakingTaskContent() {
   const roleplayTimeLabel = `${Math.round(roleplayTimeSeconds / 60)} min`;
 
   useEffect(() => {
+    if (!id) {
+      setCard(null);
+      setCardLoading(false);
+      return;
+    }
     fetchRoleCard(id)
       .then(setCard)
       .catch(() => setCard(null))
@@ -520,7 +528,7 @@ function LiveSpeakingTaskContent() {
     setIsSubmitting(true);
     setSubmitError(null);
     setRecordingState('finished');
-    analytics.track('task_submitted', { taskId: id, subtest: 'speaking', mode, durationSeconds });
+    analytics.track('task_submitted', { taskId: id, subtest: 'speaking', mode, durationSeconds, mockSessionId });
 
     try {
       const recording = await stopRecorderAsync();
@@ -532,6 +540,9 @@ function LiveSpeakingTaskContent() {
       const { submissionId } = await submitSpeakingRecording(id, recording, durationSeconds, mode, {
         accepted: recordingConsentAccepted,
         text: compliance?.consentText,
+      }, {
+        attemptId: mockAttemptId,
+        mockSessionId,
       });
       const resultUrl = `/speaking/results/${submissionId}`;
       setShowSubmitConfirm(false);

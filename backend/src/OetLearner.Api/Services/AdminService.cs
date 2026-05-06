@@ -1572,13 +1572,15 @@ public partial class AdminService(
     //  Content Management
     // ════════════════════════════════════════════
 
-    public async Task<object> GetContentListAsync(string? contentType, string? profession,
+    public async Task<object> GetContentListAsync(string? contentType, string? subtestCode, string? profession,
         string? status, string? search, int page, int pageSize, CancellationToken ct)
     {
         var query = db.ContentItems.AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(contentType))
             query = query.Where(c => c.ContentType == contentType);
+        if (!string.IsNullOrWhiteSpace(subtestCode))
+            query = query.Where(c => c.SubtestCode == subtestCode);
         if (!string.IsNullOrWhiteSpace(profession))
             query = query.Where(c => c.ProfessionId == profession);
         if (!string.IsNullOrWhiteSpace(status))
@@ -1602,6 +1604,7 @@ public partial class AdminService(
             c.Id,
             c.Title,
             type = c.ContentType,
+            subtestCode = c.SubtestCode,
             profession = c.ProfessionId,
             status = c.Status.ToString().ToLowerInvariant(),
             sourceType = c.SourceType,
@@ -4327,21 +4330,24 @@ public partial class AdminService(
               + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}");
         await LogAuditAsync(adminId, adminName, "Subscription Cancellation", "Subscription", subscriptionId, details, ct);
 
-        await notifications.CreateForLearnerAsync(
-            NotificationEventKey.LearnerSubscriptionCancelled,
-            subscription.UserId,
-            "Subscription",
-            subscription.Id,
-            now.UtcDateTime.ToString("yyyy-MM-dd"),
-            new Dictionary<string, object?>
-            {
-                ["message"] = request.Immediate
-                    ? "Your subscription has been cancelled immediately."
-                    : $"Your subscription is scheduled to cancel at the end of your current billing period ({subscription.NextRenewalAt:yyyy-MM-dd}).",
-                ["planName"] = subscription.PlanId,
-                ["status"] = subscription.Status.ToString().ToLowerInvariant()
-            },
-            ct);
+        if (notifications is not null)
+        {
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerSubscriptionCancelled,
+                subscription.UserId,
+                "Subscription",
+                subscription.Id,
+                now.UtcDateTime.ToString("yyyy-MM-dd"),
+                new Dictionary<string, object?>
+                {
+                    ["message"] = request.Immediate
+                        ? "Your subscription has been cancelled immediately."
+                        : $"Your subscription is scheduled to cancel at the end of your current billing period ({subscription.NextRenewalAt:yyyy-MM-dd}).",
+                    ["planName"] = subscription.PlanId,
+                    ["status"] = subscription.Status.ToString().ToLowerInvariant()
+                },
+                ct);
+        }
 
         var planName = await ResolvePlanNameAsync(subscription.PlanId, ct);
         var learnerName = await ResolveUserDisplayNameAsync(subscription.UserId, ct);
@@ -4394,11 +4400,14 @@ public partial class AdminService(
         // ("PastDue") that Enum.TryParse expects. Without this strip, valid UI tokens were
         // rejected as invalid because the underscore form does not exist in the enum.
         var normalizedStatus = (request.Status ?? string.Empty).Replace("_", string.Empty).Replace("-", string.Empty);
-        if (!Enum.TryParse<SubscriptionStatus>(normalizedStatus, true, out var parsedStatus))
+        var statusName = Enum.GetNames<SubscriptionStatus>()
+            .FirstOrDefault(name => string.Equals(name, normalizedStatus, StringComparison.OrdinalIgnoreCase));
+        if (statusName is null)
         {
             throw ApiException.Validation("subscription_status_invalid",
                 "Status must be one of: trial, pending, active, past_due, suspended, cancelled, expired.");
         }
+        var parsedStatus = Enum.Parse<SubscriptionStatus>(statusName);
 
         return WithSubscriptionConcurrencyRetryAsync(
             inner => SetSubscriptionStatusCoreAsync(adminId, adminName, subscriptionId, request, parsedStatus, inner),

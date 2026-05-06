@@ -114,3 +114,23 @@ public record ExpertChecklistItemDto(
     string Id,
     string Label,
     bool Checked);
+
+public record ExpertReviewAmendRequest(
+    Dictionary<string, int> Scores,
+    Dictionary<string, string> CriterionComments,
+    string FinalComment);
+
+public record ExpertBulkClaimRequest(
+    List<string> ReviewRequestIds);
+
+public record ExpertBulkReleaseRequest(
+    List<string> ReviewRequestIds);
+
+public record CreateMessageThreadRequest(
+    string Title,
+    string Body,
+    string? LinkedReviewRequestId,
+    string? LinkedCalibrationCaseId,
+    string? LinkedLearnerId);
+
+public record CreateMessageReplyRequest(string Body);

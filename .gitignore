@@ -89,3 +89,7 @@ _check_pdf_libs.py
 .opencode/*.bak-pre-*
 
 ts-prune-survivors.txt
+
+# CommandCode IDE local cache
+.commandcode/
+

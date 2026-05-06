@@ -6,7 +6,7 @@
 // two role-play `ContentItem` ids.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Sparkles, Archive, CheckCircle2 } from 'lucide-react';
+import { Plus, Sparkles, Archive, CheckCircle2, Pencil } from 'lucide-react';
 import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -20,6 +20,7 @@ import {
   fetchAdminSpeakingMockSets,
   fetchAdminSpeakingContentOptions,
   createAdminSpeakingMockSet,
+  updateAdminSpeakingMockSet,
   publishAdminSpeakingMockSet,
   archiveAdminSpeakingMockSet,
   type AdminSpeakingMockSetRow,
@@ -36,6 +37,8 @@ export default function AdminSpeakingMockSetsPage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editingRow, setEditingRow] = useState<AdminSpeakingMockSetRow | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [contentOptions, setContentOptions] = useState<SpeakingContentOption[]>([]);
   const [form, setForm] = useState({
     title: '',
@@ -67,15 +70,15 @@ export default function AdminSpeakingMockSetsPage() {
     return () => { cancelled = true; };
   }, [statusFilter, reloadNonce]);
 
-  // Lazy-load speaking content options the first time the create modal opens.
+  // Lazy-load speaking content options the first time an authoring modal opens.
   useEffect(() => {
-    if (!createOpen || contentOptions.length > 0) return;
+    if ((!createOpen && !editingRow) || contentOptions.length > 0) return;
     void fetchAdminSpeakingContentOptions()
       .then((opts) => setContentOptions(opts))
       .catch(() => {
         setToast({ variant: 'error', message: 'Could not load speaking content options.' });
       });
-  }, [createOpen, contentOptions.length]);
+  }, [createOpen, contentOptions.length, editingRow]);
 
   const dupSelected = form.rolePlay1ContentId && form.rolePlay1ContentId === form.rolePlay2ContentId;
 
@@ -141,6 +144,64 @@ export default function AdminSpeakingMockSetsPage() {
     }
   };
 
+  const openEdit = (row: AdminSpeakingMockSetRow) => {
+    setEditingRow(row);
+    setForm({
+      title: row.title,
+      description: row.description,
+      professionId: row.professionId,
+      difficulty: row.difficulty,
+      rolePlay1ContentId: row.rolePlay1.contentId,
+      rolePlay2ContentId: row.rolePlay2.contentId,
+      criteriaFocus: row.criteriaFocus.join(', '),
+      tags: row.tags.join(', '),
+      sortOrder: row.sortOrder,
+    });
+  };
+
+  const closeEdit = () => {
+    setEditingRow(null);
+    setSavingEdit(false);
+  };
+
+  const submitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRow || savingEdit) return;
+    if (!form.title.trim()) {
+      setToast({ variant: 'error', message: 'Title is required.' });
+      return;
+    }
+    if (!form.rolePlay1ContentId || !form.rolePlay2ContentId) {
+      setToast({ variant: 'error', message: 'Pick two role-play content items.' });
+      return;
+    }
+    if (dupSelected) {
+      setToast({ variant: 'error', message: 'Role-play 1 and 2 must be different content items.' });
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await updateAdminSpeakingMockSet(editingRow.mockSetId, {
+        title: form.title.trim(),
+        description: form.description.trim(),
+        professionId: form.professionId,
+        difficulty: form.difficulty,
+        rolePlay1ContentId: form.rolePlay1ContentId,
+        rolePlay2ContentId: form.rolePlay2ContentId,
+        criteriaFocus: form.criteriaFocus,
+        tags: form.tags,
+        sortOrder: form.sortOrder,
+      });
+      setToast({ variant: 'success', message: 'Mock set updated.' });
+      closeEdit();
+      setReloadNonce((n) => n + 1);
+    } catch (err: unknown) {
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Failed to update mock set.' });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const columns = useMemo<Column<AdminSpeakingMockSetRow>[]>(() => [
     {
       key: 'title',
@@ -187,6 +248,11 @@ export default function AdminSpeakingMockSetsPage() {
       header: 'Actions',
       render: (row) => (
         <div className="flex flex-wrap items-center gap-2">
+          {row.status !== 'archived' && (
+            <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </Button>
+          )}
           {row.status === 'draft' && (
             <Button size="sm" variant="primary" onClick={() => handlePublish(row.mockSetId)}>
               <CheckCircle2 className="h-3.5 w-3.5" /> Publish
@@ -343,6 +409,99 @@ export default function AdminSpeakingMockSetsPage() {
             </Button>
             <Button type="submit" variant="primary" disabled={creating}>
               {creating ? 'Creating…' : 'Create draft'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={editingRow !== null} onClose={closeEdit} title="Edit speaking mock set" size="lg">
+        <form onSubmit={submitEdit} className="space-y-4">
+          <Input
+            label="Title"
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            required
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Select
+              label="Profession"
+              value={form.professionId}
+              onChange={(e) => setForm({ ...form, professionId: e.target.value })}
+              options={[
+                { value: 'nursing', label: 'Nursing' },
+                { value: 'medicine', label: 'Medicine' },
+                { value: 'pharmacy', label: 'Pharmacy' },
+                { value: 'physiotherapy', label: 'Physiotherapy' },
+              ]}
+            />
+            <Select
+              label="Difficulty"
+              value={form.difficulty}
+              onChange={(e) => setForm({ ...form, difficulty: e.target.value })}
+              options={[
+                { value: 'core', label: 'Core' },
+                { value: 'extension', label: 'Extension' },
+                { value: 'exam', label: 'Exam' },
+              ]}
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Select
+              label="Role-play 1 (speaking content)"
+              value={form.rolePlay1ContentId}
+              onChange={(e) => setForm({ ...form, rolePlay1ContentId: e.target.value })}
+              options={[
+                { value: '', label: 'Select...' },
+                ...contentOptions.map((o) => ({ value: o.id, label: `${o.title} [${o.status}]` })),
+              ]}
+              required
+            />
+            <Select
+              label="Role-play 2 (speaking content)"
+              value={form.rolePlay2ContentId}
+              onChange={(e) => setForm({ ...form, rolePlay2ContentId: e.target.value })}
+              options={[
+                { value: '', label: 'Select...' },
+                ...contentOptions.map((o) => ({ value: o.id, label: `${o.title} [${o.status}]` })),
+              ]}
+              required
+            />
+          </div>
+          {dupSelected && (
+            <p className="text-xs text-danger">Role-play 1 and 2 must be different content items.</p>
+          )}
+          <Input
+            label="Description (optional)"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label="Criteria focus (CSV, optional)"
+              value={form.criteriaFocus}
+              onChange={(e) => setForm({ ...form, criteriaFocus: e.target.value })}
+            />
+            <Input
+              label="Tags (CSV, optional)"
+              value={form.tags}
+              onChange={(e) => setForm({ ...form, tags: e.target.value })}
+            />
+          </div>
+          <Input
+            label="Sort order"
+            type="number"
+            value={String(form.sortOrder)}
+            onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) || 0 })}
+          />
+          <div className="rounded-2xl border border-border bg-background-light p-3 text-xs text-muted">
+            Published mock sets can be edited, but learner sessions already started from an older version keep their saved attempt history.
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={closeEdit} disabled={savingEdit}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={savingEdit}>
+              {savingEdit ? 'Saving...' : 'Save changes'}
             </Button>
           </div>
         </form>

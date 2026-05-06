@@ -87,6 +87,27 @@ public static class ExpertEndpoints
             => Results.Ok(await service.RequestReworkAsync(reviewRequestId, http.ExpertId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
 
+        // Amend submitted review
+        expert.MapPost("/reviews/{reviewRequestId}/amend", async (string reviewRequestId, HttpContext http, ExpertReviewAmendRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.AmendReviewAsync(reviewRequestId, http.ExpertId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        expert.MapGet("/reviews/{reviewRequestId}/amend-eligibility", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetAmendEligibilityAsync(reviewRequestId, http.ExpertId(), ct)));
+
+        // Rework chain history
+        expert.MapGet("/reviews/{reviewRequestId}/rework-chain", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetReworkChainAsync(reviewRequestId, http.ExpertId(), ct)));
+
+        // Bulk operations
+        expert.MapPost("/queue/bulk-claim", async (HttpContext http, ExpertBulkClaimRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.BulkClaimReviewsAsync(http.ExpertId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        expert.MapPost("/queue/bulk-release", async (HttpContext http, ExpertBulkReleaseRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.BulkReleaseReviewsAsync(http.ExpertId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
         expert.MapGet("/learners", async ([AsParameters] ExpertLearnersQueryRequest request, HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetLearnersAsync(http.ExpertId(), request, ct)));
 
@@ -165,8 +186,8 @@ public static class ExpertEndpoints
 
         // ── Annotation Templates ────────────────────────
 
-        expert.MapGet("/annotation-templates", async (HttpContext http, ExpertService service, CancellationToken ct, string? subtestCode, string? criterionCode)
-            => Results.Ok(await service.GetAnnotationTemplatesAsync(http.ExpertId(), subtestCode, criterionCode, ct)));
+        expert.MapGet("/annotation-templates", async (HttpContext http, ExpertService service, CancellationToken ct, string? subtestCode, string? criterionCode, string? search)
+            => Results.Ok(await service.GetAnnotationTemplatesAsync(http.ExpertId(), subtestCode, criterionCode, search, ct)));
 
         expert.MapPost("/annotation-templates", async (HttpContext http, ExpertAnnotationTemplateRequest request, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.CreateAnnotationTemplateAsync(http.ExpertId(), request, ct)))

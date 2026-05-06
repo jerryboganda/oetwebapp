@@ -15,7 +15,7 @@ namespace OetLearner.Api.Tests;
 //   1. Posting against /v1/speaking/tasks/{contentId}/self-practice
 //      with a real published speaking ContentItem (st-001).
 //   2. Asserting the response carries a redirect path of
-//      /conversation/session/cs-... and the session id matches a row in
+//      /conversation/cs-... and the session id matches a row in
 //      ConversationSessions.
 //   3. Asserting that row's SubtestCode == "speaking" and TaskTypeCode
 //      == "oet-roleplay" (i.e. the conversation service grounded it via
@@ -41,11 +41,11 @@ public class SpeakingSelfPracticeFlowsTests : IClassFixture<FirstPartyAuthTestWe
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
         var redirectPath = doc.RootElement.GetProperty("redirectPath").GetString();
         Assert.NotNull(redirectPath);
-        Assert.StartsWith("/conversation/session/", redirectPath);
+        Assert.StartsWith("/conversation/", redirectPath);
 
         var sessionId = doc.RootElement.GetProperty("session").GetProperty("id").GetString();
         Assert.False(string.IsNullOrWhiteSpace(sessionId));
-        Assert.Equal($"/conversation/session/{sessionId}", redirectPath);
+        Assert.Equal($"/conversation/{sessionId}", redirectPath);
 
         // Verify the session was actually persisted with the speaking
         // subtest + role-play task type — that proves we routed through

@@ -20,16 +20,17 @@ import {
   TrendingUp,
   Activity,
   CheckCircle2,
-  Send,
   Clock
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
-import { Skeleton } from '@/components/ui/skeleton';
 import { fetchTrendData, fetchCompletionData, fetchSubmissionVolume, fetchProgressEvidenceSummary } from '@/lib/api';
 import type { ProgressEvidenceSummary, TrendPoint } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
+import { LearnerFreshnessIndicator } from '@/components/domain/learner-freshness-indicator';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 
 type CompletionPoint = { day: string; completed: number };
 type VolumePoint = { week: string; submissions: number };
@@ -47,6 +48,25 @@ const CHART_COLORS = {
 
 const CHART_TICK = { fontSize: 12, fill: CHART_COLORS.muted } as const;
 const CHART_TOOLTIP_STYLE = { borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' } as const;
+
+function ChartEmptyState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="flex h-full min-h-[240px] items-center justify-center">
+      <LearnerEmptyState
+        compact
+        icon={TrendingUp}
+        title={title}
+        description={description}
+        primaryAction={{ label: 'Start Practice', href: '/writing' }}
+        secondaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
+      />
+    </div>
+  );
+}
+
+function SrChartSummary({ children }: { children: string }) {
+  return <p className="sr-only">{children}</p>;
+}
 
 export default function ProgressDashboard() {
   const [criterionFilter, setCriterionFilter] = useState('Writing');
@@ -88,17 +108,10 @@ export default function ProgressDashboard() {
     ? `${progressSummary.reviewUsage.averageTurnaroundHours}h avg`
     : 'Pending';
   const hasTrendData = trendData.length > 0;
-
-  const trendEmptyState = (
-    <div className="flex h-full min-h-[240px] items-center justify-center rounded-[24px] border border-dashed border-border bg-background-light/60 px-6 text-center">
-      <div className="max-w-sm space-y-2">
-        <p className="text-sm font-black uppercase tracking-widest text-muted">No trend data yet</p>
-        <p className="text-sm text-muted">
-          Complete a few scored submissions to unlock the movement chart across Reading, Listening, Writing, and Speaking.
-        </p>
-      </div>
-    </div>
-  );
+  const hasCompletionData = completionData.length > 0;
+  const hasVolumeData = volumeData.length > 0;
+  const hasAnyProgressData = hasTrendData || hasCompletionData || hasVolumeData || Boolean(progressSummary);
+  const generatedAt = progressSummary?.freshness.generatedAt ?? null;
 
   return (
     <LearnerDashboardShell
@@ -118,22 +131,29 @@ export default function ProgressDashboard() {
             { icon: CheckCircle2, label: 'Completed work', value: completionData.length ? `${completedLast7} tasks` : 'Loading...' },
             { icon: Clock, label: 'Review speed', value: averageTurnaroundLabel },
           ]}
+          aside={<LearnerFreshnessIndicator updatedAt={generatedAt} staleAfterMinutes={1440} />}
         />
 
         {loading && (
-          <div className="space-y-6">
-            {[1, 2, 3].map(i => (
-              <Skeleton key={i} className="h-64 rounded-2xl" />
-            ))}
-          </div>
+          <LearnerSkeleton variant="dashboard" />
         )}
 
         {!loading && error && (
-          <InlineAlert variant="error">{error}</InlineAlert>
+          <InlineAlert variant={hasAnyProgressData ? 'warning' : 'error'}>{error}</InlineAlert>
         )}
 
-        {!loading && !error && (
+        {!loading && (
           <>
+            {!hasAnyProgressData ? (
+              <LearnerEmptyState
+                icon={Activity}
+                title="No progress evidence yet"
+                description="Complete diagnostic work, practice submissions, or mock tests to unlock charts and review timing insights."
+                primaryAction={{ label: 'Take Diagnostic', href: '/diagnostic' }}
+                secondaryAction={{ label: 'Start Writing Practice', href: '/writing' }}
+              />
+            ) : null}
+
             {/* 1. Sub-test Trend */}
             <MotionSection
               delayIndex={0}
@@ -145,16 +165,12 @@ export default function ProgressDashboard() {
                 description="Compare your trajectory across all four sub-tests at a glance."
                 className="mb-6"
               />
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center shrink-0">
-                  <TrendingUp className="w-5 h-5 text-info" />
-                </div>
-                <div>
-                  <h2 className="text-base font-black text-navy">Sub-test Performance Trend</h2>
-                  <p className="text-xs text-muted">Score progression across all skills</p>
-                </div>
-              </div>
               <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label="Sub-test performance trend chart showing reading, listening, writing, and speaking scores over time">
+                <SrChartSummary>
+                  {hasTrendData
+                    ? `Sub-test trend has ${trendData.length} checkpoints. Latest checkpoint is ${trendData[trendData.length - 1]?.date ?? 'unknown'}.`
+                    : 'No score trend is available yet.'}
+                </SrChartSummary>
                 {hasTrendData ? (
                   <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                     <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -169,7 +185,12 @@ export default function ProgressDashboard() {
                       <Line type="monotone" dataKey="speaking" name="Speaking" stroke={CHART_COLORS.navy} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
                     </LineChart>
                   </ResponsiveContainer>
-                ) : trendEmptyState}
+                ) : (
+                  <ChartEmptyState
+                    title="No trend data yet"
+                    description="Complete a few scored submissions to unlock movement across Reading, Listening, Writing, and Speaking."
+                  />
+                )}
               </div>
             </MotionSection>
 
@@ -184,21 +205,15 @@ export default function ProgressDashboard() {
                 description="Filter Writing and Speaking by individual criterion to see exactly where you're improving."
                 className="mb-6"
               />
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                    <Activity className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-black text-navy">Criterion Trend</h2>
-                    <p className="text-xs text-muted">Deep dive into specific scoring criteria</p>
-                  </div>
-                </div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 mb-6">
                 <div className="flex items-center gap-2 bg-background-light p-1 rounded-xl border border-border">
                   {['Writing', 'Speaking'].map(f => (
                     <button
                       key={f}
+                      type="button"
                       onClick={() => setCriterionFilter(f)}
+                      aria-pressed={criterionFilter === f}
+                      aria-label={`Show ${f} criterion trend`}
                       className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${criterionFilter === f ? 'bg-white text-navy shadow-sm' : 'text-muted hover:text-navy'}`}
                     >
                       {f}
@@ -207,6 +222,11 @@ export default function ProgressDashboard() {
                 </div>
               </div>
               <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label={`Criterion trend chart for ${criterionFilter} skills`}>
+                <SrChartSummary>
+                  {hasTrendData
+                    ? `${criterionFilter} criterion trend is displayed using the same ${trendData.length} score checkpoints.`
+                    : `No ${criterionFilter} criterion trend is available yet.`}
+                </SrChartSummary>
                 {hasTrendData ? (
                   <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                     <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -222,7 +242,12 @@ export default function ProgressDashboard() {
                       )}
                     </LineChart>
                   </ResponsiveContainer>
-                ) : trendEmptyState}
+                ) : (
+                  <ChartEmptyState
+                    title={`No ${criterionFilter.toLowerCase()} trend yet`}
+                    description="Submit scored work in this skill to unlock criterion movement."
+                  />
+                )}
               </div>
             </MotionSection>
 
@@ -238,18 +263,13 @@ export default function ProgressDashboard() {
                   description="Progress isn't just score movement — it's also how consistently you're completing planned work."
                   className="mb-6"
                 />
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-5 h-5 text-success" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-black text-navy">Completion Trend</h2>
-                    <p className="text-xs text-muted">Tasks completed over the last 7 days</p>
-                  </div>
-                </div>
-                <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <AreaChart data={completionData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
+                <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]" role="img" aria-label="Completion trend chart showing tasks completed over the last 7 days">
+                  <SrChartSummary>
+                    {hasCompletionData ? `${completedLast7} tasks are represented across ${completionData.length} completion points.` : 'No task completion trend is available yet.'}
+                  </SrChartSummary>
+                  {hasCompletionData ? (
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                      <AreaChart data={completionData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
                       <defs>
                         <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor={CHART_COLORS.success} stopOpacity={0.3} />
@@ -261,8 +281,14 @@ export default function ProgressDashboard() {
                       <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
                       <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
                       <Area type="monotone" dataKey="completed" name="Tasks Completed" stroke={CHART_COLORS.success} strokeWidth={3} fillOpacity={1} fill="url(#colorCompleted)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <ChartEmptyState
+                      title="No completion trend yet"
+                      description="Complete planned tasks to make your weekly consistency visible."
+                    />
+                  )}
                 </div>
               </MotionSection>
 
@@ -277,25 +303,26 @@ export default function ProgressDashboard() {
                   description="Your submission volume shows how much practice you've banked."
                   className="mb-6"
                 />
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
-                    <Send className="w-5 h-5 text-warning" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-black text-navy">Submission Volume</h2>
-                    <p className="text-xs text-muted">Writing and Speaking tasks submitted</p>
-                  </div>
-                </div>
-                <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <BarChart data={volumeData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
+                <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]" role="img" aria-label="Submission volume chart showing Writing and Speaking tasks submitted">
+                  <SrChartSummary>
+                    {hasVolumeData ? `Submission volume includes ${volumeData.length} weekly points.` : 'No submission-volume data is available yet.'}
+                  </SrChartSummary>
+                  {hasVolumeData ? (
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                      <BarChart data={volumeData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
                       <XAxis dataKey="week" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
                       <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
                       <Tooltip cursor={{ fill: CHART_COLORS.border }} contentStyle={CHART_TOOLTIP_STYLE} />
                       <Bar dataKey="submissions" name="Submissions" fill={CHART_COLORS.warning} radius={[6, 6, 0, 0]} barSize={32} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <ChartEmptyState
+                      title="No submissions yet"
+                      description="Submit Writing or Speaking work to see weekly volume and transfer practice."
+                    />
+                  )}
                 </div>
               </MotionSection>
             </div>

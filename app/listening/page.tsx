@@ -7,7 +7,6 @@ import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Headphones, H
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
@@ -16,6 +15,9 @@ import { getListeningHome, type ListeningHomeDto, type ListeningHomePaperDto, ty
 import { getListeningPathway, type ListeningPathwaySnapshot } from '@/lib/listening-authoring-api';
 import type { MockReport } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
+import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
 function titleCase(value: string | null | undefined) {
@@ -218,6 +220,8 @@ export default function ListeningHome() {
           highlights={heroHighlights}
         />
 
+        <LearnerSkillSwitcher compact />
+
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         {/* ── Course pathway recommendation ─────────────────────────
@@ -289,9 +293,7 @@ export default function ListeningHome() {
         ) : null}
 
         {loading ? (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {[1, 2, 3, 4].map((item) => <Skeleton key={item} className="h-56 rounded-[24px]" />)}
-          </div>
+          <LearnerSkeleton variant="dashboard" />
         ) : (
           <>
             <section>
@@ -326,13 +328,14 @@ export default function ListeningHome() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
-                  <p>{home?.emptyStates.activeAttempts ?? 'No in-progress Listening attempt.'}</p>
-                  <div className="mt-3 flex flex-wrap gap-4">
-                    <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open Mock Center <ArrowRight className="h-4 w-4" /></Link>
-                    <Link href="/study-plan" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">View Study Plan <ArrowRight className="h-4 w-4" /></Link>
-                  </div>
-                </div>
+                <LearnerEmptyState
+                  compact
+                  icon={History}
+                  title="No in-progress Listening attempt"
+                  description={home?.emptyStates.activeAttempts ?? 'Start a listening paper or mock to create a resumable attempt.'}
+                  primaryAction={{ label: 'Open Mock Center', href: '/mocks' }}
+                  secondaryAction={{ label: 'View Study Plan', href: '/study-plan' }}
+                />
               )}
             </section>
 
@@ -416,13 +419,13 @@ export default function ListeningHome() {
                   {tasks.map(taskToCard)}
                 </div>
               ) : (
-                <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
-                  <p>{home?.emptyStates.papers ?? 'No published Listening papers are ready yet.'}</p>
-                  <div className="mt-3 flex flex-wrap gap-4">
-                    <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Run a Full Mock <ArrowRight className="h-4 w-4" /></Link>
-                    <Link href="/study-plan" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Review Study Plan <ArrowRight className="h-4 w-4" /></Link>
-                  </div>
-                </div>
+                <LearnerEmptyState
+                  icon={Headphones}
+                  title="No published Listening papers are ready yet"
+                  description={home?.emptyStates.papers ?? 'Use mocks or your study plan while Listening papers are being prepared.'}
+                  primaryAction={{ label: 'Run a Full Mock', href: '/mocks' }}
+                  secondaryAction={{ label: 'Review Study Plan', href: '/study-plan' }}
+                />
               )}
             </section>
 
@@ -515,13 +518,14 @@ export default function ListeningHome() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
-                  <p>{home?.emptyStates.recentResults ?? 'Complete a Listening task to unlock transcript-backed review and canonical OET score display.'}</p>
-                  <div className="mt-3 flex flex-wrap gap-4">
-                    <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open Mock Center <ArrowRight className="h-4 w-4" /></Link>
-                    <Link href="/progress" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Track Progress <ArrowRight className="h-4 w-4" /></Link>
-                  </div>
-                </div>
+                <LearnerEmptyState
+                  compact
+                  icon={FileText}
+                  title="No Listening results yet"
+                  description={home?.emptyStates.recentResults ?? 'Complete a Listening task to unlock transcript-backed review and canonical OET score display.'}
+                  primaryAction={{ label: 'Open Mock Center', href: '/mocks' }}
+                  secondaryAction={{ label: 'Track Progress', href: '/progress' }}
+                />
               )}
             </section>
 
@@ -599,9 +603,14 @@ export default function ListeningHome() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
-                  Complete a mock to see Listening transfer evidence here.
-                </div>
+                <LearnerEmptyState
+                  compact
+                  icon={Sparkles}
+                  title="No Listening mock evidence yet"
+                  description="Complete a mock to see whether distractor control is improving under full exam load."
+                  primaryAction={{ label: 'Open Mock Center', href: '/mocks' }}
+                  secondaryAction={{ label: 'Track Progress', href: '/progress' }}
+                />
               )}
             </section>
           </>

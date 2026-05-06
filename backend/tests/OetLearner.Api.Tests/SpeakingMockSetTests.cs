@@ -89,6 +89,144 @@ public class SpeakingMockSetTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task SubmittingPairedAttempt_UpdatesMockSessionHalf_NotGenericAttempt()
+    {
+        var mockSetId = await EnsureSeedMockSetAsync();
+        const string userId = "speaking-mocks-submit-bound";
+        using var client = await CreateLearnerClientAsync(userId);
+
+        var startResponse = await client.PostAsJsonAsync(
+            $"/v1/speaking/mock-sets/{mockSetId}/start",
+            new { mode = "exam" });
+        startResponse.EnsureSuccessStatusCode();
+
+        using var startJson = JsonDocument.Parse(await startResponse.Content.ReadAsStringAsync());
+        var sessionId = startJson.RootElement.GetProperty("mockSessionId").GetString()!;
+        var role1 = startJson.RootElement.GetProperty("rolePlay1");
+        var role1AttemptId = role1.GetProperty("attemptId").GetString()!;
+        var role1ContentId = role1.GetProperty("contentId").GetString()!;
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var pairedAttempt = await db.Attempts.FirstAsync(a => a.Id == role1AttemptId);
+            pairedAttempt.AudioUploadState = UploadState.Uploaded;
+            pairedAttempt.AudioObjectKey = "audio/mock-session-bound-role1.webm";
+            await db.SaveChangesAsync();
+        }
+
+        var submitResponse = await client.PostAsync($"/v1/speaking/attempts/{role1AttemptId}/submit?contentId={role1ContentId}&mockSessionId={sessionId}", null);
+        submitResponse.EnsureSuccessStatusCode();
+
+        using var submitJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
+        Assert.Equal(role1AttemptId, submitJson.RootElement.GetProperty("attemptId").GetString());
+
+        var sessionResponse = await client.GetAsync($"/v1/speaking/mock-sessions/{sessionId}");
+        sessionResponse.EnsureSuccessStatusCode();
+        using var sessionJson = JsonDocument.Parse(await sessionResponse.Content.ReadAsStringAsync());
+        Assert.Equal(role1AttemptId, sessionJson.RootElement.GetProperty("rolePlay1").GetProperty("attemptId").GetString());
+        Assert.Equal("evaluating", sessionJson.RootElement.GetProperty("rolePlay1").GetProperty("state").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(sessionJson.RootElement.GetProperty("rolePlay1").GetProperty("evaluationId").GetString()));
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(2, await verifyDb.Attempts.CountAsync(a => a.ComparisonGroupId == sessionId));
+    }
+
+    [Fact]
+    public async Task SpeakingAttemptRoutes_NonSpeakingAttempt_Return404()
+    {
+        const string userId = "speaking-mocks-non-speaking-attempt";
+        var attemptId = $"wa-{Guid.NewGuid():N}";
+        using var client = await CreateLearnerClientAsync(userId);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.Attempts.Add(new Attempt
+            {
+                Id = attemptId,
+                UserId = userId,
+                ContentId = "wt-001",
+                SubtestCode = "writing",
+                Context = "practice",
+                Mode = "practice",
+                State = AttemptState.InProgress,
+                StartedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsync($"/v1/speaking/attempts/{attemptId}/audio/upload-session?contentId=wt-001", null);
+        var processingResponse = await client.GetAsync($"/v1/speaking/attempts/{attemptId}/processing");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, processingResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task SpeakingUploadSession_PairedAttemptWrongContentBinding_Returns400()
+    {
+        var mockSetId = await EnsureSeedMockSetAsync();
+        const string userId = "speaking-mocks-wrong-content-binding";
+        using var client = await CreateLearnerClientAsync(userId);
+        var (sessionId, role1AttemptId, _, role2ContentId) = await StartMockSessionAsync(client, mockSetId);
+
+        var response = await client.PostAsync($"/v1/speaking/attempts/{role1AttemptId}/audio/upload-session?contentId={role2ContentId}&mockSessionId={sessionId}", null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SpeakingSubmit_PairedAttemptWrongSessionBinding_Returns400()
+    {
+        var mockSetId = await EnsureSeedMockSetAsync();
+        const string userId = "speaking-mocks-wrong-session-binding";
+        using var client = await CreateLearnerClientAsync(userId);
+        var (_, role1AttemptId, role1ContentId, _) = await StartMockSessionAsync(client, mockSetId);
+
+        var response = await client.PostAsync($"/v1/speaking/attempts/{role1AttemptId}/submit?contentId={role1ContentId}&mockSessionId=sms-tampered", null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SpeakingUploadSession_CompletedAttempt_Returns409()
+    {
+        var mockSetId = await EnsureSeedMockSetAsync();
+        const string userId = "speaking-mocks-completed-reupload";
+        using var client = await CreateLearnerClientAsync(userId);
+        var (sessionId, role1AttemptId, role1ContentId, _) = await StartMockSessionAsync(client, mockSetId);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var attempt = await db.Attempts.FirstAsync(a => a.Id == role1AttemptId);
+            attempt.State = AttemptState.Completed;
+            attempt.AudioUploadState = UploadState.Uploaded;
+            attempt.AudioObjectKey = "audio/completed-speaking-attempt.webm";
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsync($"/v1/speaking/attempts/{role1AttemptId}/audio/upload-session?contentId={role1ContentId}&mockSessionId={sessionId}", null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SpeakingSubmit_ForeignLearnerAttempt_Returns404()
+    {
+        var mockSetId = await EnsureSeedMockSetAsync();
+        using var ownerClient = await CreateLearnerClientAsync("speaking-mocks-owner-attempt");
+        using var otherClient = await CreateLearnerClientAsync("speaking-mocks-other-attempt");
+        var (sessionId, role1AttemptId, role1ContentId, _) = await StartMockSessionAsync(ownerClient, mockSetId);
+
+        var response = await otherClient.PostAsync($"/v1/speaking/attempts/{role1AttemptId}/submit?contentId={role1ContentId}&mockSessionId={sessionId}", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task StartMockSet_FreeTier_SecondCallInWindow_Returns409()
     {
         var mockSetId = await EnsureSeedMockSetAsync();
@@ -251,6 +389,24 @@ public class SpeakingMockSetTests : IClassFixture<TestWebApplicationFactory>
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
         client.DefaultRequestHeaders.Add("X-Debug-Name", userId);
         return client;
+    }
+
+    private static async Task<(string SessionId, string Role1AttemptId, string Role1ContentId, string Role2ContentId)> StartMockSessionAsync(HttpClient client, string mockSetId)
+    {
+        var startResponse = await client.PostAsJsonAsync(
+            $"/v1/speaking/mock-sets/{mockSetId}/start",
+            new { mode = "exam" });
+        startResponse.EnsureSuccessStatusCode();
+
+        using var startJson = JsonDocument.Parse(await startResponse.Content.ReadAsStringAsync());
+        var sessionId = startJson.RootElement.GetProperty("mockSessionId").GetString()!;
+        var role1 = startJson.RootElement.GetProperty("rolePlay1");
+        var role2 = startJson.RootElement.GetProperty("rolePlay2");
+        return (
+            sessionId,
+            role1.GetProperty("attemptId").GetString()!,
+            role1.GetProperty("contentId").GetString()!,
+            role2.GetProperty("contentId").GetString()!);
     }
 
     private async Task<string> EnsureSeedMockSetAsync()

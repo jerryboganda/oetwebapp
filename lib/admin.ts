@@ -1,4 +1,5 @@
 import {
+  apiClient,
   fetchAdminAIConfig,
   fetchAdminCohortAnalysis,
   fetchAdminAuditLogDetail,
@@ -1419,6 +1420,10 @@ export async function getAdminBusinessIntelligenceData(): Promise<AdminBusinessI
     contentEffectiveness,
     expertEfficiency,
   };
+}
+
+export async function fetchAdminAlerts() {
+  return apiClient.get('/v1/admin/alerts');
 }
 
 function normalizeEfficiency(value: unknown): AdminExpertEfficiencyData['experts'][number]['efficiency'] {

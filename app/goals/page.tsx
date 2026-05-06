@@ -4,10 +4,11 @@ import { useRouter } from 'next/navigation';
 import { useForm, Controller, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Save, ArrowRight } from 'lucide-react';
-import { Button, Input, Select, Checkbox } from '@/components/ui';
-import { ProfessionSelector } from '@/components/domain';
+import { Save, ArrowRight, CalendarDays, Stethoscope, Target } from 'lucide-react';
+import { Button, Card, Checkbox, Input, Select } from '@/components/ui';
+import { LearnerPageHero, LearnerSurfaceSectionHeader, ProfessionSelector } from '@/components/domain';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { type ExamFamilyCode, type SubTest } from '@/lib/mock-data';
 import { fetchExamFamilies, fetchUserProfile, updateUserProfile } from '@/lib/api';
@@ -260,17 +261,28 @@ export default function GoalSetupPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Set Your Goals">
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold text-navy">Set your study goals</h1>
-          <p className="text-muted mt-1">
-            Help us personalise your study plan. Profession and target country are required - you can update them anytime in Settings.
-          </p>
-        </div>
+      <div className="space-y-6">
+        <LearnerPageHero
+          eyebrow="Goal Setup"
+          icon={Target}
+          accent="primary"
+          title="Set the signals your study plan should follow"
+          description="Tell the platform your exam, profession, target country, and weekly commitment so diagnostics and study-plan pacing stay relevant."
+          highlights={[
+            { icon: Stethoscope, label: 'Profession', value: watch('profession') || 'Required' },
+            { icon: CalendarDays, label: 'Exam date', value: watch('examDate') || 'Not scheduled' },
+            { icon: Target, label: 'Target country', value: watch('targetCountry') || 'Required' },
+          ]}
+        />
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-          <section className="space-y-4">
-            <h2 className="text-lg font-semibold text-navy">Exam Focus</h2>
+        <LearnerSkillSwitcher compact />
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <Card className="space-y-4">
+            <LearnerSurfaceSectionHeader
+              title="Exam Focus"
+              description="Choose the exam family that should shape score ranges and preparation copy."
+            />
             <Select
               label="Exam Family"
               options={examFamilyOptions}
@@ -288,10 +300,13 @@ export default function GoalSetupPage() {
               />
             )}
             <p className="text-sm text-muted">{examFamilyCopy.helperText}</p>
-          </section>
+          </Card>
 
-          <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-navy">Profession</h2>
+          <Card className="space-y-3">
+            <LearnerSurfaceSectionHeader
+              title="Profession"
+              description="Profession controls the OET context used throughout learner practice."
+            />
             <Controller
               name="profession"
               control={control}
@@ -305,10 +320,13 @@ export default function GoalSetupPage() {
             {errors.profession && (
               <p className="text-xs text-danger">{errors.profession.message}</p>
             )}
-          </section>
+          </Card>
 
-          <section className="space-y-4">
-            <h2 className="text-lg font-semibold text-navy">Exam Details</h2>
+          <Card className="space-y-4">
+            <LearnerSurfaceSectionHeader
+              title="Exam Details"
+              description="These details help prioritize readiness, review timing, and the diagnostic route."
+            />
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="Exam Date"
@@ -334,11 +352,13 @@ export default function GoalSetupPage() {
               {...register('previousAttempts')}
               error={errors.previousAttempts?.message}
             />
-          </section>
+          </Card>
 
-          <section className="space-y-4">
-            <h2 className="text-lg font-semibold text-navy">Target Scores (optional)</h2>
-            <p className="text-sm text-muted">{examFamilyCopy.scoreHint} Leave blank if you are not ready to set a target yet.</p>
+          <Card className="space-y-4">
+            <LearnerSurfaceSectionHeader
+              title="Target Scores (optional)"
+              description={examFamilyCopy.scoreHint + ' Leave blank if you are not ready to set a target yet.'}
+            />
             <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
               {SUB_TESTS.map((subTest) => (
                 <Input
@@ -361,10 +381,13 @@ export default function GoalSetupPage() {
                 />
               ))}
             </div>
-          </section>
+          </Card>
 
-          <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-navy">Which sub-tests feel hardest?</h2>
+          <Card className="space-y-3">
+            <LearnerSurfaceSectionHeader
+              title="Which sub-tests feel hardest?"
+              description="This helps surface practice recommendations before enough scored evidence exists."
+            />
             <div className="grid gap-2 grid-cols-2">
               {SUB_TESTS.map((subTest) => (
                 <Checkbox
@@ -375,10 +398,13 @@ export default function GoalSetupPage() {
                 />
               ))}
             </div>
-          </section>
+          </Card>
 
-          <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-navy">Study Commitment</h2>
+          <Card className="space-y-3">
+            <LearnerSurfaceSectionHeader
+              title="Study Commitment"
+              description="Weekly study hours pace the study plan so recommendations stay realistic."
+            />
             <Input
               label={examFamilyCopy.studyLabel}
               type="number"
@@ -389,15 +415,19 @@ export default function GoalSetupPage() {
               {...register('studyHoursPerWeek')}
               error={errors.studyHoursPerWeek?.message}
             />
-          </section>
+          </Card>
 
-          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
+          <Card className="flex flex-col gap-4 border-primary/20 bg-primary/5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-bold text-navy">Ready to turn goals into evidence?</p>
+              <p className="mt-1 text-sm text-muted">Saving sends you to the diagnostic flow so your plan can start with a baseline.</p>
+            </div>
             <Button type="submit" variant="primary" loading={saving} fullWidth className="sm:w-auto">
               <Save className="w-4 h-4 mr-2" />
               Save & Continue to Diagnostic
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
-          </div>
+          </Card>
         </form>
       </div>
     </LearnerDashboardShell>

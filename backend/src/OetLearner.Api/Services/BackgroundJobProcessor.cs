@@ -16,12 +16,23 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             {
                 await ProcessOnceAsync(stoppingToken);
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Background job processing failed");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 
@@ -1187,13 +1198,38 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         var now = DateTimeOffset.UtcNow;
         var renewalWindow = now.AddDays(7);
 
-        // Renewal reminders: Active subscriptions renewing within 7 days
-        var renewingSoon = await db.Subscriptions
-            .AsNoTracking()
-            .Where(s => s.Status == SubscriptionStatus.Active
-                && s.NextRenewalAt > now
-                && s.NextRenewalAt <= renewalWindow)
-            .ToListAsync(cancellationToken);
+        List<Subscription> renewingSoon;
+        List<Subscription> expired;
+        if (db.Database.IsSqlite())
+        {
+            var activeSubscriptions = await db.Subscriptions
+                .AsNoTracking()
+                .Where(subscription => subscription.Status == SubscriptionStatus.Active)
+                .ToListAsync(cancellationToken);
+
+            renewingSoon = activeSubscriptions
+                .Where(subscription => subscription.NextRenewalAt > now && subscription.NextRenewalAt <= renewalWindow)
+                .ToList();
+            expired = activeSubscriptions
+                .Where(subscription => subscription.NextRenewalAt <= now)
+                .ToList();
+        }
+        else
+        {
+            // Renewal reminders: Active subscriptions renewing within 7 days
+            renewingSoon = await db.Subscriptions
+                .AsNoTracking()
+                .Where(subscription => subscription.Status == SubscriptionStatus.Active
+                    && subscription.NextRenewalAt > now
+                    && subscription.NextRenewalAt <= renewalWindow)
+                .ToListAsync(cancellationToken);
+
+            expired = await db.Subscriptions
+                .AsNoTracking()
+                .Where(subscription => subscription.Status == SubscriptionStatus.Active
+                    && subscription.NextRenewalAt <= now)
+                .ToListAsync(cancellationToken);
+        }
 
         foreach (var sub in renewingSoon)
         {
@@ -1211,13 +1247,6 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 },
                 cancellationToken);
         }
-
-        // Expired subscriptions: status should be flipped to expired
-        var expired = await db.Subscriptions
-            .AsNoTracking()
-            .Where(s => s.Status == SubscriptionStatus.Active
-                && s.NextRenewalAt <= now)
-            .ToListAsync(cancellationToken);
 
         foreach (var sub in expired)
         {
@@ -1253,15 +1282,31 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             _ => 72
         };
 
-        var approachingDeadline = await db.ReviewRequests
-            .AsNoTracking()
-            .Where(r => r.State == ReviewRequestState.InReview)
-            .Join(
-                db.ExpertReviewAssignments.AsNoTracking().Where(a => a.ClaimState == ExpertAssignmentState.Claimed && a.AssignedReviewerId != null),
-                r => r.Id,
-                a => a.ReviewRequestId,
-                (r, a) => new { Request = r, Assignment = a })
-            .ToListAsync(cancellationToken);
+        var approachingDeadline = db.Database.IsSqlite()
+            ? (await db.ReviewRequests
+                    .AsNoTracking()
+                    .Where(request => request.State == ReviewRequestState.InReview)
+                    .ToListAsync(cancellationToken))
+                .Join(
+                    (await db.ExpertReviewAssignments
+                            .AsNoTracking()
+                            .Where(assignment => assignment.ClaimState == ExpertAssignmentState.Claimed
+                                && assignment.AssignedReviewerId != null)
+                            .ToListAsync(cancellationToken))
+                        .Where(assignment => !string.IsNullOrWhiteSpace(assignment.AssignedReviewerId)),
+                    request => request.Id,
+                    assignment => assignment.ReviewRequestId,
+                    (request, assignment) => new { Request = request, Assignment = assignment })
+                .ToList()
+            : await db.ReviewRequests
+                .AsNoTracking()
+                .Where(request => request.State == ReviewRequestState.InReview)
+                .Join(
+                    db.ExpertReviewAssignments.AsNoTracking().Where(assignment => assignment.ClaimState == ExpertAssignmentState.Claimed && assignment.AssignedReviewerId != null),
+                    request => request.Id,
+                    assignment => assignment.ReviewRequestId,
+                    (request, assignment) => new { Request = request, Assignment = assignment })
+                .ToListAsync(cancellationToken);
 
         foreach (var item in approachingDeadline)
         {
@@ -1313,11 +1358,18 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
 
         // Inactive learner nudge: no activity in 7 days
         var inactiveThreshold = now.AddDays(-7);
-        var inactiveLearners = await db.Users
-            .AsNoTracking()
-            .Where(u => u.LastActiveAt < inactiveThreshold
-                && u.Role == ApplicationUserRoles.Learner)
-            .ToListAsync(cancellationToken);
+        var inactiveLearners = db.Database.IsSqlite()
+            ? (await db.Users
+                .AsNoTracking()
+                .Where(user => user.Role == ApplicationUserRoles.Learner)
+                .ToListAsync(cancellationToken))
+                .Where(user => user.LastActiveAt < inactiveThreshold)
+                .ToList()
+            : await db.Users
+                .AsNoTracking()
+                .Where(user => user.LastActiveAt < inactiveThreshold
+                    && user.Role == ApplicationUserRoles.Learner)
+                .ToListAsync(cancellationToken);
 
         foreach (var user in inactiveLearners)
         {

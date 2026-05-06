@@ -47,8 +47,8 @@ public static class AdminEndpoints
         // ── Content Management ──────────────────────────────
 
         admin.MapGet("/content", async (HttpContext http, AdminService service, CancellationToken ct,
-            string? type, string? profession, string? status, string? search, int? page, int? pageSize)
-            => Results.Ok(await service.GetContentListAsync(type, profession, status, search, page ?? 1, pageSize ?? 20, ct)))
+            string? type, string? subtest, string? profession, string? status, string? search, int? page, int? pageSize)
+            => Results.Ok(await service.GetContentListAsync(type, subtest, profession, status, search, page ?? 1, pageSize ?? 20, ct)))
             .WithAdminRead("AdminContentRead");
 
         admin.MapGet("/content/{contentId}", async (string contentId, AdminService service, CancellationToken ct)

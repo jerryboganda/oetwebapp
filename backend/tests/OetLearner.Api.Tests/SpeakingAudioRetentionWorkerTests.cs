@@ -1,5 +1,10 @@
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Speaking;
@@ -19,6 +24,44 @@ public class SpeakingAudioRetentionWorkerTests : IClassFixture<FirstPartyAuthTes
     public SpeakingAudioRetentionWorkerTests(FirstPartyAuthTestWebApplicationFactory factory)
     {
         _factory = factory;
+    }
+
+    [Fact]
+    public void ProductionServiceProvider_RegistersSpeakingAudioRetentionWorker()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Development");
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["ConnectionStrings:DefaultConnection"] = $"InMemory:speaking-retention-registration-{Guid.NewGuid():N}",
+                        ["Auth:UseDevelopmentAuth"] = "true",
+                        ["Bootstrap:AutoMigrate"] = "false",
+                        ["Bootstrap:SeedDemoData"] = "false",
+                        ["Platform:PublicApiBaseUrl"] = "http://localhost",
+                        ["Platform:PublicWebBaseUrl"] = "http://localhost",
+                        ["Billing:CheckoutBaseUrl"] = "https://app.example.test/billing/checkout",
+                        ["Storage:LocalRootPath"] = Path.Combine(Path.GetTempPath(), $"speaking-retention-registration-{Guid.NewGuid():N}"),
+                    });
+                });
+                builder.ConfigureTestServices(services =>
+                {
+                    for (var index = services.Count - 1; index >= 0; index--)
+                    {
+                        if (services[index].ServiceType == typeof(IHostedService)
+                            && services[index].ImplementationType != typeof(SpeakingAudioRetentionWorker))
+                        {
+                            services.RemoveAt(index);
+                        }
+                    }
+                });
+            });
+
+        var hostedServices = factory.Services.GetServices<IHostedService>();
+        Assert.Contains(hostedServices, service => service is SpeakingAudioRetentionWorker);
     }
 
     [Fact]

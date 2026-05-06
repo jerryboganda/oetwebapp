@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { AppShell, ExpertDashboardShell, type MobileMenuSection } from '@/components/layout';
 import type { NavItem } from '@/components/layout/sidebar';
-import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket } from 'lucide-react';
+import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket, MessageSquare, DollarSign } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
 
@@ -15,6 +15,8 @@ const expertNavItems: NavItem[] = [
   { href: '/expert/schedule', label: 'Schedule', icon: <CalendarClock className="w-5 h-5" />, matchPrefix: '/expert/schedule' },
   { href: '/expert/learners', label: 'Learners', icon: <Users className="w-5 h-5" />, matchPrefix: '/expert/learners' },
   { href: '/expert/private-speaking', label: 'Private Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/expert/private-speaking' },
+  { href: '/expert/messages', label: 'Messages', icon: <MessageSquare className="w-5 h-5" />, matchPrefix: '/expert/messages' },
+  { href: '/expert/compensation', label: 'Compensation', icon: <DollarSign className="w-5 h-5" />, matchPrefix: '/expert/compensation' },
 ];
 
 const onboardingNavItem: NavItem = {
@@ -51,6 +53,14 @@ function getExpertPageTitle(pathname: string | null): string | undefined {
 
   if (pathname.startsWith('/expert/private-speaking')) {
     return 'Private Speaking';
+  }
+
+  if (pathname.startsWith('/expert/messages')) {
+    return 'Messages';
+  }
+
+  if (pathname.startsWith('/expert/compensation')) {
+    return 'Compensation';
   }
 
   if (pathname.startsWith('/expert/onboarding')) {

@@ -107,6 +107,69 @@ describe('learner route normalization', () => {
   });
 });
 
+describe('speaking API helpers', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  it('uses an existing mock-session attempt id when submitting a speaking recording', async () => {
+    const calls: Array<{ url: string; method: string; body?: unknown }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = String(init?.method ?? 'GET');
+      calls.push({
+        url,
+        method,
+        body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+      });
+
+      if (url.includes('/audio/upload-session')) {
+        return new Response(JSON.stringify({ uploadUrl: '/v1/speaking/upload-sessions/us-bound/content', uploadSessionId: 'us-bound' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/audio/complete')) {
+        return new Response(JSON.stringify({ attemptId: 'sa-bound-mock-1', canSubmit: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/submit')) {
+        return new Response(JSON.stringify({ attemptId: 'sa-bound-mock-1', evaluationId: 'se-bound-mock-1', state: 'queued' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      return new Response(null, { status: 204 });
+    });
+
+    const { submitSpeakingRecording } = await import('../api');
+    const result = await submitSpeakingRecording(
+      'st-001',
+      new Blob(['audio'], { type: 'audio/webm' }),
+      123,
+      'exam',
+      { accepted: true, text: 'Consent accepted' },
+      { attemptId: 'sa-bound-mock-1', mockSessionId: 'sms-bound-mock-1' },
+    );
+
+    expect(result.submissionId).toBe('se-bound-mock-1');
+    expect(calls.some((call) => call.url.endsWith('/v1/speaking/attempts') && call.method === 'POST')).toBe(false);
+    expect(calls.map((call) => call.url)).toEqual(expect.arrayContaining([
+      expect.stringContaining('/v1/speaking/attempts/sa-bound-mock-1/audio/upload-session?contentId=st-001&mockSessionId=sms-bound-mock-1'),
+      expect.stringContaining('/v1/speaking/attempts/sa-bound-mock-1/audio/complete?contentId=st-001&mockSessionId=sms-bound-mock-1'),
+      expect.stringContaining('/v1/speaking/attempts/sa-bound-mock-1/submit?contentId=st-001&mockSessionId=sms-bound-mock-1'),
+    ]));
+  });
+});
+
 describe('billing wallet top-up API helper', () => {
   const originalFetch = globalThis.fetch;
 

@@ -85,10 +85,12 @@ public sealed class SpeakingAudioRetentionWorker(
             return 0;
         }
 
+        var clearedAttempts = 0;
         var deletedBlobs = 0;
         foreach (var attempt in due)
         {
             var key = attempt.AudioObjectKey!;
+            var canClearPointer = true;
             try
             {
                 if (media.Exists(key))
@@ -102,16 +104,28 @@ public sealed class SpeakingAudioRetentionWorker(
                 logger.LogWarning(ex,
                     "Failed to delete speaking audio blob {Key} for attempt {AttemptId}",
                     key, attempt.Id);
+                canClearPointer = false;
+            }
+
+            if (!canClearPointer)
+            {
+                continue;
             }
 
             attempt.AudioObjectKey = null;
+            clearedAttempts++;
+        }
+
+        if (clearedAttempts == 0)
+        {
+            return 0;
         }
 
         await db.SaveChangesAsync(ct);
         logger.LogInformation(
             "Speaking audio retention sweep cleared {Count} attempts, deleted {Blobs} blobs.",
-            due.Count, deletedBlobs);
+            clearedAttempts, deletedBlobs);
 
-        return due.Count;
+        return clearedAttempts;
     }
 }

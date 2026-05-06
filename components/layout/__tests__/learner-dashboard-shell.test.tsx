@@ -34,4 +34,27 @@ describe('LearnerDashboardShell', () => {
       'Learn',
     ]);
   });
+
+  it('adds learner breadcrumbs on non-immersive workspace routes', () => {
+    renderWithRouter(
+      <LearnerDashboardShell pageTitle="Writing result">
+        <div>Writing Result</div>
+      </LearnerDashboardShell>,
+      { pathname: '/writing/result' },
+    );
+
+    expect(screen.getByRole('navigation', { name: /breadcrumb/i })).toBeInTheDocument();
+    expect(screen.getByText('Result')).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('does not render breadcrumbs in distraction-free mode', () => {
+    renderWithRouter(
+      <LearnerDashboardShell pageTitle="Writing player" distractionFree>
+        <div>Writing Player</div>
+      </LearnerDashboardShell>,
+      { pathname: '/writing/player' },
+    );
+
+    expect(screen.queryByRole('navigation', { name: /breadcrumb/i })).not.toBeInTheDocument();
+  });
 });

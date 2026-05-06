@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Trophy, Flame, Star, Zap, Lock } from 'lucide-react';
+import { Trophy, Flame, Star, Zap, Lock, ShieldCheck } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
@@ -10,6 +10,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
+import { LearnerFreshnessIndicator } from '@/components/domain/learner-freshness-indicator';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { fetchXP, fetchStreak, fetchAchievements, applyStreakFreeze } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -78,21 +81,33 @@ export default function AchievementsPage() {
   const filtered = filter === 'all' ? achievements : achievements.filter(a => a.category === filter);
   const unlocked = filtered.filter(a => a.unlocked);
   const locked = filtered.filter(a => !a.unlocked);
+  const unlockedTotal = achievements.filter(a => a.unlocked).length;
+  const latestUnlock = achievements
+    .filter((achievement) => achievement.unlockedAt)
+    .sort((first, second) => new Date(second.unlockedAt ?? '').getTime() - new Date(first.unlockedAt ?? '').getTime())[0]?.unlockedAt ?? null;
 
   return (
-    <LearnerDashboardShell>
-      <LearnerPageHero
-        title="Achievements"
-        description="Track your progress, streaks, and milestones"
-        icon={Trophy}
-      />
+    <LearnerDashboardShell pageTitle="Achievements">
+      <div className="space-y-6">
+        <LearnerPageHero
+          eyebrow="Momentum"
+          title="Achievements, streaks, and XP in one place"
+          description="Track the proof of consistent practice and see which milestones are still locked."
+          icon={Trophy}
+          accent="amber"
+          highlights={[
+            { icon: Zap, label: 'Level', value: xp ? String(xp.level) : loading ? 'Loading...' : 'Pending' },
+            { icon: Flame, label: 'Current streak', value: streak ? `${streak.currentStreak} days` : loading ? 'Loading...' : 'Pending' },
+            { icon: ShieldCheck, label: 'Unlocked', value: achievements.length ? `${unlockedTotal}/${achievements.length}` : loading ? 'Loading...' : 'No badges yet' },
+          ]}
+          aside={<LearnerFreshnessIndicator updatedAt={latestUnlock} staleAfterMinutes={10080} />}
+        />
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+        {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 
-      {/* XP + Streak summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {loading ? (
-          Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)
+          <div className="md:col-span-3"><LearnerSkeleton variant="card-grid" /></div>
         ) : (
           <>
             <MotionItem delayIndex={0}>
@@ -160,18 +175,26 @@ export default function AchievementsPage() {
         )}
       </div>
 
-      {/* Category filter */}
-      <div className="flex flex-wrap items-center gap-2 bg-background-light p-1.5 rounded-xl border border-border mb-6">
-        {categories.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setFilter(cat)}
-            className={`px-4 py-1.5 text-xs font-bold rounded-lg capitalize transition-colors ${filter === cat ? 'bg-surface text-navy shadow-sm' : 'text-muted hover:text-navy'}`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
+        <section className="space-y-4">
+          <LearnerSurfaceSectionHeader
+            title="Achievement Library"
+            description="Filter earned and locked badges without losing your current progress context."
+            action={(
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-background-light p-1.5" role="group" aria-label="Achievement category filters">
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setFilter(cat)}
+                    aria-pressed={filter === cat}
+                    className={`px-4 py-1.5 text-xs font-bold rounded-lg capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${filter === cat ? 'bg-surface text-navy shadow-sm' : 'text-muted hover:text-navy'}`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+          />
 
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -179,6 +202,16 @@ export default function AchievementsPage() {
         </div>
       ) : (
         <>
+          {filtered.length === 0 ? (
+            <LearnerEmptyState
+              icon={Trophy}
+              title="No achievements in this category yet"
+              description="Keep practicing or switch filters to review the full achievement library."
+              primaryAction={{ label: 'Start Practice', href: '/study-plan' }}
+              secondaryAction={{ label: 'Show All', onClick: () => setFilter('all') }}
+            />
+          ) : null}
+
           {unlocked.length > 0 && (
             <>
               <LearnerSurfaceSectionHeader title={`Unlocked (${unlocked.length})`} />
@@ -230,6 +263,8 @@ export default function AchievementsPage() {
           )}
         </>
       )}
+        </section>
+      </div>
     </LearnerDashboardShell>
   );
 }

@@ -169,8 +169,8 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
     );
   }
 
-  const role1Url = `/speaking/task/${session.rolePlay1.contentId}?mode=exam&mockSession=${session.mockSessionId}`;
-  const role2Url = `/speaking/task/${session.rolePlay2.contentId}?mode=exam&mockSession=${session.mockSessionId}`;
+  const role1Url = `/speaking/task/${session.rolePlay1.contentId}?mode=exam&mockSession=${session.mockSessionId}&attemptId=${session.rolePlay1.attemptId}`;
+  const role2Url = `/speaking/task/${session.rolePlay2.contentId}?mode=exam&mockSession=${session.mockSessionId}&attemptId=${session.rolePlay2.attemptId}`;
 
   return (
     <LearnerDashboardShell pageTitle="Speaking mock set">

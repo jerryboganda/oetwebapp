@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -291,8 +292,18 @@ public class ContentBulkImportE2ETests
             .ToList();
         await svc.CommitAsync("admin-1", session.SessionId, approvals, default);
 
-        // Publish Writing 1 (needs CaseNotes primary — already attached)
+        // Publish Writing 1 after authoring the learner-facing structure that
+        // the production writing publish gate requires.
         var w1 = await db.ContentPapers.FirstAsync(p => p.Title.Contains("Writing 1"));
+        w1.ExtractedTextJson = WritingContentStructure.ReplaceStructure(w1.ExtractedTextJson, JsonDocument.Parse("""
+        {
+            "letterType": "routine_referral",
+            "taskPrompt": "Write a routine referral letter to the receiving GP using the case notes provided.",
+            "caseNotes": "Patient: Ms Sarah Miller. Purpose: routine referral. Include relevant clinical background, current status, and follow-up request.",
+            "modelAnswer": "Dear Doctor,\n\nI am writing to refer Ms Sarah Miller for ongoing review following her recent presentation. Please assess her current symptoms, medication response, and any follow-up needs.\n\nYours sincerely,\nNurse"
+        }
+        """).RootElement);
+        await db.SaveChangesAsync();
         await paperSvc.PublishAsync(w1.Id, "admin-1", default);
 
         var published = await db.ContentPapers.FirstAsync(p => p.Id == w1.Id);

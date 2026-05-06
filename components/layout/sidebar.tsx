@@ -81,10 +81,12 @@ export const learnNavItems: NavItem[] = [
 
 export const mobileNavItems: NavItem[] = [
   mainNavItems[0], // Dashboard
+  mainNavItems[1], // Study Plan
   mainNavItems[2], // Writing
   mainNavItems[3], // Speaking
   mainNavItems[4], // Reading
   mainNavItems[5], // Listening
+  mainNavItems[6], // Mocks
 ];
 
 function isActive(pathname: string | null, item: NavItem): boolean {
@@ -308,7 +310,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
       layout={!reducedMotion}
       {...bottomNavMotion}
     >
-      <ul className="grid grid-cols-5 gap-1">
+      <ul className="grid auto-cols-[4.75rem] grid-flow-col gap-1 overflow-x-auto overscroll-x-contain sm:auto-cols-fr sm:grid-flow-row sm:grid-cols-7">
         {items.map((item) => {
           const active = isActive(pathname, item);
           return (

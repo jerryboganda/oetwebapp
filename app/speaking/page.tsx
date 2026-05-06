@@ -5,15 +5,16 @@ import { ArrowRight, Award, BookOpen, Clock, FileText, Heart, Mic, RefreshCw, St
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { fetchSpeakingHome, fetchSubmissions, fetchMockReports, type SpeakingHome } from '@/lib/api';
 import type { Submission, MockReport } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
+import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
 interface SpeakingLatestEvaluationDto {
@@ -74,24 +75,7 @@ export default function SpeakingHome() {
   if (loading) {
     return (
       <LearnerDashboardShell pageTitle="Speaking">
-        <div className="space-y-6">
-          <Skeleton className="h-48 w-full rounded-[24px]" />
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Skeleton className="h-72 w-full rounded-[24px]" />
-            <Skeleton className="h-72 w-full rounded-[24px]" />
-          </div>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <div className="space-y-6 lg:col-span-8">
-              <Skeleton className="h-24 w-full rounded-2xl" />
-              <Skeleton className="h-24 w-full rounded-2xl" />
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Skeleton className="h-60 w-full rounded-[24px]" />
-                <Skeleton className="h-60 w-full rounded-[24px]" />
-              </div>
-            </div>
-            <Skeleton className="h-[420px] w-full rounded-[24px] lg:col-span-4" />
-          </div>
-        </div>
+        <LearnerSkeleton variant="dashboard" />
       </LearnerDashboardShell>
     );
   }
@@ -172,6 +156,8 @@ export default function SpeakingHome() {
             { icon: Volume2, label: 'Drill groups', value: drillGroups.length > 0 ? `${drillGroups.length} available` : 'No drills yet' },
           ]}
         />
+
+        <LearnerSkillSwitcher compact />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
@@ -287,10 +273,14 @@ export default function SpeakingHome() {
               />
 
               {scenarioTasks.length === 0 ? (
-                <Card className="p-6">
-                  <p className="text-sm font-semibold text-navy">No extra role plays yet.</p>
-                  <p className="mt-1 text-sm text-muted">Use the library to browse more speaking scenarios once they are available.</p>
-                </Card>
+                <LearnerEmptyState
+                  compact
+                  icon={Mic}
+                  title="No extra role plays yet"
+                  description="Use the library to browse more speaking scenarios once they are available, or start with the recommended speaking path above."
+                  primaryAction={{ label: 'Open Speaking Library', href: '/speaking/selection' }}
+                  secondaryAction={{ label: 'Track Progress', href: '/progress' }}
+                />
               ) : (
                 <div className="flex flex-col gap-3">
                   {scenarioTasks.map((task, index) => {
@@ -417,12 +407,14 @@ export default function SpeakingHome() {
               />
 
               {evidenceItems.length === 0 ? (
-                <Card className="p-6 text-center">
-                  <Mic className="w-8 h-8 text-muted mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-navy">No speaking attempts yet.</p>
-                  <p className="mt-1 text-sm text-muted">Start a role play to build the first piece of speaking evidence.</p>
-                  <Link href="/speaking/selection" className="text-sm font-bold text-primary mt-3 inline-block">Open Speaking Library</Link>
-                </Card>
+                <LearnerEmptyState
+                  compact
+                  icon={Mic}
+                  title="No speaking attempts yet"
+                  description="Start a role play to build the first piece of speaking evidence."
+                  primaryAction={{ label: 'Open Speaking Library', href: '/speaking/selection' }}
+                  secondaryAction={{ label: 'Start AI Conversation', href: '/conversation' }}
+                />
               ) : (
                 <Card className="p-5">
                   <div className="space-y-3">
@@ -489,13 +481,14 @@ export default function SpeakingHome() {
               ))}
             </div>
           ) : (
-            <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
-              <p>Complete a mock to see speaking transfer evidence here.</p>
-              <div className="mt-3 flex flex-wrap gap-4">
-                <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open Mock Center <ArrowRight className="h-4 w-4" /></Link>
-                <Link href="/progress" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Track Progress <ArrowRight className="h-4 w-4" /></Link>
-              </div>
-            </div>
+            <LearnerEmptyState
+              compact
+              icon={Award}
+              title="No speaking mock evidence yet"
+              description="Complete a mock to see whether your speaking gains transfer under full exam pressure."
+              primaryAction={{ label: 'Open Mock Center', href: '/mocks' }}
+              secondaryAction={{ label: 'Track Progress', href: '/progress' }}
+            />
           )}
         </MotionSection>
       </div>

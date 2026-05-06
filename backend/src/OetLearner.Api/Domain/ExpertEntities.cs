@@ -293,3 +293,195 @@ public class ScheduleException
 
     public DateTimeOffset CreatedAt { get; set; }
 }
+
+/// <summary>Records an amendment to a submitted expert review.</summary>
+[Index(nameof(ReviewRequestId))]
+public class ExpertReviewAmend
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReviewRequestId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReviewerId { get; set; } = default!;
+
+    public string BeforeSnapshotJson { get; set; } = "{}";
+
+    public string AfterSnapshotJson { get; set; } = "{}";
+
+    public int AmendNumber { get; set; } = 1;
+
+    public DateTimeOffset AmendedAt { get; set; }
+}
+
+/// <summary>Compensation rate configured per expert per subtest.</summary>
+[Index(nameof(ExpertId))]
+public class ExpertCompensationRate
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ExpertId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string SubtestCode { get; set; } = default!;
+
+    public long RateMinorUnits { get; set; }
+
+    [MaxLength(3)]
+    public string Currency { get; set; } = "GBP";
+
+    public DateTimeOffset EffectiveFrom { get; set; }
+
+    public DateTimeOffset? EffectiveTo { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>Earnings accrued per completed review.</summary>
+[Index(nameof(ExpertId))]
+[Index(nameof(ReviewRequestId))]
+public class ExpertEarning
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ExpertId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReviewRequestId { get; set; } = default!;
+
+    public long AmountMinorUnits { get; set; }
+
+    [MaxLength(3)]
+    public string Currency { get; set; } = "GBP";
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "pending";
+
+    public DateTimeOffset EarnedAt { get; set; }
+
+    public DateTimeOffset? PaidOutAt { get; set; }
+
+    [MaxLength(64)]
+    public string? PayoutId { get; set; }
+}
+
+/// <summary>Batch payout to an expert.</summary>
+[Index(nameof(ExpertId))]
+public class ExpertPayout
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ExpertId { get; set; } = default!;
+
+    public long TotalAmountMinorUnits { get; set; }
+
+    [MaxLength(3)]
+    public string Currency { get; set; } = "GBP";
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "pending";
+
+    [MaxLength(64)]
+    public string? ApprovedByAdminId { get; set; }
+
+    public DateTimeOffset? ApprovedAt { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>Thread-based messaging between expert and admin team.</summary>
+[Index(nameof(ExpertId))]
+public class ExpertMessageThread
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ExpertId { get; set; } = default!;
+
+    [MaxLength(200)]
+    public string Title { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "open";
+
+    [MaxLength(64)]
+    public string? LinkedReviewRequestId { get; set; }
+
+    [MaxLength(64)]
+    public string? LinkedCalibrationCaseId { get; set; }
+
+    [MaxLength(64)]
+    public string? LinkedLearnerId { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>Individual reply within an expert-admin message thread.</summary>
+[Index(nameof(ThreadId))]
+public class ExpertMessageReply
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ThreadId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string AuthorId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string AuthorRole { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string AuthorName { get; set; } = default!;
+
+    [MaxLength(4000)]
+    public string Body { get; set; } = default!;
+
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>Per-review SLA compliance snapshot for operational visibility.</summary>
+[Index(nameof(ReviewRequestId))]
+public class ExpertSlaSnapshot
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReviewRequestId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ExpertId { get; set; } = default!;
+
+    public DateTimeOffset SlaDueAt { get; set; }
+
+    public DateTimeOffset? CompletedAt { get; set; }
+
+    public bool WasMet { get; set; }
+
+    public double? TurnaroundHours { get; set; }
+
+    [MaxLength(32)]
+    public string SlaState { get; set; } = "on_track";
+
+    public DateTimeOffset CreatedAt { get; set; }
+}

@@ -251,6 +251,13 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ExpertAnnotationTemplate> ExpertAnnotationTemplates => Set<ExpertAnnotationTemplate>();
     public DbSet<ExpertReviewerPayout> ExpertReviewerPayouts => Set<ExpertReviewerPayout>();
     public DbSet<ScheduleException> ScheduleExceptions => Set<ScheduleException>();
+    public DbSet<ExpertReviewAmend> ExpertReviewAmends => Set<ExpertReviewAmend>();
+    public DbSet<ExpertMessageThread> ExpertMessageThreads => Set<ExpertMessageThread>();
+    public DbSet<ExpertMessageReply> ExpertMessageReplies => Set<ExpertMessageReply>();
+    public DbSet<ExpertCompensationRate> ExpertCompensationRates => Set<ExpertCompensationRate>();
+    public DbSet<ExpertEarning> ExpertEarnings => Set<ExpertEarning>();
+    public DbSet<ExpertPayout> ExpertPayouts => Set<ExpertPayout>();
+    public DbSet<ExpertSlaSnapshot> ExpertSlaSnapshots => Set<ExpertSlaSnapshot>();
     public DbSet<StudyCommitment> StudyCommitments => Set<StudyCommitment>();
     public DbSet<LearnerCertificate> LearnerCertificates => Set<LearnerCertificate>();
 

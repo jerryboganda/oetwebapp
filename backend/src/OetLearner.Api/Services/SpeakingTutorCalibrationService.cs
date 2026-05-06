@@ -174,7 +174,8 @@ public class SpeakingTutorCalibrationService(LearnerDbContext db)
                 r => r.Id,
                 (a, r) => new { a, r })
             .AnyAsync(x => x.r.AttemptId == attemptId
-                        && x.a.AssignedReviewerId == expertId, ct);
+                        && x.a.AssignedReviewerId == expertId
+                        && x.a.ClaimState != ExpertAssignmentState.Released, ct);
         if (!hasAssignment)
         {
             throw ApiException.Forbidden("speaking_comment_not_authorised",
@@ -216,10 +217,12 @@ public class SpeakingTutorCalibrationService(LearnerDbContext db)
             .FirstOrDefaultAsync(a => a.Id == attemptId, ct)
             ?? throw ApiException.NotFound("speaking_attempt_not_found", "That speaking attempt does not exist.");
 
-        // Owner (learner) can always read their own comments. Experts and
-        // admins can read comments on any attempt they can see.
+        // Owner (learner) can always read their own comments. Assigned experts
+        // can read their own review attempts; admins retain operational access.
         var isOwner = string.Equals(attempt.UserId, requesterUserId, StringComparison.OrdinalIgnoreCase);
-        if (!isOwner && !isExpert && !isAdmin)
+        var isAssignedExpert = isExpert
+            && await HasExpertAssignmentAsync(requesterUserId, attemptId, ct);
+        if (!isOwner && !isAssignedExpert && !isAdmin)
         {
             throw ApiException.Forbidden("speaking_comment_read_forbidden",
                 "You cannot read comments on this attempt.");
@@ -241,6 +244,18 @@ public class SpeakingTutorCalibrationService(LearnerDbContext db)
     private static bool IsValidCriterion(string code)
         => string.Equals(code, "general", StringComparison.OrdinalIgnoreCase)
         || AdminService.SpeakingCriterionCodes.Any(c => string.Equals(c, code, StringComparison.OrdinalIgnoreCase));
+
+    private async Task<bool> HasExpertAssignmentAsync(string expertId, string attemptId, CancellationToken ct)
+        => await db.ExpertReviewAssignments
+            .AsNoTracking()
+            .Join(db.ReviewRequests.AsNoTracking(),
+                assignment => assignment.ReviewRequestId,
+                review => review.Id,
+                (assignment, review) => new { assignment, review })
+            .AnyAsync(row => row.review.AttemptId == attemptId
+                && row.assignment.AssignedReviewerId == expertId
+                && row.assignment.ClaimState != ExpertAssignmentState.Released,
+                ct);
 
     private static object ProjectComment(SpeakingFeedbackComment c) => new
     {

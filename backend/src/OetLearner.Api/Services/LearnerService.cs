@@ -1695,14 +1695,21 @@ public partial class LearnerService(
 
     public async Task<object> GetSpeakingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
-        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         return await GetAttemptAsync(attempt.Id, cancellationToken);
     }
 
-    public async Task<object> CreateSpeakingUploadSessionAsync(string userId, string attemptId, CancellationToken cancellationToken)
+    public async Task<object> CreateSpeakingUploadSessionAsync(
+        string userId,
+        string attemptId,
+        string? expectedContentId,
+        string? expectedMockSessionId,
+        CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
-        await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        EnsureSpeakingAttemptCanReceiveAudio(attempt);
+        await EnsureSpeakingAttemptBindingAsync(attempt, expectedContentId, expectedMockSessionId, cancellationToken);
         var uploadId = $"upload-{Guid.NewGuid():N}";
         var upload = new UploadSession
         {
@@ -1736,6 +1743,9 @@ public partial class LearnerService(
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var upload = await GetUploadSessionOwnedByUserAsync(userId, uploadSessionId, cancellationToken);
+        var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, upload.AttemptId, cancellationToken);
+        EnsureSpeakingAttemptCanReceiveAudio(attempt);
+        await EnsureSpeakingAttemptBindingAsync(attempt, expectedContentId: null, expectedMockSessionId: null, cancellationToken);
         if (upload.ExpiresAt <= DateTimeOffset.UtcNow)
         {
             throw ApiException.Conflict(
@@ -1774,10 +1784,18 @@ public partial class LearnerService(
         };
     }
 
-    public async Task<object> CompleteSpeakingUploadAsync(string userId, string attemptId, UploadCompleteRequest request, CancellationToken cancellationToken)
+    public async Task<object> CompleteSpeakingUploadAsync(
+        string userId,
+        string attemptId,
+        UploadCompleteRequest request,
+        string? expectedContentId,
+        string? expectedMockSessionId,
+        CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
-        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        EnsureSpeakingAttemptCanReceiveAudio(attempt);
+        await EnsureSpeakingAttemptBindingAsync(attempt, expectedContentId, expectedMockSessionId, cancellationToken);
         var upload = await GetUploadSessionForCompletionAsync(userId, attemptId, request, cancellationToken);
         if (request.ConsentAccepted != true)
         {
@@ -1831,9 +1849,18 @@ public partial class LearnerService(
     }
 
     public async Task<object> SubmitSpeakingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
+        => await SubmitSpeakingAttemptAsync(userId, attemptId, expectedContentId: null, expectedMockSessionId: null, cancellationToken);
+
+    public async Task<object> SubmitSpeakingAttemptAsync(
+        string userId,
+        string attemptId,
+        string? expectedContentId,
+        string? expectedMockSessionId,
+        CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
-        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        await EnsureSpeakingAttemptBindingAsync(attempt, expectedContentId, expectedMockSessionId, cancellationToken);
         if (attempt.State is AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed)
         {
             var existing = await db.Evaluations.FirstOrDefaultAsync(x => x.AttemptId == attemptId, cancellationToken);
@@ -1898,7 +1925,7 @@ public partial class LearnerService(
 
     public async Task<object> GetSpeakingProcessingAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
-        await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         var evaluations = await db.Evaluations.Where(x => x.AttemptId == attemptId).ToListAsync(cancellationToken);
         var evaluation = evaluations.OrderByDescending(x => x.LastTransitionAt).FirstOrDefault();
         var transcriptionJobs = await db.BackgroundJobs.Where(x => x.AttemptId == attemptId && x.Type == JobType.SpeakingTranscription).ToListAsync(cancellationToken);
@@ -3135,8 +3162,7 @@ public partial class LearnerService(
         }
 
         var now = DateTimeOffset.UtcNow;
-        SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "learner_self_reactivate");
-        subscription.ChangedAt = now;
+        SubscriptionStateMachine.ReactivateCancelled(subscription, "learner_self_reactivate", now);
         if (subscription.NextRenewalAt <= now)
         {
             subscription.NextRenewalAt = now.AddMonths(1);
@@ -3892,6 +3918,84 @@ public partial class LearnerService(
     private async Task<Attempt> GetAttemptOwnedByUserAsync(string userId, string attemptId, CancellationToken cancellationToken)
         => await db.Attempts.FirstOrDefaultAsync(x => x.Id == attemptId && x.UserId == userId, cancellationToken)
            ?? throw ApiException.NotFound("attempt_not_found", "Attempt not found.");
+
+    private async Task<Attempt> GetSpeakingAttemptOwnedByUserAsync(string userId, string attemptId, CancellationToken cancellationToken)
+    {
+        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        if (!string.Equals(attempt.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.NotFound("speaking_attempt_not_found", "Speaking attempt not found.");
+        }
+
+        return attempt;
+    }
+
+    private static void EnsureSpeakingAttemptCanReceiveAudio(Attempt attempt)
+    {
+        if (attempt.State is AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed)
+        {
+            throw ApiException.Conflict(
+                "speaking_attempt_locked",
+                "This speaking attempt has already been submitted and cannot receive another recording.",
+                [new ApiFieldError("attemptId", "locked", "Start a new speaking attempt before uploading another recording.")]);
+        }
+    }
+
+    private async Task EnsureSpeakingAttemptBindingAsync(
+        Attempt attempt,
+        string? expectedContentId,
+        string? expectedMockSessionId,
+        CancellationToken cancellationToken)
+    {
+        var normalizedContentId = expectedContentId?.Trim();
+        var normalizedMockSessionId = expectedMockSessionId?.Trim();
+
+        if (!string.IsNullOrWhiteSpace(normalizedContentId)
+            && !string.Equals(attempt.ContentId, normalizedContentId, StringComparison.Ordinal))
+        {
+            throw ApiException.Validation(
+                "speaking_attempt_content_mismatch",
+                "This speaking attempt does not belong to the requested task.",
+                [new ApiFieldError("contentId", "mismatch", "Use the attempt created for this speaking task.")]);
+        }
+
+        if (!string.Equals(attempt.Context, "mock_set", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(normalizedMockSessionId))
+            {
+                throw ApiException.Validation(
+                    "speaking_attempt_mock_session_mismatch",
+                    "This speaking attempt does not belong to the requested mock session.",
+                    [new ApiFieldError("mockSessionId", "mismatch", "Use the paired attempt created for this speaking mock session.")]);
+            }
+
+            return;
+        }
+
+        var sessionId = string.IsNullOrWhiteSpace(normalizedMockSessionId)
+            ? attempt.ComparisonGroupId
+            : normalizedMockSessionId;
+        if (string.IsNullOrWhiteSpace(sessionId)
+            || !string.Equals(attempt.ComparisonGroupId, sessionId, StringComparison.Ordinal))
+        {
+            throw ApiException.Validation(
+                "speaking_attempt_mock_session_mismatch",
+                "This speaking attempt does not belong to the requested mock session.",
+                [new ApiFieldError("mockSessionId", "mismatch", "Use the paired attempt created for this speaking mock session.")]);
+        }
+
+        var session = await db.SpeakingMockSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == sessionId && x.UserId == attempt.UserId, cancellationToken);
+        if (session is null || (attempt.Id != session.Attempt1Id && attempt.Id != session.Attempt2Id))
+        {
+            throw ApiException.Validation(
+                "speaking_attempt_mock_session_mismatch",
+                "This speaking attempt does not belong to the requested mock session.",
+                [new ApiFieldError("mockSessionId", "mismatch", "Use the paired attempt created for this speaking mock session.")]);
+        }
+
+    }
 
     private async Task<Evaluation> GetEvaluationOwnedByUserAsync(string userId, string evaluationId, CancellationToken cancellationToken)
     {
@@ -5766,6 +5870,31 @@ public partial class LearnerService(
         bool persistQuote)
     {
         var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalizedProductType is not ("review_credits" or "plan_upgrade" or "plan_downgrade" or "addon_purchase"))
+        {
+            throw ApiException.Validation(
+                "unsupported_checkout_product",
+                $"Unsupported checkout product '{request.ProductType}'.",
+                [new ApiFieldError("productType", "unsupported", "Only supported learner checkout products can be quoted.")]);
+        }
+
+        if (request.Quantity <= 0)
+        {
+            throw ApiException.Validation(
+                "invalid_checkout_quantity",
+                "Checkout quantity must be greater than zero.",
+                [new ApiFieldError("quantity", "invalid", "Choose a checkout quantity greater than zero.")]);
+        }
+
+        if (normalizedProductType is "plan_upgrade" or "plan_downgrade" or "addon_purchase"
+            && string.IsNullOrWhiteSpace(request.PriceId))
+        {
+            throw ApiException.Validation(
+                "target_item_required",
+                "A target plan or add-on id is required for this checkout.",
+                [new ApiFieldError("priceId", "required", "Choose the plan or add-on you want to purchase.")]);
+        }
+
         var now = DateTimeOffset.UtcNow;
         var subscription = await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
         if (subscription is null)
@@ -6834,7 +6963,8 @@ public partial class LearnerService(
         await EnsureUserAsync(userId, ct);
         await EnsureLearnerMutationAllowedAsync(userId, ct);
 
-        if (request.Gateway is not "stripe" and not "paypal")
+        var gateway = (request.Gateway ?? string.Empty).Trim().ToLowerInvariant();
+        if (gateway is not "stripe" and not "paypal")
         {
             throw ApiException.Validation(
                 "invalid_gateway",
@@ -6857,7 +6987,7 @@ public partial class LearnerService(
         var idempotencyKey = NormalizeIdempotencyKey(request.IdempotencyKey);
         var idempotencyRequestHash = idempotencyKey is null
             ? null
-            : ComputeIdempotencyRequestHash(new { userId, request.Amount, gateway = request.Gateway });
+            : ComputeIdempotencyRequestHash(new { userId, request.Amount, gateway });
         if (idempotencyKey is not null && idempotencyRequestHash is not null)
         {
             var reservation = await ReservePaymentIdempotencyAsync("wallet-top-up", idempotencyKey, userId, idempotencyRequestHash, ct);
@@ -6872,7 +7002,7 @@ public partial class LearnerService(
         object? idempotencyResponse = null;
         try
         {
-        var session = await walletService.CreateTopUpSessionAsync(userId, request.Amount, request.Gateway, idempotencyKey, ct);
+        var session = await walletService.CreateTopUpSessionAsync(userId, request.Amount, gateway, idempotencyKey, ct);
         providerRequestReturned = true;
         var response = new
         {

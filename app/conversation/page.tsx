@@ -8,9 +8,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader, ExamTypeBadge } from '@/components/domain';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
+import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { analytics } from '@/lib/analytics';
 import {
@@ -116,6 +117,8 @@ export default function ConversationPage() {
           highlights={heroHighlights}
         />
 
+        <LearnerSkillSwitcher compact />
+
         {entitlement && !entitlement.allowed && (
           <InlineAlert variant="warning">
             {entitlement.reason}
@@ -172,11 +175,13 @@ export default function ConversationPage() {
               })}
             </div>
           ) : (
-            <Card className="border-dashed border-border p-8 text-center shadow-sm">
-              <MessageSquare className="mx-auto mb-3 h-10 w-10 text-muted/40" />
-              <p className="text-sm font-semibold text-navy">No scenario types are currently enabled</p>
-              <p className="mt-1 text-xs text-muted">Please contact your administrator.</p>
-            </Card>
+            <LearnerEmptyState
+              icon={MessageSquare}
+              title="No scenario types are currently enabled"
+              description="AI conversation scenarios will appear here once they are published. Use speaking role plays or mocks while this module is being prepared."
+              primaryAction={{ label: 'Open Speaking', href: '/speaking' }}
+              secondaryAction={{ label: 'Open Mocks', href: '/mocks' }}
+            />
           )}
         </section>
 
@@ -193,11 +198,14 @@ export default function ConversationPage() {
               {Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-20 rounded-[24px]" />))}
             </div>
           ) : history.length === 0 ? (
-            <Card className="border-dashed border-border p-8 text-center shadow-sm">
-              <MessageSquare className="mx-auto mb-3 h-10 w-10 text-muted/40" />
-              <p className="text-sm font-semibold text-navy">No conversations yet</p>
-              <p className="mt-1 text-xs text-muted">Start your first AI conversation above</p>
-            </Card>
+            <LearnerEmptyState
+              compact
+              icon={MessageSquare}
+              title="No conversations yet"
+              description="Start your first AI conversation above, or use a speaking role play if you need a structured exam-style prompt."
+              primaryAction={{ label: 'Open Speaking', href: '/speaking' }}
+              secondaryAction={{ label: 'Track Progress', href: '/progress' }}
+            />
           ) : (
             <MotionPresence>
               <div className="space-y-3">

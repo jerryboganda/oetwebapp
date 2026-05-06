@@ -23,8 +23,8 @@ public static class WritingPdfEndpoints
                 IWritingPdfService service,
                 CancellationToken ct) =>
             {
-                var (userId, isPrivileged) = ResolveCaller(http);
-                var artifact = await service.GenerateAttemptPdfAsync(attemptId, userId, isPrivileged, ct);
+                var (userId, isExpertReviewer, isAdminReviewer) = ResolveCaller(http);
+                var artifact = await service.GenerateAttemptPdfAsync(attemptId, userId, isExpertReviewer, isAdminReviewer, ct);
                 WritePdfHeaders(http, artifact.Filename);
                 return Results.File(artifact.Bytes, "application/pdf", artifact.Filename);
             })
@@ -41,7 +41,7 @@ public static class WritingPdfEndpoints
                 IWritingPdfService service,
                 CancellationToken ct) =>
             {
-                var (userId, isPrivileged) = ResolveCaller(http);
+                var (userId, isExpertReviewer, isAdminReviewer) = ResolveCaller(http);
 
                 var section = await db.Set<MockSectionAttempt>()
                     .AsNoTracking()
@@ -60,7 +60,8 @@ public static class WritingPdfEndpoints
                 var artifact = await service.GenerateAttemptPdfAsync(
                     section.ContentAttemptId,
                     userId,
-                    isPrivileged,
+                    isExpertReviewer,
+                    isAdminReviewer,
                     ct);
                 WritePdfHeaders(http, artifact.Filename);
                 return Results.File(artifact.Bytes, "application/pdf", artifact.Filename);
@@ -71,14 +72,28 @@ public static class WritingPdfEndpoints
         return app;
     }
 
-    private static (string UserId, bool IsPrivileged) ResolveCaller(HttpContext http)
+    private static (string UserId, bool IsExpertReviewer, bool IsAdminReviewer) ResolveCaller(HttpContext http)
     {
         var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? throw ApiException.Unauthorized("authentication_required", "You must be signed in.");
         var role = http.User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-        var isPrivileged = string.Equals(role, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase);
-        return (userId, isPrivileged);
+        var isExpertReviewer = string.Equals(role, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase);
+        var isAdminReviewer = string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase)
+            && HasAdminPermission(http, AdminPermissions.ContentRead);
+        return (userId, isExpertReviewer, isAdminReviewer);
+    }
+
+    private static bool HasAdminPermission(HttpContext http, string permission)
+    {
+        var permissionsClaim = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
+        if (string.IsNullOrWhiteSpace(permissionsClaim))
+        {
+            return false;
+        }
+
+        var permissions = permissionsClaim.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return permissions.Contains(AdminPermissions.SystemAdmin, StringComparer.Ordinal)
+            || permissions.Contains(permission, StringComparer.Ordinal);
     }
 
     private static void WritePdfHeaders(HttpContext http, string filename)

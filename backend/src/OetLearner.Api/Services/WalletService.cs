@@ -393,7 +393,7 @@ public class WalletService(
         CancellationToken ct)
     {
         var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == userId, ct)
-            ?? throw new InvalidOperationException("Wallet not found.");
+            ?? throw ApiException.NotFound("wallet_not_found", "Wallet not found for this learner.");
 
         var configuredTiers = GetConfiguredTopUpTiers();
         var tier = configuredTiers.FirstOrDefault(t => t.Amount == amountDollars);

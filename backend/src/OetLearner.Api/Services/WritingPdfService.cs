@@ -23,7 +23,8 @@ public interface IWritingPdfService
     Task<WritingPdfArtifact> GenerateAttemptPdfAsync(
         string attemptId,
         string requestingUserId,
-        bool isPrivilegedReviewer,
+        bool isExpertReviewer,
+        bool isAdminReviewer,
         CancellationToken cancellationToken);
 }
 
@@ -71,7 +72,8 @@ public sealed class WritingPdfService : IWritingPdfService
     public async Task<WritingPdfArtifact> GenerateAttemptPdfAsync(
         string attemptId,
         string requestingUserId,
-        bool isPrivilegedReviewer,
+        bool isExpertReviewer,
+        bool isAdminReviewer,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
@@ -87,7 +89,10 @@ public sealed class WritingPdfService : IWritingPdfService
             throw ApiException.NotFound("writing_attempt_not_found", "That writing attempt does not exist.");
         }
 
-        if (!isPrivilegedReviewer && !string.Equals(attempt.UserId, requestingUserId, StringComparison.Ordinal))
+        var isOwner = string.Equals(attempt.UserId, requestingUserId, StringComparison.Ordinal);
+        var isAssignedExpert = isExpertReviewer
+            && await HasAssignedWritingReviewAsync(attempt.Id, requestingUserId, cancellationToken);
+        if (!isOwner && !isAdminReviewer && !isAssignedExpert)
         {
             throw ApiException.Forbidden("writing_pdf_forbidden", "You are not authorised to download this attempt.");
         }
@@ -141,13 +146,25 @@ public sealed class WritingPdfService : IWritingPdfService
             Action = "WritingPdfDownloaded",
             ResourceType = "WritingAttempt",
             ResourceId = attempt.Id,
-            Details = $"sha256={sha256};privileged={(isPrivilegedReviewer ? "1" : "0")};size={bytes.Length}",
+            Details = $"sha256={sha256};owner={(isOwner ? "1" : "0")};expert={(isAssignedExpert ? "1" : "0")};admin={(isAdminReviewer ? "1" : "0")};size={bytes.Length}",
         });
         await _db.SaveChangesAsync(cancellationToken);
 
         var filename = $"writing-{attemptShort}-practice.pdf";
         return new WritingPdfArtifact(bytes, filename, sha256);
     }
+
+    private async Task<bool> HasAssignedWritingReviewAsync(string attemptId, string expertId, CancellationToken cancellationToken)
+        => await _db.ExpertReviewAssignments
+            .AsNoTracking()
+            .Join(_db.ReviewRequests.AsNoTracking(),
+                assignment => assignment.ReviewRequestId,
+                review => review.Id,
+                (assignment, review) => new { assignment, review })
+            .AnyAsync(row => row.review.AttemptId == attemptId
+                && row.assignment.AssignedReviewerId == expertId
+                && row.assignment.ClaimState != ExpertAssignmentState.Released,
+                cancellationToken);
 
     private byte[] RenderPdf(
         string ownerDisplayName,

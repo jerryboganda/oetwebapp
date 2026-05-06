@@ -13,15 +13,15 @@ public static class AiEscalationAdminEndpoints
 
         admin.MapGet("/ai-config/escalation-stats", async ([FromServices] IAIEscalationStatsService service, CancellationToken ct, string? configId)
             => Results.Ok(await service.GetStatsAsync(configId, ct)))
-            .WithAdminRead("AdminContentRead");
+            .WithAdminRead("AdminAiConfig");
 
         admin.MapGet("/ai-config/escalation-stats/configs", async ([FromServices] IAIEscalationStatsService service, CancellationToken ct)
             => Results.Ok(await service.GetConfigStatsAsync(ct)))
-            .WithAdminRead("AdminContentRead");
+            .WithAdminRead("AdminAiConfig");
 
         admin.MapGet("/ai-config/escalation-stats/{taskType}", async (string taskType, [FromServices] IAIEscalationStatsService service, CancellationToken ct)
             => Results.Ok(await service.GetStatsByTaskTypeAsync(taskType, ct)))
-            .WithAdminRead("AdminContentRead");
+            .WithAdminRead("AdminAiConfig");
 
         return app;
     }

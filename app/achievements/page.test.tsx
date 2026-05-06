@@ -39,13 +39,13 @@ describe('Achievements page', () => {
 
   it('renders through the shared learner dashboard shell', async () => {
     render(<AchievementsPage />);
-    expect(await screen.findByText('Achievements')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Achievements, streaks, and XP in one place/i })).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('displays XP level from the API', async () => {
     render(<AchievementsPage />);
-    expect(await screen.findByText('5')).toBeInTheDocument();
+    expect((await screen.findAllByText('5')).length).toBeGreaterThan(0);
   });
 
   it('shows unlocked and locked achievement sections', async () => {

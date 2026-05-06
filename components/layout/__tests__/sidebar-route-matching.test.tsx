@@ -17,7 +17,7 @@ vi.mock('@/lib/mobile/haptics', () => ({
   triggerImpactHaptic: vi.fn(),
 }));
 
-import { Sidebar, learnNavItems, type NavGroup } from '../sidebar';
+import { BottomNav, Sidebar, learnNavItems, mobileNavItems, type NavGroup } from '../sidebar';
 
 const adminUser = {
   userId: 'admin-1',
@@ -55,5 +55,21 @@ describe('Sidebar route matching', () => {
 
     expect(labels).toContain('Recalls');
     expect(labels).not.toContain('Pronunciation');
+  });
+
+  it('exposes core learner destinations in mobile navigation', () => {
+    renderWithRouter(<BottomNav />, { pathname: '/mocks' });
+
+    expect(mobileNavItems.map((item) => item.label)).toEqual([
+      'Dashboard',
+      'Study Plan',
+      'Writing',
+      'Speaking',
+      'Reading',
+      'Listening',
+      'Mocks',
+    ]);
+    expect(screen.getByRole('link', { name: /study plan/i })).toHaveAttribute('href', '/study-plan');
+    expect(screen.getByRole('link', { name: /mocks/i })).toHaveAttribute('aria-current', 'page');
   });
 });

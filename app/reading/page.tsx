@@ -16,7 +16,6 @@ import {
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
@@ -32,6 +31,9 @@ import { fetchMockReports } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
 import { formatListeningReadingDisplay, isListeningReadingPassByRaw } from '@/lib/scoring';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
+import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
 const partGuides: LearnerSurfaceCardModel[] = [
@@ -165,6 +167,8 @@ export default function ReadingHome() {
           description={home?.intro ?? 'Use structured OET Reading papers with the same Part A and Part B/C timing rhythm learners meet in the exam.'}
           highlights={heroHighlights}
         />
+
+        <LearnerSkillSwitcher compact />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
@@ -447,49 +451,31 @@ function safeDrillCard(drill: ReadingHomeSafeDrillDto): LearnerSurfaceCardModel 
 
 function EmptyPapersState() {
   return (
-    <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-8 text-center">
-      <p className="text-base font-bold text-navy">No structured Reading papers are ready yet</p>
-      <p className="mt-2 text-sm text-muted">
-        Published papers will appear here after the authoring structure passes the Reading publish gate.
-      </p>
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-        <Link
-          href="/mocks"
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90"
-        >
-          Open Mock Center
-        </Link>
-        <Link
-          href="/study-plan"
-          className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-bold text-navy hover:bg-background-light"
-        >
-          View Study Plan
-        </Link>
-      </div>
-    </div>
+    <LearnerEmptyState
+      icon={BookOpen}
+      title="No structured Reading papers are ready yet"
+      description="Published papers will appear here after the authoring structure passes the Reading publish gate. Use mocks or your study plan while papers are being prepared."
+      primaryAction={{ label: 'Open Mock Center', href: '/mocks' }}
+      secondaryAction={{ label: 'View Study Plan', href: '/study-plan' }}
+    />
   );
 }
 
 function EmptyStateBox({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-center">
-      <p className="text-base font-bold text-navy">{title}</p>
-      <p className="mt-2 text-sm text-muted">{description}</p>
-    </div>
+    <LearnerEmptyState
+      compact
+      icon={BookOpen}
+      title={title}
+      description={description}
+      primaryAction={{ label: 'Start Reading Paper', href: '/reading' }}
+      secondaryAction={{ label: 'Open Mock Center', href: '/mocks' }}
+    />
   );
 }
 
 function ReadingHomeSkeleton() {
-  return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[1, 2].map((item) => <Skeleton key={item} className="h-56 rounded-[24px]" />)}
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {[1, 2, 3].map((item) => <Skeleton key={item} className="h-48 rounded-[24px]" />)}
-      </div>
-    </div>
-  );
+  return <LearnerSkeleton variant="dashboard" />;
 }
 
 function readErrorMessage(err: unknown, fallback: string): string {

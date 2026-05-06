@@ -272,5 +272,79 @@ public class SpeakingCalibrationFlowsTests : IClassFixture<FirstPartyAuthTestWeb
         var comments = readDoc.RootElement.GetProperty("comments");
         Assert.True(comments.GetArrayLength() >= 1);
         Assert.Equal("fluency", comments[0].GetProperty("criterionCode").GetString());
+
+        using var unassignedExpert = _factory.CreateAuthenticatedClient(SeedData.ExpertSecondaryEmail, SeedData.LocalSeedPassword, expectedRole: "expert");
+        var forbiddenRead = await unassignedExpert.GetAsync("/v1/speaking/attempts/sa-001/comments");
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenRead.StatusCode);
+    }
+
+    [Fact]
+    public async Task ExpertComment_ReleasedAssignmentCannotPostOrRead()
+    {
+        await SeedReleasedSpeakingAssignmentAsync();
+        using var expert = _factory.CreateAuthenticatedClient(SeedData.ExpertEmail, SeedData.LocalSeedPassword, expectedRole: "expert");
+
+        var post = await expert.PostAsJsonAsync("/v1/expert/speaking/attempts/sa-released-comments/comments", new
+        {
+            transcriptLineIndex = 0,
+            criterionCode = "fluency",
+            body = "This released assignment must not allow a new comment.",
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, post.StatusCode);
+
+        var read = await expert.GetAsync("/v1/speaking/attempts/sa-released-comments/comments");
+        Assert.Equal(HttpStatusCode.Forbidden, read.StatusCode);
+    }
+
+    private async Task SeedReleasedSpeakingAssignmentAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        if (await db.Attempts.AnyAsync(a => a.Id == "sa-released-comments"))
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        db.Attempts.Add(new Attempt
+        {
+            Id = "sa-released-comments",
+            UserId = "mock-user-001",
+            ContentId = "st-001",
+            SubtestCode = "speaking",
+            Context = "practice",
+            Mode = "practice",
+            State = AttemptState.Completed,
+            StartedAt = now.AddHours(-1),
+            SubmittedAt = now.AddMinutes(-20),
+            CompletedAt = now.AddMinutes(-10),
+            ElapsedSeconds = 600,
+            TranscriptJson = "[]"
+        });
+        db.ReviewRequests.Add(new ReviewRequest
+        {
+            Id = "review-released-comments",
+            AttemptId = "sa-released-comments",
+            SubtestCode = "speaking",
+            State = ReviewRequestState.Completed,
+            TurnaroundOption = "standard",
+            FocusAreasJson = "[]",
+            LearnerNotes = string.Empty,
+            PaymentSource = "credits",
+            PriceSnapshot = 1m,
+            CreatedAt = now.AddMinutes(-50),
+            CompletedAt = now.AddMinutes(-30),
+        });
+        db.ExpertReviewAssignments.Add(new ExpertReviewAssignment
+        {
+            Id = "era-released-comments",
+            ReviewRequestId = "review-released-comments",
+            AssignedReviewerId = "expert-001",
+            AssignedAt = now.AddMinutes(-45),
+            ClaimState = ExpertAssignmentState.Released,
+            ReleasedAt = now.AddMinutes(-30),
+            ReasonCode = "released_for_regression_test"
+        });
+        await db.SaveChangesAsync();
     }
 }

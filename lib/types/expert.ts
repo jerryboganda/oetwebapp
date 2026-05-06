@@ -463,3 +463,108 @@ export interface ExpertReviewHistory {
   draftVersionCount: number;
   entries: ExpertReviewHistoryEntry[];
 }
+
+// ── Amend submitted review ──
+
+export interface ExpertAmendEligibility {
+  canAmend: boolean;
+  amendsUsed: number;
+  maxAmends: number;
+  hoursRemaining?: number | null;
+  reason?: string | null;
+}
+
+export interface ExpertReviewAmendResult {
+  reviewRequestId: string;
+  amendNumber: number;
+  amendedAt: string;
+}
+
+// ── Rework chain ──
+
+export interface ExpertReworkChainIteration {
+  iteration: number;
+  state: string;
+  scores: Record<string, number>;
+  finalComment: string;
+  createdAt: string;
+  reviewerName?: string | null;
+}
+
+export interface ExpertReworkChain {
+  reviewRequestId: string;
+  chain: ExpertReworkChainIteration[];
+}
+
+// ── Bulk operations ──
+
+export interface ExpertBulkActionResult {
+  claimedIds?: string[];
+  releasedIds?: string[];
+  failedIds: string[];
+  warning?: string | null;
+}
+
+// ── Messaging ──
+
+export interface ExpertMessageThread {
+  id: string;
+  title: string;
+  status: string;
+  linkedReviewRequestId?: string | null;
+  linkedCalibrationCaseId?: string | null;
+  linkedLearnerId?: string | null;
+  replyCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExpertMessageReply {
+  id: string;
+  authorId: string;
+  authorRole: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface ExpertMessageThreadDetail extends ExpertMessageThread {
+  replies: ExpertMessageReply[];
+}
+
+// ── Compensation ──
+
+export interface ExpertCompensationSummary {
+  pendingEarningsMinorUnits: number;
+  paidThisMonthMinorUnits: number;
+  lifetimeEarningsMinorUnits: number;
+  currency: string;
+  completedReviewsThisMonth: number;
+  pendingPayoutCount: number;
+}
+
+export interface ExpertEarningItem {
+  id: string;
+  reviewRequestId: string;
+  subtestCode: string;
+  amountMinorUnits: number;
+  currency: string;
+  status: string;
+  earnedAt: string;
+}
+
+export interface ExpertEarningsHistory {
+  items: ExpertEarningItem[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ExpertPayoutItem {
+  id: string;
+  totalAmountMinorUnits: number;
+  currency: string;
+  status: string;
+  createdAt: string;
+  approvedAt?: string | null;
+}

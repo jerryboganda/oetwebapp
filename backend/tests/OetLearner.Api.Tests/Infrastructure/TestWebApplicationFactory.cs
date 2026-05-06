@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
@@ -88,6 +89,15 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         // supply a working provider.
         builder.ConfigureTestServices(services =>
         {
+            for (var i = services.Count - 1; i >= 0; i--)
+            {
+                if (services[i].ServiceType == typeof(IHostedService)
+                    && services[i].ImplementationType != typeof(BackgroundJobProcessor))
+                {
+                    services.RemoveAt(i);
+                }
+            }
+
             for (var i = services.Count - 1; i >= 0; i--)
             {
                 if (services[i].ServiceType == typeof(OetLearner.Api.Services.Rulebook.IAiModelProvider))

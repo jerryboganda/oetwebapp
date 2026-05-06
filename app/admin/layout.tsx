@@ -43,6 +43,7 @@ const adminNavGroups: NavGroup[] = [
     label: 'Overview',
     items: [
       { href: '/admin', label: 'Operations', icon: <LayoutDashboard className="w-5 h-5" />, exact: true },
+      { href: '/admin/alerts', label: 'Alerts', icon: <Bell className="w-5 h-5" />, matchPrefix: '/admin/alerts' },
       { href: '/admin/analytics/quality', label: 'Quality Analytics', icon: <PieChart className="w-5 h-5" />, matchPrefix: '/admin/analytics' },
       { href: '/admin/audit-logs', label: 'Audit Logs', icon: <ShieldCheck className="w-5 h-5" />, matchPrefix: '/admin/audit-logs' },
     ],

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Recalls;
+using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -109,7 +110,8 @@ public static class RecallsEndpoints
             {
                 code = "legacy_recalls_import_disabled",
                 message = "Legacy Recalls bulk upload is disabled for production safety. Use /v1/admin/vocabulary/import/preview and /v1/admin/vocabulary/import with dryRun first."
-            }, statusCode: StatusCodes.Status409Conflict));
+            }, statusCode: StatusCodes.Status409Conflict))
+            .RequireRateLimiting("PerUserWrite");
 
         // Recalls Content Pack v1 (2026-05-05): one-shot ElevenLabs (or any
         // configured ConversationTtsProvider) audio backfill for terms in a
@@ -120,6 +122,8 @@ public static class RecallsEndpoints
             [FromQuery] string profession,
             [FromQuery] int? limit,
             [FromQuery] bool? sentence,
+            [FromQuery] bool? execute,
+            HttpContext http,
             IRecallsTtsService tts,
             OetLearner.Api.Data.LearnerDbContext db,
             CancellationToken ct) =>
@@ -128,12 +132,31 @@ public static class RecallsEndpoints
                 return Results.BadRequest(new { code = "profession_required" });
             var cap = Math.Clamp(limit ?? 50, 1, 200);
             var includeSentence = sentence ?? false;
+            var shouldExecute = execute == true;
 
             var prof = profession.Trim().ToLowerInvariant();
             var query = db.VocabularyTerms.Where(t =>
                 t.ProfessionId == prof &&
                 (t.AudioUrl == null || t.AudioUrl == ""));
             var batch = await query.OrderBy(t => t.Term).Take(cap).ToListAsync(ct);
+
+            if (!shouldExecute)
+            {
+                var remainingPreview = await db.VocabularyTerms.CountAsync(t =>
+                    t.ProfessionId == prof &&
+                    (t.AudioUrl == null || t.AudioUrl == ""), ct);
+
+                return Results.Ok(new
+                {
+                    profession = prof,
+                    dryRun = true,
+                    considered = batch.Count,
+                    generated = 0,
+                    failed = 0,
+                    remaining = remainingPreview,
+                    message = "Pass execute=true to generate and persist Recalls TTS audio."
+                });
+            }
 
             var generated = 0;
             var failed = 0;
@@ -170,7 +193,18 @@ public static class RecallsEndpoints
                     failed++;
                 }
             }
-            if (generated > 0) await db.SaveChangesAsync(ct);
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = $"audit-{Guid.NewGuid():N}",
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system",
+                ActorName = http.User.Identity?.Name ?? "admin",
+                Action = "RecallsTtsBackfill",
+                ResourceType = "VocabularyTerm",
+                ResourceId = prof,
+                Details = $"profession={prof};considered={batch.Count};generated={generated};failed={failed};sentence={(includeSentence ? "1" : "0")}",
+            });
+            await db.SaveChangesAsync(ct);
 
             var remaining = await db.VocabularyTerms.CountAsync(t =>
                 t.ProfessionId == prof &&
@@ -184,7 +218,8 @@ public static class RecallsEndpoints
                 failed,
                 remaining,
             });
-        });
+        })
+            .RequireRateLimiting("PerUserWrite");
 
         return app;
     }

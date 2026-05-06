@@ -59,7 +59,6 @@ public static class SubscriptionStateMachine
             [SubscriptionStatus.Cancelled] = new HashSet<SubscriptionStatus>
             {
                 SubscriptionStatus.Cancelled,
-                SubscriptionStatus.Active,    // self-serve reactivation
                 SubscriptionStatus.Expired,
             },
             [SubscriptionStatus.Expired] = new HashSet<SubscriptionStatus>
@@ -103,5 +102,24 @@ public static class SubscriptionStateMachine
         subscription.Status = target;
         subscription.ChangedAt = DateTimeOffset.UtcNow;
         return true;
+    }
+
+    public static void ReactivateCancelled(Subscription subscription, string reason, DateTimeOffset changedAt)
+    {
+        ArgumentNullException.ThrowIfNull(subscription);
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("A non-empty reason is required for subscription state transitions.", nameof(reason));
+        }
+
+        if (subscription.Status != SubscriptionStatus.Cancelled)
+        {
+            throw ApiException.Conflict(
+                "subscription_reactivation_invalid_state",
+                "Only cancelled subscriptions can be reactivated.");
+        }
+
+        subscription.Status = SubscriptionStatus.Active;
+        subscription.ChangedAt = changedAt;
     }
 }

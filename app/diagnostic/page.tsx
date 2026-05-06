@@ -19,6 +19,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { MotionSection } from '@/components/ui/motion-primitives';
 
 const SUB_TESTS = [
@@ -147,6 +148,8 @@ export default function DiagnosticIntroPage() {
           ]}
         />
         </MotionSection>
+
+        <LearnerSkillSwitcher compact />
 
         <MotionSection delayIndex={1}>
         <section>

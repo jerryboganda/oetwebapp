@@ -23,13 +23,14 @@ import { Button } from '@/components/ui/button';
 import { MotionSection, MotionItem, MotionCollapse } from '@/components/ui/motion-primitives';
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
-import { Skeleton } from '@/components/ui/skeleton';
 import { fetchWritingHome, fetchWritingTasks, fetchWritingSubmissions, fetchMockReports } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import { EmptyState } from '@/components/ui/empty-error';
 import { InlineAlert } from '@/components/ui/alert';
 import type { WritingTask, WritingSubmission, MockReport } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
+import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/learner-surface';
 import { useProfessions } from '@/lib/hooks/use-professions';
 
@@ -149,15 +150,7 @@ export default function WritingHome() {
   if (loading) {
     return (
       <LearnerDashboardShell pageTitle="Writing">
-        <div className="space-y-6">
-          <Skeleton className="h-36 rounded-2xl" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Skeleton className="h-72 rounded-2xl" />
-            <Skeleton className="h-72 rounded-2xl" />
-          </div>
-          <Skeleton className="h-10 w-80" />
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
-        </div>
+        <LearnerSkeleton variant="dashboard" />
       </LearnerDashboardShell>
     );
   }
@@ -213,6 +206,8 @@ export default function WritingHome() {
             { icon: Clock, label: 'Mock flow', value: fullMockEntry ? 'Timed mock ready' : 'Browse mock setup' },
           ]}
         />
+
+        <LearnerSkillSwitcher compact />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
@@ -337,8 +332,15 @@ export default function WritingHome() {
               {activeTab === 'practice' && (
                 <motion.div key="practice" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-border">
                   {filteredTasks.length === 0 ? (
-                    <div className="p-10">
-                      <EmptyState title={hasActiveFilters ? 'No tasks match your filters' : 'No practice tasks available'} description={hasActiveFilters ? 'Try removing some filters to see more tasks.' : 'Check back later for new writing tasks.'} />
+                    <div className="p-6">
+                      <LearnerEmptyState
+                        compact
+                        icon={PenTool}
+                        title={hasActiveFilters ? 'No tasks match your filters' : 'No practice tasks available'}
+                        description={hasActiveFilters ? 'Try removing some filters to see more tasks.' : 'Check back later for new writing tasks, or use mocks and drills while the library is being prepared.'}
+                        primaryAction={hasActiveFilters ? { label: 'Clear Filters', onClick: () => setFilters({}) } : { label: 'Open Mock Center', href: '/mocks' }}
+                        secondaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
+                      />
                     </div>
                   ) : filteredTasks.map((task) => (
                     <div key={task.id} className="p-5 hover:bg-background-light transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
@@ -423,10 +425,14 @@ export default function WritingHome() {
                       </div>
                     ))
                   ) : filteredTasks.length === 0 ? (
-                    <div className="p-10">
-                      <EmptyState
+                    <div className="p-6">
+                      <LearnerEmptyState
+                        compact
+                        icon={Target}
                         title={hasActiveFilters ? 'No drills match your filters' : 'No criterion drills available'}
-                        description={hasActiveFilters ? 'Try removing some filters to see more drills.' : 'Complete a writing task to unlock AI-driven criterion drills targeting your weakest areas.'}
+                        description={hasActiveFilters ? 'Try removing some filters to see more drills.' : 'Complete a writing task to unlock criterion drills targeting your weakest areas.'}
+                        primaryAction={hasActiveFilters ? { label: 'Clear Filters', onClick: () => setFilters({}) } : { label: 'Browse Writing Library', href: '/writing/library' }}
+                        secondaryAction={{ label: 'Open Progress', href: '/progress' }}
                       />
                     </div>
                   ) : (
@@ -452,11 +458,14 @@ export default function WritingHome() {
               {activeTab === 'past' && (
                 <motion.div key="past" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-border">
                   {submissions.length === 0 ? (
-                    <div className="p-10">
-                      <EmptyState
+                    <div className="p-6">
+                      <LearnerEmptyState
+                        compact
+                        icon={History}
                         title="No submissions yet"
                         description="Complete a writing task to see your history here."
-                        action={{ label: 'Browse Writing Library', onClick: () => router.push('/writing/library') }}
+                        primaryAction={{ label: 'Browse Writing Library', href: '/writing/library' }}
+                        secondaryAction={{ label: 'Start Mock', href: '/mocks/setup' }}
                       />
                     </div>
                   ) : submissions.map((sub) => (
@@ -512,13 +521,14 @@ export default function WritingHome() {
               ))}
             </div>
           ) : (
-            <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
-              <p>Complete a mock to see writing transfer evidence here.</p>
-              <div className="mt-3 flex flex-wrap gap-4">
-                <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open Mock Center <ArrowRight className="h-4 w-4" /></Link>
-                <Link href="/progress" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Track Progress <ArrowRight className="h-4 w-4" /></Link>
-              </div>
-            </div>
+            <LearnerEmptyState
+              compact
+              icon={Award}
+              title="No writing mock evidence yet"
+              description="Complete a mock to see whether writing practice transfers under full exam pressure."
+              primaryAction={{ label: 'Open Mock Center', href: '/mocks' }}
+              secondaryAction={{ label: 'Track Progress', href: '/progress' }}
+            />
           )}
         </MotionSection>
       </div>

@@ -22,13 +22,15 @@ import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
 import type { MockReport } from '@/lib/mock-data';
 import { fetchMocksHome } from '@/lib/api';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
+import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
 type SubtestCode = 'listening' | 'reading' | 'writing' | 'speaking';
@@ -437,11 +439,20 @@ export default function MockCenter() {
           highlights={heroHighlights}
         />
 
+        <LearnerSkillSwitcher compact />
+
+        {!loading && !error && fullMocks.length === 0 && subTestMocks.length === 0 ? (
+          <LearnerEmptyState
+            icon={Layers}
+            title="No mock bundles are published yet"
+            description="Once a full or sub-test mock is published it will appear here with its real section order, profession targeting, and report route."
+            primaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
+            secondaryAction={{ label: 'Track Progress', href: '/progress' }}
+          />
+        ) : null}
+
         {loading ? (
-          <div className="space-y-4" aria-busy="true" aria-live="polite">
-            <Skeleton className="h-72 rounded-2xl" />
-            <Skeleton className="h-52 rounded-2xl" />
-          </div>
+          <LearnerSkeleton variant="dashboard" />
         ) : error ? (
           <MotionSection>
             <div

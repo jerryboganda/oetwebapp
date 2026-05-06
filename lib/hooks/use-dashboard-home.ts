@@ -24,6 +24,7 @@ export interface DashboardHomeData {
   readiness: ReadinessData | null;
   tasks: StudyPlanTask[];
   engagement: EngagementData | null;
+  loadedAt: string | null;
 }
 
 interface DashboardHomeState {
@@ -39,6 +40,7 @@ const initialState: DashboardHomeState = {
     readiness: null,
     tasks: [],
     engagement: null,
+    loadedAt: null,
   },
   error: null,
   status: 'loading',
@@ -142,6 +144,7 @@ export function useDashboardHome() {
           readiness,
           tasks,
           engagement,
+          loadedAt: new Date().toISOString(),
         },
         error: firstError ? toErrorMessage(firstError) : null,
         status: partial ? 'partial' : 'success',

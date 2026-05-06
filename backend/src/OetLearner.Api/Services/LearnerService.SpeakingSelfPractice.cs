@@ -69,6 +69,6 @@ public partial class LearnerService
         var sessionId = idProp?.GetValue(payload) as string;
         return string.IsNullOrWhiteSpace(sessionId)
             ? null
-            : $"/conversation/session/{sessionId}";
+            : $"/conversation/{sessionId}";
     }
 }

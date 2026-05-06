@@ -400,3 +400,107 @@ public sealed record ExpertAvailabilityConstraintsResponse(
     string MaxSlotDuration,
     IReadOnlyList<string> SupportedTimezones,
     IReadOnlyList<string> DayKeys);
+
+// ── Amend submitted review ──
+public sealed record ExpertReviewAmendResponse(
+    string ReviewRequestId,
+    int AmendNumber,
+    DateTimeOffset AmendedAt);
+
+public sealed record ExpertAmendEligibilityResponse(
+    bool CanAmend,
+    int AmendsUsed,
+    int MaxAmends,
+    double? HoursRemaining,
+    string? Reason);
+
+// ── Rework chain ──
+public sealed record ExpertReworkChainIterationResponse(
+    int Iteration,
+    string State,
+    Dictionary<string, int> Scores,
+    string FinalComment,
+    DateTimeOffset CreatedAt,
+    string? ReviewerName);
+
+public sealed record ExpertReworkChainResponse(
+    string ReviewRequestId,
+    IReadOnlyList<ExpertReworkChainIterationResponse> Chain);
+
+// ── Bulk operations ──
+public sealed record ExpertBulkClaimResponse(
+    IReadOnlyList<string> ClaimedIds,
+    IReadOnlyList<string> FailedIds,
+    string? Warning);
+
+// ── Messaging ──
+public sealed record ExpertMessageThreadResponse(
+    string Id,
+    string Title,
+    string Status,
+    string? LinkedReviewRequestId,
+    string? LinkedCalibrationCaseId,
+    string? LinkedLearnerId,
+    int ReplyCount,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+public sealed record ExpertMessageReplyResponse(
+    string Id,
+    string AuthorId,
+    string AuthorRole,
+    string AuthorName,
+    string Body,
+    DateTimeOffset CreatedAt);
+
+public sealed record ExpertMessageThreadDetailResponse(
+    string Id,
+    string Title,
+    string Status,
+    string? LinkedReviewRequestId,
+    string? LinkedCalibrationCaseId,
+    string? LinkedLearnerId,
+    IReadOnlyList<ExpertMessageReplyResponse> Replies,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+// ── Compensation ──
+public sealed record ExpertCompensationRateResponse(
+    string SubtestCode,
+    long RateMinorUnits,
+    string Currency);
+
+public sealed record ExpertCompensationSummaryResponse(
+    long PendingEarningsMinorUnits,
+    long PaidThisMonthMinorUnits,
+    long LifetimeEarningsMinorUnits,
+    string Currency,
+    int CompletedReviewsThisMonth,
+    int PendingPayoutCount);
+
+public sealed record ExpertEarningItemResponse(
+    string Id,
+    string ReviewRequestId,
+    string SubtestCode,
+    long AmountMinorUnits,
+    string Currency,
+    string Status,
+    DateTimeOffset EarnedAt);
+
+public sealed record ExpertEarningsHistoryResponse(
+    IReadOnlyList<ExpertEarningItemResponse> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public sealed record ExpertPayoutItemResponse(
+    string Id,
+    long TotalAmountMinorUnits,
+    string Currency,
+    string Status,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ApprovedAt);
+
+public sealed record ExpertPayoutsResponse(
+    IReadOnlyList<ExpertPayoutItemResponse> Items,
+    int TotalCount);

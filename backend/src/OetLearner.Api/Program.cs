@@ -160,6 +160,7 @@ builder.Services.Configure<AiProviderOptions>(builder.Configuration.GetSection(A
 builder.Services.Configure<WebPushOptions>(builder.Configuration.GetSection(WebPushOptions.SectionName));
 builder.Services.Configure<NotificationProofHarnessOptions>(builder.Configuration.GetSection(NotificationProofHarnessOptions.SectionName));
 builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSection("PasswordPolicy"));
+builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IWebPushDispatcher, WebPushDispatcher>();
@@ -494,10 +495,19 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminContentPublisherApproval", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "content:publisher_approval", "content:publish", "system_admin")));
+    options.AddPolicy("AdminContentPublishRequestsRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "content:editor_review", "content:publisher_approval", "content:publish", "system_admin")));
     options.AddPolicy("AdminBillingRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "system_admin")));
     options.AddPolicy("AdminBillingWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "system_admin")));
+    options.AddPolicy("AdminFreezeRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "system_admin")));
+    options.AddPolicy("AdminFreezeWrite", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "system_admin")));
     options.AddPolicy("AdminUsersRead", policy => policy
@@ -558,8 +568,12 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService
 builder.Services.AddScoped<OetLearner.Api.Services.Recalls.IRecallsTtsService, OetLearner.Api.Services.Recalls.RecallsTtsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.IWritingPdfService, OetLearner.Api.Services.WritingPdfService>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.SpeakingAudioRetentionWorker>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<ExpertOnboardingService>();
+builder.Services.AddScoped<ExpertMessagingService>();
+builder.Services.AddScoped<ExpertCompensationService>();
+builder.Services.AddScoped<AdminAlertService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<SponsorService>();
 builder.Services.AddScoped<ContentHierarchyService>();
@@ -928,6 +942,25 @@ app.UseExceptionHandler(handler =>
             return;
         }
 
+        if (exception is BadHttpRequestException badHttpRequestException)
+        {
+            var statusCode = badHttpRequestException.StatusCode is >= 400 and < 500
+                ? badHttpRequestException.StatusCode
+                : StatusCodes.Status400BadRequest;
+            context.Response.StatusCode = statusCode;
+            var badRequestPayload = new
+            {
+                code = "invalid_request",
+                message = app.Environment.IsDevelopment()
+                    ? badHttpRequestException.Message
+                    : "The request body, route values, or query string are invalid.",
+                retryable = false,
+                correlationId
+            };
+            await context.Response.WriteAsync(JsonSupport.Serialize(badRequestPayload));
+            return;
+        }
+
         // Optimistic-concurrency conflict (xmin mismatch on Subscription,
         // Invoice, SubscriptionItem, Evaluation, or any other entity mapped
         // with a concurrency token). Surface as 409 so the UI / caller can
@@ -1104,18 +1137,26 @@ app.MapAnalyticsEndpoints();
 app.MapNotificationEndpoints();
 app.MapLearnerEndpoints();
 app.MapExpertEndpoints();
+app.MapExpertMessagingEndpoints();
+app.MapExpertCompensationEndpoints();
 app.MapAdminEndpoints();
+app.MapAdminAlertEndpoints();
 app.MapAiUsageAdminEndpoints();
+app.MapAiEscalationAdminEndpoints();
 app.MapAiMeEndpoints();
 app.MapContentPapersAdminEndpoints();
+app.MapContentStalenessEndpoints();
 app.MapMockAdminEndpoints();
 app.MapContentPapersLearnerEndpoints();
 app.MapReadingAuthoringAdminEndpoints();
 app.MapListeningAuthoringAdminEndpoints();
+app.MapReadingAnalyticsAdminEndpoints();
+app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
 app.MapListeningLearnerEndpoints();
 app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
+app.MapRecallsEndpoints();
 
 // ── Phase 1 new endpoints ──
 app.MapGamificationEndpoints();
@@ -1135,6 +1176,7 @@ app.MapSocialEndpoints();
 app.MapConversationEndpoints();
 app.MapPronunciationEndpoints();
 app.MapWritingCoachEndpoints();
+app.MapWritingPdfEndpoints();
 app.MapMarketplaceEndpoints();
 
 // ── Sponsor Dashboard ──
@@ -1142,9 +1184,11 @@ app.MapSponsorEndpoints();
 
 // ── Private Speaking Sessions ──
 app.MapPrivateSpeakingEndpoints();
+app.MapSpeakingCalibrationEndpoints();
 
 // ── Rulebook + Writing linter + Speaking auditor + Grounded AI gateway ──
 app.MapRulebookEndpoints();
+app.MapRulebookAdminEndpoints();
 
 // ── Media Management ──
 app.MapMediaEndpoints();

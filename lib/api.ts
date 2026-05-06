@@ -1814,11 +1814,16 @@ export async function submitSpeakingRecording(
   durationSeconds = 120,
   mode: 'self' | 'exam' | 'practice' = 'self',
   consent?: { accepted: boolean; text?: string },
+  options?: { attemptId?: string; mockSessionId?: string },
 ): Promise<{ uploadUrl: string; submissionId: string }> {
-  const attempt = await ensureAttempt('speaking', taskId, mode);
-  const upload = await apiRequest<ApiRecord>(`/v1/speaking/attempts/${attempt.attemptId}/audio/upload-session`, { method: 'POST' });
+  const boundAttemptId = options?.attemptId?.trim();
+  const attempt = boundAttemptId ? { attemptId: boundAttemptId } : await ensureAttempt('speaking', taskId, mode);
+  const bindingQuery = new URLSearchParams({ contentId: taskId });
+  if (options?.mockSessionId) bindingQuery.set('mockSessionId', options.mockSessionId);
+  const bindingSuffix = `?${bindingQuery.toString()}`;
+  const upload = await apiRequest<ApiRecord>(`/v1/speaking/attempts/${encodeURIComponent(attempt.attemptId)}/audio/upload-session${bindingSuffix}`, { method: 'POST' });
   await uploadBinary(upload.uploadUrl, recording);
-  await apiRequest(`/v1/speaking/attempts/${attempt.attemptId}/audio/complete`, {
+  await apiRequest(`/v1/speaking/attempts/${encodeURIComponent(attempt.attemptId)}/audio/complete${bindingSuffix}`, {
     method: 'POST',
     body: JSON.stringify({
       uploadSessionId: upload.uploadSessionId,
@@ -1833,13 +1838,15 @@ export async function submitSpeakingRecording(
       consentAcceptedAt: new Date().toISOString(),
     }),
   });
-  const submitted = await apiRequest<ApiRecord>(`/v1/speaking/attempts/${attempt.attemptId}/submit`, { method: 'POST' });
+  const submitted = await apiRequest<ApiRecord>(`/v1/speaking/attempts/${encodeURIComponent(attempt.attemptId)}/submit${bindingSuffix}`, { method: 'POST' });
   const evaluationId = typeof submitted.evaluationId === 'string' ? submitted.evaluationId : '';
   if (!evaluationId) {
     throw new Error('Speaking evaluation was not queued. Please try again.');
   }
 
-  cacheRemove(attemptCacheKey('speaking', taskId, mode));
+  if (!boundAttemptId) {
+    cacheRemove(attemptCacheKey('speaking', taskId, mode));
+  }
   cacheSet(evaluationCacheKey('speaking', taskId), evaluationId);
   return { uploadUrl: upload.uploadUrl, submissionId: evaluationId };
 }
@@ -3574,9 +3581,18 @@ export async function fetchExpertAvailabilityConstraints(): Promise<ExpertAvaila
 
 // ─── Admin / CMS API ───
 
-export async function fetchAdminContent(params?: { type?: string; profession?: string; status?: string; search?: string; page?: number; pageSize?: number }) {
+// ── Admin Alerts ─────────────────────────────────────
+
+export async function fetchAdminAlerts() {
+  return apiRequest('/v1/admin/alerts');
+}
+
+// ── Admin Content ─────────────────────────────────────
+
+export async function fetchAdminContent(params?: { type?: string; subtest?: string; profession?: string; status?: string; search?: string; page?: number; pageSize?: number }) {
   const qs = new URLSearchParams();
   if (params?.type) qs.set('type', params.type);
+  if (params?.subtest) qs.set('subtest', params.subtest);
   if (params?.profession) qs.set('profession', params.profession);
   if (params?.status) qs.set('status', params.status);
   if (params?.search) qs.set('search', params.search);
@@ -5382,6 +5398,7 @@ export async function fetchAdminSpeakingContentOptions(): Promise<Array<{ id: st
   const items = Array.isArray(json.items) ? json.items.map(asRecord) : [];
   return items
     .filter((it) => typeof it.status === 'string' && it.status.toLowerCase() === 'published')
+    .filter((it) => String(it.subtestCode ?? '').toLowerCase() === 'speaking')
     .map((it) => ({
       id: typeof it.id === 'string' ? it.id : '',
       title: typeof it.title === 'string' ? it.title : '',
@@ -5639,7 +5656,7 @@ export async function startSpeakingSelfPracticeSession(
   const sessionId = typeof session.id === 'string' ? session.id : '';
   const redirectPath = typeof json.redirectPath === 'string' && json.redirectPath
     ? json.redirectPath
-    : `/conversation/session/${sessionId}`;
+    : `/conversation/${sessionId}`;
   return { sessionId, redirectPath };
 }
 
@@ -8020,10 +8037,11 @@ export async function generateReferralCode() {
 
 // ── Expert Annotation Templates ───────────────────────
 
-export async function fetchAnnotationTemplates(params?: { subtestCode?: string; criterionCode?: string }) {
+export async function fetchAnnotationTemplates(params?: { subtestCode?: string; criterionCode?: string; search?: string }) {
   const qs = new URLSearchParams();
   if (params?.subtestCode) qs.set('subtestCode', params.subtestCode);
   if (params?.criterionCode) qs.set('criterionCode', params.criterionCode);
+  if (params?.search) qs.set('search', params.search);
   const q = qs.toString();
   return apiRequest(`/v1/expert/annotation-templates${q ? `?${q}` : ''}`);
 }
@@ -8050,6 +8068,90 @@ export async function deleteAnnotationTemplate(templateId: string) {
   return apiRequest(`/v1/expert/annotation-templates/${encodeURIComponent(templateId)}`, {
     method: 'DELETE',
   });
+}
+
+// ── Expert Amend Review ──────────────────────────────
+
+export async function fetchAmendEligibility(reviewRequestId: string) {
+  return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/amend-eligibility`);
+}
+
+export async function amendReview(reviewRequestId: string, payload: {
+  scores: Record<string, number>;
+  criterionComments: Record<string, string>;
+  finalComment: string;
+}) {
+  return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/amend`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── Expert Rework Chain ──────────────────────────────
+
+export async function fetchReworkChain(reviewRequestId: string) {
+  return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/rework-chain`);
+}
+
+// ── Expert Bulk Operations ────────────────────────────
+
+export async function bulkClaimReviews(reviewRequestIds: string[]) {
+  return apiRequest('/v1/expert/queue/bulk-claim', {
+    method: 'POST',
+    body: JSON.stringify({ reviewRequestIds }),
+  });
+}
+
+export async function bulkReleaseReviews(reviewRequestIds: string[]) {
+  return apiRequest('/v1/expert/queue/bulk-release', {
+    method: 'POST',
+    body: JSON.stringify({ reviewRequestIds }),
+  });
+}
+
+// ── Expert Messaging ──────────────────────────────────
+
+export async function fetchExpertMessageThreads() {
+  return apiRequest('/v1/expert/messages');
+}
+
+export async function createExpertMessageThread(payload: {
+  title: string; body: string; linkedReviewRequestId?: string;
+  linkedCalibrationCaseId?: string; linkedLearnerId?: string;
+}) {
+  return apiRequest('/v1/expert/messages', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchExpertMessageThread(threadId: string) {
+  return apiRequest(`/v1/expert/messages/${encodeURIComponent(threadId)}`);
+}
+
+export async function postExpertMessageReply(threadId: string, body: string) {
+  return apiRequest(`/v1/expert/messages/${encodeURIComponent(threadId)}/replies`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  });
+}
+
+// ── Expert Compensation ───────────────────────────────
+
+export async function fetchExpertCompensationSummary() {
+  return apiRequest('/v1/expert/compensation');
+}
+
+export async function fetchExpertEarningsHistory(page?: number, pageSize?: number) {
+  const qs = new URLSearchParams();
+  if (page) qs.set('page', String(page));
+  if (pageSize) qs.set('pageSize', String(pageSize));
+  const q = qs.toString();
+  return apiRequest(`/v1/expert/compensation/earnings${q ? `?${q}` : ''}`);
+}
+
+export async function fetchExpertPayouts() {
+  return apiRequest('/v1/expert/compensation/payouts');
 }
 
 // ── Admin: Score Guarantee Claims ─────────────────────

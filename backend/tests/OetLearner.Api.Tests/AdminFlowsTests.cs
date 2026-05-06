@@ -37,6 +37,22 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     }
 
     [Fact]
+    public async Task AdminContent_SubtestFilter_ReturnsOnlyMatchingSubtest()
+    {
+        var response = await _client.GetAsync("/v1/admin/content?subtest=speaking&pageSize=50");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var items = json.RootElement.GetProperty("items");
+        Assert.True(items.GetArrayLength() >= 1);
+
+        foreach (var item in items.EnumerateArray())
+        {
+            Assert.Equal("speaking", item.GetProperty("subtestCode").GetString());
+        }
+    }
+
+    [Fact]
     public async Task AdminContent_ListReturnsSeededItems_WithSeededJwtSignIn()
     {
         using var factory = new FirstPartyAuthTestWebApplicationFactory();
@@ -128,8 +144,12 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         Assert.True(json.RootElement.TryGetProperty("quality", out _));
     }
 
-    [Fact]
-    public async Task PublishRequests_AllowsEditorReviewPermissionToReadQueue()
+    [Theory]
+    [InlineData(AdminPermissions.ContentEditorReview)]
+    [InlineData(AdminPermissions.ContentPublisherApproval)]
+    [InlineData(AdminPermissions.ContentPublish)]
+    [InlineData(AdminPermissions.SystemAdmin)]
+    public async Task PublishRequests_AllowsWorkflowPermissionsToReadQueue(string permission)
     {
         var previous = Environment.GetEnvironmentVariable("Auth__UseDevelopmentAuth");
         Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", "true");
@@ -138,7 +158,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             using var factory = new TestWebApplicationFactory();
             using var client = factory.CreateClient();
             client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
-            client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.ContentEditorReview);
+            client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", permission);
 
             var response = await client.GetAsync("/v1/admin/publish-requests");
 
@@ -150,8 +170,12 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         }
     }
 
-    [Fact]
-    public async Task PublishRequests_DoesNotAllowContentReadOnlyPermissionToReadQueue()
+    [Theory]
+    [InlineData(AdminPermissions.ContentRead)]
+    [InlineData(AdminPermissions.ContentWrite)]
+    [InlineData(AdminPermissions.BillingRead)]
+    [InlineData(AdminPermissions.AiConfig)]
+    public async Task PublishRequests_DoesNotAllowNonWorkflowPermissionsToReadQueue(string permission)
     {
         var previous = Environment.GetEnvironmentVariable("Auth__UseDevelopmentAuth");
         Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", "true");
@@ -160,7 +184,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             using var factory = new TestWebApplicationFactory();
             using var client = factory.CreateClient();
             client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
-            client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.ContentRead);
+            client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", permission);
 
             var response = await client.GetAsync("/v1/admin/publish-requests");
 

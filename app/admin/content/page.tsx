@@ -79,6 +79,20 @@ const hubSections: HubSection[] = [
         badge: 'Module',
       },
       {
+        href: '/admin/content/papers?subtest=speaking',
+        label: 'Speaking Authoring',
+        description: 'Author OET Speaking role-play cards with candidate/interlocutor structure, source assets, and publish readiness.',
+        icon: <Mic className="h-5 w-5" />,
+        badge: 'Module',
+      },
+      {
+        href: '/admin/content/speaking/mock-sets',
+        label: 'Speaking Mock Sets',
+        description: 'Pair two published Speaking role-plays into the official OET Speaking mock shape.',
+        icon: <MessageSquareText className="h-5 w-5" />,
+        badge: 'OET',
+      },
+      {
         href: '/admin/content/mocks',
         label: 'Full Mocks',
         description: 'Bundle Listening + Reading + Writing + Speaking into a complete OET mock paper.',
