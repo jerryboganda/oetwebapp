@@ -20,14 +20,14 @@ if (!Directory.Exists(srcRoot))
 var outFile = Path.Combine(repoRoot, "backend", "src", "OetLearner.Api", "Data", "Seeds", "writing-samples.v1.json");
 Directory.CreateDirectory(Path.GetDirectoryName(outFile)!);
 
-var folderMap = new (string Pattern, string LetterType, string Title, string Slug)[]
+var folderMap = new (string Pattern, string LetterType, string Title, string Slug, string SeedId)[]
 {
-    ("Writing 1*", "routine_referral",                 "Routine Referral",                                "writing-1-routine-referral"),
-    ("Writing 2*", "non_medical_referral",             "Non-Medical Referral",                            "writing-2-non-medical-referral"),
-    ("Writing 3*", "urgent_referral",                  "Urgent Referral",                                 "writing-3-urgent-referral"),
-    ("Writing 4*", "update_discharge",                 "Update & Discharge to GP",                        "writing-4-update-discharge"),
-    ("Writing 5*", "update_referral_specialist_to_gp","Update & Referral (Specialist to GP/Dentist)",     "writing-5-update-referral-specialist-to-gp"),
-    ("Writing 6*", "transfer_letter",                  "Transfer Letter",                                 "writing-6-transfer-letter"),
+    ("Writing 1*", "routine_referral",                 "Routine Referral",                                "writing-1-routine-referral",                 "wrt-v1-1-routine-referral"),
+    ("Writing 2*", "non_medical_referral",             "Non-Medical Referral",                            "writing-2-non-medical-referral",             "wrt-v1-2-non-medical-referral"),
+    ("Writing 3*", "urgent_referral",                  "Urgent Referral",                                 "writing-3-urgent-referral",                  "wrt-v1-3-urgent-referral"),
+    ("Writing 4*", "update_discharge",                 "Update & Discharge to GP",                        "writing-4-update-discharge",                 "wrt-v1-4-update-discharge"),
+    ("Writing 5*", "update_referral_specialist_to_gp","Update & Referral (Specialist to GP/Dentist)",     "writing-5-update-referral-specialist-to-gp", "wrt-v1-5-spec-to-gp"),
+    ("Writing 6*", "transfer_letter",                  "Transfer Letter",                                 "writing-6-transfer-letter",                  "wrt-v1-6-transfer-letter"),
 };
 
 var samples = new List<object>();
@@ -60,7 +60,7 @@ foreach (var entry in folderMap)
 
     samples.Add(new
     {
-        seedId          = $"seed:writing:v1:{entry.Slug}",
+        seedId          = entry.SeedId,
         slug            = entry.Slug,
         title           = entry.Title,
         profession      = "medicine",

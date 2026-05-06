@@ -31,7 +31,7 @@ public class WritingSampleSeederTests
         Assert.NotNull(paper.PublishedAt);
         Assert.Equal("writing", paper.SubtestCode);
         Assert.Equal("routine_referral", paper.LetterType);
-        Assert.Equal("seed:writing:v1:writing-1-routine-referral", paper.SourceProvenance);
+        Assert.Equal("wrt-v1-1-routine-referral", paper.SourceProvenance);
 
         var structure = WritingContentStructure.ExtractStructure(paper.ExtractedTextJson);
         Assert.Contains("Acne", WritingContentStructure.BuildCaseNotesText(structure));
@@ -86,7 +86,7 @@ public class WritingSampleSeederTests
             {
                 new
                 {
-                    seedId = "seed:writing:v1:bogus",
+                    seedId = "wrt-v1-bogus",
                     slug = "bogus",
                     title = "Bogus",
                     profession = "medicine",
@@ -126,7 +126,7 @@ public class WritingSampleSeederTests
         {
             new
             {
-                seedId = "seed:writing:v1:writing-1-routine-referral",
+                seedId = "wrt-v1-1-routine-referral",
                 slug = "writing-1-routine-referral",
                 title = "Routine Referral",
                 profession = "medicine",
@@ -136,7 +136,7 @@ public class WritingSampleSeederTests
             },
             new
             {
-                seedId = "seed:writing:v1:writing-3-urgent-referral",
+                seedId = "wrt-v1-3-urgent-referral",
                 slug = "writing-3-urgent-referral",
                 title = "Urgent Referral",
                 profession = "medicine",
