@@ -51,7 +51,68 @@ public interface IListeningAuthoringService
         IReadOnlyList<ListeningAuthoredExtract> extracts,
         string adminId,
         CancellationToken ct);
+
+    /// <summary>
+    /// Gap B6: PATCH a single authored question, mutating only fields
+    /// that are non-null in <paramref name="patch"/>. Returns the full,
+    /// re-tallied structure on success. Throws <see cref="ApiException"/>
+    /// (NotFound) when the question id is unknown for this paper.
+    /// </summary>
+    Task<ListeningAuthoredQuestionList> PatchQuestionAsync(
+        string paperId,
+        string questionId,
+        ListeningQuestionPatch patch,
+        string adminId,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Gap B6: PATCH a single extract by its part code (A1 | A2 | B | C1 | C2),
+    /// mutating only fields that are non-null in <paramref name="patch"/>.
+    /// Throws <see cref="ApiException"/> (NotFound) when the part code is
+    /// not present in the authored extract list.
+    /// </summary>
+    Task<IReadOnlyList<ListeningAuthoredExtract>> PatchExtractAsync(
+        string paperId,
+        string extractCode,
+        ListeningExtractPatch patch,
+        string adminId,
+        CancellationToken ct);
 }
+
+/// <summary>
+/// Per-question PATCH body. Every field is nullable so admins can ship a
+/// minimal diff; null fields are left untouched on the existing row.
+/// </summary>
+public sealed record ListeningQuestionPatch(
+    string? PartCode = null,
+    string? Type = null,
+    string? Stem = null,
+    IReadOnlyList<string>? Options = null,
+    string? CorrectAnswer = null,
+    IReadOnlyList<string>? AcceptedAnswers = null,
+    string? Explanation = null,
+    string? SkillTag = null,
+    string? TranscriptExcerpt = null,
+    string? DistractorExplanation = null,
+    int? Points = null,
+    IReadOnlyList<string?>? OptionDistractorWhy = null,
+    IReadOnlyList<string?>? OptionDistractorCategory = null,
+    string? SpeakerAttitude = null,
+    int? TranscriptEvidenceStartMs = null,
+    int? TranscriptEvidenceEndMs = null);
+
+/// <summary>
+/// Per-extract PATCH body. Every field is nullable so admins can ship a
+/// minimal diff; null fields are left untouched on the existing row.
+/// </summary>
+public sealed record ListeningExtractPatch(
+    int? DisplayOrder = null,
+    string? Kind = null,
+    string? Title = null,
+    string? AccentCode = null,
+    IReadOnlyList<ListeningAuthoredSpeaker>? Speakers = null,
+    int? AudioStartMs = null,
+    int? AudioEndMs = null);
 
 /// <summary>Server-side admin DTO for an authored Listening item. Carries the
 /// correct answer + accepted synonyms, so it MUST NOT be returned by any
@@ -106,9 +167,52 @@ public sealed record ListeningAuthoredSpeaker(
     string? Gender,                                    // m | f | nb | null
     string? Accent);
 
-public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningAuthoringService
+public sealed class ListeningAuthoringService(
+    LearnerDbContext db,
+    IListeningBackfillService? backfill = null) : IListeningAuthoringService
 {
     private const string QuestionsKey = "listeningQuestions";
+
+    /// <summary>
+    /// Gap W4: when relational ListeningQuestion rows already exist for a
+    /// paper, re-run the backfill so the projected rows track the JSON blob
+    /// after every Approve / Replace / Patch. No-op when the optional
+    /// dependency is not wired (tests without a backfill mock) or when no
+    /// relational rows exist yet. If learner attempts already exist, backfill
+    /// refuses to rewrite relational rows; surface that as a conflict so JSON
+    /// and relational runtime state cannot silently diverge.
+    /// </summary>
+    private async Task ResyncRelationalIfNeededAsync(string paperId, string adminId, CancellationToken ct)
+    {
+        if (backfill is null) return;
+        var hasRelational = await HasRelationalProjectionAsync(paperId, ct);
+        if (!hasRelational) return;
+        var report = await backfill.BackfillPaperAsync(paperId, adminId, ct);
+        if (!report.Success)
+        {
+            throw ApiException.Conflict(
+                "listening_relational_resync_blocked",
+                report.Reason ?? "Listening relational projection could not be refreshed; create a new paper revision before editing this paper.");
+        }
+    }
+
+    private async Task EnsureRelationalResyncCanRunBeforeMutationAsync(string paperId, CancellationToken ct)
+    {
+        if (backfill is null) return;
+        var hasRelational = await HasRelationalProjectionAsync(paperId, ct);
+        if (!hasRelational) return;
+        var hasAttempts = await db.ListeningAttempts.AnyAsync(a => a.PaperId == paperId, ct);
+        if (!hasAttempts) return;
+        throw ApiException.Conflict(
+            "listening_relational_resync_blocked",
+            "This Listening paper already has learner attempts. Create a new paper revision before changing authored questions or extract metadata.");
+    }
+
+    private async Task<bool> HasRelationalProjectionAsync(string paperId, CancellationToken ct)
+    {
+        if (await db.ListeningQuestions.AnyAsync(q => q.PaperId == paperId, ct)) return true;
+        return await db.ListeningParts.AnyAsync(part => part.PaperId == paperId, ct);
+    }
 
     public async Task<ListeningAuthoredQuestionList> GetStructureAsync(string paperId, CancellationToken ct)
     {
@@ -127,6 +231,12 @@ public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningA
         string adminId,
         CancellationToken ct)
     {
+        await EnsureRelationalResyncCanRunBeforeMutationAsync(paperId, ct);
+        await using var tx = db.Database.IsRelational() && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+        try
+        {
         var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
 
@@ -184,7 +294,20 @@ public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningA
 
         await db.SaveChangesAsync(ct);
 
+        // Gap W4: keep relational ListeningQuestion / ListeningQuestionOption
+        // rows in sync with the JSON blob so the publish gate (relational-first)
+        // doesn't read stale tallies after every Approve/Replace.
+        await ResyncRelationalIfNeededAsync(paperId, adminId, ct);
+
+        if (tx is not null) await tx.CommitAsync(ct);
+
         return new ListeningAuthoredQuestionList(normalized, Tally(normalized));
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync(ct);
+            throw;
+        }
     }
 
     // ── Phase 5 tail: extract metadata (accent + speakers) ──────────────
@@ -210,6 +333,13 @@ public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningA
         string adminId,
         CancellationToken ct)
     {
+        await EnsureRelationalResyncCanRunBeforeMutationAsync(paperId, ct);
+        await using var tx = db.Database.IsRelational() && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+
+        try
+        {
         var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
 
@@ -277,7 +407,15 @@ public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningA
         });
 
         await db.SaveChangesAsync(ct);
+        await ResyncRelationalIfNeededAsync(paperId, adminId, ct);
+        if (tx is not null) await tx.CommitAsync(ct);
         return normalized;
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync(ct);
+            throw;
+        }
     }
 
     private static List<Dictionary<string, object?>> ReadExtractsArray(string? extractedTextJson)
@@ -599,4 +737,283 @@ public sealed class ListeningAuthoringService(LearnerDbContext db) : IListeningA
         var c = items.Count(q => q.PartCode.StartsWith('C'));
         return new ListeningValidationCounts(a, b, c, a + b + c);
     }
+
+    // ── Gap B6: per-question + per-extract PATCH ─────────────────────────
+
+    private static readonly JsonSerializerOptions CamelJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
+    public async Task<ListeningAuthoredQuestionList> PatchQuestionAsync(
+        string paperId,
+        string questionId,
+        ListeningQuestionPatch patch,
+        string adminId,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(patch);
+        await EnsureRelationalResyncCanRunBeforeMutationAsync(paperId, ct);
+        await using var tx = db.Database.IsRelational() && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+        try
+        {
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct)
+            ?? throw ApiException.NotFound("listening_paper_not_found", "Paper not found.");
+
+        // Load the full authored list so we can locate by id, mutate one
+        // entry, and re-serialise the whole array (preserves stable ordering
+        // semantics elsewhere in the codebase).
+        var raw = ReadQuestionsArray(paper.ExtractedTextJson);
+        var items = raw.Select(NormalizeFromStorage).ToList();
+        var index = items.FindIndex(q =>
+            string.Equals(q.Id, questionId, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+        {
+            throw ApiException.NotFound(
+                "listening_question_not_found",
+                $"Listening question '{questionId}' not found on paper '{paperId}'.");
+        }
+
+        var existing = items[index];
+        var beforeJson = JsonSerializer.Serialize(existing, CamelJson);
+        var merged = ApplyQuestionPatch(existing, patch);
+        var normalized = NormalizeForStorage(merged);
+        items[index] = normalized;
+        var afterJson = JsonSerializer.Serialize(normalized, CamelJson);
+
+        // Persist the rewritten array back into the JSON blob, preserving any
+        // sibling keys the AI extractor / importer may have added.
+        var root = ReadRootObject(paper.ExtractedTextJson);
+        root[QuestionsKey] = JsonSerializer.SerializeToElement(
+            items.OrderBy(q => q.Number).ToList(), CamelJson);
+        paper.ExtractedTextJson = JsonSerializer.Serialize(root);
+        paper.UpdatedAt = DateTimeOffset.UtcNow;
+
+        // Mirror into the relational ListeningQuestion row when one exists,
+        // so authored learner attempts that already read from the relational
+        // path see the patched content immediately. Best-effort — relational
+        // backfill state is not assumed.
+        var relational = await db.ListeningQuestions
+            .FirstOrDefaultAsync(q => q.PaperId == paperId
+                                      && q.QuestionNumber == normalized.Number, ct);
+        if (relational is not null)
+        {
+            ApplyPatchToRelational(relational, normalized);
+            relational.UpdatedAt = paper.UpdatedAt;
+        }
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit_{Guid.NewGuid():N}",
+            OccurredAt = paper.UpdatedAt,
+            ActorId = adminId,
+            ActorAuthAccountId = adminId,
+            ActorName = adminId,
+            Action = "listening.question.patch",
+            ResourceType = "ListeningQuestion",
+            ResourceId = normalized.Id,
+            Details = TruncateForAudit(JsonSerializer.Serialize(new
+            {
+                paperId,
+                questionId = normalized.Id,
+                questionNumber = normalized.Number,
+                beforeJson,
+                afterJson,
+            })),
+        });
+
+        await db.SaveChangesAsync(ct);
+
+        // Gap W4: refresh relational mirror so per-question patches surface
+        // immediately in publish-gate counts and learner-facing relational reads.
+        await ResyncRelationalIfNeededAsync(paperId, adminId, ct);
+
+        if (tx is not null) await tx.CommitAsync(ct);
+
+        return new ListeningAuthoredQuestionList(items, Tally(items));
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<IReadOnlyList<ListeningAuthoredExtract>> PatchExtractAsync(
+        string paperId,
+        string extractCode,
+        ListeningExtractPatch patch,
+        string adminId,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(patch);
+        await EnsureRelationalResyncCanRunBeforeMutationAsync(paperId, ct);
+        await using var tx = db.Database.IsRelational() && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+        try
+        {
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct)
+            ?? throw ApiException.NotFound("listening_paper_not_found", "Paper not found.");
+
+        var partCode = NormalizeExtractPartCode(extractCode)
+            ?? throw ApiException.NotFound(
+                "listening_extract_not_found",
+                $"Listening extract code '{extractCode}' is not a valid part code (A1, A2, B, C1, C2).");
+
+        var current = ReadExtractsArray(paper.ExtractedTextJson)
+            .Select((e, i) => NormalizeExtractFromStorage(e, i))
+            .ToList();
+        var index = current.FindIndex(e =>
+            string.Equals(e.PartCode, partCode, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+        {
+            throw ApiException.NotFound(
+                "listening_extract_not_found",
+                $"Listening extract '{partCode}' not found on paper '{paperId}'.");
+        }
+
+        var existing = current[index];
+        var beforeJson = JsonSerializer.Serialize(existing, CamelJson);
+        var merged = ApplyExtractPatch(existing, patch);
+        var normalized = NormalizeExtractForStorage(merged);
+        current[index] = normalized;
+        var afterJson = JsonSerializer.Serialize(normalized, CamelJson);
+
+        var root = ReadRootObject(paper.ExtractedTextJson);
+        var serialised = current
+            .OrderBy(e => PartCodeOrder(e.PartCode))
+            .ThenBy(e => e.DisplayOrder)
+            .ToList();
+        root[ExtractsKey] = JsonSerializer.SerializeToElement(serialised, CamelJson);
+        paper.ExtractedTextJson = JsonSerializer.Serialize(root);
+        paper.UpdatedAt = DateTimeOffset.UtcNow;
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit_{Guid.NewGuid():N}",
+            OccurredAt = paper.UpdatedAt,
+            ActorId = adminId,
+            ActorAuthAccountId = adminId,
+            ActorName = adminId,
+            Action = "listening.extract.patch",
+            ResourceType = "ListeningExtract",
+            ResourceId = $"{paperId}:{partCode}",
+            Details = TruncateForAudit(JsonSerializer.Serialize(new
+            {
+                paperId,
+                partCode,
+                beforeJson,
+                afterJson,
+            })),
+        });
+
+        await db.SaveChangesAsync(ct);
+
+        // Gap W4: same resync after extract metadata patches so accent /
+        // speakers / audio window changes propagate to the relational mirror.
+        await ResyncRelationalIfNeededAsync(paperId, adminId, ct);
+
+        if (tx is not null) await tx.CommitAsync(ct);
+
+        return serialised;
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    private static Dictionary<string, JsonElement> ReadRootObject(string? extractedTextJson)
+    {
+        if (string.IsNullOrWhiteSpace(extractedTextJson))
+            return new Dictionary<string, JsonElement>();
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(extractedTextJson)
+                   ?? new Dictionary<string, JsonElement>();
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<string, JsonElement>();
+        }
+    }
+
+    private static ListeningAuthoredQuestion ApplyQuestionPatch(
+        ListeningAuthoredQuestion existing, ListeningQuestionPatch p)
+        => existing with
+        {
+            PartCode = p.PartCode ?? existing.PartCode,
+            Type = p.Type ?? existing.Type,
+            Stem = p.Stem ?? existing.Stem,
+            Options = p.Options ?? existing.Options,
+            CorrectAnswer = p.CorrectAnswer ?? existing.CorrectAnswer,
+            AcceptedAnswers = p.AcceptedAnswers ?? existing.AcceptedAnswers,
+            Explanation = p.Explanation ?? existing.Explanation,
+            SkillTag = p.SkillTag ?? existing.SkillTag,
+            TranscriptExcerpt = p.TranscriptExcerpt ?? existing.TranscriptExcerpt,
+            DistractorExplanation = p.DistractorExplanation ?? existing.DistractorExplanation,
+            Points = p.Points ?? existing.Points,
+            OptionDistractorWhy = p.OptionDistractorWhy ?? existing.OptionDistractorWhy,
+            OptionDistractorCategory = p.OptionDistractorCategory ?? existing.OptionDistractorCategory,
+            SpeakerAttitude = p.SpeakerAttitude ?? existing.SpeakerAttitude,
+            TranscriptEvidenceStartMs = p.TranscriptEvidenceStartMs ?? existing.TranscriptEvidenceStartMs,
+            TranscriptEvidenceEndMs = p.TranscriptEvidenceEndMs ?? existing.TranscriptEvidenceEndMs,
+        };
+
+    private static ListeningAuthoredExtract ApplyExtractPatch(
+        ListeningAuthoredExtract existing, ListeningExtractPatch p)
+        => existing with
+        {
+            DisplayOrder = p.DisplayOrder ?? existing.DisplayOrder,
+            Kind = p.Kind ?? existing.Kind,
+            Title = p.Title ?? existing.Title,
+            AccentCode = p.AccentCode ?? existing.AccentCode,
+            Speakers = p.Speakers ?? existing.Speakers,
+            AudioStartMs = p.AudioStartMs ?? existing.AudioStartMs,
+            AudioEndMs = p.AudioEndMs ?? existing.AudioEndMs,
+        };
+
+    private static void ApplyPatchToRelational(
+        ListeningQuestion row, ListeningAuthoredQuestion patched)
+    {
+        row.Stem = patched.Stem;
+        row.Points = Math.Max(1, patched.Points);
+        row.SkillTag = patched.SkillTag;
+        row.ExplanationMarkdown = patched.Explanation;
+        row.TranscriptEvidenceText = patched.TranscriptExcerpt;
+        row.TranscriptEvidenceStartMs = patched.TranscriptEvidenceStartMs;
+        row.TranscriptEvidenceEndMs = patched.TranscriptEvidenceEndMs;
+        row.CorrectAnswerJson = JsonSerializer.Serialize(patched.CorrectAnswer);
+        row.AcceptedSynonymsJson = patched.AcceptedAnswers is { Count: > 0 }
+            ? JsonSerializer.Serialize(patched.AcceptedAnswers)
+            : null;
+        if (Enum.TryParse<ListeningSpeakerAttitude>(
+                patched.SpeakerAttitude, ignoreCase: true, out var attitude))
+        {
+            row.SpeakerAttitude = attitude;
+        }
+        else if (string.IsNullOrWhiteSpace(patched.SpeakerAttitude))
+        {
+            row.SpeakerAttitude = null;
+        }
+    }
+
+    /// <summary>
+    /// Gap N5: AuditEvent.Details is now mapped to PostgreSQL TEXT (see
+    /// <c>LearnerDbContext.OnModelCreating</c>) so before/after JSON
+    /// snapshot pairs survive in full. We keep an in-code 64 KB cap as a
+    /// defence-in-depth guard against pathological payloads — well above
+    /// the typical Listening Part-C MCQ-3 patch envelope (~4 KB) but small
+    /// enough that a runaway loop can't bloat the audit table.
+    /// </summary>
+    private const int MaxAuditDetailsBytes = 65_536;
+
+    private static string TruncateForAudit(string s)
+        => string.IsNullOrEmpty(s) || s.Length <= MaxAuditDetailsBytes
+            ? (s ?? string.Empty)
+            : s[..MaxAuditDetailsBytes];
 }

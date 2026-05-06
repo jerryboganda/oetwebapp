@@ -167,6 +167,50 @@ export interface SpeakingStructureResponse {
   updatedAt?: string;
 }
 
+export interface WritingStructureValidationIssue {
+  code: string;
+  severity: 'error' | 'warning' | string;
+  message: string;
+}
+
+export interface WritingStructureValidationReport {
+  isPublishReady: boolean;
+  issues: WritingStructureValidationIssue[];
+}
+
+export interface WritingAuthoringStructure {
+  taskPrompt?: string;
+  letterType?: string;
+  taskDate?: string;
+  writerRole?: string;
+  recipient?: string;
+  purpose?: string;
+  caseNotes?: string;
+  caseNoteSections?: Array<{
+    heading?: string;
+    items?: string[];
+  }>;
+  modelAnswerText?: string;
+  modelAnswerParagraphs?: Array<{
+    id?: string;
+    text?: string;
+    rationale?: string;
+    criteria?: string[];
+    included?: string[];
+    excluded?: string[];
+    languageNotes?: string;
+  }>;
+  criteriaFocus?: string[];
+  authoringNotes?: string;
+}
+
+export interface WritingStructureResponse {
+  paperId: string;
+  structure: WritingAuthoringStructure;
+  validation: WritingStructureValidationReport;
+  updatedAt?: string;
+}
+
 // ── Transport ───────────────────────────────────────────────────────────
 
 function resolveUrl(path: string): string {
@@ -248,6 +292,15 @@ export const getSpeakingStructure = (paperId: string) =>
 
 export const updateSpeakingStructure = (paperId: string, structure: SpeakingAuthoringStructure) =>
   api<SpeakingStructureResponse>(`/v1/admin/papers/${paperId}/speaking-structure`, {
+    method: 'PUT',
+    body: JSON.stringify({ structure }),
+  });
+
+export const getWritingStructure = (paperId: string) =>
+  api<WritingStructureResponse>(`/v1/admin/papers/${paperId}/writing-structure`);
+
+export const updateWritingStructure = (paperId: string, structure: WritingAuthoringStructure) =>
+  api<WritingStructureResponse>(`/v1/admin/papers/${paperId}/writing-structure`, {
     method: 'PUT',
     body: JSON.stringify({ structure }),
   });

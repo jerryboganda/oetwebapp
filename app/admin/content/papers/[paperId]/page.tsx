@@ -15,7 +15,9 @@ import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { ReadingStructureEditor } from '@/components/domain/ReadingStructureEditor';
 import { ListeningStructureEditor } from '@/components/domain/ListeningStructureEditor';
 import { ListeningExtractMetadataEditor } from '@/components/domain/ListeningExtractMetadataEditor';
+import { ListeningExtractionPanel } from '@/components/domain/ListeningExtractionPanel';
 import { SpeakingStructureEditor } from '@/components/domain/SpeakingStructureEditor';
+import { WritingStructureEditor } from '@/components/domain/WritingStructureEditor';
 import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
 import {
   attachPaperAsset,
@@ -70,12 +72,24 @@ const ROLE_OPTIONS: { value: PaperAssetRole; label: string; accept: string }[] =
   { value: 'Supplementary', label: 'Supplementary', accept: 'application/pdf,.pdf' },
 ];
 
+const WRITING_LETTER_TYPE_OPTIONS = [
+  { value: '', label: 'Select letter type' },
+  { value: 'routine_referral', label: 'Routine referral' },
+  { value: 'urgent_referral', label: 'Urgent referral' },
+  { value: 'non_medical_referral', label: 'Referral to non-medical professional' },
+  { value: 'update_discharge', label: 'Update and discharge' },
+  { value: 'update_referral_specialist_to_gp', label: 'Specialist update / referral to GP or dentist' },
+  { value: 'transfer_letter', label: 'Transfer letter' },
+];
+
 export default function ContentPaperEditorPage({ params }: { params: Promise<{ paperId: string }> }) {
   const { paperId } = use(params);
   const { isAuthenticated, isLoading: isAdminLoading, role } = useAdminAuth();
   const { user, isLoading: isUserLoading } = useCurrentUser();
+  const canReadContent = hasPermission(user?.adminPermissions, AdminPermission.ContentRead);
   const canWriteContent = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
   const canPublishContent = hasPermission(user?.adminPermissions, AdminPermission.ContentPublish);
+  const canViewContent = canReadContent || canWriteContent || canPublishContent;
   const [status, setStatus] = useState<PageStatus>('loading');
   const [paper, setPaper] = useState<ContentPaperDto | null>(null);
   const [requiredRoles, setRequiredRoles] = useState<PaperAssetRole[]>([]);
@@ -86,14 +100,16 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
   const [uploadRole, setUploadRole] = useState<PaperAssetRole>('QuestionPaper');
   const [uploadPart, setUploadPart] = useState('');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [listeningStructureVersion, setListeningStructureVersion] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
-    if (!canWriteContent) return;
+    if (!canViewContent) return;
     setStatus('loading');
     try {
       const p = await getContentPaper(paperId);
       setPaper(p);
+      if (p.subtestCode === 'writing') setUploadRole('CaseNotes');
       const req = await getRequiredRoles(p.subtestCode);
       setRequiredRoles(req.required);
       setStatus('success');
@@ -101,12 +117,12 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
       setStatus('error');
       setToast({ variant: 'error', message: `${(e as Error).message}` });
     }
-  }, [canWriteContent, paperId]);
+  }, [canViewContent, paperId]);
 
   useEffect(() => {
-    if (!canWriteContent) return;
+    if (!canViewContent) return;
     queueMicrotask(() => { void load(); });
-  }, [canWriteContent, load]);
+  }, [canViewContent, load]);
 
   const saveMetadata = async () => {
     if (!paper || !canWriteContent) return;
@@ -183,8 +199,8 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
     return <AdminRouteWorkspace><p className="text-sm text-muted">Admin access required.</p></AdminRouteWorkspace>;
   }
 
-  if (!canWriteContent) {
-    return <AdminRouteWorkspace><p className="text-sm text-muted">Content write permission is required.</p></AdminRouteWorkspace>;
+  if (!canViewContent) {
+    return <AdminRouteWorkspace><p className="text-sm text-muted">Content read, write, or publish permission is required.</p></AdminRouteWorkspace>;
   }
 
   const missingRoles = paper
@@ -231,9 +247,11 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                     onChange={(e) => setPaper({ ...paper, professionId: e.target.value || null })} disabled={!canWriteContent} />
                 )}
                 {paper.subtestCode === 'writing' && (
-                  <Input label="Letter type" value={paper.letterType ?? ''}
+                  <Select
+                    label="Letter type"
+                    value={paper.letterType ?? ''}
                     onChange={(e) => setPaper({ ...paper, letterType: e.target.value || null })}
-                    placeholder="routine_referral | urgent_referral | transfer_letter | …"
+                    options={WRITING_LETTER_TYPE_OPTIONS}
                     disabled={!canWriteContent} />
                 )}
                 {paper.subtestCode === 'speaking' && (
@@ -316,12 +334,20 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
             {canWriteContent && paper.subtestCode === 'listening' && (
               <>
                 <ListeningExtractMetadataEditor paperId={paper.id} />
-                <ListeningStructureEditor paperId={paper.id} />
+                <ListeningExtractionPanel
+                  paperId={paper.id}
+                  onApplied={() => setListeningStructureVersion((value) => value + 1)}
+                />
+                <ListeningStructureEditor key={listeningStructureVersion} paperId={paper.id} />
               </>
             )}
 
             {canWriteContent && paper.subtestCode === 'speaking' && (
               <SpeakingStructureEditor paperId={paper.id} />
+            )}
+
+            {canWriteContent && paper.subtestCode === 'writing' && (
+              <WritingStructureEditor paperId={paper.id} />
             )}
           </>
         )}
@@ -353,7 +379,12 @@ function AssetList({ assets, onRemove, canRemove }: { assets: ContentPaperAssetD
             </div>
           </div>
           {canRemove ? (
-            <Button variant="ghost" size="sm" onClick={() => onRemove(a.id)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onRemove(a.id)}
+              aria-label={`Remove ${a.role} asset ${a.media?.originalFilename ?? a.id}`}
+            >
               <Trash2 className="w-4 h-4" />
             </Button>
           ) : null}

@@ -72,6 +72,21 @@ public class ContentPaperServiceTests
             "admin-1", default);
     }
 
+    private static async Task AttachRequiredWritingAssetsAsync(
+        LearnerDbContext db,
+        ContentPaperService svc,
+        string paperId)
+    {
+        await AddMediaAsync(db, "writing-case-notes");
+        await AddMediaAsync(db, "writing-model-answer");
+        await svc.AttachAssetAsync(paperId, new ContentPaperAssetAttach(
+            PaperAssetRole.CaseNotes, "writing-case-notes", null, null, 0, true),
+            "admin-1", default);
+        await svc.AttachAssetAsync(paperId, new ContentPaperAssetAttach(
+            PaperAssetRole.ModelAnswer, "writing-model-answer", null, null, 1, true),
+            "admin-1", default);
+    }
+
     private static async Task FullyAuthorSpeakingPaperAsync(LearnerDbContext db, string paperId)
     {
         var paper = await db.ContentPapers.FirstAsync(p => p.Id == paperId);
@@ -115,6 +130,26 @@ public class ContentPaperServiceTests
                 clinicalTopic = "paediatric asthma inhaler education",
                 criteriaFocus = new[] { "relationshipBuilding", "informationGiving" },
                 complianceNotes = "Practice content only."
+            }
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task FullyAuthorWritingPaperAsync(LearnerDbContext db, string paperId)
+    {
+        var paper = await db.ContentPapers.FirstAsync(p => p.Id == paperId);
+        paper.ExtractedTextJson = JsonSupport.Serialize(new
+        {
+            writingStructure = new
+            {
+                taskPrompt = "Using the case notes, write a referral letter to the patient's GP.",
+                taskDate = "25 Mar 2023",
+                writerRole = "Doctor",
+                recipient = "Dr Smith, General Practitioner",
+                purpose = "Referral for ongoing management",
+                caseNotes = "Patient: Mr John Roberts, 58.\nDiagnosis: type 2 diabetes.\nReason for referral: review medication adherence.",
+                modelAnswerText = "Dear Dr Smith,\n\nThank you for reviewing Mr John Roberts, a 58-year-old patient with type 2 diabetes who requires support with medication adherence.\n\nYours sincerely,",
+                criteriaFocus = new[] { "purpose", "content", "conciseness" }
             }
         });
         await db.SaveChangesAsync();
@@ -224,6 +259,7 @@ public class ContentPaperServiceTests
         Assert.Contains(PaperAssetRole.AnswerKey, svc.RequiredRolesFor("listening"));
         Assert.Contains(PaperAssetRole.AudioScript, svc.RequiredRolesFor("listening"));
         Assert.Contains(PaperAssetRole.CaseNotes, svc.RequiredRolesFor("writing"));
+        Assert.Contains(PaperAssetRole.ModelAnswer, svc.RequiredRolesFor("writing"));
         Assert.Contains(PaperAssetRole.RoleCard, svc.RequiredRolesFor("speaking"));
         Assert.Contains(PaperAssetRole.AssessmentCriteria, svc.RequiredRolesFor("speaking"));
         Assert.Contains(PaperAssetRole.WarmUpQuestions, svc.RequiredRolesFor("speaking"));
@@ -263,23 +299,99 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
-    public async Task Publish_succeeds_when_requirements_met()
+    public async Task Publish_fails_when_writing_structure_is_not_ready()
     {
         var (db, svc) = Build();
         var p = await svc.CreateAsync(new ContentPaperCreate(
             "writing", "W1", null, "medicine", false, null, 45, null, "routine_referral",
             0, null, DefaultSourceProvenance), "admin-1", default);
 
-        await AddMediaAsync(db, "m-cn");
-        await svc.AttachAssetAsync(p.Id, new ContentPaperAssetAttach(
-            PaperAssetRole.CaseNotes, "m-cn", null, null, 0, MakePrimary: true),
-            "admin-1", default);
+        await AttachRequiredWritingAssetsAsync(db, svc, p.Id);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.PublishAsync(p.Id, "admin-1", default));
+        Assert.Contains("Writing structure", ex.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Publish_fails_when_writing_letter_type_is_not_canonical()
+    {
+        var (db, svc) = Build();
+        var p = await svc.CreateAsync(new ContentPaperCreate(
+            "writing", "W1", null, "medicine", false, null, 45, null, "informal_note",
+            0, null, DefaultSourceProvenance), "admin-1", default);
+
+        await AttachRequiredWritingAssetsAsync(db, svc, p.Id);
+        await FullyAuthorWritingPaperAsync(db, p.Id);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.PublishAsync(p.Id, "admin-1", default));
+        Assert.Contains("canonical Writing letter types", ex.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Publish_succeeds_for_writing_when_structure_and_assets_are_ready()
+    {
+        var (db, svc) = Build();
+        var p = await svc.CreateAsync(new ContentPaperCreate(
+            "writing", "W1", null, "medicine", false, null, 45, null, "routine_referral",
+            0, "purpose,content", DefaultSourceProvenance), "admin-1", default);
+
+        await AttachRequiredWritingAssetsAsync(db, svc, p.Id);
+        await FullyAuthorWritingPaperAsync(db, p.Id);
 
         await svc.PublishAsync(p.Id, "admin-1", default);
 
         var reload = await db.ContentPapers.FirstAsync(x => x.Id == p.Id);
+        var content = await db.ContentItems.FirstAsync(x => x.Id == p.Id);
         Assert.Equal(ContentStatus.Published, reload.Status);
         Assert.NotNull(reload.PublishedAt);
+        Assert.Equal("writing_task", content.ContentType);
+        Assert.Equal("writing", content.SubtestCode);
+        Assert.Equal(ContentStatus.Published, content.Status);
+        Assert.Equal("routine_referral", content.ScenarioType);
+        Assert.Contains("Mr John Roberts", content.CaseNotes);
+        Assert.Contains("Dear Dr Smith", content.ModelAnswerJson);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Archive_hides_projected_writing_content_item()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "writing", "Writing archive", null, "medicine", false, null, 45, null, "urgent_referral",
+            0, "purpose", DefaultSourceProvenance), "admin-1", default);
+        await AttachRequiredWritingAssetsAsync(db, svc, paper.Id);
+        await FullyAuthorWritingPaperAsync(db, paper.Id);
+        await svc.PublishAsync(paper.Id, "admin-1", default);
+
+        await svc.ArchiveAsync(paper.Id, "admin-1", default);
+
+        var content = await db.ContentItems.FirstAsync(x => x.Id == paper.Id);
+        Assert.Equal(ContentStatus.Archived, content.Status);
+        Assert.NotNull(content.ArchivedAt);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Update_returns_attached_assets_for_admin_projection()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "writing", "Writing metadata", null, "medicine", false, null, 45, null, "routine_referral",
+            0, null, DefaultSourceProvenance), "admin-1", default);
+        await AttachRequiredWritingAssetsAsync(db, svc, paper.Id);
+
+        var updated = await svc.UpdateAsync(paper.Id, new ContentPaperUpdate(
+            "Writing metadata updated", null, null, null, null, null, null, null, null, null),
+            "admin-1", default);
+
+        Assert.Equal("Writing metadata updated", updated.Title);
+        Assert.Contains(updated.Assets, asset => asset.Role == PaperAssetRole.CaseNotes && asset.MediaAsset is not null);
+        Assert.Contains(updated.Assets, asset => asset.Role == PaperAssetRole.ModelAnswer && asset.MediaAsset is not null);
         await db.DisposeAsync();
     }
 

@@ -30,7 +30,8 @@ public sealed record ListeningExtractionDraft(
     ListeningExtractionStatus Status,
     string Message,
     IReadOnlyList<ListeningAuthoredQuestion> Questions,
-    bool IsStub = false);
+    bool IsStub = false,
+    string? RawResponseJson = null);
 
 /// <summary>
 /// AI seam for the actual Listening structure extraction. The default
@@ -76,7 +77,8 @@ public sealed class ListeningExtractionService(IListeningExtractionAi ai) : ILis
                     ? (result.StubReason ?? "Stub extraction returned a placeholder 42-item structure.")
                     : "AI extraction returned a 42-item Listening structure.",
                 Questions: result.Questions,
-                IsStub: result.IsStub);
+                IsStub: result.IsStub,
+                RawResponseJson: result.RawResponseJson);
         }
         catch (Exception ex)
         {

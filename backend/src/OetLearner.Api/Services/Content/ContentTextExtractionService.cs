@@ -41,8 +41,9 @@ public sealed class NoOpPdfTextExtractor : IPdfTextExtractor
 public interface IContentTextExtractionService
 {
     /// <summary>Extract text for every PDF asset on a paper and persist it
-    /// into <c>ContentPaper.ExtractedTextJson</c> as a
-    /// <c>{ assetId: text }</c> map.</summary>
+    /// into <c>ContentPaper.ExtractedTextJson</c> as asset-id string entries.
+    /// Existing structured authoring keys such as <c>listeningQuestions</c>
+    /// are preserved.</summary>
     Task<int> ExtractForPaperAsync(string paperId, CancellationToken ct);
 }
 
@@ -60,10 +61,7 @@ public sealed class ContentTextExtractionService(
             .FirstOrDefaultAsync(p => p.Id == paperId, ct);
         if (paper is null) return 0;
 
-        var existing = string.IsNullOrEmpty(paper.ExtractedTextJson)
-            ? new Dictionary<string, string>()
-            : JsonSerializer.Deserialize<Dictionary<string, string>>(paper.ExtractedTextJson)
-              ?? new();
+            var existing = ReadExistingPayload(paper.ExtractedTextJson);
 
         int processed = 0;
         foreach (var asset in paper.Assets)
@@ -76,13 +74,13 @@ public sealed class ContentTextExtractionService(
             {
                 await using var s = await storage.OpenReadAsync(asset.MediaAsset.StoragePath, ct);
                 var text = await extractor.ExtractAsync(s, ct);
-                existing[asset.Id] = text ?? string.Empty;
+                existing[asset.Id] = JsonSerializer.SerializeToElement(text ?? string.Empty);
                 processed++;
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "PDF extraction failed for asset {AssetId}", asset.Id);
-                existing[asset.Id] = string.Empty;
+                existing[asset.Id] = JsonSerializer.SerializeToElement(string.Empty);
             }
         }
 
@@ -90,6 +88,20 @@ public sealed class ContentTextExtractionService(
         paper.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         return processed;
+    }
+
+    private static Dictionary<string, JsonElement> ReadExistingPayload(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, JsonElement>();
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json)
+                   ?? new Dictionary<string, JsonElement>();
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<string, JsonElement>();
+        }
     }
 }
 

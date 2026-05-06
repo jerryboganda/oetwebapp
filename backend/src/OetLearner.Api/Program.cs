@@ -546,9 +546,12 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAnalytics
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAuthoringService, OetLearner.Api.Services.Listening.ListeningAuthoringService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningBackfillService, OetLearner.Api.Services.Listening.ListeningBackfillService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningCurriculumService, OetLearner.Api.Services.Listening.ListeningCurriculumService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionAi, OetLearner.Api.Services.Listening.GroundedListeningExtractionAi>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionService, OetLearner.Api.Services.Listening.ListeningExtractionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionDraftService, OetLearner.Api.Services.Listening.ListeningExtractionDraftService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPathwayService, OetLearner.Api.Services.Listening.ListeningPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAnalyticsService, OetLearner.Api.Services.Reading.ReadingAnalyticsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.StubReadingExtractionAi>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionService, OetLearner.Api.Services.Reading.ReadingExtractionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPathwayService, OetLearner.Api.Services.Reading.ReadingPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService, OetLearner.Api.Services.Reading.ReadingReviewService>();
@@ -773,12 +776,23 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Content.IContentConvention
     OetLearner.Api.Services.Content.ContentConventionParser>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentBulkImportService,
     OetLearner.Api.Services.Content.ContentBulkImportService>();
+builder.Services.Configure<PdfExtractionOptions>(
+    builder.Configuration.GetSection(PdfExtractionOptions.SectionName));
+builder.Services.AddHttpClient("AzureDocIntel");
+builder.Services.AddSingleton<OetLearner.Api.Services.Content.PdfPigPdfTextExtractor>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Content.IPdfTextExtractor,
-    OetLearner.Api.Services.Content.NoOpPdfTextExtractor>();
+    OetLearner.Api.Services.Content.AutoPdfTextExtractor>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentTextExtractionService,
     OetLearner.Api.Services.Content.ContentTextExtractionService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.ContentTextExtractionWorker>();
 
+// Writing sample seeder — one-shot startup load of canonical OET Writing 1-6
+// papers from the bundled seed JSON. Disabled by default; enable per-environment
+// with Content:WritingSeed:Enabled=true. Idempotent: skips rows whose
+// SourceProvenance already matches the seed id.
+builder.Services.Configure<WritingSeedOptions>(
+    builder.Configuration.GetSection(WritingSeedOptions.SectionName));
+builder.Services.AddHostedService<OetLearner.Api.Services.Content.WritingSampleSeeder>();
 // Reading Authoring subsystem (Slices R1–R7).
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingStructureService,
     OetLearner.Api.Services.Reading.ReadingStructureService>();
@@ -799,6 +813,7 @@ builder.Services.AddScoped<
     OetLearner.Api.Services.Listening.IListeningSampleSeeder,
     OetLearner.Api.Services.Listening.ListeningSampleSeeder>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Reading.ReadingAttemptExpireWorker>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningAttemptExpireWorker>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
     OetLearner.Api.Services.Rulebook.AiGatewayService>();

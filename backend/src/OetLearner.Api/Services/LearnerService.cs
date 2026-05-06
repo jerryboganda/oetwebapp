@@ -1242,7 +1242,7 @@ public partial class LearnerService(
 
     public async Task<object> GetWritingTaskAsync(string contentId, CancellationToken cancellationToken)
     {
-        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "writing", cancellationToken)
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "writing" && x.Status == ContentStatus.Published, cancellationToken)
                    ?? throw ApiException.NotFound("content_not_found", "Writing task not found.");
         var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(item.DetailJson, new Dictionary<string, object?>());
         return Merge(new Dictionary<string, object?>
@@ -1564,10 +1564,25 @@ public partial class LearnerService(
         return response;
     }
 
-    public async Task<object> GetWritingModelAnswerAsync(string contentId, CancellationToken cancellationToken)
+    public async Task<object> GetWritingModelAnswerAsync(string userId, string contentId, CancellationToken cancellationToken)
     {
-        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "writing", cancellationToken)
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "writing" && x.Status == ContentStatus.Published, cancellationToken)
                    ?? throw ApiException.NotFound("content_not_found", "Writing model answer not found.");
+
+        var hasSubmittedAttempt = await db.Attempts.AnyAsync(attempt =>
+            attempt.UserId == userId &&
+            attempt.ContentId == contentId &&
+            attempt.SubtestCode == "writing" &&
+            attempt.SubmittedAt != null &&
+            (attempt.State == AttemptState.Submitted ||
+             attempt.State == AttemptState.Evaluating ||
+             attempt.State == AttemptState.Completed), cancellationToken);
+
+        if (!hasSubmittedAttempt)
+        {
+            throw ApiException.Forbidden("writing_model_answer_locked", "Submit your Writing attempt before viewing the model answer.");
+        }
+
         return new
         {
             contentId = item.Id,

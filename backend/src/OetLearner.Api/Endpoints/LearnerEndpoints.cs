@@ -86,7 +86,7 @@ public static class LearnerEndpoints
         writing.MapGet("/evaluations/{evaluationId}/feedback", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingFeedbackAsync(http.UserId(), evaluationId, ct)));
         writing.MapGet("/revisions/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingRevisionAsync(http.UserId(), attemptId, ct)));
         writing.MapPost("/revisions/{attemptId}/submit", async (HttpContext http, string attemptId, RevisionSubmitRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitWritingRevisionAsync(http.UserId(), attemptId, request, ct)));
-        writing.MapGet("/content/{contentId}/model-answer", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingModelAnswerAsync(contentId, ct)));
+        writing.MapGet("/content/{contentId}/model-answer", async (HttpContext http, string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingModelAnswerAsync(http.UserId(), contentId, ct)));
 
         var speaking = v1.MapGroup("/speaking");
         speaking.MapGet("/home", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingHomeAsync(http.UserId(), ct)));

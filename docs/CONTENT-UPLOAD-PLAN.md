@@ -2,7 +2,8 @@
 
 > **Status**: planning document, ready for implementation. Companion to
 > [`AGENTS.md`](../AGENTS.md), [`SCORING.md`](SCORING.md), [`RULEBOOKS.md`](RULEBOOKS.md),
-> and [`AI-USAGE-POLICY.md`](AI-USAGE-POLICY.md). Once approved, work proceeds
+> [`AI-USAGE-POLICY.md`](AI-USAGE-POLICY.md), and the focused
+> [`WRITING-AUTHORING-PLAN.md`](WRITING-AUTHORING-PLAN.md). Once approved, work proceeds
 > as labelled slices the same way the AI Usage subsystem did.
 
 ---

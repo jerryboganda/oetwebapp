@@ -2,6 +2,14 @@
 
 Updated: 2026-05-05
 
+## Writing Authoring CRUD Restart — 2026-05-06
+
+- Multi-agent discovery confirmed the main gap: canonical `ContentPaper` Writing CRUD existed, but published Writing papers were not projected into the active learner Writing task flow.
+- Created `docs/WRITING-AUTHORING-PLAN.md` as the focused Writing PRD/implementation anchor.
+- Implemented first slice: `WritingContentStructure`, admin Writing structure endpoints, required `CaseNotes` + `ModelAnswer` publish gate, publish-to-`ContentItem` bridge, archive hiding, dedicated `/admin/content/writing` workspace, and paper-detail Writing authoring editor.
+- Added focused backend/frontend tests for Writing publish/projection/archive and admin Writing workspace rendering.
+- Remaining high-risk follow-up after this slice: replace placeholder Writing evaluation with grounded AI/scoring and add browser E2E for admin-created Writing paper visibility in learner flows.
+
 ## Status
 
 - Completed a multi-agent read-only discovery pass across UX docs, frontend, backend/API, validation, deployment/ops, documentation, and risk assumptions.

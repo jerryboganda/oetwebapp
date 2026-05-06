@@ -195,6 +195,62 @@ public class ListeningRelationalRuntimeTests
     }
 
     [Fact]
+    public async Task SubmitAfterDeadline_GradesPersistedAnswersAndIgnoresLateFinalPayload()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, questionId) = await SeedRelationalPaperAsync(db);
+
+        await svc.StartAttemptAsync(userId, paperId, "home", default);
+        var attempt = await db.ListeningAttempts.SingleAsync(a => a.UserId == userId && a.PaperId == paperId);
+        await svc.SaveAnswerAsync(userId, attempt.Id, questionId, new ListeningAnswerSaveRequest("wrong"), default);
+
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+        await db.SaveChangesAsync();
+
+        await svc.SubmitAsync(
+            userId,
+            attempt.Id,
+            new Dictionary<string, string?> { [questionId] = "five" },
+            default);
+
+        var savedAnswer = await db.ListeningAnswers.SingleAsync(a => a.ListeningAttemptId == attempt.Id);
+        var submitted = await db.ListeningAttempts.AsNoTracking().SingleAsync(a => a.Id == attempt.Id);
+        Assert.False(savedAnswer.IsCorrect);
+        Assert.Equal(0, savedAnswer.PointsEarned);
+        Assert.Equal(ListeningAttemptStatus.Submitted, submitted.Status);
+        Assert.Equal(0, submitted.RawScore);
+    }
+
+    [Fact]
+    public async Task SubmitAfterWorkerExpiry_GradesPersistedAnswersAndIgnoresLateFinalPayload()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, questionId) = await SeedRelationalPaperAsync(db);
+
+        await svc.StartAttemptAsync(userId, paperId, "home", default);
+        var attempt = await db.ListeningAttempts.SingleAsync(a => a.UserId == userId && a.PaperId == paperId);
+        await svc.SaveAnswerAsync(userId, attempt.Id, questionId, new ListeningAnswerSaveRequest("wrong"), default);
+
+        attempt.Status = ListeningAttemptStatus.Expired;
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddSeconds(-30);
+        attempt.SubmittedAt = DateTimeOffset.UtcNow.AddSeconds(-20);
+        await db.SaveChangesAsync();
+
+        await svc.SubmitAsync(
+            userId,
+            attempt.Id,
+            new Dictionary<string, string?> { [questionId] = "five" },
+            default);
+
+        var savedAnswer = await db.ListeningAnswers.SingleAsync(a => a.ListeningAttemptId == attempt.Id);
+        var submitted = await db.ListeningAttempts.AsNoTracking().SingleAsync(a => a.Id == attempt.Id);
+        Assert.False(savedAnswer.IsCorrect);
+        Assert.Equal(0, savedAnswer.PointsEarned);
+        Assert.Equal(ListeningAttemptStatus.Submitted, submitted.Status);
+        Assert.Equal(0, submitted.RawScore);
+    }
+
+    [Fact]
     public async Task GetSession_DoesNotAutoResumeAttemptFromDifferentMode()
     {
         var (db, svc) = Build();

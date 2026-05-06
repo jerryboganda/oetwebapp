@@ -236,6 +236,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ListeningAnswer> ListeningAnswers => Set<ListeningAnswer>();
     public DbSet<ListeningPolicy> ListeningPolicies => Set<ListeningPolicy>();
     public DbSet<ListeningUserPolicyOverride> ListeningUserPolicyOverrides => Set<ListeningUserPolicyOverride>();
+    public DbSet<ListeningExtractionDraft> ListeningExtractionDrafts => Set<ListeningExtractionDraft>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<BillingPlanVersion> BillingPlanVersions => Set<BillingPlanVersion>();
     public DbSet<WalletTopUpTierConfig> WalletTopUpTierConfigs => Set<WalletTopUpTierConfig>();
@@ -382,6 +383,10 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             ConfigureXminToken<Invoice>(modelBuilder);
             ConfigureXminToken<SubscriptionItem>(modelBuilder);
             ConfigureXminToken<Evaluation>(modelBuilder);
+            // Gap W1: optimistic concurrency on AI-extraction drafts so two
+            // admins racing to Approve/Reject the same Pending draft cannot
+            // both succeed. xmin is a Postgres system column → no DDL.
+            ConfigureXminToken<ListeningExtractionDraft>(modelBuilder);
         }
 
         // Hot JSON columns stored as jsonb for smaller on-disk size, native
@@ -398,6 +403,12 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             modelBuilder.Entity<Evaluation>().Property(x => x.FeedbackItemsJson).HasColumnType("jsonb");
             modelBuilder.Entity<PaymentWebhookEvent>().Property(x => x.PayloadJson).HasColumnType("jsonb");
             modelBuilder.Entity<NotificationTemplate>().Property(x => x.MetadataJson).HasColumnType("jsonb");
+
+            // Gap N5: AuditEvent.Details routinely carries before/after JSON
+            // snapshots that exceed the legacy varchar(1024) cap. Promote the
+            // column to TEXT so full payloads survive (paired migration:
+            // WidenAuditEventDetailsToText).
+            modelBuilder.Entity<AuditEvent>().Property(x => x.Details).HasColumnType("text");
 
             // Composite primary keys on the range-partitioned append-only
             // tables. Postgres requires every UNIQUE/PK on a partitioned
@@ -766,6 +777,16 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         // ── Learner Escalations ──
         modelBuilder.Entity<LearnerEscalation>().HasIndex(x => new { x.UserId, x.Status });
         modelBuilder.Entity<LearnerEscalation>().HasIndex(x => x.SubmissionId);
+
+        // ── Listening AI extraction drafts (gap B7) ──
+        // Cascade-delete drafts when the parent ContentPaper is removed so we
+        // never leave orphan draft rows behind.
+        modelBuilder.Entity<ListeningExtractionDraft>()
+            .HasOne(d => d.Paper)
+            .WithMany()
+            .HasForeignKey(d => d.PaperId)
+            .HasPrincipalKey(p => p.Id)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     /// <summary>

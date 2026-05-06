@@ -99,7 +99,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         // question ids.
         var now = DateTimeOffset.UtcNow;
 
-        await using var tx = db.Database.IsRelational()
+        await using var tx = db.Database.IsRelational() && db.Database.CurrentTransaction is null
             ? await db.Database.BeginTransactionAsync(ct)
             : null;
 

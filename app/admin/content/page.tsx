@@ -65,6 +65,20 @@ const hubSections: HubSection[] = [
         badge: 'Canonical',
       },
       {
+        href: '/admin/content/listening',
+        label: 'Listening Authoring',
+        description: 'Dedicated workspace for OET Listening papers (24+6+12 = 42 items, audio + 3 PDFs).',
+        icon: <Headphones className="h-5 w-5" />,
+        badge: 'Module',
+      },
+      {
+        href: '/admin/content/writing',
+        label: 'Writing Authoring',
+        description: 'Dedicated workspace for OET Writing case notes, letter types, model answers, and publish readiness.',
+        icon: <PenSquare className="h-5 w-5" />,
+        badge: 'Module',
+      },
+      {
         href: '/admin/content/mocks',
         label: 'Full Mocks',
         description: 'Bundle Listening + Reading + Writing + Speaking into a complete OET mock paper.',

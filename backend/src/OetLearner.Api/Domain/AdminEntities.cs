@@ -130,7 +130,13 @@ public class AuditEvent
     [MaxLength(64)]
     public string? ResourceId { get; set; }
 
-    [MaxLength(1024)]
+    /// <summary>
+    /// Free-form audit detail payload (typically JSON). Mapped to
+    /// PostgreSQL <c>text</c> via fluent config in <c>LearnerDbContext</c>
+    /// so before/after diff snapshots (which routinely exceed 1 KB) are
+    /// not silently truncated. SQLite test provider stores it as TEXT
+    /// regardless. See gap N5 in the Listening hardening pass.
+    /// </summary>
     public string? Details { get; set; }
 
     public ApplicationUserAccount? ActorAuthAccount { get; set; }

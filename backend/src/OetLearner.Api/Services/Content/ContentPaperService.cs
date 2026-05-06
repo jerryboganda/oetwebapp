@@ -84,7 +84,7 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
     {
         ["listening"] = new() { PaperAssetRole.Audio, PaperAssetRole.QuestionPaper, PaperAssetRole.AudioScript, PaperAssetRole.AnswerKey },
         ["reading"]   = new() { PaperAssetRole.QuestionPaper, PaperAssetRole.AnswerKey },
-        ["writing"]   = new() { PaperAssetRole.CaseNotes },
+        ["writing"]   = new() { PaperAssetRole.CaseNotes, PaperAssetRole.ModelAnswer },
         ["speaking"]  = new()
         {
             PaperAssetRole.RoleCard,
@@ -137,7 +137,10 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
 
     public async Task<ContentPaper> UpdateAsync(string paperId, ContentPaperUpdate args, string adminId, CancellationToken ct)
     {
-        var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId, ct)
+        var paper = await db.ContentPapers
+            .Include(p => p.Assets)
+                .ThenInclude(a => a.MediaAsset)
+            .FirstOrDefaultAsync(x => x.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
 
         if (args.Title is not null) paper.Title = args.Title.Trim();
@@ -169,7 +172,11 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
 
     public async Task<IReadOnlyList<ContentPaper>> ListAsync(ContentPaperQuery query, CancellationToken ct)
     {
-        var q = db.ContentPapers.AsNoTracking().AsQueryable();
+        var q = db.ContentPapers
+            .Include(p => p.Assets)
+                .ThenInclude(a => a.MediaAsset)
+            .AsNoTracking()
+            .AsQueryable();
         if (!string.IsNullOrWhiteSpace(query.SubtestCode))
             q = q.Where(p => p.SubtestCode == query.SubtestCode!.ToLowerInvariant());
         if (!string.IsNullOrWhiteSpace(query.ProfessionId))
@@ -204,6 +211,17 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         paper.Status = ContentStatus.Archived;
         paper.ArchivedAt = DateTimeOffset.UtcNow;
         paper.UpdatedAt = paper.ArchivedAt.Value;
+        if (string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == paper.Id, ct);
+            if (content is not null)
+            {
+                content.Status = ContentStatus.Archived;
+                content.ArchivedAt = paper.ArchivedAt;
+                content.UpdatedAt = paper.UpdatedAt;
+            }
+        }
         await WriteAuditAsync("ContentPaperArchived", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
     }
@@ -274,6 +292,20 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
             }
         }
 
+        if (string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+        {
+            var writingValidation = WritingContentStructure.Validate(paper);
+            if (!writingValidation.IsPublishReady)
+            {
+                var blockers = writingValidation.Issues
+                    .Where(i => string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase))
+                    .Select(i => $"{i.Code}: {i.Message}")
+                    .ToList();
+                throw new InvalidOperationException(
+                    $"Writing structure is not publish-ready: {string.Join("; ", blockers)}");
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
         paper.Status = ContentStatus.Published;
         paper.PublishedAt = now;
@@ -281,6 +313,10 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
         {
             await UpsertSpeakingContentItemAsync(paper, adminId, now, ct);
+        }
+        if (string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+        {
+            await UpsertWritingContentItemAsync(paper, adminId, now, ct);
         }
         await WriteAuditAsync("ContentPaperPublished", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
@@ -376,6 +412,47 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         content.Status = ContentStatus.Published;
         content.CaseNotes = SpeakingContentStructure.ReadString(detail, "background");
         content.DetailJson = JsonSupport.Serialize(detail);
+        content.SourceType = "content-paper";
+        content.SourceProvenance = string.IsNullOrWhiteSpace(paper.SourceProvenance)
+            ? "curated"
+            : paper.SourceProvenance!;
+        content.RightsStatus = "owned";
+        content.FreshnessConfidence = "current";
+        content.UpdatedAt = now;
+        content.PublishedAt = now;
+    }
+
+    private async Task UpsertWritingContentItemAsync(ContentPaper paper, string adminId, DateTimeOffset now, CancellationToken ct)
+    {
+        var detail = WritingContentStructure.BuildContentItemDetail(paper);
+        var criteriaFocus = SpeakingContentStructure.ReadStringList(
+            SpeakingContentStructure.ReadValue(detail, "criteriaFocus"));
+        var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == paper.Id, ct);
+        if (content is null)
+        {
+            content = new ContentItem
+            {
+                Id = paper.Id,
+                ContentType = "writing_task",
+                SubtestCode = "writing",
+                CreatedAt = now,
+                CreatedBy = adminId,
+            };
+            db.ContentItems.Add(content);
+        }
+
+        content.Title = paper.Title;
+        content.ProfessionId = paper.AppliesToAllProfessions ? null : paper.ProfessionId;
+        content.Difficulty = paper.Difficulty;
+        content.EstimatedDurationMinutes = paper.EstimatedDurationMinutes;
+        content.CriteriaFocusJson = JsonSupport.Serialize(criteriaFocus);
+        content.ScenarioType = paper.LetterType;
+        content.ModeSupportJson = JsonSupport.Serialize(new[] { "learning", "exam" });
+        content.PublishedRevisionId = paper.PublishedRevisionId ?? paper.Id;
+        content.Status = ContentStatus.Published;
+        content.CaseNotes = WritingContentStructure.BuildCaseNotesText(detail);
+        content.DetailJson = JsonSupport.Serialize(detail);
+        content.ModelAnswerJson = JsonSupport.Serialize(WritingContentStructure.BuildModelAnswerPayload(paper));
         content.SourceType = "content-paper";
         content.SourceProvenance = string.IsNullOrWhiteSpace(paper.SourceProvenance)
             ? "curated"

@@ -17,19 +17,57 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchModelAnswer } from '@/lib/api';
+import { InlineAlert } from '@/components/ui/alert';
+import { fetchModelAnswer, isApiError } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { ModelAnswer } from '@/lib/mock-data';
+
+type ModelAnswerState = {
+  taskId: string;
+  model: ModelAnswer | null;
+  loading: boolean;
+  error: string | null;
+};
 
 export default function ModelAnswerExplainer() {
   const searchParams = useSearchParams();
   const taskId = searchParams?.get('taskId') ?? 'wt-001';
-  const [model, setModel] = useState<ModelAnswer | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [modelState, setModelState] = useState<ModelAnswerState>({
+    taskId,
+    model: null,
+    loading: true,
+    error: null,
+  });
+  const isCurrentTask = modelState.taskId === taskId;
+  const model = isCurrentTask ? modelState.model : null;
+  const loading = !isCurrentTask || modelState.loading;
+  const error = isCurrentTask ? modelState.error : null;
 
   useEffect(() => {
+    let active = true;
     analytics.track('content_view', { content: 'model_answer', taskId, subtest: 'writing' });
-    fetchModelAnswer(taskId).then(setModel).finally(() => setLoading(false));
+    fetchModelAnswer(taskId)
+      .then(answer => {
+        if (active) setModelState({ taskId, model: answer, loading: false, error: null });
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          const message = isApiError(err) && err.status === 404
+            ? 'This model answer is no longer available.'
+            : isApiError(err) && err.code === 'writing_model_answer_locked'
+              ? 'Submit your Writing attempt before opening the model answer.'
+              : 'We could not load this model answer. Please try again.';
+          setModelState({
+            taskId,
+            model: null,
+            loading: false,
+            error: message,
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, [taskId]);
 
   if (loading) {
@@ -43,7 +81,15 @@ export default function ModelAnswerExplainer() {
     );
   }
 
-  if (!model) return <LearnerDashboardShell pageTitle="Not Found"><div className="p-10 text-center text-muted">Model answer not found.</div></LearnerDashboardShell>;
+  if (!model) {
+    return (
+      <LearnerDashboardShell pageTitle="Model Answer Explainer">
+        <div className="p-6">
+          <InlineAlert variant="warning">{error ?? 'Model answer not found.'}</InlineAlert>
+        </div>
+      </LearnerDashboardShell>
+    );
+  }
 
   return (
     <LearnerDashboardShell pageTitle="Model Answer Explainer">

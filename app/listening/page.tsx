@@ -351,18 +351,23 @@ export default function ListeningHome() {
                     // The home payload now carries a per-paper
                     // `requiresSubscription` flag projected from
                     // `IContentEntitlementService.AllowAccessAsync` in
-                    // `ListeningLearnerService.GetHomeAsync`. We surface a
-                    // "Premium" lock badge in the card eyebrow when access
-                    // is gated, so the learner sees the gate before they
-                    // click through and trip the 402 in the player.
+                    // `ListeningLearnerService.GetHomeAsync`. Backend B4
+                    // also surfaces an `accessTier` ('free' | 'preview' |
+                    // 'premium') so the eyebrow can render a tier-aware
+                    // affordance. `requiresSubscription` remains the
+                    // authoritative gate; `accessTier` only changes the
+                    // visual.
                     const locked = paper.requiresSubscription === true;
+                    const tier = paper.accessTier;
                     const card: LearnerSurfaceCardModel = {
                       kind: 'task',
                       sourceType: 'backend_task',
                       accent: locked ? 'amber' : (paper.objectiveReady ? 'indigo' : 'amber'),
                       eyebrow: locked
                         ? 'Premium — Subscription Required'
-                        : (paper.objectiveReady ? 'Published Paper' : 'Assets Ready'),
+                        : (tier === 'free'
+                            ? 'Free'
+                            : (paper.objectiveReady ? 'Published Paper' : 'Assets Ready')),
                       eyebrowIcon: locked ? Lock : Volume2,
                       title: paper.title,
                       description: paper.objectiveReady

@@ -507,7 +507,7 @@ public sealed class ListeningLearnerService(
         var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
         if (relationalAttempt is not null)
         {
-            EnsureRelationalAttemptCanMutate(relationalAttempt);
+            await EnsureRelationalAttemptCanMutateAsync(relationalAttempt, ct);
             relationalAttempt.LastActivityAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
             return new { attemptId = relationalAttempt.Id, elapsedSeconds = request.ElapsedSeconds, lastClientSyncAt = relationalAttempt.LastActivityAt };
@@ -522,13 +522,20 @@ public sealed class ListeningLearnerService(
         return new { attemptId = attempt.Id, attempt.ElapsedSeconds, attempt.LastClientSyncAt };
     }
 
-    public async Task<object> SubmitAsync(string userId, string attemptId, CancellationToken ct)
+    public Task<object> SubmitAsync(string userId, string attemptId, CancellationToken ct) =>
+        SubmitAsync(userId, attemptId, null, ct);
+
+    public async Task<object> SubmitAsync(
+        string userId,
+        string attemptId,
+        IReadOnlyDictionary<string, string?>? finalAnswers,
+        CancellationToken ct)
     {
         await EnsureLearnerMutationAllowedAsync(userId, ct);
         var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
         if (relationalAttempt is not null)
         {
-            return await SubmitRelationalAttemptAsync(userId, relationalAttempt, ct);
+            return await SubmitRelationalAttemptAsync(userId, relationalAttempt, finalAnswers, ct);
         }
 
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
@@ -543,6 +550,11 @@ public sealed class ListeningLearnerService(
         if (attempt.State == AttemptState.Completed && existing is not null)
         {
             return BuildReview(attempt, source, existing);
+        }
+
+        if (finalAnswers is { Count: > 0 })
+        {
+            ApplyFinalLegacyAnswers(attempt, source, finalAnswers);
         }
 
         var review = BuildReview(attempt, source);
@@ -755,6 +767,7 @@ public sealed class ListeningLearnerService(
                 policy.Id,
                 policy.FullPaperTimerMinutes,
                 policy.GracePeriodSeconds,
+                policy.OnExpirySubmitPolicy,
                 mode = normalizedMode,
                 onePlayOnly = IsExamMode(normalizedMode),
                 presentationStyle = normalizedMode == "home"
@@ -787,7 +800,7 @@ public sealed class ListeningLearnerService(
         string? userAnswer,
         CancellationToken ct)
     {
-        EnsureRelationalAttemptCanMutate(attempt);
+        await EnsureRelationalAttemptCanMutateAsync(attempt, ct);
         var question = await db.ListeningQuestions.AsNoTracking()
             .Where(q => q.Id == questionId && q.PaperId == attempt.PaperId)
             .Select(q => new { q.Id })
@@ -822,7 +835,11 @@ public sealed class ListeningLearnerService(
         await db.SaveChangesAsync(ct);
     }
 
-    private async Task<object> SubmitRelationalAttemptAsync(string userId, ListeningAttempt attempt, CancellationToken ct)
+    private async Task<object> SubmitRelationalAttemptAsync(
+        string userId,
+        ListeningAttempt attempt,
+        IReadOnlyDictionary<string, string?>? finalAnswers,
+        CancellationToken ct)
     {
         var source = await ResolveSourceAsync(attempt.PaperId, ct);
         if (source.Questions.Count == 0)
@@ -831,13 +848,21 @@ public sealed class ListeningLearnerService(
         }
 
         var existing = await db.Evaluations.FirstOrDefaultAsync(e => e.AttemptId == attempt.Id, ct);
-        var answers = await LoadRelationalAnswersAsync(attempt.Id, ct);
         if (attempt.Status == ListeningAttemptStatus.Submitted && existing is not null)
         {
-            return BuildReview(attempt, source, answers, existing);
+            var existingAnswers = await LoadRelationalAnswersAsync(attempt.Id, ct);
+            return BuildReview(attempt, source, existingAnswers, existing);
         }
 
-        EnsureRelationalAttemptCanMutate(attempt);
+        MarkExpiredIfDeadlinePassed(attempt);
+        var acceptsFinalAnswers = attempt.Status == ListeningAttemptStatus.InProgress;
+        EnsureRelationalAttemptCanSubmit(attempt);
+        if (acceptsFinalAnswers && finalAnswers is { Count: > 0 })
+        {
+            await ApplyFinalRelationalAnswersAsync(attempt, source, finalAnswers, ct);
+        }
+
+        var answers = await LoadRelationalAnswersAsync(attempt.Id, ct);
         var review = BuildReview(attempt, source, answers);
         var itemByQuestionId = review.ItemReview.ToDictionary(item => item.QuestionId, StringComparer.Ordinal);
         var answerRows = await db.ListeningAnswers
@@ -871,6 +896,73 @@ public sealed class ListeningLearnerService(
         return BuildReview(attempt, source, answers, evaluation);
     }
 
+    private static void ApplyFinalLegacyAnswers(
+        Attempt attempt,
+        ListeningSource source,
+        IReadOnlyDictionary<string, string?> finalAnswers)
+    {
+        var validQuestionIds = source.Questions
+            .Select(q => q.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var unknown = finalAnswers.Keys.FirstOrDefault(id => !validQuestionIds.Contains(id));
+        if (unknown is not null)
+        {
+            throw ApiException.Validation("listening_question_not_found", "One submitted answer does not belong to this Listening attempt.");
+        }
+
+        var answers = DeserializeAnswers(attempt.AnswersJson);
+        foreach (var (questionId, answer) in finalAnswers)
+        {
+            answers[questionId] = answer;
+        }
+        attempt.AnswersJson = JsonSupport.Serialize(answers);
+        attempt.LastClientSyncAt = DateTimeOffset.UtcNow;
+    }
+
+    private async Task ApplyFinalRelationalAnswersAsync(
+        ListeningAttempt attempt,
+        ListeningSource source,
+        IReadOnlyDictionary<string, string?> finalAnswers,
+        CancellationToken ct)
+    {
+        var validQuestionIds = source.Questions
+            .Select(q => q.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var unknown = finalAnswers.Keys.FirstOrDefault(id => !validQuestionIds.Contains(id));
+        if (unknown is not null)
+        {
+            throw ApiException.Validation("listening_question_not_found", "One submitted answer does not belong to this Listening attempt.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var rows = await db.ListeningAnswers
+            .Where(answer => answer.ListeningAttemptId == attempt.Id)
+            .ToDictionaryAsync(answer => answer.ListeningQuestionId, StringComparer.Ordinal, ct);
+        foreach (var (questionId, answer) in finalAnswers)
+        {
+            if (!rows.TryGetValue(questionId, out var row))
+            {
+                row = new ListeningAnswer
+                {
+                    Id = $"laa-{Guid.NewGuid():N}",
+                    ListeningAttemptId = attempt.Id,
+                    ListeningQuestionId = questionId,
+                    UserAnswerJson = JsonSerializer.Serialize(answer ?? string.Empty),
+                    AnsweredAt = now,
+                };
+                db.ListeningAnswers.Add(row);
+            }
+            else
+            {
+                row.UserAnswerJson = JsonSerializer.Serialize(answer ?? string.Empty);
+                row.AnsweredAt = now;
+                row.IsCorrect = null;
+                row.PointsEarned = 0;
+                row.SelectedDistractorCategory = null;
+            }
+        }
+    }
+
     private async Task<Dictionary<string, string?>> LoadRelationalAnswersAsync(string attemptId, CancellationToken ct)
     {
         var rows = await db.ListeningAnswers.AsNoTracking()
@@ -901,8 +993,46 @@ public sealed class ListeningLearnerService(
         return await query.FirstOrDefaultAsync(ct);
     }
 
-    private static void EnsureRelationalAttemptCanMutate(ListeningAttempt attempt)
+    private async Task EnsureRelationalAttemptCanMutateAsync(ListeningAttempt attempt, CancellationToken ct)
     {
+        if (attempt.Status != ListeningAttemptStatus.InProgress)
+        {
+            throw ApiException.Validation(
+                "listening_attempt_locked",
+                "This Listening attempt is already submitted or expired and can no longer be changed.");
+        }
+        var now = DateTimeOffset.UtcNow;
+        if (attempt.DeadlineAt is DateTimeOffset deadline && now > deadline)
+        {
+            attempt.Status = ListeningAttemptStatus.Expired;
+            attempt.LastActivityAt = now;
+            await db.SaveChangesAsync(ct);
+            throw ApiException.Validation(
+                "listening_attempt_deadline_passed",
+                "This Listening attempt deadline has passed and answers can no longer be changed.");
+        }
+    }
+
+    private static bool MarkExpiredIfDeadlinePassed(ListeningAttempt attempt)
+    {
+        if (attempt.Status != ListeningAttemptStatus.InProgress) return false;
+
+        var now = DateTimeOffset.UtcNow;
+        if (attempt.DeadlineAt is not DateTimeOffset deadline || now <= deadline) return false;
+
+        attempt.Status = ListeningAttemptStatus.Expired;
+        attempt.SubmittedAt = now;
+        attempt.LastActivityAt = now;
+        return true;
+    }
+
+    private static void EnsureRelationalAttemptCanSubmit(ListeningAttempt attempt)
+    {
+        if (attempt.Status == ListeningAttemptStatus.Expired && attempt.DeadlineAt.HasValue)
+        {
+            return;
+        }
+
         if (attempt.Status != ListeningAttemptStatus.InProgress)
         {
             throw ApiException.Validation(
@@ -1770,6 +1900,7 @@ public sealed class ListeningLearnerService(
         attempt.CompletedAt,
         attempt.ElapsedSeconds,
         attempt.LastClientSyncAt,
+        expiresAt = (DateTimeOffset?)null,
         answers
     };
 
@@ -1784,6 +1915,7 @@ public sealed class ListeningLearnerService(
         completedAt = attempt.SubmittedAt,
         elapsedSeconds = (int)Math.Max(0, (attempt.LastActivityAt - attempt.StartedAt).TotalSeconds),
         lastClientSyncAt = attempt.LastActivityAt,
+        expiresAt = attempt.DeadlineAt,
         answers
     };
 
@@ -1838,6 +1970,7 @@ public sealed class ListeningLearnerService(
             objectiveReady = questionCount > 0,
             questionCount,
             requiresSubscription,
+            accessTier = ResolveAccessTier(paper.TagsCsv),
             assetReadiness = new
             {
                 audio = roles.Contains(PaperAssetRole.Audio),
@@ -1847,6 +1980,28 @@ public sealed class ListeningLearnerService(
             },
             lastAttempt
         };
+    }
+
+    /// <summary>
+    /// Resolve the learner-facing access tier from a paper's <c>TagsCsv</c>.
+    /// Tokens recognised (case-insensitive):
+    ///   <c>access:free</c> → <c>"free"</c>,
+    ///   <c>access:preview</c> or <c>access:preview-first-extract</c> → <c>"preview"</c>,
+    ///   anything else (including null/empty) → <c>"premium"</c>.
+    /// This is independent of <see cref="IContentEntitlementService"/>: it
+    /// describes the paper's intrinsic catalog tier, not the current user's
+    /// entitlement.
+    /// </summary>
+    public static string ResolveAccessTier(string? tagsCsv)
+    {
+        if (string.IsNullOrWhiteSpace(tagsCsv)) return "premium";
+        foreach (var rawToken in tagsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var token = rawToken.ToLowerInvariant();
+            if (token == "access:free") return "free";
+            if (token == "access:preview" || token == "access:preview-first-extract") return "preview";
+        }
+        return "premium";
     }
 
     private static object LegacyTaskHomeDto(ContentItem item)

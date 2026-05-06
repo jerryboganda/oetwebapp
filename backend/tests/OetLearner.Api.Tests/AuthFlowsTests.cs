@@ -1139,6 +1139,13 @@ public class AuthFlowsTests
                 "agreeToPrivacy",
                 "marketingOptIn",
                 "externalRegistrationToken",
+                "utmSource",
+                "utmMedium",
+                "utmCampaign",
+                "utmTerm",
+                "utmContent",
+                "referrerUrl",
+                "landingPath",
             }
         };
 

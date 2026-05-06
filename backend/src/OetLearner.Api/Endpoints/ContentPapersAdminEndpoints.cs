@@ -33,7 +33,7 @@ public static class ContentPapersAdminEndpoints
             var rows = await svc.ListAsync(new ContentPaperQuery(
                 subtest, profession, status, cardType, letterType, search,
                 page ?? 1, pageSize ?? 50), ct);
-            return Results.Ok(rows);
+            return Results.Ok(rows.Select(ProjectPaper));
         });
 
         group.MapGet("/{id}", async (string id, IContentPaperService svc, CancellationToken ct) =>
@@ -48,7 +48,7 @@ public static class ContentPapersAdminEndpoints
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var paper = await svc.CreateAsync(dto, adminId, ct);
-            return Results.Created($"/v1/admin/papers/{paper.Id}", paper);
+            return Results.Created($"/v1/admin/papers/{paper.Id}", ProjectPaper(paper));
         })
         .RequireAuthorization("AdminContentWrite")
         .RequireRateLimiting("PerUserWrite");
@@ -58,7 +58,7 @@ public static class ContentPapersAdminEndpoints
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var paper = await svc.UpdateAsync(id, dto, adminId, ct);
-            return Results.Ok(paper);
+            return Results.Ok(ProjectPaper(paper));
         })
         .RequireAuthorization("AdminContentWrite")
         .RequireRateLimiting("PerUserWrite");
@@ -155,6 +155,79 @@ public static class ContentPapersAdminEndpoints
                 paperId = paper.Id,
                 structure = SpeakingContentStructure.ExtractStructure(paper.ExtractedTextJson),
                 validation = SpeakingContentStructure.Validate(paper),
+                updatedAt = paper.UpdatedAt,
+            });
+        })
+        .RequireAuthorization("AdminContentWrite")
+        .RequireRateLimiting("PerUserWrite");
+
+        // Writing-specific structure editor. Model answers remain behind the
+        // admin gate here and are projected only to the post-submit study flow.
+        group.MapGet("/{id}/writing-structure", async (
+            string id, LearnerDbContext db, CancellationToken ct) =>
+        {
+            var paper = await db.ContentPapers
+                .Include(p => p.Assets)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (paper is null) return Results.NotFound();
+            if (!string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(new { error = "This paper is not a writing paper." });
+            }
+
+            return Results.Ok(new
+            {
+                paperId = paper.Id,
+                structure = WritingContentStructure.ExtractStructure(paper.ExtractedTextJson),
+                validation = WritingContentStructure.Validate(paper),
+            });
+        })
+        .RequireAuthorization("AdminContentWrite")
+        .RequireRateLimiting("PerUserWrite");
+
+        group.MapPut("/{id}/writing-structure", async (
+            string id,
+            WritingStructureSaveDto dto,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var paper = await db.ContentPapers
+                .Include(p => p.Assets)
+                .FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (paper is null) return Results.NotFound();
+            if (!string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(new { error = "This paper is not a writing paper." });
+            }
+
+            if (dto.Structure.ValueKind != JsonValueKind.Object)
+            {
+                return Results.BadRequest(new { error = "writing structure object is required." });
+            }
+
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            paper.ExtractedTextJson = WritingContentStructure.ReplaceStructure(paper.ExtractedTextJson, dto.Structure);
+            paper.UpdatedAt = DateTimeOffset.UtcNow;
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = adminId,
+                ActorName = adminId,
+                Action = "ContentPaperWritingStructureUpdated",
+                ResourceType = "ContentPaper",
+                ResourceId = paper.Id,
+                Details = paper.Title,
+            });
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new
+            {
+                paperId = paper.Id,
+                structure = WritingContentStructure.ExtractStructure(paper.ExtractedTextJson),
+                validation = WritingContentStructure.Validate(paper),
                 updatedAt = paper.UpdatedAt,
             });
         })
@@ -304,3 +377,4 @@ public sealed record ChunkedUploadStartDto(
     string? IntendedRole);
 
 public sealed record SpeakingStructureSaveDto(JsonElement Structure);
+public sealed record WritingStructureSaveDto(JsonElement Structure);

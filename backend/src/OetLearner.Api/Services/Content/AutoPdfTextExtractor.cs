@@ -36,6 +36,11 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
 
     public async Task<string> ExtractAsync(Stream pdfStream, CancellationToken ct)
     {
+        if (string.Equals(_options.Provider, "noop", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
         // Buffer once — both PdfPig and Azure may need to consume the bytes.
         using var ms = new MemoryStream();
         await pdfStream.CopyToAsync(ms, ct);

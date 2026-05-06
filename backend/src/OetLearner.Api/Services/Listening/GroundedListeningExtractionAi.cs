@@ -56,8 +56,8 @@ public sealed class GroundedListeningExtractionAi(
             return Stub("ContentPaper not found.");
 
         var profession = ResolveProfession(paper);
-        var sourceMessage = BuildSourceMessage(paper);
-        if (string.IsNullOrWhiteSpace(sourceMessage))
+        var sourceBundle = BuildSourceMessage(paper);
+        if (!sourceBundle.HasExtractedText)
             return Stub("No extracted text was found on the paper. Run the PDF extraction worker first.");
 
         AiGroundedPrompt prompt;
@@ -87,7 +87,7 @@ public sealed class GroundedListeningExtractionAi(
             result = await gateway.CompleteAsync(new AiGatewayRequest
             {
                 Prompt = prompt,
-                UserInput = sourceMessage,
+                UserInput = sourceBundle.Message,
                 FeatureCode = AiFeatureCodes.AdminListeningDraft,
                 Temperature = 0.1,
                 MaxTokens = 6000,
@@ -127,19 +127,27 @@ public sealed class GroundedListeningExtractionAi(
         return ExamProfession.Medicine;
     }
 
-    private string BuildSourceMessage(ContentPaper paper)
+    private (string Message, bool HasExtractedText) BuildSourceMessage(ContentPaper paper)
     {
-        // ExtractedTextJson is { assetId: extractedText } as written by
-        // ContentTextExtractionService. Re-attach role labels by joining
-        // against paper.Assets so the AI never has to guess which blob is
-        // the question paper vs the audio script vs the answer key.
+        // ExtractedTextJson contains asset-id string entries plus structured
+        // authoring keys such as listeningQuestions/listeningExtracts. Only
+        // string-valued asset entries feed the AI source bundle.
         Dictionary<string, string>? extractedByAsset = null;
         try
         {
             if (!string.IsNullOrWhiteSpace(paper.ExtractedTextJson))
             {
-                extractedByAsset = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                var root = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
                     paper.ExtractedTextJson, JsonOpts);
+                if (root is not null)
+                {
+                    extractedByAsset = root
+                        .Where(kvp => kvp.Value.ValueKind == JsonValueKind.String)
+                        .ToDictionary(
+                            kvp => kvp.Key,
+                            kvp => kvp.Value.GetString() ?? string.Empty,
+                            StringComparer.OrdinalIgnoreCase);
+                }
             }
         }
         catch (JsonException ex)
@@ -156,14 +164,15 @@ public sealed class GroundedListeningExtractionAi(
         sb.AppendLine($"Difficulty: {paper.Difficulty}");
         sb.AppendLine();
 
-        AppendRole(sb, paper, extractedByAsset, PaperAssetRole.QuestionPaper, "Question Paper");
-        AppendRole(sb, paper, extractedByAsset, PaperAssetRole.AudioScript, "Audio Script");
-        AppendRole(sb, paper, extractedByAsset, PaperAssetRole.AnswerKey, "Answer Key");
+        var hasExtractedText = false;
+        hasExtractedText |= AppendRole(sb, paper, extractedByAsset, PaperAssetRole.QuestionPaper, "Question Paper");
+        hasExtractedText |= AppendRole(sb, paper, extractedByAsset, PaperAssetRole.AudioScript, "Audio Script");
+        hasExtractedText |= AppendRole(sb, paper, extractedByAsset, PaperAssetRole.AnswerKey, "Answer Key");
 
-        return sb.ToString();
+        return (sb.ToString(), hasExtractedText);
     }
 
-    private static void AppendRole(
+    private static bool AppendRole(
         StringBuilder sb,
         ContentPaper paper,
         IReadOnlyDictionary<string, string> extracted,
@@ -171,18 +180,21 @@ public sealed class GroundedListeningExtractionAi(
         string heading)
     {
         var assets = paper.Assets.Where(a => a.Role == role).ToList();
-        if (assets.Count == 0) return;
+        if (assets.Count == 0) return false;
 
+        var wroteAny = false;
         sb.AppendLine($"## {heading}");
         sb.AppendLine();
         foreach (var a in assets)
         {
             if (!extracted.TryGetValue(a.Id, out var text) || string.IsNullOrWhiteSpace(text)) continue;
+            wroteAny = true;
             sb.AppendLine("```");
             sb.AppendLine(text.Trim());
             sb.AppendLine("```");
             sb.AppendLine();
         }
+        return wroteAny;
     }
 
     private static (IReadOnlyList<ListeningAuthoredQuestion>?, string?) ParseAndValidate(string completion)

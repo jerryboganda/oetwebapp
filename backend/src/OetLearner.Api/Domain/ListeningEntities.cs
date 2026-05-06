@@ -474,3 +474,73 @@ public class ListeningUserPolicyOverride
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
 }
+
+/// <summary>
+/// Lifecycle status of an AI-proposed Listening structure draft. Mirrors
+/// <see cref="ReadingExtractionStatus"/> but kept separate so the two
+/// modules can evolve independently.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ListeningExtractionDraftStatus
+{
+    Pending = 0,
+    Approved = 1,
+    Rejected = 2,
+}
+
+/// <summary>
+/// Persisted AI extraction proposal for a Listening paper. The
+/// <c>POST .../listening/extract</c> endpoint persists the AI-gateway
+/// result here as <see cref="ListeningExtractionDraftStatus.Pending"/>;
+/// admins then review and approve/reject. Approval re-uses
+/// <c>ListeningAuthoringService.ReplaceStructureAsync</c> so the same
+/// validation + audit trail applies as for a manual edit.
+///
+/// String <c>Id</c> / <c>PaperId</c> match the project-wide convention
+/// (see <see cref="ContentPaper"/> / <see cref="ReadingExtractionDraft"/>);
+/// a Guid PaperId would not satisfy the FK to <c>ContentPapers.Id</c>.
+/// </summary>
+[Index(nameof(PaperId), nameof(Status))]
+[Index(nameof(ProposedAt))]
+public class ListeningExtractionDraft
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string PaperId { get; set; } = default!;   // FK → ContentPaper.Id (cascade)
+
+    public ListeningExtractionDraftStatus Status { get; set; } = ListeningExtractionDraftStatus.Pending;
+
+    public DateTimeOffset ProposedAt { get; set; }
+
+    [MaxLength(64)]
+    public string? ProposedByUserId { get; set; }
+
+    public bool IsStub { get; set; }
+
+    [MaxLength(512)]
+    public string? StubReason { get; set; }
+
+    [MaxLength(2048)]
+    public string Summary { get; set; } = string.Empty;
+
+    /// <summary>JSON-serialised <c>IReadOnlyList&lt;ListeningAuthoredQuestion&gt;</c> —
+    /// the candidate 42-item structure the AI proposed.</summary>
+    public string ProposedQuestionsJson { get; set; } = "[]";
+
+    /// <summary>Raw AI gateway response for audit / debugging. Capped at 64 KB.</summary>
+    [MaxLength(65536)]
+    public string? RawAiResponseJson { get; set; }
+
+    public DateTimeOffset? DecidedAt { get; set; }
+
+    [MaxLength(64)]
+    public string? DecidedByUserId { get; set; }
+
+    [MaxLength(512)]
+    public string? DecisionReason { get; set; }
+
+    public ContentPaper? Paper { get; set; }
+}

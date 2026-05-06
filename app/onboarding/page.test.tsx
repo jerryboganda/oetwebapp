@@ -14,6 +14,12 @@ vi.mock('@/components/layout', () => ({
   ),
 }));
 
+vi.mock('@/components/layout/learner-dashboard-shell', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="learner-dashboard-shell">{children}</div>
+  ),
+}));
+
 vi.mock('@/hooks/use-analytics', () => ({ useAnalytics: () => ({ track: mockTrack }) }));
 vi.mock('@/lib/api', () => ({ fetchOnboardingState: mockFetchOnboardingState, startOnboarding: mockStartOnboarding, completeOnboarding: mockCompleteOnboarding }));
 

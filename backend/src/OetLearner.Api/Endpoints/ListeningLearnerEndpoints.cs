@@ -6,6 +6,8 @@ namespace OetLearner.Api.Endpoints;
 
 public static class ListeningLearnerEndpoints
 {
+    public sealed record ListeningSubmitRequest(Dictionary<string, string?>? Answers);
+
     public static IEndpointRouteBuilder MapListeningLearnerEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/v1/listening-papers")
@@ -116,10 +118,11 @@ public static class ListeningLearnerEndpoints
 
         group.MapPost("/attempts/{attemptId}/submit", async (
             string attemptId,
+            ListeningSubmitRequest? request,
             HttpContext http,
             ListeningLearnerService service,
             CancellationToken ct) =>
-            Results.Ok(await service.SubmitAsync(http.UserId(), attemptId, ct)))
+            Results.Ok(await service.SubmitAsync(http.UserId(), attemptId, request?.Answers, ct)))
             .RequireRateLimiting("PerUserWrite")
             .WithName("SubmitListeningPaperAttempt")
             .WithSummary("Submit and server-grade a Listening attempt");

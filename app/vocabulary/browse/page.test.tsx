@@ -4,11 +4,13 @@ import userEvent from '@testing-library/user-event';
 const {
   mockFetchVocabularyTerms,
   mockFetchVocabularyCategories,
+  mockFetchVocabularyRecallSets,
   mockAddToMyVocabulary,
   mockTrack,
 } = vi.hoisted(() => ({
   mockFetchVocabularyTerms: vi.fn(),
   mockFetchVocabularyCategories: vi.fn(),
+  mockFetchVocabularyRecallSets: vi.fn(),
   mockAddToMyVocabulary: vi.fn(),
   mockTrack: vi.fn(),
 }));
@@ -54,6 +56,7 @@ vi.mock('@/lib/analytics', () => ({
 vi.mock('@/lib/api', () => ({
   fetchVocabularyTerms: mockFetchVocabularyTerms,
   fetchVocabularyCategories: mockFetchVocabularyCategories,
+  fetchVocabularyRecallSets: mockFetchVocabularyRecallSets,
   addToMyVocabulary: mockAddToMyVocabulary,
 }));
 
@@ -70,6 +73,7 @@ describe('Vocabulary browse page', () => {
         { category: 'symptoms', termCount: 80 },
       ],
     });
+    mockFetchVocabularyRecallSets.mockResolvedValue({ sets: [] });
     mockFetchVocabularyTerms.mockResolvedValue({
       total: 2,
       page: 1,

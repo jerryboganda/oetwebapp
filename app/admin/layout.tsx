@@ -134,6 +134,8 @@ function isContentWorkspace(pathname: string | null) {
     'dedup',
     'grammar',
     'pronunciation',
+    'listening',
+    'writing',
     'strategies',
     'publish-requests',
   ];
@@ -202,6 +204,10 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/content/dedup')) {
     return 'Deduplication';
+  }
+
+  if (pathname.startsWith('/admin/content/listening')) {
+    return 'Listening Authoring';
   }
 
   if (pathname.startsWith('/admin/content/grammar')) {

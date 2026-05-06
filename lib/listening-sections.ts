@@ -32,6 +32,26 @@ export const LISTENING_REVIEW_SECONDS: Record<ListeningSectionCode, number> = {
   C2: 120,
 };
 
+/**
+ * CBLA pre-audio reading window (in seconds) granted before the audio of each
+ * section starts playing. Candidates may mark answers in advance during this
+ * window. Per CBLA timing:
+ *   - A1 / A2: 30s each (Part A consultations)
+ *   - B:       30s for the whole Part B section (six 15s extract reads
+ *               compressed into one global pre-roll, since the player
+ *               currently treats Part B as a single section)
+ *   - C1 / C2: 90s each (Part C presentations)
+ */
+export const LISTENING_PREVIEW_SECONDS: Record<ListeningSectionCode, number> = {
+  A1: 30,
+  A2: 30,
+  B: 30,
+  C1: 90,
+  C2: 90,
+};
+
+export const LISTENING_PREVIEW_LABEL = 'Reading time';
+
 export const LISTENING_SECTION_LABEL: Record<ListeningSectionCode, string> = {
   A1: 'Part A — Extract 1',
   A2: 'Part A — Extract 2',

@@ -81,4 +81,16 @@
     </None>
   </ItemGroup>
 
+  <!--
+    Writing samples seed (Writing 1-6, extracted from official PDFs by
+    scripts/extract-writing-pdfs). Loaded by WritingSampleSeeder at boot when
+    Content:WritingSeed:Enabled=true. Idempotent — matched by SourceProvenance.
+  -->
+  <ItemGroup>
+    <None Include="Data\Seeds\writing-samples.v1.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

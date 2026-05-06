@@ -11,7 +11,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   buildCanonicalListeningSkeleton,
   getListeningStructure,
-  proposeListeningStructure,
   replaceListeningStructure,
   validateListeningStructure,
   type ListeningAuthoredQuestion,
@@ -159,31 +158,10 @@ export function ListeningStructureEditor({ paperId }: { paperId: string }) {
     setReport(null);
   };
 
-  // Phase 8: ask the AI extraction service for a 42-item proposal. Today
-  // returns a deterministic stub; a grounded-gateway impl plugs in via DI.
-  const proposeWithAi = async () => {
-    if (questions.length > 0 && !confirm(
-      'This will replace the current question list with the AI-proposed 42-item structure. Unsaved edits will be lost. Continue?',
-    )) return;
-    try {
-      const draft = await proposeListeningStructure(paperId);
-      if (draft.status === 'Failed') {
-        setToast({ variant: 'error', message: `Extraction failed: ${draft.message}` });
-        return;
-      }
-      setQuestions(draft.questions);
-      setDirty(true);
-      setReport(null);
-      setToast({
-        variant: 'success',
-        message: draft.isStub
-          ? 'Loaded deterministic 24/6/12 placeholder (AI gateway not yet wired).'
-          : 'AI-proposed structure loaded.',
-      });
-    } catch (e) {
-      setToast({ variant: 'error', message: `Extraction failed: ${(e as Error).message}` });
-    }
-  };
+  // Phase 8: AI proposals now land in the dedicated `ListeningExtractionPanel`
+  // mounted above this editor. The previous in-place "Propose with AI" button
+  // silently overwrote the in-memory question list, which destroyed unsaved
+  // edits and bypassed reviewer audit. Use the panel to diff + approve.
 
   const save = async () => {
     setSaving(true);
@@ -225,9 +203,6 @@ export function ListeningStructureEditor({ paperId }: { paperId: string }) {
             <Button variant="ghost" size="sm" onClick={bootstrapSkeleton} disabled={saving}>
               <Sparkles className="w-4 h-4 mr-1" /> Bootstrap blank skeleton
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => void proposeWithAi()} disabled={saving}>
-              <Sparkles className="w-4 h-4 mr-1" /> Propose with AI
-            </Button>
             <Button variant="secondary" size="sm" onClick={() => void validate()} loading={validating}>
               Validate
             </Button>
@@ -238,6 +213,10 @@ export function ListeningStructureEditor({ paperId }: { paperId: string }) {
         }
       >
         <div className="space-y-6">
+          <InlineAlert variant="info">
+            AI proposals now land in the <strong>Extraction</strong> panel above for review before applying — they no longer overwrite this editor in place.
+          </InlineAlert>
+
           <CountsBar live={liveCounts} server={counts} />
 
           {report && (

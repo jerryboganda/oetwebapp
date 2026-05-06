@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FileText, Plus, Archive as ArchiveIcon } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
@@ -41,20 +42,39 @@ const STATUSES = [
   { value: 'Archived', label: 'Archived' },
 ];
 
+type SubtestCode = 'listening' | 'reading' | 'writing' | 'speaking';
+
+function normalizeSubtest(value: string | null): SubtestCode | '' {
+  if (value === 'listening' || value === 'reading' || value === 'writing' || value === 'speaking') {
+    return value;
+  }
+  return '';
+}
+
 export default function ContentPapersListPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const { user } = useCurrentUser();
   const canWriteContent = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const initialSubtest = normalizeSubtest(searchParams?.get('subtest') ?? '');
+  const initialStatus = searchParams?.get('status') ?? '';
+  const initialSearch = searchParams?.get('search') ?? '';
+
   const [status, setStatus] = useState<PageStatus>('loading');
   const [rows, setRows] = useState<ContentPaperDto[]>([]);
   const [toast, setToast] = useState<ToastState>(null);
 
-  const [filterSubtest, setFilterSubtest] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [search, setSearch] = useState('');
+  const [filterSubtest, setFilterSubtest] = useState<string>(initialSubtest);
+  const [filterStatus, setFilterStatus] = useState<string>(initialStatus);
+  const [search, setSearch] = useState<string>(initialSearch);
 
   const [showCreate, setShowCreate] = useState(false);
-  const [newSubtest, setNewSubtest] = useState<'listening' | 'reading' | 'writing' | 'speaking'>('listening');
+  const [newSubtest, setNewSubtest] = useState<SubtestCode>(
+    (initialSubtest || 'listening') as SubtestCode,
+  );
   const [newTitle, setNewTitle] = useState('');
   const [newApplyAll, setNewApplyAll] = useState(true);
   const [newProfession, setNewProfession] = useState('medicine');
@@ -79,6 +99,25 @@ export default function ContentPapersListPage() {
   }, [filterSubtest, filterStatus, search]);
 
   useEffect(() => { queueMicrotask(() => { void load(); }); }, [load]);
+
+  // Sync filters → URL (debounced for free-text search). Deep-linkable on reload.
+  useEffect(() => {
+    if (!pathname) return;
+    const timer = setTimeout(() => {
+      const qs = new URLSearchParams();
+      if (filterSubtest) qs.set('subtest', filterSubtest);
+      if (filterStatus) qs.set('status', filterStatus);
+      if (search) qs.set('search', search);
+      const next = qs.toString();
+      const target = next ? `${pathname}?${next}` : pathname;
+      const current = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ''}`;
+      if (target !== current) {
+        router.replace(target);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterSubtest, filterStatus, search, pathname, router]);
 
   const createNow = async () => {
     if (!canWriteContent) return;
@@ -142,8 +181,11 @@ export default function ContentPapersListPage() {
     {
       key: 'a', header: 'Actions', render: (p) => canWriteContent ? (
         <div className="flex gap-2">
-          <Link href={`/admin/content/papers/${p.id}`}>
-            <Button variant="ghost" size="sm">Edit</Button>
+          <Link
+            href={`/admin/content/papers/${p.id}`}
+            className="inline-flex min-h-9 items-center rounded px-3 py-2 text-sm font-semibold text-navy hover:bg-background-light"
+          >
+            Edit
           </Link>
           {p.status !== 'Archived' && (
             <Button variant="ghost" size="sm" onClick={() => void archive(p.id)}>
@@ -184,8 +226,11 @@ export default function ContentPapersListPage() {
               }}>
                 <Plus className="w-4 h-4 mr-1" /> New paper
               </Button>
-              <Link href="/admin/content/papers/import">
-                <Button variant="ghost">Bulk import</Button>
+              <Link
+                href="/admin/content/papers/import"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy transition hover:bg-background-light"
+              >
+                Bulk import
               </Link>
             </div>
           ) : null}

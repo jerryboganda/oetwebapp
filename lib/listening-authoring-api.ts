@@ -194,20 +194,152 @@ export const backfillListeningPaper = (paperId: string) =>
 
 // ── Phase 8: AI extraction (admin) ─────────────────────────────────────
 
-export type ListeningExtractionStatus = 'Pending' | 'Ready' | 'Failed';
+export type ListeningExtractionStatus = 'Pending' | 'Approved' | 'Rejected';
 
-export interface ListeningExtractionDraft {
+/**
+ * Snapshot returned by POST /v1/admin/papers/{paperId}/listening/extract.
+ *
+ * After Gap B7 the propose endpoint persists the AI-gateway result as a
+ * Pending {@link ListeningExtractionDraftDto} and returns the draft id +
+ * current status so the admin diff/approve UI can take over instead of
+ * silently overwriting the authored structure.
+ */
+export interface ListeningExtractionProposal {
+  draftId: string;
   status: ListeningExtractionStatus;
-  message: string;
-  questions: ListeningAuthoredQuestion[];
+  summary: string;
   isStub: boolean;
+  stubReason: string | null;
+  questions: ListeningAuthoredQuestion[];
+}
+
+/**
+ * Full extraction draft persisted on the backend. Mirrors the
+ * `ListeningExtractionDraft` entity in `Domain/ListeningEntities.cs` plus
+ * the `questions` projection helpers parse client-side from
+ * `proposedQuestionsJson` when the server returns the raw entity shape.
+ */
+export interface ListeningExtractionDraftDto {
+  id: string;
+  paperId: string;
+  status: ListeningExtractionStatus;
+  proposedAt: string;
+  proposedByUserId: string | null;
+  isStub: boolean;
+  stubReason: string | null;
+  summary: string;
+  questions: ListeningAuthoredQuestion[];
+  rawAiResponseJson: string | null;
+  decidedAt: string | null;
+  decidedByUserId: string | null;
+  decisionReason: string | null;
+}
+
+/**
+ * Wire shape the backend currently emits for list/get draft endpoints — the
+ * raw entity. We normalise into {@link ListeningExtractionDraftDto} on the
+ * client by parsing `proposedQuestionsJson` if `questions` isn't already
+ * supplied. This keeps the UI insulated from DTO projection changes on the
+ * server.
+ */
+type ListeningExtractionDraftWire = Partial<ListeningExtractionDraftDto> & {
+  id: string;
+  paperId: string;
+  status: ListeningExtractionStatus;
+  proposedAt: string;
+  isStub: boolean;
+  summary?: string | null;
+  proposedQuestionsJson?: string | null;
+  questions?: ListeningAuthoredQuestion[] | null;
+};
+
+function parseQuestionsJson(json: string | null | undefined): ListeningAuthoredQuestion[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as ListeningAuthoredQuestion[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function normaliseDraft(wire: ListeningExtractionDraftWire): ListeningExtractionDraftDto {
+  const questions = wire.questions && wire.questions.length > 0
+    ? wire.questions
+    : parseQuestionsJson(wire.proposedQuestionsJson);
+  return {
+    id: wire.id,
+    paperId: wire.paperId,
+    status: wire.status,
+    proposedAt: wire.proposedAt,
+    proposedByUserId: wire.proposedByUserId ?? null,
+    isStub: wire.isStub,
+    stubReason: wire.stubReason ?? null,
+    summary: wire.summary ?? '',
+    questions,
+    rawAiResponseJson: wire.rawAiResponseJson ?? null,
+    decidedAt: wire.decidedAt ?? null,
+    decidedByUserId: wire.decidedByUserId ?? null,
+    decisionReason: wire.decisionReason ?? null,
+  };
 }
 
 export const proposeListeningStructure = (paperId: string) =>
-  api<ListeningExtractionDraft>(`/v1/admin/papers/${paperId}/listening/extract`, {
+  api<ListeningExtractionProposal>(`/v1/admin/papers/${paperId}/listening/extract`, {
     method: 'POST',
     body: JSON.stringify({}),
   });
+
+export async function listListeningExtractionDrafts(
+  paperId: string,
+  status?: ListeningExtractionStatus,
+): Promise<ListeningExtractionDraftDto[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  const wire = await api<ListeningExtractionDraftWire[]>(
+    `/v1/admin/papers/${paperId}/listening/extractions${qs}`,
+  );
+  return wire.map(normaliseDraft);
+}
+
+export async function getListeningExtractionDraft(
+  paperId: string,
+  draftId: string,
+): Promise<ListeningExtractionDraftDto> {
+  const wire = await api<ListeningExtractionDraftWire>(
+    `/v1/admin/papers/${paperId}/listening/extractions/${draftId}`,
+  );
+  return normaliseDraft(wire);
+}
+
+export async function approveListeningExtractionDraft(
+  paperId: string,
+  draftId: string,
+  reason?: string,
+): Promise<ListeningExtractionDraftDto> {
+  const wire = await api<ListeningExtractionDraftWire>(
+    `/v1/admin/papers/${paperId}/listening/extractions/${draftId}/approve`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason ?? '' }),
+    },
+  );
+  return normaliseDraft(wire);
+}
+
+export async function rejectListeningExtractionDraft(
+  paperId: string,
+  draftId: string,
+  reason: string,
+): Promise<ListeningExtractionDraftDto> {
+  const wire = await api<ListeningExtractionDraftWire>(
+    `/v1/admin/papers/${paperId}/listening/extractions/${draftId}/reject`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    },
+  );
+  return normaliseDraft(wire);
+}
 
 // ── Learner: course pathway snapshot ───────────────────────────────────
 //

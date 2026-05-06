@@ -21,6 +21,14 @@ export interface ListeningHomePaperDto {
    * badge instead of letting the learner click through to a 402.
    */
   requiresSubscription?: boolean;
+  /**
+   * Backend B4 work — coarse access tier projected by
+   * `IContentEntitlementService` so the home grid can render a tier-aware
+   * affordance (Free / Preview / Premium) without re-querying entitlement.
+   * `requiresSubscription` remains the authoritative gate; `accessTier` only
+   * influences the lock badge visual.
+   */
+  accessTier?: 'free' | 'preview' | 'premium';
   assetReadiness: {
     audio: boolean;
     questionPaper: boolean;
@@ -214,6 +222,13 @@ export interface ListeningAttemptDto {
   elapsedSeconds: number;
   lastClientSyncAt: string | null;
   answers: Record<string, string | null>;
+  /**
+   * Server-authoritative deadline for this attempt (ISO-8601). Drives the
+   * 40-minute whole-attempt countdown in the player chrome and the
+   * exam/home auto-submit on expiry. Optional for back-compat with legacy
+   * sessions that have not yet been re-projected.
+   */
+  expiresAt?: string | null;
 }
 
 export interface ListeningReviewItemDto {
@@ -366,9 +381,10 @@ export const recordListeningIntegrityEvent = (
     body: JSON.stringify({ eventType, details, occurredAt }),
   });
 
-export const submitListeningAttempt = (attemptId: string) =>
+export const submitListeningAttempt = (attemptId: string, answers?: Record<string, string | null>) =>
   api<ListeningReviewDto>(`/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/submit`, {
     method: 'POST',
+    body: JSON.stringify({ answers: answers ?? {} }),
   });
 
 export const getListeningResult = (attemptId: string) =>

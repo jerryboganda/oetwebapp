@@ -4,9 +4,10 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, CheckCircle2, ChevronRight, FileText, Loader2, Lock, Pause, Play, Save, Timer, Volume2, WifiOff } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, Clock, FileText, Loader2, Lock, Pause, Play, Save, Timer, Volume2, WifiOff } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,6 +24,8 @@ import {
   type ListeningSessionDto,
 } from '@/lib/listening-api';
 import {
+  LISTENING_PREVIEW_LABEL,
+  LISTENING_PREVIEW_SECONDS,
   LISTENING_REVIEW_SECONDS,
   LISTENING_SECTION_LABEL,
   LISTENING_SECTION_SEQUENCE,
@@ -82,6 +85,21 @@ function PlayerContent() {
   const rootRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // C8e — last-known forward-only audio time. onTimeUpdate keeps this in sync;
+  // onSeeking snaps backwards seeks back to this value in exam mode.
+  const lastKnownTimeRef = useRef<number>(0);
+  // C8e — set true once the active extract's audioEndMs has been crossed in
+  // exam mode. Subsequent play() calls (e.g. user clicking the OS play key)
+  // are immediately re-paused.
+  const hasReachedEndRef = useRef<boolean>(false);
+  // C8f — sentinel that flips true once the preview countdown for the
+  // active section has been initialised. Without this, the preview→audio
+  // transition effect would fire on the first mount (when the initial
+  // `previewSecondsRemaining` state is still 0) and skip the reading
+  // window entirely.
+  const previewArmedRef = useRef<boolean>(false);
+  // C8b — guard so handleSubmit only fires once when the attempt timer hits 0.
+  const autoSubmittedRef = useRef<boolean>(false);
   const [session, setSession] = useState<ListeningSessionDto | null>(null);
   const [attempt, setAttempt] = useState<ListeningAttemptDto | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -99,9 +117,21 @@ function PlayerContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
-  const [phase, setPhase] = useState<'audio' | 'review'>('audio');
+  // C8f — pre-audio reading window precedes the audio of every section so
+  // candidates can read the questions before audio playback starts. Initial
+  // value is 'audio' (no-op until the currentSection effect drops us into
+  // 'preview' for the active section); this avoids a one-frame race where
+  // the transition effect would see phase='preview' with sec=0 before the
+  // section setup has run.
+  const [phase, setPhase] = useState<'preview' | 'audio' | 'review'>('audio');
+  const [previewSecondsRemaining, setPreviewSecondsRemaining] = useState(0);
   const [reviewSecondsRemaining, setReviewSecondsRemaining] = useState(0);
   const [showNextConfirm, setShowNextConfirm] = useState(false);
+  // C8d — whole-attempt 40-minute countdown driven by attempt.expiresAt.
+  const [attemptSecondsRemaining, setAttemptSecondsRemaining] = useState<number | null>(null);
+  // C8c — tracks which extracts have been listened-to-completion so the
+  // section panel can render a checkmark next to each.
+  const [completedExtractIds, setCompletedExtractIds] = useState<Set<string>>(() => new Set());
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const sectionMotion = getSurfaceMotion('section', reducedMotion);
   const listMotion = getSurfaceMotion('list', reducedMotion);
@@ -211,7 +241,9 @@ function PlayerContent() {
       }
       setHasStarted(true);
       router.replace(`/listening/player/${session.paper.id}?attemptId=${started.attemptId}&mode=${started.mode}${drillId ? `&drill=${encodeURIComponent(drillId)}` : ''}`);
-      await audioRef.current?.play().catch((err) => handleAudioPlaybackError(err, setAudioError));
+      // C8f — do NOT auto-play here. Entering hasStarted triggers the
+      // currentSection effect, which drops into the pre-audio reading
+      // window. Audio play() fires when the preview countdown hits zero.
     } catch (err) {
       if (isContentLockedError(err)) {
         setContentLockedMessage(readContentLockedMessage(err));
@@ -222,7 +254,9 @@ function PlayerContent() {
   };
 
   const togglePlayPause = () => {
-    if (session?.modePolicy.onePlayOnly && hasStarted) return;
+    if (phase === 'preview') return;
+    if (isPlaying && session?.modePolicy.canPause === false) return;
+    if (!isPlaying && session?.modePolicy.onePlayOnly && hasReachedEndRef.current) return;
     if (!audioRef.current) return;
     if (isPlaying) audioRef.current.pause();
     else audioRef.current.play().catch((err) => handleAudioPlaybackError(err, setAudioError));
@@ -252,14 +286,18 @@ function PlayerContent() {
     persistAnswer(questionId, answer, attempt);
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async ({ skipFinalSave = false }: { skipFinalSave?: boolean } = {}) => {
     if (!session) return;
     setIsSubmitting(true);
     audioRef.current?.pause();
+    for (const timer of Object.values(saveTimers.current)) clearTimeout(timer);
+    saveTimers.current = {};
     try {
       const activeAttempt = await ensureAttempt();
-      await Promise.all(Object.entries(answers).map(([questionId, answer]) => saveListeningAnswer(activeAttempt.attemptId, questionId, answer)));
-      const result = await submitListeningAttempt(activeAttempt.attemptId);
+      if (!skipFinalSave) {
+        await Promise.all(Object.entries(answers).map(([questionId, answer]) => saveListeningAnswer(activeAttempt.attemptId, questionId, answer)));
+      }
+      const result = await submitListeningAttempt(activeAttempt.attemptId, answers);
       analytics.track('task_submitted', { subtest: 'listening', taskId: session.paper.id, attemptId: activeAttempt.attemptId });
       router.push(`/listening/results/${result.attemptId}`);
     } catch (err) {
@@ -288,6 +326,14 @@ function PlayerContent() {
   const activeExtract = currentExtracts[0] ?? null;
   const isLastSection = currentSection !== null && currentSectionIndex >= sectionsInPaper.length - 1;
   const currentSectionReviewSeconds = currentSection ? LISTENING_REVIEW_SECONDS[currentSection] : 0;
+  const currentSectionPreviewSeconds = currentSection ? LISTENING_PREVIEW_SECONDS[currentSection] : 0;
+  const canSkipPreview = session?.modePolicy.mode === 'practice';
+  const activeExtractKey = activeExtract ? `${activeExtract.partCode}-${activeExtract.displayOrder}` : null;
+  const activeExtractCompleted = activeExtractKey ? completedExtractIds.has(activeExtractKey) : true;
+  const canOpenReviewWindow = Boolean(
+    currentSection
+    && (session?.modePolicy.canScrub !== false || activeExtractCompleted || activeExtract?.audioEndMs == null),
+  );
 
   // 1-second countdown during review windows.
   useEffect(() => {
@@ -296,10 +342,38 @@ function PlayerContent() {
     return () => window.clearTimeout(timer);
   }, [phase, reviewSecondsRemaining]);
 
+  // C8f — 1-second countdown during the pre-audio reading window. Audio is
+  // explicitly NOT playing while in preview; answer inputs remain editable
+  // so candidates can mark answers in advance (CBLA behaviour).
+  useEffect(() => {
+    if (phase !== 'preview' || previewSecondsRemaining <= 0) return;
+    const timer = window.setTimeout(() => setPreviewSecondsRemaining((value) => value - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [phase, previewSecondsRemaining]);
+
+  // C8f — when entering a new section after the player has started, drop into
+  // the preview phase with the section's reading window. Skipped entirely
+  // when the section has no preview seconds authored (e.g. legacy data).
+  useEffect(() => {
+    if (!hasStarted || !currentSection) return;
+    if (phase === 'review') return;
+    // Reset per-section forward-only end-of-extract latch.
+    hasReachedEndRef.current = false;
+    if (currentSectionPreviewSeconds > 0) {
+      previewArmedRef.current = true;
+      setPhase('preview');
+      setPreviewSecondsRemaining(currentSectionPreviewSeconds);
+    } else {
+      previewArmedRef.current = false;
+      setPhase('audio');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSection, hasStarted]);
+
   const advanceToNextSection = () => {
-    setPhase('audio');
     setReviewSecondsRemaining(0);
     setCurrentSectionIndex((value) => value + 1);
+    // The currentSection effect above re-enters preview for the new section.
   };
 
   const advanceFromReview = () => {
@@ -318,13 +392,66 @@ function PlayerContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, reviewSecondsRemaining, hasStarted, currentSection]);
 
+  // C8f — when the preview countdown hits zero, transition to audio and
+  // trigger playback. The cue-point seek effect below handles auto-seeking
+  // to the active extract's audioStartMs once phase === 'audio'.
+  useEffect(() => {
+    if (phase !== 'preview' || previewSecondsRemaining > 0) return;
+    if (!hasStarted || !currentSection) return;
+    if (!previewArmedRef.current) return;
+    previewArmedRef.current = false;
+    setPhase('audio');
+    const audio = audioRef.current;
+    if (audio) {
+      const result = audio.play();
+      if (result && typeof result.catch === 'function') {
+        result.catch((err) => handleAudioPlaybackError(err, setAudioError));
+      }
+    }
+  }, [phase, previewSecondsRemaining, hasStarted, currentSection]);
+
+  // C8d — whole-attempt 40-minute countdown. Driven by attempt.expiresAt.
+  // Auto-submits in exam/home modes (canScrub === false) when the timer
+  // hits zero. Practice mode just shows "Time up" without submitting.
+  useEffect(() => {
+    const expiresAt = attempt?.expiresAt;
+    if (!expiresAt || !hasStarted) {
+      setAttemptSecondsRemaining(null);
+      return;
+    }
+    const compute = () => {
+      const remaining = Math.max(0, Math.floor((Date.parse(expiresAt) - Date.now()) / 1000));
+      setAttemptSecondsRemaining(remaining);
+      return remaining;
+    };
+    if (compute() === 0) return;
+    const interval = window.setInterval(() => {
+      const remaining = compute();
+      if (remaining === 0) window.clearInterval(interval);
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [attempt?.expiresAt, hasStarted]);
+
+  // C8d — auto-submit when the attempt timer hits zero in exam/home modes.
+  useEffect(() => {
+    if (attemptSecondsRemaining !== 0) return;
+    if (!hasStarted || !session) return;
+    if (autoSubmittedRef.current) return;
+    if (session.modePolicy.canScrub) return; // practice mode → no auto-submit
+    autoSubmittedRef.current = true;
+    void handleSubmit({ skipFinalSave: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attemptSecondsRemaining, hasStarted, session]);
+
   // C1 — auto-seek the audio element to the active extract's audioStartMs
   // whenever the section changes or the audio phase begins. Only runs when
   // the extract has both start/end cue points authored. Practice mode keeps
   // full scrub freedom; the soft end-of-extract boundary below only fires in
-  // exam mode (canScrub === false).
+  // exam mode (canScrub === false). C8f — also runs during the preview
+  // phase so the playhead is parked at the correct cue point before the
+  // reading window expires and audio play() is invoked.
   useEffect(() => {
-    if (phase !== 'audio') return;
+    if (phase !== 'audio' && phase !== 'preview') return;
     const audio = audioRef.current;
     if (!audio) return;
     const startMs = activeExtract?.audioStartMs;
@@ -340,6 +467,8 @@ function PlayerContent() {
 
   const confirmNextFromAudio = () => {
     if (!currentSection) return;
+    if (!canOpenReviewWindow) return;
+    audioRef.current?.pause();
     if (currentSectionReviewSeconds > 0) {
       setPhase('review');
       setReviewSecondsRemaining(currentSectionReviewSeconds);
@@ -413,13 +542,20 @@ function PlayerContent() {
         <audio
           ref={audioRef}
           src={session.paper.audioUrl ?? undefined}
+          controlsList="nodownload nofullscreen noremoteplayback"
           onTimeUpdate={() => {
             const audio = audioRef.current;
             if (!audio) return;
-            setProgress(audio.currentTime);
-            // C1 — soft enforcement of the active extract's audioEndMs in
-            // exam mode. Practice mode keeps full scrub freedom. We only
-            // pause; the existing review-window timer takes over from there.
+            const now = audio.currentTime;
+            setProgress(now);
+            // C8e — track forward-only audio progress for the seek snap-back.
+            if (now > lastKnownTimeRef.current) {
+              lastKnownTimeRef.current = now;
+            }
+            // C1 / C8e — soft enforcement of the active extract's
+            // audioEndMs in exam mode. Practice mode keeps full scrub
+            // freedom. We pause and latch hasReachedEnd; subsequent
+            // play() invocations are immediately re-paused.
             const startMs = activeExtract?.audioStartMs;
             const endMs = activeExtract?.audioEndMs;
             if (
@@ -427,10 +563,37 @@ function PlayerContent() {
               && startMs != null
               && endMs != null
               && endMs > startMs
-              && audio.currentTime * 1000 >= endMs
+              && now * 1000 >= endMs
               && !audio.paused
             ) {
+              hasReachedEndRef.current = true;
               audio.pause();
+            }
+            // C8c — mark this extract as completed once its audioEndMs is
+            // crossed (regardless of mode), so the section panel renders a
+            // checkmark next to the row.
+            if (
+              activeExtract
+              && endMs != null
+              && now * 1000 >= endMs
+            ) {
+              const key = `${activeExtract.partCode}-${activeExtract.displayOrder}`;
+              setCompletedExtractIds((prev) => {
+                if (prev.has(key)) return prev;
+                const next = new Set(prev);
+                next.add(key);
+                return next;
+              });
+            }
+          }}
+          onSeeking={() => {
+            // C8e — in exam/home modes (canScrub === false) snap any
+            // backwards seek back to the last forward-only known time.
+            const audio = audioRef.current;
+            if (!audio) return;
+            if (session?.modePolicy.canScrub !== false) return;
+            if (audio.currentTime < lastKnownTimeRef.current) {
+              audio.currentTime = lastKnownTimeRef.current;
             }
           }}
           onLoadedMetadata={() => {
@@ -440,7 +603,21 @@ function PlayerContent() {
           }}
           onWaiting={() => setAudioState('buffering')}
           onCanPlay={() => setAudioState('ready')}
-          onPlay={() => setIsPlaying(true)}
+          onPlay={() => {
+            // C8e — once the active extract's end has been reached in
+            // exam mode, any subsequent play() is immediately re-paused.
+            const audio = audioRef.current;
+            if (audio && hasReachedEndRef.current && session?.modePolicy.onePlayOnly) {
+              audio.pause();
+              return;
+            }
+            // C8f — block playback during the pre-audio reading window.
+            if (phase === 'preview' && audio) {
+              audio.pause();
+              return;
+            }
+            setIsPlaying(true);
+          }}
           onPause={() => setIsPlaying(false)}
           onEnded={() => setIsPlaying(false)}
           onError={() => {
@@ -602,10 +779,10 @@ function PlayerContent() {
             <div className="sticky top-20 z-20 flex items-center gap-4 rounded-2xl bg-navy p-4 text-white shadow-xl shadow-navy/10 sm:p-5">
               <button
                 onClick={togglePlayPause}
-                disabled={isExam}
+                disabled={phase === 'preview'}
                 aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
                 className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors ${
-                  isExam
+                  phase === 'preview'
                     ? 'cursor-not-allowed bg-white/10 text-white/30'
                     : 'bg-surface text-navy hover:bg-background-light'
                 }`}
@@ -638,7 +815,35 @@ function PlayerContent() {
                 {audioState === 'buffering' ? <Loader2 className="h-4 w-4 animate-spin" /> : audioState === 'error' ? <WifiOff className="h-4 w-4" /> : <Save className="h-4 w-4" />}
                 {saveState === 'saving' ? 'Saving' : saveState === 'error' ? 'Save issue' : `${answeredCount}/${session.questions.length} saved`}
               </div>
+              {/* C8d — whole-attempt countdown. Visible whenever the
+                  backend has projected an expiresAt onto the attempt. */}
+              {attemptSecondsRemaining !== null ? (
+                <div
+                  data-testid="listening-attempt-timer"
+                  className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 font-mono text-sm font-black ${
+                    attemptSecondsRemaining === 0
+                      ? 'bg-danger/20 text-danger'
+                      : attemptSecondsRemaining <= 30
+                        ? 'bg-danger/20 text-danger'
+                        : attemptSecondsRemaining <= 120
+                          ? 'bg-warning/20 text-warning'
+                          : 'bg-white/10 text-white'
+                  }`}
+                  aria-label={`Attempt time remaining ${formatReviewSeconds(attemptSecondsRemaining)}`}
+                >
+                  <Clock className="h-4 w-4" />
+                  {attemptSecondsRemaining === 0 ? 'Time up' : formatReviewSeconds(attemptSecondsRemaining)}
+                </div>
+              ) : null}
             </div>
+
+            {/* C8e — practice mode disclosure: replay is allowed in this
+                mode but the real CBLA exam plays once. */}
+            {session.modePolicy.mode === 'practice' && session.modePolicy.onePlayOnly === false ? (
+              <div>
+                <Badge variant="info">Practice mode — replay allowed</Badge>
+              </div>
+            ) : null}
 
             {audioError ? <InlineAlert variant="error">{audioError}</InlineAlert> : null}
             {saveState === 'error' ? <InlineAlert variant="warning">One answer did not autosave. Keep working; submit will retry saving all answers.</InlineAlert> : null}
@@ -647,16 +852,24 @@ function PlayerContent() {
             {currentExtracts.length > 0 ? (
               <div className="rounded-2xl border border-border bg-surface p-4">
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
-                  {currentExtracts.map((extract) => (
-                    <span key={`${extract.partCode}-${extract.displayOrder}`} className="inline-flex items-center gap-2 rounded-lg bg-background-light px-3 py-2">
-                      <Volume2 className="h-4 w-4" />
-                      <span className="font-semibold text-navy">{extract.title}</span>
-                      <span>{extract.accentCode ?? 'accent not set'}</span>
-                      {extract.audioStartMs != null || extract.audioEndMs != null ? (
-                        <span>{formatMilliseconds(extract.audioStartMs) ?? '00:00'} - {formatMilliseconds(extract.audioEndMs) ?? 'end'}</span>
-                      ) : null}
-                    </span>
-                  ))}
+                  {currentExtracts.map((extract) => {
+                    const extractKey = `${extract.partCode}-${extract.displayOrder}`;
+                    const completed = completedExtractIds.has(extractKey);
+                    return (
+                      <span key={extractKey} className="inline-flex items-center gap-2 rounded-lg bg-background-light px-3 py-2">
+                        {completed ? (
+                          <CheckCircle2 className="h-4 w-4 text-success" aria-label="Listened to completion" />
+                        ) : (
+                          <Volume2 className="h-4 w-4" />
+                        )}
+                        <span className="font-semibold text-navy">{extract.title}</span>
+                        <span>{extract.accentCode ?? 'accent not set'}</span>
+                        {extract.audioStartMs != null || extract.audioEndMs != null ? (
+                          <span>{formatMilliseconds(extract.audioStartMs) ?? '00:00'} - {formatMilliseconds(extract.audioEndMs) ?? 'end'}</span>
+                        ) : null}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             ) : null}
@@ -691,6 +904,42 @@ function PlayerContent() {
                 Forward-only — completed sections cannot be revisited.
               </span>
             </div>
+
+            {/* C8f — pre-audio reading window. Audio stays paused; answer
+                inputs remain editable so candidates can mark in advance. */}
+            {phase === 'preview' && currentSection ? (
+              <div
+                data-testid="listening-preview-banner"
+                className="flex flex-col gap-3 rounded-2xl border-2 border-info/30 bg-info/10 p-5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex items-start gap-3">
+                  <Timer className="mt-0.5 h-5 w-5 shrink-0 text-info" />
+                  <div>
+                    <p className="text-sm font-black text-info">
+                      {LISTENING_PREVIEW_LABEL} — {previewSecondsRemaining} seconds left
+                    </p>
+                    <p className="mt-0.5 text-xs text-info">
+                      {LISTENING_SECTION_LABEL[currentSection]} — read the questions and mark answers in advance. Audio will start automatically when the timer hits zero.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="rounded-xl bg-info/20 px-3 py-2 font-mono text-lg font-black text-info">
+                    {formatReviewSeconds(previewSecondsRemaining)}
+                  </span>
+                  {canSkipPreview ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPreviewSecondsRemaining(0)}
+                      className="gap-1"
+                    >
+                      <Play className="h-4 w-4" /> Start audio
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
             {/* Review-window countdown banner — answer boxes stay editable. */}
             {phase === 'review' && currentSection ? (
@@ -837,7 +1086,7 @@ function PlayerContent() {
                 <Button
                   size="lg"
                   onClick={() => setShowNextConfirm(true)}
-                  disabled={!currentSection}
+                  disabled={!canOpenReviewWindow}
                   className="gap-2"
                 >
                   Next <ChevronRight className="h-5 w-5" />
