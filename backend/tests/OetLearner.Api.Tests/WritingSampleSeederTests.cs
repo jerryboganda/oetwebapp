@@ -15,7 +15,7 @@ namespace OetLearner.Api.Tests;
 public class WritingSampleSeederTests
 {
     [Fact]
-    public async Task Seeder_creates_draft_papers_with_writing_structure_and_is_idempotent()
+    public async Task Seeder_creates_published_papers_with_content_items_and_is_idempotent()
     {
         await using var db = CreateDb();
         var seedFile = WriteSeedFile(samples: 2);
@@ -27,7 +27,8 @@ public class WritingSampleSeederTests
         var first = await db.ContentPapers.AsNoTracking().ToListAsync();
         Assert.Equal(2, first.Count);
         var paper = first.Single(p => p.Slug == "writing-1-routine-referral");
-        Assert.Equal(ContentStatus.Draft, paper.Status);
+        Assert.Equal(ContentStatus.Published, paper.Status);
+        Assert.NotNull(paper.PublishedAt);
         Assert.Equal("writing", paper.SubtestCode);
         Assert.Equal("routine_referral", paper.LetterType);
         Assert.Equal("seed:writing:v1:writing-1-routine-referral", paper.SourceProvenance);
@@ -36,15 +37,26 @@ public class WritingSampleSeederTests
         Assert.Contains("Acne", WritingContentStructure.BuildCaseNotesText(structure));
         Assert.Contains("Dr Smith", WritingContentStructure.BuildModelAnswerText(structure));
 
+        // Learner-facing ContentItem must be created and Published.
+        var item = await db.ContentItems.AsNoTracking().FirstOrDefaultAsync(c => c.Id == paper.Id);
+        Assert.NotNull(item);
+        Assert.Equal(ContentStatus.Published, item!.Status);
+        Assert.Equal("writing_task", item.ContentType);
+        Assert.Equal("writing", item.SubtestCode);
+        Assert.Contains("Acne", item.CaseNotes);
+
         var audits = await db.AuditEvents.AsNoTracking()
             .Where(a => a.ResourceId == paper.Id)
+            .OrderBy(a => a.Action)
             .ToListAsync();
-        Assert.Single(audits);
-        Assert.Equal("ContentPaperSeeded", audits[0].Action);
+        Assert.Equal(2, audits.Count);
+        Assert.Equal("ContentPaperPublished", audits[0].Action);
+        Assert.Equal("ContentPaperSeeded", audits[1].Action);
 
         var secondRun = await seeder.SeedAsync(CancellationToken.None);
         Assert.Equal(0, secondRun);
         Assert.Equal(2, await db.ContentPapers.CountAsync());
+        Assert.Equal(2, await db.ContentItems.CountAsync());
     }
 
     [Fact]

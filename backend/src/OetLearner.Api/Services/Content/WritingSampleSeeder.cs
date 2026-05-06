@@ -15,10 +15,13 @@ namespace OetLearner.Api.Services.Content;
 /// real PDF samples by <c>scripts/extract-writing-pdfs</c>).
 ///
 /// The seeder is idempotent — papers are matched by <c>SourceProvenance</c>
-/// seed id and never overwritten once created. Papers are created in
-/// <see cref="ContentStatus.Draft"/> with the full inline writing structure
-/// populated; admins still attach the official PDFs and publish via the
-/// existing UI (canonical CRUD path through <see cref="IContentPaperService"/>).
+/// seed id and never overwritten once created. Papers are created already
+/// <see cref="ContentStatus.Published"/> with the full inline writing
+/// structure populated and a corresponding learner-facing <c>ContentItem</c>
+/// row, so they appear immediately on the learner Writing surface. Admins
+/// can still attach official PDFs after the fact via the canonical CRUD
+/// path through <see cref="IContentPaperService"/>; the asset-presence
+/// publish gate is bypassed here because seeded papers are inline-text only.
 ///
 /// Disabled by default. Enable per-environment with
 /// <c>Content:WritingSeed:Enabled=true</c>. Optional override
@@ -152,13 +155,48 @@ public sealed class WritingSampleSeeder(
                 Priority = 0,
                 TagsCsv = "seed,writing-samples-v1",
                 SourceProvenance = sample.SeedId,
-                Status = ContentStatus.Draft,
+                Status = ContentStatus.Published,
+                PublishedAt = now,
                 CreatedAt = now,
                 UpdatedAt = now,
                 CreatedByAdminId = SeederAdminId,
                 ExtractedTextJson = extractedTextJson,
             };
+            paper.PublishedRevisionId ??= paper.Id;
             db.ContentPapers.Add(paper);
+
+            // Project to learner-visible ContentItem so the paper is reachable
+            // through the standard learner content surfaces (mirrors
+            // ContentPaperService.UpsertWritingContentItemAsync but called
+            // inline because we bypass the asset-presence publish gate —
+            // seeded papers are inline-text only).
+            var detail = WritingContentStructure.BuildContentItemDetail(paper);
+            var criteriaFocus = SpeakingContentStructure.ReadStringList(
+                SpeakingContentStructure.ReadValue(detail, "criteriaFocus"));
+            db.ContentItems.Add(new ContentItem
+            {
+                Id = paper.Id,
+                ContentType = "writing_task",
+                SubtestCode = "writing",
+                Title = paper.Title,
+                ProfessionId = paper.AppliesToAllProfessions ? null : paper.ProfessionId,
+                Difficulty = paper.Difficulty,
+                EstimatedDurationMinutes = paper.EstimatedDurationMinutes,
+                CriteriaFocusJson = JsonSupport.Serialize(criteriaFocus),
+                ScenarioType = paper.LetterType,
+                ModeSupportJson = JsonSupport.Serialize(new[] { "learning", "exam" }),
+                PublishedRevisionId = paper.PublishedRevisionId,
+                Status = ContentStatus.Published,
+                CaseNotes = WritingContentStructure.BuildCaseNotesText(detail),
+                DetailJson = JsonSupport.Serialize(detail),
+                ModelAnswerJson = JsonSupport.Serialize(WritingContentStructure.BuildModelAnswerPayload(paper)),
+                SourceType = "content-paper",
+                SourceProvenance = paper.SourceProvenance!,
+                RightsStatus = "owned",
+                CreatedAt = now,
+                CreatedBy = SeederAdminId,
+            });
+
             db.AuditEvents.Add(new AuditEvent
             {
                 Id = Guid.NewGuid().ToString("N"),
@@ -166,6 +204,17 @@ public sealed class WritingSampleSeeder(
                 ActorId = SeederAdminId,
                 ActorName = SeederAdminId,
                 Action = "ContentPaperSeeded",
+                ResourceType = "ContentPaper",
+                ResourceId = paper.Id,
+                Details = $"writing-sample:{sample.Slug}",
+            });
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = SeederAdminId,
+                ActorName = SeederAdminId,
+                Action = "ContentPaperPublished",
                 ResourceType = "ContentPaper",
                 ResourceId = paper.Id,
                 Details = $"writing-sample:{sample.Slug}",
