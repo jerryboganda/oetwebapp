@@ -271,6 +271,49 @@ Doctor";
     }
 
     [Fact]
+    public void R03_8_Body_Length_Suppressed_Below_80_Words()
+    {
+        // The default sample letter body is well under 80 words.
+        var findings = _engine.Lint(new WritingLintInput(LetterWithBoth, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R03.8");
+    }
+
+    [Fact]
+    public void R03_8_Body_Length_Advisory_When_Too_Long()
+    {
+        // Build a body of ~260 words (above the 200 max, above the 80 noise floor).
+        var word = "word ";
+        var bigBody = string.Concat(Enumerable.Repeat(word, 260));
+        var text =
+            "Dear Dr Smith,\nRe: Ms A\n\n"
+            + bigBody + "\n\n"
+            + "Yours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        var advisory = findings.FirstOrDefault(f => f.RuleId == "R03.8");
+        Assert.NotNull(advisory);
+        Assert.Equal(RuleSeverity.Minor, advisory!.Severity);
+        Assert.Contains("Too long", advisory.Message);
+        Assert.Contains("Advisory only", advisory.Message);
+    }
+
+    [Fact]
+    public void R03_8_Body_Length_Advisory_When_Too_Short()
+    {
+        // ~120 words: above the 80 noise floor, below the 180 minimum.
+        var word = "word ";
+        var smallBody = string.Concat(Enumerable.Repeat(word, 120));
+        var text =
+            "Dear Dr Smith,\nRe: Ms A\n\n"
+            + smallBody + "\n\n"
+            + "Yours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        var advisory = findings.FirstOrDefault(f => f.RuleId == "R03.8");
+        Assert.NotNull(advisory);
+        Assert.Equal(RuleSeverity.Minor, advisory!.Severity);
+        Assert.Contains("Too short", advisory.Message);
+    }
+
+    [Fact]
     public void Findings_Are_Ordered_Critical_Then_Major_Then_Minor()
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nThe patient has Hypertension.\n\nShe takes amoxicillin bd.\n\nYours sincerely,\nDoctor";

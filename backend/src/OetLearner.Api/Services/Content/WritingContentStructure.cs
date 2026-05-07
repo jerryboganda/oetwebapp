@@ -23,8 +23,64 @@ public static class WritingContentStructure
         "transfer_letter"
     };
 
+    /// <summary>
+    /// Per-profession allowed Writing letter types. Keys are lowercase profession ids.
+    /// Values are the canonical letter type ids (matching <see cref="CanonicalLetterTypes"/>)
+    /// that an admin is allowed to publish for that profession. Initially every known
+    /// profession allows the same 6 canonical types; this is data-driven so a profession
+    /// can later be narrowed without touching the validator.
+    /// </summary>
+    // Per OET convention, veterinary writing tasks do not include non-medical referrals (no OT / social worker pathway). Other 12 professions accept the full canonical set; can be tightened per-profession in the future without code-shape changes.
+    private static readonly Dictionary<string, HashSet<string>> AllowedLetterTypesByProfession =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["dentistry"] = BuildDefaultAllowedSet(),
+            ["dietetics"] = BuildDefaultAllowedSet(),
+            ["medicine"] = BuildDefaultAllowedSet(),
+            ["nursing"] = BuildDefaultAllowedSet(),
+            ["occupational-therapy"] = BuildDefaultAllowedSet(),
+            ["optometry"] = BuildDefaultAllowedSet(),
+            ["other-allied-health"] = BuildDefaultAllowedSet(),
+            ["pharmacy"] = BuildDefaultAllowedSet(),
+            ["physiotherapy"] = BuildDefaultAllowedSet(),
+            ["podiatry"] = BuildDefaultAllowedSet(),
+            ["radiography"] = BuildDefaultAllowedSet(),
+            ["speech-pathology"] = BuildDefaultAllowedSet(),
+            ["veterinary"] = new(StringComparer.OrdinalIgnoreCase)
+            {
+                "routine_referral",
+                "urgent_referral",
+                "update_discharge",
+                "transfer_letter",
+                "update_referral_specialist_to_gp",
+            },
+        };
+
+    private static HashSet<string> BuildDefaultAllowedSet() => new(StringComparer.OrdinalIgnoreCase)
+    {
+        "routine_referral",
+        "urgent_referral",
+        "non_medical_referral",
+        "update_discharge",
+        "transfer_letter",
+        "update_referral_specialist_to_gp",
+    };
+
     public static bool IsCanonicalLetterType(string? letterType)
         => !string.IsNullOrWhiteSpace(letterType) && CanonicalLetterTypes.Contains(letterType.Trim());
+
+    private static IReadOnlySet<string> AllowedLetterTypesFor(string? professionId)
+    {
+        if (!string.IsNullOrWhiteSpace(professionId)
+            && AllowedLetterTypesByProfession.TryGetValue(professionId.Trim(), out var allowed))
+        {
+            return allowed;
+        }
+
+        // Default permissive: unknown profession ids fall back to the full canonical set so
+        // we don't accidentally block a newly-added profession before its policy is authored.
+        return CanonicalLetterTypes;
+    }
 
     public static Dictionary<string, object?> ExtractStructure(string? extractedTextJson)
     {
@@ -62,6 +118,22 @@ public static class WritingContentStructure
         {
             issues.Add(new("letter_type", "error", "Letter type must be one of the canonical Writing letter types."));
         }
+
+        if (!paper.AppliesToAllProfessions
+            && !string.IsNullOrWhiteSpace(paper.ProfessionId)
+            && !string.IsNullOrWhiteSpace(paper.LetterType)
+            && IsCanonicalLetterType(paper.LetterType))
+        {
+            var allowed = AllowedLetterTypesFor(paper.ProfessionId);
+            if (!allowed.Contains(paper.LetterType.Trim()))
+            {
+                issues.Add(new(
+                    "profession_letter_type",
+                    "error",
+                    $"Letter type '{paper.LetterType}' is not allowed for profession '{paper.ProfessionId}'. Allowed: {string.Join(", ", allowed)}."));
+            }
+        }
+
         RequireText(issues, "task_prompt", ReadString(structure, "taskPrompt", "task", "brief", "scenario"),
             "Writing content requires a learner-facing task prompt.");
         RequireText(issues, "case_notes", BuildCaseNotesText(structure),

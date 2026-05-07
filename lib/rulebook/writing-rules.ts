@@ -155,13 +155,37 @@ const DETECTORS: Record<string, Detector> = {
       : [ruleFinding(rule, 'Allergy status (positive or negative) must be included for atopic conditions (asthma, eczema, hay fever).')];
   },
 
-  // R03.8 — Body length 180–200 words.
+  // R03.8 — Body length advisory (180–200 words, configurable per profession via
+  // rule.params.min/max in rulebooks/writing/<profession>/rulebook.v1.json).
   //
-  // Per Writing Module Technical Specification v1.0 (Dr. Ahmed Hesham), the
-  // platform must NOT evaluate response length. The rule remains in the
-  // rulebook as candidate guidance text only and emits zero findings.
-  letter_body_length(_rule, _input, _structure) {
-    return [];
+  // Soft warning only: emitted at severity 'minor' regardless of rule.severity
+  // (the rulebook lists it as 'major' for AI-grounding context, but the live
+  // lint surface treats it as advisory per owner directive 2026-05-07). Submit
+  // is never blocked. The AI gateway still receives the rule text via grounding.
+  //
+  // Robust to incomplete drafts: parseLetter only populates bodyParagraphs when
+  // both salutation and closure are present. While drafting, fall back to the
+  // total non-whitespace word count of letterText. Suppress the finding entirely
+  // while the draft is still very short (< 80 words) to avoid noisy warnings
+  // during brainstorming.
+  letter_body_length(rule, input, structure) {
+    const params = (rule.params as { min?: number; max?: number } | undefined) ?? {};
+    const min = params.min ?? 180;
+    const max = params.max ?? 200;
+    const SUPPRESS_BELOW_WORDS = 80;
+
+    const fromBody = structure.bodyParagraphs.join(' ').match(/\S+/g)?.length ?? 0;
+    const fallback = input.letterText.match(/\S+/g)?.length ?? 0;
+    const count = fromBody > 0 ? fromBody : fallback;
+
+    if (count < SUPPRESS_BELOW_WORDS) return [];
+    if (count >= min && count <= max) return [];
+
+    const direction = count < min ? 'short' : 'long';
+    const message = `Letter body is ${count} word(s) (target ${min}–${max}). Too ${direction} — ${
+      direction === 'short' ? 'you may be missing relevant data' : 'you may be including semi-relevant data'
+    }. Advisory only; submission is not blocked.`;
+    return [{ ruleId: rule.id, severity: 'minor' as const, message }];
   },
 
   // R03.9 / R08.1 — paragraph count

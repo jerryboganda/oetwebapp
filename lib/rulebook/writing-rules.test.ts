@@ -307,18 +307,42 @@ describe('writing linter — R08.1 paragraph count', () => {
     }));
     expect(findings.find((f) => f.ruleId === 'R08.1')).toBeDefined();
   });
+});
 
-  it('does not emit any R03.8 finding regardless of body length (word-count logic decommissioned per spec v1.0)', () => {
-    const shortFindings = lintWritingLetter(base({
-      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nMs A is 40.\n\nYours sincerely,\nDoctor',
-    }));
-    expect(shortFindings.find((f) => f.ruleId === 'R03.8')).toBeUndefined();
+describe('writing linter — R03.8 word count band', () => {
+  // Helper: build a letter with a body of exactly N words.
+  const buildLetter = (bodyWords: number): string => {
+    const word = 'word';
+    const body = Array.from({ length: bodyWords }, () => word).join(' ');
+    return `Dear Dr Smith,\nRe: Ms A\n\n${body}\n\nYours sincerely,\nDoctor`;
+  };
 
-    const longBody = Array.from({ length: 60 }, () => 'word').join(' ');
-    const longFindings = lintWritingLetter(base({
-      letterText: `Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\n${longBody} ${longBody} ${longBody} ${longBody} ${longBody}.\n\nYours sincerely,\nDoctor`,
-    }));
-    expect(longFindings.find((f) => f.ruleId === 'R03.8')).toBeUndefined();
+  it('emits no R03.8 finding when body is 195 words (in band)', () => {
+    const findings = lintWritingLetter(base({ letterText: buildLetter(195) }));
+    expect(findings.find((f) => f.ruleId === 'R03.8')).toBeUndefined();
+  });
+
+  it('emits one advisory R03.8 finding when body is 100 words (too short)', () => {
+    const findings = lintWritingLetter(base({ letterText: buildLetter(100) }));
+    const r03_8 = findings.find((f) => f.ruleId === 'R03.8');
+    expect(r03_8).toBeDefined();
+    expect(r03_8!.severity).toBe('minor');
+    expect(r03_8!.message).toMatch(/100 word/);
+    expect(r03_8!.message).toMatch(/short/);
+  });
+
+  it('emits one advisory R03.8 finding when body is 260 words (too long)', () => {
+    const findings = lintWritingLetter(base({ letterText: buildLetter(260) }));
+    const r03_8 = findings.find((f) => f.ruleId === 'R03.8');
+    expect(r03_8).toBeDefined();
+    expect(r03_8!.severity).toBe('minor');
+    expect(r03_8!.message).toMatch(/260 word/);
+    expect(r03_8!.message).toMatch(/long/);
+  });
+
+  it('suppresses R03.8 finding while draft is below the noise threshold (50 words)', () => {
+    const findings = lintWritingLetter(base({ letterText: buildLetter(50) }));
+    expect(findings.find((f) => f.ruleId === 'R03.8')).toBeUndefined();
   });
 });
 

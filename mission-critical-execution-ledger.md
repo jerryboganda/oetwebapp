@@ -77,3 +77,22 @@ Verification commands run from repo root and `backend/`:
 - E2E spec files: 33 (`tests/e2e/**/*.spec.ts`).
 - Backend endpoint map calls: 686 (`MapGet/MapPost/MapPut/MapDelete` in backend endpoint files).
 - Admin permissions: 16 (`AdminPermissions.All`).
+
+## Writing Rule Enforcement Update — 2026-05-07
+
+Two previously-unenforced OET Writing rules are now active. Both reverse prior "no enforcement" stances without changing AI scoring behaviour.
+
+### R03.8 — Word count 180–200 (ADVISORY)
+
+- **Status:** advisory only (soft warning); does not block learner submission.
+- **Source of truth:** per-profession `rulebooks/writing/<profession>/rulebook.v1.json`, rule `R03.8`, `params.min` / `params.max`.
+- **Lint detector:** `lib/rulebook/writing-rules.ts` `letter_body_length` now reads `rule.params` and emits a finding when the body word count falls outside `[min, max]`. Reverses the prior "intentional no length judgment" decision recorded in that file.
+- **UI:** `app/writing/player/page.tsx` shows a live word-count `Badge` driven by the same min/max from the active rulebook.
+- **AI scoring:** unchanged — no length penalty is applied inside the AI gateway scoring path. Length is surfaced as a rulebook lint advisory, not a scaled-score deduction.
+
+### Profession ↔ letter-type matching (PUBLISH GATE)
+
+- **Status:** hard gate. Publish is rejected when `paper.LetterType` is not in the allowed set for `paper.ProfessionId`.
+- **Enforcement point:** `WritingContentStructure.Validate(paper)` in the backend rulebook engine.
+- **Data:** `AllowedLetterTypesByProfession` dictionary (data-driven matrix). Default-permissive: unknown profession ids are not blocked, so seeding new professions does not break publish until they are added to the matrix.
+- **Scope:** publish gate only. Existing already-published papers are not retroactively invalidated; AI scoring is unaffected.

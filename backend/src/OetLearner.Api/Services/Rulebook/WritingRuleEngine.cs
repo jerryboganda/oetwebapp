@@ -217,13 +217,45 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 "Allergy status (positive or negative) must be included for atopic conditions.");
     }
 
+    // Mirrors lib/rulebook/writing-rules.ts letter_body_length.
+    //
+    // Per owner directive 2026-05-07 the prior "platform must NOT evaluate
+    // response length" stance (Tech Spec v1.0) is overridden. We now emit a
+    // single advisory finding when the body word count is meaningfully
+    // outside the configured 180–200 target window.
+    //
+    // The advisory is deliberately downgraded to RuleSeverity.Minor regardless
+    // of rule.Severity (which is "major" in the rulebook JSON) so it never
+    // blocks submission and never gets sorted ahead of substantive findings.
     private static IEnumerable<LintFinding> DetectBodyLength(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        // Per Writing Module Technical Specification v1.0 (Dr. Ahmed Hesham),
-        // the platform must NOT evaluate response length. R03.8 remains in the
-        // rulebook as candidate guidance text only and emits zero findings.
-        _ = rule; _ = input; _ = s;
-        yield break;
+        var min = 180;
+        var max = 200;
+        if (rule.Params.HasValue && rule.Params.Value.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            if (rule.Params.Value.TryGetProperty("min", out var mn) && mn.TryGetInt32(out var mv)) min = mv;
+            if (rule.Params.Value.TryGetProperty("max", out var mx) && mx.TryGetInt32(out var xv)) max = xv;
+        }
+
+        // Prefer the parsed body paragraphs; fall back to the whole letter
+        // text when no salutation+closure has been detected yet (early draft).
+        string source = s.BodyParagraphs.Count > 0
+            ? string.Join(" ", s.BodyParagraphs)
+            : input.LetterText;
+        var count = Regex.Matches(source, @"\S+").Count;
+
+        // Suppress noise during brainstorming / very early drafts.
+        if (count < 80) yield break;
+        if (count >= min && count <= max) yield break;
+
+        var direction = count < min ? "short" : "long";
+        var hint = direction == "short"
+            ? "you may be missing relevant data"
+            : "you may be including semi-relevant data";
+        yield return new LintFinding(
+            rule.Id,
+            RuleSeverity.Minor,
+            $"Letter body is {count} word(s) (target {min}–{max}). Too {direction} — {hint}. Advisory only; submission is not blocked.");
     }
 
     private static IEnumerable<LintFinding> DetectParagraphCount(OetRule rule, WritingLintInput input, LetterStructure s)

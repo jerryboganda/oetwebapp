@@ -86,6 +86,88 @@ export default function WritingPlayer() {
   const inferredLetterType = useMemo(() => inferWritingLetterType(task ?? {}), [task]);
   const caseNotesMarkers = useMemo(() => deriveWritingCaseNotesMarkers(task?.caseNotes), [task?.caseNotes]);
 
+  // Live, advisory word counter. Pure UI hint — the platform never blocks
+  // submission on word count; canonical enforcement (where it exists) lives in
+  // the rulebook engine. The OET soft guideline is 180–200 words (body only).
+  const wordCount = useMemo(() => content.trim().match(/\S+/g)?.length ?? 0, [content]);
+  // Mirrors the rulebook detector (`letter_body_length`): below 80 words the
+  // learner is still drafting, so band warnings are suppressed and the chip
+  // shows a neutral "drafting" hint rather than an alarming red badge.
+  const bandState: 'drafting' | 'in' | 'near' | 'out' = useMemo(() => {
+    if (wordCount < 80) return 'drafting';
+    if (wordCount < 162 || wordCount > 220) return 'out';
+    if (wordCount < 180 || wordCount > 200) return 'near';
+    return 'in';
+  }, [wordCount]);
+  const wordCountVariant: 'success' | 'warning' | 'danger' | 'muted' =
+    bandState === 'in'
+      ? 'success'
+      : bandState === 'near'
+      ? 'warning'
+      : bandState === 'out'
+      ? 'danger'
+      : 'muted';
+  const wordCountLabel =
+    bandState === 'drafting'
+      ? `${wordCount} words / target 180–200`
+      : `${wordCount} / 180–200 words`;
+
+  // Announce only when the band classification changes, so screen readers are
+  // not spammed on every keystroke. Transitions in or out of the 'drafting'
+  // state are intentionally silent — the band guidance only matters once the
+  // learner has a real draft (≥80 words).
+  const [bandAnnouncement, setBandAnnouncement] = useState('');
+  const lastBandRef = useRef<'drafting' | 'in' | 'near' | 'out' | null>(null);
+  useEffect(() => {
+    if (lastBandRef.current === bandState) return;
+    const previous = lastBandRef.current;
+    lastBandRef.current = bandState;
+    if (previous === null) return; // suppress initial mount announcement
+    if (bandState === 'drafting' || previous === 'drafting') return;
+    const message =
+      bandState === 'in'
+        ? `Word count ${wordCount}: within the OET pass band of 180 to 200 words.`
+        : bandState === 'near'
+        ? `Word count ${wordCount}: just outside the OET pass band of 180 to 200 words.`
+        : `Word count ${wordCount}: well outside the OET pass band of 180 to 200 words.`;
+    setBandAnnouncement(message);
+  }, [bandState, wordCount]);
+
+  const wordCountIndicator = (
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border bg-surface/95 px-3 py-2">
+      <div className="flex items-center gap-2">
+        {prefersReducedMotion ? (
+          <Badge variant={wordCountVariant} size="sm">
+            {wordCountLabel}
+          </Badge>
+        ) : (
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={bandState}
+              initial={{ opacity: 0, y: -2 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 2 }}
+              transition={panelTransition}
+              className="inline-flex"
+            >
+              <Badge variant={wordCountVariant} size="sm">
+                {wordCountLabel}
+              </Badge>
+            </motion.span>
+          </AnimatePresence>
+        )}
+        <span className="text-[11px] leading-snug text-muted">
+          {bandState === 'drafting'
+            ? 'Keep writing… word-count guidance shows once your draft passes 80 words.'
+            : 'Soft guideline — OET pass band 180–200 words.'}
+        </span>
+      </div>
+      <div role="status" aria-live="polite" className="sr-only">
+        {bandAnnouncement}
+      </div>
+    </div>
+  );
+
   const lintFindings = useMemo(() => {
     if (!task || !lintReady) return [];
     const minorAgeMatch = task.caseNotes.match(/\b(\d+)\s*(years? old|year-old)\b/i);
@@ -492,6 +574,7 @@ export default function WritingPlayer() {
                     transition={panelTransition}
                   >
                     <div className="flex h-full min-h-0 flex-col">
+                      {wordCountIndicator}
                       <WritingEditor
                         value={content}
                         onChange={handleContentChange}
@@ -546,6 +629,7 @@ export default function WritingPlayer() {
               transition={panelTransition}
             >
               <div className="flex h-full min-h-0 flex-col">
+                {wordCountIndicator}
                 <WritingEditor
                   value={content}
                   onChange={handleContentChange}
