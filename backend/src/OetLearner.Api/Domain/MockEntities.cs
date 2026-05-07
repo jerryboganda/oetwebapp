@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
@@ -262,6 +263,22 @@ public class MockBooking
 
     [MaxLength(2000)]
     public string? LearnerNotes { get; set; }
+
+    /// <summary>
+    /// Mocks V2 Wave 6 — JSON manifest of recording chunks accepted via
+    /// POST /v1/mock-bookings/{id}/recording-chunk. Shape:
+    ///   { "chunks": [ { "part": int, "sha256": "..", "key": "..", "bytes": long, "mimeType": ".." }, ... ] }
+    /// Only populated when <see cref="ConsentToRecording"/> is true.
+    /// Stored as <c>text</c> (unbounded) — a 20-min recording at 5s/chunk
+    /// can produce 240 manifest entries (~50 KB JSON), exceeding the prior
+    /// 8000-byte VARCHAR cap. The migration emits <c>text</c> in Postgres.
+    /// </summary>
+    [Column(TypeName = "text")]
+    public string? RecordingManifestJson { get; set; }
+
+    public long? RecordingDurationMs { get; set; }
+
+    public DateTimeOffset? RecordingFinalizedAt { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

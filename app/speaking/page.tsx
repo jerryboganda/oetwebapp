@@ -302,7 +302,7 @@ export default function SpeakingHome() {
                               </div>
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="default" size="sm">Speaking</Badge>
+                                  <Badge variant="muted" size="sm">Speaking</Badge>
                                   {task.difficulty ? (
                                     <Badge
                                       variant={String(task.difficulty).toLowerCase() === 'hard' ? 'danger' : String(task.difficulty).toLowerCase() === 'medium' ? 'warning' : 'success'}

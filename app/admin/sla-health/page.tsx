@@ -33,10 +33,11 @@ const HEALTH_CONFIG: Record<string, { icon: typeof AlertOctagon; tone: 'default'
 export default function SlaHealthPage() {
   const [data, setData] = useState<SlaData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('admin_sla_health_viewed');
-    apiRequest<SlaData>('/v1/admin/sla-health').then(setData).catch(() => {}).finally(() => setLoading(false));
+    apiRequest<SlaData>('/v1/admin/sla-health').then(setData).catch((e) => setError(e instanceof Error ? e.message : 'Failed to load')).finally(() => setLoading(false));
   }, []);
 
   const health = HEALTH_CONFIG[data?.overallHealth ?? 'healthy'] ?? HEALTH_CONFIG.healthy;

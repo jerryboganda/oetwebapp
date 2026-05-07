@@ -7176,6 +7176,15 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int>("RescheduleCount")
                         .HasColumnType("integer");
 
+                    b.Property<long?>("RecordingDurationMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("RecordingFinalizedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RecordingManifestJson")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("ScheduledStartAt")
                         .HasColumnType("timestamp with time zone");
 

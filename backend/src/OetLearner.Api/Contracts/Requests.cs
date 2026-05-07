@@ -151,12 +151,44 @@ public record MockBookingUpdateRequest(
 // Mocks V2 Wave 6 — Live-room transition (Speaking).
 public record LiveRoomTransitionRequest(string TargetState);
 
+public record MockBookingRecordingFinalizeRequest(long? DurationMs);
+
 public record MockLeakReportRequest(
     string? MockBundleId,
     string? MockAttemptId,
     string? Reason,
     string? EvidenceUrl = null,
     string? PageOrQuestion = null);
+
+/// <summary>
+/// Mocks Wave 8 — admin update body for a <see cref="OetLearner.Api.Domain.MockContentReview"/>
+/// row. Status transitions are validated by the service.
+/// </summary>
+public record MockLeakReportUpdateRequest(
+    string Status,
+    string? ResolutionNote = null);
+
+/// <summary>
+/// Mocks Wave 8 — admin-facing summary of a <see cref="OetLearner.Api.Domain.MockContentReview"/>
+/// row. Avoids learner email; uses display name only.
+/// </summary>
+public record MockLeakReportSummary(
+    string Id,
+    string? BundleId,
+    string? BundleTitle,
+    string? AttemptId,
+    string Severity,
+    string Status,
+    string? ReasonCode,
+    string? Details,
+    string? EvidenceUrl,
+    string? PageOrQuestion,
+    string? ReportedByUserId,
+    string? ReportedByUserDisplayName,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ResolvedAt,
+    string? ResolvedByAdminId,
+    string? ResolutionNote);
 
 public record AdminMockBundleCreateRequest(
     string Title,

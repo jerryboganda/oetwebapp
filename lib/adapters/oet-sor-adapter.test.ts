@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mockReportToStatementOfResults } from '@/lib/adapters/oet-sor-adapter';
+import { isMockReportStatementOfResultsReady, mockReportToStatementOfResults } from '@/lib/adapters/oet-sor-adapter';
 import type { MockReport } from '@/lib/mock-data';
 
 const base: MockReport = {
@@ -68,5 +68,47 @@ describe('mockReportToStatementOfResults', () => {
   it('always sets isPractice=true', () => {
     const sor = mockReportToStatementOfResults({ report: base });
     expect(sor.isPractice).toBe(true);
+  });
+});
+
+describe('isMockReportStatementOfResultsReady', () => {
+  it('allows a full report with all four final numeric scores', () => {
+    expect(isMockReportStatementOfResultsReady(base)).toBe(true);
+  });
+
+  it('accepts legacy generated subtest ids when names are canonical', () => {
+    const report: MockReport = {
+      ...base,
+      subTests: [
+        { id: 'g-l', name: 'Listening', score: '430', rawScore: '35/42', color: '', bg: '' },
+        { id: 'g-r', name: 'Reading', score: '420', rawScore: '34/42', color: '', bg: '' },
+        { id: 'g-s', name: 'Speaking', score: '350', rawScore: '', color: '', bg: '' },
+        { id: 'g-w', name: 'Writing', score: '370', rawScore: '', color: '', bg: '' },
+      ],
+    };
+
+    expect(isMockReportStatementOfResultsReady(report)).toBe(true);
+    expect(mockReportToStatementOfResults({ report }).scores).toMatchObject({
+      listening: 430,
+      reading: 420,
+      speaking: 350,
+      writing: 370,
+    });
+  });
+
+  it('blocks reports with pending teacher review scores', () => {
+    expect(isMockReportStatementOfResultsReady({
+      ...base,
+      subTests: base.subTests.map((subtest) => subtest.id === 'writing'
+        ? { ...subtest, score: 'Pending', reviewState: 'in_review' }
+        : subtest),
+    })).toBe(false);
+  });
+
+  it('blocks partial subtest reports', () => {
+    expect(isMockReportStatementOfResultsReady({
+      ...base,
+      subTests: base.subTests.filter((subtest) => subtest.id !== 'speaking'),
+    })).toBe(false);
   });
 });

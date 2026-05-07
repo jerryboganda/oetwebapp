@@ -37,6 +37,10 @@ vi.mock('@/lib/listening-api', () => ({
   recordListeningIntegrityEvent: mockRecordIntegrity,
 }));
 
+vi.mock('@/lib/api', () => ({
+  completeMockSection: vi.fn(),
+}));
+
 vi.mock('@/lib/analytics', () => ({
   analytics: { track: mockTrack },
 }));

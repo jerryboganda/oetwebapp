@@ -23,6 +23,7 @@ import {
   type ReadingQuestionLearnerDto,
 } from '@/lib/reading-authoring-api';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
+import { completeMockSection } from '@/lib/api';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -60,6 +61,12 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   // is the resumed attempt itself — we read this only to render
   // pre-resume context like "starting Drill…").
   const urlMode = search?.get('mode') ?? '';
+  // Mocks V2 — BuildLaunchRoute attaches mockAttemptId/mockSectionId when
+  // this paper is launched as a section of a mock attempt. Submission then
+  // writes the score back via completeMockSection so the mock report is
+  // not stuck on "Pending".
+  const mockAttemptId = search?.get('mockAttemptId') ?? null;
+  const mockSectionId = search?.get('mockSectionId') ?? null;
   const router = useRouter();
 
   const [structure, setStructure] = useState<ReadingLearnerStructureDto | null>(null);
@@ -297,14 +304,31 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       await Promise.all(answersToFlush.map(([questionId, valueJson]) =>
         saveReadingAnswer(attempt.attemptId, questionId, valueJson)));
       answersToFlush.forEach(([questionId]) => dirtyQuestionIds.current.delete(questionId));
-      await submitReadingAttempt(attempt.attemptId);
+      const graded = await submitReadingAttempt(attempt.attemptId);
+      if (mockAttemptId && mockSectionId) {
+        try {
+          await completeMockSection(mockAttemptId, mockSectionId, {
+            contentAttemptId: attempt.attemptId,
+            rawScore: graded.rawScore,
+            rawScoreMax: graded.maxRawScore,
+            scaledScore: graded.scaledScore,
+            grade: graded.gradeLetter,
+            evidence: { source: 'reading_player' },
+          });
+        } catch (mockErr) {
+          // Do not lose the learner's submission on mock-write failure.
+          console.warn('Could not mark mock reading section complete', mockErr);
+        }
+        router.push(`/mocks/player/${mockAttemptId}`);
+        return;
+      }
       router.push(`/reading/paper/${paperId}/results?attemptId=${attempt.attemptId}`);
     } catch (err) {
       setError(readErrorMessage(err, 'Could not submit Reading attempt.'));
     } finally {
       setSubmitting(false);
     }
-  }, [answers, attempt, paperId, paperExpired, partALocked, partBCWindowEnded, questionPartById, router]);
+  }, [answers, attempt, mockAttemptId, mockSectionId, paperId, paperExpired, partALocked, partBCWindowEnded, questionPartById, router]);
 
   useEffect(() => {
     if (!attempt || attempt.status !== 'InProgress' || !partBCWindowEnded || autoSubmitTriggered.current) return;
@@ -337,6 +361,11 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       <main className="space-y-5">
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {timingNotice ? <InlineAlert variant="warning">{timingNotice}</InlineAlert> : null}
+        {mockAttemptId ? (
+          <InlineAlert variant="info">
+            You&rsquo;re taking this section as part of a mock. Submitting will mark this section complete and return you to the mock dashboard.
+          </InlineAlert>
+        ) : null}
         <div className="md:hidden">
           <InlineAlert variant="warning">Full Reading exam mode is designed for a tablet or desktop-sized screen.</InlineAlert>
         </div>

@@ -524,6 +524,10 @@ export interface MockReport {
   state?: string;
   title: string;
   date: string;
+  profession?: string | null;
+  targetCountry?: string | null;
+  deliveryMode?: string | null;
+  strictness?: string | null;
   overallScore: string;
   overallGrade?: string | null;
   summary: string;

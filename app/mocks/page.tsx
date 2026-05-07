@@ -472,12 +472,12 @@ export default function MockCenter() {
                   <RefreshCw className="h-4 w-4" />
                   Retry
                 </Button>
-                <Link
-                  href="/help"
+                <a
+                  href="mailto:support@oetwithdrhesham.co.uk"
                   className="pressable inline-flex items-center justify-center gap-2 rounded-[16px] px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
                 >
                   Contact support
-                </Link>
+                </a>
               </div>
             </div>
           </MotionSection>

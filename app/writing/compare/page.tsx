@@ -114,7 +114,7 @@ export default function WritingComparePage() {
           <div className="flex flex-wrap gap-3">
             {result.criteria.map((c) => (
               <MotionItem key={c.name}>
-                <Badge variant="default" className="text-sm px-3 py-1.5">
+                <Badge variant="muted" className="text-sm px-3 py-1.5">
                   {c.name}: {c.score}/{c.maxScore}
                 </Badge>
               </MotionItem>

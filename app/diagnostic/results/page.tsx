@@ -137,7 +137,7 @@ export default function DiagnosticResultsPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-navy">{result.subTest}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="default">{result.scoreRange}</Badge>
+                        <Badge variant="muted">{result.scoreRange}</Badge>
                         <ConfidenceBadge level={result.confidence.toLowerCase() as 'high' | 'medium' | 'low'} />
                       </div>
                     </div>

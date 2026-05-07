@@ -107,6 +107,26 @@ public static class MockAdminEndpoints
         adminMocks.MapGet("/risk-list", async (MockService service, CancellationToken ct) =>
             Results.Ok(await service.GetAdminMockRiskListAsync(ct)));
 
+        // Mocks Wave 8 — admin leak-report queue.
+        adminMocks.MapGet("/leak-reports", async (
+            MockService service,
+            CancellationToken ct,
+            [FromQuery] string? status,
+            [FromQuery] int? limit) =>
+            Results.Ok(new
+            {
+                items = await service.ListLeakReportsAsync(status, limit ?? 50, ct)
+            }));
+
+        adminMocks.MapPatch("/leak-reports/{id}", async (
+            string id,
+            MockLeakReportUpdateRequest request,
+            MockService service,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.UpdateLeakReportAsync(AdminId(http), id, request, ct)))
+            .RequireAuthorization("AdminContentWrite");
+
         // Mocks V2 Wave 4 — admin booking management.
         var bookings = app.MapGroup("/v1/admin/mock-bookings")
             .RequireAuthorization("AdminContentRead")
@@ -118,6 +138,13 @@ public static class MockAdminEndpoints
             [FromQuery] DateTimeOffset? from,
             [FromQuery] DateTimeOffset? to) =>
             Results.Ok(await service.ListForAdminAsync(from, to, ct)));
+
+        bookings.MapGet("/{bookingId}", async (
+            string bookingId,
+            MockBookingService service,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.GetForExpertAsync(AdminId(http), isAdmin: true, bookingId, ct)));
 
         bookings.MapPatch("/{bookingId}/assign", async (
             string bookingId,

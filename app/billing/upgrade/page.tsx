@@ -256,7 +256,7 @@ export default function BillingUpgradePage() {
                         )}
                       >
                         {plan.isCurrent ? (
-                          <Badge variant="default" className="absolute -top-2 left-4">
+                          <Badge variant="info" className="absolute -top-2 left-4">
                             Current
                           </Badge>
                         ) : null}

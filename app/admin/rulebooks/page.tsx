@@ -194,7 +194,7 @@ export default function AdminRulebooksListPage() {
       )}
 
       {createOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setCreateOpen(false)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setCreateOpen(false)} role="button" tabIndex={0} aria-label="Close dialog" onKeyDown={(e) => e.key === 'Escape' && setCreateOpen(false)}>
           <Card className="p-6 max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">New Rulebook (Draft)</h3>
             <div className="space-y-3">
@@ -216,7 +216,7 @@ export default function AdminRulebooksListPage() {
       )}
 
       {importOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setImportOpen(false)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setImportOpen(false)} role="button" tabIndex={0} aria-label="Close dialog" onKeyDown={(e) => e.key === 'Escape' && setImportOpen(false)}>
           <Card className="p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">Import Rulebook (JSON)</h3>
             <div className="space-y-3">

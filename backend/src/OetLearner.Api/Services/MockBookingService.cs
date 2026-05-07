@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services;
 
@@ -189,6 +190,64 @@ public sealed class MockBookingService
         booking.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Project(booking, isAdmin: isAdmin);
+    }
+
+    /// <summary>
+    /// Mocks V2 Wave 6 — fetch a single booking, projected for the requesting
+    /// learner. Owner-or-assigned-staff only; tutor identity, Zoom start URL,
+    /// and the interlocutor card are excluded by <see cref="Project"/>.
+    /// </summary>
+    public async Task<object> GetForUserAsync(string userId, string bookingId, CancellationToken ct)
+    {
+        var booking = await _db.MockBookings.AsNoTracking()
+            .Include(x => x.MockBundle)
+            .FirstOrDefaultAsync(x => x.Id == bookingId, ct)
+            ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
+        if (booking.UserId != userId)
+        {
+            throw ApiException.Forbidden("forbidden", "You cannot view this booking.");
+        }
+        return Project(booking, isAdmin: false);
+    }
+
+    /// <summary>
+    /// Mocks V2 Wave 6 — fetch a single booking with the full tutor-side
+    /// projection including the interlocutor card content lifted from the
+    /// bound Speaking <see cref="ContentPaper"/>. Caller must be admin or the
+    /// assigned tutor / interlocutor; learners are refused even if they own
+    /// the booking, because this projection exposes tutor-only fields.
+    /// </summary>
+    public async Task<object> GetForExpertAsync(string actorId, bool isAdmin, string bookingId, CancellationToken ct)
+    {
+        var booking = await _db.MockBookings.AsNoTracking()
+            .Include(x => x.MockBundle!).ThenInclude(b => b!.Sections)
+            .FirstOrDefaultAsync(x => x.Id == bookingId, ct)
+            ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
+        if (!isAdmin && booking.AssignedTutorId != actorId && booking.AssignedInterlocutorId != actorId)
+        {
+            throw ApiException.Forbidden("forbidden", "You are not assigned to this booking.");
+        }
+
+        var projection = (Dictionary<string, object?>)Project(booking, isAdmin: true);
+
+        // Embed the speaking interlocutor card content from the bound speaking
+        // section, if any. This payload is tutor-only — the learner-side
+        // projection deliberately omits it.
+        var speakingSection = booking.MockBundle?.Sections
+            .OrderBy(s => s.SectionOrder)
+            .FirstOrDefault(s => string.Equals(s.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase));
+        if (speakingSection is not null)
+        {
+            var paper = await _db.ContentPapers.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == speakingSection.ContentPaperId, ct);
+            if (paper is not null)
+            {
+                projection["speakingPaperId"] = paper.Id;
+                projection["speakingContent"] = SpeakingContentStructure.BuildContentItemDetail(paper);
+            }
+        }
+
+        return projection;
     }
 
     private static bool IsTerminal(string status) => status == MockBookingStatuses.Completed

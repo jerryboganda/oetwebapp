@@ -512,6 +512,20 @@ public sealed class MockService(LearnerDbContext db)
             .Include(x => x.ContentPaper)
             .FirstAsync(x => x.Id == section.MockBundleSectionId, ct);
 
+        if (!string.IsNullOrWhiteSpace(request.ContentAttemptId))
+        {
+            var ownsContentAttempt = await db.Attempts.AsNoTracking().AnyAsync(x =>
+                x.Id == request.ContentAttemptId
+                && x.UserId == userId
+                && x.ContentId == bundleSection.ContentPaperId
+                && x.SubtestCode == section.SubtestCode,
+                ct);
+            if (!ownsContentAttempt)
+            {
+                throw ApiException.NotFound("content_attempt_not_found", "The submitted section evidence was not found for this learner and paper.");
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
         section.State = AttemptState.Completed;
         section.SubmittedAt ??= now;
@@ -539,14 +553,41 @@ public sealed class MockService(LearnerDbContext db)
             return new { mockAttemptId = attempt.Id, state = "completed", reportId = attempt.ReportId, reportRoute = $"/mocks/report/{attempt.ReportId}" };
         }
 
-        var completedCount = await db.MockSectionAttempts.AsNoTracking()
-            .CountAsync(x => x.MockAttemptId == attempt.Id && x.State == AttemptState.Completed, ct);
+        var sectionStates = await db.MockSectionAttempts.AsNoTracking()
+            .Where(x => x.MockAttemptId == attempt.Id)
+            .Join(db.MockBundleSections.AsNoTracking(),
+                sectionAttempt => sectionAttempt.MockBundleSectionId,
+                bundleSection => bundleSection.Id,
+                (sectionAttempt, bundleSection) => new
+                {
+                    sectionAttempt.Id,
+                    sectionAttempt.SubtestCode,
+                    sectionAttempt.State,
+                    bundleSection.IsRequired
+                })
+            .ToListAsync(ct);
+        var completedCount = sectionStates.Count(x => x.State == AttemptState.Completed);
         if (completedCount == 0)
         {
             throw ApiException.Validation(
                 "mock_no_completed_sections",
                 "Complete at least one section before submitting the mock.",
                 [new ApiFieldError("mockAttemptId", "no_completed_sections", "Start and complete a section first.")]);
+        }
+
+        var incompleteRequiredSections = sectionStates
+            .Where(x => x.IsRequired && x.State != AttemptState.Completed)
+            .ToList();
+        if (incompleteRequiredSections.Count > 0)
+        {
+            var missing = incompleteRequiredSections
+                .Select(x => x.SubtestCode)
+                .Distinct()
+                .ToArray();
+            throw ApiException.Validation(
+                "mock_sections_incomplete",
+                "Complete every required mock section before submitting the report.",
+                [new ApiFieldError("sections", "incomplete", $"Still pending: {string.Join(", ", missing)}.")]);
         }
 
         var report = await db.MockReports.FirstOrDefaultAsync(x => x.MockAttemptId == attempt.Id, ct);
@@ -771,20 +812,35 @@ public sealed class MockService(LearnerDbContext db)
             .FirstOrDefaultAsync(x => x.Id == bookingId && x.UserId == userId, ct)
             ?? throw ApiException.NotFound("mock_booking_not_found", "Mock booking not found.");
 
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            throw ApiException.Validation(
+                "booking_status_readonly",
+                "Learners cannot change booking status through this endpoint. Use reschedule or cancel actions instead.",
+                [new ApiFieldError("status", "readonly", "Booking status is controlled by the booking lifecycle service.")]);
+        }
+        if (booking.Status is MockBookingStatuses.Completed or MockBookingStatuses.Cancelled or MockBookingStatuses.LearnerNoShow or MockBookingStatuses.TutorNoShow)
+        {
+            throw ApiException.Validation("booking_finalized", "This booking can no longer be changed.");
+        }
         if (request.ScheduledStartAt.HasValue && request.ScheduledStartAt.Value != booking.ScheduledStartAt)
         {
+            if (booking.RescheduleCount >= MockBookingService.MaxReschedulesPerBooking)
+            {
+                throw ApiException.Validation("reschedule_cap_reached",
+                    $"Bookings can be rescheduled up to {MockBookingService.MaxReschedulesPerBooking} times.");
+            }
+            if (request.ScheduledStartAt.Value <= DateTimeOffset.UtcNow.AddHours(MockBookingService.MinLeadTimeHours))
+            {
+                throw ApiException.Validation("lead_time_too_short",
+                    $"Reschedule must land at least {MockBookingService.MinLeadTimeHours} hours in the future.");
+            }
             booking.ScheduledStartAt = request.ScheduledStartAt.Value.ToUniversalTime();
             booking.RescheduleCount += 1;
         }
         if (request.TimezoneIana is not null)
         {
             booking.TimezoneIana = string.IsNullOrWhiteSpace(request.TimezoneIana) ? booking.TimezoneIana : request.TimezoneIana.Trim();
-        }
-        if (request.Status is not null)
-        {
-            booking.Status = NormalizeBookingStatus(request.Status);
-            if (booking.Status == MockBookingStatuses.Cancelled) booking.CancelledAt = DateTimeOffset.UtcNow;
-            if (booking.Status == MockBookingStatuses.Completed) booking.CompletedAt = DateTimeOffset.UtcNow;
         }
         if (request.ConsentToRecording.HasValue) booking.ConsentToRecording = request.ConsentToRecording.Value;
         if (request.LearnerNotes is not null) booking.LearnerNotes = request.LearnerNotes;
@@ -946,6 +1002,186 @@ public sealed class MockService(LearnerDbContext db)
         RecordEvent(userId, "mock_leak_reported", new { reviewId = review.Id, bundleId, request.MockAttemptId });
         await db.SaveChangesAsync(ct);
         return new { id = review.Id, status = review.Status, severity = review.Severity };
+    }
+
+    // Mocks Wave 8 — admin leak-report queue.
+    private static readonly HashSet<string> LeakReportStatuses =
+        new(StringComparer.OrdinalIgnoreCase) { "open", "investigating", "resolved", "dismissed" };
+
+    private static readonly HashSet<string> TerminalLeakReportStatuses =
+        new(StringComparer.OrdinalIgnoreCase) { "resolved", "dismissed" };
+
+    public async Task<IReadOnlyList<MockLeakReportSummary>> ListLeakReportsAsync(
+        string? status, int limit, CancellationToken ct)
+    {
+        var clamped = limit <= 0 ? 50 : Math.Min(limit, 200);
+        var query = db.MockContentReviews.AsNoTracking()
+            .Include(x => x.MockBundle)
+            .AsQueryable();
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var normalised = status.Trim().ToLowerInvariant();
+            if (!LeakReportStatuses.Contains(normalised))
+            {
+                throw ApiException.Validation(
+                    "mock_leak_report_status_invalid",
+                    "Status must be one of open, investigating, resolved, dismissed.");
+            }
+            query = query.Where(x => x.Status == normalised);
+        }
+
+        var rows = await query
+            .OrderByDescending(x => x.CreatedAt)
+            .Take(clamped)
+            .ToListAsync(ct);
+
+        var reporterIds = rows
+            .Select(x => x.ReportedByUserId)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct()
+            .ToArray();
+        var displayNames = reporterIds.Length == 0
+            ? new Dictionary<string, string>(0)
+            : await db.Users.AsNoTracking()
+                .Where(u => reporterIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.DisplayName })
+                .ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
+
+        return rows.Select(row => ToLeakReportSummary(row, displayNames)).ToArray();
+    }
+
+    public async Task<MockLeakReportSummary> UpdateLeakReportAsync(
+        string adminId,
+        string id,
+        MockLeakReportUpdateRequest request,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Status)
+            || !LeakReportStatuses.Contains(request.Status.Trim().ToLowerInvariant()))
+        {
+            throw ApiException.Validation(
+                "mock_leak_report_status_invalid",
+                "Status must be one of open, investigating, resolved, dismissed.");
+        }
+        var nextStatus = request.Status.Trim().ToLowerInvariant();
+
+        var review = await db.MockContentReviews
+            .Include(x => x.MockBundle)
+            .FirstOrDefaultAsync(x => x.Id == id, ct)
+            ?? throw ApiException.NotFound("mock_leak_report_not_found", "Leak report not found.");
+
+        if (TerminalLeakReportStatuses.Contains(review.Status)
+            && !string.Equals(review.Status, nextStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "mock_leak_report_status_locked",
+                $"Report is already {review.Status} and cannot transition to {nextStatus}.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var previousStatus = review.Status;
+        var note = string.IsNullOrWhiteSpace(request.ResolutionNote) ? null : request.ResolutionNote.Trim();
+
+        // The notes column already stores the original learner-submitted JSON
+        // payload (reason, evidenceUrl, pageOrQuestion). To preserve that
+        // payload while recording the admin resolution note we merge under a
+        // dedicated key so the original report is never overwritten.
+        if (note is not null)
+        {
+            var payload = string.IsNullOrWhiteSpace(review.Notes)
+                ? new Dictionary<string, object?>()
+                : JsonSupport.Deserialize<Dictionary<string, object?>>(review.Notes, new Dictionary<string, object?>());
+            payload["adminResolutionNote"] = note;
+            payload["adminResolutionAt"] = now;
+            payload["adminResolutionBy"] = adminId;
+            review.Notes = JsonSupport.Serialize(payload);
+        }
+
+        review.Status = nextStatus;
+        if (TerminalLeakReportStatuses.Contains(nextStatus))
+        {
+            review.ResolvedAt = now;
+            review.ResolvedByAdminId = adminId;
+        }
+        else
+        {
+            review.ResolvedAt = null;
+            review.ResolvedByAdminId = null;
+        }
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit-{Guid.NewGuid():N}",
+            OccurredAt = now,
+            ActorId = adminId,
+            ActorName = adminId,
+            Action = "MockLeakReport.Updated",
+            ResourceType = "MockContentReview",
+            ResourceId = review.Id,
+            Details = JsonSupport.Serialize(new
+            {
+                previousStatus,
+                nextStatus,
+                hasResolutionNote = note is not null
+            })
+        });
+
+        await db.SaveChangesAsync(ct);
+
+        var displayNames = string.IsNullOrWhiteSpace(review.ReportedByUserId)
+            ? new Dictionary<string, string>(0)
+            : await db.Users.AsNoTracking()
+                .Where(u => u.Id == review.ReportedByUserId)
+                .Select(u => new { u.Id, u.DisplayName })
+                .ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
+
+        return ToLeakReportSummary(review, displayNames);
+    }
+
+    private static MockLeakReportSummary ToLeakReportSummary(
+        MockContentReview row,
+        IReadOnlyDictionary<string, string> displayNames)
+    {
+        string? reasonCode = null;
+        string? details = null;
+        string? evidenceUrl = null;
+        string? pageOrQuestion = null;
+        string? resolutionNote = null;
+        if (!string.IsNullOrWhiteSpace(row.Notes))
+        {
+            var payload = JsonSupport.Deserialize<Dictionary<string, object?>>(
+                row.Notes, new Dictionary<string, object?>());
+            reasonCode = payload.TryGetValue("reason", out var reason) ? reason?.ToString() : null;
+            evidenceUrl = payload.TryGetValue("evidenceUrl", out var url) ? url?.ToString() : null;
+            pageOrQuestion = payload.TryGetValue("pageOrQuestion", out var pq) ? pq?.ToString() : null;
+            resolutionNote = payload.TryGetValue("adminResolutionNote", out var rn) ? rn?.ToString() : null;
+            details = reasonCode;
+        }
+
+        string? displayName = null;
+        if (!string.IsNullOrWhiteSpace(row.ReportedByUserId)
+            && displayNames.TryGetValue(row.ReportedByUserId!, out var dn))
+        {
+            displayName = dn;
+        }
+
+        return new MockLeakReportSummary(
+            Id: row.Id,
+            BundleId: row.MockBundleId,
+            BundleTitle: row.MockBundle?.Title,
+            AttemptId: row.MockAttemptId,
+            Severity: row.Severity,
+            Status: row.Status,
+            ReasonCode: reasonCode,
+            Details: details,
+            EvidenceUrl: evidenceUrl,
+            PageOrQuestion: pageOrQuestion,
+            ReportedByUserId: row.ReportedByUserId,
+            ReportedByUserDisplayName: displayName,
+            CreatedAt: row.CreatedAt,
+            ResolvedAt: row.ResolvedAt,
+            ResolvedByAdminId: row.ResolvedByAdminId,
+            ResolutionNote: resolutionNote);
     }
 
     public async Task<object> GetDiagnosticStudyPathAsync(string userId, CancellationToken ct)

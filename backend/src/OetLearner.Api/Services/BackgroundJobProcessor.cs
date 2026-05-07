@@ -613,7 +613,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 : "not_completed";
             return new
             {
-                id = $"g-{subtest[0]}",
+                id = subtest.Trim().ToLowerInvariant(),
                 name = ToDisplaySubtest(subtest),
                 score = scaled?.ToString() ?? (state is "queued" or "in_review" ? "Pending review" : "Pending"),
                 rawScore = FormatMockRawScore(section),
@@ -682,6 +682,11 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         var weakestCriterion = weakest is null
             ? new { subtest = "Pending", criterion = "Awaiting evidence", description = "Complete scored sections or wait for expert-reviewed productive sections." }
             : new { subtest = weakest.name, criterion = "Lowest scaled sub-test", description = $"Prioritise {weakest.name} next; current scaled score is {weakest.scaledScore}/500." };
+        var config = JsonSupport.Deserialize<Dictionary<string, object?>>(mockAttempt.ConfigJson, new Dictionary<string, object?>());
+        static string? ReadString(Dictionary<string, object?> values, string key)
+            => values.TryGetValue(key, out var value) && value is not null && !string.IsNullOrWhiteSpace(value.ToString())
+                ? value.ToString()
+                : null;
 
         report.State = AsyncState.Completed;
         report.GeneratedAt = DateTimeOffset.UtcNow;
@@ -692,6 +697,11 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             mockAttemptId = mockAttempt.Id,
             title = mockAttempt.MockType == "sub" ? $"{ToDisplaySubtest(mockAttempt.SubtestCode ?? "mock")} Mock Report" : "Generated OET Mock Report",
             date = DateTime.UtcNow.ToString("yyyy-MM-dd"),
+            profession = ReadString(config, "profession") ?? mockAttempt.Profession,
+            targetCountry = ReadString(config, "targetCountry"),
+            deliveryMode = ReadString(config, "deliveryMode") ?? mockAttempt.DeliveryMode,
+            strictness = ReadString(config, "strictness") ?? mockAttempt.Strictness,
+            releasePolicy = ReadString(config, "releasePolicy"),
             overallScore = overall?.ToString() ?? "Pending",
             overallGrade = overall is null ? null : OetScoring.OetGradeLetterFromScaled(overall.Value),
             summary = BuildMockReportSummary(overall, subTests.Count(x => x.state is "queued" or "in_review")),
@@ -855,7 +865,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             message = advisory.Tier is "green" or "dark-green"
                 ? "Use at least two consistent green mocks before booking the official OET."
                 : "Complete remediation and retake a strict mock before booking.",
-            route = "/billing/exam-booking"
+            route = "/exam-booking"
         };
     }
 

@@ -155,6 +155,9 @@ public static class ExpertEndpoints
         expert.MapGet("/mocks/bookings", async (HttpContext http, MockService service, CancellationToken ct)
             => Results.Ok(await service.ListExpertMockBookingsAsync(http.ExpertId(), ct)));
 
+        expert.MapGet("/mocks/bookings/{bookingId}", async (string bookingId, HttpContext http, MockBookingService bookings, CancellationToken ct)
+            => Results.Ok(await bookings.GetForExpertAsync(http.ExpertId(), isAdmin: false, bookingId, ct)));
+
         expert.MapPut("/schedule", async (HttpContext http, ExpertAvailabilityUpdateRequest request, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.SaveAvailabilityAsync(http.ExpertId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");

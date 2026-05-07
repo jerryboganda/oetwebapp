@@ -27,15 +27,52 @@ export interface OetSorAdapterInputs {
   country?: string;
 }
 
+const REQUIRED_SOR_SUBTESTS = ['listening', 'reading', 'writing', 'speaking'] as const;
+const FINAL_REVIEW_STATES = new Set(['completed', 'reviewed', 'final', 'released']);
+const LEGACY_SUBTEST_IDS: Record<string, (typeof REQUIRED_SOR_SUBTESTS)[number]> = {
+  'g-l': 'listening',
+  'g-r': 'reading',
+  'g-w': 'writing',
+  'g-s': 'speaking',
+};
+
+function normalizeSubtestKey(value: string | undefined): string {
+  return value?.trim().toLowerCase().replace(/\s+/g, '_') ?? '';
+}
+
+function reportSubtestKey(subtest: MockReport['subTests'][number]): string {
+  const id = normalizeSubtestKey(subtest.id);
+  if (LEGACY_SUBTEST_IDS[id]) return LEGACY_SUBTEST_IDS[id];
+  if (REQUIRED_SOR_SUBTESTS.includes(id as (typeof REQUIRED_SOR_SUBTESTS)[number])) return id;
+  const name = normalizeSubtestKey(subtest.name);
+  if (REQUIRED_SOR_SUBTESTS.includes(name as (typeof REQUIRED_SOR_SUBTESTS)[number])) return name;
+  return id;
+}
+
+function subtestsByCanonicalKey(report: MockReport) {
+  return Object.fromEntries(report.subTests.map((subtest) => [reportSubtestKey(subtest), subtest]));
+}
+
+export function isMockReportStatementOfResultsReady(report: MockReport): boolean {
+  const byId = subtestsByCanonicalKey(report);
+  return REQUIRED_SOR_SUBTESTS.every((id) => {
+    const subtest = byId[id];
+    if (!subtest) return false;
+    if (subtest.reviewState && !FINAL_REVIEW_STATES.has(subtest.reviewState)) return false;
+    if (subtest.state && ['queued', 'in_review', 'awaiting_payment', 'pending', 'not_completed'].includes(subtest.state)) return false;
+    const raw = subtest.scaledScore ?? subtest.score;
+    const score = Number(String(raw).trim());
+    return Number.isFinite(score);
+  });
+}
+
 export function mockReportToStatementOfResults(inputs: OetSorAdapterInputs): OetStatementOfResults {
   const { report, candidate, profession, country } = inputs;
 
-  const byId = Object.fromEntries(
-    report.subTests.map((s) => [s.id.toLowerCase(), s]),
-  );
+  const byId = subtestsByCanonicalKey(report);
 
   const pickScore = (id: string): number => {
-    const raw = byId[id]?.score ?? '0';
+    const raw = byId[id]?.scaledScore ?? byId[id]?.score ?? '0';
     const n = Number(String(raw).trim());
     if (!Number.isFinite(n)) return 0;
     const clamped = Math.min(OET_SCALED_MAX, Math.max(OET_SCALED_MIN, Math.round(n / 10) * 10));

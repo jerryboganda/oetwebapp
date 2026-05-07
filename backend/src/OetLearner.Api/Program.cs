@@ -530,6 +530,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<MockService>();
 builder.Services.AddScoped<MockBookingService>();
+builder.Services.AddScoped<MockBookingRecordingService>();
 // DI hotfix (2026-05-06): these services are consumed directly by minimal-API
 // endpoint handlers but were not registered, causing ASP.NET to fall back to
 // inferring them as Body parameters and aborting host startup with
@@ -827,6 +828,14 @@ builder.Services.Configure<OetLearner.Api.Services.Listening.ListeningSampleSeed
 builder.Services.AddScoped<
     OetLearner.Api.Services.Listening.IListeningSampleSeeder,
     OetLearner.Api.Services.Listening.ListeningSampleSeeder>();
+
+// Mock sample seeder (Development only). On startup, ingests three fully-
+// assembled draft MockBundle rows from `Project Real Content/` so the admin
+// (and learner) can immediately preview the new mock wizard + flow.
+// Idempotent (slug-keyed); non-fatal on failure.
+builder.Services.Configure<OetLearner.Api.Services.Seeding.MockSampleSeederOptions>(
+    builder.Configuration.GetSection(OetLearner.Api.Services.Seeding.MockSampleSeederOptions.SectionName));
+builder.Services.AddScoped<OetLearner.Api.Services.Seeding.MockSampleSeeder>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Reading.ReadingAttemptExpireWorker>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningAttemptExpireWorker>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
@@ -1236,6 +1245,26 @@ using (var seedScope = app.Services.CreateScope())
     {
         seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>()
             .LogWarning(ex, "Listening sample seeder failed (non-fatal)");
+    }
+}
+
+// Mock sample seeder — Development-only preview data. Reads
+// `Project Real Content/` and creates three Draft MockBundles so the admin
+// wizard and learner mock surface have something to point at out of the box.
+// Idempotent (skips if `sample-mock-{n}` already exists); non-fatal.
+if (app.Environment.IsDevelopment())
+{
+    using var seedScope = app.Services.CreateScope();
+    var mockSeeder = seedScope.ServiceProvider
+        .GetRequiredService<OetLearner.Api.Services.Seeding.MockSampleSeeder>();
+    try
+    {
+        await mockSeeder.SeedAsync(CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>()
+            .LogWarning(ex, "Mock sample seeder failed (non-fatal)");
     }
 }
 

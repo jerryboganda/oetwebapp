@@ -201,6 +201,54 @@ describe('billing wallet top-up API helper', () => {
   });
 });
 
+describe('admin mock bundle API helpers', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  it('serializes update, reorder, and booking assignment requests', async () => {
+    const calls: Array<{ url: string; method: string; body?: unknown }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(input),
+        method: String(init?.method ?? 'GET'),
+        body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+      });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const { updateAdminMockBundle, reorderAdminMockBundleSections, assignAdminMockBooking } = await import('../api');
+
+    await updateAdminMockBundle('bundle 1', { title: 'Updated bundle', releasePolicy: 'instant' });
+    await reorderAdminMockBundleSections('bundle 1', ['section-2', 'section-1']);
+    await assignAdminMockBooking('booking 1', { assignedTutorId: 'tutor-1', status: 'confirmed' });
+
+    expect(calls).toMatchObject([
+      {
+        method: 'PUT',
+        body: { title: 'Updated bundle', releasePolicy: 'instant' },
+      },
+      {
+        method: 'PUT',
+        body: { sectionIds: ['section-2', 'section-1'] },
+      },
+      {
+        method: 'PATCH',
+        body: { assignedTutorId: 'tutor-1', status: 'confirmed' },
+      },
+    ]);
+    expect(calls[0].url).toContain('/v1/admin/mock-bundles/bundle%201');
+    expect(calls[1].url).toContain('/v1/admin/mock-bundles/bundle%201/sections/reorder');
+    expect(calls[2].url).toContain('/v1/admin/mock-bookings/booking%201/assign');
+  });
+});
+
 describe('readiness mapping', () => {
   const originalFetch = globalThis.fetch;
 

@@ -213,6 +213,12 @@ public static class AiFeatureCodes
     public const string RecallsMistakeExplain = "recalls.mistake_explain";
     public const string RecallsRevisionPlan = "recalls.revision_plan";
 
+    // Mocks V2 — Wave 5 remediation plan AI personalisation.
+    // Optional enrichment over the deterministic 7-day plan; classified as
+    // non-scoring + BYOK-eligible (no candidate score is produced — the AI
+    // only generates a personalised intro/summary string for the plan).
+    public const string MockRemediationDraft = "mock.remediation_draft";
+
     // Pronunciation analysis (platform-only by default — scoring-critical)
     public const string PronunciationScore = "pronunciation.score";
     public const string PronunciationFeedback = "pronunciation.feedback";

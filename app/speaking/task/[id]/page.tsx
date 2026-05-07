@@ -13,7 +13,7 @@ import {
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
 import { Timer } from '@/components/ui/timer';
-import { fetchRoleCard, fetchSpeakingCompliance, submitSpeakingRecording, type SpeakingComplianceCopy } from '@/lib/api';
+import { fetchRoleCard, fetchSpeakingCompliance, submitSpeakingRecording, completeMockSection, type SpeakingComplianceCopy } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
 import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
@@ -35,8 +35,13 @@ function LiveSpeakingTaskContent() {
   const rawId = params?.id;
   const id = typeof rawId === 'string' ? rawId : '';
   const requestedMode = searchParams?.get('mode');
-  const mockSessionId = searchParams?.get('mockSession') ?? undefined;
-  const mockAttemptId = searchParams?.get('attemptId') ?? undefined;
+  // Mocks V2 — BuildLaunchRoute writes mockAttemptId/mockSectionId on the
+  // URL when this player is launched as part of a mock attempt. The legacy
+  // names (`attemptId`, `mockSession`) referenced a different speaking-only
+  // session shape and were never written by the new launcher — reading
+  // them produced silent failures (no completion ever recorded).
+  const mockAttemptId = searchParams?.get('mockAttemptId') ?? undefined;
+  const mockSectionId = searchParams?.get('mockSectionId') ?? undefined;
   const mode: TaskMode = requestedMode === 'exam' ? 'exam' : 'self';
 
   // --- Card State ---
@@ -528,7 +533,7 @@ function LiveSpeakingTaskContent() {
     setIsSubmitting(true);
     setSubmitError(null);
     setRecordingState('finished');
-    analytics.track('task_submitted', { taskId: id, subtest: 'speaking', mode, durationSeconds, mockSessionId });
+    analytics.track('task_submitted', { taskId: id, subtest: 'speaking', mode, durationSeconds, mockAttemptId });
 
     try {
       const recording = await stopRecorderAsync();
@@ -540,10 +545,31 @@ function LiveSpeakingTaskContent() {
       const { submissionId } = await submitSpeakingRecording(id, recording, durationSeconds, mode, {
         accepted: recordingConsentAccepted,
         text: compliance?.consentText,
-      }, {
-        attemptId: mockAttemptId,
-        mockSessionId,
       });
+      if (mockAttemptId && mockSectionId) {
+        try {
+          await completeMockSection(mockAttemptId, mockSectionId, {
+            contentAttemptId: submissionId,
+            rawScore: null,
+            rawScoreMax: null,
+            scaledScore: null,
+            grade: null,
+            evidence: { source: 'speaking_player', sessionId: submissionId, awaitingTutorReview: true },
+          });
+        } catch (mockErr) {
+          // Do not lose the learner's submission on mock-write failure.
+          console.warn('Could not mark mock speaking section complete', mockErr);
+        }
+        const mockUrl = `/mocks/player/${mockAttemptId}`;
+        setShowSubmitConfirm(false);
+        router.replace(mockUrl);
+        resultNavigationTimerRef.current = window.setTimeout(() => {
+          if (!window.location.pathname.startsWith('/mocks/player/')) {
+            window.location.assign(mockUrl);
+          }
+        }, 1500);
+        return;
+      }
       const resultUrl = `/speaking/results/${submissionId}`;
       setShowSubmitConfirm(false);
       router.replace(resultUrl);
@@ -586,6 +612,17 @@ function LiveSpeakingTaskContent() {
   return (
     <AppShell pageTitle={card?.title ?? 'Speaking Task'} workspaceRole="learner" className="px-3 sm:px-4 lg:px-6">
     <div className="mx-auto flex min-h-[calc(100vh-7rem)] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl border border-border/80 bg-surface text-navy shadow-sm">
+      {mockAttemptId ? (
+        <div
+          role="status"
+          className="flex items-start gap-3 border-b border-info/30 bg-info/10 px-4 py-2.5 text-sm text-info sm:px-6"
+        >
+          <ShieldCheck aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+          <p className="flex-1">
+            You&rsquo;re taking this Speaking section as part of a mock. Submitting will mark this section complete and return you to the mock dashboard. Tutor scoring continues asynchronously.
+          </p>
+        </div>
+      ) : null}
       {/* Top Bar */}
       <header className="z-20 flex items-center justify-between gap-3 border-b border-border/80 bg-white/85 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">

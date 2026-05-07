@@ -256,7 +256,7 @@ export function Sidebar({
           <li>
             <Link
               href="/settings"
-              onClick={() => { void triggerImpactHaptic('LIGHT'); }}
+              onClick={() => { void triggerImpactHaptic('LIGHT'); window.open('mailto:support@oetwithdrhesham.co.uk', '_blank'); }}
               className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5"
             >
               <Settings className="h-4 w-4" />

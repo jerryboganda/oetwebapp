@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Archive, BarChart3, CalendarClock, CheckCircle, Layers, Plus } from 'lucide-react';
+import { Archive, ArrowDown, ArrowUp, BarChart3, CalendarClock, CheckCircle, Layers, Pencil, Plus, Search, ShieldAlert, Sparkles } from 'lucide-react';
 import {
   AdminRoutePanel,
   AdminRouteSectionHeader,
@@ -10,17 +10,22 @@ import {
 } from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/form-controls';
+import { Input, Select } from '@/components/ui/form-controls';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
+import { Modal } from '@/components/ui/modal';
 import {
   addAdminMockBundleSection,
   archiveAdminMockBundle,
   createAdminMockBundle,
   fetchAdminMockBundles,
+  listAdminMockLeakReports,
   publishAdminMockBundle,
+  reorderAdminMockBundleSections,
+  updateAdminMockBundle,
 } from '@/lib/api';
+import { listContentPapers, type ContentPaperDto } from '@/lib/content-upload-api';
 
 type MockBundleRow = {
   id: string;
@@ -31,6 +36,8 @@ type MockBundleRow = {
   appliesToAllProfessions: boolean;
   status: 'draft' | 'published' | 'archived';
   estimatedDurationMinutes: number;
+  priority?: number;
+  tagsCsv?: string;
   sourceProvenance: string | null;
   difficulty?: string;
   sourceStatus?: string;
@@ -38,6 +45,8 @@ type MockBundleRow = {
   releasePolicy?: string;
   topicTagsCsv?: string;
   skillTagsCsv?: string;
+  watermarkEnabled?: boolean;
+  randomiseQuestions?: boolean;
   sections: {
     id: string;
     sectionOrder: number;
@@ -49,6 +58,51 @@ type MockBundleRow = {
     reviewEligible: boolean;
   }[];
 };
+
+type MockBundleFormState = {
+  title: string;
+  mockType: MockBundleRow['mockType'];
+  subtestCode: string;
+  professionId: string;
+  appliesToAllProfessions: boolean;
+  sourceProvenance: string;
+  priority: string;
+  difficulty: string;
+  sourceStatus: string;
+  qualityStatus: string;
+  releasePolicy: string;
+  topicTagsCsv: string;
+  skillTagsCsv: string;
+  watermarkEnabled: boolean;
+  randomiseQuestions: boolean;
+};
+
+const mockTypeOptions = ['full', 'lrw', 'sub', 'part', 'diagnostic', 'final_readiness', 'remedial'] as const;
+const subtestOptions = ['listening', 'reading', 'writing', 'speaking'];
+
+function isSubtestScopedType(type: MockBundleRow['mockType']) {
+  return type === 'sub' || type === 'part' || type === 'remedial';
+}
+
+function toEditForm(row: MockBundleRow): MockBundleFormState {
+  return {
+    title: row.title,
+    mockType: row.mockType,
+    subtestCode: row.subtestCode ?? 'reading',
+    professionId: row.professionId ?? '',
+    appliesToAllProfessions: row.appliesToAllProfessions,
+    sourceProvenance: row.sourceProvenance ?? '',
+    priority: String(row.priority ?? 0),
+    difficulty: row.difficulty ?? 'exam_ready',
+    sourceStatus: row.sourceStatus ?? 'needs_review',
+    qualityStatus: row.qualityStatus ?? 'draft',
+    releasePolicy: row.releasePolicy ?? 'instant',
+    topicTagsCsv: row.topicTagsCsv ?? '',
+    skillTagsCsv: row.skillTagsCsv ?? '',
+    watermarkEnabled: row.watermarkEnabled ?? true,
+    randomiseQuestions: row.randomiseQuestions ?? false,
+  };
+}
 
 export default function AdminMockBundlesPage() {
   const [loading, setLoading] = useState(true);
@@ -71,6 +125,13 @@ export default function AdminMockBundlesPage() {
   const [sectionBundleId, setSectionBundleId] = useState('');
   const [sectionPaperId, setSectionPaperId] = useState('');
   const [sectionTimeLimit, setSectionTimeLimit] = useState('60');
+  const [paperSearch, setPaperSearch] = useState('');
+  const [paperSubtest, setPaperSubtest] = useState('');
+  const [paperOptions, setPaperOptions] = useState<ContentPaperDto[]>([]);
+  const [paperLoading, setPaperLoading] = useState(false);
+  const [editingRow, setEditingRow] = useState<MockBundleRow | null>(null);
+  const [editForm, setEditForm] = useState<MockBundleFormState | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -133,6 +194,92 @@ export default function AdminMockBundlesPage() {
     }
   }
 
+  async function handleSearchPapers() {
+    setPaperLoading(true);
+    try {
+      const papers = await listContentPapers({
+        status: 'Published',
+        subtest: paperSubtest || undefined,
+        search: paperSearch || undefined,
+        pageSize: 50,
+      });
+      setPaperOptions(papers);
+      if (!sectionPaperId && papers[0]) {
+        setSectionPaperId(papers[0].id);
+      }
+    } catch (err) {
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Could not load published papers.' });
+    } finally {
+      setPaperLoading(false);
+    }
+  }
+
+  function openEdit(row: MockBundleRow) {
+    setEditingRow(row);
+    setEditForm(toEditForm(row));
+  }
+
+  function closeEdit() {
+    setEditingRow(null);
+    setEditForm(null);
+    setSavingEdit(false);
+  }
+
+  function updateEditField<K extends keyof MockBundleFormState>(key: K, value: MockBundleFormState[K]) {
+    setEditForm((current) => current ? { ...current, [key]: value } : current);
+  }
+
+  async function handleUpdateBundle(event: FormEvent) {
+    event.preventDefault();
+    if (!editingRow || !editForm || savingEdit) return;
+    if (!editForm.title.trim()) {
+      setToast({ variant: 'error', message: 'Title is required.' });
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await updateAdminMockBundle(editingRow.id, {
+        title: editForm.title.trim(),
+        mockType: editForm.mockType,
+        subtestCode: isSubtestScopedType(editForm.mockType) ? editForm.subtestCode : null,
+        professionId: editForm.appliesToAllProfessions ? null : editForm.professionId.trim() || null,
+        appliesToAllProfessions: editForm.appliesToAllProfessions,
+        sourceProvenance: editForm.sourceProvenance.trim() || null,
+        priority: Number(editForm.priority) || 0,
+        difficulty: editForm.difficulty,
+        sourceStatus: editForm.sourceStatus,
+        qualityStatus: editForm.qualityStatus,
+        releasePolicy: editForm.releasePolicy,
+        topicTagsCsv: editForm.topicTagsCsv,
+        skillTagsCsv: editForm.skillTagsCsv,
+        watermarkEnabled: editForm.watermarkEnabled,
+        randomiseQuestions: editForm.randomiseQuestions,
+      });
+      setToast({ variant: 'success', message: 'Mock bundle updated.' });
+      closeEdit();
+      await load();
+    } catch (err) {
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Update failed.' });
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleReorder(row: MockBundleRow, sectionId: string, direction: 'up' | 'down') {
+    const ordered = row.sections.slice().sort((a, b) => a.sectionOrder - b.sectionOrder);
+    const index = ordered.findIndex((section) => section.id === sectionId);
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) return;
+    const next = ordered.slice();
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    try {
+      await reorderAdminMockBundleSections(row.id, next.map((section) => section.id));
+      setToast({ variant: 'success', message: 'Section order updated.' });
+      await load();
+    } catch (err) {
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Reorder failed.' });
+    }
+  }
+
   async function handlePublish(id: string) {
     try {
       await publishAdminMockBundle(id);
@@ -164,6 +311,24 @@ export default function AdminMockBundlesPage() {
             icon={Layers}
           />
 
+          <div className="mb-6 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-navy">Build a complete mock end-to-end</p>
+                <p className="text-xs text-muted">
+                  The wizard walks you through Bundle metadata → Listening → Reading → Writing →
+                  Speaking → Review &amp; publish in one flow.
+                </p>
+              </div>
+              <Link href="/admin/content/mocks/wizard">
+                <Button variant="primary">
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Build a complete mock with the wizard
+                </Button>
+              </Link>
+            </div>
+          </div>
+
           <div className="mb-6 flex flex-wrap gap-3">
             <Link
               href="/admin/content/mocks/item-analysis"
@@ -177,6 +342,7 @@ export default function AdminMockBundlesPage() {
             >
               <CalendarClock className="mr-2 h-4 w-4" /> Mock operations
             </Link>
+            <LeakReportsLink />
           </div>
 
           <div className="mb-6 grid gap-4 rounded-2xl border border-border bg-background-light p-4 lg:grid-cols-[1.2fr_0.8fr]">
@@ -189,14 +355,14 @@ export default function AdminMockBundlesPage() {
                 <Input label="Skill tags" value={newSkillTags} onChange={(e) => setNewSkillTags(e.target.value)} placeholder="inference, purpose, fluency" />
               </div>
               <div className="flex flex-wrap gap-2">
-                {(['full', 'lrw', 'sub', 'part', 'diagnostic', 'final_readiness', 'remedial'] as const).map((type) => (
+                {mockTypeOptions.map((type) => (
                   <Button key={type} variant={newType === type ? 'primary' : 'secondary'} onClick={() => setNewType(type)}>
                     {type.replace(/_/g, ' ')}
                   </Button>
                 ))}
                 {newType === 'sub' || newType === 'part' || newType === 'remedial' ? (
                   <div className="flex flex-wrap gap-2">
-                    {['listening', 'reading', 'writing', 'speaking'].map((subtest) => (
+                    {subtestOptions.map((subtest) => (
                       <Button key={subtest} variant={newSubtest === subtest ? 'primary' : 'secondary'} onClick={() => setNewSubtest(subtest)}>
                         {subtest}
                       </Button>
@@ -270,7 +436,31 @@ export default function AdminMockBundlesPage() {
             <div className="space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted">Add section</p>
               <Input label="Bundle ID" value={sectionBundleId} onChange={(e) => setSectionBundleId(e.target.value)} placeholder="mock-bundle-..." />
-              <Input label="Content paper ID" value={sectionPaperId} onChange={(e) => setSectionPaperId(e.target.value)} placeholder="paper-..." />
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <Input label="Find published paper" value={paperSearch} onChange={(e) => setPaperSearch(e.target.value)} placeholder="title, topic, paper id" />
+                <Button className="self-end" variant="secondary" onClick={handleSearchPapers} loading={paperLoading} disabled={paperLoading}>
+                  <Search className="h-4 w-4" /> Search
+                </Button>
+              </div>
+              <Select
+                label="Paper subtest filter"
+                value={paperSubtest}
+                onChange={(e) => setPaperSubtest(e.target.value)}
+                options={[{ value: '', label: 'All subtests' }, ...subtestOptions.map((subtest) => ({ value: subtest, label: subtest }))]}
+              />
+              {paperOptions.length > 0 ? (
+                <Select
+                  label="Published ContentPaper"
+                  value={sectionPaperId}
+                  onChange={(e) => setSectionPaperId(e.target.value)}
+                  placeholder="Choose a published paper"
+                  options={paperOptions.map((paper) => ({
+                    value: paper.id,
+                    label: `${paper.title} · ${paper.subtestCode} · ${paper.status}`,
+                  }))}
+                />
+              ) : null}
+              <Input label="Content paper ID" value={sectionPaperId} onChange={(e) => setSectionPaperId(e.target.value)} placeholder="paper-..." hint="Use the picker above, or paste a known paper id for a precise attach." />
               <Input label="Time limit minutes" value={sectionTimeLimit} onChange={(e) => setSectionTimeLimit(e.target.value)} />
               <Button variant="primary" onClick={handleAddSection} disabled={!sectionBundleId || !sectionPaperId}>
                 Add section
@@ -350,6 +540,14 @@ export default function AdminMockBundlesPage() {
                         </Button>
                       ) : null}
                       {row.status !== 'archived' ? (
+                        <Button variant="outline" onClick={() => openEdit(row)}>
+                          <Pencil className="mr-1 h-4 w-4" /> Edit
+                        </Button>
+                      ) : null}
+                      <Button variant="outline" onClick={() => setSectionBundleId(row.id)}>
+                        <Plus className="mr-1 h-4 w-4" /> Add section
+                      </Button>
+                      {row.status !== 'archived' ? (
                         <Button variant="secondary" onClick={() => handleArchive(row.id)}>
                           <Archive className="mr-1 h-4 w-4" /> Archive
                         </Button>
@@ -363,16 +561,34 @@ export default function AdminMockBundlesPage() {
                     </div>
                   ) : (
                     <div className="mt-4 grid gap-2">
-                      {row.sections.map((section) => (
+                      {row.sections.slice().sort((a, b) => a.sectionOrder - b.sectionOrder).map((section, index, orderedSections) => (
                         <div key={section.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-background-light px-3 py-2 text-sm">
                           <div>
                             <span className="font-semibold text-navy">{section.sectionOrder}. {section.subtestCode}</span>
                             <span className="ml-2 text-muted">{section.contentPaperTitle ?? section.contentPaperId}</span>
                           </div>
-                          <div className="flex items-center gap-2 text-xs text-muted">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
                             <span>{section.timeLimitMinutes}m</span>
                             <span>{section.reviewEligible ? 'review eligible' : 'no review'}</span>
                             <span>{section.contentPaperStatus ?? 'unknown'}</span>
+                            <Button
+                              aria-label={`Move ${section.subtestCode} section up`}
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleReorder(row, section.id, 'up')}
+                              disabled={index === 0}
+                            >
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              aria-label={`Move ${section.subtestCode} section down`}
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleReorder(row, section.id, 'down')}
+                              disabled={index === orderedSections.length - 1}
+                            >
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
                         </div>
                       ))}
@@ -385,7 +601,133 @@ export default function AdminMockBundlesPage() {
         </AdminRoutePanel>
       </AdminRouteWorkspace>
 
+      <Modal open={Boolean(editingRow && editForm)} onClose={closeEdit} title="Edit mock bundle" size="lg">
+        {editForm ? (
+          <form className="space-y-5" onSubmit={handleUpdateBundle}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input label="Edit title" value={editForm.title} onChange={(e) => updateEditField('title', e.target.value)} />
+              <Input label="Edit provenance" value={editForm.sourceProvenance} onChange={(e) => updateEditField('sourceProvenance', e.target.value)} />
+              <Input label="Edit topic tags" value={editForm.topicTagsCsv} onChange={(e) => updateEditField('topicTagsCsv', e.target.value)} />
+              <Input label="Edit skill tags" value={editForm.skillTagsCsv} onChange={(e) => updateEditField('skillTagsCsv', e.target.value)} />
+            </div>
+            <div className="grid gap-3 md:grid-cols-4">
+              <Select
+                label="Edit mock type"
+                value={editForm.mockType}
+                onChange={(e) => updateEditField('mockType', e.target.value as MockBundleRow['mockType'])}
+                options={mockTypeOptions.map((type) => ({ value: type, label: type.replace(/_/g, ' ') }))}
+              />
+              <Select
+                label="Edit subtest"
+                value={editForm.subtestCode}
+                onChange={(e) => updateEditField('subtestCode', e.target.value)}
+                disabled={!isSubtestScopedType(editForm.mockType)}
+                options={subtestOptions.map((subtest) => ({ value: subtest, label: subtest }))}
+              />
+              <Select
+                label="Edit difficulty"
+                value={editForm.difficulty}
+                onChange={(e) => updateEditField('difficulty', e.target.value)}
+                options={[
+                  { value: 'foundation', label: 'Foundation' },
+                  { value: 'developing', label: 'Developing' },
+                  { value: 'exam_ready', label: 'Exam ready' },
+                  { value: 'stretch', label: 'Stretch' },
+                ]}
+              />
+              <Input label="Edit priority" value={editForm.priority} onChange={(e) => updateEditField('priority', e.target.value)} inputMode="numeric" />
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <Select
+                label="Edit source status"
+                value={editForm.sourceStatus}
+                onChange={(e) => updateEditField('sourceStatus', e.target.value)}
+                options={[
+                  { value: 'needs_review', label: 'Needs review' },
+                  { value: 'original', label: 'Original' },
+                  { value: 'licensed', label: 'Licensed' },
+                  { value: 'official_sample', label: 'Official sample' },
+                ]}
+              />
+              <Select
+                label="Edit QA status"
+                value={editForm.qualityStatus}
+                onChange={(e) => updateEditField('qualityStatus', e.target.value)}
+                options={[
+                  { value: 'draft', label: 'Draft' },
+                  { value: 'in_review', label: 'In review' },
+                  { value: 'approved', label: 'Approved' },
+                  { value: 'pilot', label: 'Pilot' },
+                  { value: 'retired', label: 'Retired' },
+                ]}
+              />
+              <Select
+                label="Edit release policy"
+                value={editForm.releasePolicy}
+                onChange={(e) => updateEditField('releasePolicy', e.target.value)}
+                options={[
+                  { value: 'instant', label: 'Instant' },
+                  { value: 'after_teacher_marking', label: 'After teacher marking' },
+                  { value: 'scheduled', label: 'Scheduled' },
+                ]}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="flex items-center gap-3 rounded-xl border border-border bg-background-light px-3 py-2 text-sm font-semibold text-navy">
+                <input type="checkbox" checked={editForm.appliesToAllProfessions} onChange={(e) => updateEditField('appliesToAllProfessions', e.target.checked)} className="h-4 w-4 rounded border-border" />
+                Applies to all professions
+              </label>
+              <Input label="Edit profession id" value={editForm.professionId} onChange={(e) => updateEditField('professionId', e.target.value)} disabled={editForm.appliesToAllProfessions} />
+              <label className="flex items-center gap-3 rounded-xl border border-border bg-background-light px-3 py-2 text-sm font-semibold text-navy">
+                <input type="checkbox" checked={editForm.watermarkEnabled} onChange={(e) => updateEditField('watermarkEnabled', e.target.checked)} className="h-4 w-4 rounded border-border" />
+                Watermark enabled
+              </label>
+              <label className="flex items-center gap-3 rounded-xl border border-border bg-background-light px-3 py-2 text-sm font-semibold text-navy">
+                <input type="checkbox" checked={editForm.randomiseQuestions} onChange={(e) => updateEditField('randomiseQuestions', e.target.checked)} className="h-4 w-4 rounded border-border" />
+                Randomise questions
+              </label>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+              <Button type="button" variant="ghost" onClick={closeEdit}>Cancel</Button>
+              <Button type="submit" variant="primary" loading={savingEdit} disabled={savingEdit}>Save bundle</Button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
+
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
     </>
+  );
+}
+
+function LeakReportsLink() {
+  const [openCount, setOpenCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listAdminMockLeakReports({ status: 'open', limit: 50 })
+      .then((response) => {
+        if (!cancelled) setOpenCount(response.items?.length ?? 0);
+      })
+      .catch(() => {
+        if (!cancelled) setOpenCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <Link
+      href="/admin/content/mocks/leak-reports"
+      className="inline-flex items-center rounded-xl border border-border bg-surface px-4 py-2 text-sm font-bold text-navy hover:bg-background-light"
+    >
+      <ShieldAlert className="mr-2 h-4 w-4" /> Leak reports
+      {openCount !== null && openCount > 0 ? (
+        <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+          {openCount}
+        </span>
+      ) : null}
+    </Link>
   );
 }

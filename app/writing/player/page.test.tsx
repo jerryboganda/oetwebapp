@@ -43,6 +43,7 @@ vi.mock('@/lib/api', () => ({
   fetchWritingChecklist: (...args: unknown[]) => fetchWritingChecklistMock(...args),
   submitWritingDraft: (...args: unknown[]) => submitWritingDraftMock(...args),
   submitWritingTask: (...args: unknown[]) => submitWritingTaskMock(...args),
+  completeMockSection: vi.fn(),
 }));
 
 vi.mock('@/lib/analytics', () => ({

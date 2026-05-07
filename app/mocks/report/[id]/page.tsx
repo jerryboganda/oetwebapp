@@ -37,7 +37,7 @@ import {
 import type { MockReport } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
 import { oetGradeFromScaled } from '@/lib/scoring';
-import { mockReportToStatementOfResults } from '@/lib/adapters/oet-sor-adapter';
+import { isMockReportStatementOfResultsReady, mockReportToStatementOfResults } from '@/lib/adapters/oet-sor-adapter';
 import { buildMockRemediationPlan, getMockReadinessDecision } from '@/lib/mocks/workflow';
 
 const SUBTEST_META: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
@@ -146,6 +146,7 @@ function MockReportContent() {
     ? report.reviewSummary.pending + report.reviewSummary.queued + report.reviewSummary.inReview
     : report.subTests.filter((test) => test.reviewState && test.reviewState !== 'completed').length;
   const remediationPlan = report.remediationPlan?.length ? report.remediationPlan : buildMockRemediationPlan(report);
+  const statementReady = isMockReportStatementOfResultsReady(report);
 
   const handleLeakReport = async () => {
     setLeakState('sending');
@@ -196,7 +197,17 @@ function MockReportContent() {
             Mission-critical: this is the single place the "official" OET
             result card is rendered. See docs/OET-RESULT-CARD-SPEC.md. */}
         <MotionSection delayIndex={0}>
-          <OetStatementOfResultsCard data={mockReportToStatementOfResults({ report })} />
+          {statementReady ? (
+            <OetStatementOfResultsCard data={mockReportToStatementOfResults({
+              report,
+              profession: report.profession ?? undefined,
+              country: report.targetCountry ?? undefined,
+            })} />
+          ) : (
+            <InlineAlert variant="warning" title="Practice Statement of Results pending">
+              This report has incomplete or teacher-marked evidence still pending. The OET-style practice result card appears only after all four sub-tests have final numeric scores.
+            </InlineAlert>
+          )}
         </MotionSection>
 
         {/* 1. Overall Score */}

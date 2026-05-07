@@ -40,7 +40,7 @@ export function TaskCard({
     <Card hoverable className={cn('', className)}>
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2 flex-wrap">
-          {subtest && <Badge variant="default" size="sm">{subtest}</Badge>}
+          {subtest && <Badge variant="muted" size="sm">{subtest}</Badge>}
           {difficulty && <Badge variant={difficulty === 'Hard' ? 'danger' : difficulty === 'Medium' ? 'warning' : 'success'} size="sm">{difficulty}</Badge>}
           {profession && <Badge variant="muted" size="sm">{profession}</Badge>}
         </div>

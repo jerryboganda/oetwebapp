@@ -2117,6 +2117,10 @@ function mapMockReport(report: ApiRecord): MockReport {
     state: report.state ? String(report.state) : undefined,
     title: String(report.title ?? 'Mock Report'),
     date: String(report.date ?? ''),
+    profession: report.profession ? String(report.profession) : null,
+    targetCountry: report.targetCountry ? String(report.targetCountry) : null,
+    deliveryMode: report.deliveryMode ? String(report.deliveryMode) : null,
+    strictness: report.strictness ? String(report.strictness) : null,
     overallScore: String(report.overallScore ?? 'Pending'),
     overallGrade: report.overallGrade ? String(report.overallGrade) : null,
     summary: String(report.summary ?? 'Report generation is in progress.'),
@@ -2649,6 +2653,87 @@ export async function transitionMockBookingLiveRoom(
     body: JSON.stringify({ targetState }),
   });
   return mapMockBooking(response);
+}
+
+// ----- Mocks V2 Wave 6 — chunked recording upload --------------------------------
+// Each browser MediaRecorder chunk is POSTed as a raw audio body. The backend
+// writes via IFileStorage (SHA-256 content-addressed) and stores the manifest
+// on the booking row. Recording is gated server-side on
+// `consentToRecording === true`.
+
+export interface MockBookingChunkAck {
+  part: number;
+  sha256: string;
+  bytes: number;
+  chunkCount: number;
+  totalBytes: number;
+}
+
+export async function appendMockBookingRecordingChunk(
+  bookingId: string,
+  part: number,
+  blob: Blob,
+  options?: { signal?: AbortSignal },
+): Promise<MockBookingChunkAck> {
+  const path = `/v1/mock-bookings/${encodeURIComponent(bookingId)}/recording-chunk?part=${part}`;
+  const headers = new Headers(await getHeaders(path, undefined, { json: false }));
+  headers.set('Content-Type', blob.type || 'audio/webm');
+  const response = await fetchWithTimeout(
+    resolveApiUrl(path),
+    {
+      method: 'POST',
+      headers,
+      body: blob,
+      signal: options?.signal,
+    },
+    60_000,
+  );
+  if (!response.ok) {
+    let message = `Chunk upload failed: ${response.status}`;
+    let code = 'chunk_upload_failed';
+    try {
+      const err = await response.json();
+      message = err.message ?? err.title ?? message;
+      code = err.code ?? code;
+    } catch {
+      /* non-JSON */
+    }
+    throw new ApiError(response.status, code, message, false);
+  }
+  const data = await response.json();
+  return {
+    part: Number(data.part ?? part),
+    sha256: String(data.sha256 ?? ''),
+    bytes: Number(data.bytes ?? 0),
+    chunkCount: Number(data.chunkCount ?? 0),
+    totalBytes: Number(data.totalBytes ?? 0),
+  };
+}
+
+export interface MockBookingRecordingFinalizeResult {
+  bookingId: string;
+  recordingFinalizedAt: string | null;
+  recordingDurationMs: number | null;
+  consentToRecording: boolean;
+}
+
+export async function finalizeMockBookingRecording(
+  bookingId: string,
+  durationMs?: number,
+): Promise<MockBookingRecordingFinalizeResult> {
+  const response = await apiRequest<ApiRecord>(
+    `/v1/mock-bookings/${encodeURIComponent(bookingId)}/recording/finalize`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ durationMs: durationMs ?? null }),
+    },
+  );
+  return {
+    bookingId: String(response.bookingId ?? bookingId),
+    recordingFinalizedAt: typeof response.recordingFinalizedAt === 'string' ? response.recordingFinalizedAt : null,
+    recordingDurationMs: typeof response.recordingDurationMs === 'number' ? response.recordingDurationMs : null,
+    consentToRecording: Boolean(response.consentToRecording),
+  };
 }
 
 // ----- Mocks V2 Wave 5 — remediation plan ----------------------------------------
@@ -7609,6 +7694,24 @@ export async function fetchAdminMockBundles(params?: { status?: string; mockType
   return apiRequest(`/v1/admin/mock-bundles${qs ? `?${qs}` : ''}`);
 }
 
+export async function fetchAdminMockBundle(bundleId: string) {
+  return apiRequest(`/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}`);
+}
+
+export async function updateAdminMockBundle(bundleId: string, body: Record<string, unknown>) {
+  return apiRequest(`/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function reorderAdminMockBundleSections(bundleId: string, sectionIds: string[]) {
+  return apiRequest(`/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/sections/reorder`, {
+    method: 'PUT',
+    body: JSON.stringify({ sectionIds }),
+  });
+}
+
 export async function fetchAdminMockItemAnalysis(params?: { bundleId?: string; paperId?: string }) {
   const q = new URLSearchParams();
   if (params?.bundleId) q.set('bundleId', params.bundleId);
@@ -7625,6 +7728,64 @@ export async function fetchAdminMockBookings(params?: { from?: string; to?: stri
   return apiRequest(`/v1/admin/mocks/bookings${qs ? `?${qs}` : ''}`);
 }
 
+export async function assignAdminMockBooking(bookingId: string, body: {
+  assignedTutorId?: string | null;
+  assignedInterlocutorId?: string | null;
+  status?: string | null;
+}) {
+  return apiRequest(`/v1/admin/mock-bookings/${encodeURIComponent(bookingId)}/assign`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+// Mocks Wave 8 — admin leak-report queue.
+export type AdminMockLeakReportStatus = 'open' | 'investigating' | 'resolved' | 'dismissed';
+
+export interface AdminMockLeakReport {
+  id: string;
+  bundleId: string | null;
+  bundleTitle: string | null;
+  attemptId: string | null;
+  severity: string;
+  status: AdminMockLeakReportStatus;
+  reasonCode: string | null;
+  details: string | null;
+  evidenceUrl: string | null;
+  pageOrQuestion: string | null;
+  reportedByUserId: string | null;
+  reportedByUserDisplayName: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedByAdminId: string | null;
+  resolutionNote: string | null;
+}
+
+export async function listAdminMockLeakReports(
+  params?: { status?: AdminMockLeakReportStatus | string; limit?: number },
+): Promise<{ items: AdminMockLeakReport[] }> {
+  const q = new URLSearchParams();
+  if (params?.status) q.set('status', params.status);
+  if (typeof params?.limit === 'number') q.set('limit', String(params.limit));
+  const qs = q.toString();
+  return apiRequest<{ items: AdminMockLeakReport[] }>(
+    `/v1/admin/mocks/leak-reports${qs ? `?${qs}` : ''}`,
+  );
+}
+
+export async function updateAdminMockLeakReport(
+  id: string,
+  body: { status: AdminMockLeakReportStatus | string; resolutionNote?: string },
+): Promise<AdminMockLeakReport> {
+  return apiRequest<AdminMockLeakReport>(
+    `/v1/admin/mocks/leak-reports/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    },
+  );
+}
+
 export async function fetchAdminMockAnalytics() {
   return apiRequest('/v1/admin/mocks/analytics');
 }
@@ -7636,6 +7797,64 @@ export async function fetchAdminMockRiskList() {
 export async function fetchExpertMockBookings() {
   const response = await apiRequest<ApiRecord>('/v1/expert/mocks/bookings');
   return asArray(response.items).map(mapMockBooking);
+}
+
+/**
+ * Mocks V2 Wave 6 — fetch a single booking projection from the tutor-side
+ * endpoint. Returns the raw API record (instead of the learner-stripped
+ * {@link MockBooking} shape) because the expert projection embeds the
+ * `speakingContent.interlocutorCard` payload that the learner DTO must never
+ * expose. The caller (expert speaking-room page) needs that raw payload to
+ * render the cue prompts and patient background.
+ */
+export interface ExpertMockBookingDetail extends MockBooking {
+  assignedTutorId?: string | null;
+  assignedInterlocutorId?: string | null;
+  zoomStartUrl?: string | null;
+  speakingPaperId?: string | null;
+  speakingContent?: ExpertSpeakingContent | null;
+}
+
+export interface ExpertSpeakingInterlocutorCard {
+  background?: string;
+  patientProfile?: string;
+  cuePrompts?: string[];
+  prompts?: string[];
+  objectives?: string[];
+  hiddenInformation?: string;
+  [key: string]: unknown;
+}
+
+export interface ExpertSpeakingContent {
+  candidateCard?: Record<string, unknown>;
+  interlocutorCard?: ExpertSpeakingInterlocutorCard;
+  warmUpQuestions?: string[];
+  prepTimeSeconds?: number;
+  roleplayTimeSeconds?: number;
+  patientEmotion?: string;
+  communicationGoal?: string;
+  clinicalTopic?: string;
+  criteriaFocus?: string[];
+  disclaimer?: string;
+  background?: string;
+  setting?: string;
+  patient?: string;
+  task?: string;
+  role?: string;
+  [key: string]: unknown;
+}
+
+export async function fetchExpertMockBookingDetail(bookingId: string): Promise<ExpertMockBookingDetail> {
+  const response = await apiRequest<ApiRecord>(`/v1/expert/mocks/bookings/${encodeURIComponent(bookingId)}`);
+  const base = mapMockBooking(response);
+  return {
+    ...base,
+    assignedTutorId: typeof response.assignedTutorId === 'string' ? response.assignedTutorId : null,
+    assignedInterlocutorId: typeof response.assignedInterlocutorId === 'string' ? response.assignedInterlocutorId : null,
+    zoomStartUrl: typeof response.zoomStartUrl === 'string' ? response.zoomStartUrl : null,
+    speakingPaperId: typeof response.speakingPaperId === 'string' ? response.speakingPaperId : null,
+    speakingContent: (response.speakingContent as ExpertSpeakingContent | null | undefined) ?? null,
+  };
 }
 
 export async function createAdminMockBundle(body: Record<string, unknown>) {

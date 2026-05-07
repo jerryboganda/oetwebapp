@@ -14,7 +14,7 @@ import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-pa
 import { WritingEditor } from '@/components/domain/writing-editor';
 import { RulebookFindingsPanel } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchWritingTask, fetchWritingChecklist, submitWritingDraft, submitWritingTask } from '@/lib/api';
+import { fetchWritingTask, fetchWritingChecklist, submitWritingDraft, submitWritingTask, completeMockSection } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingTask } from '@/lib/mock-data';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -44,6 +44,12 @@ export default function WritingPlayer() {
   const taskId = searchParams?.get('taskId') ?? 'wt-001';
   const practiceMode = normalizeWritingPracticeMode(searchParams?.get('mode'));
   const isExamMode = practiceMode === 'exam';
+  // Mocks V2 — BuildLaunchRoute attaches mockAttemptId/mockSectionId when
+  // this player is launched as a section of a mock attempt. Writing scores
+  // are tutor-graded asynchronously, so we POST nulls and mark the section
+  // Completed (the mock report renders this as Provisional).
+  const mockAttemptId = searchParams?.get('mockAttemptId') ?? null;
+  const mockSectionId = searchParams?.get('mockSectionId') ?? null;
 
   const [task, setTask] = useState<WritingTask | null>(null);
   const [checklist, setChecklist] = useState<{ id: string; label: string; checked: boolean }[]>([]);
@@ -277,6 +283,29 @@ export default function WritingPlayer() {
       hasUnsavedChanges.current = false;
       setSaveStatus('saved');
       setTimerRunning(false);
+      if (mockAttemptId && mockSectionId) {
+        try {
+          await completeMockSection(mockAttemptId, mockSectionId, {
+            contentAttemptId: result.id,
+            rawScore: null,
+            rawScoreMax: null,
+            scaledScore: null,
+            grade: null,
+            evidence: { source: 'writing_player', submissionId: result.id, awaitingTutorReview: true },
+          });
+        } catch (mockErr) {
+          // Do not lose the learner's submission on mock-write failure.
+          console.warn('Could not mark mock writing section complete', mockErr);
+        }
+        const mockUrl = `/mocks/player/${mockAttemptId}`;
+        router.replace(mockUrl);
+        window.setTimeout(() => {
+          if (window.location.pathname !== mockUrl) {
+            window.location.assign(mockUrl);
+          }
+        }, 500);
+        return;
+      }
       const resultUrl = `/writing/result?id=${encodeURIComponent(result.id)}`;
       router.replace(resultUrl);
       window.setTimeout(() => {
@@ -408,6 +437,21 @@ export default function WritingPlayer() {
             </motion.header>
           )}
         </AnimatePresence>
+
+        {mockAttemptId && !isDistractionFree ? (
+          <div
+            role="status"
+            className="flex items-start gap-3 border-b border-info/30 bg-info/10 px-4 py-2.5 text-sm text-info"
+          >
+            <ClipboardCheck aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="flex-1">
+              <p className="font-semibold">Mock section in progress</p>
+              <p className="text-xs">
+                Submitting will mark this Writing section complete and return you to the mock dashboard. Tutor scoring continues asynchronously.
+              </p>
+            </div>
+          </div>
+        ) : null}
 
         {/* Reading-window banner: visible for the full 5 minutes, announces that
             writing + highlighting are locked. Disappears once phase flips to 'writing'. */}

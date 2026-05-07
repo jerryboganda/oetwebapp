@@ -35,6 +35,7 @@ import {
   type ListeningSectionCode,
 } from '@/lib/listening-sections';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
+import { completeMockSection } from '@/lib/api';
 
 function formatTime(seconds: number) {
   if (!seconds || Number.isNaN(seconds)) return '00:00';
@@ -81,6 +82,12 @@ function PlayerContent() {
     rawMode === 'exam' || rawMode === 'home' || rawMode === 'paper' ? rawMode : 'practice';
   const attemptIdFromRoute = searchParams?.get('attemptId');
   const drillId = searchParams?.get('drill');
+  // Mocks V2 — when this player is launched as a section of a mock attempt,
+  // BuildLaunchRoute writes mockAttemptId/mockSectionId/mockMode/strictness
+  // onto the URL. After grading we POST to completeMockSection so the mock
+  // report no longer shows "Pending". Standalone practice keeps these null.
+  const mockAttemptId = searchParams?.get('mockAttemptId') ?? null;
+  const mockSectionId = searchParams?.get('mockSectionId') ?? null;
 
   const rootRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -299,6 +306,24 @@ function PlayerContent() {
       }
       const result = await submitListeningAttempt(activeAttempt.attemptId, answers);
       analytics.track('task_submitted', { subtest: 'listening', taskId: session.paper.id, attemptId: activeAttempt.attemptId });
+      if (mockAttemptId && mockSectionId) {
+        try {
+          await completeMockSection(mockAttemptId, mockSectionId, {
+            contentAttemptId: activeAttempt.attemptId,
+            rawScore: result.rawScore,
+            rawScoreMax: result.maxRawScore,
+            scaledScore: result.scaledScore,
+            grade: result.grade,
+            evidence: { source: 'listening_player', evaluationId: result.evaluationId },
+          });
+        } catch (mockErr) {
+          // Do not lose the learner's submission on mock-write failure.
+          // Surface a soft warning and still navigate to the mock player.
+          console.warn('Could not mark mock listening section complete', mockErr);
+        }
+        router.push(`/mocks/player/${mockAttemptId}`);
+        return;
+      }
       router.push(`/listening/results/${result.attemptId}`);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not submit this Listening attempt.');
@@ -845,6 +870,11 @@ function PlayerContent() {
               </div>
             ) : null}
 
+            {mockAttemptId ? (
+              <InlineAlert variant="info">
+                You&rsquo;re taking this section as part of a mock. Submitting will mark this section complete and return you to the mock dashboard.
+              </InlineAlert>
+            ) : null}
             {audioError ? <InlineAlert variant="error">{audioError}</InlineAlert> : null}
             {saveState === 'error' ? <InlineAlert variant="warning">One answer did not autosave. Keep working; submit will retry saving all answers.</InlineAlert> : null}
             {integrityWarning ? <InlineAlert variant="warning">{integrityWarning}</InlineAlert> : null}

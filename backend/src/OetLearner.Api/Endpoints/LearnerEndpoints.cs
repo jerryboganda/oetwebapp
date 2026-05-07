@@ -194,12 +194,31 @@ public static class LearnerEndpoints
 
         // Mocks V2 Wave 4 — booking
         v1.MapGet("/mock-bookings", async (HttpContext http, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.ListForUserAsync(http.UserId(), ct)));
+        v1.MapGet("/mock-bookings/{bookingId}", async (HttpContext http, string bookingId, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.GetForUserAsync(http.UserId(), bookingId, ct)));
         v1.MapPost("/mock-bookings", async (HttpContext http, MockBookingCreateRequest request, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.CreateAsync(http.UserId(), request, ct)));
         v1.MapPatch("/mock-bookings/{bookingId}/reschedule", async (HttpContext http, string bookingId, MockBookingRescheduleRequest request, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.RescheduleAsync(http.UserId(), bookingId, request, ct)));
         v1.MapPatch("/mock-bookings/{bookingId}", async (HttpContext http, string bookingId, MockBookingUpdateRequest request, MockService service, CancellationToken ct) => Results.Ok(await service.UpdateMockBookingAsync(http.UserId(), bookingId, request, ct)));
         v1.MapPost("/mock-bookings/{bookingId}/cancel", async (HttpContext http, string bookingId, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.CancelAsync(http.UserId(), bookingId, ct)));
         // Mocks V2 Wave 6 — live-room state transitions (audio-only Speaking room).
         v1.MapPost("/mock-bookings/{bookingId}/live-room/transition", async (HttpContext http, string bookingId, LiveRoomTransitionRequest request, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.TransitionLiveRoomAsync(http.UserId(), isAdmin: false, bookingId, request.TargetState, ct)));
+        // Mocks V2 Wave 6 — chunked audio capture from the learner browser.
+        // Body is the raw audio chunk; Content-Type carries the mime type.
+        // ConsentToRecording must be true on the booking; rejected otherwise.
+        // Rate-limited per user (PerUserWrite) so a malicious client cannot
+        // spam empty-chunk POSTs and force a DB write per request. Per-chunk
+        // size is capped to MaxChunkBytes (8 MiB) inside the service AND at
+        // the endpoint via RequestSizeLimit so oversized requests are
+        // rejected at the boundary, not after a partial read.
+        v1.MapPost("/mock-bookings/{bookingId}/recording-chunk", async (HttpContext http, string bookingId, [FromQuery] int part, MockBookingRecordingService recordings, CancellationToken ct) =>
+        {
+            var result = await recordings.AppendChunkAsync(http.UserId(), bookingId, part, http.Request.ContentType, http.Request.Body, ct);
+            return Results.Ok(result);
+        })
+            .WithMetadata(new RequestSizeLimitAttribute(MockBookingRecordingService.MaxChunkBytes + 64L * 1024))
+            .RequireRateLimiting("PerUserWrite");
+        v1.MapPost("/mock-bookings/{bookingId}/recording/finalize", async (HttpContext http, string bookingId, MockBookingRecordingFinalizeRequest? request, MockBookingRecordingService recordings, CancellationToken ct) =>
+            Results.Ok(await recordings.FinalizeAsync(http.UserId(), bookingId, request?.DurationMs, ct)))
+            .RequireRateLimiting("PerUserWrite");
 
         // Mocks V2 Wave 5 — 7-day remediation plan from MockReport
         v1.MapGet("/mocks/remediation-plan", async (HttpContext http, RemediationPlanService plan, CancellationToken ct) => Results.Ok(await plan.GetActivePlanAsync(http.UserId(), ct)));
