@@ -153,7 +153,7 @@ export function TopNav({
     <>
       <motion.header
         className={cn(
-          'glass-panel sticky top-0 z-30 flex min-h-16 shrink-0 items-center justify-between border-b border-border/60 px-4 safe-area-inset-top lg:px-6',
+          'glass-panel sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-4 safe-area-inset-top lg:px-6',
           className,
         )}
         layout={!reducedMotion}

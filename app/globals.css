@@ -114,6 +114,38 @@
     transform: translateY(0) scale(var(--pressable-active-scale, 0.98));
   }
 
+  /* ── Admin workspace neutral theme (light + dark parity) ──
+     Keeps the global violet primary; provides clean surfaces in both modes.
+     Page-level color comes from the dashboard's own tone-aware tiles, not chrome. */
+  .admin-compact-theme {
+    --color-surface: #ffffff;
+    --color-background-light: #f8fafc;
+    --color-border: #e4e7ec;
+  }
+
+  :root.dark .admin-compact-theme {
+    --color-surface: #0b1220;
+    --color-background-light: #060912;
+    --color-background-dark: #020617;
+    --color-border: #1f2937;
+  }
+
+  .admin-compact-theme .glass-panel,
+  .admin-compact-theme .page-surface {
+    background: var(--color-surface) !important;
+    border: 1px solid var(--color-border) !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  :root.dark .admin-compact-theme .glass-panel,
+  :root.dark .admin-compact-theme .page-surface {
+    background: var(--color-surface) !important;
+    border-color: var(--color-border) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important;
+  }
+
   .glass-panel {
     background: rgba(255, 255, 255, 0.82);
     border: 1px solid rgba(148, 163, 184, 0.22);

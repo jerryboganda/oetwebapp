@@ -152,8 +152,8 @@ function NotificationItem({
       className={cn(
         'group relative flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-all duration-200',
         item.isRead
-          ? 'hover:bg-background-light/80'
-          : 'bg-primary/[0.03] hover:bg-primary/[0.05]',
+          ? 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+          : 'bg-primary/[0.03] hover:bg-primary/[0.05] dark:bg-primary/[0.08] dark:hover:bg-primary/[0.12]',
       )}
     >
       {/* ── Avatar icon ── */}
@@ -242,7 +242,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
           <button
             type="button"
             onClick={() => void refreshFeed({ reset: true })}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-background-light hover:text-navy"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-slate-100 hover:text-navy dark:hover:bg-slate-800 dark:hover:text-slate-100"
             aria-label="Refresh"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
@@ -251,7 +251,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
           <Link
             href="/settings/notifications"
             onClick={() => { onNavigate?.(); }}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-background-light hover:text-navy"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-slate-100 hover:text-navy dark:hover:bg-slate-800 dark:hover:text-slate-100"
             aria-label="Notification settings"
           >
             <Settings className="h-3.5 w-3.5" />
@@ -261,17 +261,17 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
 
       {/* ━━ Tabs + Mark all read ━━ */}
       <div className="flex items-center justify-between px-1 py-2">
-        <div className="flex rounded-lg bg-background-light/70 p-0.5">
+        <div className="flex rounded-lg bg-slate-100/70 p-0.5 dark:bg-slate-800/50">
           {(['all', 'unread'] as const).map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setTab(value)}
               className={cn(
-                'rounded-md px-3 py-2 text-[12px] font-semibold transition-all duration-150',
+                'rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all duration-150',
                 tab === value
-                  ? 'bg-white text-navy shadow-sm'
-                  : 'text-muted hover:text-navy',
+                  ? 'bg-white text-navy shadow-sm dark:bg-slate-900 dark:text-slate-100'
+                  : 'text-muted hover:text-navy dark:hover:text-slate-200',
               )}
             >
               {value === 'all' ? 'All' : `Unread${unreadCount > 0 ? ` (${unreadCount})` : ''}`}
@@ -337,7 +337,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
 
         {dateGroups.map((group) => (
           <div key={group.label} className="mb-1">
-            <div className="sticky top-0 z-10 bg-surface/90 px-3 pb-1 pt-2 backdrop-blur-sm">
+            <div className="sticky top-0 z-10 bg-white/90 dark:bg-slate-950/90 px-3 pb-1 pt-2 backdrop-blur-md">
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted/50">{group.label}</p>
             </div>
             <div className="space-y-0.5 px-1">
@@ -426,13 +426,13 @@ export function NotificationCenter() {
       <div className="hidden md:block">
         <Popover.Root open={desktopOpen} onOpenChange={setDesktopOpen}>
           <Popover.Trigger asChild>
-            <NotificationBellButton open={desktopOpen} />
+             <NotificationBellButton open={desktopOpen} />
           </Popover.Trigger>
           <Popover.Portal>
             <Popover.Content
               align="end"
               sideOffset={12}
-              className="z-50 w-[24rem] rounded-2xl border border-border/80 bg-surface p-4 shadow-2xl shadow-black/[0.08] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-top-3 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200"
+              className="z-[100] w-[24rem] rounded-2xl glass-panel p-4 shadow-2xl shadow-black/[0.08] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-top-3 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200"
             >
               <NotificationCenterContent onNavigate={() => setDesktopOpen(false)} />
             </Popover.Content>

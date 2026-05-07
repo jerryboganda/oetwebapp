@@ -32,6 +32,26 @@ function isAuthBootstrapRequest(request: Request): boolean {
   }
 }
 
+/**
+ * SignalR hub endpoints are exempt from the proxy CSRF check.
+ *
+ * SignalR negotiate (POST) and polling requests do not include the
+ * x-csrf-token header. The hub connections are protected at the backend
+ * level by [Authorize] — a valid JWT bearer token is required before any
+ * data is exchanged. Blocking the negotiate step here would prevent real-
+ * time notifications and conversation streaming from connecting at all.
+ */
+const SIGNALR_HUB_PATH_PATTERN = /^\/?api\/backend\/v1\/(notifications|conversations)\/hub(\/|$|\?)/i;
+
+function isSignalRHubRequest(request: Request): boolean {
+  try {
+    const { pathname } = new URL(request.url);
+    return SIGNALR_HUB_PATH_PATTERN.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function validateRequestOrigin(request: Request): boolean {
   const method = request.method.toUpperCase();
   if (CSRF_SAFE_METHODS.has(method)) return true;
@@ -70,6 +90,11 @@ export function validateProxyCsrf(request: Request): boolean {
   // that establishes the CSRF cookie. A user with a stale refresh cookie but
   // expired CSRF cookie must still be able to sign in.
   if (isAuthBootstrapRequest(request)) return true;
+
+  // SignalR hub endpoints (notifications, conversations) are exempt — the
+  // hub bearer JWT enforces auth at the backend; CSRF here would only break
+  // real-time connectivity without adding meaningful protection.
+  if (isSignalRHubRequest(request)) return true;
 
   const cookies = parseCookieHeader(request.headers.get('cookie'));
   if (!cookies.has(REFRESH_COOKIE)) {

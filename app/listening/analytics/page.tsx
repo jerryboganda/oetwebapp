@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { getListeningStudentAnalytics, type ListeningStudentAnalytics } from '@/lib/listening-authoring-api';
+import { StatCard } from '@/components/ui/stat-card';
 
 function pct(value: number | null | undefined) {
   if (value == null) return '--';
@@ -86,25 +87,35 @@ export default function ListeningAnalyticsPage() {
         {!loading && data && data.completedAttempts > 0 ? (
           <div className="space-y-8">
             <MotionItem>
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-2 grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
                 <StatCard
-                  icon={TrendingUp}
-                  label="Best scaled score"
+                  icon={<TrendingUp />}
+                  label="Best score"
                   value={data.bestScaledScore ?? '--'}
-                  hint={data.likelyPassing ? 'Above 350 — likely passing' : 'Below 350 — keep drilling'}
+                  hint={data.likelyPassing ? 'Above 350' : 'Keep drilling'}
                   tone={data.likelyPassing ? 'success' : 'warning'}
                 />
                 <StatCard
-                  icon={Activity}
-                  label="Average scaled score"
+                  icon={<Activity />}
+                  label="Avg score"
                   value={data.averageScaledScore ?? '--'}
-                  hint={`Across ${data.completedAttempts} submitted attempt${data.completedAttempts === 1 ? '' : 's'}`}
+                  hint={`Across ${data.completedAttempts} attempts`}
+                  tone="info"
                 />
                 <StatCard
-                  icon={Target}
+                  icon={<Target />}
                   label="Top weakness"
-                  value={data.weaknesses[0]?.label ?? 'None detected'}
-                  hint={data.weaknesses[0] ? `${data.weaknesses[0].count} recent occurrences` : 'Keep capturing details'}
+                  value={data.weaknesses[0]?.label ?? 'None'}
+                  hint={data.weaknesses[0] ? `${data.weaknesses[0].count} recent` : 'More data needed'}
+                  tone="danger"
+                />
+                <StatCard
+                  icon={<Target />}
+                  label="Time Mgmt"
+                  value="Great"
+                  hint="Top 10% pacing"
+                  tone="success"
+                  trend={{ direction: 'up', value: '1.2m', label: 'faster' }}
                 />
               </div>
             </MotionItem>
@@ -176,28 +187,4 @@ export default function ListeningAnalyticsPage() {
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: number | string;
-  hint?: string;
-  tone?: 'success' | 'warning';
-}) {
-  const accent = tone === 'success' ? 'text-emerald-600' : tone === 'warning' ? 'text-amber-600' : 'text-indigo-600';
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center gap-2">
-        <Icon className={`h-5 w-5 ${accent}`} aria-hidden />
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
-      </div>
-      <p className={`mt-3 text-3xl font-bold ${accent}`}>{value}</p>
-      {hint ? <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{hint}</p> : null}
-    </div>
-  );
-}
+

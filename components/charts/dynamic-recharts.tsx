@@ -61,3 +61,15 @@ export const YAxis = dynamic(
   () => import('recharts').then((m) => m.YAxis),
   { ssr: false },
 );
+export const PieChart = dynamic(
+  () => import('recharts').then((m) => m.PieChart),
+  { ssr: false },
+);
+export const Pie = dynamic(
+  () => import('recharts').then((m) => m.Pie),
+  { ssr: false },
+);
+export const Cell = dynamic(
+  () => import('recharts').then((m) => m.Cell),
+  { ssr: false },
+);

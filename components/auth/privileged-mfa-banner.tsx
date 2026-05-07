@@ -2,8 +2,6 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { ShieldCheck } from 'lucide-react';
-import { InlineAlert } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 
 function buildSetupHref(pathname: string | null) {
@@ -32,17 +30,20 @@ export function PrivilegedMfaBanner() {
   const setupHref = buildSetupHref(pathname);
 
   return (
-    <InlineAlert
-      variant="warning"
-      title="Recommended security step"
-      action={(
-        <Button variant="outline" size="sm" onClick={() => router.push(setupHref)}>
-          <ShieldCheck className="h-4 w-4" />
+    <>
+      <div className="absolute top-0 left-0 right-0 z-40 flex h-[30px] items-center justify-center bg-gradient-to-r from-orange-500 to-rose-600 px-4 text-xs font-medium text-white shadow-sm">
+        <ShieldCheck className="mr-2 h-3.5 w-3.5 opacity-90" />
+        <span className="truncate">
+          Security notice: Multi-factor authentication is recommended for privileged access.
+        </span>
+        <button
+          onClick={() => router.push(setupHref)}
+          className="ml-3 shrink-0 rounded bg-white/20 px-2 py-0.5 transition-colors hover:bg-white/30 font-semibold"
+        >
           Set up MFA
-        </Button>
-      )}
-    >
-      Multi-factor authentication is recommended for privileged access. You can keep working without it, but enabling an authenticator app adds a much stronger layer of account protection.
-    </InlineAlert>
+        </button>
+      </div>
+      <div className="h-4 lg:h-2" aria-hidden="true" />
+    </>
   );
 }

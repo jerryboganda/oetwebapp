@@ -341,10 +341,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
 
   const pageTitle = getAdminPageTitle(pathname);
   const bannerBlock = (
-    <div className="space-y-6">
+    <>
       <PrivilegedMfaBanner />
       {children}
-    </div>
+    </>
   );
 
   return (
@@ -362,5 +362,9 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return <AdminLayoutContent>{children}</AdminLayoutContent>;
+  return (
+    <div className="admin-compact-theme text-sm leading-snug">
+      <AdminLayoutContent>{children}</AdminLayoutContent>
+    </div>
+  );
 }

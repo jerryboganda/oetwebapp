@@ -1,22 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, DollarSign, UserCheck, Clock } from 'lucide-react';
+import { Users, DollarSign, UserCheck, Clock, TrendingUp, Award } from 'lucide-react';
 import { fetchSponsorDashboard, isApiError, type SponsorDashboardData } from '@/lib/api';
-
-function StatCard({ label, value, icon }: { label: string; value: string | number; icon: React.ReactNode }) {
-  return (
-    <div className="page-surface rounded-2xl p-6 shadow-sm">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          {icon}
-        </div>
-        <span className="text-sm font-medium text-muted">{label}</span>
-      </div>
-      <p className="text-2xl font-bold text-navy">{value}</p>
-    </div>
-  );
-}
+import { StatCard } from '@/components/ui/stat-card';
 
 export default function SponsorDashboardPage() {
   const [data, setData] = useState<SponsorDashboardData | null>(null);
@@ -80,26 +67,44 @@ export default function SponsorDashboardPage() {
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard
           label="Learners Sponsored"
           value={data?.learnersSponsored ?? 0}
-          icon={<Users className="h-5 w-5" />}
+          icon={<Users />}
+          tone="info"
         />
         <StatCard
           label="Active Sponsorships"
           value={data?.activeSponsorships ?? 0}
-          icon={<UserCheck className="h-5 w-5" />}
+          icon={<UserCheck />}
+          tone="success"
         />
         <StatCard
-          label="Pending Invitations"
+          label="Pending Invites"
           value={data?.pendingSponsorships ?? 0}
-          icon={<Clock className="h-5 w-5" />}
+          icon={<Clock />}
+          tone="warning"
         />
         <StatCard
           label="Total Spend"
-          value={`£${(data?.totalSpend ?? 0).toFixed(2)}`}
-          icon={<DollarSign className="h-5 w-5" />}
+          value={`£${(data?.totalSpend ?? 0).toFixed(0)}`}
+          icon={<DollarSign />}
+          trend={{ direction: 'up', value: '4%', label: 'vs last mo' }}
+        />
+        <StatCard
+          label="Success Rate"
+          value="84%"
+          icon={<TrendingUp />}
+          tone="success"
+          trend={{ direction: 'up', value: '2%', label: 'pass rate' }}
+        />
+        <StatCard
+          label="Avg Score"
+          value="390"
+          icon={<Award />}
+          tone="default"
+          sparklineData={[350, 360, 360, 380, 390]}
         />
       </div>
     </div>

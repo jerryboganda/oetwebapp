@@ -25,7 +25,7 @@ const toneAccentMap: Record<'default' | 'success' | 'warning' | 'danger', Learne
 
 export function AdminRouteWorkspace({ className, children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('space-y-8', className)} {...props}>
+    <div className={cn('flex flex-col gap-3 min-h-0', className)} {...props}>
       {children}
     </div>
   );
@@ -40,7 +40,7 @@ export function AdminRouteSectionHeader({
   actions,
   meta,
   eyebrow = 'Admin Workspace',
-  icon = Sparkles,
+  icon: Icon = Sparkles,
   accent = 'navy',
   highlights,
   className,
@@ -49,38 +49,31 @@ export function AdminRouteSectionHeader({
 }: LearnerSurfaceSectionHeaderProps & {
   actions?: ReactNode;
   meta?: string;
-  icon?: ElementType | ReactNode;
+  icon?: any;
   accent?: LearnerSurfaceAccent;
   highlights?: LearnerPageHeroHighlight[];
 }) {
   const hasActions = Boolean(action) || Boolean(actions);
-  const aside = hasActions || meta ? (
-    <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-      {hasActions ? (
-        <div className="flex flex-wrap items-center gap-2">
+  return (
+    <div className={cn('flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-4 shadow-sm', className)}>
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="rounded-lg bg-violet-500/20 p-2 shrink-0">
+          <Icon className="h-5 w-5 text-violet-400" />
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {title && <h1 className="text-xl font-bold tracking-tight text-white leading-none">{title}</h1>}
+            {meta && <span className="rounded bg-zinc-800/80 px-2 py-0.5 text-[10px] uppercase tracking-widest text-zinc-400 font-bold">{meta}</span>}
+          </div>
+          {description && <p className="text-xs text-zinc-400 leading-snug mt-1.5 truncate">{description}</p>}
+        </div>
+      </div>
+      {hasActions && (
+        <div className="flex items-center gap-2 shrink-0">
           {action}
           {actions}
         </div>
-      ) : null}
-      {meta ? (
-        <p className={cn('text-xs font-semibold uppercase tracking-[0.14em] text-muted', hasActions && 'mt-3')}>
-          {meta}
-        </p>
-      ) : null}
-    </div>
-  ) : undefined;
-
-  return (
-    <div className={className}>
-      <LearnerPageHero
-        title={title}
-        description={description ?? ''}
-        eyebrow={eyebrow}
-        icon={icon}
-        accent={accent}
-        highlights={highlights}
-        aside={aside}
-      />
+      )}
     </div>
   );
 }
@@ -94,52 +87,41 @@ export function AdminRouteFreshnessBadge({ value }: { value?: string | null }) {
 }
 
 export function AdminRouteSummaryCard({
-  label,
-  value,
-  hint,
-  accent,
-  icon,
-  tone = 'default',
-  statusLabel,
-  primaryAction,
-  secondaryAction,
-  className,
+  label, value, hint, accent, icon, tone = 'default', statusLabel, primaryAction, secondaryAction, className,
 }: {
-  label: string;
-  value: string | number;
-  hint?: string;
-  accent?: LearnerSurfaceAccent;
-  icon?: ElementType | ReactNode;
-  tone?: 'default' | 'success' | 'warning' | 'danger';
-  statusLabel?: string;
-  primaryAction?: LearnerSurfaceAction;
-  secondaryAction?: LearnerSurfaceAction;
-  className?: string;
+  label: string; value: string | number; hint?: string; accent?: string; icon?: any; tone?: 'default'|'success'|'warning'|'danger'; statusLabel?: string; primaryAction?: any; secondaryAction?: any; className?: string;
 }) {
-  const normalizedIcon =
-    !icon ? undefined
-    : typeof icon === 'function' || typeof icon === 'string' ? (icon as ElementType)
-    : isValidElement<{ className?: string }>(icon)
-      ? ({ className }: { className?: string }) =>
-          cloneElement(icon, {
-            className: cn(icon.props.className, className),
-          })
-      : undefined;
-
-  const card: LearnerSurfaceCardModel = {
-    kind: 'status',
-    sourceType: 'frontend_status',
-    eyebrow: label,
-    eyebrowIcon: normalizedIcon,
-    title: String(value),
-    description: hint ?? '',
-    accent: accent ?? toneAccentMap[tone],
-    statusLabel,
-    primaryAction,
-    secondaryAction,
+  const bg: Record<string, string> = {
+    default: 'bg-white border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800',
+    success: 'bg-emerald-50 border-emerald-200/60 dark:bg-emerald-950/40 dark:border-emerald-800/40',
+    warning: 'bg-amber-50 border-amber-200/60 dark:bg-amber-950/40 dark:border-amber-800/40',
+    danger: 'bg-rose-50 border-rose-200/60 dark:bg-rose-950/40 dark:border-rose-800/40',
   };
+  const valMap: Record<string, string> = {
+    default: 'text-zinc-900 dark:text-zinc-100', success: 'text-emerald-700 dark:text-emerald-400', warning: 'text-amber-700 dark:text-amber-400', danger: 'text-rose-700 dark:text-rose-400',
+  };
+  const icoMap: Record<string, string> = {
+    default: 'text-zinc-400', success: 'text-emerald-500', warning: 'text-amber-500', danger: 'text-rose-500',
+  };
+  
+  const IconToRender = typeof icon === 'function' ? icon : null;
 
-  return <LearnerSurfaceCard card={card} className={className} />;
+  return (
+    <div className={cn('flex items-center gap-3 rounded-xl border px-4 py-3 flex-1 min-w-0 shadow-sm', bg[tone], className)}>
+      {IconToRender ? (
+        <IconToRender className={cn('h-5 w-5 shrink-0', icoMap[tone])} />
+      ) : icon ? (
+        <div className={cn('h-5 w-5 shrink-0 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full', icoMap[tone])}>
+          {icon}
+        </div>
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400 truncate leading-none mb-1">{label}</p>
+        <p className={cn('text-xl font-black leading-none tabular-nums tracking-tight', valMap[tone])}>{value}</p>
+        {hint && <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 leading-none">{hint}</p>}
+      </div>
+    </div>
+  );
 }
 
 export function AdminRoutePanel({
@@ -158,19 +140,17 @@ export function AdminRoutePanel({
   contentClassName?: string;
 }) {
   return (
-    <Card className={cn('overflow-hidden', className)} padding="lg">
-      <div className="space-y-5">
-        {(title || description || actions) && (
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1.5">
-            {title && <h2 className="text-xl font-bold tracking-tight text-navy">{title}</h2>}
-            {description ? <p className="max-w-3xl text-sm leading-6 text-muted">{description}</p> : null}
+    <div className={cn('rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden dark:border-zinc-800 dark:bg-zinc-950 flex flex-col', className)}>
+      {(title || description || actions) && (
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-4 py-2.5 border-b border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/60 dark:bg-zinc-900/40 shrink-0">
+          <div className="flex flex-col">
+            {title && <h2 className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-zinc-600 dark:text-zinc-300 leading-none">{title}</h2>}
+            {description && <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{description}</p>}
           </div>
-          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
-        )}
-        <div className={cn('space-y-4', contentClassName)}>{children}</div>
-      </div>
-    </Card>
+      )}
+      <div className={cn('flex-1 min-h-0 p-4', contentClassName)}>{children}</div>
+    </div>
   );
 }

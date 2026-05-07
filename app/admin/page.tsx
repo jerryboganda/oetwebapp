@@ -5,230 +5,223 @@ import Link from 'next/link';
 import {
   Activity,
   AlertTriangle,
-  Archive,
   BarChart3,
-  Briefcase,
-  CalendarClock,
-  CheckCircle2,
   Clock4,
   CreditCard,
   FileText,
   Flag,
   Inbox,
-  PlayCircle,
   Shield,
   Sparkles,
+  TrendingUp,
   Users,
-  XCircle,
   Zap,
 } from 'lucide-react';
-import type { ElementType } from 'react';
-import {
-  AdminRouteFreshnessBadge,
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteSummaryCard,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { AdminQuickAction } from '@/components/domain/admin-quick-action';
+import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminDashboardData } from '@/lib/admin';
 import type { AdminDashboardData } from '@/lib/types/admin';
 import { cn } from '@/lib/utils';
+import { StatusBadge, PulseTile, Panel, DenseTable, MetricGrid2x2, type MetricTone } from '@/components/admin/ui';
 
-type PageStatus = 'loading' | 'success' | 'error';
-
-type MetricTone = 'default' | 'success' | 'warning' | 'danger';
-
-const METRIC_TONE_STYLES: Record<MetricTone, { bg: string; icon: string; value: string }> = {
-  default: { bg: 'bg-background-light', icon: 'text-primary', value: 'text-navy' },
-  success: { bg: 'bg-success/10', icon: 'text-success', value: 'text-navy' },
-  warning: { bg: 'bg-warning/10', icon: 'text-warning', value: 'text-navy' },
-  danger: { bg: 'bg-danger/10', icon: 'text-danger', value: 'text-danger' },
-};
-
-function MetricTile({
-  icon: Icon,
-  label,
-  value,
-  tone = 'default',
-}: {
-  icon: ElementType;
-  label: string;
-  value: string | number;
-  tone?: MetricTone;
-}) {
-  const styles = METRIC_TONE_STYLES[tone];
-  return (
-    <div className={cn('flex items-center gap-3 rounded-xl border border-border p-3', styles.bg)}>
-      <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface', styles.icon)}>
-        <Icon className="h-4 w-4" aria-hidden />
-      </div>
-      <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{label}</p>
-        <p className={cn('text-lg font-semibold leading-tight', styles.value)}>{value}</p>
-      </div>
-    </div>
-  );
-}
-
+/* ── Main page ────────────────────────────────────────────────────────── */
 export default function AdminDashboardPage() {
   const { isAuthenticated, role } = useAdminAuth();
-  const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
-  const [dashboard, setDashboard] = useState<AdminDashboardData | null>(null);
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [d, setD] = useState<AdminDashboardData | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      setPageStatus('loading');
-      try {
-        const summary = await getAdminDashboardData();
-        if (!cancelled) {
-          setDashboard(summary);
-          setPageStatus('success');
-        }
-      } catch (error) {
-        console.error(error);
-        if (!cancelled) {
-          setPageStatus('error');
-        }
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
+    getAdminDashboardData()
+      .then((data) => { if (!cancelled) { setD(data); setStatus('success'); } })
+      .catch(() => { if (!cancelled) setStatus('error'); });
+    return () => { cancelled = true; };
   }, []);
 
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
     <AdminRouteWorkspace role="main" aria-label="Admin operations">
-      <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
-        {dashboard ? (
-          <div className="space-y-8">
-            <AdminRouteHero
-              eyebrow="Operational Control"
-              icon={Sparkles}
-              accent="primary"
-              title="Keep platform health, review risk, and rollout signals in one place"
-              description="Start from the highest-signal summaries, then move directly into the workstream that needs attention."
-              highlights={[
-                {
-                  icon: Activity,
-                  label: 'Quality window',
-                  value: dashboard.freshness.qualityWindow,
-                },
-                {
-                  icon: CalendarClock,
-                  label: 'Last sync',
-                  value: new Date(dashboard.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                },
-                {
-                  icon: Users,
-                  label: 'Active subscribers',
-                  value: dashboard.billingRisk.activeSubscribers.toLocaleString(),
-                },
-              ]}
-              aside={(
-                <div className="space-y-4 rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Quick Actions</p>
-                    <p className="mt-1 text-sm text-muted">Move straight into the admin areas that typically need action first.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <AdminQuickAction href="/admin/review-ops" label="Open Review Ops" variant="primary" />
-                    <AdminQuickAction href="/admin/freeze" label="Open Freeze Center" />
-                    <AdminQuickAction href="/admin/content" label="Open Content Library" />
-                    <AdminQuickAction href="/admin/business-intelligence" label="Open BI Dashboard" />
-                  </div>
-                  <AdminRouteFreshnessBadge value={dashboard.generatedAt} />
+      <AsyncStateWrapper status={status} onRetry={() => window.location.reload()}>
+        {d ? (
+          <div className="flex flex-col gap-3">
+
+            {/* ── Command strip ─────────────────────────────────────── */}
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-3.5 shadow-sm">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="rounded-lg bg-violet-500/20 p-2 shrink-0">
+                  <Sparkles className="h-4 w-4 text-violet-400" />
                 </div>
-              )}
-            />
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <AdminRouteSummaryCard label="Published Content" value={dashboard.contentHealth.published} hint={`${dashboard.contentHealth.drafts} drafts still in flight`} icon={<FileText className="h-5 w-5" />} />
-              <AdminRouteSummaryCard label="Review Backlog" value={dashboard.reviewOps.backlog} hint={`${dashboard.reviewOps.overdue} already overdue`} icon={<Inbox className="h-5 w-5" />} tone={dashboard.reviewOps.overdue > 0 ? 'warning' : 'default'} />
-              <AdminRouteSummaryCard label="Billing Risk" value={dashboard.billingRisk.failedInvoices} hint={`${dashboard.billingRisk.pendingInvoices} pending invoices`} icon={<CreditCard className="h-5 w-5" />} tone={dashboard.billingRisk.failedInvoices > 0 ? 'danger' : 'default'} />
-              <AdminRouteSummaryCard label="Agreement Rate" value={`${dashboard.quality.agreementRate}%`} hint={`${dashboard.quality.evaluationCount} evaluations in window`} icon={<BarChart3 className="h-5 w-5" />} />
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-2">
-              <AdminRoutePanel
-                title="Content Health"
-                description="Surface stale drafts before they become invisible delivery debt."
-                actions={<Link href="/admin/content" className="text-sm font-medium text-primary hover:text-primary-dark hover:underline">Open content library</Link>}
-              >
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <MetricTile icon={FileText} label="Drafts" value={dashboard.contentHealth.drafts} tone={dashboard.contentHealth.drafts > 0 ? 'warning' : 'default'} />
-                  <MetricTile icon={Archive} label="Archived" value={dashboard.contentHealth.archived} />
-                  <MetricTile icon={Clock4} label="Stale Drafts" value={dashboard.contentHealth.staleDrafts} tone={dashboard.contentHealth.staleDrafts > 0 ? 'danger' : 'success'} />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-violet-400 leading-none">Operations Center</p>
+                  <p className="text-[11px] text-zinc-400 leading-none mt-1 truncate">Platform health · review risk · rollout signals</p>
                 </div>
-              </AdminRoutePanel>
-
-              <AdminRoutePanel
-                title="Review Risk"
-                description="Keep the productive-skill review pipeline honest and visible."
-                actions={<Link href="/admin/review-ops" className="text-sm font-medium text-primary hover:text-primary-dark hover:underline">Open review ops</Link>}
-              >
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <MetricTile icon={PlayCircle} label="In Progress" value={dashboard.reviewOps.inProgress} tone={dashboard.reviewOps.inProgress > 0 ? 'default' : 'success'} />
-                  <MetricTile icon={XCircle} label="Failed Reviews" value={dashboard.reviewOps.failedReviews} tone={dashboard.reviewOps.failedReviews > 0 ? 'danger' : 'success'} />
-                  <MetricTile icon={AlertTriangle} label="Failed Jobs" value={dashboard.reviewOps.failedJobs} tone={dashboard.reviewOps.failedJobs > 0 ? 'danger' : 'success'} />
-                </div>
-              </AdminRoutePanel>
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-3">
-              <AdminRoutePanel title="Billing" description="Subscription exposure and legacy plan drag.">
-                <div className="grid gap-3">
-                  <MetricTile icon={Briefcase} label="Legacy Plans" value={dashboard.billingRisk.legacyPlans} tone={dashboard.billingRisk.legacyPlans > 0 ? 'warning' : 'success'} />
-                  <MetricTile icon={Users} label="Active Subscribers" value={dashboard.billingRisk.activeSubscribers.toLocaleString()} tone="success" />
-                </div>
-              </AdminRoutePanel>
-
-              <AdminRoutePanel title="Feature Flags" description="Rollout footprint and recent changes.">
-                <div className="grid gap-3">
-                  <MetricTile icon={Flag} label="Enabled / Total" value={`${dashboard.flags.enabled} / ${dashboard.flags.total}`} />
-                  <div className="grid grid-cols-2 gap-3">
-                    <MetricTile icon={Zap} label="Live experiments" value={dashboard.flags.liveExperiments} />
-                    <MetricTile icon={CalendarClock} label="Changed (7d)" value={dashboard.flags.recentChanges} />
-                  </div>
-                </div>
-              </AdminRoutePanel>
-
-              <AdminRoutePanel title="Quality Risk" description="Signals that need closer QA review.">
-                <div className="grid gap-3">
-                  <MetricTile
-                    icon={dashboard.quality.riskCases > 0 ? AlertTriangle : CheckCircle2}
-                    label="Combined risk cases"
-                    value={dashboard.quality.riskCases}
-                    tone={dashboard.quality.riskCases > 0 ? 'danger' : 'success'}
-                  />
-                  <MetricTile icon={Shield} label="Agreement rate" value={`${dashboard.quality.agreementRate}%`} />
-                </div>
-                <p className="mt-3 text-xs text-muted">Failed jobs and failed review cases in the current operational view.</p>
-              </AdminRoutePanel>
-            </div>
-
-            <AdminRoutePanel title="Operational Shortcuts" description="Jump straight into the admin workstreams that need action.">
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {[
-                  { href: '/admin/content', label: 'Content Hub' },
-                  { href: '/admin/review-ops', label: 'Review Ops' },
-                  { href: '/admin/freeze', label: 'Subscription Freezes' },
-                  { href: '/admin/billing', label: 'Billing Ops' },
-                  { href: '/admin/business-intelligence', label: 'Business Intelligence' },
-                  { href: '/admin/analytics/quality', label: 'Quality Analytics' },
-                  { href: '/admin/analytics/reading', label: 'Reading Analytics' },
-                ].map((link) => (
-                  <AdminQuickAction key={link.href} href={link.href} label={link.label} />
-                ))}
               </div>
-            </AdminRoutePanel>
+              <div className="flex items-center gap-2.5 shrink-0 text-[10px] font-bold uppercase tracking-widest">
+                <span className="text-zinc-400">Q·{d.freshness.qualityWindow}</span>
+                <span className="text-zinc-700">|</span>
+                <span className="text-zinc-400">{new Date(d.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="text-zinc-700">|</span>
+                <span className="flex items-center gap-1.5 text-emerald-400">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
+                  Live
+                </span>
+              </div>
+            </div>
+
+            {/* ── KPI pulse bar ─────────────────────────────────────── */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <PulseTile label="Backlog"     value={d.reviewOps.backlog}                            tone={d.reviewOps.backlog > 0 ? 'warning' : 'default'} icon={Inbox} />
+              <PulseTile label="Overdue"     value={d.reviewOps.overdue}                            tone={d.reviewOps.overdue > 0 ? 'danger' : 'success'} icon={AlertTriangle} />
+              <PulseTile label="Active Subs" value={d.billingRisk.activeSubscribers.toLocaleString()} tone="info"    icon={Users} />
+              <PulseTile label="Agreement"  value={`${d.quality.agreementRate}%`}                  tone={d.quality.agreementRate >= 80 ? 'success' : d.quality.agreementRate >= 65 ? 'warning' : 'danger'} icon={Shield} />
+              <PulseTile label="Risk Cases"  value={d.quality.riskCases}                            tone={d.quality.riskCases > 0 ? 'danger' : 'success'} icon={TrendingUp} />
+              <PulseTile label="Live Flags"  value={d.flags.liveExperiments}                        tone={d.flags.liveExperiments > 0 ? 'purple' : 'default'} icon={Flag} />
+            </div>
+
+            {/* ── Main grid: left (tables) + right rail ─────────────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3">
+
+              {/* Left — two dense tables stacked */}
+              <div className="flex flex-col gap-3">
+
+                {/* Review Operations */}
+                <Panel title="Review Operations" icon={Inbox} href="/admin/review-ops">
+                  <DenseTable
+                    cols={['Workstream', 'Status', 'Vol']}
+                    rows={[
+                      [
+                        <span key="bl" className="font-semibold text-zinc-800 dark:text-zinc-200">Backlog</span>,
+                        <StatusBadge key="bls" tone={d.reviewOps.backlog > 0 ? 'warning' : 'default'} label={d.reviewOps.backlog > 0 ? 'Action Req' : 'Normal'} />,
+                        <span key="blv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.backlog > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-500 dark:text-zinc-400')}>{d.reviewOps.backlog}</span>,
+                      ],
+                      [
+                        <span key="ov" className="font-semibold text-zinc-800 dark:text-zinc-200">Overdue</span>,
+                        <StatusBadge key="ovs" tone={d.reviewOps.overdue > 0 ? 'danger' : 'success'} label={d.reviewOps.overdue > 0 ? 'Critical' : 'Clear'} />,
+                        <span key="ovv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.overdue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{d.reviewOps.overdue}</span>,
+                      ],
+                      [
+                        <span key="ip" className="font-semibold text-zinc-800 dark:text-zinc-200">In Progress</span>,
+                        <StatusBadge key="ips" tone="info" label="Active" />,
+                        <span key="ipv" className="font-mono text-zinc-500 dark:text-zinc-400 tabular-nums">{d.reviewOps.inProgress}</span>,
+                      ],
+                      [
+                        <span key="fr" className="font-semibold text-zinc-800 dark:text-zinc-200">Failed Reviews</span>,
+                        <StatusBadge key="frs" tone={d.reviewOps.failedReviews > 0 ? 'danger' : 'success'} label={d.reviewOps.failedReviews > 0 ? 'Failing' : 'Clear'} />,
+                        <span key="frv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.failedReviews > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{d.reviewOps.failedReviews}</span>,
+                      ],
+                      [
+                        <span key="fj" className="font-semibold text-zinc-800 dark:text-zinc-200">Failed Jobs</span>,
+                        <StatusBadge key="fjs" tone={d.reviewOps.failedJobs > 0 ? 'danger' : 'success'} label={d.reviewOps.failedJobs > 0 ? 'Failing' : 'Healthy'} />,
+                        <span key="fjv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.failedJobs > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{d.reviewOps.failedJobs}</span>,
+                      ],
+                    ]}
+                  />
+                </Panel>
+
+                {/* Billing Risk & Subscriptions */}
+                <Panel title="Billing Risk & Subscriptions" icon={CreditCard} href="/admin/billing">
+                  <DenseTable
+                    cols={['Category', 'Status', 'Count']}
+                    rows={[
+                      [
+                        <span key="as" className="font-semibold text-zinc-800 dark:text-zinc-200">Active Subscribers</span>,
+                        <StatusBadge key="ass" tone="success" label="Stable" />,
+                        <span key="asv" className="font-mono font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{d.billingRisk.activeSubscribers.toLocaleString()}</span>,
+                      ],
+                      [
+                        <span key="pi" className="font-semibold text-zinc-800 dark:text-zinc-200">Pending Invoices</span>,
+                        <StatusBadge key="pis" tone={d.billingRisk.pendingInvoices > 0 ? 'warning' : 'success'} label={d.billingRisk.pendingInvoices > 0 ? 'Pending' : 'Clear'} />,
+                        <span key="piv" className={cn('font-mono font-bold tabular-nums', d.billingRisk.pendingInvoices > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400')}>{d.billingRisk.pendingInvoices}</span>,
+                      ],
+                      [
+                        <span key="fi" className="font-semibold text-zinc-800 dark:text-zinc-200">Failed Invoices</span>,
+                        <StatusBadge key="fis" tone={d.billingRisk.failedInvoices > 0 ? 'danger' : 'success'} label={d.billingRisk.failedInvoices > 0 ? 'At Risk' : 'Clear'} />,
+                        <span key="fiv" className={cn('font-mono font-bold tabular-nums', d.billingRisk.failedInvoices > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{d.billingRisk.failedInvoices}</span>,
+                      ],
+                      [
+                        <span key="lp" className="font-semibold text-zinc-800 dark:text-zinc-200">Legacy Plans</span>,
+                        <StatusBadge key="lps" tone="warning" label="Deprecating" />,
+                        <span key="lpv" className="font-mono text-amber-600 dark:text-amber-400 tabular-nums">{d.billingRisk.legacyPlans}</span>,
+                      ],
+                    ]}
+                  />
+                </Panel>
+
+              </div>
+
+              {/* Right rail — four compact panels */}
+              <div className="flex flex-col gap-3">
+
+                {/* Content Health + Quality side by side */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Panel title="Content" icon={FileText} href="/admin/content">
+                    <MetricGrid2x2
+                      items={[
+                        { label: 'Published',    value: d.contentHealth.published,    tone: 'success' },
+                        { label: 'Drafts',       value: d.contentHealth.drafts,       tone: d.contentHealth.drafts > 0 ? 'info' : 'default' },
+                        { label: 'Archived',     value: d.contentHealth.archived,     tone: 'default' },
+                        { label: 'Stale Drafts', value: d.contentHealth.staleDrafts,  tone: d.contentHealth.staleDrafts > 0 ? 'warning' : 'default' },
+                      ]}
+                    />
+                  </Panel>
+
+                  <Panel title="Quality" icon={Shield} href="/admin/analytics/quality">
+                    <MetricGrid2x2
+                      items={[
+                        { label: 'Agreement',  value: `${d.quality.agreementRate}%`,  tone: d.quality.agreementRate >= 80 ? 'success' : d.quality.agreementRate >= 65 ? 'warning' : 'danger' },
+                        { label: 'Evals',      value: d.quality.evaluationCount,      tone: 'info' },
+                        { label: 'Avg Review', value: `${d.quality.avgReviewHours}h`, tone: 'default' },
+                        { label: 'Risk Cases', value: d.quality.riskCases,            tone: d.quality.riskCases > 0 ? 'danger' : 'success' },
+                      ]}
+                    />
+                  </Panel>
+                </div>
+
+                {/* Feature Flags */}
+                <Panel title="Feature Flags" icon={Flag} href="/admin/flags">
+                  <MetricGrid2x2
+                    items={[
+                      { label: 'Total',       value: d.flags.total,            tone: 'default' },
+                      { label: 'Enabled',     value: d.flags.enabled,          tone: 'success' },
+                      { label: 'Live Exps',   value: d.flags.liveExperiments,  tone: d.flags.liveExperiments > 0 ? 'purple' : 'default' },
+                      { label: 'Changes 24h', value: d.flags.recentChanges,    tone: d.flags.recentChanges > 0 ? 'warning' : 'default' },
+                    ]}
+                  />
+                </Panel>
+
+                {/* Quick Actions */}
+                <Panel title="Quick Actions" icon={Zap}>
+                  <div className="grid grid-cols-3">
+                    {([
+                      { href: '/admin/content',               label: 'Content Hub', icon: FileText,  color: 'text-blue-500',   bg: 'hover:bg-blue-50   dark:hover:bg-blue-950/30' },
+                      { href: '/admin/review-ops',            label: 'Review Ops',  icon: Inbox,     color: 'text-violet-500', bg: 'hover:bg-violet-50 dark:hover:bg-violet-950/30' },
+                      { href: '/admin/freeze',                label: 'Freezes',     icon: Clock4,    color: 'text-cyan-500',   bg: 'hover:bg-cyan-50   dark:hover:bg-cyan-950/30' },
+                      { href: '/admin/billing',               label: 'Billing',     icon: CreditCard, color: 'text-emerald-500', bg: 'hover:bg-emerald-50 dark:hover:bg-emerald-950/30' },
+                      { href: '/admin/business-intelligence', label: 'BI',          icon: BarChart3, color: 'text-amber-500',  bg: 'hover:bg-amber-50  dark:hover:bg-amber-950/30' },
+                      { href: '/admin/analytics/quality',     label: 'Quality',     icon: Shield,    color: 'text-rose-500',   bg: 'hover:bg-rose-50   dark:hover:bg-rose-950/30' },
+                    ] as const).map((a, i) => (
+                      <Link
+                        key={a.href}
+                        href={a.href}
+                        className={cn(
+                          'flex flex-col items-center justify-center gap-2 py-4 transition-colors group',
+                          i % 3 !== 2 && 'border-r border-zinc-100 dark:border-zinc-800/50',
+                          i < 3 && 'border-b border-zinc-100 dark:border-zinc-800/50',
+                          a.bg,
+                        )}
+                      >
+                        <a.icon className={cn('h-5 w-5 transition-transform group-hover:scale-110', a.color)} />
+                        <span className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors leading-none">{a.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </Panel>
+
+              </div>
+            </div>
+
           </div>
         ) : null}
       </AsyncStateWrapper>

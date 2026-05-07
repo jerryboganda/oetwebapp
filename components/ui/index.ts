@@ -17,3 +17,4 @@ export { Skeleton, CardSkeleton, PageSkeleton } from './skeleton';
 export { EmptyState, ErrorState } from './empty-error';
 export { Input, Textarea, Select, Checkbox, RadioGroup, type InputProps, type TextareaProps, type SelectProps, type RadioOption } from './form-controls';
 export { DataTable, type Column } from './data-table';
+export { StatCard, type StatCardProps, type StatTrend } from './stat-card';

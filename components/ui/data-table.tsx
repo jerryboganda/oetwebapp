@@ -129,7 +129,7 @@ export function DataTable<T>({
   };
 
   return (
-    <div className={cn('overflow-hidden rounded-[24px] border border-gray-200 bg-surface shadow-sm', className)}>
+    <div className={cn('overflow-hidden rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm', className)}>
       <div className="md:hidden p-3">
         {data.map((row, idx) => {
           const rowKey = keyExtractor(row, idx);
@@ -182,7 +182,7 @@ export function DataTable<T>({
                       key={column.key}
                       scope="col"
                       className={cn(
-                        'px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-muted',
+                        'border-b border-zinc-100 dark:border-zinc-800/50 py-2 px-4 text-left text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400 whitespace-nowrap',
                         column.hideOnMobile && 'hidden md:table-cell',
                         column.className,
                       )}
@@ -208,7 +208,7 @@ export function DataTable<T>({
                     tabIndex={onRowClick ? 0 : undefined}
                     role={onRowClick ? 'button' : undefined}
                     className={cn(
-                      'transition-colors duration-200',
+                      'border-b border-zinc-50 dark:border-zinc-800/30 hover:bg-zinc-50/70 dark:hover:bg-zinc-900/30 transition-colors focus:outline-none',
                       onRowClick && 'cursor-pointer hover:bg-primary/[0.03] focus-visible:bg-primary/[0.03] focus-visible:outline-none',
                     )}
                   >
@@ -216,7 +216,7 @@ export function DataTable<T>({
                       <td
                         key={column.key}
                         className={cn(
-                          'px-5 py-4 align-top text-sm text-navy',
+                          'px-4 py-3 text-sm whitespace-nowrap align-middle',
                           column.hideOnMobile && 'hidden md:table-cell',
                           column.className,
                         )}
@@ -287,7 +287,7 @@ function VirtualizedDesktopView<T>({
               key={column.key}
               role="columnheader"
               className={cn(
-                'px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-muted',
+                'border-b border-zinc-100 dark:border-zinc-800/50 py-2 px-4 text-left text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400 whitespace-nowrap',
                 column.className,
               )}
             >
@@ -317,8 +317,8 @@ function VirtualizedDesktopView<T>({
               }}
               tabIndex={onRowClick ? 0 : undefined}
               className={cn(
-                'grid border-b border-gray-100/90 bg-surface transition-colors duration-200',
-                onRowClick && 'cursor-pointer hover:bg-primary/[0.03] focus-visible:bg-primary/[0.03] focus-visible:outline-none',
+                'grid border-b border-zinc-50 dark:border-zinc-800/30 hover:bg-zinc-50/70 dark:hover:bg-zinc-900/30 transition-colors focus:outline-none',
+                onRowClick && 'cursor-pointer focus-visible:bg-primary/[0.03]',
               )}
               style={{
                 position: 'absolute',
@@ -334,7 +334,7 @@ function VirtualizedDesktopView<T>({
                 <div
                   key={column.key}
                   role="cell"
-                  className={cn('px-5 py-4 align-top text-sm text-navy', column.className)}
+                  className={cn('px-4 py-3 text-sm whitespace-nowrap align-middle', column.className)}
                 >
                   {column.render(row, virtualRow.index)}
                 </div>
