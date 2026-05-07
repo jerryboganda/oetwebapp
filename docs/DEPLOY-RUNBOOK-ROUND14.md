@@ -50,8 +50,10 @@ oetwebsite-db     Up (healthy)             5432/tcp
 curl -sS -o /dev/null -w "%{http_code}\n" https://app.oetwithdrhesham.co.uk/api/health
 # -> 200
 
-# API health
-curl -sS -o /dev/null -w "%{http_code}\n" https://api.oetwithdrhesham.co.uk/v1/health
+# API health (canonical endpoints — no `/v1` prefix)
+curl -sS -o /dev/null -w "%{http_code}\n" https://api.oetwithdrhesham.co.uk/health
+# -> 200
+curl -sS -o /dev/null -w "%{http_code}\n" https://api.oetwithdrhesham.co.uk/health/ready
 # -> 200
 
 # Homepage
