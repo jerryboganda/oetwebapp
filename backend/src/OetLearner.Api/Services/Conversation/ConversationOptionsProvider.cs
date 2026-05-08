@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Conversation;
 
@@ -44,6 +45,17 @@ public sealed class ConversationOptionsProvider(
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var row = await db.ConversationSettings.AsNoTracking().FirstOrDefaultAsync(r => r.Id == "default", ct);
         if (row is not null) ApplyOverrides(merged, row);
+
+        // Phase 6c: registry-first voice credential overrides. After
+        // ConversationSettings DB-row overrides are applied, consult the
+        // unified AiProviders registry for any seeded voice rows that
+        // carry an encrypted API key. When present, those credentials win
+        // — this is the contract that lets admins rotate Azure / Whisper /
+        // ElevenLabs keys from /admin/ai-providers without touching
+        // .env.production. Rows with empty EncryptedApiKey are skipped so
+        // existing options-only deployments keep working unchanged.
+        var registry = scope.ServiceProvider.GetRequiredService<IAiProviderRegistry>();
+        await ApplyRegistryVoiceOverridesAsync(merged, registry, ct);
 
         cache.Set(CacheKey, merged, CacheTtl);
         return merged;
@@ -121,6 +133,90 @@ public sealed class ConversationOptionsProvider(
         if (!string.IsNullOrWhiteSpace(r.EvaluationModel)) o.EvaluationModel = r.EvaluationModel;
         if (r.ReplyTemperature.HasValue) o.ReplyTemperature = r.ReplyTemperature.Value;
         if (r.EvaluationTemperature.HasValue) o.EvaluationTemperature = r.EvaluationTemperature.Value;
+    }
+
+    /// <summary>
+    /// Phase 6c — apply registry-first overrides for the four conversation
+    /// voice provider codes (<c>azure-tts</c>, <c>azure-asr</c>,
+    /// <c>elevenlabs-tts</c>, <c>whisper-asr</c>). Each lookup is skipped
+    /// silently if the row is missing, inactive, or has an empty
+    /// EncryptedApiKey, so this method is strictly additive and cannot
+    /// break a deployment that has not yet seeded voice credentials.
+    /// </summary>
+    private static async Task ApplyRegistryVoiceOverridesAsync(
+        ConversationOptions o, IAiProviderRegistry registry, CancellationToken ct)
+    {
+        // Azure TTS (region used for both ASR + TTS — Azure speech key is shared).
+        var azureTts = await registry.FindByCodeAsync("azure-tts", ct);
+        if (azureTts is { IsActive: true } && !string.IsNullOrEmpty(azureTts.EncryptedApiKey))
+        {
+            var key = await registry.GetPlatformKeyAsync(azureTts.Code, ct);
+            if (!string.IsNullOrEmpty(key))
+            {
+                o.AzureSpeechKey = key;
+                if (!string.IsNullOrWhiteSpace(azureTts.DefaultModel)) o.AzureTtsDefaultVoice = azureTts.DefaultModel;
+                var region = ExtractAzureRegion(azureTts.BaseUrl);
+                if (!string.IsNullOrWhiteSpace(region)) o.AzureSpeechRegion = region;
+            }
+        }
+
+        // Azure ASR — separate row code, but in practice shares the same
+        // Azure Speech subscription key. Override only when this row carries
+        // a key (operator may genuinely have two distinct subscriptions).
+        var azureAsr = await registry.FindByCodeAsync("azure-asr", ct);
+        if (azureAsr is { IsActive: true } && !string.IsNullOrEmpty(azureAsr.EncryptedApiKey))
+        {
+            var key = await registry.GetPlatformKeyAsync(azureAsr.Code, ct);
+            if (!string.IsNullOrEmpty(key))
+            {
+                o.AzureSpeechKey = key;
+                if (!string.IsNullOrWhiteSpace(azureAsr.DefaultModel)) o.AzureLocale = azureAsr.DefaultModel;
+                var region = ExtractAzureRegion(azureAsr.BaseUrl);
+                if (!string.IsNullOrWhiteSpace(region)) o.AzureSpeechRegion = region;
+            }
+        }
+
+        // ElevenLabs TTS.
+        var eleven = await registry.FindByCodeAsync("elevenlabs-tts", ct);
+        if (eleven is { IsActive: true } && !string.IsNullOrEmpty(eleven.EncryptedApiKey))
+        {
+            var key = await registry.GetPlatformKeyAsync(eleven.Code, ct);
+            if (!string.IsNullOrEmpty(key))
+            {
+                o.ElevenLabsApiKey = key;
+                if (!string.IsNullOrWhiteSpace(eleven.DefaultModel)) o.ElevenLabsModel = eleven.DefaultModel;
+            }
+        }
+
+        // Whisper ASR — registry BaseUrl wins when set so admins can swap
+        // OpenAI/Groq/Together endpoints without redeploying.
+        var whisper = await registry.FindByCodeAsync("whisper-asr", ct);
+        if (whisper is { IsActive: true } && !string.IsNullOrEmpty(whisper.EncryptedApiKey))
+        {
+            var key = await registry.GetPlatformKeyAsync(whisper.Code, ct);
+            if (!string.IsNullOrEmpty(key))
+            {
+                o.WhisperApiKey = key;
+                if (!string.IsNullOrWhiteSpace(whisper.BaseUrl)) o.WhisperBaseUrl = whisper.BaseUrl;
+                if (!string.IsNullOrWhiteSpace(whisper.DefaultModel)) o.WhisperModel = whisper.DefaultModel;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Extract the Azure region from a stored BaseUrl such as
+    /// <c>https://uksouth.tts.speech.microsoft.com</c>. Returns null when
+    /// the host does not match the Azure speech URL shape, leaving the
+    /// option-supplied region intact.
+    /// </summary>
+    private static string? ExtractAzureRegion(string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl)) return null;
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)) return null;
+        var host = uri.Host;
+        var dot = host.IndexOf('.');
+        if (dot <= 0) return null;
+        return host[..dot];
     }
 
     private static ConversationOptions Clone(ConversationOptions src) => new()

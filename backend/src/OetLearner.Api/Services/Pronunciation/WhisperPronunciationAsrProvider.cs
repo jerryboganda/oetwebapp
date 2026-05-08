@@ -25,30 +25,41 @@ public sealed class WhisperPronunciationAsrProvider(
     IHttpClientFactory httpClientFactory,
     IOptions<PronunciationOptions> options,
     IAiGatewayService aiGateway,
+    IPronunciationCredentialResolver credentialResolver,
     ILogger<WhisperPronunciationAsrProvider> logger) : IPronunciationAsrProvider
 {
     private readonly PronunciationOptions _options = options.Value;
 
     public string Name => "whisper";
+    // Phase 6c: registry-first / options-fallback. Marked configured if
+    // either source has a usable key.
     public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(_options.WhisperApiKey) &&
-        !string.IsNullOrWhiteSpace(_options.WhisperBaseUrl);
+        credentialResolver.IsRegistryConfigured("whisper-asr") ||
+        (!string.IsNullOrWhiteSpace(_options.WhisperApiKey) &&
+         !string.IsNullOrWhiteSpace(_options.WhisperBaseUrl));
 
     public async Task<AsrResult> AnalyzeAsync(AsrRequest request, CancellationToken ct)
     {
-        if (!IsConfigured)
+        // Resolve credentials at call time so admin key rotations land
+        // without an app restart (cached for 30s).
+        var registry = await credentialResolver.ResolveAsync("whisper-asr", ct);
+        var apiKey = registry?.ApiKey ?? _options.WhisperApiKey;
+        var baseUrl = registry?.BaseUrl ?? _options.WhisperBaseUrl;
+        var model = registry?.DefaultModel ?? _options.WhisperModel;
+
+        if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(baseUrl))
             throw new InvalidOperationException("Whisper provider is not configured.");
 
         // ── Step 1: Whisper transcription (word timestamps) ──────────────────
         var client = httpClientFactory.CreateClient("PronunciationWhisperClient");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.WhisperApiKey);
-        var url = $"{_options.WhisperBaseUrl.TrimEnd('/')}/audio/transcriptions";
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        var url = $"{baseUrl.TrimEnd('/')}/audio/transcriptions";
 
         using var form = new MultipartFormDataContent();
         var audioContent = new StreamContent(request.Audio);
         audioContent.Headers.ContentType = new MediaTypeHeaderValue(request.AudioMimeType);
         form.Add(audioContent, "file", GuessFileName(request.AudioMimeType));
-        form.Add(new StringContent(_options.WhisperModel), "model");
+        form.Add(new StringContent(model), "model");
         form.Add(new StringContent(request.Locale[..2]), "language");
         form.Add(new StringContent("verbose_json"), "response_format");
         form.Add(new StringContent("word"), "timestamp_granularities[]");

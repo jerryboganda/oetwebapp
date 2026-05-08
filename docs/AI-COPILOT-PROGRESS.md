@@ -330,21 +330,45 @@ Phase 6b — registry visibility (this commit):
       idempotency, and `ListByCategoryAsync` filtering
       (`AiVoiceProviderSeederTests.cs`).
 
-**Continuation (Phase 6c — separate commit, gated on
-production-traffic safety):**
+**Continuation (Phase 6c — shipped):**
 
-- [ ] Refactor `IConversationTtsProviderSelector`,
-      `IConversationAsrProviderSelector`, and
-      `IPronunciationAsrProviderSelector` to read credentials /
-      base URLs from `IAiProviderRegistry` (filtered by
-      `Category`) while keeping their existing routing-rule layer
-      (registry-first, options-fallback). Selectors today still
-      consume `IConversationOptionsProvider` /
-      `IOptions<PronunciationOptions>` directly — Phase 6c moves
-      them to the registry. Phase 6b only adds *visibility* of
-      voice rows; live traffic is untouched.
-- [ ] Extract `IPronunciationPhonemeProvider` so phoneme rows
-      can be selected the same way as ASR rows.
+- [x] `ConversationOptionsProvider` now consults
+      `IAiProviderRegistry` after the `ConversationSettings`
+      DB-row overrides are applied. Active rows for `azure-tts`,
+      `azure-asr`, `elevenlabs-tts`, `whisper-asr` whose
+      `EncryptedApiKey` is non-empty win over both env defaults
+      and the legacy `ConversationSettings` row. The Azure region
+      is parsed from the row's `BaseUrl` host. Empty-key rows are
+      skipped, so seeded-but-unconfigured rows never break a
+      working options-only deployment.
+- [x] New `IPronunciationCredentialResolver`
+      (`backend/.../Services/Pronunciation/PronunciationCredentialResolver.cs`),
+      registered as a singleton with a 30-second `IMemoryCache`
+      snapshot mirroring `ConversationOptionsProvider`'s pattern.
+      Exposes `ResolveAsync` (registry-first / options-fallback
+      via async DB lookup) and a sync `IsRegistryConfigured`
+      hot-path used by provider `IsConfigured` checks. Lifetime
+      mismatch with the scoped `IAiProviderRegistry` is handled
+      by `IServiceScopeFactory.CreateAsyncScope()`.
+- [x] `AzurePronunciationAsrProvider` and
+      `WhisperPronunciationAsrProvider` now inject the resolver,
+      report `IsConfigured = registry || options`, and resolve
+      their effective key / region / base URL / model at call
+      time so admin key rotations land within 30 seconds without
+      an app restart.
+- [x] New `IPronunciationPhonemeProvider` scaffolding interface
+      with `AzurePronunciationPhonemeProvider` adapter that
+      delegates to the existing `AzurePronunciationAsrProvider`
+      (Azure's pronunciation-assessment endpoint already returns
+      phoneme detail as part of the ASR response). Live grading
+      still routes through the ASR selector — Phase 6d will
+      switch the live grading path to the phoneme contract once
+      production traffic on Phase 6c is verified stable.
+- [x] 8 unit tests cover the new resolver
+      (`PronunciationCredentialResolverTests.cs`): registry-first
+      resolution for both providers, empty-key skip, inactive-row
+      skip, sync-cold-cache returns false, sync-warm-cache true,
+      Azure region extraction, cache invalidation after rotation.
 
 ## Phase 7 — Per-feature routing defaults
 

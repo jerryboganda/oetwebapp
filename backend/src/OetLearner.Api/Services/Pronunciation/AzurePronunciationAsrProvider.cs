@@ -25,22 +25,30 @@ namespace OetLearner.Api.Services.Pronunciation;
 public sealed class AzurePronunciationAsrProvider(
     IHttpClientFactory httpClientFactory,
     IOptions<PronunciationOptions> options,
+    IPronunciationCredentialResolver credentialResolver,
     ILogger<AzurePronunciationAsrProvider> logger) : IPronunciationAsrProvider
 {
     private readonly PronunciationOptions _options = options.Value;
 
     public string Name => "azure";
+    // Phase 6c: registry-first / options-fallback.
     public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(_options.AzureSpeechKey) &&
-        !string.IsNullOrWhiteSpace(_options.AzureSpeechRegion);
+        credentialResolver.IsRegistryConfigured("azure-phoneme") ||
+        (!string.IsNullOrWhiteSpace(_options.AzureSpeechKey) &&
+         !string.IsNullOrWhiteSpace(_options.AzureSpeechRegion));
 
     public async Task<AsrResult> AnalyzeAsync(AsrRequest request, CancellationToken ct)
     {
-        if (!IsConfigured)
+        // Resolve credentials with registry-first / options-fallback.
+        var registry = await credentialResolver.ResolveAsync("azure-phoneme", ct);
+        var apiKey = registry?.ApiKey ?? _options.AzureSpeechKey;
+        var region = registry?.AzureRegion ?? _options.AzureSpeechRegion;
+        var defaultLocale = registry?.DefaultModel ?? _options.AzureLocale;
+
+        if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(region))
             throw new InvalidOperationException("Azure Speech provider is not configured.");
 
-        var region = _options.AzureSpeechRegion;
-        var locale = string.IsNullOrWhiteSpace(request.Locale) ? _options.AzureLocale : request.Locale;
+        var locale = string.IsNullOrWhiteSpace(request.Locale) ? defaultLocale : request.Locale;
         var endpoint =
             $"https://{region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1" +
             $"?language={Uri.EscapeDataString(locale)}&format=detailed";
@@ -57,7 +65,7 @@ public sealed class AzurePronunciationAsrProvider(
 
         var client = httpClientFactory.CreateClient("PronunciationAzureClient");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, endpoint);
-        requestMessage.Headers.TryAddWithoutValidation("Ocp-Apim-Subscription-Key", _options.AzureSpeechKey);
+        requestMessage.Headers.TryAddWithoutValidation("Ocp-Apim-Subscription-Key", apiKey);
         requestMessage.Headers.TryAddWithoutValidation("Pronunciation-Assessment", pronHeader);
         requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 

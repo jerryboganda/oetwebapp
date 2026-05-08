@@ -682,10 +682,22 @@ builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationA
     OetLearner.Api.Services.Pronunciation.MockPronunciationAsrProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProvider,
     OetLearner.Api.Services.Pronunciation.AzurePronunciationAsrProvider>();
+// Phase 6c: register the concrete Azure provider too so the phoneme adapter
+// below can take it directly (same scope; same HttpClient handler pool).
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.AzurePronunciationAsrProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProvider,
     OetLearner.Api.Services.Pronunciation.WhisperPronunciationAsrProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProviderSelector,
     OetLearner.Api.Services.Pronunciation.PronunciationAsrProviderSelector>();
+// Phase 6c: registry-first credential resolver (singleton, 30s cache) +
+// scaffolding interface + Azure adapter for phoneme scoring. The live
+// grading path still routes through the ASR selector — the phoneme
+// interface is currently visibility-only (Phase 6d will move grading
+// to it once production traffic is verified stable).
+builder.Services.AddSingleton<OetLearner.Api.Services.Pronunciation.IPronunciationCredentialResolver,
+    OetLearner.Api.Services.Pronunciation.PronunciationCredentialResolver>();
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationPhonemeProvider,
+    OetLearner.Api.Services.Pronunciation.AzurePronunciationPhonemeProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationFeedbackService,
     OetLearner.Api.Services.Pronunciation.PronunciationFeedbackService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationSchedulerService,
