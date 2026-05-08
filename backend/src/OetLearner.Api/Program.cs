@@ -866,6 +866,53 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningAtt
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
     OetLearner.Api.Services.Rulebook.AiGatewayService>();
+
+// ── Phase 5 — AI Tool Calling ──
+// Single source of truth for tool execution. Registry is singleton with
+// in-memory grant cache; invoker + executors are scoped per request so they
+// can share LearnerDbContext with the rest of the gateway.
+builder.Services.Configure<OetLearner.Api.Services.AiTools.AiToolOptions>(
+    builder.Configuration.GetSection("AiTool"));
+builder.Services.AddSingleton<OetLearner.Api.Services.AiTools.IAiToolRegistry,
+    OetLearner.Api.Services.AiTools.AiToolRegistry>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolInvoker,
+    OetLearner.Api.Services.AiTools.AiToolInvoker>();
+
+// 7-tool catalog (Phase 5 v1). Deny-by-default — admins grant per feature.
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.LookupRulebookRuleTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.LookupVocabularyTermTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.GetUserRecentAttemptsTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.SearchRecallSetTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.SaveUserNoteTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.BookmarkRecallTermTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.FetchDictionaryDefinitionTool>();
+
+// External-network tool HTTP client — strict timeout, no auto-redirect, no
+// proxy passthrough. The tool itself enforces host allowlist + max-bytes.
+builder.Services.AddHttpClient(
+    OetLearner.Api.Services.AiTools.Tools.FetchDictionaryDefinitionTool.HttpClientName,
+    c =>
+    {
+        c.Timeout = TimeSpan.FromSeconds(5);
+        c.DefaultRequestHeaders.Clear();
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false,
+        UseProxy = false,
+        UseCookies = false,
+    });
+
+// Catalog seeder — one-shot at startup, idempotent. Mirrors the
+// WritingSampleSeeder pattern: hosted service that opens its own scope.
+builder.Services.AddHostedService<OetLearner.Api.Services.AiTools.AiToolCatalogSeederHostedService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarDraftService,
     OetLearner.Api.Services.Grammar.GrammarDraftService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarPublishGateService,
@@ -1179,6 +1226,7 @@ app.MapAdminEndpoints();
 app.MapAdminAlertEndpoints();
 app.MapAiUsageAdminEndpoints();
 app.MapAiEscalationAdminEndpoints();
+app.MapAiToolsAdminEndpoints();
 app.MapAiMeEndpoints();
 app.MapContentPapersAdminEndpoints();
 app.MapContentStalenessEndpoints();

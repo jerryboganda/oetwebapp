@@ -528,3 +528,62 @@ export const fetchMyAiPreferences = () =>
   );
 export const updateMyAiPreferences = (body: { mode: AiCredentialMode; allowPlatformFallback: boolean; perFeatureOverridesJson?: string }) =>
   aiApi<unknown>('/v1/me/ai/preferences', { method: 'PUT', body: JSON.stringify(body) });
+
+
+// ═════════════════════════════════════════════════════════════════════════
+// Admin — per-feature tool grants (Phase 5: tool calling)
+// ═════════════════════════════════════════════════════════════════════════
+
+export interface AiToolRow {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  category: 'Read' | 'Write' | 'External';
+  jsonSchemaArgs: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiFeatureToolGrantRow {
+  id: string;
+  featureCode: string;
+  toolCode: string;
+  toolName: string;
+  toolCategory: 'Read' | 'Write' | 'External' | null;
+  toolActive: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  updatedByAdminId: string | null;
+}
+
+export const fetchAiTools = () =>
+  aiApi<{ tools: AiToolRow[] }>('/v1/admin/ai-tools/tools');
+
+export const fetchAiFeatureToolGrants = (featureCode?: string) =>
+  aiApi<{ grants: AiFeatureToolGrantRow[] }>(
+    featureCode
+      ? `/v1/admin/ai-tools/grants?featureCode=${encodeURIComponent(featureCode)}`
+      : `/v1/admin/ai-tools/grants`,
+  );
+
+export const upsertAiFeatureToolGrant = (body: {
+  featureCode: string;
+  toolCode: string;
+  isActive?: boolean;
+}) =>
+  aiApi<{ id: string }>(`/v1/admin/ai-tools/grants`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const updateAiFeatureToolGrant = (id: string, body: { isActive?: boolean }) =>
+  aiApi<{ id: string; isActive: boolean }>(`/v1/admin/ai-tools/grants/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+export const deleteAiFeatureToolGrant = (id: string) =>
+  aiApi<void>(`/v1/admin/ai-tools/grants/${id}`, { method: 'DELETE' });

@@ -213,6 +213,16 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     // Credit ledger (Slice 6). Append-only; balance = SUM(TokensDelta).
     public DbSet<AiCreditLedgerEntry> AiCreditLedger => Set<AiCreditLedgerEntry>();
 
+    // Tool calling (Phase 5). Deny-by-default catalog + per-feature opt-in
+    // grants + per-call audit. See docs/AI-COPILOT-TOOLS-PRD.md.
+    public DbSet<AiTool> AiTools => Set<AiTool>();
+    public DbSet<AiFeatureToolGrant> AiFeatureToolGrants => Set<AiFeatureToolGrant>();
+    public DbSet<AiToolInvocation> AiToolInvocations => Set<AiToolInvocation>();
+
+    // User-scoped items written by the two write-category tools (Phase 5).
+    public DbSet<UserNote> UserNotes => Set<UserNote>();
+    public DbSet<RecallBookmark> RecallBookmarks => Set<RecallBookmark>();
+
     // Content Paper subsystem (Content Upload, Slice 1). Curatorial papers
     // that bundle typed assets pointing at MediaAsset rows.
     public DbSet<ContentPaper> ContentPapers => Set<ContentPaper>();

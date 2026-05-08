@@ -23,6 +23,7 @@ import {
 } from '@/lib/ai-management-api';
 import { AiProviderAccountsModal } from '@/components/domain/ai-provider-accounts-modal';
 import { AiFeatureRoutesPanel } from '@/components/domain/ai-feature-routes-panel';
+import { AiFeatureToolGrantsPanel } from '@/components/domain/ai-feature-tool-grants-panel';
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
@@ -382,6 +383,10 @@ export default function AiProvidersPage() {
 
       <div className="mt-6">
         <AiFeatureRoutesPanel />
+      </div>
+
+      <div className="mt-6">
+        <AiFeatureToolGrantsPanel />
       </div>
 
       {editing && (

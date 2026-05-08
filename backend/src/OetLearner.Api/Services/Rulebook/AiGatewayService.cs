@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
+using OetLearner.Api.Services.AiTools;
 
 namespace OetLearner.Api.Services.Rulebook;
 
@@ -46,7 +47,10 @@ public sealed class AiGatewayService(
     IAiQuotaService? quotaService = null,
     IAiCredentialResolver? credentialResolver = null,
     IAiProviderRegistry? providerRegistry = null,
-    IAiFeatureRouteResolver? featureRouteResolver = null)
+    IAiFeatureRouteResolver? featureRouteResolver = null,
+    IAiToolRegistry? toolRegistry = null,
+    IAiToolInvoker? toolInvoker = null,
+    Microsoft.Extensions.Options.IOptions<AiToolOptions>? toolOptions = null)
     : IAiGatewayService
 {
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
@@ -237,19 +241,104 @@ public sealed class AiGatewayService(
         var userPrompt = BuildUserMessage(request);
         var context = BuildUsageContext(request, featureCode, startedAt, request.Prompt.SystemPrompt, userPrompt);
 
-        AiProviderCompletion completion;
+        // Phase 5 — Tool calling. When the feature is granted any tools, run
+        // a bounded multi-turn loop: model → tool call(s) → tool result(s) →
+        // model → … → final text. Each turn is one provider call but all
+        // turns aggregate into ONE AiUsageRecord (token sum, max latency
+        // across turns). The grounding header is verified once on turn 0;
+        // once the system prompt is in the message list it is preserved.
+        IReadOnlyList<AiToolDefinition> tools = Array.Empty<AiToolDefinition>();
+        if (toolRegistry is not null && toolInvoker is not null)
+        {
+            try { tools = await toolRegistry.ResolveForFeatureAsync(featureCode, ct); }
+            catch { tools = Array.Empty<AiToolDefinition>(); }
+        }
+
+        var maxTurns = Math.Max(1, toolOptions?.Value.MaxToolCallsPerCompletion ?? 4);
+        var messages = new List<AiChatMessage>(capacity: 4 + maxTurns * 2)
+        {
+            new() { Role = "system", Content = request.Prompt.SystemPrompt },
+            new() { Role = "user", Content = userPrompt },
+        };
+
+        AiProviderCompletion completion = null!;
+        var aggregatePromptTokens = 0;
+        var aggregateCompletionTokens = 0;
+        string? loopTrace = null;
+        var aiUsageRecordIdForTools = Guid.NewGuid().ToString("N"); // placeholder; tools record their own row
+
         try
         {
-            completion = await provider.CompleteAsync(new AiProviderRequest
+            for (var turn = 0; turn < maxTurns; turn++)
             {
-                Model = request.Model,
-                SystemPrompt = request.Prompt.SystemPrompt,
-                UserPrompt = userPrompt,
-                Temperature = request.Temperature,
-                MaxTokens = request.MaxTokens,
-                ApiKeyOverride = resolution?.ApiKeyPlaintext,
-                BaseUrlOverride = resolution?.BaseUrlOverride,
-            }, ct);
+                completion = await provider.CompleteAsync(new AiProviderRequest
+                {
+                    Model = request.Model,
+                    SystemPrompt = request.Prompt.SystemPrompt,
+                    UserPrompt = userPrompt,
+                    Temperature = request.Temperature,
+                    MaxTokens = request.MaxTokens,
+                    ApiKeyOverride = resolution?.ApiKeyPlaintext,
+                    BaseUrlOverride = resolution?.BaseUrlOverride,
+                    Messages = messages,
+                    Tools = tools.Count == 0 ? null : tools,
+                    ToolChoice = tools.Count == 0 ? null : "auto",
+                }, ct);
+
+                if (completion.Usage is not null)
+                {
+                    aggregatePromptTokens += completion.Usage.PromptTokens;
+                    aggregateCompletionTokens += completion.Usage.CompletionTokens;
+                }
+
+                var calls = completion.ToolCalls;
+                if (calls is null || calls.Count == 0)
+                {
+                    break; // final text turn
+                }
+
+                // Append assistant turn that requested tool execution.
+                messages.Add(new AiChatMessage
+                {
+                    Role = "assistant",
+                    Content = completion.Text,
+                    ToolCalls = calls,
+                });
+
+                // Execute every requested tool sequentially (parallel safe but
+                // deterministic ordering keeps the audit log easy to read).
+                foreach (var call in calls)
+                {
+                    var toolCtx = new AiToolContext(
+                        FeatureCode: featureCode,
+                        UserId: request.UserId,
+                        AuthAccountId: request.AuthAccountId,
+                        AiUsageRecordId: aiUsageRecordIdForTools,
+                        TurnIndex: turn);
+
+                    var invocation = await toolInvoker!.InvokeAsync(call, toolCtx, ct);
+
+                    var toolPayload = invocation.ResultJson?.GetRawText()
+                        ?? JsonSerializer.Serialize(new
+                        {
+                            outcome = invocation.Outcome.ToString(),
+                            error_code = invocation.ErrorCode,
+                            error_message = invocation.ErrorMessage,
+                        });
+
+                    messages.Add(new AiChatMessage
+                    {
+                        Role = "tool",
+                        ToolCallId = call.Id,
+                        Content = toolPayload,
+                    });
+                }
+
+                if (turn == maxTurns - 1)
+                {
+                    loopTrace = "tool_loop_truncated";
+                }
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -346,6 +435,14 @@ public sealed class AiGatewayService(
 
         stopwatch.Stop();
 
+        // Phase 5 — when the multi-turn tool loop ran, expose the aggregated
+        // prompt+completion token totals (sum across turns) on the SINGLE
+        // usage record. Single-turn calls fall through with completion.Usage
+        // unchanged.
+        var aggregatedUsage = (aggregatePromptTokens > 0 || aggregateCompletionTokens > 0)
+            ? new AiUsage { PromptTokens = aggregatePromptTokens, CompletionTokens = aggregateCompletionTokens }
+            : completion.Usage;
+
         if (usageRecorder is not null)
         {
             await usageRecorder.RecordSuccessAsync(
@@ -353,10 +450,10 @@ public sealed class AiGatewayService(
                 providerId: provider.Name,
                 model: request.Model,
                 keySource: prospectiveKeySource,
-                usage: completion.Usage,
+                usage: aggregatedUsage,
                 latencyMs: (int)stopwatch.ElapsedMilliseconds,
                 retryCount: 0,
-                policyTrace: ComposeTrace(resolution?.PolicyTrace, quotaDecision?.PolicyTrace),
+                policyTrace: ComposeTrace(ComposeTrace(resolution?.PolicyTrace, quotaDecision?.PolicyTrace), loopTrace),
                 ct: CancellationToken.None,
                 accountId: completion.AccountId,
                 failoverTrace: completion.FailoverTrace);
@@ -367,7 +464,7 @@ public sealed class AiGatewayService(
         // have no user to attribute to. Degrade / platform-fallback calls DO
         // count against platform quota.
         var shouldCommit = quotaService is not null
-            && completion.Usage is not null
+            && aggregatedUsage is not null
             && !string.IsNullOrWhiteSpace(request.UserId)
             && prospectiveKeySource != AiKeySource.Byok
             && prospectiveKeySource != AiKeySource.None;
@@ -379,13 +476,13 @@ public sealed class AiGatewayService(
                 // Cost estimate: rate card × token counts, if the provider
                 // exposes it. Falls back to 0 so the counter still moves.
                 var costEstimate = await ComputeCostEstimateAsync(
-                    provider.Name, completion.Usage!, CancellationToken.None);
+                    provider.Name, aggregatedUsage!, CancellationToken.None);
 
                 await quotaService!.CommitAsync(
                     request.UserId,
                     featureCode,
-                    completion.Usage!.PromptTokens,
-                    completion.Usage.CompletionTokens,
+                    aggregatedUsage!.PromptTokens,
+                    aggregatedUsage.CompletionTokens,
                     costEstimateUsd: costEstimate,
                     CancellationToken.None);
             }
@@ -399,7 +496,7 @@ public sealed class AiGatewayService(
         return new AiGatewayResult
         {
             Completion = completion.Text,
-            Usage = completion.Usage,
+            Usage = aggregatedUsage,
             Metadata = request.Prompt.Metadata,
             RulebookVersion = request.Prompt.Metadata.RulebookVersion,
             AppliedRuleIds = request.Prompt.Metadata.AppliedRuleIds,
@@ -1171,6 +1268,27 @@ public sealed class AiProviderRequest
     /// <summary>Optional override for the base URL. Used when the admin has
     /// registered a provider with a non-default endpoint (Slice 5+).</summary>
     public string? BaseUrlOverride { get; init; }
+
+    /// <summary>Phase 5 — explicit message history for tool-calling multi-turn
+    /// loops. When supplied, providers MUST use this in place of building a
+    /// pair from <see cref="SystemPrompt"/>/<see cref="UserPrompt"/>. Includes
+    /// assistant messages with <c>tool_calls</c> and tool result messages.
+    /// Providers that don't support tool calling (mock, anthropic adapter,
+    /// registry adapter) ignore this and fall back to the legacy two-message
+    /// shape from <see cref="SystemPrompt"/>+<see cref="UserPrompt"/>.</summary>
+    public IReadOnlyList<AiChatMessage>? Messages { get; init; }
+
+    /// <summary>Phase 5 — tool definitions exposed to the model on this turn.
+    /// When non-empty, providers that support function calling MUST attach
+    /// these to the underlying chat-completions request. Providers that do
+    /// not support tool calling MUST ignore this and return a normal text
+    /// completion with <see cref="AiProviderCompletion.ToolCalls"/> = null.</summary>
+    public IReadOnlyList<AiToolDefinition>? Tools { get; init; }
+
+    /// <summary>Phase 5 — <c>"auto"</c> (default), <c>"none"</c>, or a specific
+    /// tool code. Providers MAY ignore this if their backing API does not
+    /// support tool_choice; the gateway only sets <c>"auto"</c>.</summary>
+    public string? ToolChoice { get; init; }
 }
 
 public sealed class AiProviderCompletion
@@ -1188,6 +1306,41 @@ public sealed class AiProviderCompletion
     /// <c>"primary:429 → backup:success"</c>. Null on single-shot calls.
     /// Phase 3.</summary>
     public string? FailoverTrace { get; init; }
+
+    /// <summary>Phase 5 — tool calls emitted by the model on this turn. When
+    /// non-empty the gateway invokes each tool, appends an assistant message
+    /// + tool result messages, and re-calls the provider. Null/empty means
+    /// the model returned a final text answer.</summary>
+    public IReadOnlyList<AiToolCall>? ToolCalls { get; init; }
+
+    /// <summary>Phase 5 — provider's stop reason for the turn. Common values:
+    /// <c>"stop"</c>, <c>"tool_calls"</c>, <c>"length"</c>, <c>"content_filter"</c>.
+    /// Used only for diagnostics and gateway loop bookkeeping.</summary>
+    public string? FinishReason { get; init; }
+}
+
+/// <summary>Phase 5 — chat-message envelope used by tool-calling providers.
+/// Mirrors the OpenAI ChatCompletionMessage shape. <c>Role</c> is one of
+/// <c>"system"</c>, <c>"user"</c>, <c>"assistant"</c>, <c>"tool"</c>.</summary>
+public sealed class AiChatMessage
+{
+    public required string Role { get; init; }
+    public string? Content { get; init; }
+    /// <summary>Set on assistant turns that requested tool execution.</summary>
+    public IReadOnlyList<AiToolCall>? ToolCalls { get; init; }
+    /// <summary>Set on <c>"tool"</c> messages — matches an
+    /// <see cref="AiToolCall.Id"/> from the previous assistant turn.</summary>
+    public string? ToolCallId { get; init; }
+}
+
+/// <summary>Phase 5 — single tool call requested by the model.
+/// <c>ArgsJson</c> is the raw JSON arguments string emitted by the provider;
+/// the invoker validates it against the tool's JSON Schema before dispatch.</summary>
+public sealed class AiToolCall
+{
+    public required string Id { get; init; }
+    public required string ToolCode { get; init; }
+    public required string ArgsJson { get; init; }
 }
 
 /// <summary>

@@ -1,3 +1,4 @@
+using System.Linq;
 using Azure;
 using Azure.AI.Inference;
 using Azure.Core.Pipeline;
@@ -167,15 +168,43 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
 
         var options = new ChatCompletionsOptions
         {
-            Messages =
-            {
-                new ChatRequestSystemMessage(request.SystemPrompt),
-                new ChatRequestUserMessage(request.UserPrompt),
-            },
             Model = model,
             Temperature = (float)request.Temperature,
             MaxTokens = request.MaxTokens ?? 4096,
         };
+
+        // Phase 5 — message history takes precedence over the legacy
+        // System+User pair when supplied. The gateway always sends Messages
+        // for tool-calling features; older callers fall through to the
+        // simple two-message shape unchanged.
+        if (request.Messages is { Count: > 0 } msgs)
+        {
+            foreach (var m in msgs)
+            {
+                options.Messages.Add(BuildAzureMessage(m));
+            }
+        }
+        else
+        {
+            options.Messages.Add(new ChatRequestSystemMessage(request.SystemPrompt));
+            options.Messages.Add(new ChatRequestUserMessage(request.UserPrompt));
+        }
+
+        // Phase 5 — expose tool definitions to the model for this turn.
+        if (request.Tools is { Count: > 0 } tools)
+        {
+            foreach (var t in tools)
+            {
+                using var schemaDoc = System.Text.Json.JsonDocument.Parse(
+                    string.IsNullOrWhiteSpace(t.JsonSchemaArgs) ? "{}" : t.JsonSchemaArgs);
+                var fn = new FunctionDefinition(t.Code)
+                {
+                    Description = string.IsNullOrWhiteSpace(t.Description) ? t.Name : t.Description,
+                    Parameters = BinaryData.FromString(schemaDoc.RootElement.GetRawText()),
+                };
+                options.Tools.Add(new ChatCompletionsToolDefinition(fn));
+            }
+        }
 
         try
         {
@@ -192,7 +221,32 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
                     CompletionTokens = completions.Usage.CompletionTokens,
                 };
 
-            return new AiProviderCompletion { Text = text, Usage = usage };
+            // Phase 5 — surface tool calls. The Azure.AI.Inference shape
+            // exposes them via completions.ToolCalls (ChatCompletionsToolCall
+            // entries with .Id, .Name, .Arguments).
+            IReadOnlyList<AiToolCall>? toolCalls = null;
+            if (completions.ToolCalls is { Count: > 0 } raw)
+            {
+                var list = new List<AiToolCall>(raw.Count);
+                foreach (var c in raw)
+                {
+                    list.Add(new AiToolCall
+                    {
+                        Id = c.Id,
+                        ToolCode = c.Name,
+                        ArgsJson = c.Arguments ?? "{}",
+                    });
+                }
+                toolCalls = list;
+            }
+
+            return new AiProviderCompletion
+            {
+                Text = text,
+                Usage = usage,
+                ToolCalls = toolCalls,
+                FinishReason = completions.FinishReason.ToString(),
+            };
         }
         catch (RequestFailedException ex)
         {
@@ -206,6 +260,43 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
                 $"GitHub Copilot AI provider call failed: {ex.Status}{code}. {ex.Message}",
                 ex);
         }
+    }
+
+    /// <summary>
+    /// Project an <see cref="AiChatMessage"/> into the Azure SDK's typed
+    /// chat-message hierarchy. <c>"tool"</c> role uses
+    /// <see cref="ChatRequestToolMessage"/>; <c>"assistant"</c> turns with
+    /// tool calls attach them via <see cref="ChatRequestAssistantMessage.ToolCalls"/>.
+    /// </summary>
+    private static ChatRequestMessage BuildAzureMessage(AiChatMessage m)
+    {
+        var role = (m.Role ?? "user").ToLowerInvariant();
+        return role switch
+        {
+            "system" => new ChatRequestSystemMessage(m.Content ?? string.Empty),
+            "user" => new ChatRequestUserMessage(m.Content ?? string.Empty),
+            "tool" => new ChatRequestToolMessage(
+                m.Content ?? string.Empty,
+                m.ToolCallId ?? throw new InvalidOperationException("tool message requires ToolCallId")),
+            "assistant" => BuildAssistant(m),
+            _ => new ChatRequestUserMessage(m.Content ?? string.Empty),
+        };
+    }
+
+    private static ChatRequestAssistantMessage BuildAssistant(AiChatMessage m)
+    {
+        // Azure.AI.Inference 1.0.0-beta.5 exposes only three public ctors on
+        // ChatRequestAssistantMessage: (string content), (IEnumerable<ToolCall>, string content),
+        // and (ChatCompletions). Pick the one that fits this turn.
+        if (m.ToolCalls is { Count: > 0 } calls)
+        {
+            var sdkCalls = calls.Select(c => ChatCompletionsToolCall.CreateFunctionToolCall(
+                c.Id,
+                c.ToolCode,
+                string.IsNullOrWhiteSpace(c.ArgsJson) ? "{}" : c.ArgsJson!));
+            return new ChatRequestAssistantMessage(sdkCalls, m.Content);
+        }
+        return new ChatRequestAssistantMessage(m.Content ?? string.Empty);
     }
 
     /// <summary>
