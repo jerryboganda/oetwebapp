@@ -913,6 +913,11 @@ builder.Services.AddHttpClient(
 // Catalog seeder — one-shot at startup, idempotent. Mirrors the
 // WritingSampleSeeder pattern: hosted service that opens its own scope.
 builder.Services.AddHostedService<OetLearner.Api.Services.AiTools.AiToolCatalogSeederHostedService>();
+// Phase 6b — backfill voice provider rows (TTS/ASR/Phoneme) into the
+// AiProviders registry so admins see them in /admin/ai-providers.
+// Strictly additive: never overwrites existing rows; selectors still
+// read credentials from existing options sources.
+builder.Services.AddHostedService<OetLearner.Api.Services.Voice.AiVoiceProviderSeeder>();
 builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarDraftService,
     OetLearner.Api.Services.Grammar.GrammarDraftService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarPublishGateService,

@@ -23,6 +23,11 @@ public interface IAiProviderRegistry
 {
     Task<AiProvider?> FindByCodeAsync(string code, CancellationToken ct);
     Task<IReadOnlyList<AiProvider>> ListActiveAsync(CancellationToken ct);
+    /// <summary>Phase 6b — list active rows for a single capability category
+    /// (e.g. <see cref="AiProviderCategory.Tts"/>). Used by voice selectors
+    /// and the admin UI to surface the per-category provider pool without
+    /// loading every text-chat row.</summary>
+    Task<IReadOnlyList<AiProvider>> ListByCategoryAsync(AiProviderCategory category, CancellationToken ct);
     /// <summary>Return platform-held API key plaintext, decrypted.</summary>
     Task<string?> GetPlatformKeyAsync(string providerCode, CancellationToken ct);
 }
@@ -43,6 +48,12 @@ public sealed class AiProviderRegistry(LearnerDbContext db, IDataProtectionProvi
     public async Task<IReadOnlyList<AiProvider>> ListActiveAsync(CancellationToken ct)
         => await db.AiProviders.AsNoTracking()
             .Where(p => p.IsActive)
+            .OrderBy(p => p.FailoverPriority)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<AiProvider>> ListByCategoryAsync(AiProviderCategory category, CancellationToken ct)
+        => await db.AiProviders.AsNoTracking()
+            .Where(p => p.IsActive && p.Category == category)
             .OrderBy(p => p.FailoverPriority)
             .ToListAsync(ct);
 

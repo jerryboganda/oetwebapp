@@ -293,10 +293,11 @@ full spec.
 ## Phase 6 — Voice provider unification
 
 **Status:** 🟡 foundation shipped (commit d232180, deployed
-2026-05-10). Selector registry-first refactor lives in follow-up
-Phase 6b — see *Continuation* below.
+2026-05-10). 🟢 Phase 6b additive backfill shipped (this commit).
+Selector registry-first refactor still pending — see *Phase 6c*
+below.
 
-Foundation slice (this commit):
+Foundation slice (commit d232180):
 
 - [x] `AiProviderDialect` enum extended with five voice values:
       `AzureTts=10`, `ElevenLabsTts=11`, `AzureAsr=12`,
@@ -314,22 +315,36 @@ Foundation slice (this commit):
       voice values; providers table shows a Category column and
       a chip-group filter (`All / TextChat / Tts / Asr / Phoneme`).
 
-**Continuation (Phase 6b — separate commit):**
+Phase 6b — registry visibility (this commit):
+
+- [x] `IAiProviderRegistry.ListByCategoryAsync(category, ct)` —
+      filtered, active-only, ordered by failover priority.
+- [x] `AiVoiceProviderSeeder` HostedService — on first boot
+      backfills voice rows from `Conversation:Tts/Asr` +
+      `Pronunciation:Azure` config so admins immediately see the
+      configured voice providers in `/admin/ai-providers`.
+      Strictly idempotent: never overwrites an existing row keyed
+      by `Code`. Tolerates missing DB / migration with a warning,
+      mirroring `AiToolCatalogSeederHostedService`.
+- [x] 7 unit tests cover `BuildSeeds` permutations, seeder
+      idempotency, and `ListByCategoryAsync` filtering
+      (`AiVoiceProviderSeederTests.cs`).
+
+**Continuation (Phase 6c — separate commit, gated on
+production-traffic safety):**
 
 - [ ] Refactor `IConversationTtsProviderSelector`,
       `IConversationAsrProviderSelector`, and
       `IPronunciationAsrProviderSelector` to read credentials /
       base URLs from `IAiProviderRegistry` (filtered by
       `Category`) while keeping their existing routing-rule layer
-      (registry-first, options-fallback).
+      (registry-first, options-fallback). Selectors today still
+      consume `IConversationOptionsProvider` /
+      `IOptions<PronunciationOptions>` directly — Phase 6c moves
+      them to the registry. Phase 6b only adds *visibility* of
+      voice rows; live traffic is untouched.
 - [ ] Extract `IPronunciationPhonemeProvider` so phoneme rows
-      can live alongside ASR rows under the unified registry.
-- [ ] `AiVoiceProviderSeeder` HostedService — on first boot
-      backfills voice rows from existing `appsettings`
-      `Conversation:Tts/Asr` and `Pronunciation:Azure` blocks
-      so the unified registry is populated without admin work.
-- [ ] Tests: backend (selector falls back to options when
-      DB row missing), frontend (category filter renders).
+      can be selected the same way as ASR rows.
 
 ## Phase 7 — Per-feature routing defaults
 
