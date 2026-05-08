@@ -93,3 +93,7 @@ ts-prune-survivors.txt
 # CommandCode IDE local cache
 .commandcode/
 
+
+backend/tests/**/TestResults/
+test-full.log
+front-test.log

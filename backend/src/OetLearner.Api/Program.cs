@@ -880,12 +880,15 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
     OetLearner.Api.Services.Rulebook.AiGatewayService>();
 
 // ── Phase 5 — AI Tool Calling ──
-// Single source of truth for tool execution. Registry is singleton with
-// in-memory grant cache; invoker + executors are scoped per request so they
-// can share LearnerDbContext with the rest of the gateway.
+// All AI-tool services are Scoped so the registry, invoker, and executors
+// share the per-request LearnerDbContext. The grant cache remains process-
+// wide because IMemoryCache is a Singleton — InvalidateFeature() therefore
+// fans out to every subsequent request regardless of which scope mutates
+// it. (Phase 6c hardening — making the registry Singleton crashed DI
+// validation because it captured Scoped IEnumerable<IAiToolExecutor>.)
 builder.Services.Configure<OetLearner.Api.Services.AiTools.AiToolOptions>(
     builder.Configuration.GetSection("AiTool"));
-builder.Services.AddSingleton<OetLearner.Api.Services.AiTools.IAiToolRegistry,
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolRegistry,
     OetLearner.Api.Services.AiTools.AiToolRegistry>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolInvoker,
     OetLearner.Api.Services.AiTools.AiToolInvoker>();
