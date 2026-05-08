@@ -292,9 +292,9 @@ full spec.
 
 ## Phase 6 — Voice provider unification
 
-**Status:** 🟡 foundation shipped (commit pending). Selector
-registry-first refactor lives in follow-up Phase 6b — see
-*Continuation* below.
+**Status:** 🟡 foundation shipped (commit d232180, deployed
+2026-05-10). Selector registry-first refactor lives in follow-up
+Phase 6b — see *Continuation* below.
 
 Foundation slice (this commit):
 
