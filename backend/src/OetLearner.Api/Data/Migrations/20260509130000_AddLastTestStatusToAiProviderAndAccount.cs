@@ -1,5 +1,7 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
@@ -14,6 +16,8 @@ namespace OetLearner.Api.Data.Migrations
     /// per row. See <c>docs/AI-COPILOT-PROGRESS.md</c> Phase 4 and
     /// <c>Services/Rulebook/AiProviderConnectionTester.cs</c>.
     /// </remarks>
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260509130000_AddLastTestStatusToAiProviderAndAccount")]
     public partial class AddLastTestStatusToAiProviderAndAccount : Migration
     {
         /// <inheritdoc />

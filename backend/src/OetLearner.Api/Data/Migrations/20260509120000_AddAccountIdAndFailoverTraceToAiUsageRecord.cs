@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
@@ -14,6 +16,8 @@ namespace OetLearner.Api.Data.Migrations
     /// See <c>docs/AI-COPILOT-PROGRESS.md</c> Phase 3 and
     /// <c>CopilotAiModelProvider.TryCompleteWithAccountFailoverAsync</c>.
     /// </remarks>
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260509120000_AddAccountIdAndFailoverTraceToAiUsageRecord")]
     public partial class AddAccountIdAndFailoverTraceToAiUsageRecord : Migration
     {
         /// <inheritdoc />

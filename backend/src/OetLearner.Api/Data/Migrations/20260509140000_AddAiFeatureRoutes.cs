@@ -1,5 +1,7 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
@@ -13,6 +15,8 @@ namespace OetLearner.Api.Data.Migrations
     /// default. See <c>docs/AI-COPILOT-PROGRESS.md</c> Phase 7 and
     /// <c>Services/Rulebook/AiFeatureRouteResolver.cs</c>.
     /// </remarks>
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260509140000_AddAiFeatureRoutes")]
     public partial class AddAiFeatureRoutes : Migration
     {
         /// <inheritdoc />
