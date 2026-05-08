@@ -750,13 +750,38 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCredentialRes
 builder.Services.AddHttpClient("AiRegistryClient", c => c.Timeout = TimeSpan.FromMinutes(30));
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiProviderRegistry,
     OetLearner.Api.Services.Rulebook.AiProviderRegistry>();
+// Multi-account pool registry — siblings of AiProviderRegistry, used by
+// Copilot-style providers (Phase 2 of GitHub Copilot integration). The
+// registry guarantees atomic pick + counter increment via
+// ExecuteUpdateAsync; see AiProviderAccountRegistry XML doc.
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiProviderAccountRegistry,
+    OetLearner.Api.Services.Rulebook.AiProviderAccountRegistry>();
+// Phase 7: per-feature routing override resolver. Consulted by the
+// gateway between explicit pins and the registry-default fallback.
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiFeatureRouteResolver,
+    OetLearner.Api.Services.Rulebook.AiFeatureRouteResolver>();
+// Phase 4: admin connectivity probe. Bypasses gateway grounding +
+// quota on purpose — see AiProviderConnectionTester XML doc.
+builder.Services.AddHttpClient(nameof(OetLearner.Api.Services.Rulebook.AiProviderConnectionTester));
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiProviderConnectionTester,
+    OetLearner.Api.Services.Rulebook.AiProviderConnectionTester>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.RegistryBackedProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.AnthropicProvider>();
+// GitHub Copilot / Models adapter — uses the official `Azure.AI.Inference`
+// typed SDK (ChatCompletionsClient + AzureKeyCredential) against the
+// chat-completions endpoint at the registered base URL (default
+// https://models.github.ai/inference). DB-backed credentials live in the
+// AiProviders row keyed by Code="copilot"; Phase 2 will extend this to
+// a multi-account pool with auto-failover. The SDK owns its own pipeline
+// (retry / timeout / transport) so no IHttpClientFactory entry is needed.
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
+    OetLearner.Api.Services.Rulebook.CopilotAiModelProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCreditService,
     OetLearner.Api.Services.AiManagement.AiCreditService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiCreditRenewalWorker>();
+builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiAccountQuotaResetWorker>();
 
 // Content Upload subsystem (Slice 2). IFileStorage sits in front of disk
 // access so future S3/R2 swap is a DI-only change.

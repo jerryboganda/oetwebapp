@@ -45,7 +45,8 @@ public sealed class AiGatewayService(
     IAiUsageRecorder? usageRecorder = null,
     IAiQuotaService? quotaService = null,
     IAiCredentialResolver? credentialResolver = null,
-    IAiProviderRegistry? providerRegistry = null)
+    IAiProviderRegistry? providerRegistry = null,
+    IAiFeatureRouteResolver? featureRouteResolver = null)
     : IAiGatewayService
 {
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
@@ -111,6 +112,42 @@ public sealed class AiGatewayService(
             provider = providers.FirstOrDefault(p => string.Equals(p.Name, request.Provider, StringComparison.OrdinalIgnoreCase));
         }
 
+        // Phase 7: per-feature override. Consulted only when the caller did
+        // not pin a provider — explicit pins always win so feature codes can
+        // still be routed ad-hoc from tests and ops.
+        if (provider is null && featureRouteResolver is not null && providerRegistry is not null)
+        {
+            try
+            {
+                var route = await featureRouteResolver.ResolveAsync(featureCode, ct);
+                if (route is not null)
+                {
+                    var routeRow = (await providerRegistry.ListActiveAsync(ct))
+                        .FirstOrDefault(p => string.Equals(p.Code, route.ProviderCode, StringComparison.OrdinalIgnoreCase));
+                    if (routeRow is not null)
+                    {
+                        var preferredName = routeRow.Dialect switch
+                        {
+                            AiProviderDialect.Cloudflare => "cloudflare",
+                            AiProviderDialect.Anthropic => "anthropic",
+                            AiProviderDialect.Copilot => "copilot",
+                            AiProviderDialect.OpenAiCompatible => "registry",
+                            _ => null,
+                        };
+                        if (preferredName is not null)
+                        {
+                            provider = providers.FirstOrDefault(p => string.Equals(p.Name, preferredName, StringComparison.OrdinalIgnoreCase));
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Route resolution failure must not block the call — fall back
+                // to the registry-default path immediately below.
+            }
+        }
+
         // No explicit pin → consult the provider registry to honor the active
         // highest-priority row's dialect. Without this, a Cloudflare or
         // Anthropic row registered as the top failover entry would be ignored
@@ -127,6 +164,7 @@ public sealed class AiGatewayService(
                     {
                         AiProviderDialect.Cloudflare => "cloudflare",
                         AiProviderDialect.Anthropic => "anthropic",
+                        AiProviderDialect.Copilot => "copilot",
                         AiProviderDialect.OpenAiCompatible => "registry",
                         _ => null,
                     };
@@ -287,6 +325,7 @@ public sealed class AiGatewayService(
 
             if (usageRecorder is not null)
             {
+                var failover = ex as AiProviderFailoverException;
                 await usageRecorder.RecordFailureAsync(
                     context,
                     providerId: provider.Name,
@@ -298,7 +337,9 @@ public sealed class AiGatewayService(
                     latencyMs: (int)stopwatch.ElapsedMilliseconds,
                     retryCount: 0,
                     policyTrace: resolution?.PolicyTrace,
-                    ct: CancellationToken.None);
+                    ct: CancellationToken.None,
+                    accountId: failover?.LastAccountId,
+                    failoverTrace: failover?.FailoverTrace);
             }
             throw;
         }
@@ -316,7 +357,9 @@ public sealed class AiGatewayService(
                 latencyMs: (int)stopwatch.ElapsedMilliseconds,
                 retryCount: 0,
                 policyTrace: ComposeTrace(resolution?.PolicyTrace, quotaDecision?.PolicyTrace),
-                ct: CancellationToken.None);
+                ct: CancellationToken.None,
+                accountId: completion.AccountId,
+                failoverTrace: completion.FailoverTrace);
         }
 
         // Commit token usage against the per-user counters. BYOK calls are
@@ -1134,6 +1177,36 @@ public sealed class AiProviderCompletion
 {
     public string Text { get; init; } = "";
     public AiUsage? Usage { get; init; }
+
+    /// <summary>Multi-account pool: the <c>AiProviderAccount.Id</c> that
+    /// served this completion. Null when the provider is single-credential.
+    /// Phase 3.</summary>
+    public string? AccountId { get; init; }
+
+    /// <summary>Multi-account pool: compact failover trail when the provider
+    /// retried across accounts before succeeding. Format
+    /// <c>"primary:429 → backup:success"</c>. Null on single-shot calls.
+    /// Phase 3.</summary>
+    public string? FailoverTrace { get; init; }
+}
+
+/// <summary>
+/// Provider-level exception thrown when a multi-account pool is exhausted.
+/// Carries the same trail data as <see cref="AiProviderCompletion.FailoverTrace"/>
+/// so the gateway can persist it on the failure record. Internal to the
+/// provider implementation; gateway is the only catcher.
+/// </summary>
+public sealed class AiProviderFailoverException : InvalidOperationException
+{
+    public AiProviderFailoverException(string message, string failoverTrace, string? lastAccountId)
+        : base(message)
+    {
+        FailoverTrace = failoverTrace;
+        LastAccountId = lastAccountId;
+    }
+
+    public string FailoverTrace { get; }
+    public string? LastAccountId { get; }
 }
 
 /// <summary>

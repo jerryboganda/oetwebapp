@@ -200,6 +200,16 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     // config-only provider registration.
     public DbSet<AiProvider> AiProviders => Set<AiProvider>();
 
+    // Multi-account pool (GitHub Copilot integration Phase 2). One row per
+    // PAT / quota slot under a provider. Pick + increment is atomic; see
+    // AiProviderAccountRegistry.PickAndReserveAsync.
+    public DbSet<AiProviderAccount> AiProviderAccounts => Set<AiProviderAccount>();
+
+    // Per-feature routing overrides (Phase 7). One row per FeatureCode that
+    // pins a provider; consulted by AiFeatureRouteResolver before the
+    // global failover-priority default.
+    public DbSet<AiFeatureRoute> AiFeatureRoutes => Set<AiFeatureRoute>();
+
     // Credit ledger (Slice 6). Append-only; balance = SUM(TokensDelta).
     public DbSet<AiCreditLedgerEntry> AiCreditLedger => Set<AiCreditLedgerEntry>();
 

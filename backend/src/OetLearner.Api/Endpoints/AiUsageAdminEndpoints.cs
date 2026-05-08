@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -30,6 +31,7 @@ public static class AiUsageAdminEndpoints
             string? userId,
             string? featureCode,
             string? providerId,
+            string? accountId,
             string? outcome,
             string? periodMonthKey,
             string? periodDayKey,
@@ -47,6 +49,8 @@ public static class AiUsageAdminEndpoints
                 query = query.Where(r => r.FeatureCode == featureCode);
             if (!string.IsNullOrWhiteSpace(providerId))
                 query = query.Where(r => r.ProviderId == providerId);
+            if (!string.IsNullOrWhiteSpace(accountId))
+                query = query.Where(r => r.AccountId == accountId);
             if (!string.IsNullOrWhiteSpace(periodMonthKey))
                 query = query.Where(r => r.PeriodMonthKey == periodMonthKey);
             if (!string.IsNullOrWhiteSpace(periodDayKey))
@@ -70,6 +74,8 @@ public static class AiUsageAdminEndpoints
                     tenantId = r.TenantId,
                     featureCode = r.FeatureCode,
                     providerId = r.ProviderId,
+                    accountId = r.AccountId,
+                    failoverTrace = r.FailoverTrace,
                     model = r.Model,
                     keySource = r.KeySource.ToString(),
                     rulebookVersion = r.RulebookVersion,
@@ -129,6 +135,25 @@ public static class AiUsageAdminEndpoints
                         costEstimateUsd = g.Sum(x => x.CostEstimateUsd),
                         successes = g.Count(x => x.Outcome == AiCallOutcome.Success),
                         failures = g.Count(x => x.Outcome != AiCallOutcome.Success),
+                    })
+                    .OrderByDescending(r => r.totalTokens)
+                    .ToListAsync(ct),
+
+                "account" => await query
+                    .Where(r => r.AccountId != null)
+                    .GroupBy(r => new { ProviderId = r.ProviderId ?? "(none)", AccountId = r.AccountId! })
+                    .Select(g => new
+                    {
+                        key = g.Key.AccountId,
+                        providerId = g.Key.ProviderId,
+                        calls = g.Count(),
+                        promptTokens = g.Sum(x => x.PromptTokens),
+                        completionTokens = g.Sum(x => x.CompletionTokens),
+                        totalTokens = g.Sum(x => x.PromptTokens + x.CompletionTokens),
+                        costEstimateUsd = g.Sum(x => x.CostEstimateUsd),
+                        successes = g.Count(x => x.Outcome == AiCallOutcome.Success),
+                        failures = g.Count(x => x.Outcome != AiCallOutcome.Success),
+                        failovers = g.Count(x => x.FailoverTrace != null),
                     })
                     .OrderByDescending(r => r.totalTokens)
                     .ToListAsync(ct),
@@ -381,6 +406,7 @@ public static class AiUsageAdminEndpoints
                     p.PricePer1kPromptTokens, p.PricePer1kCompletionTokens,
                     p.RetryCount, p.CircuitBreakerThreshold, p.CircuitBreakerWindowSeconds,
                     p.FailoverPriority, p.IsActive,
+                    p.LastTestedAt, p.LastTestStatus, p.LastTestError,
                     p.CreatedAt, p.UpdatedAt, p.UpdatedByAdminId,
                 })
                 .ToListAsync(ct);
@@ -478,6 +504,350 @@ public static class AiUsageAdminEndpoints
             row.UpdatedAt = DateTimeOffset.UtcNow;
             await SaveWithAuditAsync(db, http, "AiProviderDeactivated", row.Id, row.Code, ct);
             return Results.NoContent();
+        }).RequireRateLimiting("PerUserWrite");
+
+        // Phase 4: admin "Test connection" probe. Sends a 1-token chat
+        // completion to the provider and persists the classifier outcome
+        // (ok / auth / rate_limited / network / unknown) plus a timestamp.
+        // Bypasses gateway grounding + quota — see
+        // AiProviderConnectionTester XML doc.
+        group.MapPost("/providers/{code}/test", async (
+            string code,
+            IAiProviderConnectionTester tester,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var providerRow = await db.AiProviders.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Code == code, ct);
+            if (providerRow is null) return Results.NotFound();
+            var result = await tester.TestProviderAsync(code, ct);
+            // Audit AFTER tester.SaveChanges so the audit row reflects
+            // the persisted status. Reload to attach to context for the
+            // audit save (tester used its own scope-shared db).
+            var tracked = await db.AiProviders.FirstAsync(p => p.Code == code, ct);
+            await SaveWithAuditAsync(db, http,
+                result.Status == AiProviderTestStatuses.Ok ? "AiProviderTested" : "AiProviderTestFailed",
+                tracked.Id,
+                $"code={code} status={result.Status} latency={result.LatencyMs}ms", ct);
+            return Results.Ok(new
+            {
+                status = result.Status,
+                errorMessage = result.ErrorMessage,
+                latencyMs = result.LatencyMs,
+                testedAt = result.TestedAt,
+            });
+        }).RequireRateLimiting("PerUserWrite");
+
+        // ═══ Multi-account pool (Phase 2 Slice 2b) ═══════════════════════════
+        // Admin CRUD over AiProviderAccount rows. Used today by the Copilot
+        // dialect to spread requests across multiple PATs with auto-failover
+        // (see AiProviderAccountRegistry + CopilotAiModelProvider). Other
+        // dialects can use it too — the pool is generic.
+        group.MapGet("/providers/{providerId}/accounts", async (
+            string providerId,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var providerExists = await db.AiProviders.AsNoTracking()
+                .AnyAsync(p => p.Id == providerId, ct);
+            if (!providerExists) return Results.NotFound();
+
+            var rows = await db.AiProviderAccounts.AsNoTracking()
+                .Where(a => a.ProviderId == providerId)
+                .OrderBy(a => a.Priority).ThenBy(a => a.Label)
+                .Select(a => new
+                {
+                    a.Id, a.ProviderId, a.Label, a.ApiKeyHint,
+                    a.MonthlyRequestCap, a.RequestsUsedThisMonth,
+                    a.Priority, a.ExhaustedUntil, a.IsActive,
+                    a.PeriodMonthKey,
+                    a.LastTestedAt, a.LastTestStatus, a.LastTestError,
+                    a.CreatedAt, a.UpdatedAt, a.UpdatedByAdminId,
+                })
+                .ToListAsync(ct);
+            return Results.Ok(rows);
+        });
+
+        group.MapPost("/providers/{providerId}/accounts", async (
+            string providerId,
+            AiProviderAccountUpsertDto dto,
+            LearnerDbContext db,
+            IDataProtectionProvider dpProvider,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(dto.Label))
+                return Results.BadRequest(new { error = "Label is required." });
+            if (string.IsNullOrWhiteSpace(dto.ApiKey) || dto.ApiKey.Length < 16)
+                return Results.BadRequest(new { error = "ApiKey is required and must be at least 16 chars." });
+            if (dto.MonthlyRequestCap is < 1)
+                return Results.BadRequest(new { error = "MonthlyRequestCap must be null or >= 1." });
+
+            var providerExists = await db.AiProviders.AsNoTracking()
+                .AnyAsync(p => p.Id == providerId, ct);
+            if (!providerExists) return Results.NotFound();
+
+            var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+            var now = DateTimeOffset.UtcNow;
+            var row = new AiProviderAccount
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ProviderId = providerId,
+                Label = dto.Label.Trim(),
+                EncryptedApiKey = protector.Protect(dto.ApiKey),
+                ApiKeyHint = $"…{dto.ApiKey[^4..]}",
+                MonthlyRequestCap = dto.MonthlyRequestCap,
+                RequestsUsedThisMonth = 0,
+                Priority = dto.Priority,
+                ExhaustedUntil = null,
+                IsActive = dto.IsActive,
+                PeriodMonthKey = now.ToString("yyyy-MM"),
+                CreatedAt = now,
+                UpdatedAt = now,
+                UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier),
+            };
+            db.AiProviderAccounts.Add(row);
+            await SaveWithAuditAsync(db, http, "AiProviderAccountCreated", row.Id,
+                $"provider={providerId} label={row.Label}", ct);
+            return Results.Created(
+                $"/v1/admin/ai/providers/{providerId}/accounts/{row.Id}",
+                new { row.Id, row.Label, row.ApiKeyHint });
+        }).RequireRateLimiting("PerUserWrite");
+
+        group.MapPut("/providers/{providerId}/accounts/{accountId}", async (
+            string providerId,
+            string accountId,
+            AiProviderAccountUpsertDto dto,
+            LearnerDbContext db,
+            IDataProtectionProvider dpProvider,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var row = await db.AiProviderAccounts
+                .FirstOrDefaultAsync(a => a.Id == accountId && a.ProviderId == providerId, ct);
+            if (row is null) return Results.NotFound();
+
+            if (!string.IsNullOrWhiteSpace(dto.Label)) row.Label = dto.Label.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.ApiKey))
+            {
+                if (dto.ApiKey.Length < 16)
+                    return Results.BadRequest(new { error = "ApiKey must be at least 16 chars." });
+                var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+                row.EncryptedApiKey = protector.Protect(dto.ApiKey);
+                row.ApiKeyHint = $"…{dto.ApiKey[^4..]}";
+            }
+            if (dto.MonthlyRequestCap is < 1)
+                return Results.BadRequest(new { error = "MonthlyRequestCap must be null or >= 1." });
+            row.MonthlyRequestCap = dto.MonthlyRequestCap;
+            row.Priority = dto.Priority;
+            row.IsActive = dto.IsActive;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            await SaveWithAuditAsync(db, http, "AiProviderAccountUpdated", row.Id,
+                $"provider={providerId} label={row.Label}", ct);
+            return Results.Ok(new { row.Id, row.Label, row.ApiKeyHint });
+        }).RequireRateLimiting("PerUserWrite");
+
+        group.MapDelete("/providers/{providerId}/accounts/{accountId}", async (
+            string providerId,
+            string accountId,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var row = await db.AiProviderAccounts
+                .FirstOrDefaultAsync(a => a.Id == accountId && a.ProviderId == providerId, ct);
+            if (row is null) return Results.NotFound();
+            row.IsActive = false;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            await SaveWithAuditAsync(db, http, "AiProviderAccountDeactivated", row.Id,
+                $"provider={providerId} label={row.Label}", ct);
+            return Results.NoContent();
+        }).RequireRateLimiting("PerUserWrite");
+
+        // Manual "release from quarantine + reset counter" — mostly for ops
+        // when an account was wrongly 401'd or to test failover. Audited.
+        group.MapPost("/providers/{providerId}/accounts/{accountId}/reset", async (
+            string providerId,
+            string accountId,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var row = await db.AiProviderAccounts
+                .FirstOrDefaultAsync(a => a.Id == accountId && a.ProviderId == providerId, ct);
+            if (row is null) return Results.NotFound();
+            var now = DateTimeOffset.UtcNow;
+            row.RequestsUsedThisMonth = 0;
+            row.ExhaustedUntil = null;
+            row.PeriodMonthKey = now.ToString("yyyy-MM");
+            row.UpdatedAt = now;
+            row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            await SaveWithAuditAsync(db, http, "AiProviderAccountReset", row.Id,
+                $"provider={providerId} label={row.Label}", ct);
+            return Results.Ok(new { row.Id, row.RequestsUsedThisMonth, row.ExhaustedUntil });
+        }).RequireRateLimiting("PerUserWrite");
+
+        // Phase 4: per-account connectivity probe. Same classifier as the
+        // provider-level probe but uses the account's PAT.
+        group.MapPost("/providers/{providerId}/accounts/{accountId}/test", async (
+            string providerId,
+            string accountId,
+            IAiProviderConnectionTester tester,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var exists = await db.AiProviderAccounts.AsNoTracking()
+                .AnyAsync(a => a.Id == accountId && a.ProviderId == providerId, ct);
+            if (!exists) return Results.NotFound();
+            var result = await tester.TestAccountAsync(providerId, accountId, ct);
+            await SaveWithAuditAsync(db, http,
+                result.Status == AiProviderTestStatuses.Ok ? "AiProviderAccountTested" : "AiProviderAccountTestFailed",
+                accountId,
+                $"provider={providerId} status={result.Status} latency={result.LatencyMs}ms", ct);
+            return Results.Ok(new
+            {
+                status = result.Status,
+                errorMessage = result.ErrorMessage,
+                latencyMs = result.LatencyMs,
+                testedAt = result.TestedAt,
+            });
+        }).RequireRateLimiting("PerUserWrite");
+
+        // ═══ Per-feature routing overrides (Phase 7) ═══════════════════════
+        // GET   /v1/admin/ai/feature-routes              → list all rows + known feature codes
+        // POST  /v1/admin/ai/feature-routes              → upsert a single route
+        // POST  /v1/admin/ai/feature-routes/bulk-copilot → flip the canonical bulk-route set to copilot
+        // DELETE /v1/admin/ai/feature-routes/{featureCode}
+        group.MapGet("/feature-routes", async (LearnerDbContext db, CancellationToken ct) =>
+        {
+            var rows = await db.AiFeatureRoutes.AsNoTracking()
+                .OrderBy(r => r.FeatureCode)
+                .Select(r => new
+                {
+                    r.Id, r.FeatureCode, r.ProviderCode, r.Model, r.IsActive,
+                    r.CreatedAt, r.UpdatedAt, r.UpdatedByAdminId,
+                })
+                .ToListAsync(ct);
+            return Results.Ok(new
+            {
+                rows,
+                knownFeatureCodes = AiFeatureRouteResolver.KnownFeatureCodes,
+                copilotBulkRouteTargets = AiFeatureRouteResolver.CopilotBulkRouteTargets,
+            });
+        });
+
+        group.MapPost("/feature-routes", async (
+            AiFeatureRouteUpsertDto dto,
+            LearnerDbContext db,
+            IAiFeatureRouteResolver resolver,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(dto.FeatureCode) || !resolver.IsKnownFeatureCode(dto.FeatureCode))
+                return Results.BadRequest(new { error = "Unknown feature code." });
+            if (string.IsNullOrWhiteSpace(dto.ProviderCode))
+                return Results.BadRequest(new { error = "ProviderCode is required." });
+
+            var providerExists = await db.AiProviders.AsNoTracking()
+                .AnyAsync(p => p.Code == dto.ProviderCode && p.IsActive, ct);
+            if (!providerExists)
+                return Results.BadRequest(new { error = $"Provider '{dto.ProviderCode}' is not registered or not active." });
+
+            var now = DateTimeOffset.UtcNow;
+            var row = await db.AiFeatureRoutes.FirstOrDefaultAsync(r => r.FeatureCode == dto.FeatureCode, ct);
+            var auditEvent = row is null ? "AiFeatureRouteCreated" : "AiFeatureRouteUpdated";
+            if (row is null)
+            {
+                row = new AiFeatureRoute
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    FeatureCode = dto.FeatureCode,
+                    CreatedAt = now,
+                };
+                db.AiFeatureRoutes.Add(row);
+            }
+            row.ProviderCode = dto.ProviderCode;
+            row.Model = string.IsNullOrWhiteSpace(dto.Model) ? null : dto.Model.Trim();
+            row.IsActive = dto.IsActive;
+            row.UpdatedAt = now;
+            row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            await SaveWithAuditAsync(db, http, auditEvent, row.Id,
+                $"feature={dto.FeatureCode} provider={dto.ProviderCode} active={dto.IsActive}", ct);
+            return Results.Ok(new { row.Id, row.FeatureCode, row.ProviderCode, row.Model, row.IsActive });
+        }).RequireRateLimiting("PerUserWrite");
+
+        group.MapDelete("/feature-routes/{featureCode}", async (
+            string featureCode, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
+        {
+            var row = await db.AiFeatureRoutes.FirstOrDefaultAsync(r => r.FeatureCode == featureCode, ct);
+            if (row is null) return Results.NotFound();
+            db.AiFeatureRoutes.Remove(row);
+            await SaveWithAuditAsync(db, http, "AiFeatureRouteDeleted", row.Id,
+                $"feature={featureCode}", ct);
+            return Results.NoContent();
+        }).RequireRateLimiting("PerUserWrite");
+
+        // Bulk-route action — flips the canonical set of feature codes to
+        // route through the Copilot provider. Refuses when no Copilot row
+        // is registered + active so the UI can disable the button.
+        group.MapPost("/feature-routes/bulk-copilot", async (
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            const string copilot = "copilot";
+            var copilotActive = await db.AiProviders.AsNoTracking()
+                .AnyAsync(p => p.Code == copilot && p.IsActive, ct);
+            if (!copilotActive)
+                return Results.BadRequest(new { error = "Copilot provider is not registered or not active." });
+
+            var now = DateTimeOffset.UtcNow;
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var existing = await db.AiFeatureRoutes
+                .Where(r => AiFeatureRouteResolver.CopilotBulkRouteTargets.Contains(r.FeatureCode))
+                .ToListAsync(ct);
+            var existingByCode = existing.ToDictionary(r => r.FeatureCode, StringComparer.OrdinalIgnoreCase);
+
+            var changed = new List<string>();
+            foreach (var featureCode in AiFeatureRouteResolver.CopilotBulkRouteTargets)
+            {
+                if (existingByCode.TryGetValue(featureCode, out var row))
+                {
+                    if (string.Equals(row.ProviderCode, copilot, StringComparison.OrdinalIgnoreCase)
+                        && row.IsActive)
+                    {
+                        continue;
+                    }
+                    row.ProviderCode = copilot;
+                    row.IsActive = true;
+                    row.UpdatedAt = now;
+                    row.UpdatedByAdminId = adminId;
+                }
+                else
+                {
+                    db.AiFeatureRoutes.Add(new AiFeatureRoute
+                    {
+                        Id = Guid.NewGuid().ToString("N"),
+                        FeatureCode = featureCode,
+                        ProviderCode = copilot,
+                        Model = null,
+                        IsActive = true,
+                        CreatedAt = now,
+                        UpdatedAt = now,
+                        UpdatedByAdminId = adminId,
+                    });
+                }
+                changed.Add(featureCode);
+            }
+
+            await SaveWithAuditAsync(db, http, "AiFeatureRoutesBulkCopilot", "*",
+                $"changed={string.Join(',', changed)}", ct);
+            return Results.Ok(new { changed });
         }).RequireRateLimiting("PerUserWrite");
 
         // ═══ Credit ledger (Slice 6) ═══════════════════════════════════════
@@ -705,6 +1075,13 @@ public sealed record AiProviderUpsertDto(
     int FailoverPriority,
     bool IsActive);
 
+public sealed record AiProviderAccountUpsertDto(
+    string Label,
+    string? ApiKey,
+    int? MonthlyRequestCap,
+    int Priority,
+    bool IsActive);
+
 public sealed record AiCreditGrantDto(
     int Tokens,
     decimal CostUsd,
@@ -712,3 +1089,9 @@ public sealed record AiCreditGrantDto(
     string? Description,
     string? ReferenceId,
     DateTimeOffset? ExpiresAt);
+
+public sealed record AiFeatureRouteUpsertDto(
+    string FeatureCode,
+    string ProviderCode,
+    string? Model,
+    bool IsActive);

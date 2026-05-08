@@ -155,6 +155,93 @@ public class AiUsageRecorderTests
         var row = Assert.Single(await db.AiUsageRecords.ToListAsync());
         Assert.Equal(AiFeatureCodes.Unclassified, row.FeatureCode);
     }
+
+    /// <summary>
+    /// Phase 3: per-account analytics. The recorder must persist
+    /// <c>AccountId</c> and <c>FailoverTrace</c> for both success (winning
+    /// account) and failure (last attempted account + trail) outcomes. These
+    /// fields are how the admin explorer answers "which Copilot PAT served
+    /// this turn?" and "did this turn failover and across which slots?"
+    /// without rebuilding the trail from log scraping.
+    /// </summary>
+    [Fact]
+    public async Task Recorder_PersistsAccountIdAndFailoverTrace_OnSuccess()
+    {
+        var options = NewInMemoryOptions();
+        await using var db = new LearnerDbContext(options);
+        var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
+
+        await recorder.RecordSuccessAsync(
+            new AiUsageContext(null, null, null, AiFeatureCodes.WritingGrade,
+                null, null, null, null, DateTimeOffset.UtcNow),
+            providerId: "copilot",
+            model: "gpt-4o",
+            keySource: AiKeySource.Platform,
+            usage: new AiUsage { PromptTokens = 10, CompletionTokens = 20 },
+            latencyMs: 99,
+            retryCount: 0,
+            policyTrace: null,
+            ct: CancellationToken.None,
+            accountId: "acct-backup",
+            failoverTrace: "primary:429 → backup:success");
+
+        var row = Assert.Single(await db.AiUsageRecords.ToListAsync());
+        Assert.Equal("acct-backup", row.AccountId);
+        Assert.Equal("primary:429 → backup:success", row.FailoverTrace);
+    }
+
+    [Fact]
+    public async Task Recorder_PersistsAccountIdAndFailoverTrace_OnFailure()
+    {
+        var options = NewInMemoryOptions();
+        await using var db = new LearnerDbContext(options);
+        var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
+
+        await recorder.RecordFailureAsync(
+            new AiUsageContext(null, null, null, AiFeatureCodes.WritingGrade,
+                null, null, null, null, DateTimeOffset.UtcNow),
+            providerId: "copilot",
+            model: "gpt-4o",
+            keySource: AiKeySource.Platform,
+            outcome: AiCallOutcome.ProviderError,
+            errorCode: "provider_429",
+            errorMessage: "pool exhausted",
+            latencyMs: 200,
+            retryCount: 0,
+            policyTrace: null,
+            ct: CancellationToken.None,
+            accountId: "acct-tertiary",
+            failoverTrace: "primary:429 → backup:429 → tertiary:429");
+
+        var row = Assert.Single(await db.AiUsageRecords.ToListAsync());
+        Assert.Equal("acct-tertiary", row.AccountId);
+        Assert.Equal("primary:429 → backup:429 → tertiary:429", row.FailoverTrace);
+        Assert.Equal(AiCallOutcome.ProviderError, row.Outcome);
+    }
+
+    [Fact]
+    public async Task Recorder_NullAccountId_OnSingleCredentialProvider()
+    {
+        var options = NewInMemoryOptions();
+        await using var db = new LearnerDbContext(options);
+        var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
+
+        await recorder.RecordSuccessAsync(
+            new AiUsageContext(null, null, null, AiFeatureCodes.WritingGrade,
+                null, null, null, null, DateTimeOffset.UtcNow),
+            providerId: "openai-platform",
+            model: "gpt-4o",
+            keySource: AiKeySource.Platform,
+            usage: new AiUsage(),
+            latencyMs: 50,
+            retryCount: 0,
+            policyTrace: null,
+            ct: CancellationToken.None);
+
+        var row = Assert.Single(await db.AiUsageRecords.ToListAsync());
+        Assert.Null(row.AccountId);
+        Assert.Null(row.FailoverTrace);
+    }
 }
 
 /// <summary>

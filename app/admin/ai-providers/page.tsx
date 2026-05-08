@@ -17,14 +17,32 @@ import {
   createAiProvider,
   updateAiProvider,
   deactivateAiProvider,
+  testAiProvider,
   type AiProviderRow,
+  type AiProviderTestStatus,
 } from '@/lib/ai-management-api';
-
+import { AiProviderAccountsModal } from '@/components/domain/ai-provider-accounts-modal';
+import { AiFeatureRoutesPanel } from '@/components/domain/ai-feature-routes-panel';
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 function fmtUsd(n: number): string {
   return `$${n.toFixed(2)}`;
+}
+
+function testStatusVariant(status: AiProviderTestStatus): 'success' | 'danger' | 'warning' | 'muted' {
+  switch (status) {
+    case 'ok':
+      return 'success';
+    case 'auth':
+      return 'danger';
+    case 'rate_limited':
+      return 'warning';
+    case 'network':
+    case 'unknown':
+    default:
+      return 'muted';
+  }
 }
 
 const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
@@ -189,6 +207,32 @@ const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
     failoverPriority: 110,
     isActive: true,
   },
+  'github-copilot': {
+    code: 'copilot',
+    name: 'GitHub Copilot / Models',
+    dialect: 'Copilot',
+    // GitHub Models inference endpoint. Org-attributed billing and a higher
+    // rate-limit tier are available via the org variant —
+    // https://models.github.ai/orgs/{ORG_LOGIN}/inference — paste the URL
+    // here when an org is configured.
+    baseUrl: 'https://models.github.ai/inference',
+    // Model ids use the {publisher}/{model} form on GitHub Models. The
+    // mini default keeps cost low for non-scoring text features. Override
+    // per-feature via /admin/ai-config when needed.
+    defaultModel: 'openai/gpt-4o-mini',
+    // GitHub Models pricing (May 2026, USD per 1k tokens) for the default
+    // model. Update if you change DefaultModel — pricing is read at usage
+    // recording time for cost estimates.
+    pricePer1kPromptTokens: 0.00015,
+    pricePer1kCompletionTokens: 0.0006,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 120,
+    // Default to inactive — admin must paste a GitHub PAT (scope:
+    // models:read) and verify before flipping live.
+    isActive: false,
+  },
 };
 
 export default function AiProvidersPage() {
@@ -198,6 +242,8 @@ export default function AiProvidersPage() {
   const [editing, setEditing] = useState<(AiProviderRow & { apiKey?: string }) | null>(null);
   const [creating, setCreating] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [accountsFor, setAccountsFor] = useState<AiProviderRow | null>(null);
+  const [testingCode, setTestingCode] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try { setRows(await fetchAiProviders()); setStatus('success'); } catch { setStatus('error'); }
@@ -219,6 +265,22 @@ export default function AiProvidersPage() {
   const deactivate = async (id: string) => {
     try { await deactivateAiProvider(id); setToast({ variant: 'success', message: 'Provider deactivated.' }); await load(); }
     catch (e) { setToast({ variant: 'error', message: `Failed: ${(e as Error).message}` }); }
+  };
+
+  const runTest = async (code: string) => {
+    setTestingCode(code);
+    try {
+      const result = await testAiProvider(code);
+      setToast({
+        variant: result.status === 'ok' ? 'success' : 'error',
+        message: `Test ${code}: ${result.status}${result.errorMessage ? ' — ' + result.errorMessage : ''} (${result.latencyMs} ms)`,
+      });
+      await load();
+    } catch (e) {
+      setToast({ variant: 'error', message: `Test failed: ${(e as Error).message}` });
+    } finally {
+      setTestingCode(null);
+    }
   };
 
   const applyPreset = (key: string) => {
@@ -255,9 +317,23 @@ export default function AiProvidersPage() {
     { key: 'pri', header: 'Priority', render: (p) => p.failoverPriority },
     { key: 'a', header: 'Active', render: (p) => <Badge variant={p.isActive ? 'success' : 'muted'}>{p.isActive ? 'Yes' : 'No'}</Badge> },
     {
+      key: 'last', header: 'Last test', render: (p) => p.lastTestStatus
+        ? (
+          <div className="flex flex-col gap-1">
+            <Badge variant={testStatusVariant(p.lastTestStatus)}>{p.lastTestStatus}</Badge>
+            {p.lastTestedAt && <span className="text-[10px] text-muted">{new Date(p.lastTestedAt).toLocaleString()}</span>}
+          </div>
+        )
+        : <span className="text-xs text-muted">—</span>,
+    },
+    {
       key: 'acts', header: 'Actions', render: (p) => (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="ghost" size="sm" onClick={() => { setEditing({ ...p, apiKey: '' }); setCreating(false); }}>Edit</Button>
+          <Button variant="ghost" size="sm" onClick={() => setAccountsFor(p)}>Accounts</Button>
+          <Button variant="ghost" size="sm" disabled={testingCode === p.code} onClick={() => void runTest(p.code)}>
+            {testingCode === p.code ? 'Testing…' : 'Test'}
+          </Button>
           {p.isActive && <Button variant="ghost" size="sm" onClick={() => void deactivate(p.id)}>Deactivate</Button>}
         </div>
       ),
@@ -292,6 +368,7 @@ export default function AiProvidersPage() {
               pricePer1kPromptTokens: 0, pricePer1kCompletionTokens: 0,
               retryCount: 2, circuitBreakerThreshold: 5, circuitBreakerWindowSeconds: 30,
               failoverPriority: 100, isActive: true,
+              lastTestedAt: null, lastTestStatus: null, lastTestError: null,
               createdAt: '', updatedAt: '', apiKey: '',
             });
           }}>
@@ -302,6 +379,10 @@ export default function AiProvidersPage() {
           <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id || p.code} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
+
+      <div className="mt-6">
+        <AiFeatureRoutesPanel />
+      </div>
 
       {editing && (
         <Modal open={true} onClose={() => { setEditing(null); setCreating(false); }} title={creating ? 'Register provider' : `Edit ${editing.code}`}>
@@ -325,6 +406,7 @@ export default function AiProvidersPage() {
                   { value: 'OpenAiCompatible', label: 'OpenAI-compatible' },
                   { value: 'Anthropic', label: 'Anthropic (native)' },
                   { value: 'Cloudflare', label: 'Cloudflare Workers AI (native)' },
+                  { value: 'Copilot', label: 'GitHub Copilot / Models' },
                   { value: 'Mock', label: 'Mock (dev only)' },
                 ]} />
               <Input label="Base URL" value={editing.baseUrl} onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })} />
@@ -353,6 +435,15 @@ export default function AiProvidersPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {accountsFor && (
+        <AiProviderAccountsModal
+          open={true}
+          providerId={accountsFor.id}
+          providerLabel={accountsFor.name || accountsFor.code}
+          onClose={() => setAccountsFor(null)}
+        />
       )}
     </AdminRouteWorkspace>
   );

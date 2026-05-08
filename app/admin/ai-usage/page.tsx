@@ -87,18 +87,26 @@ export default function AiUsagePage() {
 function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
   const [status, setStatus] = useState<PageStatus>('loading');
   const [summary, setSummary] = useState<AiUsageSummaryRow[]>([]);
+  const [accountSummary, setAccountSummary] = useState<AiUsageSummaryRow[]>([]);
   const [log, setLog] = useState<AiUsagePage | null>(null);
   const [trend, setTrend] = useState<{ day: string; totalTokens: number; calls: number }[]>([]);
+  const [accountFilter, setAccountFilter] = useState('');
 
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const [sum, page, tr] = await Promise.all([
+      const [sum, accSum, page, tr] = await Promise.all([
         fetchAiUsageSummary(undefined, 'feature'),
-        fetchAiUsage({ page: 1, pageSize: 25 }),
+        fetchAiUsageSummary(undefined, 'account'),
+        fetchAiUsage({
+          page: 1,
+          pageSize: 25,
+          accountId: accountFilter.trim() || undefined,
+        }),
         fetchAiUsageTrend(),
       ]);
       setSummary(sum.rows);
+      setAccountSummary(accSum.rows);
       setLog(page);
       setTrend(tr.rows);
       setStatus('success');
@@ -106,7 +114,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
       setStatus('error');
       onToast({ variant: 'error', message: `Failed to load usage data: ${(e as Error).message}` });
     }
-  }, [onToast]);
+  }, [onToast, accountFilter]);
 
   useEffect(() => { queueMicrotask(() => { void load(); }); }, [load]);
 
@@ -134,11 +142,57 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
     { key: 't', header: 'Time', render: (r) => new Date(r.createdAt).toLocaleString() },
     { key: 'f', header: 'Feature', render: (r) => <span className="font-mono text-xs">{r.featureCode}</span> },
     { key: 'p', header: 'Provider', render: (r) => r.providerId ?? '—' },
+    {
+      key: 'a',
+      header: 'Account',
+      render: (r) => (
+        <span className="font-mono text-xs">
+          {r.accountId ? r.accountId.slice(0, 8) : '—'}
+          {r.failoverTrace && (
+            <span className="ml-1 text-[10px] text-muted">⤳</span>
+          )}
+        </span>
+      ),
+    },
     { key: 'k', header: 'Key', render: (r) => <Badge variant={r.keySource === 'Byok' ? 'info' : 'muted'}>{r.keySource}</Badge> },
     { key: 'tk', header: 'Tokens', render: (r) => fmt(r.totalTokens) },
     { key: 'o', header: 'Outcome', render: (r) => <Badge variant={r.outcome === 'Success' ? 'success' : 'danger'}>{r.outcome}</Badge> },
     { key: 'l', header: 'Latency', render: (r) => `${r.latencyMs}ms` },
-    { key: 'tr', header: 'Policy trace', render: (r) => <span className="text-xs text-muted truncate max-w-xs">{r.policyTrace ?? ''}</span> },
+    {
+      key: 'tr',
+      header: 'Trace',
+      render: (r) => (
+        <span className="text-xs text-muted truncate max-w-xs block" title={[r.policyTrace, r.failoverTrace].filter(Boolean).join(' | ')}>
+          {r.failoverTrace ?? r.policyTrace ?? ''}
+        </span>
+      ),
+    },
+  ];
+
+  const accountColumns: Column<AiUsageSummaryRow>[] = [
+    { key: 'a', header: 'Account', render: (r) => <span className="font-mono text-xs">{r.key.slice(0, 12)}…</span> },
+    { key: 'p', header: 'Provider', render: (r) => r.providerId ?? '—' },
+    { key: 'calls', header: 'Calls', render: (r) => fmt(r.calls) },
+    { key: 'tokens', header: 'Tokens', render: (r) => fmt(r.totalTokens) },
+    {
+      key: 'fo',
+      header: 'Failovers',
+      render: (r) =>
+        (r.failovers ?? 0) > 0 ? (
+          <Badge variant="warning">{r.failovers}</Badge>
+        ) : (
+          <span className="text-muted">0</span>
+        ),
+    },
+    {
+      key: 'ok',
+      header: 'Success rate',
+      render: (r) => {
+        const total = (r.successes ?? 0) + (r.failures ?? 0);
+        const pct = total === 0 ? 100 : Math.round(((r.successes ?? 0) / total) * 100);
+        return <Badge variant={pct >= 95 ? 'success' : pct >= 80 ? 'warning' : 'danger'}>{pct}%</Badge>;
+      },
+    },
   ];
 
   return (
@@ -151,8 +205,28 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
       <AdminRoutePanel title="By feature">
         <DataTable data={summary} columns={summaryColumns} keyExtractor={(r) => r.key} />
       </AdminRoutePanel>
+      <AdminRoutePanel title="By account (multi-account providers)">
+        {accountSummary.length === 0 ? (
+          <EmptyState title="No multi-account usage yet" description="Records appear once a multi-account provider (e.g. Copilot) serves a request." />
+        ) : (
+          <DataTable data={accountSummary} columns={accountColumns} keyExtractor={(r) => `${r.providerId ?? ''}/${r.key}`} />
+        )}
+      </AdminRoutePanel>
       {log && (
         <AdminRoutePanel title={`Recent calls (${log.total} total)`}>
+          <div className="flex items-end gap-2 mb-3">
+            <Input
+              label="Filter by account ID"
+              value={accountFilter}
+              onChange={(e) => setAccountFilter(e.target.value)}
+              placeholder="paste account id…"
+              className="max-w-xs"
+            />
+            <Button variant="secondary" onClick={() => void load()}>Apply</Button>
+            {accountFilter && (
+              <Button variant="ghost" onClick={() => { setAccountFilter(''); }}>Clear</Button>
+            )}
+          </div>
           <DataTable data={log.rows} columns={logColumns} keyExtractor={(r) => r.id} />
         </AdminRoutePanel>
       )}

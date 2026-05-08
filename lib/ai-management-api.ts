@@ -29,7 +29,7 @@ export type AiQuotaRolloverPolicy = 'Expire' | 'RolloverCapped' | 'RolloverFull'
 export type AiOveragePolicy = 'Deny' | 'AllowWithCharge' | 'AutoUpgrade' | 'DegradeToSmallerModel';
 export type AiKillSwitchScope = 'PlatformKeysOnly' | 'AllCalls';
 export type AiCredentialMode = 'Auto' | 'ByokOnly' | 'PlatformOnly';
-export type AiProviderDialect = 'OpenAiCompatible' | 'Anthropic' | 'Cloudflare' | 'Mock';
+export type AiProviderDialect = 'OpenAiCompatible' | 'Anthropic' | 'Cloudflare' | 'Copilot' | 'Mock';
 export type AiCredentialStatus = 'Active' | 'Invalid' | 'Revoked';
 
 export interface AiUsageRow {
@@ -37,6 +37,8 @@ export interface AiUsageRow {
   userId: string | null;
   featureCode: string;
   providerId: string | null;
+  accountId: string | null;
+  failoverTrace: string | null;
   model: string | null;
   keySource: AiKeySource;
   rulebookVersion: string | null;
@@ -69,6 +71,10 @@ export interface AiUsageSummaryRow {
   costEstimateUsd?: number;
   successes?: number;
   failures?: number;
+  /** Phase 3: when groupBy=account, the parent providerId for the account. */
+  providerId?: string;
+  /** Phase 3: when groupBy=account, the count of records that recorded a multi-account failover trail. */
+  failovers?: number;
 }
 
 export interface AiQuotaPlan {
@@ -121,6 +127,15 @@ export interface AiGlobalPolicy {
   updatedByAdminId: string | null;
 }
 
+export type AiProviderTestStatus = 'ok' | 'auth' | 'rate_limited' | 'network' | 'unknown';
+
+export interface AiProviderTestResult {
+  status: AiProviderTestStatus;
+  errorMessage: string | null;
+  latencyMs: number;
+  testedAt: string;
+}
+
 export interface AiProviderRow {
   id: string;
   code: string;
@@ -138,6 +153,10 @@ export interface AiProviderRow {
   circuitBreakerWindowSeconds: number;
   failoverPriority: number;
   isActive: boolean;
+  /** Phase 4: last admin-initiated connection probe outcome. */
+  lastTestedAt: string | null;
+  lastTestStatus: AiProviderTestStatus | null;
+  lastTestError: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -236,6 +255,7 @@ export function fetchAiUsage(filters: {
   userId?: string;
   featureCode?: string;
   providerId?: string;
+  accountId?: string;
   outcome?: string;
   periodMonthKey?: string;
   periodDayKey?: string;
@@ -247,7 +267,7 @@ export function fetchAiUsage(filters: {
   return aiApi<AiUsagePage>(`/v1/admin/ai/usage?${qs.toString()}`);
 }
 
-export function fetchAiUsageSummary(periodMonthKey?: string, groupBy: 'feature' | 'provider' | 'outcome' | 'user' = 'feature') {
+export function fetchAiUsageSummary(periodMonthKey?: string, groupBy: 'feature' | 'provider' | 'outcome' | 'user' | 'account' = 'feature') {
   const qs = new URLSearchParams({ groupBy });
   if (periodMonthKey) qs.append('periodMonthKey', periodMonthKey);
   return aiApi<{ periodMonthKey: string; groupBy: string; rows: AiUsageSummaryRow[] }>(
@@ -306,6 +326,134 @@ export const updateAiProvider = (id: string, body: Record<string, unknown>) =>
   aiApi<AiProviderRow>(`/v1/admin/ai/providers/${id}`, { method: 'PUT', body: JSON.stringify(body) });
 export const deactivateAiProvider = (id: string) =>
   aiApi<void>(`/v1/admin/ai/providers/${id}`, { method: 'DELETE' });
+
+/**
+ * Phase 4: admin-initiated connectivity probe. Sends a 1-token chat
+ * completion to the provider and returns the classifier outcome plus a
+ * latency reading. Persisted server-side as `lastTestedAt` /
+ * `lastTestStatus` / `lastTestError` on the provider row.
+ */
+export const testAiProvider = (code: string) =>
+  aiApi<AiProviderTestResult>(`/v1/admin/ai/providers/${code}/test`, { method: 'POST' });
+
+// ═════════════════════════════════════════════════════════════════════════
+// Admin — provider account pool (multi-PAT failover)
+// ═════════════════════════════════════════════════════════════════════════
+
+export interface AiProviderAccountRow {
+  id: string;
+  providerId: string;
+  label: string;
+  apiKeyHint: string;
+  monthlyRequestCap: number | null;
+  requestsUsedThisMonth: number;
+  priority: number;
+  exhaustedUntil: string | null;
+  isActive: boolean;
+  periodMonthKey: string;
+  /** Phase 4: last admin-initiated connection probe outcome. */
+  lastTestedAt: string | null;
+  lastTestStatus: AiProviderTestStatus | null;
+  lastTestError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  updatedByAdminId: string | null;
+}
+
+export interface AiProviderAccountUpsertBody {
+  label: string;
+  apiKey?: string;
+  monthlyRequestCap: number | null;
+  priority: number;
+  isActive: boolean;
+}
+
+export const fetchAiProviderAccounts = (providerId: string) =>
+  aiApi<AiProviderAccountRow[]>(`/v1/admin/ai/providers/${providerId}/accounts`);
+
+export const createAiProviderAccount = (providerId: string, body: AiProviderAccountUpsertBody) =>
+  aiApi<{ id: string; label: string; apiKeyHint: string }>(
+    `/v1/admin/ai/providers/${providerId}/accounts`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+
+export const updateAiProviderAccount = (
+  providerId: string,
+  accountId: string,
+  body: AiProviderAccountUpsertBody,
+) =>
+  aiApi<{ id: string; label: string; apiKeyHint: string }>(
+    `/v1/admin/ai/providers/${providerId}/accounts/${accountId}`,
+    { method: 'PUT', body: JSON.stringify(body) },
+  );
+
+export const deactivateAiProviderAccount = (providerId: string, accountId: string) =>
+  aiApi<void>(`/v1/admin/ai/providers/${providerId}/accounts/${accountId}`, { method: 'DELETE' });
+
+export const resetAiProviderAccount = (providerId: string, accountId: string) =>
+  aiApi<{ id: string; requestsUsedThisMonth: number; exhaustedUntil: string | null }>(
+    `/v1/admin/ai/providers/${providerId}/accounts/${accountId}/reset`,
+    { method: 'POST' },
+  );
+
+/** Phase 4: per-account connectivity probe — same classifier as testAiProvider. */
+export const testAiProviderAccount = (providerId: string, accountId: string) =>
+  aiApi<AiProviderTestResult>(
+    `/v1/admin/ai/providers/${providerId}/accounts/${accountId}/test`,
+    { method: 'POST' },
+  );
+
+// ═════════════════════════════════════════════════════════════════════════
+// Admin — per-feature routing (Phase 7)
+// ═════════════════════════════════════════════════════════════════════════
+
+export interface AiFeatureRouteRow {
+  id: string;
+  featureCode: string;
+  providerCode: string;
+  model: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  updatedByAdminId: string | null;
+}
+
+export interface AiFeatureRoutesResponse {
+  rows: AiFeatureRouteRow[];
+  knownFeatureCodes: string[];
+  copilotBulkRouteTargets: string[];
+}
+
+export const fetchAiFeatureRoutes = () =>
+  aiApi<AiFeatureRoutesResponse>('/v1/admin/ai/feature-routes');
+
+export const upsertAiFeatureRoute = (input: {
+  featureCode: string;
+  providerCode: string;
+  model?: string | null;
+  isActive: boolean;
+}) =>
+  aiApi<AiFeatureRouteRow>('/v1/admin/ai/feature-routes', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+
+export const deleteAiFeatureRoute = (featureCode: string) =>
+  aiApi<void>(`/v1/admin/ai/feature-routes/${encodeURIComponent(featureCode)}`, {
+    method: 'DELETE',
+  });
+
+/**
+ * Bulk-route action — flips the canonical Phase 7 set of feature codes to
+ * route through the Copilot provider. Server enforces that the Copilot row
+ * is registered + active and refuses with 400 otherwise; the UI uses that
+ * to grey out the action.
+ */
+export const bulkRouteFeaturesToCopilot = () =>
+  aiApi<{ changed: string[] }>(
+    '/v1/admin/ai/feature-routes/bulk-copilot',
+    { method: 'POST' },
+  );
 
 // ═════════════════════════════════════════════════════════════════════════
 // Admin — credit ledger per user

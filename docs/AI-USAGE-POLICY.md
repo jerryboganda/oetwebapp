@@ -232,3 +232,47 @@ version of this document:
 - Every AI call produces exactly one `AiUsageRecord` row, regardless of
   outcome (success, provider error, quota denied, kill-switch denied).
 - `AiCredentialMode=platform-only` cannot be overridden by a BYOK feature flag.
+
+---
+
+## 18. GitHub Copilot / GitHub Models provider
+
+GitHub Copilot ships as a registered provider via the **GitHub Models REST
+API** — OpenAI-compatible chat-completions at
+`https://models.github.ai/inference/chat/completions`. Wired through the
+existing `IAiGatewayService` like any other provider; no policy bypass.
+
+**Setup**
+
+- Register at `/admin/ai-providers` → preset **GitHub Copilot / Models**
+  (sets `Code = "copilot"`, `Dialect = Copilot`).
+- Paste a fine-grained GitHub PAT, scope `models:read`. Stored encrypted
+  via `IDataProtectionProvider` purpose `"AiProvider.PlatformKey.v1"`.
+- Default `IsActive = false` until privacy review completes (writing
+  samples and conversation transcripts may carry patient-style PII).
+- For org-attributed billing / higher rate limits, swap the base URL to
+  `https://models.github.ai/orgs/{ORG_LOGIN}/inference`.
+
+**Auth modes**
+
+- **Platform PAT**: default. Per-feature platform-only allowlists in
+  `IAiCredentialResolver` apply unchanged (scoring features refuse BYOK).
+- **Admin BYOK PAT**: pasted as `ApiKey`, treated identically.
+- **Per-learner GitHub OAuth: NOT supported** — students aren't expected
+  to own Copilot subscriptions, and per-user GitHub identity would
+  cross-contaminate `AiUsageRecord.UserId`.
+
+**Boundaries**
+
+- Text completions only. **Voice** (TTS / ASR) stays on
+  `IConversationTtsProviderSelector`, `IConversationAsrProviderSelector`,
+  and `IPronunciationAsrProviderSelector` (ElevenLabs / Azure / Whisper /
+  Deepgram). ElevenLabs config remains at
+  `/admin/content/conversation/settings`.
+- **Streaming and tool calling are disabled** for phase 1. Both would
+  break the "exactly one `AiUsageRecord` per `CompleteAsync`" invariant.
+- Pricing fields on the `AiProviders` row drive cost reporting; defaults
+  target `openai/gpt-4o-mini`. Update if `DefaultModel` changes.
+
+See [`docs/AI-COPILOT-SDK-INTEGRATION.md`](AI-COPILOT-SDK-INTEGRATION.md)
+for the full architecture.

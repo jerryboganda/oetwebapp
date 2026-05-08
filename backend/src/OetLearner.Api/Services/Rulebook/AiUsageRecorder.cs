@@ -36,7 +36,9 @@ public interface IAiUsageRecorder
         int latencyMs,
         int retryCount,
         string? policyTrace,
-        CancellationToken ct);
+        CancellationToken ct,
+        string? accountId = null,
+        string? failoverTrace = null);
 
     /// <summary>Record a call that did not succeed. <paramref name="outcome"/>
     /// must not be <see cref="AiCallOutcome.Success"/>.</summary>
@@ -51,7 +53,9 @@ public interface IAiUsageRecorder
         int latencyMs,
         int retryCount,
         string? policyTrace,
-        CancellationToken ct);
+        CancellationToken ct,
+        string? accountId = null,
+        string? failoverTrace = null);
 }
 
 /// <summary>
@@ -82,7 +86,9 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
         int latencyMs,
         int retryCount,
         string? policyTrace,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? accountId = null,
+        string? failoverTrace = null)
         => PersistAsync(
             context,
             providerId,
@@ -95,6 +101,8 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
             latencyMs: latencyMs,
             retryCount: retryCount,
             policyTrace: policyTrace,
+            accountId: accountId,
+            failoverTrace: failoverTrace,
             ct);
 
     public Task RecordFailureAsync(
@@ -108,7 +116,9 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
         int latencyMs,
         int retryCount,
         string? policyTrace,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? accountId = null,
+        string? failoverTrace = null)
     {
         if (outcome == AiCallOutcome.Success)
         {
@@ -127,6 +137,8 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
             latencyMs: latencyMs,
             retryCount: retryCount,
             policyTrace: policyTrace,
+            accountId: accountId,
+            failoverTrace: failoverTrace,
             ct);
     }
 
@@ -142,6 +154,8 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
         int latencyMs,
         int retryCount,
         string? policyTrace,
+        string? accountId,
+        string? failoverTrace,
         CancellationToken ct)
     {
         try
@@ -176,6 +190,8 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
                 LatencyMs = latencyMs,
                 RetryCount = retryCount,
                 PolicyTrace = Truncate(policyTrace, 256),
+                AccountId = Truncate(accountId, 64),
+                FailoverTrace = Truncate(failoverTrace, 1024),
                 CreatedAt = createdAt,
                 PeriodMonthKey = createdAt.ToString("yyyy-MM"),
                 PeriodDayKey = createdAt.ToString("yyyy-MM-dd"),

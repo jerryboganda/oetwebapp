@@ -69,6 +69,7 @@ public enum AiCallOutcome
 [Index(nameof(UserId), nameof(CreatedAt))]
 [Index(nameof(FeatureCode), nameof(CreatedAt))]
 [Index(nameof(ProviderId), nameof(CreatedAt))]
+[Index(nameof(AccountId), nameof(CreatedAt))]
 [Index(nameof(CreatedAt))]
 public class AiUsageRecord
 {
@@ -104,6 +105,23 @@ public class AiUsageRecord
     /// <c>openrouter</c>, <c>mock</c>). Null if the call was refused.</summary>
     [MaxLength(64)]
     public string? ProviderId { get; set; }
+
+    /// <summary>For multi-account providers (e.g. Copilot multi-PAT pool),
+    /// the <see cref="AiProviderAccount.Id"/> that ultimately served the
+    /// call. Null when the provider is single-credential or when the call
+    /// was refused before account selection. Per Phase 3 invariant: this
+    /// is the LAST account tried — failover hops are recorded in
+    /// <see cref="FailoverTrace"/>, not as separate rows.</summary>
+    [MaxLength(64)]
+    public string? AccountId { get; set; }
+
+    /// <summary>Compact human-readable failover trail when the provider
+    /// retried across multiple accounts. Format
+    /// <c>"primary:429 → backup:success"</c>. Null when no failover
+    /// happened (single-shot call). Capped at 1024 chars; longer trails
+    /// are truncated by the recorder.</summary>
+    [MaxLength(1024)]
+    public string? FailoverTrace { get; set; }
 
     /// <summary>Model identifier sent to the provider (e.g. <c>gpt-4o</c>,
     /// <c>claude-3-5-sonnet-latest</c>). Null if the call was refused.</summary>
