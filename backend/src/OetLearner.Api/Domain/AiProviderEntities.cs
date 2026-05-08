@@ -24,7 +24,33 @@ public enum AiProviderDialect
     /// BaseUrl default: <c>https://models.github.ai/inference</c>.
     /// </summary>
     Copilot = 3,
+    /// <summary>Azure Cognitive Services Speech — TTS.</summary>
+    AzureTts = 10,
+    /// <summary>ElevenLabs synthesis API.</summary>
+    ElevenLabsTts = 11,
+    /// <summary>Azure Cognitive Services Speech — ASR (speech-to-text).</summary>
+    AzureAsr = 12,
+    /// <summary>OpenAI Whisper transcription (or compatible).</summary>
+    WhisperAsr = 13,
+    /// <summary>Azure Pronunciation Assessment (phoneme scoring).</summary>
+    AzurePhoneme = 14,
     Mock = 99,
+}
+
+/// <summary>Capability category for an <see cref="AiProvider"/> row.
+/// Drives the <c>/admin/ai-providers</c> tab filter and (Phase 6+) the
+/// voice-selector registry. <c>TextChat</c> is the default for every row
+/// pre-Phase 6.</summary>
+public enum AiProviderCategory
+{
+    /// <summary>OpenAI-compatible / Anthropic / Copilot chat completions.</summary>
+    TextChat = 0,
+    /// <summary>Text-to-speech synthesis.</summary>
+    Tts = 1,
+    /// <summary>Automatic speech recognition (transcription).</summary>
+    Asr = 2,
+    /// <summary>Phoneme-level pronunciation scoring.</summary>
+    Phoneme = 3,
 }
 
 /// <summary>
@@ -52,6 +78,13 @@ public class AiProvider
     public string Name { get; set; } = default!;
 
     public AiProviderDialect Dialect { get; set; } = AiProviderDialect.OpenAiCompatible;
+
+    /// <summary>Capability category. Phase 6: lets the admin UI tab the
+    /// providers list by capability and lets voice selectors find rows
+    /// without mis-classifying a chat provider as a voice provider.
+    /// Defaults to <c>TextChat</c> so all pre-Phase-6 rows behave
+    /// identically.</summary>
+    public AiProviderCategory Category { get; set; } = AiProviderCategory.TextChat;
 
     [MaxLength(512)]
     public string BaseUrl { get; set; } = default!;

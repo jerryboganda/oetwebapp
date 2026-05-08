@@ -682,6 +682,9 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
+                    b.Property<int>("Category")
+                        .HasColumnType("integer");
+
                     b.Property<int>("CircuitBreakerThreshold")
                         .HasColumnType("integer");
 

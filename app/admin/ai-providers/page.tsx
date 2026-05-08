@@ -245,6 +245,7 @@ export default function AiProvidersPage() {
   const [toast, setToast] = useState<ToastState>(null);
   const [accountsFor, setAccountsFor] = useState<AiProviderRow | null>(null);
   const [testingCode, setTestingCode] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<AiProviderRow['category'] | 'All'>('All');
 
   const load = useCallback(async () => {
     try { setRows(await fetchAiProviders()); setStatus('success'); } catch { setStatus('error'); }
@@ -312,6 +313,7 @@ export default function AiProvidersPage() {
     { key: 'code', header: 'Code', render: (p) => <span className="font-mono">{p.code}</span> },
     { key: 'name', header: 'Name', render: (p) => p.name },
     { key: 'd', header: 'Dialect', render: (p) => p.dialect },
+    { key: 'cat', header: 'Category', render: (p) => <Badge variant={p.category === 'TextChat' ? 'info' : 'success'}>{p.category}</Badge> },
     { key: 'u', header: 'Base URL', render: (p) => <span className="text-xs text-muted">{p.baseUrl}</span> },
     { key: 'k', header: 'Key', render: (p) => <span className="font-mono text-xs">{p.apiKeyHint}</span> },
     { key: 'pr', header: 'Price 1k in/out', render: (p) => `${fmtUsd(p.pricePer1kPromptTokens)}/${fmtUsd(p.pricePer1kCompletionTokens)}` },
@@ -364,7 +366,7 @@ export default function AiProvidersPage() {
           <Button variant="primary" onClick={() => {
             setCreating(true);
             setEditing({
-              id: '', code: '', name: '', dialect: 'OpenAiCompatible',
+              id: '', code: '', name: '', dialect: 'OpenAiCompatible', category: 'TextChat',
               baseUrl: '', apiKeyHint: '', defaultModel: '', allowedModelsCsv: '',
               pricePer1kPromptTokens: 0, pricePer1kCompletionTokens: 0,
               retryCount: 2, circuitBreakerThreshold: 5, circuitBreakerWindowSeconds: 30,
@@ -377,7 +379,24 @@ export default function AiProvidersPage() {
           </Button>
         </div>
         <AdminRoutePanel title="Registered providers">
-          <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id || p.code} />
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted">Filter by category:</span>
+            {(['All', 'TextChat', 'Tts', 'Asr', 'Phoneme'] as const).map((cat) => (
+              <Button
+                key={cat}
+                variant={categoryFilter === cat ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => setCategoryFilter(cat)}
+              >
+                {cat}
+              </Button>
+            ))}
+          </div>
+          <DataTable
+            data={categoryFilter === 'All' ? rows : rows.filter((r) => r.category === categoryFilter)}
+            columns={columns}
+            keyExtractor={(p) => p.id || p.code}
+          />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 
@@ -412,7 +431,20 @@ export default function AiProvidersPage() {
                   { value: 'Anthropic', label: 'Anthropic (native)' },
                   { value: 'Cloudflare', label: 'Cloudflare Workers AI (native)' },
                   { value: 'Copilot', label: 'GitHub Copilot / Models' },
+                  { value: 'AzureTts', label: 'Azure Speech — TTS' },
+                  { value: 'ElevenLabsTts', label: 'ElevenLabs — TTS' },
+                  { value: 'AzureAsr', label: 'Azure Speech — ASR' },
+                  { value: 'WhisperAsr', label: 'Whisper — ASR' },
+                  { value: 'AzurePhoneme', label: 'Azure Pronunciation Assessment' },
                   { value: 'Mock', label: 'Mock (dev only)' },
+                ]} />
+              <Select label="Category" value={editing.category}
+                onChange={(e) => setEditing({ ...editing, category: e.target.value as AiProviderRow['category'] })}
+                options={[
+                  { value: 'TextChat', label: 'Text chat' },
+                  { value: 'Tts', label: 'Text-to-speech' },
+                  { value: 'Asr', label: 'Speech-to-text (ASR)' },
+                  { value: 'Phoneme', label: 'Phoneme scoring' },
                 ]} />
               <Input label="Base URL" value={editing.baseUrl} onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })} />
               <Input label={creating ? 'API key' : 'API key (leave blank to keep)'} type="password" value={editing.apiKey ?? ''} onChange={(e) => setEditing({ ...editing, apiKey: e.target.value })} />

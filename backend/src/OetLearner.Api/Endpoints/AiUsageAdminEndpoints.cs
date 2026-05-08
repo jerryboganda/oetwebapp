@@ -401,7 +401,7 @@ public static class AiUsageAdminEndpoints
                 .OrderBy(p => p.FailoverPriority).ThenBy(p => p.Code)
                 .Select(p => new
                 {
-                    p.Id, p.Code, p.Name, p.Dialect, p.BaseUrl, p.ApiKeyHint,
+                    p.Id, p.Code, p.Name, p.Dialect, p.Category, p.BaseUrl, p.ApiKeyHint,
                     p.DefaultModel, p.ReasoningEffort, p.AllowedModelsCsv,
                     p.PricePer1kPromptTokens, p.PricePer1kCompletionTokens,
                     p.RetryCount, p.CircuitBreakerThreshold, p.CircuitBreakerWindowSeconds,
@@ -435,6 +435,7 @@ public static class AiUsageAdminEndpoints
                 Code = dto.Code.Trim().ToLowerInvariant(),
                 Name = dto.Name.Trim(),
                 Dialect = dto.Dialect,
+                Category = dto.Category,
                 BaseUrl = dto.BaseUrl.Trim(),
                 EncryptedApiKey = protector.Protect(dto.ApiKey),
                 ApiKeyHint = $"…{dto.ApiKey[^4..]}",
@@ -470,6 +471,7 @@ public static class AiUsageAdminEndpoints
             if (row is null) return Results.NotFound();
             row.Name = dto.Name?.Trim() ?? row.Name;
             row.Dialect = dto.Dialect;
+            row.Category = dto.Category;
             if (!string.IsNullOrWhiteSpace(dto.BaseUrl)) row.BaseUrl = dto.BaseUrl.Trim();
             if (!string.IsNullOrWhiteSpace(dto.ApiKey) && dto.ApiKey.Length >= 16)
             {
@@ -1062,6 +1064,7 @@ public sealed record AiProviderUpsertDto(
     string Code,
     string Name,
     AiProviderDialect Dialect,
+    AiProviderCategory Category,
     string BaseUrl,
     string? ApiKey,
     string? DefaultModel,

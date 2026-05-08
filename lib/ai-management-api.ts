@@ -29,7 +29,18 @@ export type AiQuotaRolloverPolicy = 'Expire' | 'RolloverCapped' | 'RolloverFull'
 export type AiOveragePolicy = 'Deny' | 'AllowWithCharge' | 'AutoUpgrade' | 'DegradeToSmallerModel';
 export type AiKillSwitchScope = 'PlatformKeysOnly' | 'AllCalls';
 export type AiCredentialMode = 'Auto' | 'ByokOnly' | 'PlatformOnly';
-export type AiProviderDialect = 'OpenAiCompatible' | 'Anthropic' | 'Cloudflare' | 'Copilot' | 'Mock';
+export type AiProviderDialect =
+  | 'OpenAiCompatible'
+  | 'Anthropic'
+  | 'Cloudflare'
+  | 'Copilot'
+  | 'AzureTts'
+  | 'ElevenLabsTts'
+  | 'AzureAsr'
+  | 'WhisperAsr'
+  | 'AzurePhoneme'
+  | 'Mock';
+export type AiProviderCategory = 'TextChat' | 'Tts' | 'Asr' | 'Phoneme';
 export type AiCredentialStatus = 'Active' | 'Invalid' | 'Revoked';
 
 export interface AiUsageRow {
@@ -141,6 +152,7 @@ export interface AiProviderRow {
   code: string;
   name: string;
   dialect: AiProviderDialect;
+  category: AiProviderCategory;
   baseUrl: string;
   apiKeyHint: string;
   defaultModel: string;

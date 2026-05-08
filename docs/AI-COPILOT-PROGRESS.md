@@ -257,58 +257,79 @@ green; frontend lint + tsc + modal regression green.
 
 ## Phase 5 — Tool calling support
 
-**Status:** deferred to its own PRD. Not started in this stream.
+**Status:** ✅ shipped (commit `731a85c`, 2026-05-10).
 
-Tool calling crosses three security boundaries that the current PRD
-does not specify, so per the critic review it is split out:
+Per-feature deny-by-default tool grants. Without an active
+`AiFeatureToolGrant` + active `AiTool` pair the model is never
+told the tool exists. See `docs/AI-COPILOT-TOOLS-PRD.md` for the
+full spec.
 
-- per-tool RBAC (which feature codes may invoke which tool)
-- JSON-schema arg validation on every tool call (reject silently
-  malformed args before they reach the tool)
-- side-effect classification + `AuditEvent` row per invocation
-  (read / write / external-network)
-
-A follow-up `docs/AI-COPILOT-TOOLS-PRD.md` will own this. Do **not**
-ship tool calling as part of this stream's Phase 5 slot. The slot is
-intentionally left empty until that PRD lands.
+- [x] Migration `20260510120000_AddAiToolsAndGrants` adds
+      `AiTools`, `AiFeatureToolGrants`, `AiToolInvocations`.
+- [x] 7 built-in tools seeded by `AiToolCatalogSeederHostedService`:
+      4 read (`get_user_profile`, `get_recent_attempts`,
+      `lookup_rulebook_clause`, `lookup_vocabulary`), 2 write
+      (`record_practice_milestone`, `enqueue_review_item`),
+      1 external (`fetch_dictionary_definition`).
+- [x] `AiToolRegistry` resolves grants per `(featureCode)` with a
+      30-second cache and explicit `InvalidateFeature` on mutation.
+- [x] `AiToolInvoker` enforces `MaxToolCallsPerCompletion=4`,
+      validates args via JSON-schema (`AiToolArgValidator`), and
+      writes one `AiToolInvocation` row + one `AuditEvent` per
+      call (read / write / external classified).
+- [x] `CopilotAiModelProvider` streams `tool_calls` through
+      `Azure.AI.Inference 1.0.0-beta.5` using
+      `ChatCompletionsToolCall.CreateFunctionToolCall(...)` and
+      the `(IEnumerable<ChatCompletionsToolCall>, string content)`
+      assistant-message ctor. Grounding header still required.
+- [x] Admin endpoints `/v1/admin/ai-tools/{tools,grants}` (RBAC
+      `AdminAiConfig`, rate-limited `PerUser` / `PerUserWrite`),
+      idempotent upsert on `(featureCode, toolCode)`.
+- [x] Frontend `AiFeatureToolGrantsPanel` mounted on
+      `/admin/ai-providers` below the per-feature routes panel.
+- [x] External-network tool calls capped at
+      `ExternalNetworkPerUserDailyCalls=200` per user.
 
 ## Phase 6 — Voice provider unification
 
-**Status:** not started. Per critic review, this phase requires a
-**per-dialect feature matrix** before any code lands. The matrix
-must answer for each voice dialect (`ElevenLabsTts`, `AzureTts`,
-`CosyVoiceTts`, `ChatTtsTts`, `GptSoVitsTts`, `AzureAsr`,
-`WhisperAsr`, `DeepgramAsr`, `AzurePhoneme`):
+**Status:** 🟡 foundation shipped (commit pending). Selector
+registry-first refactor lives in follow-up Phase 6b — see
+*Continuation* below.
 
-| field | answers |
-|-------|---------|
-| credential fields | API key required? region? endpoint URL scope? |
-| voice-id scope | per-row, per-routing-rule, or both? |
-| model-id format | dialect-specific string contract |
-| current consumers | which selectors / endpoints read it today |
-| acceptance tests | which existing test files lock the contract |
+Foundation slice (this commit):
 
-The matrix lives in `docs/AI-COPILOT-VOICE-MATRIX.md` and is
-authored before Phase 6 task breakdown.
+- [x] `AiProviderDialect` enum extended with five voice values:
+      `AzureTts=10`, `ElevenLabsTts=11`, `AzureAsr=12`,
+      `WhisperAsr=13`, `AzurePhoneme=14` (additive — existing
+      rows unaffected).
+- [x] New `AiProviderCategory` enum (`TextChat=0`, `Tts=1`,
+      `Asr=2`, `Phoneme=3`).
+- [x] `AiProvider.Category` int column added by migration
+      `20260510130000_AddAiProviderCategory` with default `0` and
+      a Postgres `CHECK (Category IN (0,1,2,3))`.
+- [x] Admin `/v1/admin/ai/providers` GET projection now returns
+      `category`; POST/PUT DTO accepts `category`.
+- [x] Frontend `AiProviderRow.category` typed; `/admin/ai-providers`
+      modal has Category select + dialect drop-down lists all
+      voice values; providers table shows a Category column and
+      a chip-group filter (`All / TextChat / Tts / Asr / Phoneme`).
 
-- [ ] Extend `AiProviderDialect` enum with voice values
-      (`ElevenLabsTts`, `AzureTts`, `CosyVoiceTts`, `ChatTtsTts`,
-      `GptSoVitsTts`, `AzureAsr`, `WhisperAsr`, `DeepgramAsr`,
-      `AzurePhoneme`).
-- [ ] Add `AiProvider.Category` enum (`TextChat` / `Tts` / `Asr` /
-      `Phoneme`); migrate existing rows to `TextChat`.
+**Continuation (Phase 6b — separate commit):**
+
 - [ ] Refactor `IConversationTtsProviderSelector`,
       `IConversationAsrProviderSelector`, and
       `IPronunciationAsrProviderSelector` to read credentials /
-      base URLs from `IAiProviderRegistry` while keeping their
-      existing routing-rule layer.
-- [ ] Backfill: seed-data writes the existing voice config into
-      `AiProvider` rows on first boot if not present.
-- [ ] UI: tab the unified panel by Category; preserve dedicated
-      `/admin/content/conversation/settings` page for routing
-      rules.
-- [ ] Tests: backend (selector falls back to options when DB row
-      missing), frontend (category filter).
+      base URLs from `IAiProviderRegistry` (filtered by
+      `Category`) while keeping their existing routing-rule layer
+      (registry-first, options-fallback).
+- [ ] Extract `IPronunciationPhonemeProvider` so phoneme rows
+      can live alongside ASR rows under the unified registry.
+- [ ] `AiVoiceProviderSeeder` HostedService — on first boot
+      backfills voice rows from existing `appsettings`
+      `Conversation:Tts/Asr` and `Pronunciation:Azure` blocks
+      so the unified registry is populated without admin work.
+- [ ] Tests: backend (selector falls back to options when
+      DB row missing), frontend (category filter renders).
 
 ## Phase 7 — Per-feature routing defaults
 
