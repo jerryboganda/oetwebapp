@@ -30,6 +30,10 @@ test.describe('Tutor review workflows @expert @smoke', () => {
     // assert the durable indicators instead — "Last saved:" timestamp and the "Unsaved" badge clearing.
     await expect(page.getByText(/last saved:/i)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByLabel('Comment for Purpose')).toHaveValue(purposeComment);
+    // DBG: dump dirty log before the unsaved assertion
+    await page.waitForTimeout(2000);
+    const log = await page.evaluate(() => (window as unknown as { __dirtyLog?: string[] }).__dirtyLog ?? []);
+    console.log('[DIRTY LOG]\n' + log.join('\n'));
     await expect(page.getByText(/unsaved/i)).toHaveCount(0);
 
     expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });

@@ -5,19 +5,38 @@ import { waitForSessionGuardToClear } from '../fixtures/auth';
 
 const keyboardModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
-async function fillAllRubricScores(page: Page, value = '5') {
-  // Capture aria-labels up front; the page can re-render (audio playback, draft
-  // auto-saves, AI panel updates) and invalidate nth-based locators mid-loop,
-  // which manifests as a `selectOption` test-timeout under cold dev load.
+async function fillAllRubricScores(page: Page, preferredValue = '5') {
+  // Capture aria-labels + each select's option values up front. Speaking reviews
+  // mix two rubric scales: linguistic criteria score 0–6 and the OET clinical
+  // criteria score 0–3, so a single hard-coded "5" is invalid for the clinical
+  // selects. Pick the highest available option that satisfies `preferredValue`
+  // (or the highest option overall when the preferred value is out of range).
   const scoreSelects = page.locator('select[aria-label^="Score for "]');
-  const labels = await scoreSelects.evaluateAll((nodes) =>
-    nodes.map((node) => (node as HTMLSelectElement).getAttribute('aria-label') ?? ''),
+  const entries = await scoreSelects.evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const select = node as HTMLSelectElement;
+      const optionValues = Array.from(select.options)
+        .map((option) => option.value)
+        .filter((value) => value !== '');
+      return {
+        label: select.getAttribute('aria-label') ?? '',
+        optionValues,
+      };
+    }),
   );
 
-  expect(labels.length, 'Expected at least one rubric score selector').toBeGreaterThan(0);
+  expect(entries.length, 'Expected at least one rubric score selector').toBeGreaterThan(0);
 
-  for (const label of labels) {
-    if (!label) continue;
+  for (const { label, optionValues } of entries) {
+    if (!label || optionValues.length === 0) continue;
+    const value = optionValues.includes(preferredValue)
+      ? preferredValue
+      // Pick the highest numeric option as the "good" score for criteria whose
+      // scale doesn't include the preferred value (e.g. clinical 0–3 selects).
+      : optionValues
+          .map((option) => ({ option, n: Number(option) }))
+          .filter((entry) => Number.isFinite(entry.n))
+          .sort((a, b) => b.n - a.n)[0]?.option ?? optionValues[0];
     await page.locator(`select[aria-label="${label.replace(/"/g, '\\"')}"]`).selectOption(value);
   }
 }
@@ -52,7 +71,13 @@ test.describe('Tutor review completion workflows @expert', () => {
 
     // The success toast auto-dismisses after 5s (components/ui/alert.tsx) which races test polling under cold dev load;
     // assert the durable indicators instead — "Unsaved" badge clearing and the persisted comment value.
-    await expect(page.getByText(/^Unsaved$/i)).toHaveCount(0, { timeout: 30_000 });
+    try {
+      await expect(page.getByText(/^Unsaved$/i)).toHaveCount(0, { timeout: 15_000 });
+    } catch (e) {
+      const log = await page.evaluate(() => (window as unknown as { __dirtyLog?: string[] }).__dirtyLog ?? []);
+      console.log('[DIRTY LOG]\n' + log.join('\n'));
+      throw e;
+    }
     await expect(page.getByLabel('Final overall comment')).toHaveValue(finalComment);
 
     await page.keyboard.press(`${keyboardModifier}+Enter`);

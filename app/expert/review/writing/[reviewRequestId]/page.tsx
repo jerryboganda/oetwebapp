@@ -125,7 +125,16 @@ export default function WritingReviewWorkspace() {
   const [selectedText, setSelectedText] = useState<{ text: string; start: number; end: number } | null>(null);
   const [pendingCriterion, setPendingCriterion] = useState<WritingCriterionKey | undefined>(undefined);
   const [draftVersion, setDraftVersion] = useState<number | undefined>(undefined);
-  const [isDirty, setIsDirty] = useState(false);
+  const [isDirty, _setIsDirty] = useState(false);
+  const setIsDirty = useCallback((next: boolean | ((prev: boolean) => boolean), tag?: string) => {
+    if (typeof window !== 'undefined') {
+      const w = window as unknown as { __dirtyLog?: string[] };
+      w.__dirtyLog ??= [];
+      const stack = new Error().stack?.split('\n').slice(2, 5).join(' || ') ?? '';
+      w.__dirtyLog.push(`${Date.now()} ${tag ?? '?'} ${String(next)} ${stack}`);
+    }
+    _setIsDirty(next);
+  }, []);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -172,7 +181,7 @@ export default function WritingReviewWorkspace() {
         setChecklist(DEFAULT_CHECKLIST);
         setDraftVersion(undefined);
         setLastSavedAt(null);
-        setIsDirty(false);
+        setIsDirty(false, 'load-init');
         const detail = await fetchWritingReviewDetail(reviewRequestId);
         if (cancelled) return;
         const [history, context] = await Promise.all([
@@ -242,7 +251,7 @@ export default function WritingReviewWorkspace() {
     const savedDraft = await saveDraftReview(payload);
     setDraftVersion(savedDraft.version);
     setLastSavedAt(savedDraft.savedAt);
-    setIsDirty(false);
+    setIsDirty(false, 'persistDraft');
     upsertReviewDraft(reviewRequestId, {
       scores: savedDraft.scores,
       criterionComments: savedDraft.criterionComments,
@@ -302,7 +311,7 @@ export default function WritingReviewWorkspace() {
       });
       analytics.track('review_submitted', { reviewRequestId, type: 'writing' });
       clearReviewDraft(reviewRequestId);
-      setIsDirty(false);
+      setIsDirty(false, 'submit');
       setToast({ variant: 'success', message: 'Review submitted successfully.' });
       try {
         window.sessionStorage.setItem('expertReviewQueueFlash', 'review-submitted');
@@ -334,7 +343,7 @@ export default function WritingReviewWorkspace() {
       setToast({ variant: 'success', message: 'Rework request submitted.' });
       setShowReworkPrompt(false);
       setReworkReason('');
-      setIsDirty(false);
+      setIsDirty(false, 'rework');
       try {
         window.sessionStorage.setItem('expertReviewQueueFlash', 'rework-submitted');
       } catch {
@@ -372,7 +381,7 @@ export default function WritingReviewWorkspace() {
       next.delete(criterion);
       return next;
     });
-    setIsDirty(true);
+    setIsDirty(true, 'handleScoreChange');
   };
 
   const handleTextSelection = () => {
@@ -416,7 +425,7 @@ export default function WritingReviewWorkspace() {
     });
     setSelectedText(null);
     setPendingCriterion(undefined);
-    setIsDirty(true);
+    setIsDirty(true, 'addAnchored');
     window.getSelection()?.removeAllRanges();
   };
 
@@ -515,7 +524,7 @@ export default function WritingReviewWorkspace() {
                           <p className="text-navy">{comment.text}</p>
                         </div>
                         {!workspaceMeta?.isReadOnly && (
-                          <button onClick={() => { setAnchoredComments((current) => current.filter((item) => item.id !== comment.id)); setIsDirty(true); }} className="text-muted hover:text-error text-xs shrink-0" aria-label="Remove comment">&times;</button>
+                          <button onClick={() => { setAnchoredComments((current) => current.filter((item) => item.id !== comment.id)); setIsDirty(true, 'removeAnchored'); }} className="text-muted hover:text-error text-xs shrink-0" aria-label="Remove comment">&times;</button>
                         )}
                       </div>
                     );
@@ -528,11 +537,11 @@ export default function WritingReviewWorkspace() {
               <WritingCaseNotesPanel
                 caseNotes={reviewDetail?.caseNotes ?? ''}
                 scratchpad={scratchpad}
-                onScratchpadChange={(value) => { setScratchpad(value); setIsDirty(true); }}
+                onScratchpadChange={(value) => { setScratchpad(value); setIsDirty(true, 'scratchpad'); }}
                 checklist={checklist}
                 onChecklistChange={(id, checked) => {
                   setChecklist((current) => current.map((item) => item.id === id ? { ...item, checked } : item));
-                  setIsDirty(true);
+                  setIsDirty(true, 'checklist');
                 }}
                 activeTab={caseNotesTab}
                 onTabChange={setCaseNotesTab}
@@ -635,7 +644,7 @@ export default function WritingReviewWorkspace() {
                 <Textarea
                   placeholder={`Comment on ${label.toLowerCase()}...`}
                   value={criterionComments[key] ?? ''}
-                  onChange={(event) => { setCriterionComments((current) => ({ ...current, [key]: event.target.value })); setIsDirty(true); }}
+                  onChange={(event) => { setCriterionComments((current) => ({ ...current, [key]: event.target.value })); setIsDirty(true, 'criterion-comment'); }}
                   rows={2}
                   className="mt-2"
                   aria-label={`Comment for ${label}`}
@@ -649,7 +658,7 @@ export default function WritingReviewWorkspace() {
                 label="Final Overall Comment"
                 placeholder="Provide a summary of the learner's performance..."
                 value={finalComment}
-                onChange={(event) => { setFinalComment(event.target.value); setIsDirty(true); }}
+                onChange={(event) => { setFinalComment(event.target.value); setIsDirty(true, 'final-comment'); }}
                 rows={5}
                 aria-label="Final overall comment"
                 disabled={workspaceMeta?.isReadOnly}
