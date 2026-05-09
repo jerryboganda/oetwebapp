@@ -50,6 +50,11 @@ function ListeningResultsContent() {
       throw lastErr instanceof Error ? lastErr : new Error('Could not load Listening result.');
     };
 
+    // The setState calls below kick off an async fetch lifecycle (loading →
+    // result/error). This is the canonical React data-fetching pattern and
+    // the React 19 set-state-in-effect rule's auto-fix would replace it with
+    // useReducer, which is overkill here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
 

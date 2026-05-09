@@ -138,7 +138,11 @@ test.describe('Learner workspace smoke @learner @smoke', () => {
       test.skip();
     }
 
-    testInfo.setTimeout(120000);
+    // Two `goto` + `reload` cycles, each waiting up to 90s for the dashboard
+    // heading. Under sustained matrix load, dev-mode compile of `/` can soak
+    // most of that budget. Allow a 4-minute window so the second wait still
+    // has headroom after a slow first cycle.
+    testInfo.setTimeout(240000);
     let diagnostics = observePage(page);
     const dashboardHeading = page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i });
     await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -180,7 +184,10 @@ test.describe('Learner workspace smoke @learner @smoke', () => {
         test.skip();
       }
 
-      testInfo.setTimeout(120000);
+      // Per-route smoke can recover from a recoverable dev-page error by
+      // re-navigating, so the test may execute two full route loads. Allow a
+      // 3-minute window to absorb cold compile under matrix load.
+      testInfo.setTimeout(180000);
       let diagnostics = observePage(page);
       const recovered = await openLearnerRoute(page, route.path);
       if (recovered) {

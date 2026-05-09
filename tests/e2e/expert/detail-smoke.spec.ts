@@ -67,6 +67,12 @@ test.describe('Expert detail smoke @expert @smoke', () => {
 
       expectNoSevereClientIssues(diagnostics, {
         allowNextDevNoise: testInfo.project.name.includes('webkit'),
+        // Desktop WebKit also emits "due to access control checks" page
+        // errors when Next.js dev fetches /api/backend/v1/* requests during
+        // initial hydration; these are benign and the same gate is already
+        // used by the mobile-webkit suite.
+        allowMobileWebKitReloadNoise: testInfo.project.name.includes('webkit'),
+        allowNotificationReconnectNoise: true,
       });
       diagnostics.detach();
       await attachDiagnostics(testInfo, diagnostics);

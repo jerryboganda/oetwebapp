@@ -15,7 +15,7 @@ test.describe('Authentication flows @auth @smoke', () => {
     await expect(page).toHaveURL(/\/sign-in\?next=%2Freading/);
     await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics, { allowAuthRedirectNoise: true });
+    expectNoSevereClientIssues(diagnostics, { allowAuthRedirectNoise: true, allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });

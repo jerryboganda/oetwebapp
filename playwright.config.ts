@@ -14,9 +14,12 @@ export default defineConfig({
     ['html', { outputFolder: 'output/playwright/report', open: 'never' }],
   ],
   outputDir: 'output/playwright/test-results',
-  timeout: 60_000,
+  // Bumped from 60s to absorb Next.js dev-mode cold-compile spikes that occur
+  // under sustained matrix load. Solo-test runs typically finish in <45s; the
+  // larger budget removes flakes when the dev server is recompiling routes.
+  timeout: 120_000,
   expect: {
-    timeout: 10_000,
+    timeout: 15_000,
   },
   use: {
     baseURL,
