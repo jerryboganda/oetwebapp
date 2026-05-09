@@ -65,8 +65,9 @@ export function AppShell({
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const routeMotionProps = getSurfaceMotion('route', reducedMotion);
   const presenceMode = getMotionPresenceMode(reducedMotion);
+  const isAdminWorkspace = workspaceRole === 'admin' || requiredRole === 'admin';
 
-  const shellBackdrop = (
+  const shellBackdrop = isAdminWorkspace ? null : (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
       <div className="absolute left-1/2 top-0 h-64 w-[42rem] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
       <div className="absolute -left-24 top-24 h-72 w-72 rounded-full bg-info/10 blur-3xl" />
@@ -96,7 +97,7 @@ export function AppShell({
           id="main-content"
           key={pathname}
           layout="position"
-            className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto py-4 lg:py-6', className)}
+          className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto py-4 lg:py-6', className)}
           {...routeMotionProps}
         >
           {children}

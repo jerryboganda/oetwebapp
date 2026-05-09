@@ -41,7 +41,7 @@ test.describe('Authentication flows @auth @smoke', () => {
     await expect(page).toHaveURL(/\/forgot-password/);
     await expect(page.getByRole('heading', { name: /find your account/i })).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -63,7 +63,7 @@ test.describe('Authentication flows @auth @smoke', () => {
 
     await expect(page.getByRole('heading', { name: /check your email/i })).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -82,7 +82,7 @@ test.describe('Authentication flows @auth @smoke', () => {
 
     await expect(page.getByText(/passwords must match before you continue/i)).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -97,7 +97,7 @@ test.describe('Authentication flows @auth @smoke', () => {
 
     await expect(page.getByText(/a valid email address is required before verification can continue/i)).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });

@@ -507,6 +507,15 @@ public sealed class ListeningLearnerService(
         var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
         if (relationalAttempt is not null)
         {
+            // Heartbeat is best-effort activity-tracking and races the submit
+            // POST: a 15s tick can land just after the attempt has been
+            // marked Submitted, which previously surfaced a 409 to the
+            // browser console. Treat already-finalised attempts as a no-op
+            // so the client's unmount race never produces a hard error.
+            if (relationalAttempt.Status != ListeningAttemptStatus.InProgress)
+            {
+                return new { attemptId = relationalAttempt.Id, elapsedSeconds = request.ElapsedSeconds, lastClientSyncAt = relationalAttempt.LastActivityAt };
+            }
             await EnsureRelationalAttemptCanMutateAsync(relationalAttempt, ct);
             relationalAttempt.LastActivityAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
@@ -514,6 +523,11 @@ public sealed class ListeningLearnerService(
         }
 
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
+        // Same race-tolerance for the legacy attempt store.
+        if (attempt.State is AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed)
+        {
+            return new { attemptId = attempt.Id, attempt.ElapsedSeconds, attempt.LastClientSyncAt };
+        }
         EnsureAttemptCanMutate(attempt);
         attempt.ElapsedSeconds = request.ElapsedSeconds;
         attempt.LastClientSyncAt = DateTimeOffset.UtcNow;

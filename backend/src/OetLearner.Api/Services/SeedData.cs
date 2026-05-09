@@ -988,7 +988,7 @@ public static partial class SeedData
                     profession = "Nursing",
                     setting = "Hospital surgical ward",
                     patient = "Mr. James Wheeler, 68, post right hip replacement (day 1)",
-                    brief = "Provide a safe, concise handover for the next shift.",
+                    brief = "Provide a clinical handover.",
                     tasks = new[]
                     {
                         "Summarise the surgery and current condition",

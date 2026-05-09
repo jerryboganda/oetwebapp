@@ -59,7 +59,7 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   if (data.length === 0) {
     return (
-      <div className="rounded-[20px] border border-dashed border-gray-200 bg-background-light px-6 py-10 text-center text-sm text-muted">
+      <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
         {emptyMessage}
       </div>
     );
@@ -129,7 +129,7 @@ export function DataTable<T>({
   };
 
   return (
-    <div className={cn('overflow-hidden rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm', className)}>
+    <div className={cn('overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950', className)}>
       <div className="md:hidden p-3">
         {data.map((row, idx) => {
           const rowKey = keyExtractor(row, idx);
@@ -175,7 +175,7 @@ export function DataTable<T>({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-full text-sm" aria-label={ariaLabel}>
-              <thead className="bg-background-light">
+              <thead className="bg-zinc-50 dark:bg-zinc-900/50">
                 <tr className="border-b border-gray-200/60">
                   {columns.map((column) => (
                     <th
@@ -193,7 +193,7 @@ export function DataTable<T>({
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-gray-100/90 bg-surface">
+              <tbody className="divide-y divide-zinc-100 bg-white dark:divide-zinc-800/80 dark:bg-zinc-950">
                 {data.map((row, idx) => (
                   <tr
                     key={keyExtractor(row, idx)}
@@ -279,7 +279,7 @@ function VirtualizedDesktopView<T>({
     >
       <div
         role="rowgroup"
-        className="sticky top-0 z-10 bg-background-light border-b border-gray-200/60"
+        className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/50"
       >
         <div role="row" className="grid" style={{ gridTemplateColumns: gridTemplate }}>
           {columns.map((column) => (

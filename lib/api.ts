@@ -6042,6 +6042,12 @@ export async function fetchForumThreads(categoryId?: string, page = 1, pageSize 
   return apiRequest(`/v1/community/threads?${p}`);
 }
 
+export async function fetchAdminCommunityThreads(categoryId?: string, page = 1, pageSize = 20) {
+  const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (categoryId) p.set('categoryId', categoryId);
+  return apiRequest(`/v1/admin/community/threads?${p}`);
+}
+
 export async function fetchForumThread(threadId: string) {
   return apiRequest(`/v1/community/threads/${encodeURIComponent(threadId)}`);
 }

@@ -21,7 +21,7 @@ Full end-to-end remediation of all gaps identified in the 7 product-manual docum
 **Fix**: Remove the `ai` mode option from mode-selection UI. Keep only `self` and `exam`. Preserve backend enum value if needed for future compatibility.
 
 ### 4. UI Encoding Artifacts (P1)
-- 49 files across `app/` contain visible encoding artifacts (`&nbsp;`, `&#39;`, `&quot;`, `&#x27;`, `â€™`, `â€œ`, etc.) or HTML entities rendered as literal text.
+- 49 files across `app/` contain visible encoding artifacts such as escaped HTML entities or misdecoded curly punctuation rendered as literal text.
 **Fix**: Replace with proper Unicode characters or JSX escaping. Audit each file and apply targeted string replacements.
 
 ### 5. lib/mock-data.ts Transitional State (P1)

@@ -159,6 +159,12 @@ export default function ExpertPrivateSpeakingPage() {
           title="Private Speaking Sessions"
           description="Your tutor profile is not set up yet. Please contact an admin to get started."
         />
+        <div
+          role="status"
+          className="rounded-2xl border border-dashed border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 text-sm text-gray-600 dark:text-gray-400"
+        >
+          You are not currently available for private speaking sessions.
+        </div>
         {error && <InlineAlert variant="warning">{error}</InlineAlert>}
       </div>
     );

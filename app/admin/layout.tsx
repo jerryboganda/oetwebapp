@@ -227,6 +227,10 @@ function getAdminPageTitle(pathname: string | null) {
     return 'Publish Requests';
   }
 
+  if (pathname.startsWith('/admin/content/writing')) {
+    return 'Writing Authoring';
+  }
+
   if (pathname.startsWith('/admin/content')) {
     return 'Content Hub';
   }
@@ -247,6 +251,10 @@ function getAdminPageTitle(pathname: string | null) {
     return 'AI Providers';
   }
 
+  if (pathname.startsWith('/admin/ai-usage')) {
+    return 'AI Usage & Budget';
+  }
+
   if (pathname.startsWith('/admin/review-ops')) {
     return 'Review Ops';
   }
@@ -259,12 +267,28 @@ function getAdminPageTitle(pathname: string | null) {
     return 'Reading Analytics';
   }
 
+  if (pathname.startsWith('/admin/analytics/listening')) {
+    return 'Listening Analytics';
+  }
+
+  if (pathname.startsWith('/admin/business-intelligence')) {
+    return 'Business Intelligence';
+  }
+
+  if (pathname.startsWith('/admin/analytics/subscription-health')) {
+    return 'Subscription Health';
+  }
+
   if (pathname.startsWith('/admin/analytics')) {
     return 'Quality Analytics';
   }
 
   if (pathname.startsWith('/admin/users')) {
     return 'User Operations';
+  }
+
+  if (pathname.startsWith('/admin/institutions')) {
+    return 'Institutions';
   }
 
   // Legacy routes — kept for redirect stubs only.
@@ -274,6 +298,18 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/billing')) {
     return 'Billing Ops';
+  }
+
+  if (pathname.startsWith('/admin/free-tier')) {
+    return 'Free Tier';
+  }
+
+  if (pathname.startsWith('/admin/credit-lifecycle')) {
+    return 'Credit Lifecycle';
+  }
+
+  if (pathname.startsWith('/admin/bulk-operations')) {
+    return 'Bulk Operations';
   }
 
   if (pathname.startsWith('/admin/flags')) {
@@ -294,6 +330,30 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/private-speaking')) {
     return 'Private Speaking';
+  }
+
+  if (pathname.startsWith('/admin/signup-catalog')) {
+    return 'Signup Catalog';
+  }
+
+  if (pathname.startsWith('/admin/rulebooks')) {
+    return 'Rulebooks';
+  }
+
+  if (pathname.startsWith('/admin/webhooks')) {
+    return 'Webhooks';
+  }
+
+  if (pathname.startsWith('/admin/escalations')) {
+    return 'Escalations';
+  }
+
+  if (pathname.startsWith('/admin/enterprise')) {
+    return 'Enterprise';
+  }
+
+  if (pathname.startsWith('/admin/playbook')) {
+    return 'Playbook';
   }
 
   if (pathname.startsWith('/admin/community')) {

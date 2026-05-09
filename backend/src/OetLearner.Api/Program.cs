@@ -506,10 +506,10 @@ builder.Services.AddAuthorization(options =>
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "system_admin")));
     options.AddPolicy("AdminFreezeRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
-        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "system_admin")));
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "users:read", "system_admin")));
     options.AddPolicy("AdminFreezeWrite", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
-        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "system_admin")));
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "users:write", "system_admin")));
     options.AddPolicy("AdminUsersRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "users:read", "system_admin")));
@@ -747,10 +747,18 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IAiModelProvider,
 // The gateway prefers the first non-mock provider registered — this one
 // precedes the registry-backed provider so env-var config works even before
 // the DB row is populated on first boot.
-builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
-    OetLearner.Api.Services.Rulebook.OpenAiCompatibleProvider>();
-builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiUsageRecorder,
-    OetLearner.Api.Services.Rulebook.AiUsageRecorder>();
+//
+// Dev / test fallback: when neither AI__BaseUrl nor AI__ApiKey is configured,
+// skip registering this provider so the gateway can fall back to the mock
+// instead of attempting an unauthenticated HTTP call. This keeps unit + e2e
+// suites runnable without provisioning AI credentials, while production
+// behaviour is unchanged whenever AI__* env vars are populated.
+if (!string.IsNullOrWhiteSpace(aiProviderOptions.BaseUrl)
+    && !string.IsNullOrWhiteSpace(aiProviderOptions.ApiKey))
+{
+    builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
+        OetLearner.Api.Services.Rulebook.OpenAiCompatibleProvider>();
+}
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiQuotaService,
     OetLearner.Api.Services.AiManagement.AiQuotaService>();
@@ -1253,8 +1261,8 @@ app.MapContentStalenessEndpoints();
 app.MapMockAdminEndpoints();
 app.MapContentPapersLearnerEndpoints();
 app.MapReadingAuthoringAdminEndpoints();
-app.MapListeningAuthoringAdminEndpoints();
 app.MapReadingAnalyticsAdminEndpoints();
+app.MapListeningAuthoringAdminEndpoints();
 app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
 app.MapListeningLearnerEndpoints();

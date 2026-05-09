@@ -698,15 +698,162 @@ function buildStorageState(session: AuthSessionResponse) {
             name: localSessionKey,
             value: JSON.stringify(session),
           },
+          {
+            // Opt-in flag honored by lib/auth-storage.ts so toPersistedSnapshot
+            // keeps access/refresh tokens in localStorage. Required because the
+            // backend rotates refresh tokens single-use: a single shared
+            // storageState file would otherwise be invalidated as soon as the
+            // first test cold-loads and refreshes. Production sign-in never
+            // writes this key.
+            name: 'oet.e2e.keep-tokens',
+            value: '1',
+          },
         ],
       },
     ],
   };
 }
 
+/**
+ * Cookies that the backend's auth flow sets for the browser-facing origin
+ * (rewritten by the Next.js `/api/backend/*` proxy). Keep the indicator cookie
+ * out of this list — it is built deterministically from the session payload by
+ * `buildAuthIndicatorCookie` and may be present on the request context with a
+ * shorter expiry than we want to persist.
+ */
+const FRONTEND_AUTH_COOKIE_NAMES = new Set(['oet_rt', 'oet_csrf']);
+
+type StorageStateCookie = ReturnType<typeof buildAuthIndicatorCookie>;
+
+type StorageStateBlob = {
+  cookies: StorageStateCookie[];
+  origins: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>;
+};
+
+/**
+ * Sign the role in through the **frontend proxy** at `${defaultAppOrigin}/api/backend/v1/auth/sign-in`
+ * using the provided APIRequestContext, then return the cookies the proxy
+ * rewrote onto the frontend origin (`oet_rt`, `oet_csrf`). These are required
+ * for the persisted storage state to survive the auth provider's first-load
+ * `/v1/auth/refresh` call: without `oet_rt` bound to `localhost` the refresh
+ * 400s, the auth manager clears the session, and the page redirects to
+ * `/sign-in`.
+ *
+ * For MFA-protected roles (expert/admin) we additionally complete the MFA
+ * challenge through the frontend proxy using the TOTP secret previously
+ * captured by `resolvePrivilegedSession`. Without this, the persisted
+ * storageState only contains the `oet_auth` indicator + localStorage tokens
+ * but no HttpOnly `oet_rt` for the frontend origin — so the auth provider's
+ * first-load refresh has nothing to send and the privileged page redirects
+ * back to `/sign-in` (or hangs in `/mfa/setup`).
+ */
+async function captureFrontendAuthCookies(
+  request: APIRequestContext,
+  role: SeededRole,
+): Promise<StorageStateCookie[]> {
+  const account = seededAccounts[role];
+  const frontendHost = new URL(defaultAppOrigin).hostname;
+
+  const extractFrontendCookies = async () => {
+    const state = await request.storageState();
+    return state.cookies.filter(
+      (cookie) =>
+        FRONTEND_AUTH_COOKIE_NAMES.has(cookie.name)
+        && (cookie.domain === frontendHost || cookie.domain === `.${frontendHost}`),
+    ) as StorageStateCookie[];
+  };
+
+  try {
+    const signInResponse = await request.post(`${defaultAppOrigin}/api/backend/v1/auth/sign-in`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: {
+        email: account.email,
+        password: account.password,
+        rememberMe: true,
+      },
+      timeout: 30_000,
+    });
+
+    if (role === 'learner') {
+      return extractFrontendCookies();
+    }
+
+    // Privileged roles (expert/admin): the proxy sign-in returns 403 with an
+    // MFA challenge envelope. Complete the challenge via the proxy so the
+    // backend's Set-Cookie for `oet_rt`/`oet_csrf` lands on the frontend
+    // origin (rewritten by the proxy).
+    if (signInResponse.status() !== 403) {
+      // Either an unexpected success (no MFA enrolled — should not happen
+      // after `bootstrapSessionForRole`) or a hard failure. Fall back to
+      // whatever cookies are present so the caller still gets the indicator
+      // cookie + localStorage path.
+      return extractFrontendCookies();
+    }
+
+    let challenge: MfaChallengePayload;
+    try {
+      challenge = await signInResponse.json() as MfaChallengePayload;
+    } catch {
+      return extractFrontendCookies();
+    }
+
+    const bootstrapState = await readMfaBootstrapState(role as Extract<SeededRole, 'expert' | 'admin'>);
+    if (!bootstrapState?.secretKey) {
+      return extractFrontendCookies();
+    }
+
+    let lastError: unknown = null;
+    for (const code of generateTotpCandidates(bootstrapState.secretKey)) {
+      const challengeResponse = await request.post(`${defaultAppOrigin}/api/backend/v1/auth/mfa/challenge`, {
+        headers: { 'Content-Type': 'application/json' },
+        data: {
+          email: account.email,
+          code,
+          challengeToken: challenge.challengeToken,
+          recoveryCode: null,
+        },
+        timeout: 30_000,
+      });
+
+      if (challengeResponse.ok()) {
+        return extractFrontendCookies();
+      }
+
+      lastError = await readResponseBody(challengeResponse);
+      if (!String(lastError).includes('"code":"invalid_authenticator_code"')) {
+        break;
+      }
+    }
+
+    return extractFrontendCookies();
+  } catch {
+    // Best-effort. If the frontend isn't reachable in this scenario, we still
+    // return whatever cookies are present and let the caller fall back to the
+    // indicator-only storage state.
+    return extractFrontendCookies().catch(() => []);
+  }
+}
+
 export async function persistSessionToStorageState(
   session: AuthSessionResponse,
   storageStatePath: string,
+  request?: APIRequestContext,
+  role?: SeededRole,
 ) {
-  await writeJsonFile(storageStatePath, buildStorageState(session));
+  const base = buildStorageState(session) as StorageStateBlob;
+
+  if (request && role) {
+    const captured = await captureFrontendAuthCookies(request, role);
+    if (captured.length > 0) {
+      const seen = new Set(base.cookies.map((c) => c.name));
+      for (const cookie of captured) {
+        if (!seen.has(cookie.name)) {
+          base.cookies.push(cookie);
+          seen.add(cookie.name);
+        }
+      }
+    }
+  }
+
+  await writeJsonFile(storageStatePath, base);
 }

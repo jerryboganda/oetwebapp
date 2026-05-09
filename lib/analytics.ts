@@ -270,6 +270,15 @@ type AnalyticsProvider = (event: string, properties?: EventProperties) => Promis
 const MAX_BUFFER_SIZE = 1000;
 const ANALYTICS_EVENTS_PATH = '/v1/analytics/events';
 
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 class AnalyticsService {
   private enabled = true;
   private provider: AnalyticsProvider | null = null;
@@ -297,11 +306,15 @@ class AnalyticsService {
         return;
       }
 
+      const csrfToken = readCookie('oet_csrf');
+
       const response = await fetch(`${env.apiBaseUrl}${ANALYTICS_EVENTS_PATH}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
+          'X-OET-Client-Platform': 'web',
+          ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
         },
         body: JSON.stringify({
           eventName: event,

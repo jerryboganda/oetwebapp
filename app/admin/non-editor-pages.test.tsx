@@ -306,9 +306,11 @@ describe('Admin Non-Editor Pages', () => {
     renderPage(<AdminDashboardPage />);
 
     expect(await screen.findByRole('main', { name: /admin operations/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /keep platform health, review risk, and rollout signals in one place/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /operational shortcuts/i })).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /open review ops/i })).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: /operations center/i })).toBeInTheDocument();
+    expect(screen.getByText(/platform health/i)).toBeInTheDocument();
+    expect(screen.getByText(/quick actions/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /open review operations/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^review ops$/i })).toBeInTheDocument();
   });
 
   it('renders the content library inside the learner-style route surface', async () => {

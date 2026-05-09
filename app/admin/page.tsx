@@ -23,7 +23,11 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminDashboardData } from '@/lib/admin';
 import type { AdminDashboardData } from '@/lib/types/admin';
 import { cn } from '@/lib/utils';
-import { StatusBadge, PulseTile, Panel, DenseTable, MetricGrid2x2, type MetricTone } from '@/components/admin/ui';
+import { DenseTable } from '@/components/admin/ui/dense-table';
+import { MetricGrid2x2 } from '@/components/admin/ui/metric-grid-2x2';
+import { Panel } from '@/components/admin/ui/panel';
+import { PulseTile } from '@/components/admin/ui/pulse-tile';
+import { StatusBadge } from '@/components/admin/ui/status-badge';
 
 /* ── Main page ────────────────────────────────────────────────────────── */
 export default function AdminDashboardPage() {
@@ -48,17 +52,17 @@ export default function AdminDashboardPage() {
           <div className="flex flex-col gap-3">
 
             {/* ── Command strip ─────────────────────────────────────── */}
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-3.5 shadow-sm">
+            <div className="flex flex-col justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-3.5 shadow-sm sm:flex-row sm:items-center">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="rounded-lg bg-violet-500/20 p-2 shrink-0">
                   <Sparkles className="h-4 w-4 text-violet-400" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-violet-400 leading-none">Operations Center</p>
+                  <h1 className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-violet-400 leading-none">Operations Center</h1>
                   <p className="text-[11px] text-zinc-400 leading-none mt-1 truncate">Platform health · review risk · rollout signals</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2.5 shrink-0 text-[10px] font-bold uppercase tracking-widest">
+              <div className="flex flex-wrap items-center gap-2.5 text-[10px] font-bold uppercase tracking-widest sm:justify-end">
                 <span className="text-zinc-400">Q·{d.freshness.qualityWindow}</span>
                 <span className="text-zinc-700">|</span>
                 <span className="text-zinc-400">{new Date(d.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>

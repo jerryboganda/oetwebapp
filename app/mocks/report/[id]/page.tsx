@@ -446,9 +446,9 @@ function MockReportContent() {
             </div>
           ) : (
             <div className="grid gap-4 lg:grid-cols-5">
-              {remediationPlan.map((item) => (
+              {remediationPlan.map((item, index) => (
                 <Link
-                  key={`${item.day}-${item.title}`}
+                  key={`${item.day || 'day'}-${item.title || 'item'}-${index}`}
                   href={item.route}
                   className="group rounded-2xl border border-border bg-surface p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
                 >

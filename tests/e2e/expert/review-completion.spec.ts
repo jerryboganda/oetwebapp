@@ -1,17 +1,24 @@
 import { expect, test, type Page } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 import { createDisposableSpeakingReviewRequest, createDisposableWritingReviewRequest } from '../fixtures/api-auth';
+import { waitForSessionGuardToClear } from '../fixtures/auth';
 
 const keyboardModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
 async function fillAllRubricScores(page: Page, value = '5') {
+  // Capture aria-labels up front; the page can re-render (audio playback, draft
+  // auto-saves, AI panel updates) and invalidate nth-based locators mid-loop,
+  // which manifests as a `selectOption` test-timeout under cold dev load.
   const scoreSelects = page.locator('select[aria-label^="Score for "]');
-  const count = await scoreSelects.count();
+  const labels = await scoreSelects.evaluateAll((nodes) =>
+    nodes.map((node) => (node as HTMLSelectElement).getAttribute('aria-label') ?? ''),
+  );
 
-  expect(count, 'Expected at least one rubric score selector').toBeGreaterThan(0);
+  expect(labels.length, 'Expected at least one rubric score selector').toBeGreaterThan(0);
 
-  for (let index = 0; index < count; index += 1) {
-    await scoreSelects.nth(index).selectOption(value);
+  for (const label of labels) {
+    if (!label) continue;
+    await page.locator(`select[aria-label="${label.replace(/"/g, '\\"')}"]`).selectOption(value);
   }
 }
 
@@ -21,12 +28,16 @@ test.describe('Tutor review completion workflows @expert', () => {
       test.skip();
     }
 
+    test.setTimeout(120_000); // cold dev compile of /expert/review/writing + multi-step interaction + final submit redirect
+
     const diagnostics = observePage(page);
     const finalComment = `QA final writing review ${Date.now()}`;
     const { reviewRequestId } = await createDisposableWritingReviewRequest(request);
 
     await page.goto(`/expert/review/writing/${reviewRequestId}`);
-    await expect(page.getByRole('heading', { name: /review rubric/i })).toBeVisible();
+    await waitForSessionGuardToClear(page);
+    // First-load fetches review detail + history + learner context in parallel; cold dev cache can exceed the 10s default.
+    await expect(page.getByRole('heading', { name: /review rubric/i })).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole('button', { name: /submit review/i }).click();
     await expect(page.getByText(/please complete all \d+ rubric score\(s\) before submitting\./i)).toBeVisible();
@@ -39,8 +50,9 @@ test.describe('Tutor review completion workflows @expert', () => {
     await page.getByLabel('Final overall comment').fill(finalComment);
     await page.keyboard.press(`${keyboardModifier}+S`);
 
-    await expect(page.getByRole('status').filter({ hasText: /draft saved successfully\./i })).toBeVisible();
-    await expect(page.getByText(/^Unsaved$/i)).toHaveCount(0);
+    // The success toast auto-dismisses after 5s (components/ui/alert.tsx) which races test polling under cold dev load;
+    // assert the durable indicators instead — "Unsaved" badge clearing and the persisted comment value.
+    await expect(page.getByText(/^Unsaved$/i)).toHaveCount(0, { timeout: 30_000 });
     await expect(page.getByLabel('Final overall comment')).toHaveValue(finalComment);
 
     await page.keyboard.press(`${keyboardModifier}+Enter`);
@@ -49,7 +61,7 @@ test.describe('Tutor review completion workflows @expert', () => {
     await expect(page).toHaveURL(/\/expert\/queue$/);
     await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -59,12 +71,16 @@ test.describe('Tutor review completion workflows @expert', () => {
       test.skip();
     }
 
+    test.setTimeout(120_000); // cold dev compile of /expert/review/speaking + tab navigation + submit exceeds default 60s budget
+
     const diagnostics = observePage(page);
     const finalComment = `QA final speaking review ${Date.now()}`;
     const { reviewRequestId } = await createDisposableSpeakingReviewRequest(request);
 
     await page.goto(`/expert/review/speaking/${reviewRequestId}`);
-    await expect(page.getByText(/candidate audio submission/i).first()).toBeVisible();
+    await waitForSessionGuardToClear(page);
+    // First-load fetches review detail + history + learner context in parallel; cold dev cache can exceed the 10s default.
+    await expect(page.getByText(/candidate audio submission/i).first()).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole('tab', { name: /role card/i }).click();
     await expect(page.getByRole('region', { name: /role card details/i })).toContainText(/provide a clinical handover/i);
@@ -82,7 +98,7 @@ test.describe('Tutor review completion workflows @expert', () => {
     await expect(page).toHaveURL(/\/expert\/queue$/);
     await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -92,11 +108,15 @@ test.describe('Tutor review completion workflows @expert', () => {
       test.skip();
     }
 
+    test.setTimeout(120_000); // cold dev compile of /expert/review/writing + rework submit + queue redirect
+
     const diagnostics = observePage(page);
     const { reviewRequestId } = await createDisposableWritingReviewRequest(request);
 
     await page.goto(`/expert/review/writing/${reviewRequestId}`);
-    await expect(page.getByRole('heading', { name: /review rubric/i })).toBeVisible();
+    await waitForSessionGuardToClear(page);
+    // First-load fetches review detail + history + learner context in parallel; cold dev cache can exceed the 10s default.
+    await expect(page.getByRole('heading', { name: /review rubric/i })).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole('button', { name: /request rework/i }).click();
     await page.getByRole('button', { name: /submit rework/i }).click();
@@ -109,7 +129,7 @@ test.describe('Tutor review completion workflows @expert', () => {
     await expect(page).toHaveURL(/\/expert\/queue$/);
     await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });

@@ -59,18 +59,60 @@ function getStorage(persistence: AuthPersistence): Storage | null {
   return persistence === 'local' ? window.localStorage : window.sessionStorage;
 }
 
+const E2E_KEEP_TOKENS_KEY = 'oet.e2e.keep-tokens';
+
+function shouldKeepTokensForE2E(): boolean {
+  // Only true when the Playwright bootstrap explicitly seeds this flag into
+  // localStorage. Production sign-in flows never set this key, so production
+  // behavior (XSS hardening: tokens never persisted to web storage) is
+  // unchanged. The flag exists so a single shared `storageState` file can
+  // serve many test contexts: without it, the first cold load triggers a
+  // single-use refresh-token rotation that invalidates every other test that
+  // shares the same persisted `oet_rt`.
+  if (!isBrowser()) return false;
+  try {
+    return window.localStorage.getItem(E2E_KEEP_TOKENS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 function toPersistedSnapshot(session: AuthSession): PersistedSessionSnapshot {
-  return {
+  const base: PersistedSessionSnapshot = {
     accessTokenExpiresAt: session.accessTokenExpiresAt,
     refreshTokenExpiresAt: session.refreshTokenExpiresAt,
     currentUser: session.currentUser,
   };
+  if (shouldKeepTokensForE2E()) {
+    return {
+      ...base,
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+    } as PersistedSessionSnapshot & { accessToken?: string; refreshToken?: string | null };
+  }
+  return base;
 }
 
 function fromPersistedSnapshot(snapshot: PersistedSessionSnapshot): AuthSession {
+  // Production paths persist via `toPersistedSnapshot`, which intentionally
+  // strips access/refresh tokens (browser-side XSS hardening). Test bootstraps
+  // (Playwright storageState) write the full session payload directly into
+  // localStorage. When those extra fields are present at runtime we honor
+  // them so the auth manager can avoid an immediate /v1/auth/refresh round
+  // trip — important because the backend rotates refresh tokens single-use,
+  // so a single shared storageState cannot survive multiple test contexts
+  // that each refresh on cold load. Reading the persisted access token costs
+  // nothing in production where the field is simply absent.
+  const extras = snapshot as PersistedSessionSnapshot & {
+    accessToken?: unknown;
+    refreshToken?: unknown;
+  };
+  const persistedAccessToken = typeof extras.accessToken === 'string' ? extras.accessToken : '';
+  const persistedRefreshToken = typeof extras.refreshToken === 'string' ? extras.refreshToken : null;
+
   return {
-    accessToken: '',
-    refreshToken: null,
+    accessToken: persistedAccessToken,
+    refreshToken: persistedRefreshToken,
     accessTokenExpiresAt: snapshot.accessTokenExpiresAt,
     refreshTokenExpiresAt: snapshot.refreshTokenExpiresAt,
     currentUser: snapshot.currentUser,

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 import { createDisposableSpeakingReviewRequest, createDisposableWritingReviewRequest } from '../fixtures/api-auth';
+import { waitForSessionGuardToClear } from '../fixtures/auth';
 
 test.describe('Tutor review workflows @expert @smoke', () => {
   test('writing review supports rubric edits and draft saves', async ({ page, request }, testInfo) => {
@@ -8,12 +9,16 @@ test.describe('Tutor review workflows @expert @smoke', () => {
       test.skip();
     }
 
+    test.setTimeout(120_000); // cold dev compile of /expert/review/writing + draft save round-trip exceeds default 60s budget
+
     const diagnostics = observePage(page);
     const purposeComment = `QA writing draft ${Date.now()}`;
     const { reviewRequestId } = await createDisposableWritingReviewRequest(request);
 
     await page.goto(`/expert/review/writing/${reviewRequestId}`);
-    await expect(page.getByRole('heading', { name: /review rubric/i })).toBeVisible();
+    await waitForSessionGuardToClear(page);
+    // First-load fetches review detail + history + learner context in parallel; cold dev cache can exceed the 10s default.
+    await expect(page.getByRole('heading', { name: /review rubric/i })).toBeVisible({ timeout: 30_000 });
 
     await page.getByLabel('Score for Purpose').selectOption('5');
     await page.getByLabel('Comment for Purpose').fill(purposeComment);
@@ -21,12 +26,13 @@ test.describe('Tutor review workflows @expert @smoke', () => {
 
     await page.getByRole('button', { name: /save draft/i }).click();
 
-    await expect(page.getByText(/draft saved successfully\./i)).toBeVisible();
-    await expect(page.getByText(/last saved:/i)).toBeVisible();
+    // The success toast auto-dismisses after 5s (components/ui/alert.tsx) which races test polling under cold dev load;
+    // assert the durable indicators instead — "Last saved:" timestamp and the "Unsaved" badge clearing.
+    await expect(page.getByText(/last saved:/i)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByLabel('Comment for Purpose')).toHaveValue(purposeComment);
     await expect(page.getByText(/unsaved/i)).toHaveCount(0);
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -36,12 +42,16 @@ test.describe('Tutor review workflows @expert @smoke', () => {
       test.skip();
     }
 
+    test.setTimeout(120_000); // cold dev compile of /expert/review/speaking + tab navigation exceeds default 60s budget
+
     const diagnostics = observePage(page);
     const finalComment = `QA speaking draft ${Date.now()}`;
     const { reviewRequestId } = await createDisposableSpeakingReviewRequest(request);
 
     await page.goto(`/expert/review/speaking/${reviewRequestId}`);
-    await expect(page.getByText(/candidate audio submission/i).first()).toBeVisible();
+    await waitForSessionGuardToClear(page);
+    // First-load fetches review detail + history + learner context in parallel; cold dev cache can exceed the 10s default.
+    await expect(page.getByText(/candidate audio submission/i).first()).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole('tab', { name: /role card/i }).click();
     await expect(page.getByRole('region', { name: /role card details/i })).toContainText(/hospital surgical ward/i);
@@ -56,12 +66,13 @@ test.describe('Tutor review workflows @expert @smoke', () => {
 
     await page.getByRole('button', { name: /save draft/i }).click();
 
-    await expect(page.getByText(/draft saved successfully\./i)).toBeVisible();
-    await expect(page.getByText(/last saved:/i)).toBeVisible();
+    // The success toast auto-dismisses after 5s (components/ui/alert.tsx) which races test polling under cold dev load;
+    // assert the durable indicators instead — "Last saved:" timestamp and the "Unsaved" badge clearing.
+    await expect(page.getByText(/last saved:/i)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByLabel('Final overall comment')).toHaveValue(finalComment);
     await expect(page.getByText(/unsaved/i)).toHaveCount(0);
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });

@@ -1320,6 +1320,46 @@ public static class AdminEndpoints
 
         // ── Community Moderation ────────────────────────
 
+        admin.MapGet("/community/threads", async (
+            [FromQuery] string? categoryId,
+            [FromQuery] int page,
+            [FromQuery] int pageSize,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var ps = pageSize <= 0 ? 20 : pageSize;
+            var pg = page <= 0 ? 1 : page;
+            var query = db.ForumThreads.AsQueryable();
+            if (!string.IsNullOrEmpty(categoryId)) query = query.Where(t => t.CategoryId == categoryId);
+            var total = await query.CountAsync(ct);
+            var threads = await query
+                .OrderByDescending(t => t.IsPinned)
+                .ThenByDescending(t => t.LastActivityAt)
+                .Skip((pg - 1) * ps)
+                .Take(ps)
+                .ToListAsync(ct);
+
+            return Results.Ok(new
+            {
+                total,
+                threads = threads.Select(t => new
+                {
+                    id = t.Id,
+                    categoryId = t.CategoryId,
+                    title = t.Title,
+                    authorDisplayName = t.AuthorDisplayName,
+                    authorRole = t.AuthorRole,
+                    isPinned = t.IsPinned,
+                    isLocked = t.IsLocked,
+                    replyCount = t.ReplyCount,
+                    viewCount = t.ViewCount,
+                    likeCount = t.LikeCount,
+                    createdAt = t.CreatedAt,
+                    lastActivityAt = t.LastActivityAt
+                })
+            });
+        }).WithAdminRead("AdminSystemAdmin");
+
         admin.MapPatch("/community/threads/{threadId}/pin", async (string threadId,
             AdminCommunityPinRequest request, LearnerDbContext db, CancellationToken ct) =>
         {

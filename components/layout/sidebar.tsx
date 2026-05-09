@@ -124,10 +124,10 @@ function NavSection({
     <motion.div className="mb-4" layout={!reducedMotion}>
       <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted">{label}</div>
       <motion.ul className="flex flex-col gap-1" layout={!reducedMotion}>
-        {items.map((item) => {
+        {items.map((item, index) => {
           const active = item.href === activeHref;
           return (
-            <motion.li key={item.href} layout={!reducedMotion}>
+            <motion.li key={`${label}:${index}:${item.href}`} layout={!reducedMotion}>
               <Link
                 href={item.href}
                 onClick={() => {
@@ -310,11 +310,11 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
       layout={!reducedMotion}
       {...bottomNavMotion}
     >
-      <ul className="grid auto-cols-[4.75rem] grid-flow-col gap-1 overflow-x-auto overscroll-x-contain sm:auto-cols-fr sm:grid-flow-row sm:grid-cols-7">
-        {items.map((item) => {
+      <ul className="grid grid-cols-5 gap-1">
+        {items.map((item, index) => {
           const active = isActive(pathname, item);
           return (
-            <li key={item.href}>
+            <li key={`${index}:${item.href}`}>
               <Link
                 href={item.href}
                 onClick={() => {

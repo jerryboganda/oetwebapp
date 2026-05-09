@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
-import { fetchForumThreads, pinCommunityThread, lockCommunityThread, adminDeleteCommunityThread } from '@/lib/api';
+import { fetchAdminCommunityThreads, pinCommunityThread, lockCommunityThread, adminDeleteCommunityThread } from '@/lib/api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 
 interface ForumThreadSummary {
@@ -58,10 +58,10 @@ export default function AdminCommunityPage() {
   const loadThreads = useCallback(async (p: number, size: number) => {
     setPageStatus('loading');
     try {
-      const res = await fetchForumThreads(undefined, p, size) as ThreadsResponse;
+      const res = await fetchAdminCommunityThreads(undefined, p, size) as ThreadsResponse;
       setThreads(res.threads ?? []);
       setTotal(res.total ?? 0);
-      setPageStatus((res.threads ?? []).length > 0 ? 'success' : 'empty');
+      setPageStatus('success');
     } catch {
       setPageStatus('error');
     }
@@ -104,8 +104,17 @@ export default function AdminCommunityPage() {
     setIsMutating(true);
     try {
       await adminDeleteCommunityThread(deleteTarget.id);
-      setThreads((prev) => prev.filter((t) => t.id !== deleteTarget.id));
-      setTotal((prev) => prev - 1);
+      const nextThreads = threads.filter((t) => t.id !== deleteTarget.id);
+      const nextTotal = Math.max(0, total - 1);
+      setThreads(nextThreads);
+      setTotal(nextTotal);
+      if (nextThreads.length === 0 && nextTotal > 0) {
+        if (page > 1) {
+          setPage(page - 1);
+        } else {
+          await loadThreads(page, pageSize);
+        }
+      }
       setToast({ variant: 'success', message: 'Thread deleted.' });
       setDeleteTarget(null);
     } catch {
@@ -219,64 +228,63 @@ export default function AdminCommunityPage() {
             {threads.length === 0 ? (
               <EmptyState
                 icon={<MessageSquareText className="h-8 w-8" />}
-                title="No threads"
-                description="No community threads have been created yet."
+                title={total === 0 ? 'No threads' : 'No threads on this page'}
+                description={total === 0 ? 'No community threads have been created yet.' : 'Move to another page to continue moderation.'}
               />
             ) : (
-              <>
-                <DataTable<ForumThreadSummary>
-                  columns={columns}
-                  data={threads}
-                  keyExtractor={(row) => row.id}
-                  onRowClick={(row) => router.push(`/community/threads/${row.id}`)}
-                  mobileCardRender={(row, _index) => (
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {row.isPinned && (
-                          <Badge variant="warning" className="text-xs">
-                            <Pin className="mr-0.5 h-3 w-3" /> Pinned
-                          </Badge>
-                        )}
-                        {row.isLocked && (
-                          <Badge variant="muted" className="text-xs">
-                            <Lock className="mr-0.5 h-3 w-3" /> Locked
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="font-medium text-navy">{row.title}</p>
-                      <p className="text-xs text-muted">by {row.authorDisplayName} · {formatDate(row.createdAt)}</p>
-                      <div className="flex items-center gap-3 text-xs text-muted">
-                        <span className="flex items-center gap-1"><MessageCircle className="h-3 w-3" /> {row.replyCount}</span>
-                        <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {row.viewCount}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 pt-1">
-                        <Button variant="outline" size="sm" onClick={() => handlePin(row)} disabled={isMutating}>
-                          <Pin className={`h-3.5 w-3.5 mr-1 ${row.isPinned ? 'text-warning' : ''}`} />
-                          {row.isPinned ? 'Unpin' : 'Pin'}
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleLock(row)} disabled={isMutating}>
-                          <Lock className={`h-3.5 w-3.5 mr-1 ${row.isLocked ? 'text-danger' : ''}`} />
-                          {row.isLocked ? 'Unlock' : 'Lock'}
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => setDeleteTarget(row)} disabled={isMutating} className="text-danger">
-                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
-                        </Button>
-                      </div>
+              <DataTable<ForumThreadSummary>
+                columns={columns}
+                data={threads}
+                keyExtractor={(row) => row.id}
+                onRowClick={(row) => router.push(`/community/threads/${row.id}`)}
+                mobileCardRender={(row, _index) => (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {row.isPinned && (
+                        <Badge variant="warning" className="text-xs">
+                          <Pin className="mr-0.5 h-3 w-3" /> Pinned
+                        </Badge>
+                      )}
+                      {row.isLocked && (
+                        <Badge variant="muted" className="text-xs">
+                          <Lock className="mr-0.5 h-3 w-3" /> Locked
+                        </Badge>
+                      )}
                     </div>
-                  )}
-                  aria-label="Community threads"
-                />
-
-                <Pagination
-                  page={page}
-                  pageSize={pageSize}
-                  total={total}
-                  onPageChange={setPage}
-                  onPageSizeChange={setPageSize}
-                  itemLabel="thread"
-                  itemLabelPlural="threads"
-                />
-              </>
+                    <p className="font-medium text-navy">{row.title}</p>
+                    <p className="text-xs text-muted">by {row.authorDisplayName} · {formatDate(row.createdAt)}</p>
+                    <div className="flex items-center gap-3 text-xs text-muted">
+                      <span className="flex items-center gap-1"><MessageCircle className="h-3 w-3" /> {row.replyCount}</span>
+                      <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {row.viewCount}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <Button variant="outline" size="sm" onClick={() => handlePin(row)} disabled={isMutating}>
+                        <Pin className={`h-3.5 w-3.5 mr-1 ${row.isPinned ? 'text-warning' : ''}`} />
+                        {row.isPinned ? 'Unpin' : 'Pin'}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleLock(row)} disabled={isMutating}>
+                        <Lock className={`h-3.5 w-3.5 mr-1 ${row.isLocked ? 'text-danger' : ''}`} />
+                        {row.isLocked ? 'Unlock' : 'Lock'}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setDeleteTarget(row)} disabled={isMutating} className="text-danger">
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                aria-label="Community threads"
+              />
+            )}
+            {total > 0 && (
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="thread"
+                itemLabelPlural="threads"
+              />
             )}
           </AdminRoutePanel>
         </div>

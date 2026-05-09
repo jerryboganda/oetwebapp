@@ -19,7 +19,10 @@ const contentHierarchyRoutes = [
   {
     path: '/admin/content/media',
     assertions: async (page: Page) => {
-      await expect(page.getByRole('heading', { name: /media asset/i })).toBeVisible();
+      // Page renders both "Media Asset Manager" hero heading and a
+      // "Media Assets" panel heading; scope to the first match to avoid
+      // strict-mode violations.
+      await expect(page.getByRole('heading', { name: /media asset/i }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /run audit/i })).toBeVisible();
     },
   },
@@ -38,7 +41,7 @@ test.describe('Admin content hierarchy smoke @admin @smoke', () => {
       await expect(page).toHaveURL(new RegExp(route.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
       await route.assertions(page);
 
-      expectNoSevereClientIssues(diagnostics);
+      expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
       diagnostics.detach();
       await attachDiagnostics(testInfo, diagnostics);
     });

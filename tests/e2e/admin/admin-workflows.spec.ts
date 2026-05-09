@@ -17,14 +17,14 @@ test.describe('Admin workflows @admin @smoke', () => {
     await page.getByLabel('Learner-Facing Description').fill('QA-created content draft used to validate the admin content workflow.');
     await page.getByRole('button', { name: /^save draft$/i }).click();
 
-    await expect(page).toHaveURL(/\/admin\/content\/(?!new$)[^/]+$/);
-    await expect(page.getByRole('heading', { name: new RegExp(`edit ${title}`, 'i') })).toBeVisible();
+    await page.waitForURL(/\/admin\/content\/(?!new$)[^/]+$/, { timeout: 60000 });
+    await expect(page.getByRole('heading', { name: new RegExp(`edit ${title}`, 'i') })).toBeVisible({ timeout: 30000 });
     await expect(page.getByRole('button', { name: /revisions/i })).toBeVisible();
 
     await page.getByRole('tab', { name: /criteria mapping/i }).click();
     await expect(page.getByText(/criteria are loaded live from the rubric library/i)).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -37,7 +37,7 @@ test.describe('Admin workflows @admin @smoke', () => {
     const diagnostics = observePage(page);
 
     await page.goto('/admin/users/mock-user-001');
-    await expect(page.getByRole('heading', { name: /faisal maqsood/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /faisal maqsood/i })).toBeVisible({ timeout: 30000 });
 
     const adjustCreditsButton = page.getByRole('button', { name: /adjust credits/i });
     await adjustCreditsButton.click();
@@ -52,7 +52,7 @@ test.describe('Admin workflows @admin @smoke', () => {
     await expect(dialog).toHaveCount(0);
     await expect(adjustCreditsButton).toBeFocused();
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });

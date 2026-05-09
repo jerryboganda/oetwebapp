@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Services;
 
@@ -98,14 +100,14 @@ public static class AuthEndpoints
                 => Results.Ok(await service.GetCurrentUserAsync(user, ct)))
             .RequireAuthorization();
 
-        auth.MapPost("/refresh", async (RefreshTokenRequest request, AuthService service, CancellationToken ct)
-                => Results.Ok(await service.RefreshAsync(request, ct)))
+        auth.MapPost("/refresh", async ([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, AuthService service, CancellationToken ct)
+            => Results.Ok(await service.RefreshAsync(request ?? new RefreshTokenRequest(null), ct)))
             .AllowAnonymous()
             .RequireRateLimiting("AuthRefresh");
 
-        auth.MapPost("/sign-out", async (SignOutRequest request, AuthService service, CancellationToken ct) =>
+        auth.MapPost("/sign-out", async ([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] SignOutRequest? request, AuthService service, CancellationToken ct) =>
             {
-                await service.SignOutAsync(request, ct);
+            await service.SignOutAsync(request ?? new SignOutRequest(null), ct);
                 return Results.NoContent();
             })
             .AllowAnonymous()

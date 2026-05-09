@@ -54,6 +54,9 @@ function playwrightArgs({ files, projects, grep, workers }) {
   return args;
 }
 
+const continueOnFailure = process.env.PLAYWRIGHT_CONTINUE_ON_FAILURE === '1';
+const failedRuns = [];
+
 function run(label, args) {
   console.log(`\n==> ${label}`);
   const result = process.platform === 'win32'
@@ -70,6 +73,11 @@ function run(label, args) {
 
   if (result.status !== 0) {
     const exitCode = typeof result.status === 'number' ? result.status : 1;
+    if (continueOnFailure) {
+      failedRuns.push({ label, exitCode });
+      console.log(`==> [continue-on-failure] ${label} failed with exit ${exitCode}; continuing.`);
+      return;
+    }
     process.exit(exitCode);
   }
 }
@@ -266,6 +274,14 @@ const runs = mode === 'full' ? fullRuns : smokeRuns;
 
 for (const { label, args } of runs) {
   run(label, args);
+}
+
+if (continueOnFailure && failedRuns.length > 0) {
+  console.log(`\nPlaywright ${mode} matrix completed with ${failedRuns.length} failed bucket(s):`);
+  for (const failure of failedRuns) {
+    console.log(`  - ${failure.label} (exit ${failure.exitCode})`);
+  }
+  process.exit(1);
 }
 
 console.log(`\nPlaywright ${mode} matrix completed without skipped-role routing.`);

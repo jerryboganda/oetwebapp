@@ -107,6 +107,12 @@ function PlayerContent() {
   const previewArmedRef = useRef<boolean>(false);
   // C8b — guard so handleSubmit only fires once when the attempt timer hits 0.
   const autoSubmittedRef = useRef<boolean>(false);
+  // Synchronous submit-in-flight gate. The state-driven `isSubmitting` only
+  // updates after React commits, which leaves a window where a 15s heartbeat
+  // tick can race the submit POST and 409 because the backend has already
+  // marked the attempt Submitted. Setting this ref first thing in
+  // handleSubmit closes that race deterministically.
+  const isSubmittingRef = useRef<boolean>(false);
   const [session, setSession] = useState<ListeningSessionDto | null>(null);
   const [attempt, setAttempt] = useState<ListeningAttemptDto | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -185,12 +191,16 @@ function PlayerContent() {
   }, [attemptIdFromRoute, id, mode]);
 
   useEffect(() => {
-    if (!attempt?.attemptId || !hasStarted) return;
+    if (!attempt?.attemptId || !hasStarted || isSubmitting) return;
     const interval = window.setInterval(() => {
+      // Skip if a submit is already in-flight — the backend will 409 a
+      // heartbeat against an attempt it has already marked Submitted, and
+      // those 409s leak into diagnostics and fail the smoke spec.
+      if (isSubmittingRef.current) return;
       void heartbeatListeningAttempt(attempt.attemptId, Math.round(progress), 'web').catch(() => undefined);
     }, 15000);
     return () => window.clearInterval(interval);
-  }, [attempt?.attemptId, hasStarted, progress]);
+  }, [attempt?.attemptId, hasStarted, isSubmitting, progress]);
 
   const logIntegrityEvent = useCallback((eventType: string, details?: string) => {
     if (!attempt?.attemptId || !session?.modePolicy.integrityLockRequired) return;
@@ -295,6 +305,9 @@ function PlayerContent() {
 
   const handleSubmit = async ({ skipFinalSave = false }: { skipFinalSave?: boolean } = {}) => {
     if (!session) return;
+    // Set the synchronous gate before any await so the 15s heartbeat tick
+    // cannot race a Submitted attempt and trip the 409 diagnostics check.
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     audioRef.current?.pause();
     for (const timer of Object.values(saveTimers.current)) clearTimeout(timer);
@@ -326,6 +339,7 @@ function PlayerContent() {
       }
       router.push(`/listening/results/${result.attemptId}`);
     } catch (err) {
+      isSubmittingRef.current = false;
       setLoadError(err instanceof Error ? err.message : 'Could not submit this Listening attempt.');
       setIsSubmitting(false);
     }
@@ -396,6 +410,12 @@ function PlayerContent() {
   }, [currentSection, hasStarted]);
 
   const advanceToNextSection = () => {
+    // Reset phase off 'review' BEFORE the section index changes. Otherwise
+    // the auto-advance effect (which fires whenever phase==='review' &&
+    // reviewSecondsRemaining===0) sees the new section's currentSection on
+    // re-render and immediately calls advanceFromReview again — which on
+    // the last section triggers handleSubmit and skips the section entirely.
+    setPhase('audio');
     setReviewSecondsRemaining(0);
     setCurrentSectionIndex((value) => value + 1);
     // The currentSection effect above re-enters preview for the new section.

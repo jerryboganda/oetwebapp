@@ -6,6 +6,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { AdminRouteRedirectNotice } from '@/components/domain/admin-route-surface';
 
 export default function ExpertsRedirectPage() {
   const router = useRouter();
@@ -13,8 +14,9 @@ export default function ExpertsRedirectPage() {
     router.replace('/admin/users?tab=tutors');
   }, [router]);
   return (
-    <div className="p-8 text-sm text-muted">
-      Expert Management has moved into User Operations → Tutors. Redirecting…
-    </div>
+    <AdminRouteRedirectNotice
+      title="Expert Management moved to User Operations"
+      description="Tutor and expert administration now lives under the Tutors tab. Redirecting to the unified workspace."
+    />
   );
 }

@@ -11,7 +11,7 @@ for (const target of authStateTargets) {
       useDiskCache: false,
       isolateSession: true,
     });
-    await persistSessionToStorageState(session, target.path);
+    await persistSessionToStorageState(session, target.path, request, target.role);
 
     const rawState = JSON.parse(await readFile(target.path, 'utf8')) as {
       cookies: Array<unknown>;

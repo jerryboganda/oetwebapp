@@ -308,6 +308,13 @@ function shouldIgnorePageError(text: string, options: DiagnosticExpectationOptio
   }
 
   if (
+    options.allowNextDevNoise
+    && (text === 'Connection closed.' || text === 'Connection closed')
+  ) {
+    return true;
+  }
+
+  if (
     options.allowMobileWebKitReloadNoise
     && text.includes('Invariant: Expected clientReferenceManifest to be defined. This is a bug in Next.js.')
   ) {

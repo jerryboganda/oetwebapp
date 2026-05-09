@@ -234,7 +234,7 @@ export function TopNav({
                               const active = sectionedActiveHref === item.href;
                               return (
                                 <motion.li
-                                  key={item.href}
+                                  key={`${section.label}:${item.href}`}
                                   {...itemMotionProps}
                                   transition={{
                                     ...itemMotionProps.transition,
@@ -288,7 +288,7 @@ export function TopNav({
                         const active = flatActiveHref === item.href;
                         return (
                           <motion.li
-                            key={item.href}
+                            key={`${index}:${item.href}`}
                             {...itemMotionProps}
                             transition={{
                               ...itemMotionProps.transition,

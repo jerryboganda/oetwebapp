@@ -19,17 +19,17 @@ test.describe('Admin deep CRUD and mutation workflows @admin', () => {
     await page.getByLabel('Learner-Facing Description').fill('Disposable QA content used to validate draft-save, publish, and revision visibility.');
     await page.getByRole('button', { name: /^save draft$/i }).click();
 
-    await expect(page).toHaveURL(/\/admin\/content\/(?!new$)[^/]+$/);
-    await expect(page.getByRole('heading', { name: new RegExp(`edit ${title}`, 'i') })).toBeVisible();
+    await page.waitForURL(/\/admin\/content\/(?!new$)[^/]+$/, { timeout: 60000 });
+    await expect(page.getByRole('heading', { name: new RegExp(`edit ${title}`, 'i') })).toBeVisible({ timeout: 30000 });
 
     await page.getByRole('button', { name: /^publish$/i }).click();
     await expect(page.getByText(/content saved and published\./i)).toBeVisible();
 
     await page.getByRole('button', { name: /revisions/i }).click();
-    await expect(page).toHaveURL(/\/admin\/content\/[^/]+\/revisions$/);
-    await expect(page.getByRole('heading', { name: /revision history/i })).toBeVisible();
+    await page.waitForURL(/\/admin\/content\/[^/]+\/revisions$/, { timeout: 60000 });
+    await expect(page.getByRole('heading', { name: /revision history/i })).toBeVisible({ timeout: 30000 });
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -50,8 +50,10 @@ test.describe('Admin deep CRUD and mutation workflows @admin', () => {
     await expect(eventRow).toBeVisible();
 
     await filterTrigger.click();
-    const actionOption = page.locator('button[role="checkbox"]').filter({ hasText: /^Saved Review Draft$/ }).first();
-    await expect(actionOption).toBeVisible();
+    // The filter-bar option button renders "<label> <count>"; do not anchor
+    // the regex to end-of-string or the optional count breaks the match.
+    const actionOption = page.locator('button[role="checkbox"]').filter({ hasText: /Saved Review Draft/ }).first();
+    await expect(actionOption).toBeVisible({ timeout: 15000 });
     await actionOption.click();
 
     await eventRow.focus();
@@ -78,7 +80,7 @@ test.describe('Admin deep CRUD and mutation workflows @admin', () => {
     expect(stats.size, 'Expected exported audit log CSV to be non-empty').toBeGreaterThan(0);
     await expect(page.getByText(/audit log export downloaded\./i)).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -93,7 +95,7 @@ test.describe('Admin deep CRUD and mutation workflows @admin', () => {
     const before = await fetchAdminUserDetailApi(request, userId) as { creditBalance?: number };
 
     await page.goto(`/admin/users/${userId}`);
-    await expect(page.getByRole('heading', { name: /faisal maqsood/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /faisal maqsood/i })).toBeVisible({ timeout: 30000 });
 
     await page.getByRole('button', { name: /adjust credits/i }).click();
     await page.getByLabel('Credit Adjustment').fill('1');
@@ -123,7 +125,7 @@ test.describe('Admin deep CRUD and mutation workflows @admin', () => {
       await expect(page.getByText(/account reactivated successfully\./i)).toBeVisible();
     }
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });

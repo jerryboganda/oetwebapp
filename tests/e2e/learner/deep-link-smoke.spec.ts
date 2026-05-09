@@ -6,7 +6,10 @@ const learnerDeepLinks = [
   {
     path: '/reading/player/rt-001',
     assertions: async (page: Page) => {
-      const main = page.getByRole('main');
+      // The app shell renders a top-level <main id="main-content"> and the
+      // reading-player page renders an inner <main> for its content. Scope to
+      // the page-content main to avoid strict-mode landmark ambiguity.
+      const main = page.locator('main').last();
       await expect(main).toBeVisible({ timeout: 60000 });
       await expect(main.getByRole('heading', { name: /hospital-acquired infections: prevention strategies/i })).toBeVisible({ timeout: 60000 });
       await expect(page.getByText(/question 1 of 3/i)).toBeVisible({ timeout: 60000 });

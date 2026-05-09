@@ -21,7 +21,7 @@ interface FeatureFlag {
   id: string;
   name: string;
   key: string;
-  flagType: string;
+  flagType: string | null;
   enabled: boolean;
   rolloutPercentage: number;
   description: string | null;
@@ -44,6 +44,14 @@ const FREE_TIER_DEFAULTS: Record<string, { freeLimit: number; label: string }> =
   'ask-an-expert':        { freeLimit: 1,   label: 'Ask a Tutor Qs/month' },
   'community-access':     { freeLimit: -1,  label: 'Community access (unlimited)' },
 };
+
+function normalizeFlagType(value: string | null | undefined): string {
+  return value?.trim().toLowerCase() || 'release';
+}
+
+function toSearchableText(value: string | null | undefined): string {
+  return value?.toLowerCase() ?? '';
+}
 
 export default function FreeTierStrategyPage() {
   /* state */
@@ -112,10 +120,10 @@ export default function FreeTierStrategyPage() {
 
   /* filter + search */
   const filtered = flags
-    .filter(f => !filterType || f.flagType.toLowerCase() === filterType)
-    .filter(f => !search || f.name.toLowerCase().includes(search.toLowerCase()) || f.key.toLowerCase().includes(search.toLowerCase()));
+    .filter(f => !filterType || normalizeFlagType(f.flagType) === filterType)
+    .filter(f => !search || toSearchableText(f.name).includes(search.toLowerCase()) || toSearchableText(f.key).includes(search.toLowerCase()));
 
-  const flagTypes = Array.from(new Set(flags.map(f => f.flagType)));
+  const flagTypes = Array.from(new Set(flags.map(f => normalizeFlagType(f.flagType))));
 
   /* counts */
   const enabledCount = flags.filter(f => f.enabled).length;
@@ -186,6 +194,7 @@ export default function FreeTierStrategyPage() {
         {filtered.map(flag => {
           const limits = tierLimits[flag.id] || { freeLimit: -1, premiumLimit: -1 };
           const preset = FREE_TIER_DEFAULTS[flag.key];
+          const flagType = normalizeFlagType(flag.flagType);
           return (
             <MotionItem key={flag.id}>
               <Card className="p-4">
@@ -193,7 +202,7 @@ export default function FreeTierStrategyPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-sm">{flag.name}</span>
-                        <Badge variant="outline" className="text-[10px] capitalize">{flag.flagType}</Badge>
+                        <Badge variant="outline" className="text-[10px] capitalize">{flagType}</Badge>
                         {preset && <Badge variant="muted" className="text-[10px]">Tier-configured</Badge>}
                       </div>
                       <p className="text-xs text-muted truncate">{flag.description || flag.key}</p>

@@ -69,6 +69,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/analytics/quality': [AdminPermission.QualityAnalytics],
   '/admin/users': [AdminPermission.UsersRead],
   '/admin/experts': [AdminPermission.UsersRead],
+  '/admin/community': [AdminPermission.SystemAdmin],
   '/admin/billing': [AdminPermission.BillingRead],
   '/admin/billing/wallet-tiers': [AdminPermission.BillingRead],
   '/admin/flags': [AdminPermission.FeatureFlags],

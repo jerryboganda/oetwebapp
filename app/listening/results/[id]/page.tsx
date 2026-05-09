@@ -29,13 +29,31 @@ function ListeningResultsContent() {
     if (!id) return;
     let cancelled = false;
 
-    Promise.resolve()
-      .then(() => {
+    const fetchWithRetry = async (): Promise<ListeningReviewDto | null> => {
+      // The submit→navigate handoff can race the review endpoint when the
+      // dev server is under load. A few short retries paper over the
+      // fetch-cancellation that happens when the player unmounts mid-call
+      // without forcing the learner to reload. Budget extends to ~30s to
+      // cover cold-path AI grading and Next dev-server first-compile of
+      // the result route under Playwright load.
+      const delaysMs = [0, 250, 500, 1000, 2000, 3000, 5000, 8000, 10000];
+      let lastErr: unknown = null;
+      for (const delay of delaysMs) {
         if (cancelled) return null;
-        setLoading(true);
-        setError(null);
-        return getListeningResult(id);
-      })
+        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+        try {
+          return await getListeningResult(id);
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr instanceof Error ? lastErr : new Error('Could not load Listening result.');
+    };
+
+    setLoading(true);
+    setError(null);
+
+    fetchWithRetry()
       .then((review) => {
         if (cancelled || !review) return;
         const expanded: Record<string, boolean> = {};

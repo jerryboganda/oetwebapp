@@ -203,7 +203,18 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {  co
       });
 
       if (resolvedContentId && resolvedContentId !== contentId) {
-        router.replace(`/admin/content/${resolvedContentId}`);
+        const target = `/admin/content/${resolvedContentId}`;
+        router.replace(target);
+        // Backup: when dev-server first-compile of /admin/content/[id] is
+        // slow under Playwright load, router.replace can land in a half
+        // state where the URL doesn't update. Force a hard nav as fallback.
+        if (typeof window !== 'undefined') {
+          window.setTimeout(() => {
+            if (window.location.pathname.endsWith('/admin/content/new')) {
+              window.location.assign(target);
+            }
+          }, 750);
+        }
       } else if (resolvedContentId) {
         const impactSummary = await getAdminContentImpactData(resolvedContentId);
         setImpact(impactSummary);

@@ -312,6 +312,19 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
 
+  // Attach CSRF token (double-submit cookie pattern) for mutation requests.
+  // The Next.js /api/backend proxy enforces matching header + cookie on
+  // non-safe methods whenever a refresh cookie is present, so listening
+  // autosave PUTs and section-transition heartbeats must include it or
+  // they 403 out and the player drops into "Listening task unavailable".
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (typeof document !== 'undefined' && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    const csrfMatch = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
+    if (csrfMatch && !headers.has('x-csrf-token')) {
+      headers.set('x-csrf-token', csrfMatch[1]);
+    }
+  }
+
   const response = await fetchWithTimeout(resolveUrl(path), { ...init, headers });
   if (!response.ok) {
     let detail: unknown = null;

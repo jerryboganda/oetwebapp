@@ -126,6 +126,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         */}
         <script
           nonce={nonce}
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: getRuntimeBootstrapScript() }}
         />
         <AppProviders nonce={nonce}>{children}</AppProviders>

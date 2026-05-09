@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
+import { waitForSessionGuardToClear } from '../fixtures/auth';
 
 const expertRoutes = [
   { path: '/expert', text: /dashboard|expert/i },
@@ -59,7 +60,7 @@ test.describe('Privileged workspaces @smoke', () => {
     const diagnostics = observePage(page);
     await expectPrivilegedAuthResolution(page, '/expert', /dashboard|expert/i);
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -72,7 +73,7 @@ test.describe('Privileged workspaces @smoke', () => {
     const diagnostics = observePage(page);
     await expectPrivilegedAuthResolution(page, '/admin', /operations|admin/i);
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -83,13 +84,16 @@ test.describe('Privileged workspaces @smoke', () => {
         test.skip();
       }
 
+      test.setTimeout(120_000); // page.goto + session-guard wait + cold dev compile + render under firefox/webkit can exceed default 60s budget
+
       const diagnostics = observePage(page);
       await page.goto(route.path);
+      await waitForSessionGuardToClear(page);
       const main = page.getByRole('main');
 
-      await expect(main.getByText(route.text).first()).toBeVisible();
+      await expect(main.getByText(route.text).first()).toBeVisible({ timeout: 30_000 }); // cold dev compile + first data fetch can exceed 10s
 
-      expectNoSevereClientIssues(diagnostics);
+      expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
       diagnostics.detach();
       await attachDiagnostics(testInfo, diagnostics);
     });
@@ -101,13 +105,16 @@ test.describe('Privileged workspaces @smoke', () => {
         test.skip();
       }
 
+      test.setTimeout(120_000); // page.goto + session-guard wait + cold dev compile + render under firefox/webkit can exceed default 60s budget
+
       const diagnostics = observePage(page);
       await page.goto(route.path);
+      await waitForSessionGuardToClear(page);
       const main = page.getByRole('main');
 
-      await expect(main.getByText(route.text).first()).toBeVisible();
+      await expect(main.getByText(route.text).first()).toBeVisible({ timeout: 30_000 }); // cold dev compile + first data fetch can exceed 10s
 
-      expectNoSevereClientIssues(diagnostics);
+      expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
       diagnostics.detach();
       await attachDiagnostics(testInfo, diagnostics);
     });

@@ -5,6 +5,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { AdminRouteRedirectNotice } from '@/components/domain/admin-route-surface';
 
 export default function PermissionsRedirectPage() {
   const router = useRouter();
@@ -12,8 +13,9 @@ export default function PermissionsRedirectPage() {
     router.replace('/admin/users?tab=admins');
   }, [router]);
   return (
-    <div className="p-8 text-sm text-muted">
-      Permissions has moved into User Operations → Admins &amp; Permissions. Redirecting…
-    </div>
+    <AdminRouteRedirectNotice
+      title="Permissions moved to User Operations"
+      description="Permission management now lives under Admins & Permissions. Redirecting to the unified workspace."
+    />
   );
 }
