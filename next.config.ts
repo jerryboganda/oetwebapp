@@ -61,6 +61,15 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ['wavesurfer.js'],
   webpack: (config, {dev, isServer}) => {
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings ?? []),
+      {
+        module:
+          /node_modules[\\/]@prisma[\\/]instrumentation[\\/]node_modules[\\/]@opentelemetry[\\/]instrumentation[\\/]/,
+        message: /Critical dependency: the request of a dependency is an expression/,
+      },
+    ];
+
     if (!dev && isServer) {
       config.plugins ??= [];
       config.plugins.push({
