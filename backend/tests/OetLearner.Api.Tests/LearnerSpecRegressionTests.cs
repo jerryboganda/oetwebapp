@@ -769,7 +769,14 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             var normalizedSubtest = subtest.ToLowerInvariant();
             Assert.Equal(normalizedSubtest, json.RootElement.GetProperty("subtest").GetString());
 
-            var taskResponse = await client.GetAsync($"/v1/{normalizedSubtest}/tasks/{taskId}");
+            // Reading was migrated off /v1/reading/tasks/{id} (now 410 Gone)
+            // to the structured paper API. Use the paper structure endpoint
+            // so the per-subtest follow-up call exercises real production
+            // routing.
+            var taskRoute = normalizedSubtest == "reading"
+                ? $"/v1/reading-papers/papers/{taskId}/structure"
+                : $"/v1/{normalizedSubtest}/tasks/{taskId}";
+            var taskResponse = await client.GetAsync(taskRoute);
             taskResponse.EnsureSuccessStatusCode();
         }
     }
