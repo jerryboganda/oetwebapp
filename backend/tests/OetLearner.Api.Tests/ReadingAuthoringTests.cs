@@ -911,6 +911,34 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Exam_allows_BC_answer_and_submit_after_part_a_break_window_expires_without_resume()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var partBQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddSeconds(-(15 * 60 + ReadingAttemptService.PartABreakMaxSeconds + 30));
+        attempt.PartBCTimerPausedAt = attempt.StartedAt.AddMinutes(15);
+        attempt.PartABreakUsed = false;
+        attempt.PartBCPausedSeconds = 0;
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddMinutes(30);
+        await db.SaveChangesAsync();
+
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default);
+        var result = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+
+        Assert.Equal(1, result.RawScore);
+        Assert.Equal(ReadingAttemptStatus.Submitted, attempt.Status);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Optional_break_extends_only_BC_deadline_and_never_reopens_part_a()
     {
         var (db, structure, _, _, attemptSvc) = Build();

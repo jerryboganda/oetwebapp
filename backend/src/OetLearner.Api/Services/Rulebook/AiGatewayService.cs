@@ -144,16 +144,17 @@ public sealed class AiGatewayService(
             }
         }
 
-        // No explicit pin → consult the provider registry to honor the active
-        // highest-priority row's dialect. Without this, a Cloudflare or
-        // Anthropic row registered as the top failover entry would be ignored
-        // because the gateway would always grab the first non-mock concrete
-        // implementation in DI registration order.
+        // No explicit pin → consult the text-chat provider registry to honor
+        // the active highest-priority row's dialect. Voice/OCR rows share the
+        // registry but cannot service grounded chat completions.
         if (provider is null && providerRegistry is not null)
         {
             try
             {
-                var topRow = (await providerRegistry.ListActiveAsync(ct)).FirstOrDefault();
+                var topRow = (await providerRegistry.ListByCategoryAsync(AiProviderCategory.TextChat, ct))
+                    .Where(row => row.IsActive && row.Category == AiProviderCategory.TextChat)
+                    .OrderBy(row => row.FailoverPriority)
+                    .FirstOrDefault();
                 if (topRow is not null)
                 {
                     var preferredName = ProviderNameForDialect(topRow.Dialect);

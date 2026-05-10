@@ -232,19 +232,28 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   }, [attempt?.scopeQuestionIds, structure]);
   const answeredCount = Object.values(answers).filter(isAnsweredJson).length;
   const unansweredCount = Math.max(0, totalQuestions - answeredCount);
+  const partADeadlineMs = attempt ? Date.parse(attempt.partADeadlineAt) : Number.NaN;
+  const partBCDeadlineMs = attempt ? Date.parse(attempt.partBCDeadlineAt) : Number.NaN;
+  const overallDeadlineMs = attempt ? Date.parse(attempt.deadlineAt) : Number.NaN;
+  const breakWindowEndsAtMs = attempt
+    ? Math.min(
+        Number.isFinite(overallDeadlineMs) ? overallDeadlineMs : Number.POSITIVE_INFINITY,
+        partADeadlineMs + Math.max(0, attempt.partABreakMaxSeconds) * 1000,
+      )
+    : Number.NaN;
   // Practice modes ignore the Part-A hard lock, but their own timer still
   // controls autosave, input locking, and auto-submit.
   const partALocked = !isPracticeMode
-    && Boolean(attempt && nowMs > new Date(attempt.partADeadlineAt).getTime());
+    && Boolean(attempt && nowMs > partADeadlineMs);
   const breakPending = Boolean(
     attempt?.mode === 'Exam'
     && attempt.partABreakAvailable
     && partALocked
     && !attempt.partABreakResumed
-    && nowMs <= new Date(attempt.deadlineAt).getTime(),
+    && nowMs < breakWindowEndsAtMs,
   );
-  const partBCWindowEnded = Boolean(attempt && !breakPending && nowMs > new Date(attempt.partBCDeadlineAt).getTime());
-  const paperExpired = Boolean(attempt && nowMs > new Date(attempt.deadlineAt).getTime());
+  const partBCWindowEnded = Boolean(attempt && !breakPending && nowMs > partBCDeadlineMs);
+  const paperExpired = Boolean(attempt && nowMs > overallDeadlineMs);
   const attemptInputsLocked = breakPending || partBCWindowEnded || paperExpired;
 
   useEffect(() => {

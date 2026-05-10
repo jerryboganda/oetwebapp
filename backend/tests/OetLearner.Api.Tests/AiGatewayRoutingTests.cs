@@ -97,6 +97,31 @@ public class AiGatewayRoutingTests
         Assert.Equal("openai-platform", credentialResolver.LastProviderCode);
     }
 
+    [Fact]
+    public async Task CompleteAsync_FallbackRegistrySelection_IgnoresHigherPriorityVoiceRows()
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { mockProvider, registryProvider },
+            providerRegistry: new FakeProviderRegistry(
+                ProviderRow("azure-tts", AiProviderDialect.AzureTts, AiProviderCategory.Tts, 0, "voice-default-model"),
+                ProviderRow("openai-platform", AiProviderDialect.OpenAiCompatible, AiProviderCategory.TextChat, 10, "text-default-model")));
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        });
+
+        Assert.Equal("completion from registry", result.Completion);
+        Assert.Null(mockProvider.LastRequest);
+        Assert.NotNull(registryProvider.LastRequest);
+        Assert.Equal("openai-platform", registryProvider.LastRequest!.ProviderCode);
+        Assert.Equal("text-default-model", registryProvider.LastRequest.Model);
+    }
+
     private static AiGroundedPrompt BuildWritingPrompt(IAiGatewayService gateway)
         => gateway.BuildGroundedPrompt(new AiGroundingContext
         {
@@ -159,27 +184,54 @@ public class AiGatewayRoutingTests
             => string.Equals(requestedFeatureCode, featureCode, StringComparison.OrdinalIgnoreCase);
     }
 
-    private sealed class FakeProviderRegistry(string providerCode, AiProviderDialect dialect) : IAiProviderRegistry
-    {
-        private readonly AiProvider _provider = new()
+    private static AiProvider ProviderRow(
+        string providerCode,
+        AiProviderDialect dialect,
+        AiProviderCategory category = AiProviderCategory.TextChat,
+        int failoverPriority = 0,
+        string defaultModel = "provider-default-model")
+        => new()
         {
             Id = providerCode,
             Code = providerCode,
             Name = providerCode,
             Dialect = dialect,
+            Category = category,
             BaseUrl = "https://provider.example.test",
             IsActive = true,
-            DefaultModel = "provider-default-model",
+            FailoverPriority = failoverPriority,
+            DefaultModel = defaultModel,
         };
 
+    private sealed class FakeProviderRegistry : IAiProviderRegistry
+    {
+        private readonly IReadOnlyList<AiProvider> _providers;
+
+        public FakeProviderRegistry(string providerCode, AiProviderDialect dialect)
+            : this(ProviderRow(providerCode, dialect))
+        {
+        }
+
+        public FakeProviderRegistry(params AiProvider[] providers)
+        {
+            _providers = providers;
+        }
+
         public Task<AiProvider?> FindByCodeAsync(string code, CancellationToken ct)
-            => Task.FromResult<AiProvider?>(string.Equals(code, providerCode, StringComparison.OrdinalIgnoreCase) ? _provider : null);
+            => Task.FromResult(_providers.FirstOrDefault(provider =>
+                provider.IsActive && string.Equals(provider.Code, code, StringComparison.OrdinalIgnoreCase)));
 
         public Task<IReadOnlyList<AiProvider>> ListActiveAsync(CancellationToken ct)
-            => Task.FromResult<IReadOnlyList<AiProvider>>(new[] { _provider });
+            => Task.FromResult<IReadOnlyList<AiProvider>>(_providers
+                .Where(provider => provider.IsActive)
+                .OrderBy(provider => provider.FailoverPriority)
+                .ToList());
 
         public Task<IReadOnlyList<AiProvider>> ListByCategoryAsync(AiProviderCategory category, CancellationToken ct)
-            => Task.FromResult<IReadOnlyList<AiProvider>>(category == _provider.Category ? new[] { _provider } : Array.Empty<AiProvider>());
+            => Task.FromResult<IReadOnlyList<AiProvider>>(_providers
+                .Where(provider => provider.IsActive && provider.Category == category)
+                .OrderBy(provider => provider.FailoverPriority)
+                .ToList());
 
         public Task<string?> GetPlatformKeyAsync(string providerCode, CancellationToken ct)
             => Task.FromResult<string?>(null);

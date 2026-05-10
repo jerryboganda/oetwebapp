@@ -784,7 +784,7 @@ public sealed class WritingEvaluationPipeline(
         public bool? Passed { get; set; }
 
         [JsonPropertyName("passRequires")]
-        public string? PassRequires { get; set; }
+        public JsonElement? PassRequires { get; set; }
 
         [JsonPropertyName("advisory")]
         public string? Advisory { get; set; }

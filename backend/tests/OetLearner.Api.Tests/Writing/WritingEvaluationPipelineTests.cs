@@ -66,7 +66,7 @@ public sealed class WritingEvaluationPipelineTests : IAsyncDisposable
             estimatedScaledScore = 360,
             estimatedGrade = "B",
             passed = true,
-            passRequires = "350 (UK)",
+            passRequires = new { scaledScore = 350, grade = "B", jurisdiction = "UK" },
             advisory = "Solid discharge letter; reduce minor lexical repetition.",
             strengths = new[] { "Clear purpose statement.", "Logical paragraph order." },
         });

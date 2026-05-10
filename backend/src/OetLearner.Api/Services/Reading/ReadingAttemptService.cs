@@ -377,7 +377,7 @@ public sealed class ReadingAttemptService(
                     "Parts B and C are not available until the Part A window has ended.");
             }
 
-            if (!attempt.PartABreakUsed)
+            if (IsPartABreakPending(attempt, resolvedPolicy, now))
             {
                 throw new ReadingAttemptException(
                     "part_bc_break_not_resumed",
@@ -721,9 +721,21 @@ public sealed class ReadingAttemptService(
         ReadingAttempt attempt,
         ReadingResolvedPolicy policy,
         DateTimeOffset now)
-        => attempt.Mode == ReadingAttemptMode.Exam
-            && !attempt.PartABreakUsed
-            && now >= ResolvePartADeadline(attempt, policy);
+    {
+        if (attempt.Mode != ReadingAttemptMode.Exam || attempt.PartABreakUsed)
+        {
+            return false;
+        }
+
+        var partADeadline = ResolvePartADeadline(attempt, policy);
+        var breakWindowEndsAt = partADeadline.AddSeconds(PartABreakMaxSeconds);
+        if (attempt.DeadlineAt is DateTimeOffset deadline && deadline < breakWindowEndsAt)
+        {
+            breakWindowEndsAt = deadline;
+        }
+
+        return now >= partADeadline && now < breakWindowEndsAt;
+    }
 
     private async Task<bool> CanLearnerSeePaperAsync(string userId, ContentPaper paper, CancellationToken ct)
     {
