@@ -86,6 +86,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             catch (Exception ex)
             {
                 logger.LogError(ex, "Job {JobId} of type {JobType} failed (attempt {Attempt})", job.Id, job.Type, job.RetryCount + 1);
+                await DiscardPendingJobSideEffectsAsync(db, job.Id, cancellationToken);
                 job.RetryCount += 1;
                 job.LastTransitionAt = DateTimeOffset.UtcNow;
 
@@ -500,6 +501,25 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         var attempt = await db.Attempts.FirstAsync(x => x.Id == job.AttemptId, cancellationToken);
         var evaluation = await db.Evaluations.FirstAsync(x => x.AttemptId == attempt.Id, cancellationToken);
 
+        if (evaluation.State != AsyncState.Completed)
+        {
+            var failureVersion = evaluation.LastTransitionAt.UtcDateTime.Ticks.ToString();
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerEvaluationFailed,
+                attempt.UserId,
+                "attempt",
+                attempt.Id,
+                failureVersion,
+                new Dictionary<string, object?>
+                {
+                    ["attemptId"] = attempt.Id,
+                    ["subtest"] = "speaking",
+                    ["message"] = evaluation.StatusMessage ?? "We could not finish your speaking evaluation automatically. Please try again shortly."
+                },
+                cancellationToken);
+            return;
+        }
+
         db.AnalyticsEvents.Add(new AnalyticsEventRecord
         {
             Id = $"evt-{Guid.NewGuid():N}",
@@ -536,6 +556,40 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 ["message"] = "Your readiness snapshot was recalculated after the latest speaking evaluation."
             },
             cancellationToken);
+    }
+
+    private static async Task DiscardPendingJobSideEffectsAsync(LearnerDbContext db, string currentJobId, CancellationToken cancellationToken)
+    {
+        foreach (var entry in db.ChangeTracker.Entries().ToList())
+        {
+            if (entry.Entity is BackgroundJobItem backgroundJob)
+            {
+                if (backgroundJob.Id == currentJobId)
+                {
+                    await entry.ReloadAsync(cancellationToken);
+                }
+
+                continue;
+            }
+
+            if (entry.State == EntityState.Added)
+            {
+                entry.State = EntityState.Detached;
+                continue;
+            }
+
+            if (entry.State is EntityState.Modified or EntityState.Deleted)
+            {
+                try
+                {
+                    await entry.ReloadAsync(cancellationToken);
+                }
+                catch (InvalidOperationException)
+                {
+                    entry.State = EntityState.Detached;
+                }
+            }
+        }
     }
 
     private static async Task CompleteStudyPlanRegenerationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)

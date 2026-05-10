@@ -21,8 +21,20 @@ public static class AuthEndpoints
                 => Results.Ok(await service.GetSignupCatalogAsync(ct)))
             .AllowAnonymous();
 
-        auth.MapPost("/sign-in", async (PasswordSignInRequest request, AuthService service, CancellationToken ct)
-                => Results.Ok(await service.SignInAsync(request, ct)))
+        auth.MapPost("/sign-in", async (PasswordSignInRequest request, HttpContext httpContext, AuthService service, CancellationToken ct) =>
+            {
+                try
+                {
+                    return Results.Ok(await service.SignInAsync(request, ct));
+                }
+                catch (MfaChallengeRequiredException exception)
+                {
+                    return Results.Json(
+                        CreateMfaChallengePayload(httpContext, exception),
+                        statusCode: StatusCodes.Status403Forbidden,
+                        contentType: "application/problem+json");
+                }
+            })
             .AllowAnonymous()
             .RequireRateLimiting("AuthBruteforce");
 
@@ -78,7 +90,7 @@ public static class AuthEndpoints
             .AllowAnonymous()
             .RequireRateLimiting("AuthBruteforce");
 
-        auth.MapPost("/mfa/authenticator/begin", async (ClaimsPrincipal user, BeginAuthenticatorSetupRequest _, AuthService service, CancellationToken ct)
+        auth.MapPost("/mfa/authenticator/begin", async (ClaimsPrincipal user, AuthService service, CancellationToken ct)
                 => Results.Ok(await service.BeginAuthenticatorSetupAsync(user, ct)))
             .RequireAuthorization();
 
@@ -146,5 +158,19 @@ public static class AuthEndpoints
             .RequireAuthorization();
 
         return app;
+    }
+
+    private static object CreateMfaChallengePayload(HttpContext context, MfaChallengeRequiredException exception)
+    {
+        var correlationId = context.Items.TryGetValue("CorrelationId", out var cid) ? cid as string : null;
+        return new
+        {
+            code = "mfa_challenge_required",
+            message = exception.Message,
+            email = exception.Email,
+            challengeToken = exception.ChallengeToken,
+            retryable = false,
+            correlationId
+        };
     }
 }

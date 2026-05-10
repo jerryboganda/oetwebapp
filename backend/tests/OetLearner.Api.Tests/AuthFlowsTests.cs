@@ -436,6 +436,28 @@ public class AuthFlowsTests
     }
 
     [Fact]
+    public async Task AuthEndpoints_BeginAuthenticatorSetup_AllowsEmptyRequestBody()
+    {
+        await using var harness = CreateAuthApiHarness();
+        await harness.SeedPrivilegedAccountAsync(ApplicationUserRoles.Expert, isEmailVerified: true);
+
+        var signInResponse = await harness.Client.PostAsJsonAsync("/v1/auth/sign-in",
+            new PasswordSignInRequest("expert@example.com", "Password123!", true));
+        signInResponse.EnsureSuccessStatusCode();
+        var signInSession = await signInResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
+        Assert.NotNull(signInSession);
+
+        using var beginRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/mfa/authenticator/begin");
+        beginRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", signInSession!.AccessToken);
+
+        var beginResponse = await harness.Client.SendAsync(beginRequest);
+        beginResponse.EnsureSuccessStatusCode();
+        var setup = await beginResponse.Content.ReadFromJsonAsync<AuthenticatorSetupResponse>(JsonSupport.Options);
+        Assert.NotNull(setup);
+        Assert.False(string.IsNullOrWhiteSpace(setup!.SecretKey));
+    }
+
+    [Fact]
     public async Task AuthEndpoints_MfaChallenge_CompletesPrivilegedSignInAfterAuthenticatorSetup()
     {
         await using var harness = CreateAuthApiHarness();
