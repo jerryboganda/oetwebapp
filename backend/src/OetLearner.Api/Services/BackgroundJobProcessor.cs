@@ -769,24 +769,43 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     /// <summary>Map a rulebook rule id to its OET writing criterion code.</summary>
     private static string MapRuleToCriterion(string ruleId)
     {
-        // Heuristic mapping by section prefix. Aligns with the 6-criterion
-        // writing rubric and the rulebook section organisation.
-        var id = ruleId ?? "";
-        if (id.StartsWith("R01", StringComparison.OrdinalIgnoreCase) ||
-            id.StartsWith("R02", StringComparison.OrdinalIgnoreCase)) return "purpose";
-        if (id.StartsWith("R03", StringComparison.OrdinalIgnoreCase) ||
-            id.StartsWith("R04", StringComparison.OrdinalIgnoreCase) ||
-            id.StartsWith("R05", StringComparison.OrdinalIgnoreCase)) return "content";
-        if (id.StartsWith("R06", StringComparison.OrdinalIgnoreCase) ||
-            id.StartsWith("R07", StringComparison.OrdinalIgnoreCase)) return "conciseness_clarity";
-        if (id.StartsWith("R08", StringComparison.OrdinalIgnoreCase) ||
-            id.StartsWith("R09", StringComparison.OrdinalIgnoreCase) ||
-            id.StartsWith("R10", StringComparison.OrdinalIgnoreCase)) return "genre_style";
-        if (id.StartsWith("R11", StringComparison.OrdinalIgnoreCase) ||
-            id.StartsWith("R12", StringComparison.OrdinalIgnoreCase) ||
+        // Rulebook-compliance audit 2026-05-10: route rules to the correct
+        // criterion so deterministic critical-violation caps land on the
+        // criterion the rule actually concerns.
+        //
+        //   R01            -> purpose (task identification / addressee)
+        //   R02, R03       -> content (clinical content rules)
+        //   R03.8 / R03.9  -> conciseness_clarity (length / paragraph count)
+        //   R04, R05, R11,
+        //     R13, R14     -> organisation_layout (layout / structure)
+        //   R06, R07, R08,
+        //     R09, R15, R16-> genre_style (register / phrasing)
+        //   R10, R12       -> language (grammar, tense, contractions, the patient)
+        //   default        -> content
+        var id = ruleId ?? string.Empty;
+
+        // Length / paragraph count fall under conciseness_clarity even though
+        // they sit under R03 in the rulebook tree.
+        if (id.StartsWith("R03.8", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R03.9", StringComparison.OrdinalIgnoreCase)) return "conciseness_clarity";
+
+        if (id.StartsWith("R01", StringComparison.OrdinalIgnoreCase)) return "purpose";
+        if (id.StartsWith("R02", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R03", StringComparison.OrdinalIgnoreCase)) return "content";
+        if (id.StartsWith("R10", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R12", StringComparison.OrdinalIgnoreCase)) return "language";
+        if (id.StartsWith("R04", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R05", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R11", StringComparison.OrdinalIgnoreCase) ||
             id.StartsWith("R13", StringComparison.OrdinalIgnoreCase) ||
             id.StartsWith("R14", StringComparison.OrdinalIgnoreCase)) return "organisation_layout";
-        return "language";
+        if (id.StartsWith("R06", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R07", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R08", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R09", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R15", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R16", StringComparison.OrdinalIgnoreCase)) return "genre_style";
+        return "content";
     }
 
     private static OetLearner.Api.Services.Rulebook.ExamProfession MapProfession(string code)

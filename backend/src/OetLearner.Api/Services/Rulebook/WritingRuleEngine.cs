@@ -194,9 +194,10 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
 
     private static IEnumerable<LintFinding> DetectSmokingDrinking(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        var recipient = (input.RecipientSpecialty ?? "").ToLowerInvariant();
-        string[] excluded = { "occupational therapist", "ot" };
-        if (excluded.Any(e => recipient.Contains(e))) yield break;
+        var recipient = input.RecipientSpecialty ?? "";
+        // Word-boundary exclusion so 'physiotherapist' does NOT match 'ot'.
+        // Mirrors lib/rulebook/writing-rules.ts.
+        if (Regex.IsMatch(recipient, @"\b(occupational\s+therapist|OT)\b", RegexOptions.IgnoreCase)) yield break;
 
         var body = input.LetterText.ToLowerInvariant();
         var hasSmoking = Regex.IsMatch(body, @"\b(smok|tobacco|cigarett)");

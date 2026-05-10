@@ -482,8 +482,10 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               </InlineAlert>
             ) : null}
             {/* Reading rulebook B §7 — academic-integrity reminder visible above the
-                timer during Part A and on the break screen for mock/exam attempts. */}
-            {attempt.mode === 'Exam' && (activePart === 'A' || breakPending) ? (
+                timer during Part A. The break-screen renders its own banner, so
+                this outer placement is gated off when the break is active to
+                avoid a double-render. */}
+            {attempt.mode === 'Exam' && activePart === 'A' && !breakPending ? (
               <ReadingIntegrityBanner />
             ) : null}
             <AttemptToolbar

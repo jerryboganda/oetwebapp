@@ -54,6 +54,26 @@ Doctor`;
     }));
     expect(findings.find((f) => f.ruleId === 'R03.4')).toBeUndefined();
   });
+
+  // Regression: the OT-exclusion previously used substring matching on 'ot',
+  // which incorrectly matched 'physi-OT-herapist'. Word-boundary regex now.
+  it('FIRES R03.4 when writing to a physiotherapist (no OT exclusion)', () => {
+    const findings = lintWritingLetter(base({
+      letterText: letterWithBoth.replace(/smokes[^.]+\./, '').replace(/drinks[^.]+\./, ''),
+      recipientSpecialty: 'Physiotherapist',
+      letterType: 'non_medical_referral',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R03.4')).toBeDefined();
+  });
+
+  it('does NOT fire R03.4 when recipient is "OT" (abbreviation, word-boundary)', () => {
+    const findings = lintWritingLetter(base({
+      letterText: letterWithBoth.replace(/smokes[^.]+\./, '').replace(/drinks[^.]+\./, ''),
+      recipientSpecialty: 'OT',
+      letterType: 'non_medical_referral',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R03.4')).toBeUndefined();
+  });
 });
 
 describe('writing linter — R03.6 atopic allergy rule', () => {
@@ -189,6 +209,22 @@ describe('writing linter — R08.14 forbidden "the patient"', () => {
     }));
     const hits = findings.filter((f) => f.ruleId === 'R08.14' || f.ruleId === 'R12.2');
     expect(hits.length).toBeGreaterThan(0);
+  });
+});
+
+describe('writing linter — R06.7 body uses last-name only', () => {
+  it('flags a full title+first+last name in body (e.g. "Mr John Smith")', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Mr John Smith\n\nMr John Smith presented with chest pain.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R06.7')).toBeDefined();
+  });
+
+  it('does NOT fire R06.7 when body uses title + last name only ("Mr Smith")', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Mr John Smith\n\nMr Smith presented with chest pain.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R06.7')).toBeUndefined();
   });
 });
 

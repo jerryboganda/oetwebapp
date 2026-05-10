@@ -117,6 +117,25 @@ export interface WritingResult {
   criteria: CriterionFeedback[];
   submittedAt: string;
   evalStatus: EvalStatus;
+  /**
+   * Hybrid grader surface (rulebook-compliance audit 2026-05-10). Optional
+   * because legacy mocks/results may not include it.
+   */
+  evaluation?: {
+    ruleViolations?: WritingRuleViolation[];
+    criterionScores?: Record<string, { raw?: number; max?: number }>;
+    graderMode?: string;
+    aiFeedback?: unknown[];
+  };
+}
+
+export interface WritingRuleViolation {
+  ruleId: string;
+  severity?: 'critical' | 'major' | 'minor' | 'info';
+  criterion?: string;
+  quote?: string;
+  message: string;
+  fixSuggestion?: string;
 }
 
 export interface CriteriaDelta {

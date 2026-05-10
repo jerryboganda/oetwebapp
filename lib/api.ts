@@ -1375,6 +1375,38 @@ export async function fetchWritingResult(resultId: string): Promise<WritingResul
 
   const criteria = mapCriterionFeedback(feedback.criterionScores ?? [], feedback.feedbackItems ?? []);
 
+  // Hybrid grader surface (rulebook-compliance audit 2026-05-10): backend
+  // returns criterionScores as a list of dicts and ruleViolations carrying
+  // criterionCode. The feedback page expects a map keyed by criterionCode
+  // and a `criterion` field on each violation.
+  const summaryCriterionList = Array.isArray(summary.criterionScores)
+    ? (summary.criterionScores as ApiRecord[])
+    : [];
+  const criterionScoresMap: Record<string, { raw?: number; max?: number }> = {};
+  for (const entry of summaryCriterionList) {
+    const code = entry.criterionCode as string | undefined;
+    if (!code) continue;
+    criterionScoresMap[code] = {
+      raw: typeof entry.score === 'number' ? entry.score : undefined,
+      max: typeof entry.max === 'number' ? entry.max : undefined,
+    };
+  }
+
+  const summaryViolations = Array.isArray(summary.ruleViolations)
+    ? (summary.ruleViolations as ApiRecord[])
+    : [];
+  const ruleViolations = summaryViolations.map((v) => ({
+    ruleId: String(v.ruleId ?? ''),
+    severity: (v.severity as 'critical' | 'major' | 'minor' | 'info' | undefined),
+    criterion: v.criterionCode as string | undefined,
+    quote: v.quote as string | undefined,
+    message: String(v.message ?? ''),
+    fixSuggestion: v.fixSuggestion as string | undefined,
+  }));
+
+  const aiFeedback = Array.isArray(summary.aiFeedback) ? (summary.aiFeedback as unknown[]) : [];
+  const graderMode = typeof summary.graderMode === 'string' ? summary.graderMode : undefined;
+
   return {
     id: resultId,
     taskId: summary.taskId,
@@ -1396,6 +1428,12 @@ export async function fetchWritingResult(resultId: string): Promise<WritingResul
     criteria,
     submittedAt: summary.generatedAt ?? new Date().toISOString(),
     evalStatus: toEvalStatus(summary.state),
+    evaluation: {
+      ruleViolations,
+      criterionScores: criterionScoresMap,
+      graderMode,
+      aiFeedback,
+    },
   };
 }
 

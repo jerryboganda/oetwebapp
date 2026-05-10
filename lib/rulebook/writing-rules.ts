@@ -123,10 +123,11 @@ const DETECTORS: Record<string, Detector> = {
   // R03.4 — Smoking/drinking always included unless recipient is OT
   content_requires_smoking_drinking(rule, input) {
     const findings: LintFinding[] = [];
-    const recipient = (input.recipientSpecialty ?? '').toLowerCase();
-    const excluded = (rule.params as { excludeRecipientSpecialties?: string[] } | undefined)
-      ?.excludeRecipientSpecialties?.map((s) => s.toLowerCase()) ?? [];
-    if (excluded.some((x) => recipient.includes(x))) return findings;
+    const recipient = input.recipientSpecialty ?? '';
+    // Word-boundary exclusion so 'physiotherapist' does NOT match 'ot'.
+    // Per the rulebook, the exclusion list is occupational therapists only.
+    const excludedRe = /\b(occupational\s+therapist|OT)\b/i;
+    if (excludedRe.test(recipient)) return findings;
 
     const body = input.letterText.toLowerCase();
     const hasSmoking = /\b(smok|tobacco|cigarett)/.test(body);
@@ -304,10 +305,21 @@ const DETECTORS: Record<string, Detector> = {
     return [];
   },
 
-  body_uses_last_name_only(rule, input, structure) {
-    // If we know the recipient's full name via Re: line, we could cross-check; for now we
-    // piggy-back on the_patient detector + flag occurrences of the last-name-less "Dr" outside salutation.
-    return DETECTORS.body_forbidden_phrase_the_patient(rule, input, structure);
+  body_uses_last_name_only(rule, _input, structure) {
+    // R06.7 — in the body, refer to the patient by title + last name only.
+    // Detect title + first + last name patterns (e.g. 'Mr John Smith').
+    // Use the structured body so we don't false-positive on Re: lines.
+    if (!structure.body || structure.body.length === 0) return [];
+    const fullNameRe = /\b(Mr|Mrs|Ms|Miss|Dr|Master)\.?\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b/g;
+    const m = fullNameRe.exec(structure.body);
+    if (!m) return [];
+    return [
+      ruleFinding(
+        rule,
+        "Use title + last name only in body, not the patient's full name (e.g. 'Mr Smith' not 'Mr John Smith').",
+        { quote: m[0], start: m.index, end: m.index + m[0].length },
+      ),
+    ];
   },
 
   // R06.8 — Age / DOB handling in Re:
@@ -356,11 +368,11 @@ const DETECTORS: Record<string, Detector> = {
     if (/^yours\s+(sincerely|faithfully)/i.test(yours) && !/^Yours\s+(sincerely|faithfully)/.test(yours)) {
       return [ruleFinding(rule, "Capitalise 'Yours' (capital Y, lowercase s in 'sincerely').", { quote: yours })];
     }
-    // Misspellings
-    if (/sincerly|sincerley|sincrely|faithfuly|faithfully|sincerely/i.test(yours)) {
-      if (/sincerly|sincerley|sincrely|faithfuly/i.test(yours)) {
-        return [ruleFinding(rule, "Check spelling of the closing phrase (S-I-N-C-E-R-E-L-Y).", { quote: yours })];
-      }
+    // Common misspellings of the closing phrase. The previous outer
+    // wrapper that also matched the correctly-spelled forms made this
+    // branch dead; we now test only the typo variants.
+    if (/sincerly|sincerley|sincrely|faithfuly/i.test(yours)) {
+      return [ruleFinding(rule, "Check spelling of the closing phrase (S-I-N-C-E-R-E-L-Y).", { quote: yours })];
     }
     return [];
   },

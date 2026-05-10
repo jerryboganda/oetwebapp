@@ -27,14 +27,10 @@ import type { WritingResult, AnchoredComment } from '@/lib/mock-data';
 import { criterionMaxScore } from '@/lib/writing-criterion-colors';
 
 /**
- * Optional structured evaluation surface attached by the backend grader.
- * The backend agent (Hephaestus) is in flight delivering `evaluation`
- * alongside `WritingResult`; until then this is best-effort and the page
- * falls back to the legacy `result.criteria[*]` shape.
- *
- * TODO(backend-handoff): once `WritingResult.evaluation` ships in
- *   `lib/mock-data.ts`, remove the local typing here and import the canonical
- *   types from `@/lib/mock-data`.
+ * Hybrid grader surface attached by `fetchWritingResult` from the
+ * `/v1/writing/evaluations/{id}/summary` payload (rulebook-compliance audit
+ * 2026-05-10). The page reads `result.evaluation` directly off
+ * `WritingResult` — see `lib/mock-data.ts`.
  */
 interface RuleViolation {
   ruleId: string;
@@ -310,9 +306,6 @@ export default function WritingDetailedFeedback() {
                   ) : (
                     <p className="text-xs italic text-muted">
                       No deterministic rule violations detected.
-                      {!result.evaluation?.ruleViolations
-                        ? ' (Rulebook engine evaluation not yet attached to this result — backend handoff in flight.)'
-                        : ''}
                     </p>
                   )}
                 </section>
