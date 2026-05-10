@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using OetLearner.Api.Data;
 
 #nullable disable
 
@@ -18,6 +20,8 @@ namespace OetLearner.Api.Data.Migrations
     /// is wrapped in <c>DO $$ ... $$</c> blocks so re-applying the migration
     /// against a partially-migrated database is a no-op.
     /// </summary>
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260504130000_HardenWallet")]
     public partial class HardenWallet : Migration
     {
         /// <inheritdoc />
