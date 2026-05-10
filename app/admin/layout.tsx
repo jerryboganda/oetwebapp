@@ -5,7 +5,7 @@ import { AdminDashboardShell, type MobileMenuSection } from '@/components/layout
 import type { NavGroup, NavItem } from '@/components/layout/sidebar';
 import { hasPermission, sidebarPermissionMap } from '@/lib/admin-permissions';
 import { useAuth } from '@/contexts/auth-context';
-import { useMemo } from 'react';
+import { Children, isValidElement, cloneElement, useMemo } from 'react';
 import { 
   LayoutDashboard,
   Library, 
@@ -400,12 +400,6 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const filteredMobileMenuSections = useMemo(() => filterSectionsByPermissions(adminMobileMenuSections, perms), [perms]);
 
   const pageTitle = getAdminPageTitle(pathname);
-  const bannerBlock = (
-    <>
-      <PrivilegedMfaBanner />
-      {children}
-    </>
-  );
 
   return (
     <AdminDashboardShell
@@ -416,7 +410,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       mobileMenuSections={filteredMobileMenuSections}
       requiredRole="admin"
     >
-      {bannerBlock}
+      <PrivilegedMfaBanner key="privileged-mfa-banner" />
+      {Children.map(children, (child, index) =>
+        isValidElement(child) ? cloneElement(child, { key: child.key ?? `admin-children-${index}` }) : child,
+      )}
     </AdminDashboardShell>
   );
 }
