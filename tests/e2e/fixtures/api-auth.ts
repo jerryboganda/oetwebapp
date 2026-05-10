@@ -110,6 +110,14 @@ async function acquireLock(name: string): Promise<() => void> {
 void readFileSync;
 
 function isOptimisticConcurrencyFailure(status: number, body: string) {
+  // After the backend exhausts its internal retry (LearnerService
+  // CreateReviewRequestAsync), DbUpdateConcurrencyException is mapped to a
+  // typed 409 wallet_update_conflict. Treat that as retryable so cross-worker
+  // contention on the seeded learner wallet doesn't fail the helper.
+  if (status === 409 && /"code"\s*:\s*"wallet_update_conflict"/.test(body)) {
+    return true;
+  }
+
   if (status !== 500) {
     return false;
   }

@@ -2897,13 +2897,16 @@ public partial class LearnerService(
     public async Task<object> CreateReviewRequestAsync(string userId, ReviewRequestCreateRequest request, CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
-        for (var attemptNumber = 0; attemptNumber < 2; attemptNumber++)
+        // Higher retry count tolerates cross-worker wallet contention during
+        // parallel CI Playwright shards. The helper retries on the resulting
+        // 409 wallet_update_conflict as well.
+        for (var attemptNumber = 0; attemptNumber < 4; attemptNumber++)
         {
             try
             {
                 return await CreateReviewRequestCoreAsync(userId, request, cancellationToken);
             }
-            catch (DbUpdateConcurrencyException) when (attemptNumber == 0)
+            catch (DbUpdateConcurrencyException) when (attemptNumber < 3)
             {
                 db.ChangeTracker.Clear();
             }

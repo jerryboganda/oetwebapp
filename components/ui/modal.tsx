@@ -269,9 +269,16 @@ interface DrawerProps {
   children: ReactNode;
   side?: 'right' | 'left';
   className?: string;
+  /**
+   * When `false`, the Drawer skips its own focus-restoration on close. Use
+   * this when the parent owns focus restoration (e.g. via a stable
+   * `data-row-key` lookup) to avoid racing the modal's late
+   * `onExitComplete` callback — see admin audit-logs.
+   */
+  restoreFocusOnClose?: boolean;
 }
 
-export function Drawer({ open, onClose, title, children, side = 'right', className }: DrawerProps) {
+export function Drawer({ open, onClose, title, children, side = 'right', className, restoreFocusOnClose = true }: DrawerProps) {
   const drawerRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const restoreFocusDescriptorRef = useRef<FocusRestoreDescriptor | null>(null);
@@ -355,8 +362,11 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
     }
 
     shouldRestoreFocusRef.current = false;
+    if (!restoreFocusOnClose) {
+      return;
+    }
     queueFocusRestore(restoreFocusRef.current, restoreFocusDescriptorRef.current);
-  }, []);
+  }, [restoreFocusOnClose]);
 
   return (
     <AnimatePresence initial={false} mode={presenceMode} onExitComplete={handleExitComplete}>

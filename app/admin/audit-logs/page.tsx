@@ -327,7 +327,7 @@ export default function AuditLogsPage() {
         </AdminRoutePanel>
       </AsyncStateWrapper>
 
-      <Drawer open={Boolean(selectedLogId)} onClose={handleDrawerClose} title="Audit Event Detail">
+      <Drawer open={Boolean(selectedLogId)} onClose={handleDrawerClose} title="Audit Event Detail" restoreFocusOnClose={false}>
         {isDetailLoading || !selectedLogDetail ? (
           <p className="text-sm text-muted">Loading event detail...</p>
         ) : (
