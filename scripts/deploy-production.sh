@@ -22,6 +22,8 @@ echo "[deploy] docker version:"
 docker --version || true
 echo "[deploy] docker compose version:"
 docker compose version || true
+export COMPOSE_PARALLEL_LIMIT="${COMPOSE_PARALLEL_LIMIT:-1}"
+echo "[deploy] compose parallel limit: $COMPOSE_PARALLEL_LIMIT"
 echo "[deploy] disk space BEFORE cleanup:"
 df -h / | tail -1 || true
 echo "[deploy] free memory:"
@@ -33,15 +35,9 @@ if [ ! -f ".env.production" ]; then
 fi
 echo "[deploy] .env.production exists"
 
-# -- Step 1: Stop old containers --
+# -- Step 1: Pre-build cleanup (free disk space without destroying layer cache) --
 echo ""
-echo "[deploy] STEP 1/6: stopping old containers..."
-docker compose --env-file .env.production -f docker-compose.production.yml down --remove-orphans 2>&1 || echo "[deploy] STEP 1 warn: compose down returned non-zero (continuing)"
-echo "[deploy] STEP 1 done"
-
-# -- Step 2: Pre-build cleanup (free disk space without destroying layer cache) --
-echo ""
-echo "[deploy] STEP 2/6: pre-build cleanup..."
+echo "[deploy] STEP 1/5: pre-build cleanup..."
 echo "[deploy] removing stopped containers..."
 docker container prune -f 2>&1 || true
 echo "[deploy] removing dangling images (preserving tagged/cached images)..."
@@ -50,56 +46,59 @@ echo "[deploy] removing unused build cache older than 24h..."
 docker builder prune -f --filter "until=24h" 2>&1 || true
 echo "[deploy] disk space AFTER cleanup:"
 df -h / | tail -1 || true
-echo "[deploy] STEP 2 done"
+echo "[deploy] STEP 1 done"
 
-# -- Step 3: Build images --
+# -- Step 2: Build images before touching the live containers. If the build
+# fails, the current production stack stays up instead of being replaced by 502s.
 echo ""
-echo "[deploy] STEP 3/6: building images..."
+echo "[deploy] STEP 2/5: building images..."
 echo "[deploy] build started at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 build_images() {
-  docker compose --env-file .env.production -f docker-compose.production.yml build --pull 2>&1
+  docker compose --env-file .env.production -f docker-compose.production.yml build --pull db-backup 2>&1
+  docker compose --env-file .env.production -f docker-compose.production.yml build --pull learner-api 2>&1
+  docker compose --env-file .env.production -f docker-compose.production.yml build --pull web 2>&1
 }
 
 if build_images; then
-  echo "[deploy] STEP 3 OK: build succeeded at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "[deploy] STEP 2 OK: build succeeded at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 else
   BUILD_EXIT=$?
-  echo "[deploy] STEP 3 WARN: initial build failed with exit code $BUILD_EXIT at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "[deploy] STEP 2 WARN: initial build failed with exit code $BUILD_EXIT at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "[deploy] pruning BuildKit cache and retrying once; this recovers stale/corrupt package-cache mounts without touching volumes..."
   docker builder prune -af 2>&1 || true
   if build_images; then
-    echo "[deploy] STEP 3 OK: build succeeded after cache prune at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "[deploy] STEP 2 OK: build succeeded after cache prune at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   else
     BUILD_RETRY_EXIT=$?
-    echo "[deploy] STEP 3 FAILED: retry build exit code $BUILD_RETRY_EXIT at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "[deploy] STEP 2 FAILED: retry build exit code $BUILD_RETRY_EXIT at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "[deploy] disk space after failed build retry:"
     df -h / | tail -1 || true
     exit 1
   fi
 fi
 
-# -- Step 4: Start containers --
+# -- Step 3: Start containers --
 echo ""
-echo "[deploy] STEP 4/6: starting containers..."
+echo "[deploy] STEP 3/5: starting containers..."
 if docker compose --env-file .env.production -f docker-compose.production.yml up -d --force-recreate --remove-orphans 2>&1; then
-  echo "[deploy] STEP 4 OK: containers started"
+  echo "[deploy] STEP 3 OK: containers started"
 else
   UP_EXIT=$?
-  echo "[deploy] STEP 4 FAILED: container start exit code $UP_EXIT"
+  echo "[deploy] STEP 3 FAILED: container start exit code $UP_EXIT"
   docker compose --env-file .env.production -f docker-compose.production.yml logs --tail=50 2>&1 || true
   exit 1
 fi
 
-# -- Step 5: Post-build cleanup --
+# -- Step 4: Post-build cleanup --
 echo ""
-echo "[deploy] STEP 5/6: post-build cleanup..."
+echo "[deploy] STEP 4/5: post-build cleanup..."
 docker builder prune -af 2>&1 || true
 docker image prune -af 2>&1 || true
-echo "[deploy] STEP 5 done"
+echo "[deploy] STEP 4 done"
 
-# -- Step 6: Status --
+# -- Step 5: Status --
 echo ""
-echo "[deploy] STEP 6/6: container status:"
+echo "[deploy] STEP 5/5: container status:"
 docker compose --env-file .env.production -f docker-compose.production.yml ps 2>&1 || true
 
 echo ""
