@@ -186,9 +186,18 @@ public class ContentPaperServiceTests
 
         for (var i = 1; i <= 20; i++)
         {
+            // Match the strict OET Part A pattern enforced by ReadingStructureService:
+            //   1–7  MatchingTextReference (single-letter A–D), 8–14 ShortAnswer,
+            //   15–20 SentenceCompletion. Texts A1–A4 map to letters A–D.
+            var (qType, correct) = i switch
+            {
+                <= 7 => (ReadingQuestionType.MatchingTextReference, $"\"{(char)('A' + ((i - 1) % textsA.Count))}\""),
+                <= 14 => (ReadingQuestionType.ShortAnswer, $"\"answer-{i}\""),
+                _ => (ReadingQuestionType.SentenceCompletion, $"\"answer-{i}\""),
+            };
             await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
-                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.ShortAnswer,
-                $"Part A question {i}", "[]", $"\"answer-{i}\"", null, false, null, "detail"),
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, qType,
+                $"Part A question {i}", "[]", correct, null, false, null, "detail"),
                 "admin-1", default);
         }
 
