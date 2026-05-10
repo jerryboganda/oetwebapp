@@ -7,7 +7,18 @@ import { join } from 'node:path';
 // would either override the nonced one (bad) or be overridden by it (dead code).
 // API-origin resolution likewise moved to middleware.ts to co-locate with connect-src.
 
+const readNextBuildWorkers = () => {
+  const rawValue = process.env.NEXT_BUILD_WORKERS;
+  if (!rawValue) return undefined;
+
+  const parsedValue = Number.parseInt(rawValue, 10);
+  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : undefined;
+};
+
+const nextBuildWorkers = readNextBuildWorkers();
+
 const nextConfig: NextConfig = {
+  ...(nextBuildWorkers ? { experimental: { cpus: nextBuildWorkers } } : {}),
   reactStrictMode: true,
   images: {
     remotePatterns: [],
