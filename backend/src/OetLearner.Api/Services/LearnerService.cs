@@ -11,6 +11,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Services;
 
@@ -580,9 +581,56 @@ public partial class LearnerService(
         };
     }
 
-    public async Task<object> GetDiagnosticTaskAsync(string subtest, CancellationToken cancellationToken)
+    public async Task<object> GetDiagnosticTaskAsync(string userId, string subtest, IContentEntitlementService contentEntitlements, CancellationToken cancellationToken)
     {
         var normalizedSubtest = NormalizeDiagnosticSubtest(subtest);
+        if (normalizedSubtest == "reading")
+        {
+            var papers = await db.ContentPapers
+                .AsNoTracking()
+                .Where(x => x.SubtestCode.ToLower() == "reading" && x.Status == ContentStatus.Published)
+                .OrderByDescending(x => x.Priority)
+                .ThenByDescending(x => x.PublishedAt)
+                .ThenBy(x => x.Title)
+                .ToListAsync(cancellationToken);
+
+            var structure = new ReadingStructureService(db);
+            foreach (var paper in papers)
+            {
+                if (!await CanLearnerSeeContentPaperAsync(userId, paper, cancellationToken))
+                {
+                    continue;
+                }
+
+                var access = await contentEntitlements.AllowAccessAsync(userId, paper, cancellationToken);
+                if (!access.Allowed)
+                {
+                    continue;
+                }
+
+                var report = await structure.ValidatePaperAsync(paper.Id, cancellationToken);
+                if (!report.IsPublishReady)
+                {
+                    continue;
+                }
+
+                return new
+                {
+                    taskId = paper.Id,
+                    contentId = paper.Id,
+                    subtest = paper.SubtestCode,
+                    title = paper.Title,
+                    difficulty = paper.Difficulty,
+                    estimatedDurationMinutes = paper.EstimatedDurationMinutes,
+                    diagnosticEligible = true
+                };
+            }
+
+            throw ApiException.NotFound(
+                "diagnostic_task_not_found",
+                "No diagnostic Reading paper is currently published.");
+        }
+
         var contentType = $"{normalizedSubtest}_task";
         var item = await db.ContentItems
             .AsNoTracking()
@@ -607,6 +655,23 @@ public partial class LearnerService(
             estimatedDurationMinutes = item.EstimatedDurationMinutes,
             diagnosticEligible = item.IsDiagnosticEligible
         };
+    }
+
+    private async Task<bool> CanLearnerSeeContentPaperAsync(string userId, ContentPaper paper, CancellationToken cancellationToken)
+    {
+        if (paper.AppliesToAllProfessions)
+        {
+            return true;
+        }
+
+        var profession = await db.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => user.ActiveProfessionId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return !string.IsNullOrWhiteSpace(profession)
+            && string.Equals(paper.ProfessionId, profession, StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<object> CreateOrResumeDiagnosticAsync(string userId, CancellationToken cancellationToken)

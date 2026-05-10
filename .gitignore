@@ -97,3 +97,14 @@ ts-prune-survivors.txt
 backend/tests/**/TestResults/
 test-full.log
 front-test.log
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
+
+# Repomix bundles (generated)
+repomix-output.*
+repomix-output*.xml
+repomix-output*.md
+repomix-output*.json
+repomix-output*.txt

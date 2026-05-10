@@ -55,7 +55,7 @@ public static class LearnerEndpoints
 
         var diagnostic = v1.MapGroup("/diagnostic");
         diagnostic.MapGet("/overview", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticOverviewAsync(http.UserId(), ct)));
-        diagnostic.MapGet("/tasks", async ([FromQuery] string subtest, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticTaskAsync(subtest, ct)));
+        diagnostic.MapGet("/tasks", async (HttpContext http, [FromQuery] string subtest, LearnerService service, IContentEntitlementService contentEntitlements, CancellationToken ct) => Results.Ok(await service.GetDiagnosticTaskAsync(http.UserId(), subtest, contentEntitlements, ct)));
         diagnostic.MapPost("/attempts", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateOrResumeDiagnosticAsync(http.UserId(), ct)));
         diagnostic.MapGet("/attempts/{diagnosticId}", async (HttpContext http, string diagnosticId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticAttemptAsync(http.UserId(), diagnosticId, ct)));
         diagnostic.MapGet("/attempts/{diagnosticId}/hub", async (HttpContext http, string diagnosticId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticHubAsync(http.UserId(), diagnosticId, ct)));

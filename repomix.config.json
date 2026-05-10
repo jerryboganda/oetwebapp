@@ -1,0 +1,43 @@
+{
+  "$schema": "https://repomix.com/schemas/latest/schema.json",
+  "input": {
+    "maxFileSize": 5000000
+  },
+  "output": {
+    "filePath": "repomix-output.xml",
+    "style": "xml",
+    "parsableStyle": false,
+    "compress": true,
+    "headerText": "OET Prep Platform — Next.js 15 (frontend) + ASP.NET Core 10 (backend) + Electron (desktop) + Capacitor (mobile). Authoritative architectural rules: see AGENTS.md, DESIGN.md, docs/SCORING.md, docs/RULEBOOKS.md, docs/AI-USAGE-POLICY.md, docs/CONTENT-UPLOAD-PLAN.md, docs/READING-AUTHORING-POLICY.md, docs/GRAMMAR-MODULE.md, docs/PRONUNCIATION.md, docs/CONVERSATION.md.",
+    "fileSummary": true,
+    "directoryStructure": true,
+    "files": true,
+    "removeComments": false,
+    "removeEmptyLines": false,
+    "showLineNumbers": false,
+    "truncateBase64": true,
+    "topFilesLength": 20,
+    "tokenCountTree": 2000,
+    "includeEmptyDirectories": false,
+    "includeFullDirectoryStructure": true,
+    "git": {
+      "sortByChanges": true,
+      "sortByChangesMaxCommits": 200,
+      "includeDiffs": false,
+      "includeLogs": false
+    }
+  },
+  "include": ["**/*"],
+  "ignore": {
+    "useGitignore": true,
+    "useDotIgnore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": []
+  },
+  "security": {
+    "enableSecurityCheck": true
+  },
+  "tokenCount": {
+    "encoding": "o200k_base"
+  }
+}

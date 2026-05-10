@@ -218,7 +218,7 @@ export default function WritingReviewWorkspace() {
       }
     })();
     return () => { cancelled = true; };
-  }, [applyDraft, getReviewDraft, reloadToken, reviewRequestId]);
+  }, [applyDraft, getReviewDraft, reloadToken, reviewRequestId, setIsDirty]);
 
   useEffect(() => {
     if (!reviewRequestId || !isInitialized) return;
@@ -278,7 +278,7 @@ export default function WritingReviewWorkspace() {
     }
     analytics.track('review_draft_saved', { reviewRequestId });
     return savedDraft;
-  }, [anchoredComments, checklist, criterionComments, draftVersion, finalComment, reviewRequestId, scratchpad, scores, upsertReviewDraft]);
+  }, [anchoredComments, checklist, criterionComments, draftVersion, finalComment, reviewRequestId, scratchpad, scores, setIsDirty, upsertReviewDraft]);
 
   const handleSaveDraft = useCallback(async () => {
     setIsSaving(true);
@@ -334,7 +334,7 @@ export default function WritingReviewWorkspace() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [clearReviewDraft, criterionComments, draftVersion, finalComment, persistDraft, reviewRequestId, router, scores]);
+  }, [clearReviewDraft, criterionComments, draftVersion, finalComment, persistDraft, reviewRequestId, router, scores, setIsDirty]);
 
   const handleRework = useCallback(async () => {
     if (!reviewRequestId) return;
@@ -365,7 +365,7 @@ export default function WritingReviewWorkspace() {
     } finally {
       setIsReworking(false);
     }
-  }, [clearReviewDraft, isDirty, persistDraft, reviewRequestId, reworkReason, router]);
+  }, [clearReviewDraft, isDirty, persistDraft, reviewRequestId, reworkReason, router, setIsDirty]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

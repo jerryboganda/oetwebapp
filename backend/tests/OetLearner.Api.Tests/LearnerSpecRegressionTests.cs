@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Reading;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -753,6 +754,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     [Fact]
     public async Task DiagnosticTaskEndpoint_ReturnsPublishedTaskIds_ForEachSubtest()
     {
+        await SeedDiagnosticReadingPaperAsync();
         using var client = await CreateClientForUserAsync("diagnostic-task-user");
 
         var subtests = new[] { "Writing", "Speaking", "Reading", "Listening" };
@@ -768,6 +770,10 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             Assert.Equal(taskId, json.RootElement.GetProperty("contentId").GetString());
             var normalizedSubtest = subtest.ToLowerInvariant();
             Assert.Equal(normalizedSubtest, json.RootElement.GetProperty("subtest").GetString());
+            if (string.Equals(subtest, "Reading", StringComparison.OrdinalIgnoreCase))
+            {
+                Assert.Equal(DiagnosticReadingAccessiblePaperId, taskId);
+            }
 
             // Reading was migrated off /v1/reading/tasks/{id} (now 410 Gone)
             // to the structured paper API. Use the paper structure endpoint
@@ -777,7 +783,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
                 ? $"/v1/reading-papers/papers/{taskId}/structure"
                 : $"/v1/{normalizedSubtest}/tasks/{taskId}";
             var taskResponse = await client.GetAsync(taskRoute);
-            taskResponse.EnsureSuccessStatusCode();
+            Assert.True(taskResponse.IsSuccessStatusCode, $"{subtest} task route {taskRoute} returned {(int)taskResponse.StatusCode}.");
         }
     }
 
@@ -1001,6 +1007,162 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             PublishedAt = now,
         });
 
+        await db.SaveChangesAsync();
+    }
+
+    private const string DiagnosticReadingAccessiblePaperId = "diagnostic-reading-regression";
+    private const string DiagnosticReadingInaccessiblePaperId = "diagnostic-reading-premium-regression";
+
+    private async Task SeedDiagnosticReadingPaperAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        await SeedDiagnosticReadingPaperAsync(
+            db,
+            DiagnosticReadingInaccessiblePaperId,
+            "Premium Diagnostic Reading Regression Paper",
+            "access:premium",
+            priority: 2000,
+            appliesToAllProfessions: false,
+            professionId: "nursing");
+        await SeedDiagnosticReadingPaperAsync(
+            db,
+            DiagnosticReadingAccessiblePaperId,
+            "Diagnostic Reading Regression Paper",
+            "access:free",
+            priority: 1000,
+            appliesToAllProfessions: true,
+            professionId: null);
+    }
+
+    private static async Task SeedDiagnosticReadingPaperAsync(
+        LearnerDbContext db,
+        string paperId,
+        string title,
+        string tagsCsv,
+        int priority,
+        bool appliesToAllProfessions,
+        string? professionId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId);
+        if (paper is null)
+        {
+            db.ContentPapers.Add(new ContentPaper
+            {
+                Id = paperId,
+                SubtestCode = "reading",
+                Title = title,
+                Slug = paperId,
+                AppliesToAllProfessions = appliesToAllProfessions,
+                ProfessionId = professionId,
+                Difficulty = "standard",
+                EstimatedDurationMinutes = 60,
+                Status = ContentStatus.Published,
+                SourceProvenance = "Regression test content supplied by platform owner for internal practice use.",
+                TagsCsv = tagsCsv,
+                Priority = priority,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+        else
+        {
+            paper.Title = title;
+            paper.AppliesToAllProfessions = appliesToAllProfessions;
+            paper.ProfessionId = professionId;
+            paper.TagsCsv = tagsCsv;
+            paper.Priority = priority;
+            paper.Status = ContentStatus.Published;
+            paper.UpdatedAt = now;
+            paper.PublishedAt ??= now;
+            await db.SaveChangesAsync();
+        }
+
+        var structure = new ReadingStructureService(db);
+        var report = await structure.ValidatePaperAsync(paperId, default);
+        if (report.IsPublishReady)
+        {
+            return;
+        }
+
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorDiagnosticReadingPaperAsync(db, structure, paperId);
+    }
+
+    private static async Task FullyAuthorDiagnosticReadingPaperAsync(
+        LearnerDbContext db,
+        ReadingStructureService structure,
+        string paperId)
+    {
+        var parts = await db.ReadingParts.Where(p => p.PaperId == paperId).ToListAsync();
+        var partA = parts.First(p => p.PartCode == ReadingPartCode.A);
+        var partB = parts.First(p => p.PartCode == ReadingPartCode.B);
+        var partC = parts.First(p => p.PartCode == ReadingPartCode.C);
+
+        var textsA = new List<ReadingText>();
+        var textsB = new List<ReadingText>();
+        var textsC = new List<ReadingText>();
+        for (var i = 1; i <= 4; i++)
+        {
+            textsA.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partA.Id, i, $"Text A{i}", "BMJ", "<p>text</p>", 10, null), "admin", default));
+        }
+        for (var i = 1; i <= 6; i++)
+        {
+            textsB.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partB.Id, i, $"Extract B{i}", "NHS", "<p>text</p>", 20, null), "admin", default));
+        }
+        for (var i = 1; i <= 2; i++)
+        {
+            textsC.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partC.Id, i, $"Text C{i}", "Lancet", "<p>text</p>", 300, null), "admin", default));
+        }
+
+        for (var i = 1; i <= 7; i++)
+        {
+            var answer = ((char)('A' + ((i - 1) % 4))).ToString();
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.MatchingTextReference,
+                $"PA-Q{i}", "[]", $"\"{answer}\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 8; i <= 14; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.ShortAnswer,
+                $"PA-Q{i}", "[]", $"\"ans{i}\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 15; i <= 20; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.SentenceCompletion,
+                $"PA-Q{i}", "[]", $"\"ans{i}\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 1; i <= 6; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partB.Id, textsB[i - 1].Id, i, 1, ReadingQuestionType.MultipleChoice3,
+                $"PB-Q{i}", "[\"a\",\"b\",\"c\"]", "\"B\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 1; i <= 16; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partC.Id, textsC[(i - 1) / 8].Id, i, 1, ReadingQuestionType.MultipleChoice4,
+                $"PC-Q{i}", "[\"a\",\"b\",\"c\",\"d\"]", "\"C\"", null, false, null, null), "admin", default);
+        }
+
+        var partIds = parts.Select(p => p.Id).ToList();
+        var questions = await db.ReadingQuestions
+            .Where(q => partIds.Contains(q.ReadingPartId))
+            .ToListAsync();
+        foreach (var question in questions)
+        {
+            question.ReviewState = ReadingReviewState.Published;
+        }
         await db.SaveChangesAsync();
     }
 

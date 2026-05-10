@@ -1,0 +1,56 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Repomix: Refresh AI bundle",
+      "type": "shell",
+      "command": "npx",
+      "args": ["-y", "repomix@latest", "--quiet"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": false,
+        "close": true
+      },
+      "problemMatcher": [],
+      "detail": "Regenerates repomix-output.xml on demand so GitHub Copilot and other AI agents can use a fresh whole-codebase bundle."
+    },
+    {
+      "label": "Repomix: Pack now",
+      "type": "shell",
+      "command": "npx",
+      "args": ["-y", "repomix@latest"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Manual run with full progress + token-tree + security check output."
+    },
+    {
+      "label": "Repomix: Pack (compressed, fast)",
+      "type": "shell",
+      "command": "npx",
+      "args": ["-y", "repomix@latest", "--compress", "--quiet"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "close": true
+      },
+      "problemMatcher": [],
+      "detail": "Fast, compressed regeneration for token-budget-sensitive runs."
+    }
+  ]
+}

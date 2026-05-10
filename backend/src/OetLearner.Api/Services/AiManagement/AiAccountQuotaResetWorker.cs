@@ -9,8 +9,8 @@ namespace OetLearner.Api.Services.AiManagement;
 /// UTC month. Runs hourly; idempotent — once an account's PeriodMonthKey
 /// matches the current month, the worker leaves it alone.
 ///
-/// Implementation is a single set-based <see cref="EntityFrameworkQueryableExtensions.ExecuteUpdateAsync"/>
-/// so it works the same on Postgres and SQLite without loading rows.
+/// Implementation uses a single set-based <see cref="EntityFrameworkQueryableExtensions.ExecuteUpdateAsync"/>
+/// on relational providers, with a tracked fallback for EF's in-memory test provider.
 /// Concurrent reservations during the reset are safe: any reservation
 /// that lands between this UPDATE and a competing pick will simply
 /// increment the freshly-zeroed counter to 1, which is correct.
@@ -60,6 +60,27 @@ public sealed class AiAccountQuotaResetWorker(
 
         var now = clock.GetUtcNow();
         var currentKey = now.ToString("yyyy-MM");
+
+        if (string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal))
+        {
+            var staleAccounts = await db.AiProviderAccounts
+                .Where(a => a.PeriodMonthKey != currentKey)
+                .ToListAsync(ct);
+
+            foreach (var account in staleAccounts)
+            {
+                account.RequestsUsedThisMonth = 0;
+                account.PeriodMonthKey = currentKey;
+                account.UpdatedAt = now;
+            }
+
+            if (staleAccounts.Count > 0)
+            {
+                await db.SaveChangesAsync(ct);
+            }
+
+            return staleAccounts.Count;
+        }
 
         // Set-based update: any row whose PeriodMonthKey is not the current
         // month gets RequestsUsedThisMonth=0 and PeriodMonthKey=currentKey.

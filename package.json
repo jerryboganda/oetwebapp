@@ -41,7 +41,10 @@
     "backend:smoke": "dotnet run --no-build --project backend/src/OetLearner.Api/OetLearner.Api.csproj",
     "ai:gateway:smoke": "powershell -ExecutionPolicy Bypass -File ./scripts/test-cf-gateway.ps1",
     "ai:workers:smoke": "powershell -ExecutionPolicy Bypass -File ./scripts/test-cf-workers-ai.ps1",
-    "unused:scan": "ts-prune -p tsconfig.json | node ./scripts/ts-prune-filter.mjs"
+    "unused:scan": "ts-prune -p tsconfig.json | node ./scripts/ts-prune-filter.mjs",
+    "repomix:pack": "npx -y repomix@latest",
+    "repomix:pack:compress": "npx -y repomix@latest --compress",
+    "repomix:hook:install": "powershell -ExecutionPolicy Bypass -File ./scripts/repomix/install-hook.ps1"
   },
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^7.2.0",
