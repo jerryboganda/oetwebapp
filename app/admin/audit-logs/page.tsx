@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Download, FileText, Search } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
@@ -36,8 +36,6 @@ export default function AuditLogsPage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
-  const lastOpenedLogIdRef = useRef<string | null>(null);
-  const lastOpenedRowRef = useRef<HTMLElement | null>(null);
 
   const selectedAction = filters.action?.[0];
   const selectedActor = filters.actor?.[0];
@@ -201,53 +199,12 @@ export default function AuditLogsPage() {
     }));
   }
 
-  function handleRowClick(
-    log: AdminAuditLogRow,
-    event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>,
-  ) {
-    lastOpenedLogIdRef.current = log.id;
-    lastOpenedRowRef.current = event.currentTarget;
+  function handleRowClick(log: AdminAuditLogRow) {
     setSelectedLogId(log.id);
   }
 
   function handleDrawerClose() {
-    const restoreRow = lastOpenedRowRef.current;
-    const restoreLogId = lastOpenedLogIdRef.current;
     setSelectedLogId(null);
-
-    if (!restoreRow && !restoreLogId) {
-      return;
-    }
-
-    let attempts = 0;
-    const focusRow = () => {
-      const fallbackCandidates = restoreLogId
-        ? Array.from(document.querySelectorAll<HTMLElement>(`[data-row-key="${restoreLogId}"]`))
-        : [];
-      const row = restoreRow?.isConnected && restoreRow.getClientRects().length > 0
-        ? restoreRow
-        : fallbackCandidates.find((candidate) => candidate.getClientRects().length > 0) ?? fallbackCandidates[0];
-      if (!row) {
-        if (attempts < 6) {
-          attempts += 1;
-          window.setTimeout(focusRow, 50);
-        }
-        return;
-      }
-
-      row.focus();
-      if (document.activeElement !== row && attempts < 6) {
-        attempts += 1;
-        requestAnimationFrame(() => {
-          row.focus();
-          if (document.activeElement !== row) {
-            window.setTimeout(focusRow, 50);
-          }
-        });
-      }
-    };
-
-    window.setTimeout(focusRow, 50);
   }
 
   async function handleExport() {
@@ -327,7 +284,7 @@ export default function AuditLogsPage() {
         </AdminRoutePanel>
       </AsyncStateWrapper>
 
-      <Drawer open={Boolean(selectedLogId)} onClose={handleDrawerClose} title="Audit Event Detail" restoreFocusOnClose={false}>
+      <Drawer open={Boolean(selectedLogId)} onClose={handleDrawerClose} title="Audit Event Detail">
         {isDetailLoading || !selectedLogDetail ? (
           <p className="text-sm text-muted">Loading event detail...</p>
         ) : (

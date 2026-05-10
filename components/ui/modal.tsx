@@ -28,6 +28,9 @@ type FocusRestoreDescriptor = {
   ariaLabel?: string;
   name?: string;
   text?: string;
+  /** Stable `data-row-key` attribute, used to re-locate table rows after
+   *  React re-renders invalidate a direct element reference. */
+  dataRowKey?: string;
 };
 
 function describeFocusTarget(element: HTMLElement | null): FocusRestoreDescriptor | null {
@@ -38,6 +41,7 @@ function describeFocusTarget(element: HTMLElement | null): FocusRestoreDescripto
     ariaLabel: element.getAttribute('aria-label') || undefined,
     name: element.getAttribute('name') || undefined,
     text: element.textContent?.trim() || undefined,
+    dataRowKey: element.getAttribute('data-row-key') || undefined,
   };
 }
 
@@ -48,6 +52,15 @@ function resolveFocusTarget(element: HTMLElement | null, descriptor: FocusRestor
 
   if (!descriptor) {
     return null;
+  }
+
+  // Stable data-row-key lookup — preferred over text-matching which is
+  // locale-sensitive and fails when column content changes after re-render.
+  if (descriptor.dataRowKey) {
+    const byRowKey = document.querySelector<HTMLElement>(`[data-row-key="${descriptor.dataRowKey}"]`);
+    if (byRowKey instanceof HTMLElement) {
+      return byRowKey;
+    }
   }
 
   if (descriptor.id) {
