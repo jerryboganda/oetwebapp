@@ -6,39 +6,90 @@ on:
       - main
       - master
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: qa-smoke-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  qa-smoke:
+  backend-tests:
+    name: Backend tests (.NET)
     runs-on: ubuntu-latest
     timeout-minutes: 45
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore backend/OetLearner.sln
+      - name: Test
+        run: dotnet test backend/OetLearner.sln --configuration Release --no-restore --nologo --verbosity minimal
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+  frontend-unit:
+    name: Frontend unit (vitest + lint + tsc + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npx vitest run --reporter=dot
+      - run: npm run build
+
+  e2e-smoke:
+    name: E2E smoke (shard ${{ matrix.shard }}/${{ strategy.job-total }} · ${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # One job per Playwright project. Each job runs that project's full
+        # smoke surface end-to-end against an in-job production-mode Docker
+        # stack — no `next dev` cold-compile flakes.
+        project:
+          - chromium-learner
+          - firefox-learner
+          - webkit-learner
+          - sydney-learner
+          - mobile-chromium-learner
+          - mobile-webkit-learner
+          - chromium-expert
+          - firefox-expert
+          - webkit-expert
+          - chromium-admin
+          - firefox-admin
+          - webkit-admin
+          - chromium-unauth
+        shard: [1]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
-      - name: Install frontend dependencies
-        run: npm ci
+      - run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox webkit
-
-      - name: Run backend tests
-        run: dotnet test backend/OetLearner.sln --configuration Release --no-logo
+        # Only the browser engine actually needed for this shard's project.
+        run: |
+          case "${{ matrix.project }}" in
+            *firefox*)            npx playwright install --with-deps firefox ;;
+            *webkit*|*sydney*)    npx playwright install --with-deps webkit  ;;
+            *)                    npx playwright install --with-deps chromium ;;
+          esac
 
       - name: Build local smoke stack
         run: docker compose -f docker-compose.desktop.yml up -d --build
@@ -46,8 +97,16 @@ jobs:
       - name: Verify stack readiness
         run: node ./scripts/qa/assert-local-stack.mjs
 
-      - name: Run Playwright smoke suite
-        run: npm run test:e2e:smoke
+      - name: Run Playwright tests for ${{ matrix.project }}
+        env:
+          # Force exit-on-failure off so we always get a full report even
+          # when one spec inside the project fails.
+          PLAYWRIGHT_HTML_OPEN: never
+        run: |
+          npx playwright test \
+            --project="${{ matrix.project }}" \
+            --shard=${{ matrix.shard }}/1 \
+            --reporter=list,html,blob
 
       - name: Capture docker logs
         if: always()
@@ -59,11 +118,69 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-smoke-artifacts
+          name: playwright-${{ matrix.project }}-shard${{ matrix.shard }}
           path: |
             output/playwright/
+            blob-report/
           if-no-files-found: ignore
+          retention-days: 14
 
       - name: Shut down smoke stack
         if: always()
         run: docker compose -f docker-compose.desktop.yml down -v
+
+  e2e-merge-report:
+    name: E2E merged HTML report
+    if: always()
+    needs: e2e-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Download all blob reports
+        uses: actions/download-artifact@v4
+        with:
+          path: all-blob-reports
+          pattern: playwright-*
+          merge-multiple: false
+      - name: Merge into HTML report
+        run: |
+          mkdir -p merged-blob
+          find all-blob-reports -type d -name 'blob-report' -exec sh -c 'cp -r "$1"/* merged-blob/ 2>/dev/null || true' _ {} \;
+          if [ -n "$(ls -A merged-blob 2>/dev/null)" ]; then
+            npx playwright merge-reports --reporter html ./merged-blob
+          else
+            echo "No blob reports found to merge."
+          fi
+      - name: Upload merged HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-merged-html-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  qa-gate:
+    name: QA gate (all suites green)
+    if: always()
+    needs: [backend-tests, frontend-unit, e2e-smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all dependencies succeeded
+        run: |
+          if [ "${{ needs.backend-tests.result }}" != "success" ]; then
+            echo "::error::backend-tests failed"; exit 1
+          fi
+          if [ "${{ needs.frontend-unit.result }}" != "success" ]; then
+            echo "::error::frontend-unit failed"; exit 1
+          fi
+          if [ "${{ needs.e2e-smoke.result }}" != "success" ]; then
+            echo "::error::e2e-smoke failed"; exit 1
+          fi
+          echo "All QA gates passed."
