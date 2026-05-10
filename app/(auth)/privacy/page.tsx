@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import shellStyles from '@/components/auth/auth-screen-shell.module.scss';
@@ -18,8 +19,8 @@ interface LegalSection {
   id: string;
   title: string;
   lead?: string;
-  bullets?: Array<string | React.ReactNode>;
-  callout?: React.ReactNode;
+  bullets?: Array<string | ReactNode>;
+  callout?: ReactNode;
 }
 
 const sections: LegalSection[] = [

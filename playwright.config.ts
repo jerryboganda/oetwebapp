@@ -8,7 +8,11 @@ export default defineConfig({
   testIgnore: [/tests\/e2e\/desktop\//, /tests\/e2e\/prod-smoke-privileged\.spec\.ts/],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  // Retry once locally too — Next.js dev cold-compile spikes under sustained
+  // matrix load can flake first attempts on long-route tests; a single retry
+  // absorbs that without masking real regressions (passes only on retry are
+  // visible in the HTML report as "flaky").
+  retries: process.env.CI ? 2 : 1,
   reporter: [
     ['list'],
     ['html', { outputFolder: 'output/playwright/report', open: 'never' }],

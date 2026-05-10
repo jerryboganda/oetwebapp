@@ -169,6 +169,54 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Validator_rejects_part_a_questions_without_text_links()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+        var partAQuestions = await db.ReadingQuestions
+            .Where(question => question.ReadingPartId == partA.Id)
+            .ToListAsync();
+        foreach (var question in partAQuestions)
+        {
+            question.ReadingTextId = null;
+        }
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, issue => issue.Code == "part_A_no_texts" && issue.Severity == "error");
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validator_rejects_individual_part_a_question_missing_text_link()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var question = await db.ReadingQuestions
+            .Where(q => q.Part!.PartCode == ReadingPartCode.A)
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+        question.ReadingTextId = null;
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, issue =>
+            issue.Code == "part_A_question_text_required" && issue.TargetId == question.Id);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Validator_rejects_non_official_time_limit()
     {
         var (db, structure, _, _, _) = Build();
@@ -608,6 +656,53 @@ public class ReadingAuthoringTests
         var result = await grader.GradeAttemptAsync("a1", default);
         Assert.Equal(0, result.RawScore);
         Assert.DoesNotContain(result.Answers, x => x.IsCorrect);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_short_answer_stays_strict_in_drill_mode()
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+        var question = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, null, 8, 1, ReadingQuestionType.ShortAnswer,
+            "What does ORT stand for?", "[]", "\"ORT\"",
+            "[\"oral rehydration therapy\",\"oral-rehydration\"]", false, null, null), "admin", default);
+
+        var snapshot = (await policy.ResolveForUserAsync("u1", default)) with
+        {
+            ShortAnswerAcceptSynonyms = true,
+        };
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "drill-a1",
+            UserId = "u1",
+            PaperId = "p1",
+            Mode = ReadingAttemptMode.Drill,
+            StartedAt = DateTimeOffset.UtcNow,
+            LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress,
+            MaxRawScore = 1,
+            ScopeJson = JsonSerializer.Serialize(new { kind = "drill", questionIds = new[] { question.Id } }),
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "drill-answer-a1",
+            ReadingAttemptId = "drill-a1",
+            ReadingQuestionId = question.Id,
+            UserAnswerJson = "\"oral rehydration therapy\"",
+            AnsweredAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("drill-a1", default);
+
+        Assert.Equal(0, result.RawScore);
+        Assert.DoesNotContain(result.Answers, answer => answer.IsCorrect);
         await db.DisposeAsync();
     }
 

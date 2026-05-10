@@ -695,6 +695,22 @@ public sealed class ReadingStructureService : IReadingStructureService
                 }
                 if (part.PartCode == ReadingPartCode.A)
                 {
+                    if (q.ReadingTextId is null)
+                    {
+                        issues.Add(new(
+                            Code: "part_A_question_text_required",
+                            Severity: "error",
+                            Message: $"Part A question {q.DisplayOrder} must reference one of the authored Part A text units.",
+                            TargetId: q.Id));
+                    }
+                    else if (!textIds.Contains(q.ReadingTextId))
+                    {
+                        issues.Add(new(
+                            Code: "part_A_question_text_invalid",
+                            Severity: "error",
+                            Message: $"Part A question {q.DisplayOrder} references a text outside Part A.",
+                            TargetId: q.Id));
+                    }
                     var expectedType = ExpectedPartAQuestionType(q.DisplayOrder);
                     if (expectedType is null)
                     {
@@ -754,8 +770,8 @@ public sealed class ReadingStructureService : IReadingStructureService
 
             if (part.PartCode == ReadingPartCode.A && questionCount > 0 && part.Questions.All(q => q.ReadingTextId is null))
             {
-                issues.Add(new($"part_{part.PartCode}_no_texts", "warning",
-                    $"No questions in Part {part.PartCode} reference a text — OK for matching, suspicious for MCQ.",
+                issues.Add(new($"part_{part.PartCode}_no_texts", "error",
+                    $"Part {part.PartCode} questions must reference the authored Part A text units for rulebook-safe review and analytics.",
                     part.Id));
             }
 

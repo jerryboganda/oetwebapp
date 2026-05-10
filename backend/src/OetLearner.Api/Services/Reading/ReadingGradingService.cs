@@ -193,7 +193,7 @@ public sealed class ReadingGradingService(
     {
         try
         {
-            var strictPartA = mode == ReadingAttemptMode.Exam && partCode == ReadingPartCode.A;
+            var strictPartA = partCode == ReadingPartCode.A;
             return q.QuestionType switch
             {
                 ReadingQuestionType.MultipleChoice3 or

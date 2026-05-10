@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { sendEmailVerificationOtp, verifyEmailOtp } from '@/lib/auth-client';
@@ -22,6 +22,28 @@ function readErrorMessage(error: unknown): string {
 }
 
 export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<VerifyEmailFallback />}>
+      <VerifyEmailContent />
+    </Suspense>
+  );
+}
+
+function VerifyEmailFallback() {
+  return (
+    <AuthScreenShell
+      brandHref={AUTH_ROUTES.signIn}
+      brandLabel="OET"
+      eyebrow="Step Verification"
+      title="Verify OTP"
+      subtitle="Enter the 6 digit verification code sent to your account to continue."
+    >
+      <p className={styles.fieldHint}>Preparing verification...</p>
+    </AuthScreenShell>
+  );
+}
+
+function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();

@@ -156,7 +156,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
       test.skip();
     }
 
-    testInfo.setTimeout(240000);
+    testInfo.setTimeout(360000); // speaking pipeline = transcription + AI grade; cold dev compile under matrix load can need ~5–6 min total
     await installFakeRecordingMedia(page);
     const diagnostics = observePage(page);
 
@@ -212,8 +212,17 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await expect(page).toHaveURL(/\/speaking\/results\//, { timeout: 60000 });
     // Speaking evaluation runs as a background job (transcription + AI
     // grounded grade). In dev with the mock gateway this typically settles
-    // in under a minute, but cold-start AI calls can take longer.
-    await expect(page.getByRole('heading', { name: /performance summary/i })).toBeVisible({ timeout: 120000 });
+    // in under a minute, but cold-start AI calls under matrix load have
+    // been observed to need >2 min. Periodic reloads recover from a stuck
+    // SWR cache while the background job is still finalising.
+    let attempt = 0;
+    await expect(async () => {
+      attempt += 1;
+      if (attempt > 1) {
+        await page.reload({ waitUntil: 'domcontentloaded' });
+      }
+      await expect(page.getByRole('heading', { name: /performance summary/i })).toBeVisible({ timeout: 30_000 });
+    }).toPass({ timeout: 240_000, intervals: [5_000, 30_000, 30_000, 30_000] });
     await expect(page.getByRole('link', { name: /review transcript/i })).toBeVisible({ timeout: 30000 });
     await expect(page.getByRole('link', { name: /request tutor review/i })).toBeVisible({ timeout: 30000 });
 
