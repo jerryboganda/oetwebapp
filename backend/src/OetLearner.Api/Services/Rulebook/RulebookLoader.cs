@@ -228,6 +228,7 @@ internal sealed class LowercaseEnumConverter<T> : JsonConverter<T> where T : str
 
 public sealed record LintFinding(
     string RuleId,
+    [property: JsonConverter(typeof(LowercaseEnumConverter<RuleSeverity>))]
     RuleSeverity Severity,
     string Message,
     string? Quote = null,

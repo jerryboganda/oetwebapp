@@ -615,6 +615,15 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         var findings = json.RootElement.GetProperty("findings").EnumerateArray().ToArray();
         Assert.Contains(findings, finding => finding.GetProperty("ruleId").GetString() == "R09.7");
         Assert.Contains(findings, finding => finding.GetProperty("ruleId").GetString() == "R09.8");
+        Assert.All(findings, finding =>
+        {
+            var severity = finding.GetProperty("severity");
+            Assert.Equal(JsonValueKind.String, severity.ValueKind);
+            var severityText = severity.GetString();
+            Assert.True(
+                severityText is "critical" or "major" or "minor" or "info",
+                $"Unexpected severity '{severityText}'.");
+        });
     }
 
     [Theory]

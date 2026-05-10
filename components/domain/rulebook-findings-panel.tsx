@@ -28,6 +28,21 @@ const severityBadge: Record<RuleSeverity, { label: string; variant: 'danger' | '
   info: { label: 'Info', variant: 'muted', icon: Info },
 };
 
+function normalizeSeverity(value: unknown): RuleSeverity {
+  if (typeof value === 'number') {
+    return (['critical', 'major', 'minor', 'info'] as const)[value] ?? 'info';
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'critical' || normalized === 'major' || normalized === 'minor' || normalized === 'info') {
+      return normalized;
+    }
+  }
+
+  return 'info';
+}
+
 export function RulebookFindingsPanel({
   title,
   subtitle,
@@ -38,16 +53,21 @@ export function RulebookFindingsPanel({
 }: RulebookFindingsPanelProps) {
   const [filter, setFilter] = useState<FilterMode>('all');
 
+  const normalizedFindings = useMemo(
+    () => findings.map((finding) => ({ ...finding, severity: normalizeSeverity(finding.severity) })),
+    [findings],
+  );
+
   const counts = useMemo(() => ({
-    critical: findings.filter((f) => f.severity === 'critical').length,
-    major: findings.filter((f) => f.severity === 'major').length,
-    minor: findings.filter((f) => f.severity === 'minor').length,
-    info: findings.filter((f) => f.severity === 'info').length,
-  }), [findings]);
+    critical: normalizedFindings.filter((f) => f.severity === 'critical').length,
+    major: normalizedFindings.filter((f) => f.severity === 'major').length,
+    minor: normalizedFindings.filter((f) => f.severity === 'minor').length,
+    info: normalizedFindings.filter((f) => f.severity === 'info').length,
+  }), [normalizedFindings]);
 
   const visible = useMemo(
-    () => (filter === 'critical' ? findings.filter((f) => f.severity === 'critical') : findings),
-    [filter, findings],
+    () => (filter === 'critical' ? normalizedFindings.filter((f) => f.severity === 'critical') : normalizedFindings),
+    [filter, normalizedFindings],
   );
 
   return (
