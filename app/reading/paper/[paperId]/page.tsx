@@ -241,16 +241,22 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         partADeadlineMs + Math.max(0, attempt.partABreakMaxSeconds) * 1000,
       )
     : Number.NaN;
+  const fullUnresumedBreakPartBCDeadlineMs = attempt
+    ? partADeadlineMs
+      + Math.max(0, attempt.partBCTimerMinutes) * 60_000
+      + Math.max(0, attempt.partABreakMaxSeconds) * 1000
+    : Number.NaN;
   const partBCDeadlineMs = attempt
     && attempt.mode === 'Exam'
     && attempt.partABreakAvailable
     && !attempt.partABreakResumed
     && Number.isFinite(serverPartBCDeadlineMs)
     && Number.isFinite(breakWindowEndsAtMs)
+    && Number.isFinite(fullUnresumedBreakPartBCDeadlineMs)
     && nowMs >= breakWindowEndsAtMs
       ? Math.min(
           Number.isFinite(overallDeadlineMs) ? overallDeadlineMs : Number.POSITIVE_INFINITY,
-          serverPartBCDeadlineMs + Math.max(0, attempt.partABreakMaxSeconds) * 1000,
+          Math.max(serverPartBCDeadlineMs, fullUnresumedBreakPartBCDeadlineMs),
         )
       : serverPartBCDeadlineMs;
   // Practice modes ignore the Part-A hard lock, but their own timer still

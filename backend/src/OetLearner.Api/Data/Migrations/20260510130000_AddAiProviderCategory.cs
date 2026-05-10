@@ -14,7 +14,7 @@ namespace OetLearner.Api.Data.Migrations
     /// rows backfill to <c>0</c> (TextChat) so behaviour is unchanged
     /// until an admin explicitly registers a voice row.
     ///
-    /// A Postgres CHECK constraint locks the value to the four enum
+    /// A Postgres CHECK constraint locks the value to the six enum
     /// members defined in <see cref="OetLearner.Api.Domain.AiProviderCategory"/>.
     ///
     /// Selector refactor (TTS / ASR / Pronunciation ASR) lands in
@@ -41,7 +41,7 @@ namespace OetLearner.Api.Data.Migrations
             migrationBuilder.Sql(
                 "ALTER TABLE \"AiProviders\" " +
                 "ADD CONSTRAINT \"CK_AiProviders_Category\" " +
-                "CHECK (\"Category\" IN (0, 1, 2, 3));");
+                "CHECK (\"Category\" IN (0, 1, 2, 3, 4, 5));");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
