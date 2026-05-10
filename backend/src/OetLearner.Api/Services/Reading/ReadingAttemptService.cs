@@ -349,7 +349,7 @@ public sealed class ReadingAttemptService(
 
         var resolvedPolicy = ResolvePolicySnapshot(attempt.PolicySnapshotJson);
         var partADeadline = ResolvePartADeadline(attempt, resolvedPolicy);
-        var answerWindowDeadline = ResolveAnswerWindowDeadline(attempt, resolvedPolicy);
+        var answerWindowDeadline = ResolveAnswerWindowDeadline(attempt, resolvedPolicy, now);
         if (now > answerWindowDeadline)
         {
             throw new ReadingAttemptException(
@@ -478,13 +478,14 @@ public sealed class ReadingAttemptService(
 
     private static DateTimeOffset ResolveAnswerWindowDeadline(
         ReadingAttempt attempt,
-        ReadingResolvedPolicy policy)
+        ReadingResolvedPolicy policy,
+        DateTimeOffset now)
     {
         if (attempt.Mode == ReadingAttemptMode.Exam)
         {
             return attempt.StartedAt
                 .AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes)
-                .AddSeconds(Math.Clamp(attempt.PartBCPausedSeconds, 0, PartABreakMaxSeconds));
+                .AddSeconds(ResolveEffectivePartBCPausedSeconds(attempt, policy, now));
         }
 
         if (attempt.DeadlineAt is DateTimeOffset deadline)
@@ -735,6 +736,21 @@ public sealed class ReadingAttemptService(
         }
 
         return now >= partADeadline && now < breakWindowEndsAt;
+    }
+
+    private static int ResolveEffectivePartBCPausedSeconds(
+        ReadingAttempt attempt,
+        ReadingResolvedPolicy policy,
+        DateTimeOffset now)
+    {
+        var persisted = Math.Clamp(attempt.PartBCPausedSeconds, 0, PartABreakMaxSeconds);
+        if (attempt.Mode != ReadingAttemptMode.Exam || attempt.PartABreakUsed)
+        {
+            return persisted;
+        }
+
+        var elapsedBreakSeconds = (int)Math.Floor((now - ResolvePartADeadline(attempt, policy)).TotalSeconds);
+        return Math.Clamp(Math.Max(persisted, elapsedBreakSeconds), 0, PartABreakMaxSeconds);
     }
 
     private async Task<bool> CanLearnerSeePaperAsync(string userId, ContentPaper paper, CancellationToken ct)

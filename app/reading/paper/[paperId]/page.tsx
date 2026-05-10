@@ -233,7 +233,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const answeredCount = Object.values(answers).filter(isAnsweredJson).length;
   const unansweredCount = Math.max(0, totalQuestions - answeredCount);
   const partADeadlineMs = attempt ? Date.parse(attempt.partADeadlineAt) : Number.NaN;
-  const partBCDeadlineMs = attempt ? Date.parse(attempt.partBCDeadlineAt) : Number.NaN;
+  const serverPartBCDeadlineMs = attempt ? Date.parse(attempt.partBCDeadlineAt) : Number.NaN;
   const overallDeadlineMs = attempt ? Date.parse(attempt.deadlineAt) : Number.NaN;
   const breakWindowEndsAtMs = attempt
     ? Math.min(
@@ -241,6 +241,18 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         partADeadlineMs + Math.max(0, attempt.partABreakMaxSeconds) * 1000,
       )
     : Number.NaN;
+  const partBCDeadlineMs = attempt
+    && attempt.mode === 'Exam'
+    && attempt.partABreakAvailable
+    && !attempt.partABreakResumed
+    && Number.isFinite(serverPartBCDeadlineMs)
+    && Number.isFinite(breakWindowEndsAtMs)
+    && nowMs >= breakWindowEndsAtMs
+      ? Math.min(
+          Number.isFinite(overallDeadlineMs) ? overallDeadlineMs : Number.POSITIVE_INFINITY,
+          serverPartBCDeadlineMs + Math.max(0, attempt.partABreakMaxSeconds) * 1000,
+        )
+      : serverPartBCDeadlineMs;
   // Practice modes ignore the Part-A hard lock, but their own timer still
   // controls autosave, input locking, and auto-submit.
   const partALocked = !isPracticeMode

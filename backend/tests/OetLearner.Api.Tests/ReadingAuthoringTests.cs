@@ -923,11 +923,13 @@ public class ReadingAuthoringTests
             .Include(q => q.Part)
             .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
         var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
-        attempt.StartedAt = DateTimeOffset.UtcNow.AddSeconds(-(15 * 60 + ReadingAttemptService.PartABreakMaxSeconds + 30));
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-65);
         attempt.PartBCTimerPausedAt = attempt.StartedAt.AddMinutes(15);
         attempt.PartABreakUsed = false;
         attempt.PartBCPausedSeconds = 0;
-        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddMinutes(30);
+        attempt.DeadlineAt = attempt.StartedAt
+            .AddMinutes(70)
+            .AddSeconds(10);
         await db.SaveChangesAsync();
 
         await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default);
@@ -977,7 +979,7 @@ public class ReadingAuthoringTests
 
         var started = await attemptSvc.StartAsync("u1", "p1", default);
         var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
-        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-61);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-71);
         attempt.DeadlineAt = DateTimeOffset.UtcNow.AddSeconds(5);
         await db.SaveChangesAsync();
         var partBQuestion = await db.ReadingQuestions
