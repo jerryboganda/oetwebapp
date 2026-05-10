@@ -25,7 +25,24 @@ jobs:
       - name: Restore
         run: dotnet restore backend/OetLearner.sln
       - name: Test
-        run: dotnet test backend/OetLearner.sln --configuration Release --no-restore --nologo --verbosity minimal
+        run: |
+          mkdir -p test-results
+          dotnet test backend/OetLearner.sln \
+            --configuration Release \
+            --no-restore \
+            --nologo \
+            --verbosity normal \
+            --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=results.trx" \
+            --results-directory test-results
+      - name: Upload backend test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
 
   frontend-unit:
     name: Frontend unit (vitest + lint + tsc + build)
@@ -83,13 +100,11 @@ jobs:
       - run: npm ci
 
       - name: Install Playwright browsers
-        # Only the browser engine actually needed for this shard's project.
-        run: |
-          case "${{ matrix.project }}" in
-            *firefox*)            npx playwright install --with-deps firefox ;;
-            *webkit*|*sydney*)    npx playwright install --with-deps webkit  ;;
-            *)                    npx playwright install --with-deps chromium ;;
-          esac
+        # All three engines are required: the `setup` project (auth state
+        # generation) always runs under chromium regardless of which
+        # downstream project this shard targets, and webkit/firefox shards
+        # also need their own engine.
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Build local smoke stack
         run: docker compose -f docker-compose.desktop.yml up -d --build
@@ -97,16 +112,16 @@ jobs:
       - name: Verify stack readiness
         run: node ./scripts/qa/assert-local-stack.mjs
 
-      - name: Run Playwright tests for ${{ matrix.project }}
+      - name: Run Playwright smoke buckets for ${{ matrix.project }}
         env:
-          # Force exit-on-failure off so we always get a full report even
-          # when one spec inside the project fails.
+          # Surface every bucket failure but keep the rest of the project's
+          # buckets running so we capture a complete report per shard.
+          PLAYWRIGHT_CONTINUE_ON_FAILURE: '1'
           PLAYWRIGHT_HTML_OPEN: never
         run: |
-          npx playwright test \
-            --project="${{ matrix.project }}" \
-            --shard=${{ matrix.shard }}/1 \
-            --reporter=list,html,blob
+          node ./scripts/qa/run-playwright-matrix.mjs smoke \
+            --project=${{ matrix.project }} \
+            --skip-readiness
 
       - name: Capture docker logs
         if: always()

@@ -1,7 +1,17 @@
 import { spawnSync } from 'node:child_process';
 
-const mode = process.argv[2] === 'full' ? 'full' : 'smoke';
+const rawArgs = process.argv.slice(2);
+const mode = rawArgs[0] === 'full' ? 'full' : 'smoke';
 const playwrightBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+
+// Optional CLI filters used by sharded CI: --project=<name> selects only
+// buckets that target the given Playwright project; --skip-readiness skips
+// the assert-local-stack precheck (CI runs that as its own step).
+const projectFilter = (() => {
+  const flag = rawArgs.find((a) => a.startsWith('--project='));
+  return flag ? flag.slice('--project='.length).trim() : null;
+})();
+const skipReadiness = rawArgs.includes('--skip-readiness');
 
 const learnerDesktopProjects = ['chromium-learner', 'firefox-learner', 'webkit-learner', 'sydney-learner'];
 const learnerProjects = [...learnerDesktopProjects, 'mobile-chromium-learner', 'mobile-webkit-learner'];
@@ -270,12 +280,54 @@ const fullRuns = [
   },
 ];
 
-verifyReadiness();
+if (!skipReadiness) {
+  verifyReadiness();
+}
 
-const runs = mode === 'full' ? fullRuns : smokeRuns;
+const allRuns = mode === 'full' ? fullRuns : smokeRuns;
+
+// When CI shards by Playwright project, filter buckets to only those whose
+// project list contains the requested project. Bucket projects live inside
+// `args` after each `--project` token, produced by `playwrightArgs`.
+function bucketIncludesProject(args, project) {
+  for (let i = 0; i < args.length - 1; i += 1) {
+    if (args[i] === '--project' && args[i + 1] === project) return true;
+  }
+  return false;
+}
+
+const runs = projectFilter
+  ? allRuns.filter(({ args }) => bucketIncludesProject(args, projectFilter))
+  : allRuns;
+
+// When filtering by a single project, also strip the OTHER --project tokens
+// from each bucket so we only execute the requested project's slice.
+function restrictArgsToProject(args, project) {
+  const out = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === '--project') {
+      // Only keep this --project pair if it matches the filter.
+      if (args[i + 1] === project) {
+        out.push(args[i], args[i + 1]);
+      }
+      i += 1;
+      continue;
+    }
+    out.push(args[i]);
+  }
+  return out;
+}
+
+if (projectFilter && runs.length === 0) {
+  console.log(
+    `No ${mode} buckets target project '${projectFilter}'. Nothing to run.`,
+  );
+  process.exit(0);
+}
 
 for (const { label, args } of runs) {
-  run(label, args);
+  const finalArgs = projectFilter ? restrictArgsToProject(args, projectFilter) : args;
+  run(label, finalArgs);
 }
 
 if (continueOnFailure && failedRuns.length > 0) {
