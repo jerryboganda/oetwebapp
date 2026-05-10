@@ -352,6 +352,25 @@ function resolveApiUrl(pathOrUrl: string): string {
   return `${API_BASE_URL}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
 }
 
+function resolveBrowserApiResourceUrl(pathOrUrl: string): string | null {
+  if (typeof window !== 'undefined' && /^https?:\/\//i.test(pathOrUrl)) {
+    try {
+      const url = new URL(pathOrUrl);
+      if (url.pathname.startsWith('/v1/')) {
+        return resolveApiUrl(`${url.pathname}${url.search}`);
+      }
+    } catch {
+      // Fall back to the normal resolver for malformed input.
+    }
+  }
+
+  return null;
+}
+
+function resolveApiUploadUrl(pathOrUrl: string): string {
+  return resolveBrowserApiResourceUrl(pathOrUrl) ?? resolveApiUrl(pathOrUrl);
+}
+
 async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: boolean }): Promise<HeadersInit> {
   const headers = new Headers(extra);
   if (options?.json ?? true) {
@@ -599,7 +618,7 @@ export const apiClient = {
 };
 
 async function uploadBinary(pathOrUrl: string, blob: Blob): Promise<void> {
-  const response = await fetchWithTimeout(resolveApiUrl(pathOrUrl), {
+  const response = await fetchWithTimeout(resolveApiUploadUrl(pathOrUrl), {
     method: 'PUT',
     headers: await getHeaders(pathOrUrl, { 'Content-Type': blob.type || 'audio/webm' }, { json: false }),
     body: blob,
@@ -690,7 +709,7 @@ export async function completeGroundedAi(
 }
 
 export async function fetchAuthorizedObjectUrl(pathOrUrl: string): Promise<string> {
-  const response = await fetchWithTimeout(resolveApiUrl(pathOrUrl), {
+  const response = await fetchWithTimeout(resolveBrowserApiResourceUrl(pathOrUrl) ?? resolveApiUrl(pathOrUrl), {
     headers: await getHeaders(pathOrUrl, undefined, { json: false }),
   });
 
@@ -945,10 +964,6 @@ function rewriteLegacyLearnerRoute(pathname: string, search: string, hash: strin
   }
 
   if (pathname.startsWith('/reading/task/')) {
-    const taskOrEvaluationId = pathname.slice('/reading/task/'.length);
-    if (taskOrEvaluationId.startsWith('rt-')) {
-      return `/reading/player/${taskOrEvaluationId}${search}${hash}`;
-    }
     return `/reading${search}${hash}`;
   }
 
@@ -1140,7 +1155,7 @@ export async function revokeAllOtherSessions(): Promise<{ revokedCount: number }
 }
 
 export async function fetchReadingHome(): Promise<ApiRecord> {
-  const data = await apiRequest<ApiRecord>('/v1/reading/home');
+  const data = await apiRequest<ApiRecord>('/v1/reading-papers/home');
   return normalizeRouteValues(data);
 }
 
@@ -1852,78 +1867,16 @@ export async function submitSpeakingRecording(
 }
 
 export async function fetchReadingTask(taskId: string): Promise<ReadingTask> {
-  const task = await apiRequest<ApiRecord>(`/v1/reading/tasks/${taskId}`);
-  return {
-    id: task.contentId,
-    title: task.title,
-    part: task.part ?? 'C',
-    timeLimit: task.timeLimitSeconds ?? task.estimatedDurationMinutes * 60,
-    texts: (task.texts ?? []).map((text: ApiRecord) => ({ id: text.id, title: text.title, content: text.content })),
-    questions: (task.questions ?? []).map((question: ApiRecord) => ({
-      id: question.id,
-      number: question.number,
-      text: question.text,
-      type: question.type,
-      options: question.options ?? undefined,
-      correctAnswer: question.correctAnswer ?? '',
-    })),
-  };
+  throw new Error(`Legacy Reading task ${taskId} is closed. Use structured Reading papers from /reading.`);
 }
 
 export async function submitReadingAnswers(taskId: string, answers: Record<string, string>): Promise<ReadingResult> {
-  const attempt = await ensureAttempt('reading', taskId, 'exam');
-  await apiRequest(`/v1/reading/attempts/${attempt.attemptId}/answers`, { method: 'PATCH', body: JSON.stringify({ answers }) });
-  const submitted = await apiRequest<ApiRecord>(`/v1/reading/attempts/${attempt.attemptId}/submit`, { method: 'POST' });
-  cacheRemove(attemptCacheKey('reading', taskId, 'exam'));
-  cacheSet(evaluationCacheKey('reading', taskId), submitted.evaluationId);
-  return fetchReadingResult(taskId);
+  void answers;
+  throw new Error(`Legacy Reading task ${taskId} is closed. Submit structured Reading attempts from /reading.`);
 }
 
 export async function fetchReadingResult(taskId: string): Promise<ReadingResult> {
-  const evaluationId = await latestEvaluationIdForContent(taskId, 'reading');
-  if (!evaluationId) {
-    throw new Error('Reading result not found');
-  }
-
-  const [evaluation, task] = await Promise.all([
-    apiRequest<ApiRecord>(`/v1/reading/evaluations/${evaluationId}`),
-    fetchReadingTask(taskId),
-  ]);
-  const attempt = await apiRequest<ApiRecord>(`/v1/reading/attempts/${evaluation.attemptId}`);
-  const answers = attempt.answers ?? {};
-
-  const items = task.questions.map((question: ReadingTask['questions'][number], index) => {
-    const userAnswer = answers[question.id] ?? '';
-    const isCorrect = String(userAnswer).trim().toLowerCase() === String(question.correctAnswer).trim().toLowerCase();
-    return {
-      id: `ri-${index + 1}`,
-      number: question.number,
-      text: question.text,
-      userAnswer,
-      correctAnswer: question.correctAnswer,
-      isCorrect,
-      errorType: isCorrect ? '' : readingErrorType(question),
-      explanation: (question as ReadingTask['questions'][number] & { explanation?: string }).explanation ?? (isCorrect ? 'Correct.' : 'Review the source text carefully and focus on exact detail.'),
-    };
-  });
-
-  const totalQuestions = items.length;
-  const score = items.filter((item) => item.isCorrect).length;
-  const percentage = totalQuestions === 0 ? 0 : Math.round((score / totalQuestions) * 100);
-
-  return {
-    taskId,
-    title: task.title,
-    score,
-    totalQuestions,
-    percentage,
-    grade: percentage >= 80 ? 'B+' : percentage >= 65 ? 'C+' : 'C',
-    errorClusters: [
-      { type: 'Inference', count: items.filter((item) => !item.isCorrect && item.errorType === 'Inference').length, total: Math.max(1, items.filter((item) => item.errorType === 'Inference').length), percentage: percentage },
-      { type: 'Detail Extraction', count: items.filter((item) => !item.isCorrect && item.errorType === 'Detail Extraction').length, total: Math.max(1, items.filter((item) => item.errorType === 'Detail Extraction').length), percentage: percentage },
-    ],
-    items,
-  };
+  throw new Error(`Legacy Reading result ${taskId} is closed. Review structured Reading attempts from /reading.`);
 }
 
 export async function fetchListeningTask(taskId: string): Promise<ListeningTask> {

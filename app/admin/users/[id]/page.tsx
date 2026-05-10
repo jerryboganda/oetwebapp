@@ -62,7 +62,7 @@ function uiRoleLabel(role: string) {
 
 export default function UserDetailPage() {
   const params = useParams<{ id: string }>();
-  const userId = params?.id;
+  const userId = params?.id ?? '';
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [user, setUser] = useState<AdminUserDetail | null>(null);

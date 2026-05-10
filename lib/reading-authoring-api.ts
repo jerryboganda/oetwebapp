@@ -166,6 +166,23 @@ export interface ReadingAttemptStarted {
   paperTitle: string;
   partATimerMinutes: number;
   partBCTimerMinutes: number;
+  partABreakAvailable: boolean;
+  partABreakResumed: boolean;
+  partBCTimerPausedAt: string | null;
+  partBCPausedSeconds: number;
+  partABreakMaxSeconds: number;
+}
+
+export interface ReadingAttemptBreakState {
+  attemptId: string;
+  deadlineAt: string;
+  partADeadlineAt: string;
+  partBCDeadlineAt: string;
+  partABreakAvailable: boolean;
+  partABreakResumed: boolean;
+  partBCTimerPausedAt: string | null;
+  partBCPausedSeconds: number;
+  partABreakMaxSeconds: number;
 }
 
 export interface ReadingAttemptGraded {
@@ -227,6 +244,11 @@ export interface ReadingHomeAttemptDto {
   deadlineAt: string | null;
   partADeadlineAt: string;
   partBCDeadlineAt: string;
+  partABreakAvailable?: boolean;
+  partABreakResumed?: boolean;
+  partBCTimerPausedAt?: string | null;
+  partBCPausedSeconds?: number;
+  partABreakMaxSeconds?: number;
   answeredCount: number;
   totalQuestions: number;
   canResume: boolean;
@@ -612,7 +634,7 @@ export const updateReadingPolicy = (body: ReadingPolicyDto) =>
 
 // ── Learner ─────────────────────────────────────────────────────────────
 
-export const getReadingHome = () => api<ReadingHomeDto>('/v1/reading/home');
+export const getReadingHome = () => api<ReadingHomeDto>('/v1/reading-papers/home');
 
 // ── Learner: course pathway snapshot ───────────────────────────────────
 //
@@ -680,6 +702,9 @@ export const saveReadingAnswer = (attemptId: string, questionId: string, userAns
     method: 'PUT', body: JSON.stringify({ userAnswerJson }),
   });
 
+export const resumeReadingBreak = (attemptId: string) =>
+  api<ReadingAttemptBreakState>(`/v1/reading-papers/attempts/${attemptId}/break/resume`, { method: 'POST' });
+
 export const submitReadingAttempt = (attemptId: string) =>
   api<ReadingAttemptGraded>(`/v1/reading-papers/attempts/${attemptId}/submit`, { method: 'POST' });
 
@@ -693,6 +718,8 @@ export const getReadingAttempt = (attemptId: string) =>
     startedAt: string; deadlineAt: string | null; submittedAt: string | null;
     rawScore: number | null; scaledScore: number | null; maxRawScore: number;
     partADeadlineAt: string; partBCDeadlineAt: string;
+    partABreakAvailable: boolean; partABreakResumed: boolean; partBCTimerPausedAt: string | null;
+    partBCPausedSeconds: number; partABreakMaxSeconds: number;
     answeredCount: number; totalQuestions: number; canResume: boolean;
     answers: Array<{
       readingQuestionId: string; userAnswerJson: string;

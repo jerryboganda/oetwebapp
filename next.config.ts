@@ -1,4 +1,6 @@
 import type {NextConfig} from 'next';
+import { copyFileSync, existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 // NOTE: Content-Security-Policy is emitted by middleware.ts on a per-request basis
 // so each response carries a unique nonce. Do NOT add a CSP here — a static CSP
@@ -58,7 +60,27 @@ const nextConfig: NextConfig = {
     ];
   },
   serverExternalPackages: ['wavesurfer.js'],
-  webpack: (config, {dev}) => {
+  webpack: (config, {dev, isServer}) => {
+    if (!dev && isServer) {
+      config.plugins ??= [];
+      config.plugins.push({
+        apply(compiler: { hooks: { afterEmit: { tap: (name: string, callback: (compilation: { outputOptions: { path?: string } }) => void) => void } } }) {
+          compiler.hooks.afterEmit.tap('MirrorNextServerChunks', (compilation) => {
+            const outputPath = compilation.outputOptions.path;
+            if (!outputPath) return;
+            const chunksPath = join(outputPath, 'chunks');
+            if (!existsSync(chunksPath)) return;
+
+            for (const fileName of readdirSync(chunksPath)) {
+              if (fileName.endsWith('.js')) {
+                copyFileSync(join(chunksPath, fileName), join(outputPath, fileName));
+              }
+            }
+          });
+        },
+      });
+    }
+
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Do not modify — file watching is disabled to prevent flickering during agent edits.
     if (dev && process.env.DISABLE_HMR === 'true') {

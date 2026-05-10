@@ -50,11 +50,11 @@ export function RegisterForm() {
   const [mobileLocalNumber, setMobileLocalNumber] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { examTypes, professions } = useSignupCatalog();
-  const nextPath = searchParams.get('next');
-  const registrationToken = searchParams.get('registrationToken');
-  const externalEmail = searchParams.get('email') ?? '';
-  const externalFirstName = searchParams.get('firstName') ?? '';
-  const externalLastName = searchParams.get('lastName') ?? '';
+  const nextPath = searchParams?.get('next') ?? null;
+  const registrationToken = searchParams?.get('registrationToken') ?? null;
+  const externalEmail = searchParams?.get('email') ?? '';
+  const externalFirstName = searchParams?.get('firstName') ?? '';
+  const externalLastName = searchParams?.get('lastName') ?? '';
 
   const socials = useMemo(() => ([
     {

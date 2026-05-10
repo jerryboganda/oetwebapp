@@ -30,7 +30,7 @@ export function PrivilegedMfaBanner() {
   const setupHref = buildSetupHref(pathname);
 
   return (
-    <>
+    <div>
       <div className="absolute top-0 left-0 right-0 z-40 flex h-[30px] items-center justify-center bg-gradient-to-r from-orange-500 to-rose-600 px-4 text-xs font-medium text-white shadow-sm">
         <ShieldCheck className="mr-2 h-3.5 w-3.5 opacity-90" />
         <span className="truncate">
@@ -44,6 +44,6 @@ export function PrivilegedMfaBanner() {
         </button>
       </div>
       <div className="h-4 lg:h-2" aria-hidden="true" />
-    </>
+    </div>
   );
 }

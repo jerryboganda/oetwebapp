@@ -29,12 +29,12 @@ export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
   const flowLinks = getAuthFlowLinks('passwordCreate');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [email, setEmail] = useState(searchParams.get('email') ?? '');
-  const [resetToken, setResetToken] = useState(searchParams.get('token') ?? '');
+  const [email, setEmail] = useState(searchParams?.get('email') ?? '');
+  const [resetToken, setResetToken] = useState(searchParams?.get('token') ?? '');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const initialError = searchParams.get('error') ?? '';
+  const initialError = searchParams?.get('error') ?? '';
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -61,7 +61,7 @@ export default function ResetPasswordPage() {
       });
 
       const params = new URLSearchParams({ email: normalizedEmail });
-      const nextPath = searchParams.get('next');
+      const nextPath = searchParams?.get('next');
       if (nextPath) {
         params.set('next', nextPath);
       }
@@ -108,7 +108,7 @@ export default function ResetPasswordPage() {
             here directly). When the verify page redirected here the token is
             already in state; no need to re-expose it. Hidden field still
             submits the value. */}
-        {searchParams.get('token') ? (
+        {searchParams?.get('token') ? (
           <input type="hidden" value={resetToken} readOnly />
         ) : (
           <div className={styles.field}>

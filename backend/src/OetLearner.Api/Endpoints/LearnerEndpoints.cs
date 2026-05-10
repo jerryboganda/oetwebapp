@@ -155,20 +155,14 @@ public static class LearnerEndpoints
         });
 
         var reading = v1.MapGroup("/reading");
-        reading.MapGet("/home", async (
-            HttpContext http,
-            LearnerDbContext db,
-            IReadingPolicyService policy,
-            IContentEntitlementService contentEntitlements,
-            CancellationToken ct) =>
-            Results.Ok(await GetStructuredReadingHomeAsync(http.UserId(), db, policy, contentEntitlements, ct)));
-        reading.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingTaskAsync(contentId, ct)));
-        reading.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateReadingAttemptAsync(http.UserId(), request, ct)));
-        reading.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingAttemptAsync(http.UserId(), attemptId, ct)));
-        reading.MapPatch("/attempts/{attemptId}/answers", async (HttpContext http, string attemptId, AnswersUpdateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.UpdateReadingAnswersAsync(http.UserId(), attemptId, request, ct)));
-        reading.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatAttemptAsync(http.UserId(), attemptId, request, ct)));
-        reading.MapPost("/attempts/{attemptId}/submit", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitReadingAttemptAsync(http.UserId(), attemptId, ct)));
-        reading.MapGet("/evaluations/{evaluationId}", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingEvaluationAsync(http.UserId(), evaluationId, ct)));
+        reading.MapGet("/home", () => ReadingLegacyGone("/v1/reading-papers/home"));
+        reading.MapGet("/tasks/{contentId}", (string contentId) => ReadingLegacyGone($"/v1/reading-papers/papers/{Uri.EscapeDataString(contentId)}/structure"));
+        reading.MapPost("/attempts", () => ReadingLegacyGone("/v1/reading-papers/papers/{paperId}/attempts"));
+        reading.MapGet("/attempts/{attemptId}", () => ReadingLegacyGone("/v1/reading-papers/attempts/{attemptId}"));
+        reading.MapPatch("/attempts/{attemptId}/answers", () => ReadingLegacyGone("/v1/reading-papers/attempts/{attemptId}/answers/{questionId}"));
+        reading.MapPatch("/attempts/{attemptId}/heartbeat", () => ReadingLegacyGone(null));
+        reading.MapPost("/attempts/{attemptId}/submit", () => ReadingLegacyGone("/v1/reading-papers/attempts/{attemptId}/submit"));
+        reading.MapGet("/evaluations/{evaluationId}", () => ReadingLegacyGone("/v1/reading-papers/attempts/{attemptId}/review"));
 
         var listening = v1.MapGroup("/listening");
         listening.MapGet("/home", async (HttpContext http, ListeningLearnerService service, CancellationToken ct) => Results.Ok(await service.GetHomeAsync(http.UserId(), ct)));
@@ -504,7 +498,7 @@ public static class LearnerEndpoints
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
 
-    private static async Task<object> GetStructuredReadingHomeAsync(
+    internal static async Task<object> GetStructuredReadingHomeAsync(
         string userId,
         LearnerDbContext db,
         IReadingPolicyService policyService,
@@ -577,6 +571,15 @@ public static class LearnerEndpoints
                     a.DeadlineAt,
                     partADeadlineAt,
                     partBCDeadlineAt,
+                    partABreakAvailable = a.Mode == ReadingAttemptMode.Exam,
+                    partABreakResumed = a.Mode != ReadingAttemptMode.Exam || a.PartABreakUsed,
+                    partBCTimerPausedAt = a.Mode == ReadingAttemptMode.Exam && !a.PartABreakUsed
+                        ? partADeadlineAt
+                        : (DateTimeOffset?)null,
+                    a.PartBCPausedSeconds,
+                    partABreakMaxSeconds = a.Mode == ReadingAttemptMode.Exam
+                        ? ReadingAttemptService.PartABreakMaxSeconds
+                        : 0,
                     answeredCount = a.Answers.Count,
                     totalQuestions,
                     canResume = a.DeadlineAt is null || a.DeadlineAt >= DateTimeOffset.UtcNow || snapshot.AllowResumeAfterExpiry,
@@ -827,7 +830,9 @@ public static class LearnerEndpoints
         {
             return (
                 attempt.StartedAt.AddMinutes(policy.PartATimerMinutes),
-                attempt.StartedAt.AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes));
+                attempt.StartedAt
+                    .AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes)
+                    .AddSeconds(Math.Clamp(attempt.PartBCPausedSeconds, 0, ReadingAttemptService.PartABreakMaxSeconds)));
         }
 
         var answerDeadline = ResolveReadingPracticeAnswerDeadline(attempt, policy);
@@ -919,6 +924,15 @@ public static class LearnerEndpoints
 
         return fallback;
     }
+
+    private static IResult ReadingLegacyGone(string? replacementRoute)
+        => Results.Json(new
+        {
+            code = "reading_legacy_gone",
+            error = "Legacy Reading tasks are closed. Use the structured Reading paper endpoints.",
+            message = "Legacy Reading tasks are closed. Use the structured Reading paper endpoints.",
+            replacementRoute,
+        }, statusCode: StatusCodes.Status410Gone);
 }
 
 public record PeerReviewSubmitRequest(string AttemptId, string SubtestCode);

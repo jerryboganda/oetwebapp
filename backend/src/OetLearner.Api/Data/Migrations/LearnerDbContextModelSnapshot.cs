@@ -6387,6 +6387,15 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<bool>("PartABreakUsed")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("PartBCPausedSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("PartBCTimerPausedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("PolicySnapshotJson")
                         .IsRequired()
                         .HasColumnType("text");

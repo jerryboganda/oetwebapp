@@ -25,8 +25,8 @@ export default function VerifyEmailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const email = user?.email ?? searchParams.get('email') ?? '';
-  const nextHref = searchParams.get('next');
+  const email = user?.email ?? searchParams?.get('email') ?? '';
+  const nextHref = searchParams?.get('next') ?? null;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [otp, setOtp] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

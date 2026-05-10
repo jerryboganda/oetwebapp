@@ -25,13 +25,13 @@ import {
 export default function RegisterSuccessPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const email = searchParams.get('email') ?? 'your email';
-  const fullName = searchParams.get('fullName') ?? 'New learner';
-  const exam = searchParams.get('exam') ?? 'OET';
-  const profession = searchParams.get('profession') ?? 'Profession';
-  const country = searchParams.get('country') ?? 'Not selected';
-  const registrationStamp = searchParams.get('stamp') ?? 'just now';
-  const nextPath = searchParams.get('next');
+  const email = searchParams?.get('email') ?? 'your email';
+  const fullName = searchParams?.get('fullName') ?? 'New learner';
+  const exam = searchParams?.get('exam') ?? 'OET';
+  const profession = searchParams?.get('profession') ?? 'Profession';
+  const country = searchParams?.get('country') ?? 'Not selected';
+  const registrationStamp = searchParams?.get('stamp') ?? 'just now';
+  const nextPath = searchParams?.get('next');
   const signInHref = nextPath
     ? `${AUTH_ROUTES.signIn}?email=${encodeURIComponent(email)}&next=${encodeURIComponent(nextPath)}`
     : `${AUTH_ROUTES.signIn}?email=${encodeURIComponent(email)}`;

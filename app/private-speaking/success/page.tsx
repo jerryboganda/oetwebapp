@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 export default function PrivateSpeakingSuccessPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const bookingId = params.get('booking_id');
+  const bookingId = params?.get('booking_id') ?? null;
   const [countdown, setCountdown] = useState(5);
 
   useEffect(() => {

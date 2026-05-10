@@ -41,6 +41,11 @@ public partial class LearnerService(
     private static readonly TimeSpan PaymentWebhookProcessingLease = TimeSpan.FromMinutes(5);
     private static readonly Regex PaymentIdempotencyKeyRegex = new("^[A-Za-z0-9._:-]+$", RegexOptions.Compiled);
 
+    private static List<DiagnosticSubtestStatus> ActiveDiagnosticSubtests(List<DiagnosticSubtestStatus> subtests)
+        => subtests
+            .Where(x => !string.Equals(x.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
     public async Task<object> GetMeAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureLearnerProfileAsync(userId, cancellationToken);
@@ -527,7 +532,7 @@ public partial class LearnerService(
             {
                 diagnosticId = (string?)null,
                 state = "not_started",
-                estimatedTotalMinutes = 120,
+                estimatedTotalMinutes = 90,
                 disclaimer = $"Diagnostic results are training estimates only and are not official {examFamilyLabel} scores.",
                 resumable = false,
                 startRoute = "/diagnostic",
@@ -535,13 +540,12 @@ public partial class LearnerService(
                 {
                     new { subtest = "writing", estimatedDurationMinutes = 45, state = "not_started", route = "/diagnostic/writing" },
                     new { subtest = "speaking", estimatedDurationMinutes = 20, state = "not_started", route = "/diagnostic/speaking" },
-                    new { subtest = "reading", estimatedDurationMinutes = 30, state = "not_started", route = "/diagnostic/reading" },
                     new { subtest = "listening", estimatedDurationMinutes = 25, state = "not_started", route = "/diagnostic/listening" }
                 }
             };
         }
 
-        var subtests = await db.DiagnosticSubtests.Where(x => x.DiagnosticSessionId == session.Id).ToListAsync(cancellationToken);
+        var subtests = ActiveDiagnosticSubtests(await db.DiagnosticSubtests.Where(x => x.DiagnosticSessionId == session.Id).ToListAsync(cancellationToken));
 
         return new
         {
@@ -596,7 +600,6 @@ public partial class LearnerService(
         db.DiagnosticSubtests.AddRange(
             new DiagnosticSubtestStatus { Id = $"{id}-w", DiagnosticSessionId = id, SubtestCode = "writing", State = AttemptState.NotStarted, EstimatedDurationMinutes = 45 },
             new DiagnosticSubtestStatus { Id = $"{id}-s", DiagnosticSessionId = id, SubtestCode = "speaking", State = AttemptState.NotStarted, EstimatedDurationMinutes = 20 },
-            new DiagnosticSubtestStatus { Id = $"{id}-r", DiagnosticSessionId = id, SubtestCode = "reading", State = AttemptState.NotStarted, EstimatedDurationMinutes = 30 },
             new DiagnosticSubtestStatus { Id = $"{id}-l", DiagnosticSessionId = id, SubtestCode = "listening", State = AttemptState.NotStarted, EstimatedDurationMinutes = 25 }
         );
         await RecordEventAsync(userId, "diagnostic_started", new { userId, diagnosticId = id }, cancellationToken);
@@ -607,7 +610,7 @@ public partial class LearnerService(
     public async Task<object> GetDiagnosticAttemptAsync(string userId, string diagnosticId, CancellationToken cancellationToken)
     {
         var session = await GetDiagnosticSessionOwnedByUserAsync(userId, diagnosticId, cancellationToken);
-        var subtests = await db.DiagnosticSubtests.Where(x => x.DiagnosticSessionId == diagnosticId).ToListAsync(cancellationToken);
+        var subtests = ActiveDiagnosticSubtests(await db.DiagnosticSubtests.Where(x => x.DiagnosticSessionId == diagnosticId).ToListAsync(cancellationToken));
         return new
         {
             diagnosticId = session.Id,
@@ -628,7 +631,7 @@ public partial class LearnerService(
     public async Task<object> GetDiagnosticHubAsync(string userId, string diagnosticId, CancellationToken cancellationToken)
     {
         var session = await GetDiagnosticSessionOwnedByUserAsync(userId, diagnosticId, cancellationToken);
-        var subtests = await db.DiagnosticSubtests.Where(x => x.DiagnosticSessionId == diagnosticId).ToListAsync(cancellationToken);
+        var subtests = ActiveDiagnosticSubtests(await db.DiagnosticSubtests.Where(x => x.DiagnosticSessionId == diagnosticId).ToListAsync(cancellationToken));
         var completed = subtests.Count(x => x.State == AttemptState.Completed);
 
         return new
@@ -652,9 +655,9 @@ public partial class LearnerService(
     public async Task<object> GetDiagnosticResultsAsync(string userId, string diagnosticId, CancellationToken cancellationToken)
     {
         var session = await GetDiagnosticSessionOwnedByUserAsync(userId, diagnosticId, cancellationToken);
-        var diagnosticSubtests = await db.DiagnosticSubtests
+        var diagnosticSubtests = ActiveDiagnosticSubtests(await db.DiagnosticSubtests
             .Where(x => x.DiagnosticSessionId == diagnosticId)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken));
         var readiness = (await db.ReadinessSnapshots
             .Where(x => x.UserId == session.UserId)
             .ToListAsync(cancellationToken))
@@ -744,7 +747,7 @@ public partial class LearnerService(
             {
                 new { day = "Day 1", action = "Writing task focused on discharge summaries", route = "/writing/tasks/wt-001" },
                 new { day = "Day 2", action = "Speaking fluency drill with roleplay", route = "/speaking/task/st-001" },
-                new { day = "Day 3", action = "Reading detail extraction practice", route = "/reading/task/rt-001" }
+                new { day = "Day 3", action = "Reading detail extraction practice", route = "/reading" }
             },
             upgradePrompt = new { shouldShow = true, reason = "Tutor review can validate your highest-priority writing and speaking gaps." },
             studyPlan = new
@@ -2166,15 +2169,15 @@ public partial class LearnerService(
             {
                 new { id = "part-a", title = "Part A", route = (string?)null, available = false },
                 new { id = "part-b", title = "Part B", route = (string?)null, available = false },
-                new { id = "part-c", title = "Part C", route = "/reading/task/rt-001", available = true }
+                new { id = "part-c", title = "Part C", route = "/reading", available = true }
             },
             speedDrills = new[]
             {
-                new { id = "reading-speed-1", title = "Timed detail scanning", route = "/reading/task/rt-001" }
+                new { id = "reading-speed-1", title = "Timed detail scanning", route = "/reading" }
             },
             accuracyDrills = new[]
             {
-                new { id = "reading-accuracy-1", title = "Named concept accuracy drill", route = "/reading/task/rt-001" }
+                new { id = "reading-accuracy-1", title = "Named concept accuracy drill", route = "/reading" }
             },
             explanations = new[]
             {
@@ -5349,7 +5352,7 @@ public partial class LearnerService(
         {
             "writing" => $"/writing/player?taskId={Uri.EscapeDataString(item.ContentId)}",
             "speaking" => $"/speaking/task/{Uri.EscapeDataString(item.ContentId)}",
-            "reading" => $"/reading/player/{Uri.EscapeDataString(item.ContentId)}",
+            "reading" => "/reading",
             "listening" => $"/listening/player/{Uri.EscapeDataString(item.ContentId)}",
             _ => $"/{item.SubtestCode.ToLowerInvariant()}"
         };
@@ -6674,7 +6677,7 @@ public partial class LearnerService(
             rationale = $"Focus next on {ObjectiveErrorTypeLabel(errorType).ToLowerInvariant()} to strengthen your {ToDisplaySubtest(subtest)} accuracy.",
             route = subtest == "listening"
                 ? $"/listening/drills/{Uri.EscapeDataString(listeningDrillId)}"
-                : "/reading/task/rt-001"
+                : "/reading"
         };
     }
 
@@ -6868,7 +6871,7 @@ public partial class LearnerService(
     {
         "writing" => $"/writing/result/{evaluationId}",
         "speaking" => $"/speaking/result/{evaluationId}",
-        "reading" => $"/reading/task/{evaluationId}",
+        "reading" => "/reading",
         "listening" => $"/listening/task/{evaluationId}",
         _ => $"/history/{evaluationId}"
     };

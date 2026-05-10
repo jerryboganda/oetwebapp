@@ -668,6 +668,14 @@ public sealed class ReadingStructureService : IReadingStructureService
             foreach (var q in part.Questions)
             {
                 totalPoints += q.Points;
+                if (q.Points != 1)
+                {
+                    issues.Add(new(
+                        Code: "question_points_not_one",
+                        Severity: "error",
+                        Message: $"Part {part.PartCode} question {q.DisplayOrder} is worth {q.Points} point(s), expected 1.",
+                        TargetId: q.Id));
+                }
                 if (!IsQuestionTypeAllowedForPart(part.PartCode, q.QuestionType))
                 {
                     issues.Add(new(
@@ -684,6 +692,34 @@ public sealed class ReadingStructureService : IReadingStructureService
                         Severity: "error",
                         Message: $"Part {part.PartCode} question {q.DisplayOrder} must reference one of this part's text units.",
                         TargetId: q.Id));
+                }
+                if (part.PartCode == ReadingPartCode.A)
+                {
+                    var expectedType = ExpectedPartAQuestionType(q.DisplayOrder);
+                    if (expectedType is null)
+                    {
+                        issues.Add(new(
+                            Code: "part_A_question_order",
+                            Severity: "error",
+                            Message: $"Part A question {q.DisplayOrder} is outside the official 1-20 range.",
+                            TargetId: q.Id));
+                    }
+                    else if (q.QuestionType != expectedType)
+                    {
+                        issues.Add(new(
+                            Code: "part_A_question_sequence",
+                            Severity: "error",
+                            Message: $"Part A question {q.DisplayOrder} must be {expectedType}, not {q.QuestionType}.",
+                            TargetId: q.Id));
+                    }
+                    if (!string.IsNullOrWhiteSpace(q.AcceptedSynonymsJson))
+                    {
+                        issues.Add(new(
+                            Code: "part_A_synonyms_forbidden",
+                            Severity: "error",
+                            Message: $"Part A question {q.DisplayOrder} must not define accepted synonyms; strict marking uses the authored answer only.",
+                            TargetId: q.Id));
+                    }
                 }
                 try
                 {
@@ -780,6 +816,14 @@ public sealed class ReadingStructureService : IReadingStructureService
         _ => false,
     };
 
+    private static ReadingQuestionType? ExpectedPartAQuestionType(int displayOrder) => displayOrder switch
+    {
+        >= 1 and <= 7 => ReadingQuestionType.MatchingTextReference,
+        >= 8 and <= 14 => ReadingQuestionType.ShortAnswer,
+        >= 15 and <= 20 => ReadingQuestionType.SentenceCompletion,
+        _ => null,
+    };
+
     // ── JSON shape validation ────────────────────────────────────────────
     //
     // Enforces the contract on CorrectAnswerJson / OptionsJson / AcceptedSynonymsJson
@@ -815,8 +859,11 @@ public sealed class ReadingStructureService : IReadingStructureService
                 }
             case ReadingQuestionType.MatchingTextReference:
                 {
-                    if (correct.ValueKind != JsonValueKind.String && correct.ValueKind != JsonValueKind.Array)
-                        throw new InvalidOperationException("Matching CorrectAnswerJson must be a string or array of strings.");
+                    if (correct.ValueKind != JsonValueKind.String)
+                        throw new InvalidOperationException("Matching CorrectAnswerJson must be a single string letter.");
+                    var ans = correct.GetString() ?? string.Empty;
+                    if (!new[] { "A", "B", "C", "D" }.Contains(ans, StringComparer.Ordinal))
+                        throw new InvalidOperationException("Matching answer must be one of A,B,C,D.");
                     break;
                 }
             case ReadingQuestionType.ShortAnswer:

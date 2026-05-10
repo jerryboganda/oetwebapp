@@ -98,8 +98,8 @@ test('prod — module drill-down: open first practice item in each module', asyn
     });
   };
 
-  // Reading: any /reading/paper/<id> or /reading/player/<id> link
-  await drillInto('/reading', /\/reading\/(paper|player)\//, 'reading');
+  // Reading: structured /reading/paper/<id> links only.
+  await drillInto('/reading', /\/reading\/paper\//, 'reading');
 
   // Listening: /listening/(drills|player|review)/<id>
   await drillInto('/listening', /\/listening\/(drills|player|review|results)\//, 'listening');

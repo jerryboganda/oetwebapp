@@ -60,7 +60,7 @@ function parseFilters(searchParams: URLSearchParams | null): Record<string, stri
 
 export default function ReviewQueuePage() {
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '/expert/queue';
   const searchParams = useSearchParams();
 
   const [data, setData] = useState<ReviewRequest[]>([]);

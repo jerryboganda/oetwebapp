@@ -10,7 +10,7 @@ export default function MfaSetupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { loading, user, isAuthenticated } = useAuth();
-  const nextHref = searchParams.get('next');
+  const nextHref = searchParams?.get('next') ?? null;
 
   useEffect(() => {
     if (loading) {

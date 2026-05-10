@@ -256,3 +256,42 @@ See docs/LISTENING-INGESTION-PRD.md
 - dotnet build BLOCKED by pre-existing AdminService.cs:8569 (other agent WIP)
 - backend:test deferred until that other slice's owner lands GenerateExpertPayoutsRequest
 
+---
+
+# 2026-05-10 ultrawork: Reading Rulebook Closure Plan
+
+Scope: executed Ralph/OmO ultrawork update for OET Reading rulebook closure, covering backend strictness, learner route shutdown, computer/paper Reading UI, diagnostics closure, regression tests, and production build validation.
+
+## Baseline Notes
+
+- Existing Reading implementation plan is `docs/READING-MODULE-A-Z-IMPLEMENTATION-PLAN.md`.
+- No `rulebooks/reading/**` files exist in the workspace; current Reading design treats the rulebook as objective structured behavior, not a JSON rulebook file.
+- Canonical frontend route family exists at `/reading/paper/[paperId]` and `/reading/paper/[paperId]/results`.
+- Legacy frontend `/reading/player/[id]` now redirects to `/reading`; diagnostic Reading redirects to `/reading`.
+- Backend learner Reading is canonical under `/v1/reading-papers/*`; legacy `/v1/reading/*` returns `410 Gone` with `reading_legacy_gone`.
+
+## Execution Queue
+
+- [x] R0: Run baseline audit for `npx tsc --noEmit`, `npm run lint`, focused Reading Vitest/backend tests, backend build/tests, Playwright smoke, and `npm run build`; record unrelated blockers before edits.
+- [x] R1: Shut down legacy Reading routes safely: replace links to `/reading/player/[id]` and `/reading/results/[id]`, preserve saved-link redirects where needed, and disable or compatibility-wrap legacy `/v1/reading/attempts/*` without breaking active canonical flows.
+- [x] R2: Harden backend strict marking, structure, and timing: enforce 20/6/16/42 publish rules, Part A 15-minute lock, B/C 45-minute shared deadline, no answer leakage, idempotent submit, exact objective grading, and `30/42 = 350` through canonical scoring only.
+- [x] R3: Complete computer-delivered UI tools in the canonical player: timer state, answered/unanswered/flagged navigator, autosave recovery, Part A lockout, B/C auto-submit, highlight, notes, strike-through, keyboard access, and small-screen exam warning.
+- [x] R4: Complete paper simulation: original PDF access/paper presentation path, answer-sheet style entry/review, 15-minute Part A collection behavior, and explicit paper presentation controls over the canonical backend attempt.
+- [x] R5: Add regression tests: backend validation/redaction/timing/grading, Vitest route/UI tools, Playwright Reading route smoke, and legacy route shutdown assertions.
+- [x] R6: Run final validation: `npx tsc --noEmit`, `npm run lint`, focused Vitest, focused backend tests, Reading Playwright smoke, `npm run build`, then independent Reading rulebook gap review.
+
+## Final Validation Evidence
+
+- `npm test -- lib/reading-paper-simulation.test.ts app/diagnostic/reading/page.test.tsx lib/__tests__/api.test.ts app/reading/page.test.tsx lib/scoring.test.ts` - PASS, 5 files / 107 tests.
+- Focused backend Reading tests - PASS, 60/60.
+- Focused backend learner surface/spec regression tests - PASS, 22/22.
+- `npx tsc --noEmit` - PASS.
+- `npm run lint` - PASS with 0 errors; remaining warnings are pre-existing hook dependency warnings in `app/expert/review/writing/[reviewRequestId]/page.tsx`.
+- `if (Test-Path .next) { Remove-Item -Recurse -Force .next }; npm run build` - PASS. Remaining warning is Prisma/OpenTelemetry dynamic dependency warning plus the same expert review hook warnings.
+- `npx playwright test tests/e2e/learner/player-workflows.spec.ts tests/e2e/learner/deep-link-smoke.spec.ts --project chromium-learner --workers 1 --grep "legacy reading player|/reading/player/rt-001"` - PASS, 14/14 including auth setup and both Reading redirect checks.
+- Independent review status: no unresolved critical Reading rulebook gaps found after strict backend enforcement, legacy route closure, computer/paper learner surfaces, diagnostic Reading closure, regression tests, and production build.
+
+## Release Gate
+
+- Completion criteria met for the implemented Reading rulebook closure. Known residuals are non-blocking and unrelated to Reading correctness: Prisma/OpenTelemetry build warning and existing expert review hook dependency warnings.
+

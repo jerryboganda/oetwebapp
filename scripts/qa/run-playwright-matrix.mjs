@@ -140,6 +140,7 @@ const smokeRuns = [
       files: ['tests/e2e/expert/privileged-smoke.spec.ts'],
       projects: expertProjects,
       grep: 'expert',
+      workers: 1,
     }),
   },
   {
@@ -148,6 +149,7 @@ const smokeRuns = [
       files: ['tests/e2e/expert/privileged-smoke.spec.ts'],
       projects: adminProjects,
       grep: 'admin',
+      workers: 1,
     }),
   },
   {

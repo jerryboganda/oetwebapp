@@ -360,6 +360,9 @@ public class ReadingAttempt
 
     public DateTimeOffset StartedAt { get; set; }
     public DateTimeOffset? DeadlineAt { get; set; }
+    public DateTimeOffset? PartBCTimerPausedAt { get; set; }
+    public int PartBCPausedSeconds { get; set; }
+    public bool PartABreakUsed { get; set; }
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset LastActivityAt { get; set; }
 
@@ -470,7 +473,7 @@ public class ReadingPolicy
     public string EnabledQuestionTypesJson { get; set; } =
         "[\"MatchingTextReference\",\"ShortAnswer\",\"SentenceCompletion\",\"MultipleChoice3\",\"MultipleChoice4\"]";
     [MaxLength(32)]
-    public string ShortAnswerNormalisation { get; set; } = "trim_collapse_case_insensitive";
+    public string ShortAnswerNormalisation { get; set; } = "trim_only";
     /// <summary>
     /// NON-STANDARD MODE. Default <c>false</c> to stay OET-faithful:
     /// real OET Reading Part A answers are copied word-for-word from the
@@ -478,7 +481,7 @@ public class ReadingPolicy
     /// assessment and must be explicitly opted in by the admin.
     /// </summary>
     public bool ShortAnswerAcceptSynonyms { get; set; } = false;
-    public bool MatchingAllowPartialCredit { get; set; } = true;
+    public bool MatchingAllowPartialCredit { get; set; }
     [MaxLength(32)]
     public string SentenceCompletionStrictness { get; set; } = "exact_from_bank";
     [MaxLength(32)]

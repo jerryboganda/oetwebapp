@@ -102,7 +102,7 @@ describe('learner route normalization', () => {
     expect(payload.historyRoute).toBe('/submissions');
     expect(payload.writingLibraryRoute).toBe('/writing/library');
     expect(payload.writingTaskRoute).toBe('/writing/player?taskId=wt-001');
-    expect(payload.readingTaskRoute).toBe('/reading/player/rt-001');
+    expect(payload.readingTaskRoute).toBe('/reading');
     expect(payload.listeningTaskRoute).toBe('/listening/player/lt-001');
   });
 });
@@ -167,6 +167,81 @@ describe('speaking API helpers', () => {
       expect.stringContaining('/v1/speaking/attempts/sa-bound-mock-1/audio/complete?contentId=st-001&mockSessionId=sms-bound-mock-1'),
       expect.stringContaining('/v1/speaking/attempts/sa-bound-mock-1/submit?contentId=st-001&mockSessionId=sms-bound-mock-1'),
     ]));
+  });
+
+  it('keeps absolute backend speaking upload URLs on the browser proxy path', async () => {
+    const calls: Array<{ url: string; method: string }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = String(init?.method ?? 'GET');
+      calls.push({ url, method });
+
+      if (url.includes('/audio/upload-session')) {
+        return new Response(JSON.stringify({
+          uploadUrl: 'http://localhost:5198/v1/speaking/upload-sessions/us-absolute/content',
+          uploadSessionId: 'us-absolute',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/audio/complete')) {
+        return new Response(JSON.stringify({ attemptId: 'sa-absolute', canSubmit: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/submit')) {
+        return new Response(JSON.stringify({ attemptId: 'sa-absolute', evaluationId: 'se-absolute', state: 'queued' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      return new Response(null, { status: 204 });
+    });
+
+    const { submitSpeakingRecording } = await import('../api');
+    await submitSpeakingRecording(
+      'st-001',
+      new Blob(['audio'], { type: 'audio/webm' }),
+      123,
+      'self',
+      { accepted: true, text: 'Consent accepted' },
+      { attemptId: 'sa-absolute' },
+    );
+
+    expect(calls).toEqual(expect.arrayContaining([
+      { url: '/api/backend/v1/speaking/upload-sessions/us-absolute/content', method: 'PUT' },
+    ]));
+    expect(calls.some((call) => call.url.startsWith('http://localhost:5198/'))).toBe(false);
+  });
+
+  it('keeps absolute backend object URLs on the browser proxy path', async () => {
+    const originalCreateObjectURL = URL.createObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:expert-audio');
+    const calls: Array<{ url: string; method: string }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), method: String(init?.method ?? 'GET') });
+      return new Response('audio', {
+        status: 200,
+        headers: { 'content-type': 'audio/webm' },
+      });
+    });
+
+    try {
+      const { fetchAuthorizedObjectUrl } = await import('../api');
+      const result = await fetchAuthorizedObjectUrl('http://localhost:5198/v1/expert/reviews/review-001/speaking/audio?download=1');
+
+      expect(result).toBe('blob:expert-audio');
+      expect(calls).toEqual([
+        { url: '/api/backend/v1/expert/reviews/review-001/speaking/audio?download=1', method: 'GET' },
+      ]);
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL;
+    }
   });
 });
 

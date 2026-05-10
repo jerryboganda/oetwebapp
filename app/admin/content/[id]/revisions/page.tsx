@@ -19,6 +19,7 @@ type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 
 export default function AdminContentRevisionsPage() {
   const params = useParams<{ id: string }>();
+  const contentId = params?.id ?? '';
   const router = useRouter();
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
@@ -30,7 +31,7 @@ export default function AdminContentRevisionsPage() {
     async function load() {
       setPageStatus('loading');
       try {
-        const items = await getAdminContentRevisionData(params.id);
+        const items = await getAdminContentRevisionData(contentId);
         if (cancelled) return;
         setRevisions(items);
         setPageStatus(items.length > 0 ? 'success' : 'empty');
@@ -47,13 +48,13 @@ export default function AdminContentRevisionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.id]);
+  }, [contentId]);
 
   async function handleRestore(revisionId: string) {
     try {
-      await restoreAdminContentRevision(params.id, revisionId);
+      await restoreAdminContentRevision(contentId, revisionId);
       setToast({ variant: 'success', message: 'Revision restored successfully.' });
-      const items = await getAdminContentRevisionData(params.id);
+      const items = await getAdminContentRevisionData(contentId);
       setRevisions(items);
     } catch (error) {
       console.error(error);
@@ -96,7 +97,7 @@ export default function AdminContentRevisionsPage() {
         title="Revision History"
         description="Review the saved content history and restore a previous editorial state when needed."
         actions={
-          <Button variant="outline" onClick={() => router.push(`/admin/content/${params.id}`)} className="gap-2">
+          <Button variant="outline" onClick={() => router.push(`/admin/content/${contentId}`)} className="gap-2">
             <ArrowLeft className="h-4 w-4" /> Back to Content
           </Button>
         }

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import shellStyles from '@/components/auth/auth-screen-shell.module.scss';
-import legalStyles from '../terms/terms.module.scss';
+import legalStyles from '../../terms/terms.module.scss';
 import { AUTH_ROUTES } from '@/lib/auth/routes';
 
 export const metadata: Metadata = {

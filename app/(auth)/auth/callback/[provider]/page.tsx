@@ -27,7 +27,7 @@ export default function ExternalAuthCallbackPage() {
   const provider = readProvider(params?.provider);
   const [token, setToken] = useState<string | null>(null);
   const [tokenReady, setTokenReady] = useState(false);
-  const nextHref = searchParams.get('next');
+  const nextHref = searchParams?.get('next') ?? null;
   const [error, setError] = useState<string | null>(null);
 
   // Security (H11): read the exchange token from the URL fragment (#token=...) rather than
@@ -48,7 +48,7 @@ export default function ExternalAuthCallbackPage() {
     const hashParams = new URLSearchParams(hash);
     const hashToken = hashParams.get('token');
 
-    const queryToken = searchParams.get('token');
+    const queryToken = searchParams?.get('token');
 
     const resolved = hashToken ?? queryToken ?? null;
     setToken(resolved);

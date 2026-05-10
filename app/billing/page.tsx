@@ -117,10 +117,10 @@ const BILLING_TABS: Array<{ id: BillingTabId; label: string; icon: React.ReactNo
 
 export default function BillingPage() {
   const searchParams = useSearchParams();
-  const paymentStatus = searchParams.get('payment');
-  const paymentGateway = searchParams.get('gateway');
-  const requestedPlanId = searchParams.get('planId');
-  const initialTab = (searchParams.get('tab') as BillingTabId | null) ?? 'overview';
+  const paymentStatus = searchParams?.get('payment') ?? null;
+  const paymentGateway = searchParams?.get('gateway') ?? null;
+  const requestedPlanId = searchParams?.get('planId') ?? null;
+  const initialTab = (searchParams?.get('tab') as BillingTabId | null) ?? 'overview';
 
   const [activeTab, setActiveTab] = useState<BillingTabId>(
     BILLING_TABS.some((t) => t.id === initialTab) ? initialTab : 'overview',

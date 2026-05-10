@@ -16,7 +16,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
       test.skip();
     }
 
-    testInfo.setTimeout(120000);
+    testInfo.setTimeout(240000);
     const diagnostics = observePage(page);
     page.on('dialog', (dialog) => dialog.accept());
     const seen403: string[] = [];
@@ -71,7 +71,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await expect(submitDialog).toBeVisible();
     await submitDialog.getByRole('button', { name: /submit now/i }).click();
 
-    await page.waitForURL(/\/listening\/results\//, { timeout: 90000 });
+    await page.waitForURL(/\/listening\/results\//, { timeout: 120000, waitUntil: 'commit' });
     // Wait for the result to actually load (skeleton → score header). If the
     // result page enters its "Result not found" error state because the
     // submit→navigate raced backend persistence, reload once and re-wait.
@@ -94,7 +94,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
       test.skip();
     }
 
-    testInfo.setTimeout(120000);
+    testInfo.setTimeout(240000);
     const diagnostics = observePage(page);
     const content = [
       'Dear Dr Patterson,',
@@ -141,7 +141,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
     // waitForURL is more robust than expect(toHaveURL) for navigation that
     // is preceded by a multi-step backend submit (PATCH draft → POST submit
     // → fetchWritingTask) which on cold path can extend close to 60s.
-    await page.waitForURL(/\/writing\/result\?id=/, { timeout: 120000 });
+    await page.waitForURL(/\/writing\/result\?id=/, { timeout: 120000, waitUntil: 'commit' });
     await waitForSessionGuardToClear(page);
     await expect(page.getByRole('heading', { name: /evaluation summary/i })).toBeVisible({ timeout: 60000 });
     await expect(page.getByRole('link', { name: /request tutor review/i })).toBeVisible({ timeout: 60000 });

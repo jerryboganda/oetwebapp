@@ -57,7 +57,10 @@ public static class LearnerWorkflowCoordinator
             .OrderBy(x => x.SubtestCode)
             .ToListAsync(cancellationToken);
 
-        var completed = subtests.All(x => x.State == AttemptState.Completed);
+        var activeSubtests = subtests
+            .Where(x => !string.Equals(x.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var completed = activeSubtests.Count > 0 && activeSubtests.All(x => x.State == AttemptState.Completed);
         if (completed)
         {
             if (session.State != AttemptState.Completed)

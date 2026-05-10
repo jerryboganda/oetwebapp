@@ -9,7 +9,7 @@ export default function MfaChallengePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { loading, pendingMfaChallenge, isAuthenticated, user } = useAuth();
-  const nextHref = searchParams.get('next');
+  const nextHref = searchParams?.get('next') ?? null;
 
   useEffect(() => {
     if (loading) {

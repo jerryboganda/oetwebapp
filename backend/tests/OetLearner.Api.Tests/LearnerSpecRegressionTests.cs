@@ -294,9 +294,15 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             },
             "speaking evaluation to complete");
 
-        var readingAttemptId = await CreateObjectiveAttemptAsync(client, "reading", "rt-001", "diagnostic");
-        var readingSubmit = await client.PostAsync($"/v1/reading/attempts/{readingAttemptId}/submit", content: null);
-        readingSubmit.EnsureSuccessStatusCode();
+        var readingCreate = await client.PostAsJsonAsync("/v1/reading/attempts", new
+        {
+            contentId = "rt-001",
+            context = "diagnostic",
+            mode = "exam",
+            deviceType = "desktop",
+            parentAttemptId = (string?)null
+        });
+        Assert.Equal(HttpStatusCode.Gone, readingCreate.StatusCode);
 
         var listeningAttemptId = await CreateObjectiveAttemptAsync(client, "listening", "lt-001", "diagnostic");
         var listeningSubmit = await client.PostAsync($"/v1/listening/attempts/{listeningAttemptId}/submit", content: null);
@@ -307,7 +313,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             {
                 var response = await client.GetAsync($"/v1/diagnostic/attempts/{diagnosticId}/hub");
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-                return json.RootElement.GetProperty("completedCount").GetInt32() == 4
+                return json.RootElement.GetProperty("completedCount").GetInt32() == 3
                     && json.RootElement.GetProperty("state").GetString() == "completed";
             },
             "diagnostic hub to reach the completed state");
@@ -316,7 +322,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         resultsResponse.EnsureSuccessStatusCode();
         using var resultsJson = JsonDocument.Parse(await resultsResponse.Content.ReadAsStringAsync());
 
-        Assert.Equal(4, resultsJson.RootElement.GetProperty("results").GetArrayLength());
+        Assert.Equal(3, resultsJson.RootElement.GetProperty("results").GetArrayLength());
         Assert.Equal("Writing", resultsJson.RootElement.GetProperty("results")[0].GetProperty("subTest").GetString());
     }
 

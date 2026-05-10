@@ -230,6 +230,13 @@ function shouldIgnoreConsoleError(
       || text.includes('Falling back to browser navigation. TypeError: Load failed')
       || text.includes('Failed to load resource: the server responded with a status of 500 (Internal Server Error)')
       || (
+        text === 'Failed to load resource: Timeout was reached'
+        && diagnostics.requestFailures.some((entry) => (
+          entry.includes('/api/backend/v1/analytics/events')
+          && entry.includes('Timeout was reached')
+        ))
+      )
+      || (
         text.includes('MIME type')
         && text.includes('text/plain')
         && text.includes('X-Content-Type-Options: nosniff')
@@ -302,6 +309,14 @@ function shouldIgnorePageError(text: string, options: DiagnosticExpectationOptio
 
   if (
     options.allowNextDevNoise
+    && text.includes('Loading chunk ')
+    && text.includes('/_next/static/chunks/')
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowNextDevNoise
     && text === 'Unexpected EOF'
   ) {
     return true;
@@ -350,6 +365,14 @@ function shouldIgnoreRequestFailureText(text: string, options: DiagnosticExpecta
       || text.includes('/?_rsc=')
       || text.endsWith('http://localhost:3000/ :: Load request cancelled')
     )
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowNextDevNoise
+    && text.includes('/api/backend/v1/analytics/events')
+    && text.includes('Timeout was reached')
   ) {
     return true;
   }

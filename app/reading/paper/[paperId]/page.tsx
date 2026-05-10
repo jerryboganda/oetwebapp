@@ -2,7 +2,7 @@
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, Bookmark, Clock, Loader2, Save, Send } from 'lucide-react';
+import { AlertCircle, Clock, Flag, Loader2, Play, RotateCcw, Save, Send, ZoomIn, ZoomOut } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import {
   getReadingAttempt,
   getReadingStructureLearner,
+  resumeReadingBreak,
   saveReadingAnswer,
   startReadingAttempt,
   submitReadingAttempt,
@@ -23,6 +24,7 @@ import {
   type ReadingQuestionLearnerDto,
 } from '@/lib/reading-authoring-api';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
+import { ReadingPaperSimulation } from '@/components/domain/reading-paper-simulation';
 import { completeMockSection } from '@/lib/api';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -38,6 +40,11 @@ interface ActiveAttempt {
   partBCTimerMinutes: number;
   answeredCount: number;
   canResume: boolean;
+  partABreakAvailable: boolean;
+  partABreakResumed: boolean;
+  partBCTimerPausedAt: string | null;
+  partBCPausedSeconds: number;
+  partABreakMaxSeconds: number;
   status: ReadingAttemptStatus;
   /** Phase 3: which practice mode this attempt is running under. */
   mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank';
@@ -61,6 +68,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   // is the resumed attempt itself — we read this only to render
   // pre-resume context like "starting Drill…").
   const urlMode = search?.get('mode') ?? '';
+  const presentation = search?.get('presentation') === 'paper' ? 'paper' : 'computer';
   // Mocks V2 — BuildLaunchRoute attaches mockAttemptId/mockSectionId when
   // this paper is launched as a section of a mock attempt. Submission then
   // writes the score back via completeMockSection so the mock report is
@@ -84,11 +92,33 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const [showConfirm, setShowConfirm] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [timingNotice, setTimingNotice] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [displayWarnings, setDisplayWarnings] = useState<string[]>([]);
+  const [eliminatedChoices, setEliminatedChoices] = useState<Set<string>>(() => new Set());
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const autoSubmitTriggered = useRef(false);
   const dirtyQuestionIds = useRef<Set<string>>(new Set());
-  const timingState = useRef({ partALocked: false, partBCWindowEnded: false, paperExpired: false });
+  const timingState = useRef({ partALocked: false, partBCWindowEnded: false, paperExpired: false, breakPending: false });
+
+  useReadingBrowserZoomGuard();
+
+  useEffect(() => {
+    const readWarnings = () => {
+      if (typeof window === 'undefined') return;
+      const next: string[] = [];
+      if (window.screen.width < 1920 || window.screen.height < 1080) {
+        next.push('Display below 1920 x 1080');
+      }
+      if (Math.abs(window.devicePixelRatio - 1) > 0.01) {
+        next.push(`Display scale or browser zoom ${Math.round(window.devicePixelRatio * 100)}%`);
+      }
+      setDisplayWarnings(next);
+    };
+    readWarnings();
+    window.addEventListener('resize', readWarnings);
+    return () => window.removeEventListener('resize', readWarnings);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -122,6 +152,11 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
           partBCTimerMinutes: Math.max(0, minutesBetween(saved.partADeadlineAt, saved.partBCDeadlineAt)),
           answeredCount: saved.answeredCount,
           canResume: saved.canResume,
+          partABreakAvailable: saved.partABreakAvailable,
+          partABreakResumed: saved.partABreakResumed,
+          partBCTimerPausedAt: saved.partBCTimerPausedAt,
+          partBCPausedSeconds: saved.partBCPausedSeconds,
+          partABreakMaxSeconds: saved.partABreakMaxSeconds,
           status: saved.status,
           mode: saved.mode,
           scopeQuestionIds: saved.scopeQuestionIds,
@@ -201,13 +236,20 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   // controls autosave, input locking, and auto-submit.
   const partALocked = !isPracticeMode
     && Boolean(attempt && nowMs > new Date(attempt.partADeadlineAt).getTime());
-  const partBCWindowEnded = Boolean(attempt && nowMs > new Date(attempt.partBCDeadlineAt).getTime());
+  const breakPending = Boolean(
+    attempt?.mode === 'Exam'
+    && attempt.partABreakAvailable
+    && partALocked
+    && !attempt.partABreakResumed
+    && nowMs <= new Date(attempt.deadlineAt).getTime(),
+  );
+  const partBCWindowEnded = Boolean(attempt && !breakPending && nowMs > new Date(attempt.partBCDeadlineAt).getTime());
   const paperExpired = Boolean(attempt && nowMs > new Date(attempt.deadlineAt).getTime());
-  const attemptInputsLocked = partBCWindowEnded || paperExpired;
+  const attemptInputsLocked = breakPending || partBCWindowEnded || paperExpired;
 
   useEffect(() => {
-    timingState.current = { partALocked, partBCWindowEnded, paperExpired };
-  }, [paperExpired, partALocked, partBCWindowEnded]);
+    timingState.current = { partALocked, partBCWindowEnded, paperExpired, breakPending };
+  }, [breakPending, paperExpired, partALocked, partBCWindowEnded]);
 
   useEffect(() => {
     if (!attempt || !partALocked) {
@@ -215,9 +257,11 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       return;
     }
 
-    if (activePart === 'A') setActivePart('B');
-    setTimingNotice('Part A is locked. Parts B and C are now active.');
-  }, [activePart, attempt, partALocked]);
+    if (activePart === 'A' && !breakPending) setActivePart('B');
+    setTimingNotice(breakPending
+      ? 'Part A is locked. Resume the test to begin the B/C shared window.'
+      : 'Part A is locked. Parts B and C are now active.');
+  }, [activePart, attempt, breakPending, partALocked]);
 
   const start = async () => {
     setStarting(true);
@@ -228,6 +272,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       setAttempt(fromStartedAttempt(started));
       setAnswers({});
       setFlagged(new Set());
+      setEliminatedChoices(new Set());
       autoSubmitTriggered.current = false;
       dirtyQuestionIds.current.clear();
       setTimingNotice(null);
@@ -247,7 +292,10 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     if (!attempt) return;
     const questionPart = questionPartById.get(questionId);
     const currentTiming = timingState.current;
-    if ((questionPart === 'A' && currentTiming.partALocked) || currentTiming.partBCWindowEnded || currentTiming.paperExpired) {
+    if ((questionPart === 'A' && currentTiming.partALocked)
+      || ((questionPart === 'B' || questionPart === 'C') && currentTiming.breakPending)
+      || currentTiming.partBCWindowEnded
+      || currentTiming.paperExpired) {
       dirtyQuestionIds.current.delete(questionId);
       setSaveState('saved');
       return;
@@ -265,7 +313,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   }, [attempt, questionPartById]);
 
   const setAnswer = (question: ReadingQuestionLearnerDto, value: unknown) => {
-    if (!attempt || isQuestionLocked(activePart, partALocked, attemptInputsLocked)) return;
+    if (!attempt || isQuestionLocked(activePart, partALocked, attemptInputsLocked, breakPending)) return;
 
     const json = JSON.stringify(value);
     setAnswers((prev) => ({ ...prev, [question.id]: json }));
@@ -285,6 +333,10 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
   const submit = useCallback(async () => {
     if (!attempt) return;
+    if (breakPending) {
+      setError('Resume the test before submitting the Reading attempt.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -293,7 +345,10 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       const answersToFlush = Object.entries(answers).filter(([questionId]) => {
         if (!dirtyQuestionIds.current.has(questionId)) return false;
         const questionPart = questionPartById.get(questionId);
-        if ((questionPart === 'A' && partALocked) || partBCWindowEnded || paperExpired) {
+        if ((questionPart === 'A' && partALocked)
+          || ((questionPart === 'B' || questionPart === 'C') && breakPending)
+          || partBCWindowEnded
+          || paperExpired) {
           lockedQuestionIds.push(questionId);
           return false;
         }
@@ -328,7 +383,30 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     } finally {
       setSubmitting(false);
     }
-  }, [answers, attempt, mockAttemptId, mockSectionId, paperId, paperExpired, partALocked, partBCWindowEnded, questionPartById, router]);
+  }, [answers, attempt, breakPending, mockAttemptId, mockSectionId, paperId, paperExpired, partALocked, partBCWindowEnded, questionPartById, router]);
+
+  const resumeBreak = useCallback(async () => {
+    if (!attempt) return;
+    setError(null);
+    try {
+      const resumed = await resumeReadingBreak(attempt.attemptId);
+      setAttempt((current) => current ? {
+        ...current,
+        deadlineAt: resumed.deadlineAt,
+        partADeadlineAt: resumed.partADeadlineAt,
+        partBCDeadlineAt: resumed.partBCDeadlineAt,
+        partABreakAvailable: resumed.partABreakAvailable,
+        partABreakResumed: resumed.partABreakResumed,
+        partBCTimerPausedAt: resumed.partBCTimerPausedAt,
+        partBCPausedSeconds: resumed.partBCPausedSeconds,
+        partABreakMaxSeconds: resumed.partABreakMaxSeconds,
+      } : current);
+      setActivePart('B');
+      setTimingNotice('Break ended. Parts B and C are now active.');
+    } catch (err) {
+      setError(readErrorMessage(err, 'Could not resume the Reading attempt.'));
+    }
+  }, [attempt]);
 
   useEffect(() => {
     if (!attempt || attempt.status !== 'InProgress' || !partBCWindowEnded || autoSubmitTriggered.current) return;
@@ -358,7 +436,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
   return (
     <LearnerDashboardShell pageTitle={structure.paper.title} backHref="/reading">
-      <main className="space-y-5">
+      <main className="space-y-5" style={{ ['--reading-player-scale' as string]: zoomLevel / 100 }}>
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {timingNotice ? <InlineAlert variant="warning">{timingNotice}</InlineAlert> : null}
         {mockAttemptId ? (
@@ -406,30 +484,57 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               saveState={saveState}
               paperExpired={partBCWindowEnded || paperExpired}
               partALocked={partALocked}
+              breakPending={breakPending}
+              zoomLevel={zoomLevel}
+              displayWarnings={displayWarnings}
               submitting={submitting}
+              onZoomChange={setZoomLevel}
               onSubmit={() => setShowConfirm(true)}
             />
 
-            <PartTabs
-              structure={displayedStructure ?? structure}
-              activePart={activePart}
-              answers={answers}
-              flagged={flagged}
-              partALocked={partALocked}
-              onChange={(part) => setActivePart(part)}
-            />
+            {breakPending ? (
+              <ReadingBreakScreen attempt={attempt} nowMs={nowMs} onResume={() => void resumeBreak()} />
+            ) : null}
 
-            {displayedCurrentPart ? (
-              <PartBody
-                part={displayedCurrentPart}
+            {!breakPending ? (
+              <PartTabs
+                structure={displayedStructure ?? structure}
+                activePart={activePart}
                 answers={answers}
                 flagged={flagged}
-                activeQuestionId={activeQuestionId}
-                locked={attemptInputsLocked || (displayedCurrentPart.partCode === 'A' && partALocked)}
-                onActiveQuestionChange={setActiveQuestionId}
-                onToggleFlag={(questionId) => setFlagged((prev) => toggleSetValue(prev, questionId))}
+                partALocked={partALocked}
+                partBCAccessible={isPracticeMode || (partALocked && !breakPending)}
+                onChange={(part) => setActivePart(part)}
+              />
+            ) : null}
+
+            {!breakPending && presentation === 'paper' && displayedStructure ? (
+              <ReadingPaperSimulation
+                structure={displayedStructure}
+                answers={answers}
+                partADeadlineAt={attempt.partADeadlineAt}
+                partBCDeadlineAt={attempt.partBCDeadlineAt}
+                nowMs={nowMs}
+                locked={attemptInputsLocked || (partALocked && activePart === 'A')}
                 onAnswerChange={setAnswer}
               />
+            ) : null}
+
+            {!breakPending && presentation === 'computer' && displayedCurrentPart ? (
+              <div className="origin-top" style={{ transform: 'scale(var(--reading-player-scale))', transformOrigin: 'top center' }}>
+                <PartBody
+                  part={displayedCurrentPart}
+                  answers={answers}
+                  flagged={flagged}
+                  activeQuestionId={activeQuestionId}
+                  eliminatedChoices={eliminatedChoices}
+                  locked={attemptInputsLocked || (displayedCurrentPart.partCode === 'A' && partALocked)}
+                  onActiveQuestionChange={setActiveQuestionId}
+                  onToggleFlag={(questionId) => setFlagged((prev) => toggleSetValue(prev, questionId))}
+                  onToggleEliminated={(questionId, optionValue) => setEliminatedChoices((prev) => toggleSetValue(prev, `${questionId}:${optionValue}`))}
+                  onAnswerChange={setAnswer}
+                />
+              </div>
             ) : null}
           </>
         )}
@@ -467,7 +572,11 @@ function AttemptToolbar({
   saveState,
   paperExpired,
   partALocked,
+  breakPending,
+  zoomLevel,
+  displayWarnings,
   submitting,
+  onZoomChange,
   onSubmit,
 }: {
   attempt: ActiveAttempt;
@@ -478,15 +587,26 @@ function AttemptToolbar({
   saveState: SaveState;
   paperExpired: boolean;
   partALocked: boolean;
+  breakPending: boolean;
+  zoomLevel: number;
+  displayWarnings: string[];
   submitting: boolean;
+  onZoomChange: (next: number) => void;
   onSubmit: () => void;
 }) {
+  const breakStartedAt = attempt.partBCTimerPausedAt ?? attempt.partADeadlineAt;
+  const breakSecondsLeft = Math.max(
+    0,
+    attempt.partABreakMaxSeconds - Math.floor((nowMs - new Date(breakStartedAt).getTime()) / 1000),
+  );
   const activeDeadline = attempt.mode === 'Exam' && activePart === 'A'
     ? attempt.partADeadlineAt
     : attempt.partBCDeadlineAt;
-  const secondsLeft = Math.max(0, Math.floor((new Date(activeDeadline).getTime() - nowMs) / 1000));
+  const secondsLeft = breakPending
+    ? breakSecondsLeft
+    : Math.max(0, Math.floor((new Date(activeDeadline).getTime() - nowMs) / 1000));
   const timerLabel = attempt.mode === 'Exam'
-    ? (activePart === 'A' ? 'Part A window' : 'B/C shared window')
+    ? (breakPending ? 'Optional break' : activePart === 'A' ? 'Part A window' : 'B/C shared window')
     : 'Practice timer';
 
   return (
@@ -505,6 +625,7 @@ function AttemptToolbar({
             <span className="font-mono text-base font-bold text-navy">{formatCountdown(secondsLeft)}</span>
           </div>
           {partALocked ? <Badge variant="warning">Part A locked</Badge> : null}
+          {breakPending ? <Badge variant="info">B/C paused</Badge> : null}
           {paperExpired ? <Badge variant="danger">Time expired</Badge> : null}
           <span className="text-sm font-semibold text-muted" aria-label={`${answeredCount} of ${totalQuestions} questions answered`}>
             {answeredCount}/{totalQuestions} answered
@@ -512,12 +633,62 @@ function AttemptToolbar({
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <ReadingZoomControls zoomLevel={zoomLevel} onZoomChange={onZoomChange} />
           <SaveStatus state={saveState} />
-          <Button variant="primary" onClick={onSubmit} loading={submitting} aria-label="Submit attempt for grading">
+          <Button variant="primary" onClick={onSubmit} loading={submitting} disabled={breakPending || paperExpired} aria-label="Submit attempt for grading">
             <Send className="h-4 w-4" aria-hidden="true" />
             Submit
           </Button>
         </div>
+      </div>
+      {displayWarnings.length > 0 ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-amber-700">
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+          {displayWarnings.map((warning) => <span key={warning}>{warning}</span>)}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ReadingZoomControls({ zoomLevel, onZoomChange }: { zoomLevel: number; onZoomChange: (next: number) => void }) {
+  const changeZoom = (next: number) => onZoomChange(Math.min(125, Math.max(80, next)));
+
+  return (
+    <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-background-light p-1" aria-label="Reading zoom controls">
+      <Button variant="ghost" size="sm" className="h-9 w-9 px-0" onClick={() => changeZoom(zoomLevel - 5)} aria-label="Zoom out" title="Zoom out">
+        <ZoomOut className="h-4 w-4" aria-hidden="true" />
+      </Button>
+      <span className="w-12 text-center font-mono text-xs font-bold text-navy" aria-live="polite">{zoomLevel}%</span>
+      <Button variant="ghost" size="sm" className="h-9 w-9 px-0" onClick={() => changeZoom(zoomLevel + 5)} aria-label="Zoom in" title="Zoom in">
+        <ZoomIn className="h-4 w-4" aria-hidden="true" />
+      </Button>
+      <Button variant="ghost" size="sm" className="h-9 w-9 px-0" onClick={() => changeZoom(100)} aria-label="Reset zoom" title="Reset zoom">
+        <RotateCcw className="h-4 w-4" aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}
+
+function ReadingBreakScreen({ attempt, nowMs, onResume }: { attempt: ActiveAttempt; nowMs: number; onResume: () => void }) {
+  const breakStartedAt = attempt.partBCTimerPausedAt ?? attempt.partADeadlineAt;
+  const secondsLeft = Math.max(
+    0,
+    attempt.partABreakMaxSeconds - Math.floor((nowMs - new Date(breakStartedAt).getTime()) / 1000),
+  );
+
+  return (
+    <section className="rounded-[20px] border border-border bg-surface p-6 shadow-sm" aria-label="Part A break">
+      <div className="mx-auto flex max-w-2xl flex-col items-center gap-4 text-center">
+        <Badge variant="info">Part A collected</Badge>
+        <div className="flex items-center gap-3 rounded-2xl bg-background-light px-5 py-4" role="timer" aria-live="polite" aria-label={`${formatCountdown(secondsLeft)} break time remaining`}>
+          <Clock className="h-5 w-5 text-primary" aria-hidden="true" />
+          <span className="font-mono text-3xl font-bold text-navy">{formatCountdown(secondsLeft)}</span>
+        </div>
+        <Button variant="primary" onClick={onResume} aria-label="Resume Reading test">
+          <Play className="h-4 w-4" aria-hidden="true" />
+          Resume Test
+        </Button>
       </div>
     </section>
   );
@@ -553,6 +724,7 @@ function PartTabs({
   answers,
   flagged,
   partALocked,
+  partBCAccessible,
   onChange,
 }: {
   structure: ReadingLearnerStructureDto;
@@ -560,6 +732,7 @@ function PartTabs({
   answers: Record<string, string>;
   flagged: Set<string>;
   partALocked: boolean;
+  partBCAccessible: boolean;
   onChange: (part: ReadingPartCode) => void;
 }) {
   return (
@@ -572,7 +745,8 @@ function PartTabs({
         const answered = part.questions.filter((question) => isAnsweredJson(answers[question.id])).length;
         const flaggedCount = part.questions.filter((question) => flagged.has(question.id)).length;
         const isActive = activePart === part.partCode;
-        const isLocked = part.partCode === 'A' && partALocked;
+        const isLocked = (part.partCode === 'A' && partALocked)
+          || ((part.partCode === 'B' || part.partCode === 'C') && !partBCAccessible);
         const partALabel = isLocked ? ' (locked)' : '';
         return (
           <button
@@ -610,18 +784,22 @@ function PartBody({
   answers,
   flagged,
   activeQuestionId,
+  eliminatedChoices,
   locked,
   onActiveQuestionChange,
   onToggleFlag,
+  onToggleEliminated,
   onAnswerChange,
 }: {
   part: ReadingLearnerStructureDto['parts'][number];
   answers: Record<string, string>;
   flagged: Set<string>;
   activeQuestionId: string | null;
+  eliminatedChoices: Set<string>;
   locked: boolean;
   onActiveQuestionChange: (questionId: string) => void;
   onToggleFlag: (questionId: string) => void;
+  onToggleEliminated: (questionId: string, optionValue: string) => void;
   onAnswerChange: (question: ReadingQuestionLearnerDto, value: unknown) => void;
 }) {
   const activeQuestion = part.questions.find((question) => question.id === activeQuestionId) ?? part.questions[0];
@@ -649,7 +827,8 @@ function PartBody({
                 {text.source ? <p className="text-xs font-semibold text-muted">Source: {text.source}</p> : null}
               </div>
               <div
-                className="prose prose-sm max-w-none text-navy"
+                className="prose prose-sm max-w-none text-navy selection:bg-warning/30"
+                data-reading-highlight-scope="passage"
                 dangerouslySetInnerHTML={{ __html: text.bodyHtml }}
               />
             </article>
@@ -681,8 +860,10 @@ function PartBody({
             texts={part.texts}
             valueJson={answers[activeQuestion.id] ?? ''}
             flagged={flagged.has(activeQuestion.id)}
+            eliminatedChoices={eliminatedChoices}
             locked={locked}
             onToggleFlag={() => onToggleFlag(activeQuestion.id)}
+            onToggleEliminated={(optionValue) => onToggleEliminated(activeQuestion.id, optionValue)}
             onChange={(value) => onAnswerChange(activeQuestion, value)}
           />
         ) : null}
@@ -757,7 +938,7 @@ function QuestionNavigator({
             )}
           >
             {question.displayOrder}
-            {isFlagged ? <Bookmark className="absolute right-1 top-1 h-3 w-3 fill-current" aria-hidden="true" /> : null}
+            {isFlagged ? <Flag className="absolute right-1 top-1 h-3 w-3 fill-current" aria-hidden="true" /> : null}
           </button>
         );
       })}
@@ -770,16 +951,20 @@ function QuestionInput({
   texts,
   valueJson,
   flagged,
+  eliminatedChoices,
   locked,
   onToggleFlag,
+  onToggleEliminated,
   onChange,
 }: {
   question: ReadingQuestionLearnerDto;
   texts: ReadingLearnerStructureDto['parts'][number]['texts'];
   valueJson: string;
   flagged: boolean;
+  eliminatedChoices: Set<string>;
   locked: boolean;
   onToggleFlag: () => void;
+  onToggleEliminated: (optionValue: string) => void;
   onChange: (value: unknown) => void;
 }) {
   const current = useMemo(() => parseAnswer(valueJson), [valueJson]);
@@ -789,16 +974,23 @@ function QuestionInput({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Question {question.displayOrder}</p>
-          <h3 className="mt-2 text-base font-semibold leading-7 text-navy">{question.stem}</h3>
+          <h3 className="mt-2 text-base font-semibold leading-7 text-navy selection:bg-warning/30" data-reading-highlight-scope="stem">{question.stem}</h3>
         </div>
         <Button variant="ghost" size="sm" onClick={onToggleFlag} aria-pressed={flagged}>
-          <Bookmark className={cn('h-4 w-4', flagged && 'fill-current text-warning')} />
+          <Flag className={cn('h-4 w-4', flagged && 'fill-current text-warning')} />
           {flagged ? 'Flagged' : 'Flag'}
         </Button>
       </div>
 
       {question.questionType === 'MultipleChoice3' || question.questionType === 'MultipleChoice4' ? (
-        <McqControl question={question} current={current} locked={locked} onChange={onChange} />
+        <McqControl
+          question={question}
+          current={current}
+          eliminatedChoices={eliminatedChoices}
+          locked={locked}
+          onToggleEliminated={onToggleEliminated}
+          onChange={onChange}
+        />
       ) : question.questionType === 'MatchingTextReference' ? (
         <MatchingControl question={question} texts={texts} current={current} locked={locked} onChange={onChange} />
       ) : (
@@ -811,12 +1003,16 @@ function QuestionInput({
 function McqControl({
   question,
   current,
+  eliminatedChoices,
   locked,
+  onToggleEliminated,
   onChange,
 }: {
   question: ReadingQuestionLearnerDto;
   current: unknown;
+  eliminatedChoices: Set<string>;
   locked: boolean;
+  onToggleEliminated: (optionValue: string) => void;
   onChange: (value: unknown) => void;
 }) {
   const options = toOptionList(question.options);
@@ -825,12 +1021,19 @@ function McqControl({
     <div className="space-y-2">
       {options.map((option, index) => {
         const letter = option.value || String.fromCharCode(65 + index);
+        const eliminated = eliminatedChoices.has(`${question.id}:${letter}`);
         return (
           <label
             key={`${letter}-${option.label}`}
+            data-reading-answer-choice="true"
+            onContextMenu={(event) => {
+              event.preventDefault();
+              if (!locked) onToggleEliminated(letter);
+            }}
             className={cn(
               'flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border bg-background-light p-3 text-sm transition-colors',
               current === letter && 'border-primary bg-primary/5',
+              eliminated && 'text-muted line-through decoration-2',
               locked && 'cursor-not-allowed opacity-70',
             )}
           >
@@ -843,7 +1046,7 @@ function McqControl({
               onChange={() => onChange(letter)}
             />
             <span className="font-mono font-bold text-navy">{letter}.</span>
-            <span className="leading-6 text-navy">{option.label}</span>
+            <span className={cn('leading-6 text-navy', eliminated && 'text-muted')}>{option.label}</span>
           </label>
         );
       })}
@@ -937,6 +1140,11 @@ function fromStartedAttempt(started: ReadingAttemptStarted): ActiveAttempt {
     partBCTimerMinutes: started.partBCTimerMinutes,
     answeredCount: started.answeredCount,
     canResume: started.canResume,
+    partABreakAvailable: started.partABreakAvailable,
+    partABreakResumed: started.partABreakResumed,
+    partBCTimerPausedAt: started.partBCTimerPausedAt,
+    partBCPausedSeconds: started.partBCPausedSeconds,
+    partABreakMaxSeconds: started.partABreakMaxSeconds,
     status: 'InProgress',
     // The /attempts/{id} POST returns the full canonical attempt; mode is
     // always Exam at this entry point. Practice modes are launched via the
@@ -947,8 +1155,8 @@ function fromStartedAttempt(started: ReadingAttemptStarted): ActiveAttempt {
   };
 }
 
-function isQuestionLocked(activePart: ReadingPartCode, partALocked: boolean, paperExpired: boolean) {
-  return paperExpired || (activePart === 'A' && partALocked);
+function isQuestionLocked(activePart: ReadingPartCode, partALocked: boolean, paperExpired: boolean, breakPending: boolean) {
+  return paperExpired || breakPending || (activePart === 'A' && partALocked);
 }
 
 function practiceModeLabel(mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank'): string {
@@ -963,6 +1171,28 @@ function practiceModeLabel(mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'E
 
 function isSubsetPracticeMode(mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank') {
   return mode === 'Drill' || mode === 'MiniTest' || mode === 'ErrorBank';
+}
+
+function useReadingBrowserZoomGuard() {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.key === '+' || event.key === '=' || event.key === '-' || event.key === '0') {
+        event.preventDefault();
+      }
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('wheel', onWheel);
+    };
+  }, []);
 }
 
 function toOptionList(options: unknown): Array<{ value: string; label: string }> {

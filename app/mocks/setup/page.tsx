@@ -154,8 +154,8 @@ export default function MockSetup() {
         setOptions(result);
         setDiagnosticEntitlement(entitlement);
         const queryBundleId = searchParams?.get('bundleId');
-        const querySubtest = searchParams?.get('subtest');
-        const queryType = searchParams?.get('type');
+        const querySubtest = searchParams?.get('subtest') ?? null;
+        const queryType = searchParams?.get('type') ?? null;
         const bundle = queryBundleId ? result.availableBundles.find((item) => item.bundleId === queryBundleId || item.id === queryBundleId) : null;
         if (bundle) {
           setSelectedBundleId(bundle.bundleId);

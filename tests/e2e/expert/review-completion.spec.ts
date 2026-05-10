@@ -71,13 +71,7 @@ test.describe('Tutor review completion workflows @expert', () => {
 
     // The success toast auto-dismisses after 5s (components/ui/alert.tsx) which races test polling under cold dev load;
     // assert the durable indicators instead — "Unsaved" badge clearing and the persisted comment value.
-    try {
-      await expect(page.getByText(/^Unsaved$/i)).toHaveCount(0, { timeout: 15_000 });
-    } catch (e) {
-      const log = await page.evaluate(() => (window as unknown as { __dirtyLog?: string[] }).__dirtyLog ?? []);
-      console.log('[DIRTY LOG]\n' + log.join('\n'));
-      throw e;
-    }
+    await expect(page.getByText(/^Unsaved$/i)).toHaveCount(0, { timeout: 30_000 });
     await expect(page.getByLabel('Final overall comment')).toHaveValue(finalComment);
 
     await page.keyboard.press(`${keyboardModifier}+Enter`);
@@ -121,7 +115,9 @@ test.describe('Tutor review completion workflows @expert', () => {
 
     await expect(page.getByText(/review submitted successfully\./i)).toBeVisible();
     await expect(page).toHaveURL(/\/expert\/queue$/);
-    await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
+    // After this final submission the queue may be empty for this fixture user; the empty state replaces the
+    // "Review queue" hero heading. Assert the workspace landmark, which is rendered in both branches.
+    await expect(page.getByRole('main', { name: /review queue/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();

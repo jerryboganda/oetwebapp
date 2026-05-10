@@ -99,9 +99,9 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
             OnExpirySubmitPolicy: g.OnExpirySubmitPolicy,
             CountdownWarnings: ParseIntArray(g.CountdownWarningsJson),
             EnabledQuestionTypes: ParseStringArray(g.EnabledQuestionTypesJson),
-            ShortAnswerNormalisation: g.ShortAnswerNormalisation,
-            ShortAnswerAcceptSynonyms: g.ShortAnswerAcceptSynonyms,
-            MatchingAllowPartialCredit: g.MatchingAllowPartialCredit,
+            ShortAnswerNormalisation: "trim_only",
+            ShortAnswerAcceptSynonyms: false,
+            MatchingAllowPartialCredit: false,
             UnknownTypeFallbackPolicy: g.UnknownTypeFallbackPolicy,
             ShowExplanationsAfterSubmit: g.ShowExplanationsAfterSubmit,
             ShowExplanationsOnlyIfWrong: g.ShowExplanationsOnlyIfWrong,
@@ -136,9 +136,9 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
         row.OnExpirySubmitPolicy = next.OnExpirySubmitPolicy;
         row.CountdownWarningsJson = next.CountdownWarningsJson;
         row.EnabledQuestionTypesJson = next.EnabledQuestionTypesJson;
-        row.ShortAnswerNormalisation = next.ShortAnswerNormalisation;
-        row.ShortAnswerAcceptSynonyms = next.ShortAnswerAcceptSynonyms;
-        row.MatchingAllowPartialCredit = next.MatchingAllowPartialCredit;
+        row.ShortAnswerNormalisation = "trim_only";
+        row.ShortAnswerAcceptSynonyms = false;
+        row.MatchingAllowPartialCredit = false;
         row.SentenceCompletionStrictness = next.SentenceCompletionStrictness;
         row.UnknownTypeFallbackPolicy = next.UnknownTypeFallbackPolicy;
         row.ShowExplanationsAfterSubmit = next.ShowExplanationsAfterSubmit;

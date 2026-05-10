@@ -3,31 +3,43 @@ import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../f
 import { waitForSessionGuardToClear } from '../fixtures/auth';
 
 const expertRoutes = [
-  { path: '/expert', text: /dashboard|expert/i },
-  { path: '/expert/queue', text: /review queue|queue/i },
-  { path: '/expert/calibration', text: /calibration/i },
-  { path: '/expert/metrics', text: /metrics/i },
-  { path: '/expert/schedule', text: /schedule/i },
-  { path: '/expert/learners', text: /learners/i },
+  { path: '/expert', title: 'Dashboard' },
+  { path: '/expert/queue', title: 'Review Queue' },
+  { path: '/expert/calibration', title: 'Calibration' },
+  { path: '/expert/metrics', title: 'Metrics' },
+  { path: '/expert/schedule', title: 'Schedule' },
+  { path: '/expert/learners', title: 'Learners' },
 ];
 
 const adminRoutes = [
-  { path: '/admin', text: /operations|admin/i },
-  { path: '/admin/content', text: /content library|content/i },
-  { path: '/admin/criteria', text: /criteria|rubrics/i },
-  { path: '/admin/taxonomy', text: /taxonomy/i },
-  { path: '/admin/flags', text: /feature flags|flags/i },
-  { path: '/admin/users', text: /user ops|users/i },
-  { path: '/admin/billing', text: /billing/i },
-  { path: '/admin/audit-logs', text: /audit logs/i },
+  { path: '/admin', title: 'Operations' },
+  { path: '/admin/content', title: 'Content Hub' },
+  { path: '/admin/criteria', title: 'Rubrics & Criteria' },
+  { path: '/admin/taxonomy', title: 'Professions' },
+  { path: '/admin/flags', title: 'Feature Flags' },
+  { path: '/admin/users', title: 'User Operations' },
+  { path: '/admin/billing', title: 'Billing Ops' },
+  { path: '/admin/audit-logs', title: 'Audit Logs' },
 ];
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function expectRouteShell(page: Parameters<typeof observePage>[0], route: { path: string; title: string }) {
+  await page.goto(route.path, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await expect(page).toHaveURL(new RegExp(`${escapeRegExp(route.path)}(?:[?#].*)?$`));
+  await waitForSessionGuardToClear(page);
+  await expect(page.getByRole('banner').getByText(route.title, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('main').first()).toBeVisible();
+}
 
 async function expectPrivilegedAuthResolution(
   page: Parameters<typeof observePage>[0],
   targetPath: '/expert' | '/admin',
   workspaceText: RegExp,
 ) {
-  await page.goto(`/mfa/setup?next=${encodeURIComponent(targetPath)}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`/mfa/setup?next=${encodeURIComponent(targetPath)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
 
   const setupHeading = page.getByRole('heading', { name: /set up authenticator mfa/i });
   const setupLoadingNotice = page.getByText(/preparing your authenticator secret and recovery codes/i);
@@ -87,11 +99,7 @@ test.describe('Privileged workspaces @smoke', () => {
       test.setTimeout(120_000); // page.goto + session-guard wait + cold dev compile + render under firefox/webkit can exceed default 60s budget
 
       const diagnostics = observePage(page);
-      await page.goto(route.path);
-      await waitForSessionGuardToClear(page);
-      const main = page.getByRole('main');
-
-      await expect(main.getByText(route.text).first()).toBeVisible({ timeout: 30_000 }); // cold dev compile + first data fetch can exceed 10s
+      await expectRouteShell(page, route);
 
       expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
       diagnostics.detach();
@@ -108,11 +116,7 @@ test.describe('Privileged workspaces @smoke', () => {
       test.setTimeout(120_000); // page.goto + session-guard wait + cold dev compile + render under firefox/webkit can exceed default 60s budget
 
       const diagnostics = observePage(page);
-      await page.goto(route.path);
-      await waitForSessionGuardToClear(page);
-      const main = page.getByRole('main');
-
-      await expect(main.getByText(route.text).first()).toBeVisible({ timeout: 30_000 }); // cold dev compile + first data fetch can exceed 10s
+      await expectRouteShell(page, route);
 
       expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
       diagnostics.detach();

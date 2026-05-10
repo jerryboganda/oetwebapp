@@ -5,5 +5,5 @@ import { AdminContentEditor } from '@/components/domain/admin-content-editor';
 
 export default function AdminContentEditPage() {
   const params = useParams<{ id: string }>();
-  return <AdminContentEditor contentId={params.id} />;
+  return <AdminContentEditor contentId={params?.id ?? ''} />;
 }

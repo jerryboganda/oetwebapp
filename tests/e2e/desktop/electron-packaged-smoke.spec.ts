@@ -256,28 +256,14 @@ test.describe('Packaged Electron desktop shell', () => {
       const diagnostics = observePage(page);
       const apiBaseURL = `${getAppOrigin(page.url())}/api/backend`;
       const session = await bootstrapSessionForRole(request, 'learner', apiBaseURL);
-      const answer = 'approximately 1 in 10';
 
       await hydrateSessionStorage(page, session);
       await loadWithinApp(page, '/');
       await expect(page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i })).toBeVisible();
 
       await loadWithinApp(page, '/reading/player/rt-001');
-      await expect(page.getByRole('heading', { name: /hospital-acquired infections: prevention strategies/i })).toBeVisible();
-      await expect(page.getByText(/question 1 of 3/i)).toBeVisible();
-
-      const answerInput = page.getByPlaceholder('Type your answer here...');
-      await answerInput.fill(answer);
-
-      await page.getByRole('button', { name: /flag this question for review/i }).click();
-      await expect(page.getByRole('button', { name: /remove flag from this question/i })).toBeVisible();
-
-      await page.getByRole('button', { name: /next/i }).click();
-      await expect(page.getByText(/question 2 of 3/i)).toBeVisible();
-
-      await page.getByRole('button', { name: /previous/i }).click();
-      await expect(page.getByText(/question 1 of 3/i)).toBeVisible();
-      await expect(answerInput).toHaveValue(answer);
+      await expect(page).toHaveURL(/\/reading(?:\?|$)/);
+      await expect(page.getByRole('heading', { name: /reading/i })).toBeVisible();
 
       expectNoSevereClientIssues(diagnostics);
       diagnostics.detach();

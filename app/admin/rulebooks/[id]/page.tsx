@@ -60,7 +60,7 @@ const emptyRuleForm = (sectionCode: string): RuleFormState => ({
 export default function AdminRulebookDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const id = decodeURIComponent(params.id);
+  const id = decodeURIComponent(params?.id ?? '');
 
   const [data, setData] = useState<AdminRulebookDetail | null>(null);
   const [loading, setLoading] = useState(true);

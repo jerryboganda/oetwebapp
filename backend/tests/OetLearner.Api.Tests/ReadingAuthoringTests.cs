@@ -490,15 +490,26 @@ public class ReadingAuthoringTests
         await FullyAuthorPaperAsync(db, structure, "p1");
 
         var started = await attemptSvc.StartAsync("u1", "p1", default);
-        // Answer first 30 questions correctly; remaining 12 blank.
-        var questions = await db.ReadingQuestions.OrderBy(q => q.ReadingPartId).ThenBy(q => q.DisplayOrder).ToListAsync();
-        var correctAnswers = 0;
-        foreach (var q in questions)
+        var partAQuestions = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A)
+            .OrderBy(q => q.DisplayOrder)
+            .ToListAsync();
+        foreach (var q in partAQuestions)
         {
-            if (correctAnswers >= 30) break;
-            var correctJson = q.CorrectAnswerJson;
-            await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, q.Id, correctJson, default);
-            correctAnswers++;
+            await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, q.Id, q.CorrectAnswerJson, default);
+        }
+        await ResumeExamPartBCAsync(db, attemptSvc, "u1", started.AttemptId);
+        var partBCQuestions = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode != ReadingPartCode.A)
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
+            .Take(10)
+            .ToListAsync();
+        foreach (var q in partBCQuestions)
+        {
+            await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, q.Id, q.CorrectAnswerJson, default);
         }
 
         var result = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
@@ -518,8 +529,21 @@ public class ReadingAuthoringTests
         await FullyAuthorPaperAsync(db, structure, "p1");
 
         var started = await attemptSvc.StartAsync("u2", "p1", default);
-        var questions = await db.ReadingQuestions.ToListAsync();
-        foreach (var q in questions)
+        var partAQuestions = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A)
+            .OrderBy(q => q.DisplayOrder)
+            .ToListAsync();
+        foreach (var q in partAQuestions)
+            await attemptSvc.SaveAnswerAsync("u2", started.AttemptId, q.Id, q.CorrectAnswerJson, default);
+        await ResumeExamPartBCAsync(db, attemptSvc, "u2", started.AttemptId);
+        var partBCQuestions = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode != ReadingPartCode.A)
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
+            .ToListAsync();
+        foreach (var q in partBCQuestions)
             await attemptSvc.SaveAnswerAsync("u2", started.AttemptId, q.Id, q.CorrectAnswerJson, default);
 
         var result = await attemptSvc.SubmitAsync("u2", started.AttemptId, default);
@@ -546,7 +570,7 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
-    public async Task ShortAnswer_respects_synonyms()
+    public async Task PartA_short_answer_rejects_synonyms_even_when_policy_enabled()
     {
         var (db, structure, policy, grader, _) = Build();
         await SeedPaperAsync(db, "p1");
@@ -576,53 +600,52 @@ public class ReadingAuthoringTests
         db.ReadingAnswers.Add(new ReadingAnswer
         {
             Id = "aa1", ReadingAttemptId = "a1", ReadingQuestionId = q.Id,
-            UserAnswerJson = "\"Oral Rehydration Therapy\"",
+            UserAnswerJson = "\"oral rehydration therapy\"",
             AnsweredAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
 
         var result = await grader.GradeAttemptAsync("a1", default);
-        Assert.Equal(1, result.RawScore);
-        Assert.Single(result.Answers, x => x.IsCorrect);
+        Assert.Equal(0, result.RawScore);
+        Assert.DoesNotContain(result.Answers, x => x.IsCorrect);
         await db.DisposeAsync();
     }
 
     [Fact]
-    public async Task Matching_partial_credit_awards_proportionally()
+    public async Task PartA_matching_rejects_array_answers_even_when_partial_credit_enabled()
     {
-        var (db, structure, _, grader, _) = Build();
+        var (db, structure, policy, grader, _) = Build();
         await SeedPaperAsync(db, "p1");
         await structure.EnsureCanonicalPartsAsync("p1", default);
         var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
 
-        // Matching question worth 4 points, correct answer = {1,2,3,4}.
         var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
-            null, partA.Id, null, 1, 4, ReadingQuestionType.MatchingTextReference,
-            "Match statements to texts", "[]", "[\"1\",\"2\",\"3\",\"4\"]",
+            null, partA.Id, null, 1, 1, ReadingQuestionType.MatchingTextReference,
+            "Match statement to text", "[]", "\"A\"",
             null, false, null, null), "admin", default);
+        var snapshot = (await policy.ResolveForUserAsync("u1", default)) with { MatchingAllowPartialCredit = true };
 
         db.ReadingAttempts.Add(new ReadingAttempt
         {
             Id = "a2", UserId = "u1", PaperId = "p1",
             StartedAt = DateTimeOffset.UtcNow, LastActivityAt = DateTimeOffset.UtcNow,
-            Status = ReadingAttemptStatus.InProgress, MaxRawScore = 42, PolicySnapshotJson = "{}",
+            Status = ReadingAttemptStatus.InProgress, MaxRawScore = 42, PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
         });
-        // User answers {1, 2, 5} — 2 hits out of 4 correct answers → half credit.
         db.ReadingAnswers.Add(new ReadingAnswer
         {
             Id = "aa2", ReadingAttemptId = "a2", ReadingQuestionId = q.Id,
-            UserAnswerJson = "[\"1\",\"2\",\"5\"]",
+            UserAnswerJson = "[\"A\"]",
             AnsweredAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
 
         var result = await grader.GradeAttemptAsync("a2", default);
-        Assert.Equal(2, result.RawScore); // 4 points × 2/4
+        Assert.Equal(0, result.RawScore);
         await db.DisposeAsync();
     }
 
     [Fact]
-    public async Task Fuzzy_levenshtein_1_accepts_single_edit_short_answer()
+    public async Task PartA_short_answer_rejects_fuzzy_single_edit_policy()
     {
         var (db, structure, policy, grader, _) = Build();
         await SeedPaperAsync(db, "p1");
@@ -657,7 +680,7 @@ public class ReadingAuthoringTests
         await db.SaveChangesAsync();
 
         var result = await grader.GradeAttemptAsync("fuzzy-a1", default);
-        Assert.Equal(1, result.RawScore);
+        Assert.Equal(0, result.RawScore);
         await db.DisposeAsync();
     }
 
@@ -760,6 +783,68 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Exam_rejects_BC_answers_until_part_a_break_is_resumed()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var partBQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
+
+        var early = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default));
+        Assert.Equal("part_bc_not_open", early.Code);
+
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-16);
+        attempt.PartBCTimerPausedAt = attempt.StartedAt.AddMinutes(15);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddHours(1);
+        await db.SaveChangesAsync();
+
+        var paused = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default));
+        Assert.Equal("part_bc_break_not_resumed", paused.Code);
+
+        await attemptSvc.ResumePartABreakAsync("u1", started.AttemptId, default);
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default);
+        Assert.Single(await db.ReadingAnswers.Where(a => a.ReadingAttemptId == started.AttemptId).ToListAsync());
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Optional_break_extends_only_BC_deadline_and_never_reopens_part_a()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20);
+        attempt.PartBCTimerPausedAt = attempt.StartedAt.AddMinutes(15);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddHours(1);
+        await db.SaveChangesAsync();
+
+        var resumed = await attemptSvc.ResumePartABreakAsync("u1", started.AttemptId, default);
+        Assert.Equal(attempt.StartedAt.AddMinutes(15), resumed.PartADeadlineAt, TimeSpan.FromSeconds(1));
+        Assert.InRange(resumed.PartBCPausedSeconds, 299, 301);
+        Assert.Equal(resumed.PartBCDeadlineAt.AddSeconds(10), resumed.DeadlineAt, TimeSpan.FromSeconds(1));
+
+        var partAQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A);
+        var locked = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partAQuestion.Id, partAQuestion.CorrectAnswerJson, default));
+        Assert.Equal("part_a_locked", locked.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Answer_window_rejects_BC_save_before_grace_deadline()
     {
         var (db, structure, _, _, attemptSvc) = Build();
@@ -795,6 +880,7 @@ public class ReadingAuthoringTests
         var partBQuestion = await db.ReadingQuestions
             .Include(q => q.Part)
             .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
+        await ResumeExamPartBCAsync(db, attemptSvc, "u1", started.AttemptId);
         await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default);
 
         var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
@@ -861,7 +947,7 @@ public class ReadingAuthoringTests
         // Default 15 + 45 = 60 min; 25% extra → 19 + 57 = 76 min
         Assert.Equal(19, started.PartATimerMinutes);
         Assert.Equal(57, started.PartBCTimerMinutes);
-        var totalExpected = TimeSpan.FromMinutes(76).Add(TimeSpan.FromSeconds(10));
+        var totalExpected = TimeSpan.FromMinutes(86).Add(TimeSpan.FromSeconds(10));
         var actualDelta = started.DeadlineAt - started.StartedAt;
         Assert.True(Math.Abs((actualDelta - totalExpected).TotalSeconds) < 5);
         await db.DisposeAsync();
@@ -885,7 +971,7 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
-    public async Task Grading_uses_policy_snapshot_not_live_policy()
+    public async Task PartA_grading_remains_strict_after_live_policy_softening_attempt()
     {
         var (db, structure, policy, _, attemptSvc) = Build();
         await SeedPaperAsync(db, "p1");
@@ -894,15 +980,15 @@ public class ReadingAuthoringTests
 
         var firstQuestion = await db.ReadingQuestions
             .Include(q => q.Part)
-            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A);
+            .FirstAsync(q => q.Part!.PaperId == "p1"
+                && q.Part.PartCode == ReadingPartCode.A
+                && q.QuestionType == ReadingQuestionType.ShortAnswer);
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+
         firstQuestion.AcceptedSynonymsJson = "[\"synonym answer\"]";
         await db.SaveChangesAsync();
 
         var global = await policy.GetGlobalAsync(default);
-        global.ShortAnswerAcceptSynonyms = false;
-        await policy.UpsertGlobalAsync(global, "admin", default);
-        var started = await attemptSvc.StartAsync("u1", "p1", default);
-
         global.ShortAnswerAcceptSynonyms = true;
         await policy.UpsertGlobalAsync(global, "admin", default);
 
@@ -1092,11 +1178,24 @@ public class ReadingAuthoringTests
                 null, partC.Id, i, $"Text C{i}", "Lancet", "<p>text</p>", 300, null), "admin", default));
         }
 
-        // Part A: 20 short-answer questions
-        for (var i = 1; i <= 20; i++)
+        // Part A: Q1-7 matching, Q8-14 short answer, Q15-20 sentence completion.
+        for (var i = 1; i <= 7; i++)
+        {
+            var answer = ((char)('A' + ((i - 1) % 4))).ToString();
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.MatchingTextReference,
+                $"PA-Q{i}", "[]", $"\"{answer}\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 8; i <= 14; i++)
         {
             await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
                 null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.ShortAnswer,
+                $"PA-Q{i}", "[]", $"\"ans{i}\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 15; i <= 20; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.SentenceCompletion,
                 $"PA-Q{i}", "[]", $"\"ans{i}\"", null, false, null, null), "admin", default);
         }
         // Part B: 6 MCQ3
@@ -1126,6 +1225,22 @@ public class ReadingAuthoringTests
             q.ReviewState = ReadingReviewState.Published;
         }
         await db.SaveChangesAsync();
+    }
+
+    private static async Task ResumeExamPartBCAsync(
+        LearnerDbContext db,
+        ReadingAttemptService attemptSvc,
+        string userId,
+        string attemptId)
+    {
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == attemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-16);
+        attempt.PartABreakUsed = false;
+        attempt.PartBCPausedSeconds = 0;
+        attempt.PartBCTimerPausedAt = attempt.StartedAt.AddMinutes(15);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddHours(1);
+        await db.SaveChangesAsync();
+        await attemptSvc.ResumePartABreakAsync(userId, attemptId, default);
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -1196,6 +1311,7 @@ public class ReadingAuthoringTests
         var pbQ = await db.ReadingQuestions
             .Where(q => q.Part!.PartCode == ReadingPartCode.B)
             .FirstAsync();
+        await ResumeExamPartBCAsync(db, attemptSvc, "u1", first.AttemptId);
         await attemptSvc.SaveAnswerAsync("u1", first.AttemptId, pbQ.Id, "\"X\"", default);
         await attemptSvc.SubmitAsync("u1", first.AttemptId, default);
 
@@ -1259,28 +1375,23 @@ public class ReadingAuthoringTests
 
         // Pick three Part-A questions to scope a drill against. Authored
         // correct answer for Part A = "ans{i}".
-        var partAIds = await db.ReadingQuestions
+        var partAQuestions = await db.ReadingQuestions
             .Where(q => q.Part!.PartCode == ReadingPartCode.A)
             .OrderBy(q => q.DisplayOrder)
             .Take(3)
-            .Select(q => q.Id)
+            .Select(q => new { q.Id, q.CorrectAnswerJson })
             .ToListAsync();
+        var partAIds = partAQuestions.Select(q => q.Id).ToList();
 
         var scope = JsonSerializer.Serialize(new { kind = "drill", questionIds = partAIds });
         var run = await attemptSvc.StartInModeAsync("u1", "p1", ReadingAttemptMode.Drill, scope, default);
 
         // Answer two correctly, one wrong.
         var idx = 0;
-        foreach (var qid in partAIds)
+        foreach (var q in partAQuestions)
         {
-            var orderedIds = await db.ReadingQuestions
-                .Where(q => q.Part!.PartCode == ReadingPartCode.A)
-                .OrderBy(q => q.DisplayOrder)
-                .Select(q => q.Id)
-                .ToListAsync();
-            var qIndex = orderedIds.IndexOf(qid) + 1;
-            var answer = idx == 2 ? "\"WRONG\"" : $"\"ans{qIndex}\"";
-            await attemptSvc.SaveAnswerAsync("u1", run.AttemptId, qid, answer, default);
+            var answer = idx == 2 ? "\"WRONG\"" : q.CorrectAnswerJson;
+            await attemptSvc.SaveAnswerAsync("u1", run.AttemptId, q.Id, answer, default);
             idx++;
         }
         var result = await grader.GradeAttemptAsync(run.AttemptId, default);
@@ -1625,6 +1736,7 @@ public class ReadingAuthoringTests
 
         // Learner picks A (the tagged-Opposite distractor) → wrong.
         var run = await attemptSvc.StartAsync("u1", "p1", default);
+        await ResumeExamPartBCAsync(db, attemptSvc, "u1", run.AttemptId);
         await attemptSvc.SaveAnswerAsync("u1", run.AttemptId, partCQ.Id, "\"A\"", default);
         await attemptSvc.SubmitAsync("u1", run.AttemptId, default);
 
@@ -1715,6 +1827,7 @@ public class ReadingAuthoringTests
         {
             var userId = $"u{i}";
             var run = await attemptSvc.StartAsync(userId, "p1", default);
+            await ResumeExamPartBCAsync(db, attemptSvc, userId, run.AttemptId);
             await attemptSvc.SaveAnswerAsync(userId, run.AttemptId, partCQ.Id, "\"A\"", default);
             await attemptSvc.SubmitAsync(userId, run.AttemptId, default);
         }
@@ -1835,9 +1948,17 @@ public class ReadingAuthoringTests
         // freshly-graded attempt. We answer everything wrong so scaled is 0.
         var run = await attemptSvc.StartAsync("u1", "p1", default);
         var qs = await db.ReadingQuestions.AsNoTracking()
+            .Include(q => q.Part)
             .Where(q => q.Part!.PaperId == "p1")
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
             .ToListAsync();
-        foreach (var q in qs)
+        foreach (var q in qs.Where(q => q.Part!.PartCode == ReadingPartCode.A))
+        {
+            await attemptSvc.SaveAnswerAsync("u1", run.AttemptId, q.Id, "\"WRONG\"", default);
+        }
+        await ResumeExamPartBCAsync(db, attemptSvc, "u1", run.AttemptId);
+        foreach (var q in qs.Where(q => q.Part!.PartCode != ReadingPartCode.A))
         {
             await attemptSvc.SaveAnswerAsync("u1", run.AttemptId, q.Id, "\"WRONG\"", default);
         }

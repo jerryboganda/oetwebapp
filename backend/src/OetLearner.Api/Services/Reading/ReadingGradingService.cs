@@ -72,6 +72,9 @@ public sealed class ReadingGradingService(
             .Where(p => p.PaperId == attempt.PaperId)
             .Select(p => p.Id)
             .ToListAsync(ct);
+        var partCodeByPartId = await db.ReadingParts.AsNoTracking()
+            .Where(p => p.PaperId == attempt.PaperId)
+            .ToDictionaryAsync(p => p.Id, p => p.PartCode, ct);
         var questions = await db.ReadingQuestions
             .Where(q => partIds.Contains(q.ReadingPartId))
             .ToListAsync(ct);
@@ -103,7 +106,8 @@ public sealed class ReadingGradingService(
                 continue;
             }
 
-            var (isCorrect, pts) = GradeOne(q, answer, policy);
+            var partCode = partCodeByPartId.GetValueOrDefault(q.ReadingPartId, ReadingPartCode.A);
+            var (isCorrect, pts) = GradeOne(q, answer, policy, attempt.Mode, partCode);
             answer.IsCorrect = isCorrect;
             answer.PointsEarned = pts;
             answer.SelectedDistractorCategory = isCorrect
@@ -180,19 +184,29 @@ public sealed class ReadingGradingService(
 
     // ── Grader strategies ────────────────────────────────────────────────
 
-    private (bool isCorrect, int points) GradeOne(ReadingQuestion q, ReadingAnswer a, ReadingResolvedPolicy policy)
+    private (bool isCorrect, int points) GradeOne(
+        ReadingQuestion q,
+        ReadingAnswer a,
+        ReadingResolvedPolicy policy,
+        ReadingAttemptMode mode,
+        ReadingPartCode partCode)
     {
         try
         {
+            var strictPartA = mode == ReadingAttemptMode.Exam && partCode == ReadingPartCode.A;
             return q.QuestionType switch
             {
                 ReadingQuestionType.MultipleChoice3 or
                 ReadingQuestionType.MultipleChoice4 => GradeMcq(q, a),
 
-                ReadingQuestionType.MatchingTextReference => GradeMatching(q, a, policy),
+                ReadingQuestionType.MatchingTextReference => strictPartA
+                    ? GradeStrictSingleLetter(q, a)
+                    : GradeMatching(q, a, policy),
 
                 ReadingQuestionType.ShortAnswer or
-                ReadingQuestionType.SentenceCompletion => GradeShortAnswer(q, a, policy),
+                ReadingQuestionType.SentenceCompletion => strictPartA
+                    ? GradeStrictTextAnswer(q, a)
+                    : GradeShortAnswer(q, a, policy),
 
                 _ => ApplyUnknownFallback(q, a, policy),
             };
@@ -270,6 +284,24 @@ public sealed class ReadingGradingService(
         // All-or-nothing
         var allRight = correct.SetEquals(user);
         return (allRight, allRight ? q.Points : 0);
+    }
+
+    private static (bool, int) GradeStrictSingleLetter(ReadingQuestion q, ReadingAnswer a)
+    {
+        var correct = ParseJsonString(q.CorrectAnswerJson)?.Trim();
+        var user = ParseJsonString(a.UserAnswerJson)?.Trim();
+        var ok = correct is "A" or "B" or "C" or "D"
+            && string.Equals(user, correct, StringComparison.Ordinal);
+        return (ok, ok ? q.Points : 0);
+    }
+
+    private static (bool, int) GradeStrictTextAnswer(ReadingQuestion q, ReadingAnswer a)
+    {
+        var correct = ParseJsonString(q.CorrectAnswerJson);
+        var user = ParseJsonString(a.UserAnswerJson);
+        if (correct is null || user is null) return (false, 0);
+        var ok = string.Equals(user.Trim(), correct.Trim(), StringComparison.Ordinal);
+        return (ok, ok ? q.Points : 0);
     }
 
     private static (bool, int) GradeShortAnswer(ReadingQuestion q, ReadingAnswer a, ReadingResolvedPolicy policy)
@@ -416,6 +448,13 @@ public sealed class ReadingGradingService(
             };
         }
         catch (JsonException) { return new(); }
+    }
+
+    private static string? ParseJsonString(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JsonSerializer.Deserialize<string>(json); }
+        catch (JsonException) { return null; }
     }
 
     /// <summary>

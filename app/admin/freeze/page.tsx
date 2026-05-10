@@ -113,7 +113,7 @@ function TextAreaField({ label, value, onChange, rows = 3, hint }: { label: stri
 export default function AdminFreezePage() {
   const { isAuthenticated, role } = useAdminAuth();
   const searchParams = useSearchParams();
-  const initialUserId = searchParams.get('userId') ?? '';
+  const initialUserId = searchParams?.get('userId') ?? '';
   const [pageStatus, setPageStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [overview, setOverview] = useState<AdminFreezeOverview | null>(null);
   const [error, setError] = useState<string | null>(null);

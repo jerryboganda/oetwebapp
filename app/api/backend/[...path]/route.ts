@@ -33,10 +33,10 @@ async function proxyRequest(request: Request, context: { params: Promise<{ path:
 
   const headers = sanitizeProxyHeaders(request.headers);
 
-  let body: string | undefined;
+  let body: ArrayBuffer | undefined;
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     try {
-      body = await request.text();
+      body = await request.arrayBuffer();
     } catch (error) {
       if (isAnalyticsEventPath(path)) {
         return new Response(null, { status: 204 });
@@ -45,8 +45,7 @@ async function proxyRequest(request: Request, context: { params: Promise<{ path:
       throw error;
     }
   }
-  const bodyText = body ?? '';
-  const hasBody = bodyText.length > 0;
+  const hasBody = Boolean(body && body.byteLength > 0);
 
   if (isAnalyticsEventPath(path)) {
     if (!hasBody) {
@@ -62,7 +61,7 @@ async function proxyRequest(request: Request, context: { params: Promise<{ path:
   const upstreamResponse = await fetch(targetUrl, {
     method: request.method,
     headers,
-    body: hasBody ? bodyText : undefined,
+    body: hasBody ? body : undefined,
     redirect: 'manual',
   });
 

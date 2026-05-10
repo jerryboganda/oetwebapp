@@ -41,6 +41,7 @@ public interface IReadingAttemptService
 
     Task<ReadingAttempt> GetAsync(string userId, string attemptId, CancellationToken ct);
     Task SaveAnswerAsync(string userId, string attemptId, string questionId, string userAnswerJson, CancellationToken ct);
+    Task<ReadingAttemptBreakState> ResumePartABreakAsync(string userId, string attemptId, CancellationToken ct);
     Task<ReadingGradingResult> SubmitAsync(string userId, string attemptId, CancellationToken ct);
     Task<int> SweepExpiredAsync(CancellationToken ct);
 }
@@ -61,7 +62,23 @@ public sealed record ReadingAttemptStarted(
     ReadingResolvedPolicy Policy,
     string PaperTitle,
     int PartATimerMinutes,
-    int PartBCTimerMinutes);
+    int PartBCTimerMinutes,
+    bool PartABreakAvailable,
+    bool PartABreakResumed,
+    DateTimeOffset? PartBCTimerPausedAt,
+    int PartBCPausedSeconds,
+    int PartABreakMaxSeconds);
+
+public sealed record ReadingAttemptBreakState(
+    string AttemptId,
+    DateTimeOffset DeadlineAt,
+    DateTimeOffset PartADeadlineAt,
+    DateTimeOffset PartBCDeadlineAt,
+    bool PartABreakAvailable,
+    bool PartABreakResumed,
+    DateTimeOffset? PartBCTimerPausedAt,
+    int PartBCPausedSeconds,
+    int PartABreakMaxSeconds);
 
 public sealed class ReadingAttemptService(
     LearnerDbContext db,
@@ -70,6 +87,8 @@ public sealed class ReadingAttemptService(
     IContentEntitlementService entitlements,
     ILogger<ReadingAttemptService> logger) : IReadingAttemptService
 {
+    public const int PartABreakMaxSeconds = 600;
+
     public Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct)
         => StartInModeAsync(userId, paperId, ReadingAttemptMode.Exam, scopeJson: null, ct);
 
@@ -202,6 +221,10 @@ public sealed class ReadingAttemptService(
         var partADeadline = now.AddMinutes(
             mode == ReadingAttemptMode.Exam ? policy.PartATimerMinutes : totalMinutes);
         var partBCDeadline = now.AddMinutes(totalMinutes);
+        var graceSeconds = Math.Max(0, policy.GracePeriodSeconds);
+        var initialDeadline = mode == ReadingAttemptMode.Exam
+            ? partBCDeadline.AddSeconds(PartABreakMaxSeconds + graceSeconds)
+            : partBCDeadline.AddSeconds(graceSeconds);
         var attempt = new ReadingAttempt
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -209,7 +232,10 @@ public sealed class ReadingAttemptService(
             PaperId = paperId,
             StartedAt = now,
             LastActivityAt = now,
-            DeadlineAt = partBCDeadline.AddSeconds(policy.GracePeriodSeconds),
+            DeadlineAt = initialDeadline,
+            PartBCTimerPausedAt = mode == ReadingAttemptMode.Exam ? partADeadline : null,
+            PartBCPausedSeconds = 0,
+            PartABreakUsed = mode != ReadingAttemptMode.Exam,
             Status = ReadingAttemptStatus.InProgress,
             MaxRawScore = maxRaw,
             PolicySnapshotJson = JsonSerializer.Serialize(policy),
@@ -243,7 +269,12 @@ public sealed class ReadingAttemptService(
             Policy: policy,
             PaperTitle: paper.Title,
             PartATimerMinutes: mode == ReadingAttemptMode.Exam ? policy.PartATimerMinutes : totalMinutes,
-            PartBCTimerMinutes: mode == ReadingAttemptMode.Exam ? policy.PartBCTimerMinutes : 0);
+            PartBCTimerMinutes: mode == ReadingAttemptMode.Exam ? policy.PartBCTimerMinutes : 0,
+            PartABreakAvailable: mode == ReadingAttemptMode.Exam,
+            PartABreakResumed: mode != ReadingAttemptMode.Exam,
+            PartBCTimerPausedAt: attempt.PartBCTimerPausedAt,
+            PartBCPausedSeconds: attempt.PartBCPausedSeconds,
+            PartABreakMaxSeconds: mode == ReadingAttemptMode.Exam ? PartABreakMaxSeconds : 0);
     }
 
     private static int? TryReadMinutesFromScope(string? scopeJson)
@@ -317,6 +348,7 @@ public sealed class ReadingAttemptService(
         }
 
         var resolvedPolicy = ResolvePolicySnapshot(attempt.PolicySnapshotJson);
+        var partADeadline = ResolvePartADeadline(attempt, resolvedPolicy);
         var answerWindowDeadline = ResolveAnswerWindowDeadline(attempt, resolvedPolicy);
         if (now > answerWindowDeadline)
         {
@@ -328,11 +360,29 @@ public sealed class ReadingAttemptService(
         if (q.Part?.PartCode == ReadingPartCode.A
             && attempt.Mode == ReadingAttemptMode.Exam
             && string.Equals(resolvedPolicy.PartATimerStrictness, "hard_lock", StringComparison.OrdinalIgnoreCase)
-            && now > attempt.StartedAt.AddMinutes(resolvedPolicy.PartATimerMinutes))
+            && now > partADeadline)
         {
             throw new ReadingAttemptException(
                 "part_a_locked",
                 "Part A is locked because the 15-minute window has ended.");
+        }
+
+        if (q.Part?.PartCode is ReadingPartCode.B or ReadingPartCode.C
+            && attempt.Mode == ReadingAttemptMode.Exam)
+        {
+            if (now <= partADeadline)
+            {
+                throw new ReadingAttemptException(
+                    "part_bc_not_open",
+                    "Parts B and C are not available until the Part A window has ended.");
+            }
+
+            if (!attempt.PartABreakUsed)
+            {
+                throw new ReadingAttemptException(
+                    "part_bc_break_not_resumed",
+                    "Resume the test before answering Parts B and C.");
+            }
         }
 
         // Reject malformed JSON
@@ -400,6 +450,14 @@ public sealed class ReadingAttemptService(
         if (attempt.Status is ReadingAttemptStatus.Abandoned)
             throw new InvalidOperationException("This attempt was abandoned and cannot be submitted.");
 
+        var resolvedPolicyForBreak = ResolvePolicySnapshot(attempt.PolicySnapshotJson);
+        if (IsPartABreakPending(attempt, resolvedPolicyForBreak, DateTimeOffset.UtcNow))
+        {
+            throw new ReadingAttemptException(
+                "part_bc_break_not_resumed",
+                "Resume the test before submitting the Reading attempt.");
+        }
+
         // Expired? OnExpirySubmitPolicy decides.
         var resolved = JsonSerializer.Deserialize<ReadingResolvedPolicy>(attempt.PolicySnapshotJson);
         var expired = attempt.DeadlineAt is DateTimeOffset dl && DateTimeOffset.UtcNow > dl;
@@ -424,7 +482,9 @@ public sealed class ReadingAttemptService(
     {
         if (attempt.Mode == ReadingAttemptMode.Exam)
         {
-            return attempt.StartedAt.AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes);
+            return attempt.StartedAt
+                .AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes)
+                .AddSeconds(Math.Clamp(attempt.PartBCPausedSeconds, 0, PartABreakMaxSeconds));
         }
 
         if (attempt.DeadlineAt is DateTimeOffset deadline)
@@ -484,6 +544,89 @@ public sealed class ReadingAttemptService(
         {
             return false;
         }
+    }
+
+    public async Task<ReadingAttemptBreakState> ResumePartABreakAsync(string userId, string attemptId, CancellationToken ct)
+    {
+        var attempt = await db.ReadingAttempts
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
+            ?? throw new InvalidOperationException("Attempt not found.");
+
+        if (attempt.Status != ReadingAttemptStatus.InProgress)
+        {
+            throw new ReadingAttemptException(
+                "attempt_not_in_progress",
+                $"Cannot resume a break for an attempt that is {attempt.Status}.");
+        }
+
+        if (attempt.Mode != ReadingAttemptMode.Exam)
+        {
+            throw new ReadingAttemptException(
+                "optional_break_unavailable",
+                "The optional Part A break is only available in Exam mode.");
+        }
+
+        if (attempt.PartABreakUsed)
+        {
+            throw new ReadingAttemptException(
+                "optional_break_already_used",
+                "The optional Part A break has already been resumed.");
+        }
+
+        var policy = ResolvePolicySnapshot(attempt.PolicySnapshotJson);
+        var now = DateTimeOffset.UtcNow;
+        var partADeadline = ResolvePartADeadline(attempt, policy);
+        if (now < partADeadline)
+        {
+            throw new ReadingAttemptException(
+                "optional_break_unavailable",
+                "The optional break is available only after Part A has ended.");
+        }
+
+        var pausedSeconds = Math.Clamp((int)Math.Floor((now - partADeadline).TotalSeconds), 0, PartABreakMaxSeconds);
+        var partBCDeadline = attempt.StartedAt
+            .AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes)
+            .AddSeconds(pausedSeconds);
+        var deadline = partBCDeadline.AddSeconds(Math.Max(0, policy.GracePeriodSeconds));
+        if (now > deadline)
+        {
+            attempt.Status = ReadingAttemptStatus.Expired;
+            attempt.LastActivityAt = now;
+            await db.SaveChangesAsync(ct);
+            throw new ReadingAttemptException(
+                "attempt_deadline_passed",
+                "The Reading answer window has ended.");
+        }
+
+        attempt.PartABreakUsed = true;
+        attempt.PartBCPausedSeconds = pausedSeconds;
+        attempt.PartBCTimerPausedAt = null;
+        attempt.DeadlineAt = deadline;
+        attempt.LastActivityAt = now;
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = now,
+            ActorId = userId,
+            ActorName = userId,
+            Action = "ReadingPartABreakResumed",
+            ResourceType = "ReadingAttempt",
+            ResourceId = attempt.Id,
+            Details = $"pausedSeconds={pausedSeconds}",
+        });
+        await db.SaveChangesAsync(ct);
+
+        return new ReadingAttemptBreakState(
+            AttemptId: attempt.Id,
+            DeadlineAt: deadline,
+            PartADeadlineAt: partADeadline,
+            PartBCDeadlineAt: partBCDeadline,
+            PartABreakAvailable: true,
+            PartABreakResumed: true,
+            PartBCTimerPausedAt: null,
+            PartBCPausedSeconds: pausedSeconds,
+            PartABreakMaxSeconds: PartABreakMaxSeconds);
     }
 
     public async Task<int> SweepExpiredAsync(CancellationToken ct)
@@ -555,10 +698,10 @@ public sealed class ReadingAttemptService(
                 nameof(ReadingQuestionType.MultipleChoice3),
                 nameof(ReadingQuestionType.MultipleChoice4),
             },
-            ShortAnswerNormalisation: "trim_collapse_case_insensitive",
+            ShortAnswerNormalisation: "trim_only",
             // OET-faithful default. Synonym acceptance is non-standard mode.
             ShortAnswerAcceptSynonyms: false,
-            MatchingAllowPartialCredit: true,
+            MatchingAllowPartialCredit: false,
             UnknownTypeFallbackPolicy: "skip_with_zero",
             ShowExplanationsAfterSubmit: false,
             ShowExplanationsOnlyIfWrong: false,
@@ -570,6 +713,17 @@ public sealed class ReadingAttemptService(
             AllowPausingAttempt: false,
             AllowResumeAfterExpiry: false);
     }
+
+    private static DateTimeOffset ResolvePartADeadline(ReadingAttempt attempt, ReadingResolvedPolicy policy)
+        => attempt.StartedAt.AddMinutes(policy.PartATimerMinutes);
+
+    private static bool IsPartABreakPending(
+        ReadingAttempt attempt,
+        ReadingResolvedPolicy policy,
+        DateTimeOffset now)
+        => attempt.Mode == ReadingAttemptMode.Exam
+            && !attempt.PartABreakUsed
+            && now >= ResolvePartADeadline(attempt, policy);
 
     private async Task<bool> CanLearnerSeePaperAsync(string userId, ContentPaper paper, CancellationToken ct)
     {

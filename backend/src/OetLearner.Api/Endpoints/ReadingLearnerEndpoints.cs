@@ -30,6 +30,19 @@ public static class ReadingLearnerEndpoints
             .RequireAuthorization("LearnerOnly")
             .RequireRateLimiting("PerUser");
 
+        group.MapGet("/home", async (
+            HttpContext http,
+            LearnerDbContext db,
+            IReadingPolicyService policy,
+            IContentEntitlementService contentEntitlements,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            return Results.Ok(await LearnerEndpoints.GetStructuredReadingHomeAsync(
+                userId, db, policy, contentEntitlements, ct));
+        });
+
         // ── Fetch structure (no answers, no explanations) ───────────────────
         group.MapGet("/papers/{paperId}/structure", async (
             string paperId,
@@ -105,6 +118,29 @@ public static class ReadingLearnerEndpoints
             catch (InvalidOperationException ex)
             {
                 return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+            }
+        }).RequireRateLimiting("PerUserWrite");
+
+        group.MapPost("/attempts/{attemptId}/break/resume", async (
+            string attemptId,
+            IReadingAttemptService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            try
+            {
+                var resumed = await svc.ResumePartABreakAsync(userId, attemptId, ct);
+                return Results.Ok(resumed);
+            }
+            catch (ReadingAttemptException ex)
+            {
+                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { code = "reading_break_rejected", error = ex.Message, message = ex.Message });
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -208,6 +244,15 @@ public static class ReadingLearnerEndpoints
                 attempt.MaxRawScore,
                 partADeadlineAt = partADeadline,
                 partBCDeadlineAt = partBCDeadline,
+                partABreakAvailable = attempt.Mode == ReadingAttemptMode.Exam,
+                partABreakResumed = attempt.Mode != ReadingAttemptMode.Exam || attempt.PartABreakUsed,
+                partBCTimerPausedAt = attempt.Mode == ReadingAttemptMode.Exam && !attempt.PartABreakUsed
+                    ? partADeadline
+                    : (DateTimeOffset?)null,
+                attempt.PartBCPausedSeconds,
+                partABreakMaxSeconds = attempt.Mode == ReadingAttemptMode.Exam
+                    ? ReadingAttemptService.PartABreakMaxSeconds
+                    : 0,
                 answeredCount = attempt.Answers.Count,
                 totalQuestions,
                 canResume = attempt.Status == ReadingAttemptStatus.InProgress
@@ -361,6 +406,15 @@ public static class ReadingLearnerEndpoints
                     gradeLetter,
                     partADeadlineAt = partADeadline,
                     partBCDeadlineAt = partBCDeadline,
+                    partABreakAvailable = attempt.Mode == ReadingAttemptMode.Exam,
+                    partABreakResumed = attempt.Mode != ReadingAttemptMode.Exam || attempt.PartABreakUsed,
+                    partBCTimerPausedAt = attempt.Mode == ReadingAttemptMode.Exam && !attempt.PartABreakUsed
+                        ? partADeadline
+                        : (DateTimeOffset?)null,
+                    attempt.PartBCPausedSeconds,
+                    partABreakMaxSeconds = attempt.Mode == ReadingAttemptMode.Exam
+                        ? ReadingAttemptService.PartABreakMaxSeconds
+                        : 0,
                 },
                 paper = new { paper.Id, paper.Title, paper.Slug, paper.SubtestCode },
                 policy = new
@@ -789,7 +843,9 @@ public static class ReadingLearnerEndpoints
         {
             return (
                 attempt.StartedAt.AddMinutes(policy.PartATimerMinutes),
-                attempt.StartedAt.AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes));
+                attempt.StartedAt
+                    .AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes)
+                    .AddSeconds(Math.Clamp(attempt.PartBCPausedSeconds, 0, ReadingAttemptService.PartABreakMaxSeconds)));
         }
 
         var answerDeadline = ResolvePracticeAnswerDeadline(attempt, policy);
@@ -910,10 +966,10 @@ public static class ReadingLearnerEndpoints
                 nameof(ReadingQuestionType.MultipleChoice3),
                 nameof(ReadingQuestionType.MultipleChoice4),
             },
-            ShortAnswerNormalisation: "trim_collapse_case_insensitive",
+            ShortAnswerNormalisation: "trim_only",
             // OET-faithful default. Synonym acceptance is non-standard mode.
             ShortAnswerAcceptSynonyms: false,
-            MatchingAllowPartialCredit: true,
+            MatchingAllowPartialCredit: false,
             UnknownTypeFallbackPolicy: "skip_with_zero",
             ShowExplanationsAfterSubmit: false,
             ShowExplanationsOnlyIfWrong: false,

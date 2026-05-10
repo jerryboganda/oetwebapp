@@ -14,7 +14,7 @@ export default function ForgotPasswordVerifyPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const flowLinks = getAuthFlowLinks('passwordResetOtp');
-  const email = searchParams.get('email') ?? '';
+  const email = searchParams?.get('email') ?? '';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [otp, setOtp] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

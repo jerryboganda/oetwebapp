@@ -12,7 +12,7 @@ export default function MfaRecoveryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { loading, pendingMfaChallenge, isAuthenticated, user, completeRecoveryChallenge } = useAuth();
-  const nextHref = searchParams.get('next');
+  const nextHref = searchParams?.get('next') ?? null;
 
   const [recoveryCode, setRecoveryCode] = useState('');
   const [error, setError] = useState<string | null>(null);

@@ -13,8 +13,8 @@ const REDIRECT_SECONDS = 12;
 export default function ResetPasswordSuccessPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const email = searchParams.get('email') ?? 'your account';
-  const nextPath = searchParams.get('next');
+  const email = searchParams?.get('email') ?? 'your account';
+  const nextPath = searchParams?.get('next');
   const signInHref = nextPath
     ? `${AUTH_ROUTES.signIn}?email=${encodeURIComponent(email)}&next=${encodeURIComponent(nextPath)}`
     : `${AUTH_ROUTES.signIn}?email=${encodeURIComponent(email)}`;

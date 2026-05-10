@@ -39,6 +39,16 @@ const BAND_OPTIONS = [
   { value: '0', label: '0 (Unscorable)' },
 ];
 
+// Purpose is scored 0-3 by the OET writing rubric (see backend ExpertService.MaxScoreForCriterion).
+const PURPOSE_BAND_OPTIONS = [
+  { value: '3', label: '3 (Excellent)' },
+  { value: '2', label: '2 (Good)' },
+  { value: '1', label: '1 (Borderline)' },
+  { value: '0', label: '0 (Unscorable)' },
+];
+const bandOptionsFor = (criterionKey: string) =>
+  criterionKey === 'purpose' ? PURPOSE_BAND_OPTIONS : BAND_OPTIONS;
+
 type DraftCandidate = {
   reviewId: string;
   scores: Record<string, number>;
@@ -635,7 +645,7 @@ export default function WritingReviewWorkspace() {
                   label={label}
                   value={scores[key] ?? ''}
                   onChange={(event) => handleScoreChange(key, event.target.value)}
-                  options={BAND_OPTIONS}
+                  options={bandOptionsFor(key)}
                   placeholder="Select band..."
                   error={validationErrors.has(key) ? 'Score required' : undefined}
                   aria-label={`Score for ${label}`}

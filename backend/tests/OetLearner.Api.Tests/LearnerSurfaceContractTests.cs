@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using OetLearner.Api.Services;
@@ -50,7 +51,7 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
     [Fact]
     public async Task ReadingAndListeningHomes_ExposeGroupedCollections()
     {
-        var readingResponse = await _client.GetAsync("/v1/reading/home");
+        var readingResponse = await _client.GetAsync("/v1/reading-papers/home");
         readingResponse.EnsureSuccessStatusCode();
         using var readingJson = JsonDocument.Parse(await readingResponse.Content.ReadAsStringAsync());
         Assert.True(readingJson.RootElement.TryGetProperty("papers", out _));
@@ -118,12 +119,9 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
     public async Task ObjectiveEvaluations_ExposeItemReviewClustersAndTranscriptAccess()
     {
         var readingResponse = await _client.GetAsync("/v1/reading/evaluations/re-001");
-        readingResponse.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Gone, readingResponse.StatusCode);
         using var readingJson = JsonDocument.Parse(await readingResponse.Content.ReadAsStringAsync());
-        Assert.True(readingJson.RootElement.TryGetProperty("itemReview", out var readingReview));
-        Assert.NotEqual(0, readingReview.GetArrayLength());
-        Assert.True(readingJson.RootElement.TryGetProperty("errorClusters", out _));
-        Assert.True(readingJson.RootElement.TryGetProperty("recommendedNextDrill", out _));
+        Assert.Equal("reading_legacy_gone", readingJson.RootElement.GetProperty("code").GetString());
 
         var listeningResponse = await _client.GetAsync("/v1/listening/evaluations/le-001");
         listeningResponse.EnsureSuccessStatusCode();

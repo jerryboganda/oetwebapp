@@ -23,7 +23,7 @@ export default function ForgotPasswordPage() {
   const searchParams = useSearchParams();
   const flowLinks = getAuthFlowLinks('passwordReset');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [email, setEmail] = useState(searchParams.get('email') ?? '');
+  const [email, setEmail] = useState(searchParams?.get('email') ?? '');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
