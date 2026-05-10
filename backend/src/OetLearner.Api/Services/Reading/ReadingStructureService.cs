@@ -810,9 +810,102 @@ public sealed class ReadingStructureService : IReadingStructureService
                 TargetId: q.Id));
         }
 
+        // Reading rulebook A R07.6 / R07.7 — Part C authoring guideline checks.
+        ValidatePartCParagraphOrder(parts, issues);
+        await ValidatePartCUnderlinedParagraphQuotaAsync(parts, issues, ct);
+
         var counts = new ReadingValidationCounts(partA, partB, partC, totalPoints);
         var isReady = !issues.Any(i => i.Severity == "error");
         return new ReadingValidationReport(isReady, issues, counts);
+    }
+
+    /// <summary>
+    /// Reading rulebook A R07.6 — within a Part C text, questions follow
+    /// the paragraph order of the source text (no reversal). Enforcement is
+    /// gated on a per-question paragraph reference, which the
+    /// <see cref="ReadingQuestion"/> entity does not currently expose.
+    /// While the field is absent we emit a single soft warning per Part C
+    /// text so authors are reminded to verify paragraph order manually.
+    /// TODO: when <c>ReadingQuestion.ParagraphReference</c> (1-based int)
+    /// lands, replace the warning with a hard ascending-order check across
+    /// each text's questions in <see cref="ReadingQuestion.DisplayOrder"/>.
+    /// </summary>
+    private static void ValidatePartCParagraphOrder(
+        List<ReadingPart> parts,
+        List<ReadingValidationIssue> issues)
+    {
+        var partC = parts.FirstOrDefault(p => p.PartCode == ReadingPartCode.C);
+        if (partC is null) return;
+
+        // The entity does not yet expose a ParagraphReference field. Surface
+        // a single advisory per text so the author is reminded to verify
+        // R07.6 manually until the field is added.
+        var textIds = partC.Questions
+            .Where(q => q.ReadingTextId is not null)
+            .Select(q => q.ReadingTextId!)
+            .Distinct(StringComparer.Ordinal);
+
+        foreach (var textId in textIds)
+        {
+            issues.Add(new(
+                Code: "part_C_paragraph_order_manual",
+                Severity: "warning",
+                Message: "Part C: verify questions follow source-text paragraph order (R07.6). " +
+                    "Automatic enforcement requires a per-question paragraph reference field, which is not yet modelled.",
+                TargetId: textId));
+        }
+    }
+
+    /// <summary>
+    /// Reading rulebook A R07.7 — when a passage paragraph contains an
+    /// underlined word/sentence (rendered as <c>&lt;u&gt;</c> or
+    /// <c>&lt;span class="underlined"&gt;</c> in <see cref="ReadingText.BodyHtml"/>),
+    /// roughly two Part C questions should reference that paragraph.
+    /// Without a per-question paragraph reference we cannot tie questions to
+    /// the underlined paragraph, so this is a soft warning that simply
+    /// signals "this text has underlines — ensure ~2 questions target
+    /// each underlined paragraph".
+    /// </summary>
+    private async Task ValidatePartCUnderlinedParagraphQuotaAsync(
+        List<ReadingPart> parts,
+        List<ReadingValidationIssue> issues,
+        CancellationToken ct)
+    {
+        var partC = parts.FirstOrDefault(p => p.PartCode == ReadingPartCode.C);
+        if (partC is null) return;
+
+        var texts = await db.ReadingTexts.AsNoTracking()
+            .Where(t => t.ReadingPartId == partC.Id)
+            .ToListAsync(ct);
+
+        foreach (var text in texts)
+        {
+            if (string.IsNullOrEmpty(text.BodyHtml)) continue;
+            var underlineCount = CountUnderlinedSegments(text.BodyHtml);
+            if (underlineCount == 0) continue;
+
+            var expectedQuestions = underlineCount * 2;
+            issues.Add(new(
+                Code: "part_C_underlined_paragraph_quota",
+                Severity: "warning",
+                Message: $"Part C text '{text.Title}' has {underlineCount} underlined segment(s); " +
+                    $"expect ~{expectedQuestions} question(s) referencing the underlined paragraph(s) (R07.7). " +
+                    "Verify manually until per-question paragraph references are modelled.",
+                TargetId: text.Id));
+        }
+    }
+
+    private static int CountUnderlinedSegments(string bodyHtml)
+    {
+        if (string.IsNullOrEmpty(bodyHtml)) return 0;
+        var uTagCount = System.Text.RegularExpressions.Regex
+            .Matches(bodyHtml, "<u[\\s>]", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            .Count;
+        var spanCount = System.Text.RegularExpressions.Regex
+            .Matches(bodyHtml, "<span[^>]*class\\s*=\\s*\"[^\"]*\\bunderlined\\b[^\"]*\"",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            .Count;
+        return uTagCount + spanCount;
     }
 
     private static bool HasContiguousDisplayOrders(IEnumerable<int> orders)

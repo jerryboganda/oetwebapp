@@ -816,6 +816,187 @@ const DETECTORS: Record<string, Detector> = {
     }
     return [];
   },
+
+  // -----------------------------------------------------------------------
+  // R10.7 — Smoking/drinking with duration → present perfect continuous
+  // -----------------------------------------------------------------------
+  // "She smokes 10 cigarettes for 20 years" → wrong; should be
+  // "She has been smoking 10 cigarettes for 20 years".
+  // Heuristic: present-simple verb (smokes/drinks) anywhere within 60 chars
+  // before a "for X years/months" duration → flag.
+  smoking_drinking_duration_tense(rule, _input, structure) {
+    const re = /\b(?:she|he|they|the patient|[A-Z][a-z]+)\s+(smokes|drinks)\b[^.;\n]{0,80}?\bfor\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty)\s+(?:years?|months?|weeks?|days?)\b/gi;
+    const findings: LintFinding[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(structure.body))) {
+      const verb = m[1].toLowerCase();
+      const replacement = verb === 'smokes' ? 'has been smoking' : 'has been drinking';
+      findings.push(
+        ruleFinding(
+          rule,
+          `Smoking/drinking with a duration uses present perfect continuous. Rewrite "${m[1]}" as "${replacement}".`,
+          { quote: m[0], start: m.index, end: m.index + m[0].length, fixSuggestion: replacement },
+        ),
+      );
+      if (findings.length >= 3) break;
+    }
+    return findings;
+  },
+
+  // -----------------------------------------------------------------------
+  // R11.4 — Trade vs generic medication capitalisation consistency
+  // -----------------------------------------------------------------------
+  // If the same sentence mixes a clearly capitalised trade name (e.g. Panadol)
+  // with a clearly lowercase generic (e.g. paracetamol) we flag the mix.
+  // Allowlists are deliberately small but representative — generic, not
+  // exhaustive, since the rule is about consistency rather than spelling.
+  medication_capitalisation_consistency(rule, _input, structure) {
+    const trade = ['Panadol', 'Augmentin', 'Voltaren', 'Nurofen', 'Ventolin', 'Lipitor', 'Atorvastatin', 'Zoloft'];
+    const generic = ['paracetamol', 'amoxicillin', 'ibuprofen', 'diclofenac', 'salbutamol', 'sertraline', 'metformin'];
+    const sentences = structure.body.split(/(?<=[.!?])\s+/);
+    const findings: LintFinding[] = [];
+    for (const sentence of sentences) {
+      const tradeHit = trade.find((t) => new RegExp(`\\b${t}\\b`).test(sentence));
+      const genericHit = generic.find((g) => new RegExp(`\\b${g}\\b`).test(sentence));
+      if (tradeHit && genericHit) {
+        findings.push(
+          ruleFinding(
+            rule,
+            `Sentence mixes trade ("${tradeHit}", capitalised) and generic ("${genericHit}", lowercase) medication names. Pick one convention per letter and stay consistent.`,
+            { quote: sentence.trim().slice(0, 120) },
+          ),
+        );
+        if (findings.length >= 3) break;
+      }
+    }
+    return findings;
+  },
+
+  // -----------------------------------------------------------------------
+  // R12.6 — Eponymous diseases capitalised
+  // -----------------------------------------------------------------------
+  // Allow-list of common eponymous conditions. Flag the lowercase form
+  // wherever it appears in the body.
+  eponymous_diseases_capitalised(rule, _input, structure) {
+    const eponyms = [
+      "parkinson's", "crohn's", "alzheimer's", "graves'", 'doppler',
+      "hodgkin's", "down's", "cushing's", "addison's", "bell's",
+      "raynaud's", "wilson's", "huntington's",
+    ];
+    const findings: LintFinding[] = [];
+    for (const term of eponyms) {
+      // Use a backreference-free pattern. Lookbehind ensures we don't match a
+      // capital first letter (e.g. "Parkinson's" stays clean).
+      const re = new RegExp(`(?<![A-Za-z])${term}(?![A-Za-z])`, 'g');
+      const m = re.exec(structure.body);
+      if (m) {
+        const display = term.replace(/^./, (c) => c.toUpperCase());
+        findings.push(
+          ruleFinding(rule, `Eponymous disease "${m[0]}" must be capitalised ("${display}").`, {
+            quote: m[0],
+            start: m.index,
+            end: m.index + m[0].length,
+            fixSuggestion: display,
+          }),
+        );
+        if (findings.length >= 3) break;
+      }
+    }
+    return findings;
+  },
+
+  // -----------------------------------------------------------------------
+  // R12.7 — Bacteria genus capital + species lowercase
+  // -----------------------------------------------------------------------
+  // Pattern: known genus followed by a single lowercase Latin-style species
+  // word. Flag when both are lowercase (genus should be capital) or when
+  // both are capitalised (species should be lowercase).
+  bacteria_binomial_capitalisation(rule, _input, structure) {
+    const genera = ['Staphylococcus', 'Streptococcus', 'Escherichia', 'Pseudomonas', 'Klebsiella', 'Mycobacterium', 'Helicobacter', 'Neisseria'];
+    const findings: LintFinding[] = [];
+    for (const genus of genera) {
+      // Build a pattern that matches either capitalisation of the genus
+      // followed by a single Latin-style word for the species.
+      const re = new RegExp(`\\b(${genus}|${genus.toLowerCase()})\\s+([A-Za-z]+)\\b`, 'g');
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(structure.body))) {
+        const genusToken = m[1];
+        const speciesToken = m[2];
+        const genusLower = genusToken === genusToken.toLowerCase();
+        const speciesUpper = /^[A-Z]/.test(speciesToken);
+        if (genusLower || speciesUpper) {
+          findings.push(
+            ruleFinding(
+              rule,
+              `Bacteria binomial nomenclature: capitalise the genus and lowercase the species (e.g. "${genus} ${speciesToken.toLowerCase()}"), not "${genusToken} ${speciesToken}".`,
+              { quote: m[0], start: m.index, end: m.index + m[0].length, fixSuggestion: `${genus} ${speciesToken.toLowerCase()}` },
+            ),
+          );
+          if (findings.length >= 3) return findings;
+        }
+      }
+    }
+    return findings;
+  },
+
+  // -----------------------------------------------------------------------
+  // R12.12 — "in addition to / together with / along with / as well as"
+  //          MUST NOT be preceded by a comma or semicolon.
+  // -----------------------------------------------------------------------
+  in_addition_to_no_preceding_punctuation(rule, _input, structure) {
+    const phrases = ['in addition to', 'together with', 'along with', 'as well as'];
+    const findings: LintFinding[] = [];
+    for (const phrase of phrases) {
+      const re = new RegExp(`([,;])\\s+${phrase}\\b`, 'gi');
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(structure.body))) {
+        findings.push(
+          ruleFinding(
+            rule,
+            `"${phrase}" must NOT be preceded by punctuation. Remove the "${m[1]}" before "${phrase}".`,
+            { quote: m[0], start: m.index, end: m.index + m[0].length, fixSuggestion: ` ${phrase}` },
+          ),
+        );
+        if (findings.length >= 3) return findings;
+      }
+    }
+    return findings;
+  },
+
+  // -----------------------------------------------------------------------
+  // R08.15 — Name vs pronoun matrix.
+  // -----------------------------------------------------------------------
+  // After the FIRST mention of "Mr/Ms/Mrs/Miss [LastName]" inside a body
+  // paragraph, every subsequent mention of the same form within the same
+  // paragraph should be a pronoun. We flag the second (and beyond) full
+  // name occurrence per paragraph.
+  name_vs_pronoun_per_paragraph(rule, _input, structure) {
+    const findings: LintFinding[] = [];
+    const namePattern = /\b(Mr|Ms|Mrs|Miss|Dr|Master)\.?\s+([A-Z][a-z]+)\b/g;
+    for (const paragraph of structure.bodyParagraphs) {
+      const seen = new Map<string, number>();
+      let m: RegExpExecArray | null;
+      while ((m = namePattern.exec(paragraph))) {
+        const key = `${m[1].toLowerCase()} ${m[2]}`;
+        const count = (seen.get(key) ?? 0) + 1;
+        seen.set(key, count);
+        if (count >= 2) {
+          findings.push(
+            ruleFinding(
+              rule,
+              `Use a pronoun on the second mention of "${m[0]}" within the same paragraph.`,
+              { quote: m[0] },
+            ),
+          );
+          if (findings.length >= 3) return findings;
+          break; // one finding per paragraph is enough
+        }
+      }
+      // Reset lastIndex because we reuse the global regex per paragraph.
+      namePattern.lastIndex = 0;
+    }
+    return findings;
+  },
 };
 
 // ---------------------------------------------------------------------------

@@ -810,8 +810,11 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         sb.AppendLine();
         sb.AppendLine("### MAJOR rules (significant feedback items)");
         sb.AppendLine();
-        foreach (var rule in major.Take(60)) sb.AppendLine(FormatRule(rule));
-        if (major.Count > 60) sb.AppendLine($"… and {major.Count - 60} more major rules.");
+        // Rulebook-compliance audit 2026-05-10: send the FULL major-rule corpus
+        // to the grader (was previously truncated to 60). Truncation meant
+        // rules 61+ were never assessable in a single grader call. Token cost
+        // is acceptable; correctness > cost for the writing grader path.
+        foreach (var rule in major) sb.AppendLine(FormatRule(rule));
         sb.AppendLine();
     }
 

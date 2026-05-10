@@ -1439,7 +1439,15 @@ public partial class LearnerService(
             escalationRecommended = ShouldRecommendHumanReview(evaluation.ConfidenceBand),
             statusReasonCode = evaluation.StatusReasonCode,
             retryable = evaluation.Retryable,
-            retryAfterMs = evaluation.RetryAfterMs
+            retryAfterMs = evaluation.RetryAfterMs,
+            // Rulebook-compliance audit 2026-05-10: surface hybrid grader fields
+            // so the UI can render deterministic violations side-by-side with AI feedback.
+            graderMode = evaluation.GraderMode,
+            ruleViolationCount = evaluation.RuleViolationCount,
+            criticalRuleViolationCount = evaluation.CriticalRuleViolationCount,
+            ruleViolations = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.RuleViolationsJson, []),
+            aiFeedback = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.FeedbackItemsJson, []),
+            criterionScores = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.CriterionScoresJson, [])
         };
     }
 

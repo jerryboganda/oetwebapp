@@ -357,3 +357,159 @@ describe('writing coverage summary', () => {
     expect(summary.findings.length).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// New detectors — extended deterministic coverage (audit P1-3 follow-up).
+// Each block proves the detector FIRES on a violating sample and DOES NOT
+// FIRE on a compliant counter-example.
+// ---------------------------------------------------------------------------
+
+describe('writing linter — R10.7 smoking/drinking + duration tense', () => {
+  it('flags "She smokes 10 cigarettes for 20 years"', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe smokes 10 cigarettes for 20 years.\n\nYours sincerely,\nDoctor',
+    }));
+    const r10_7 = findings.find((f) => f.ruleId === 'R10.7');
+    expect(r10_7).toBeDefined();
+    expect(r10_7!.message).toMatch(/has been smoking/);
+  });
+
+  it('does NOT fire on "She has been smoking for 20 years"', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has been smoking for 20 years.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R10.7')).toBeUndefined();
+  });
+
+  it('does NOT fire on "She smokes" without a duration', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe smokes occasionally and drinks socially.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R10.7')).toBeUndefined();
+  });
+});
+
+describe('writing linter — R11.4 trade vs generic medication consistency', () => {
+  it('flags a sentence mixing Panadol (trade) and paracetamol (generic)', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was prescribed Panadol and paracetamol.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R11.4')).toBeDefined();
+  });
+
+  it('does NOT fire when only generic names are used', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was prescribed paracetamol and amoxicillin.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R11.4')).toBeUndefined();
+  });
+});
+
+describe('writing linter — R12.6 eponymous diseases capitalised', () => {
+  it('flags lowercase "parkinson\'s"', () => {
+    const findings = lintWritingLetter(base({
+      letterText: "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has parkinson's disease.\n\nYours sincerely,\nDoctor",
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.6')).toBeDefined();
+  });
+
+  it('does NOT fire on properly capitalised "Crohn\'s"', () => {
+    const findings = lintWritingLetter(base({
+      letterText: "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has Crohn's disease.\n\nYours sincerely,\nDoctor",
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.6')).toBeUndefined();
+  });
+});
+
+describe('writing linter — R12.7 bacteria binomial capitalisation', () => {
+  it('flags "staphylococcus aureus" (genus lowercase)', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nThe culture grew staphylococcus aureus.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.7')).toBeDefined();
+  });
+
+  it('flags "Staphylococcus Aureus" (species capitalised)', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nThe culture grew Staphylococcus Aureus.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.7')).toBeDefined();
+  });
+
+  it('does NOT fire on canonical "Staphylococcus aureus"', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nThe culture grew Staphylococcus aureus.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.7')).toBeUndefined();
+  });
+});
+
+describe('writing linter — R12.12 "in addition to" no preceding punctuation', () => {
+  it('flags "She has hypertension, in addition to diabetes."', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has hypertension, in addition to diabetes.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.12')).toBeDefined();
+  });
+
+  it('flags "; together with" usage', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe takes metformin; together with insulin.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.12')).toBeDefined();
+  });
+
+  it('does NOT fire on "in addition to" without preceding comma/semicolon', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has hypertension in addition to diabetes.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.12')).toBeUndefined();
+  });
+});
+
+describe('writing linter — R08.15 name vs pronoun within paragraph', () => {
+  it('flags repeated "Mr Jones" inside the same paragraph', () => {
+    const findings = lintWritingLetter(base({
+      letterText:
+        'Dear Dr Smith,\nRe: Mr Jones\n\nMr Jones presented with chest pain. Mr Jones was tachycardic and Mr Jones declined investigation.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R08.15')).toBeDefined();
+  });
+
+  it('does NOT fire when the second mention is a pronoun', () => {
+    const findings = lintWritingLetter(base({
+      letterText:
+        'Dear Dr Smith,\nRe: Mr Jones\n\nMr Jones presented with chest pain. He was tachycardic and he declined investigation.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R08.15')).toBeUndefined();
+  });
+
+  it('does NOT fire when the same name reappears in a NEW paragraph', () => {
+    const findings = lintWritingLetter(base({
+      letterText:
+        'Dear Dr Smith,\nRe: Mr Jones\n\nMr Jones presented with chest pain. He was tachycardic.\n\nMr Jones was discharged in stable condition.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R08.15')).toBeUndefined();
+  });
+});
+
+describe('writing linter — R08.1 minimum 2 body paragraphs (regression)', () => {
+  it('does NOT fire when body has two clear paragraphs', () => {
+    const findings = lintWritingLetter(base({
+      letterText:
+        'Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph one.\n\nBody paragraph two with detail.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R08.1')).toBeUndefined();
+  });
+});
+
+describe('writing linter — R14.6 "was admitted" not "was presented" (regression)', () => {
+  it('does NOT fire when discharge letter uses "was admitted"', () => {
+    const findings = lintWritingLetter(base({
+      letterText:
+        'Dear Dr Smith,\nRe: Ms A\n\nI am writing to update you regarding Ms A.\n\nShe was admitted to St James with chest pain on 1 January.\n\nYours sincerely,\nDoctor',
+      letterType: 'discharge',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R14.6')).toBeUndefined();
+  });
+});

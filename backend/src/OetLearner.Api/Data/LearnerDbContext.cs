@@ -95,6 +95,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<RulebookSectionRow> RulebookSectionRows => Set<RulebookSectionRow>();
     public DbSet<RulebookRuleRow> RulebookRuleRows => Set<RulebookRuleRow>();
 
+    // Deterministic Writing rule violations (rulebook-compliance audit 2026-05-10)
+    public DbSet<WritingRuleViolation> WritingRuleViolations => Set<WritingRuleViolation>();
+
     // Gamification entities
     public DbSet<LearnerStreak> LearnerStreaks => Set<LearnerStreak>();
     public DbSet<LearnerXP> LearnerXPs => Set<LearnerXP>();
@@ -389,6 +392,14 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<RulebookSectionRow>().HasIndex(x => new { x.RulebookVersionId, x.Code }).IsUnique();
         modelBuilder.Entity<RulebookRuleRow>().HasIndex(x => new { x.RulebookVersionId, x.Code }).IsUnique();
         modelBuilder.Entity<RulebookRuleRow>().HasIndex(x => new { x.RulebookVersionId, x.SectionCode });
+
+        // WritingRuleViolation — FK to Evaluation (cascade), plus indexes on
+        // (RuleId, CreatedAt) and (UserId, CreatedAt) declared via [Index].
+        modelBuilder.Entity<WritingRuleViolation>()
+            .HasOne(x => x.Evaluation)
+            .WithMany()
+            .HasForeignKey(x => x.EvaluationId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Learner lookup indexes (frequently queried by UserId)
         modelBuilder.Entity<LearnerGoal>().HasIndex(x => x.UserId);

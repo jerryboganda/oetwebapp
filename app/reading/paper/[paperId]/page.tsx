@@ -459,6 +459,12 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
                 ? `Loading your ${urlMode.replace('-', ' ')} practice attempt…`
                 : 'Start a server-authoritative Reading attempt. Part A locks after its window, then Parts B and C share the remaining timer.'}
             </p>
+            {/* Reading rulebook B §7 — academic-integrity reminder for mock/exam launches. */}
+            {!urlMode || urlMode === 'exam' ? (
+              <div className="mt-5">
+                <ReadingIntegrityBanner />
+              </div>
+            ) : null}
             {!urlMode || urlMode === 'exam' ? (
               <div className="mt-5 flex justify-center">
                 <Button variant="primary" onClick={() => void start()} loading={starting}>
@@ -474,6 +480,11 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
                 <strong>{practiceModeLabel(attempt.mode)} — practice only.</strong>{' '}
                 This attempt does not produce an OET 0–500 scaled score and does not consume an exam attempt.
               </InlineAlert>
+            ) : null}
+            {/* Reading rulebook B §7 — academic-integrity reminder visible above the
+                timer during Part A and on the break screen for mock/exam attempts. */}
+            {attempt.mode === 'Exam' && (activePart === 'A' || breakPending) ? (
+              <ReadingIntegrityBanner />
             ) : null}
             <AttemptToolbar
               attempt={attempt}
@@ -670,6 +681,21 @@ function ReadingZoomControls({ zoomLevel, onZoomChange }: { zoomLevel: number; o
   );
 }
 
+function ReadingIntegrityBanner() {
+  // Reading rulebook B §7 — academic-integrity reminder rendered before
+  // Part A starts (mock launch + active Part A) and on the inter-part
+  // break screen. Mock/exam-mode only; learning/drill modes hide it.
+  return (
+    <div
+      className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
+      role="note"
+      data-testid="reading-integrity-banner"
+    >
+      Exam content is confidential. Do not disclose, copy, or share OET test material. Cheating or rule violations may lead to disqualification.
+    </div>
+  );
+}
+
 function ReadingBreakScreen({ attempt, nowMs, onResume }: { attempt: ActiveAttempt; nowMs: number; onResume: () => void }) {
   const breakStartedAt = attempt.partBCTimerPausedAt ?? attempt.partADeadlineAt;
   const secondsLeft = Math.max(
@@ -681,6 +707,8 @@ function ReadingBreakScreen({ attempt, nowMs, onResume }: { attempt: ActiveAttem
     <section className="rounded-[20px] border border-border bg-surface p-6 shadow-sm" aria-label="Part A break">
       <div className="mx-auto flex max-w-2xl flex-col items-center gap-4 text-center">
         <Badge variant="info">Part A collected</Badge>
+        {/* Reading rulebook B §7 — academic-integrity reminder also visible during the break. */}
+        {attempt.mode === 'Exam' ? <ReadingIntegrityBanner /> : null}
         <div className="flex items-center gap-3 rounded-2xl bg-background-light px-5 py-4" role="timer" aria-live="polite" aria-label={`${formatCountdown(secondsLeft)} break time remaining`}>
           <Clock className="h-5 w-5 text-primary" aria-hidden="true" />
           <span className="font-mono text-3xl font-bold text-navy">{formatCountdown(secondsLeft)}</span>

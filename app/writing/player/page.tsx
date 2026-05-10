@@ -20,6 +20,11 @@ import type { WritingTask } from '@/lib/mock-data';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { deriveWritingCaseNotesMarkers, inferWritingLetterType, lintWritingLetter } from '@/lib/rulebook';
 import {
+  fromEngineLetterType,
+  letterTypeLabel,
+  type CanonicalLetterType,
+} from '@/lib/writing/letter-types';
+import {
   normalizeWritingPracticeMode,
   WRITING_CRITERIA,
   WRITING_READING_WINDOW_SECONDS,
@@ -90,6 +95,18 @@ export default function WritingPlayer() {
   const lintReady = trimmedContentLength >= LINT_MIN_CONTENT_CHARS;
 
   const inferredLetterType = useMemo(() => inferWritingLetterType(task ?? {}), [task]);
+  /** Canonical (backend wire-format) equivalent of the inferred letter type.
+   *  Use this whenever the value is sent back to the server, persisted, or
+   *  surfaced to the learner — `inferredLetterType` is the engine-internal
+   *  shorter alias and must never reach the API layer. */
+  const canonicalLetterType: CanonicalLetterType = useMemo(
+    () => fromEngineLetterType(inferredLetterType),
+    [inferredLetterType],
+  );
+  const letterTypeDisplayLabel = useMemo(
+    () => letterTypeLabel(canonicalLetterType),
+    [canonicalLetterType],
+  );
   const caseNotesMarkers = useMemo(() => deriveWritingCaseNotesMarkers(task?.caseNotes), [task?.caseNotes]);
 
   // Live, advisory word counter. Pure UI hint — the platform never blocks
@@ -354,7 +371,7 @@ export default function WritingPlayer() {
     if (!task) return [];
     return [
       { label: 'Profession', value: task.profession },
-      { label: 'Letter type', value: task.letterType ?? task.scenarioType },
+      { label: 'Letter type', value: task.letterType ?? letterTypeDisplayLabel },
       { label: 'Writer role', value: task.writerRole },
       { label: 'Recipient', value: task.recipient },
       { label: 'Purpose', value: task.purpose },
@@ -403,7 +420,7 @@ export default function WritingPlayer() {
                     <h1 className="truncate text-base font-bold leading-tight text-navy sm:text-lg">{task.title}</h1>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted sm:text-xs">
                       <Badge variant="info" size="sm">{task.profession}</Badge>
-                      <Badge variant="muted" size="sm">{task.letterType ?? task.scenarioType}</Badge>
+                      <Badge variant="muted" size="sm">{task.letterType ?? letterTypeDisplayLabel}</Badge>
                       <Badge variant={isExamMode ? 'warning' : 'success'} size="sm">
                         {isExamMode ? 'Exam mode' : 'Learning mode'}
                       </Badge>

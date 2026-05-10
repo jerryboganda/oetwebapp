@@ -95,3 +95,41 @@ export const WRITING_CRITERIA_ORDER: WritingCriterionKey[] = [
   'organization',
   'language',
 ];
+
+/**
+ * Per-criterion max raw scores for OET Writing.
+ *
+ * Purpose is on the 0–3 scale (rulebook R16.2); every other criterion is on
+ * the 0–7 scale (rulebook R16.1). Mirrors the canonical map in
+ * `lib/scoring.ts#WRITING_CRITERION_MAX_SCORES` but keyed by the UI-side
+ * `WritingCriterionKey` ('conciseness', 'genre', 'organization') so the
+ * feedback surface can render `n/3` vs `n/7` without collapsing the two
+ * vocabularies into the same file.
+ */
+export const WRITING_CRITERION_MAX_SCORE: Readonly<Record<WritingCriterionKey, number>> = {
+  purpose: 3,
+  content: 7,
+  conciseness: 7,
+  genre: 7,
+  organization: 7,
+  language: 7,
+};
+
+/**
+ * Maximum raw score for a single Writing criterion. Accepts either the
+ * UI-facing `WritingCriterionKey` or a backend criterion code/label so
+ * callers don't have to normalise first.
+ *
+ * Falls back to 7 (the dominant max) for unknown labels — every criterion
+ * except Purpose uses 7, so this is the safest default.
+ */
+export function criterionMaxScore(criterion?: string | null): number {
+  if (!criterion) return 7;
+  const normalized = criterion.trim().toLowerCase();
+  if (normalized === 'purpose') return 3;
+  // Map common backend / display synonyms back to the UI key.
+  if (normalized === 'conciseness_clarity' || normalized.startsWith('conciseness')) return 7;
+  if (normalized === 'genre_style' || normalized.startsWith('genre')) return 7;
+  if (normalized === 'organisation_layout' || normalized.startsWith('organisation') || normalized.startsWith('organization')) return 7;
+  return WRITING_CRITERION_MAX_SCORE[normalized as WritingCriterionKey] ?? 7;
+}

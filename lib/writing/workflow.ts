@@ -2,6 +2,10 @@ import {
   WRITING_CRITERION_MAX_SCORES,
   type WritingCriterionCode,
 } from '@/lib/scoring';
+import {
+  CANONICAL_LETTER_TYPES,
+  type CanonicalLetterType,
+} from './letter-types';
 
 export type WritingPracticeMode = 'exam' | 'learning';
 
@@ -9,15 +13,19 @@ export const WRITING_READING_WINDOW_SECONDS = 5 * 60;
 export const WRITING_WINDOW_SECONDS = 40 * 60;
 export const WRITING_TOTAL_SECONDS = WRITING_READING_WINDOW_SECONDS + WRITING_WINDOW_SECONDS;
 
-export const WRITING_LETTER_TYPES = [
-  'Referral',
-  'Discharge',
-  'Transfer',
-  'Advice',
-  'Update',
-] as const;
+/**
+ * The six canonical OET Writing letter types. This is now a re-export of the
+ * single source of truth in `./letter-types.ts` — values are the on-the-wire
+ * codes that match the backend `WritingContentStructure.LetterType` field.
+ *
+ * Previously this constant held display labels (`'Referral'`, `'Discharge'`,
+ * `'Transfer'`, `'Advice'`, `'Update'`) which did not match the canonical
+ * backend vocabulary; that drift caused rule-applicability filters to miss.
+ * Use `LETTER_TYPE_DISPLAY_LABELS` from `./letter-types` for human-facing copy.
+ */
+export const WRITING_LETTER_TYPES = CANONICAL_LETTER_TYPES;
 
-export type WritingLetterType = (typeof WRITING_LETTER_TYPES)[number];
+export type WritingLetterType = CanonicalLetterType;
 
 export interface WritingCriterionDescriptor {
   code: WritingCriterionCode;

@@ -8,6 +8,8 @@ import {
   XCircle,
   Lightbulb,
   ArrowRight,
+  ScrollText,
+  Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -22,6 +24,41 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { fetchWritingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingResult, AnchoredComment } from '@/lib/mock-data';
+import { criterionMaxScore } from '@/lib/writing-criterion-colors';
+
+/**
+ * Optional structured evaluation surface attached by the backend grader.
+ * The backend agent (Hephaestus) is in flight delivering `evaluation`
+ * alongside `WritingResult`; until then this is best-effort and the page
+ * falls back to the legacy `result.criteria[*]` shape.
+ *
+ * TODO(backend-handoff): once `WritingResult.evaluation` ships in
+ *   `lib/mock-data.ts`, remove the local typing here and import the canonical
+ *   types from `@/lib/mock-data`.
+ */
+interface RuleViolation {
+  ruleId: string;
+  severity?: 'critical' | 'major' | 'minor' | 'info';
+  message: string;
+  quote?: string;
+  criterion?: string;
+}
+
+interface CriterionScoreEntry {
+  raw?: number;
+  max?: number;
+  /** Optional examiner / AI commentary specifically attached to this score. */
+  comment?: string;
+}
+
+interface WritingEvaluationSurface {
+  ruleViolations?: RuleViolation[];
+  criterionScores?: Record<string, CriterionScoreEntry | undefined>;
+}
+
+type WritingResultWithEvaluation = WritingResult & {
+  evaluation?: WritingEvaluationSurface;
+};
 
 /* --- Inline Highlight helper (needs activeComment state) --- */
 function Highlight({ id, children, active, onToggle }: { id: string; children: React.ReactNode; active: boolean; onToggle: (id: string | null) => void }) {
@@ -44,7 +81,7 @@ function Highlight({ id, children, active, onToggle }: { id: string; children: R
 export default function WritingDetailedFeedback() {
   const searchParams = useSearchParams();
   const resultId = searchParams?.get('id') ?? '';
-  const [result, setResult] = useState<WritingResult | null>(null);
+  const [result, setResult] = useState<WritingResultWithEvaluation | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeComment, setActiveComment] = useState<string | null>(null);
 
@@ -56,17 +93,42 @@ export default function WritingDetailedFeedback() {
     fetchWritingResult(resultId).then(setResult).finally(() => setLoading(false));
   }, [resultId]);
 
-  /* Flatten all issues from criteria for the WritingIssueList */
-  const allIssues = useMemo(() => {
+  /* Flatten all issues from criteria for the WritingIssueList. AI / examiner
+   * findings come from `result.criteria[*]`; deterministic rule violations
+   * come from `result.evaluation?.ruleViolations` (backend-in-flight). */
+  const aiIssues = useMemo(() => {
     if (!result) return [];
-    const issues: { id: string; type: IssueType; criterion: string; text: string }[] = [];
+    const issues: { id: string; type: IssueType; criterion: string; text: string; source: 'ai' }[] = [];
     result.criteria.forEach((c) => {
-      c.omissions.forEach((t, i) => issues.push({ id: `${c.name}-om-${i}`, type: 'omission', criterion: c.name, text: t }));
-      c.unnecessaryDetails.forEach((t, i) => issues.push({ id: `${c.name}-un-${i}`, type: 'unnecessary', criterion: c.name, text: t }));
-      c.revisionSuggestions.forEach((t, i) => issues.push({ id: `${c.name}-sg-${i}`, type: 'suggestion', criterion: c.name, text: t }));
+      c.omissions.forEach((t, i) => issues.push({ id: `${c.name}-om-${i}`, type: 'omission', criterion: c.name, text: t, source: 'ai' }));
+      c.unnecessaryDetails.forEach((t, i) => issues.push({ id: `${c.name}-un-${i}`, type: 'unnecessary', criterion: c.name, text: t, source: 'ai' }));
+      c.revisionSuggestions.forEach((t, i) => issues.push({ id: `${c.name}-sg-${i}`, type: 'suggestion', criterion: c.name, text: t, source: 'ai' }));
     });
     return issues;
   }, [result]);
+
+  const ruleIssues = useMemo(() => {
+    const violations = result?.evaluation?.ruleViolations ?? [];
+    return violations.map((v, i) => ({
+      id: `rule-${v.ruleId}-${i}`,
+      type: 'suggestion' as const,
+      criterion: v.criterion ?? v.severity ?? 'Rule',
+      text: v.quote ? `${v.message} — “${v.quote}”` : v.message,
+      ruleId: v.ruleId,
+      source: 'rule' as const,
+    }));
+  }, [result]);
+
+  /** Resolve the max raw score for a criterion, preferring the structured
+   *  evaluation surface when present, falling back to the legacy
+   *  `criterion.maxScore` field, then to the canonical `criterionMaxScore`
+   *  helper. Guarantees Purpose renders as `n/3` and others as `n/7`. */
+  const resolveMax = (criterionName: string, fallback: number): number => {
+    const fromEvaluation = result?.evaluation?.criterionScores?.[criterionName]?.max;
+    if (typeof fromEvaluation === 'number' && fromEvaluation > 0) return fromEvaluation;
+    if (fallback > 0) return fallback;
+    return criterionMaxScore(criterionName);
+  };
 
   if (!resultId) {
     return <AppShell pageTitle="Not Found"><div className="p-10 text-center text-muted">Open feedback from a completed writing result.</div></AppShell>;
@@ -161,7 +223,10 @@ export default function WritingDetailedFeedback() {
               title="Score details and revision guidance"
               description="A quick summary first, then the detailed breakdown below."
             />
-            {result.criteria.map((criterion, index) => (
+            {result.criteria.map((criterion, index) => {
+              const maxScore = resolveMax(criterion.name, criterion.maxScore);
+              const ratio = maxScore > 0 ? criterion.score / maxScore : 0;
+              return (
               <MotionItem key={criterion.name} delayIndex={index}>
                 <Card className="p-6 shadow-sm">
                   {/* Header with score */}
@@ -170,8 +235,8 @@ export default function WritingDetailedFeedback() {
                       <h3 className="text-xl font-bold text-navy mb-1">{criterion.name}</h3>
                       <div className="text-sm text-muted">Criterion Score</div>
                     </div>
-                    <Badge variant={criterion.score / criterion.maxScore >= 0.75 ? 'success' : criterion.score / criterion.maxScore >= 0.5 ? 'warning' : 'danger'}>
-                      {criterion.score} / {criterion.maxScore}
+                    <Badge variant={ratio >= 0.75 ? 'success' : ratio >= 0.5 ? 'warning' : 'danger'}>
+                      {criterion.score} / {maxScore}
                     </Badge>
                   </div>
 
@@ -226,13 +291,45 @@ export default function WritingDetailedFeedback() {
                   )}
                 </Card>
               </MotionItem>
-            ))}
+              );
+            })}
 
-            {/* Aggregated Issues (WritingIssueList) */}
-            {allIssues.length > 0 && (
-              <div className="pt-4">
-                <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted">All Issues Summary</h3>
-                <WritingIssueList issues={allIssues} />
+            {/* Side-by-side: Rule-Based Findings (deterministic) vs AI Examiner Feedback. */}
+            {(ruleIssues.length > 0 || aiIssues.length > 0) && (
+              <div className="grid grid-cols-1 gap-6 pt-4 lg:grid-cols-2">
+                <section>
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted">
+                    <ScrollText className="h-4 w-4 text-slate-600" />
+                    Rule-Based Findings
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">
+                      {ruleIssues.length}
+                    </span>
+                  </h3>
+                  {ruleIssues.length > 0 ? (
+                    <WritingIssueList issues={ruleIssues} />
+                  ) : (
+                    <p className="text-xs italic text-muted">
+                      No deterministic rule violations detected.
+                      {!result.evaluation?.ruleViolations
+                        ? ' (Rulebook engine evaluation not yet attached to this result — backend handoff in flight.)'
+                        : ''}
+                    </p>
+                  )}
+                </section>
+                <section>
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted">
+                    <Sparkles className="h-4 w-4 text-violet-600" />
+                    AI Examiner Feedback
+                    <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
+                      {aiIssues.length}
+                    </span>
+                  </h3>
+                  {aiIssues.length > 0 ? (
+                    <WritingIssueList issues={aiIssues} />
+                  ) : (
+                    <p className="text-xs italic text-muted">No AI-flagged issues for this submission.</p>
+                  )}
+                </section>
               </div>
             )}
           </div>

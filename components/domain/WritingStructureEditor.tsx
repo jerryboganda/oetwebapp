@@ -13,6 +13,12 @@ import {
   type WritingAuthoringStructure,
   type WritingStructureValidationReport,
 } from '@/lib/content-upload-api';
+import {
+  CANONICAL_LETTER_TYPES,
+  LETTER_TYPE_DISPLAY_LABELS,
+} from '@/lib/writing/letter-types';
+
+const PURPOSE_DATALIST_ID = 'writing-structure-purpose-options';
 
 const DEFAULT_STRUCTURE: WritingAuthoringStructure = {
   taskPrompt: '',
@@ -143,7 +149,18 @@ export function WritingStructureEditor({ paperId }: { paperId: string }) {
             <Input label="Task date" value={structure.taskDate ?? ''} onChange={(e) => patch({ taskDate: e.target.value })} placeholder="25 Mar 2023" />
             <Input label="Writer role" value={structure.writerRole ?? ''} onChange={(e) => patch({ writerRole: e.target.value })} placeholder="Doctor / Nurse / Dentist" />
             <Input label="Recipient" value={structure.recipient ?? ''} onChange={(e) => patch({ recipient: e.target.value })} placeholder="Dr Smith, GP" />
-            <Input label="Purpose" value={structure.purpose ?? ''} onChange={(e) => patch({ purpose: e.target.value })} placeholder="Referral / transfer / discharge update" />
+            <Input
+              label="Purpose"
+              value={structure.purpose ?? ''}
+              onChange={(e) => patch({ purpose: e.target.value })}
+              placeholder="Routine Referral / Discharge Letter / Transfer Letter"
+              list={PURPOSE_DATALIST_ID}
+            />
+            <datalist id={PURPOSE_DATALIST_ID}>
+              {CANONICAL_LETTER_TYPES.map((code) => (
+                <option key={code} value={LETTER_TYPE_DISPLAY_LABELS[code]} />
+              ))}
+            </datalist>
           </div>
           <Textarea
             label="Criteria focus"

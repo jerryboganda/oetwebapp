@@ -1,4 +1,8 @@
 import type { LetterType, SpeakingCardType, WritingLintInput } from './types';
+import {
+  fromEngineLetterType,
+  type CanonicalLetterType,
+} from '@/lib/writing/letter-types';
 
 type MinimalWritingTask = {
   title?: string | null;
@@ -40,6 +44,19 @@ export function inferWritingLetterType(task: MinimalWritingTask): LetterType {
     return 'specialist_to_gp';
   }
   return 'routine_referral';
+}
+
+/**
+ * Backend-canonical equivalent of {@link inferWritingLetterType}.
+ *
+ * Returns one of the six {@link CanonicalLetterType} codes that match the
+ * backend `WritingContentStructure.LetterType` wire vocabulary. Use this
+ * when the inferred type is going to be POSTed, persisted, or analysed —
+ * NOT when it is being passed straight to the local rule engine (use
+ * `inferWritingLetterType` for that).
+ */
+export function inferCanonicalLetterType(task: MinimalWritingTask): CanonicalLetterType {
+  return fromEngineLetterType(inferWritingLetterType(task));
 }
 
 /**

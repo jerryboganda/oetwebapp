@@ -7,13 +7,17 @@ import { UploadSlot } from './UploadSlot';
 import { useWizard } from './WizardShell';
 import { ensureBundleSection, ensurePaperWithAssets, type PendingAsset } from './step-helpers';
 import { setWritingStructure, type WritingStructurePayload } from '@/lib/mock-wizard/api';
+import {
+  CANONICAL_LETTER_TYPES,
+  LETTER_TYPE_DISPLAY_LABELS,
+  type CanonicalLetterType,
+} from '@/lib/writing/letter-types';
 
-const LETTER_TYPES = [
-  { value: 'referral', label: 'Referral letter' },
-  { value: 'discharge', label: 'Discharge letter' },
-  { value: 'transfer', label: 'Transfer letter' },
-  { value: 'update', label: 'Update letter' },
-];
+const LETTER_TYPES: ReadonlyArray<{ value: CanonicalLetterType; label: string }> =
+  CANONICAL_LETTER_TYPES.map((value) => ({
+    value,
+    label: LETTER_TYPE_DISPLAY_LABELS[value],
+  }));
 
 const COUNTRIES = [
   { value: 'UK', label: 'United Kingdom' },
@@ -32,7 +36,7 @@ export function StepWriting() {
   const existingPaperId = existingSection?.contentPaperId ?? null;
 
   const [pending, setPending] = useState<Record<string, string>>({});
-  const [letterType, setLetterType] = useState('referral');
+  const [letterType, setLetterType] = useState<CanonicalLetterType>('routine_referral');
   const [country, setCountry] = useState('UK');
   const [wordCountTarget, setWordCountTarget] = useState(200);
   const [writerRole, setWriterRole] = useState('');
@@ -154,7 +158,7 @@ export function StepWriting() {
           <Select
             label="Letter type"
             value={letterType}
-            onChange={(e) => setLetterType(e.target.value)}
+            onChange={(e) => setLetterType(e.target.value as CanonicalLetterType)}
             options={LETTER_TYPES}
           />
           <Select

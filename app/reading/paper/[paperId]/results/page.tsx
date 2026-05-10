@@ -121,6 +121,15 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               <LearnerSurfaceCard card={policyCard(review)} />
             </section>
 
+            {/* Reading rulebook B §6 — verbatim scoring disclaimer required
+                directly under the score card. Do not paraphrase. */}
+            <p
+              className="text-sm font-semibold italic text-muted"
+              data-testid="reading-scoring-disclaimer"
+            >
+              This is an estimate, not an official OET conversion.
+            </p>
+
             <section id="part-breakdown">
               <LearnerSurfaceSectionHeader
                 eyebrow="Part Breakdown"

@@ -382,6 +382,20 @@ public class Evaluation
 
     [MaxLength(64)]
     public string? ModelVersionId { get; set; }
+
+    // ── Writing grader hybrid fields (rulebook-compliance audit 2026-05-10) ──
+    /// <summary>Raw AI grader JSON response (debug / forensic). Null when AI failed or was skipped.</summary>
+    public string? AiRawResponseJson { get; set; }
+
+    /// <summary>"deterministic_only" | "hybrid" | "ai_only" | "stub_legacy".</summary>
+    [MaxLength(32)]
+    public string GraderMode { get; set; } = "stub_legacy";
+
+    public int RuleViolationCount { get; set; }
+    public int CriticalRuleViolationCount { get; set; }
+
+    /// <summary>Serialised deterministic rule violations (mirror of WritingRuleViolation rows for fast read).</summary>
+    public string RuleViolationsJson { get; set; } = "[]";
 }
 
 public class ReadinessSnapshot

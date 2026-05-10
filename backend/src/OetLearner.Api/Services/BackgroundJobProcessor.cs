@@ -132,7 +132,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         switch (job.Type)
         {
             case JobType.WritingEvaluation:
-                await CompleteWritingEvaluationAsync(db, notifications, job, cancellationToken);
+                await CompleteWritingEvaluationAsync(services, db, notifications, job, cancellationToken);
                 break;
             case JobType.SpeakingTranscription:
                 await services.GetRequiredService<ISpeakingEvaluationPipeline>()
@@ -405,70 +405,208 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         record.EntitlementConsumed = true;
     }
 
-    private static async Task CompleteWritingEvaluationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteWritingEvaluationAsync(IServiceProvider services, LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
 
         var attempt = await db.Attempts.FirstAsync(x => x.Id == job.AttemptId, cancellationToken);
         var evaluation = await db.Evaluations.FirstAsync(x => x.AttemptId == attempt.Id, cancellationToken);
+        var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == attempt.ContentId, cancellationToken);
+        var user = await db.Users.FirstOrDefaultAsync(x => x.Id == attempt.UserId, cancellationToken);
+        var goal = await db.Goals
+            .Where(g => g.UserId == attempt.UserId)
+            .OrderByDescending(g => g.UpdatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        // Per Writing Module Technical Specification v1.0 (Dr. Ahmed Hesham),
-        // the platform must NOT evaluate response length. Scoring bands here
-        // are length-independent placeholder values for the mock evaluation
-        // pipeline; tutor review remains the final marking path.
-        _ = attempt.DraftContent;
-        var concisenessBand = "4-5/6";
+        var draft = attempt.DraftContent ?? string.Empty;
+        var caseNotes = content?.CaseNotes ?? string.Empty;
 
+        // ── Resolve profession + letter type ──────────────────────────────
+        var professionCode = (user?.ActiveProfessionId ?? content?.ProfessionId ?? "medicine").ToLowerInvariant();
+        var profession = MapProfession(professionCode);
+        var letterType = ResolveWritingLetterType(content);
+
+        // ── Step 1: deterministic engine ─────────────────────────────────
+        var ruleEngine = services.GetRequiredService<OetLearner.Api.Services.Rulebook.WritingRuleEngine>();
+        var lintInput = new OetLearner.Api.Services.Rulebook.WritingLintInput(
+            LetterText: draft,
+            LetterType: letterType,
+            Profession: profession);
+
+        IReadOnlyList<OetLearner.Api.Services.Rulebook.LintFinding> findings;
+        try
+        {
+            findings = ruleEngine.Lint(lintInput);
+        }
+        catch (Exception ex)
+        {
+            // Rulebook load / detector failure must not abort the evaluation.
+            // Surface as deterministic_only with zero deterministic findings.
+            findings = Array.Empty<OetLearner.Api.Services.Rulebook.LintFinding>();
+            services.GetService<ILogger<BackgroundJobProcessor>>()
+                ?.LogWarning(ex, "WritingRuleEngine.Lint failed for attempt {AttemptId}", attempt.Id);
+        }
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        var violationRows = new List<WritingRuleViolation>(findings.Count);
+        foreach (var f in findings)
+        {
+            var sev = f.Severity.ToString().ToLowerInvariant();
+            var crit = MapRuleToCriterion(f.RuleId);
+            var row = new WritingRuleViolation
+            {
+                Id = $"wrv-{Guid.NewGuid():N}",
+                EvaluationId = evaluation.Id,
+                AttemptId = attempt.Id,
+                UserId = attempt.UserId,
+                RuleId = f.RuleId,
+                Severity = sev,
+                CriterionCode = crit,
+                Quote = f.Quote,
+                Message = f.Message,
+                FixSuggestion = f.FixSuggestion,
+                CreatedAt = nowUtc,
+            };
+            violationRows.Add(row);
+            db.WritingRuleViolations.Add(row);
+        }
+
+        var criticalCount = violationRows.Count(v => v.Severity == "critical");
+
+        // ── Step 2: invoke AI grader ─────────────────────────────────────
+        var (aiScores, aiFeedbackItems, aiStrengths, aiIssues, aiRawJson, aiOk, aiError) =
+            await TryRunWritingAiGraderAsync(services, attempt, evaluation, content, draft, caseNotes,
+                profession, letterType, goal?.TargetCountry, cancellationToken);
+
+        // ── Step 3: criterion scoring with deterministic caps ────────────
+        // Six criteria, max scores per Dr. Hesham's writing spec:
+        //   purpose=3, content=7, conciseness_clarity=7, genre_style=7,
+        //   organisation_layout=7, language=7. Total max = 38.
+        // (Fixes the previous /6 stub bug where all were treated as /6.)
+        var maxByCriterion = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["purpose"] = 3,
+            ["content"] = 7,
+            ["conciseness_clarity"] = 7,
+            ["genre_style"] = 7,
+            ["organisation_layout"] = 7,
+            ["language"] = 7,
+        };
+
+        var critByCriterion = violationRows
+            .Where(v => v.Severity == "critical")
+            .GroupBy(v => v.CriterionCode, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+
+        var cappedScores = new List<Dictionary<string, object?>>(maxByCriterion.Count);
+        var rawTotal = 0;
+        var maxTotal = 0;
+        foreach (var (code, max) in maxByCriterion)
+        {
+            // Default mid-band heuristic when AI did not score this criterion.
+            var aiScore = aiScores is not null && aiScores.TryGetValue(code, out var s) ? s : (int?)null;
+            var heuristic = (int)Math.Round(max * 0.65); // 65% of max as deterministic fallback band
+            var baseScore = aiScore ?? heuristic;
+
+            // Critical-violation cap: -1 per critical (capped at -2).
+            critByCriterion.TryGetValue(code, out var crit);
+            var cap = max - Math.Min(2, crit);
+            var capped = Math.Min(baseScore, cap);
+            if (capped < 0) capped = 0;
+
+            cappedScores.Add(new Dictionary<string, object?>
+            {
+                ["criterionCode"] = code,
+                ["score"] = capped,
+                ["max"] = max,
+                ["scoreRange"] = $"{capped}/{max}",
+                ["confidenceBand"] = aiOk ? "medium" : "low",
+                ["aiScore"] = aiScore,
+                ["criticalViolations"] = crit,
+                ["explanation"] = aiOk
+                    ? $"AI score {(aiScore?.ToString() ?? "n/a")}/{max}, capped at {capped}/{max} after {crit} critical violation(s)."
+                    : $"Deterministic-only fallback ({heuristic}/{max}) capped at {capped}/{max} after {crit} critical violation(s)."
+            });
+            rawTotal += capped;
+            maxTotal += max;
+        }
+
+        var scaled = maxTotal > 0
+            ? (int)Math.Round(rawTotal * (double)OetScoring.ScaledMax / maxTotal)
+            : 0;
+        if (scaled < 0) scaled = 0;
+        if (scaled > OetScoring.ScaledMax) scaled = OetScoring.ScaledMax;
+        var grade = OetScoring.OetGradeLetterFromScaled(scaled);
+
+        // ── Step 4: persist ──────────────────────────────────────────────
         evaluation.State = AsyncState.Completed;
-        evaluation.ScoreRange = "330-360";
-        evaluation.GradeRange = "C+-B";
-        evaluation.ConfidenceBand = ConfidenceBand.Medium;
-        evaluation.StrengthsJson = JsonSupport.Serialize(new[]
+        evaluation.ScoreRange = scaled.ToString();
+        evaluation.GradeRange = grade;
+        evaluation.ConfidenceBand = aiOk ? ConfidenceBand.Medium : ConfidenceBand.Low;
+        evaluation.CriterionScoresJson = JsonSupport.Serialize(cappedScores);
+        evaluation.FeedbackItemsJson = JsonSupport.Serialize(aiFeedbackItems ?? new List<object>());
+        evaluation.RuleViolationsJson = JsonSupport.Serialize(violationRows.Select(v => new
         {
-            "Your structure stays focused on the receiving clinician.",
-            "Core postoperative actions are covered clearly."
-        });
-        evaluation.IssuesJson = JsonSupport.Serialize(new[]
-        {
-            "Trim lower-priority procedural detail more aggressively.",
-            "Proofread for small wording repetitions before submission."
-        });
-        evaluation.CriterionScoresJson = JsonSupport.Serialize(new[]
-        {
-            new { criterionCode = "purpose", scoreRange = "4-5/6", confidenceBand = "medium", explanation = "Purpose is clear in the opening lines." },
-            new { criterionCode = "content", scoreRange = "4-5/6", confidenceBand = "high", explanation = "Key discharge details are present." },
-            new { criterionCode = "conciseness_clarity", scoreRange = concisenessBand, confidenceBand = "medium", explanation = "Conciseness & Clarity improve when only ongoing-care information is retained." },
-            new { criterionCode = "genre_style", scoreRange = "4/7", confidenceBand = "medium", explanation = "Tone and register remain professional overall." },
-            new { criterionCode = "organisation_layout", scoreRange = "4/7", confidenceBand = "medium", explanation = "The sequence and layout of information are logical." },
-            new { criterionCode = "language", scoreRange = "4/6", confidenceBand = "medium", explanation = "Grammar and wording are generally secure." }
-        });
-        evaluation.FeedbackItemsJson = JsonSupport.Serialize(new[]
-        {
-            new { feedbackItemId = $"{evaluation.Id}-1", criterionCode = "conciseness_clarity", type = "anchored_comment", anchor = new { snippet = attempt.DraftContent.Length > 80 ? attempt.DraftContent[..80] : attempt.DraftContent }, message = "Prioritise information that changes the reader's follow-up actions.", severity = "medium", suggestedFix = "Remove low-impact procedural details." }
-        });
-        evaluation.GeneratedAt = DateTimeOffset.UtcNow;
-        evaluation.ModelExplanationSafe = "This training estimate is based on criterion-level writing signals and is not an official OET result.";
+            ruleId = v.RuleId,
+            severity = v.Severity,
+            criterionCode = v.CriterionCode,
+            quote = v.Quote,
+            message = v.Message,
+            fixSuggestion = v.FixSuggestion,
+        }));
+        evaluation.AiRawResponseJson = aiRawJson;
+        evaluation.GraderMode = aiOk ? "hybrid" : "deterministic_only";
+        evaluation.RuleViolationCount = violationRows.Count;
+        evaluation.CriticalRuleViolationCount = criticalCount;
+
+        evaluation.StrengthsJson = JsonSupport.Serialize(aiStrengths ?? (violationRows.Count == 0
+            ? new[] { "No deterministic rule violations detected in this draft." }
+            : new[] { "Letter structure was successfully parsed for grading." }));
+
+        evaluation.IssuesJson = JsonSupport.Serialize(aiIssues ?? violationRows
+            .Where(v => v.Severity == "critical" || v.Severity == "major")
+            .Take(5)
+            .Select(v => $"[{v.RuleId}] {v.Message}")
+            .DefaultIfEmpty("Submit for tutor review for higher-confidence feedback.")
+            .ToArray());
+
+        evaluation.GeneratedAt = nowUtc;
+        evaluation.ModelExplanationSafe = aiOk
+            ? "Hybrid grader: deterministic rulebook engine + AI grader. Critical rule violations cap the affected criterion. Advisory only — not an official OET result."
+            : aiError is null
+                ? "Deterministic-only grader (AI grader unavailable). Scores are heuristic and capped by critical rule violations. Advisory only — not an official OET result."
+                : $"Deterministic-only grader (AI grader failed: {aiError}). Scores are heuristic and capped by critical rule violations. Advisory only.";
         evaluation.LearnerDisclaimer = "Use tutor review when you need a higher-trust external check.";
         evaluation.StatusReasonCode = "completed";
-        evaluation.StatusMessage = "Writing evaluation completed.";
+        evaluation.StatusMessage = aiOk ? "Writing evaluation completed (hybrid grader)." : "Writing evaluation completed (deterministic-only fallback).";
         evaluation.RetryAfterMs = null;
-        evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
+        evaluation.LastTransitionAt = nowUtc;
 
         attempt.State = AttemptState.Completed;
-        attempt.CompletedAt = DateTimeOffset.UtcNow;
+        attempt.CompletedAt = nowUtc;
         db.AnalyticsEvents.Add(new AnalyticsEventRecord
         {
             Id = $"evt-{Guid.NewGuid():N}",
             UserId = attempt.UserId,
             EventName = "evaluation_completed",
-            PayloadJson = JsonSupport.Serialize(new { attemptId = attempt.Id, evaluationId = evaluation.Id, subtest = "writing" }),
-            OccurredAt = DateTimeOffset.UtcNow
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                attemptId = attempt.Id,
+                evaluationId = evaluation.Id,
+                subtest = "writing",
+                graderMode = evaluation.GraderMode,
+                ruleViolationCount = evaluation.RuleViolationCount,
+                criticalRuleViolationCount = evaluation.CriticalRuleViolationCount,
+                scaled,
+                grade,
+            }),
+            OccurredAt = nowUtc
         });
 
         var readiness = await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Completed, cancellationToken);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, attempt.UserId, cancellationToken);
-        var evaluationVersion = (evaluation.GeneratedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString();
+        var evaluationVersion = (evaluation.GeneratedAt ?? nowUtc).UtcDateTime.Ticks.ToString();
         await notifications.CreateForLearnerAsync(
             NotificationEventKey.LearnerEvaluationCompleted,
             attempt.UserId,
@@ -492,6 +630,211 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 ["message"] = "Your readiness snapshot was recalculated after the latest writing evaluation."
             },
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Calls the AI gateway for a writing-grade completion. Returns parsed
+    /// per-criterion scores + feedback items, or signals failure (aiOk=false)
+    /// so the caller can fall back to deterministic-only scoring.
+    /// </summary>
+    private static async Task<(
+        Dictionary<string, int>? Scores,
+        List<object>? FeedbackItems,
+        string[]? Strengths,
+        string[]? Issues,
+        string? RawJson,
+        bool Ok,
+        string? Error)> TryRunWritingAiGraderAsync(
+            IServiceProvider services,
+            Attempt attempt,
+            Evaluation evaluation,
+            ContentItem? content,
+            string draft,
+            string caseNotes,
+            OetLearner.Api.Services.Rulebook.ExamProfession profession,
+            string letterType,
+            string? candidateCountry,
+            CancellationToken cancellationToken)
+    {
+        var logger = services.GetService<ILogger<BackgroundJobProcessor>>();
+        var gateway = services.GetService<OetLearner.Api.Services.Rulebook.IAiGatewayService>();
+        if (gateway is null)
+        {
+            return (null, null, null, null, null, false, "ai_gateway_unavailable");
+        }
+
+        try
+        {
+            var ctx = new OetLearner.Api.Services.Rulebook.AiGroundingContext
+            {
+                Kind = OetLearner.Api.Services.Rulebook.RuleKind.Writing,
+                Profession = profession,
+                LetterType = letterType,
+                Task = OetLearner.Api.Services.Rulebook.AiTaskMode.Score,
+                CandidateCountry = candidateCountry,
+            };
+            var prompt = gateway.BuildGroundedPrompt(ctx);
+
+            var userInputBuilder = new System.Text.StringBuilder();
+            userInputBuilder.AppendLine("## Case notes (prompt the candidate received)");
+            userInputBuilder.AppendLine();
+            userInputBuilder.AppendLine(string.IsNullOrWhiteSpace(caseNotes) ? "(none provided)" : caseNotes);
+            userInputBuilder.AppendLine();
+            userInputBuilder.AppendLine("## Candidate draft (verbatim)");
+            userInputBuilder.AppendLine();
+            userInputBuilder.AppendLine(draft);
+
+            var result = await gateway.CompleteAsync(new OetLearner.Api.Services.Rulebook.AiGatewayRequest
+            {
+                Prompt = prompt,
+                UserInput = userInputBuilder.ToString(),
+                FeatureCode = AiFeatureCodes.WritingGrade,
+                UserId = attempt.UserId,
+                Temperature = 0.2,
+            }, cancellationToken);
+
+            var raw = result.Completion ?? string.Empty;
+            var json = ExtractJsonObject(raw);
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                logger?.LogWarning("Writing AI grader returned non-JSON for attempt {AttemptId}", attempt.Id);
+                return (null, null, null, null, raw, false, "ai_response_not_json");
+            }
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var scores = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            if (root.TryGetProperty("criteriaScores", out var crit) && crit.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var p in crit.EnumerateObject())
+                {
+                    if (p.Value.ValueKind == System.Text.Json.JsonValueKind.Number && p.Value.TryGetInt32(out var iv))
+                        scores[p.Name] = iv;
+                }
+            }
+
+            var findings = new List<object>();
+            if (root.TryGetProperty("findings", out var fnd) && fnd.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in fnd.EnumerateArray())
+                {
+                    findings.Add(System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(item.GetRawText()) ?? new());
+                }
+            }
+
+            string[]? strengths = null;
+            string[]? issues = null;
+            if (root.TryGetProperty("strengths", out var st) && st.ValueKind == System.Text.Json.JsonValueKind.Array)
+                strengths = st.EnumerateArray().Where(e => e.ValueKind == System.Text.Json.JsonValueKind.String).Select(e => e.GetString() ?? "").ToArray();
+            if (root.TryGetProperty("issues", out var iss) && iss.ValueKind == System.Text.Json.JsonValueKind.Array)
+                issues = iss.EnumerateArray().Where(e => e.ValueKind == System.Text.Json.JsonValueKind.String).Select(e => e.GetString() ?? "").ToArray();
+
+            return (scores, findings, strengths, issues, json, true, null);
+        }
+        catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException qex)
+        {
+            logger?.LogWarning("Writing AI grader quota denied for attempt {AttemptId}: {Code}", attempt.Id, qex.ErrorCode);
+            return (null, null, null, null, null, false, $"quota_denied:{qex.ErrorCode}");
+        }
+        catch (OetLearner.Api.Services.Rulebook.PromptNotGroundedException pgex)
+        {
+            logger?.LogError(pgex, "Writing AI grader prompt grounding failure");
+            return (null, null, null, null, null, false, "prompt_not_grounded");
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Writing AI grader call failed for attempt {AttemptId}", attempt.Id);
+            return (null, null, null, null, null, false, "ai_provider_error");
+        }
+    }
+
+    /// <summary>Extract the first balanced JSON object from a model response (handles ```json fences).</summary>
+    private static string? ExtractJsonObject(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var s = raw;
+        var fence = s.IndexOf("```", StringComparison.Ordinal);
+        if (fence >= 0)
+        {
+            var start = s.IndexOf('{', fence);
+            var end = s.LastIndexOf('}');
+            if (start >= 0 && end > start) return s.Substring(start, end - start + 1);
+        }
+        var first = s.IndexOf('{');
+        var last = s.LastIndexOf('}');
+        if (first >= 0 && last > first) return s.Substring(first, last - first + 1);
+        return null;
+    }
+
+    /// <summary>Map a rulebook rule id to its OET writing criterion code.</summary>
+    private static string MapRuleToCriterion(string ruleId)
+    {
+        // Heuristic mapping by section prefix. Aligns with the 6-criterion
+        // writing rubric and the rulebook section organisation.
+        var id = ruleId ?? "";
+        if (id.StartsWith("R01", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R02", StringComparison.OrdinalIgnoreCase)) return "purpose";
+        if (id.StartsWith("R03", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R04", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R05", StringComparison.OrdinalIgnoreCase)) return "content";
+        if (id.StartsWith("R06", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R07", StringComparison.OrdinalIgnoreCase)) return "conciseness_clarity";
+        if (id.StartsWith("R08", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R09", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R10", StringComparison.OrdinalIgnoreCase)) return "genre_style";
+        if (id.StartsWith("R11", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R12", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R13", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("R14", StringComparison.OrdinalIgnoreCase)) return "organisation_layout";
+        return "language";
+    }
+
+    private static OetLearner.Api.Services.Rulebook.ExamProfession MapProfession(string code)
+    {
+        return code.ToLowerInvariant() switch
+        {
+            "medicine" => OetLearner.Api.Services.Rulebook.ExamProfession.Medicine,
+            "nursing" => OetLearner.Api.Services.Rulebook.ExamProfession.Nursing,
+            "dentistry" => OetLearner.Api.Services.Rulebook.ExamProfession.Dentistry,
+            "pharmacy" => OetLearner.Api.Services.Rulebook.ExamProfession.Pharmacy,
+            "physiotherapy" => OetLearner.Api.Services.Rulebook.ExamProfession.Physiotherapy,
+            "veterinary" => OetLearner.Api.Services.Rulebook.ExamProfession.Veterinary,
+            "optometry" => OetLearner.Api.Services.Rulebook.ExamProfession.Optometry,
+            "radiography" => OetLearner.Api.Services.Rulebook.ExamProfession.Radiography,
+            "occupational-therapy" or "occupationaltherapy" => OetLearner.Api.Services.Rulebook.ExamProfession.OccupationalTherapy,
+            "speech-pathology" or "speechpathology" => OetLearner.Api.Services.Rulebook.ExamProfession.SpeechPathology,
+            "podiatry" => OetLearner.Api.Services.Rulebook.ExamProfession.Podiatry,
+            "dietetics" => OetLearner.Api.Services.Rulebook.ExamProfession.Dietetics,
+            _ => OetLearner.Api.Services.Rulebook.ExamProfession.Medicine,
+        };
+    }
+
+    private static string ResolveWritingLetterType(ContentItem? content)
+    {
+        // Prefer the explicit letterType stored on the content item's DetailJson;
+        // fall back to a routine_referral default per spec.
+        if (content is null) return "routine_referral";
+        var detail = content.DetailJson;
+        if (!string.IsNullOrWhiteSpace(detail))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(detail);
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                    doc.RootElement.TryGetProperty("letterType", out var lt) &&
+                    lt.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var s = lt.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) return s!.Trim();
+                }
+            }
+            catch
+            {
+                // Detail JSON malformed — fall through to default.
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(content.ScenarioType)) return content.ScenarioType!.Trim();
+        return "routine_referral";
     }
 
     private static async Task CompleteSpeakingEvaluationSideEffectsAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
