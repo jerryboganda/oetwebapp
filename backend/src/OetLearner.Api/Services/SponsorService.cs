@@ -4,8 +4,95 @@ using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services;
 
-public class SponsorService(LearnerDbContext db, ILogger<SponsorService> logger)
+public class SponsorService(LearnerDbContext db, ILogger<SponsorService> logger, TimeProvider clock)
 {
+    /// <summary>
+    /// RW-013 — sponsor-attributable spend is computed from
+    /// <see cref="PaymentTransaction"/> rows belonging to learners who are
+    /// (or were) sponsored by this sponsor, restricted to the time window
+    /// during which the <see cref="Sponsorship"/> was active. We do not yet
+    /// have a direct sponsor-paid flag on <c>PaymentTransaction</c>, so this
+    /// is the most defensible heuristic until institutional billing lands:
+    /// any completed transaction by a linked learner inside the active
+    /// sponsorship window is counted as sponsor-attributable.
+    /// </summary>
+    private async Task<SponsorBillingSnapshot> ComputeBillingAsync(string sponsorUserId, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var monthStart = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var sponsorships = await db.Sponsorships
+            .AsNoTracking()
+            .Where(s => s.SponsorUserId == sponsorUserId && s.LearnerUserId != null)
+            .Select(s => new { s.Id, s.LearnerUserId, s.LearnerEmail, s.CreatedAt, s.RevokedAt, s.Status })
+            .ToListAsync(ct);
+
+        if (sponsorships.Count == 0)
+        {
+            return new SponsorBillingSnapshot(0m, 0m, null, Array.Empty<SponsorInvoice>());
+        }
+
+        var learnerIds = sponsorships
+            .Select(s => s.LearnerUserId!)
+            .Distinct()
+            .ToList();
+
+        // Pull only completed transactions for the linked learners. This is
+        // an over-fetch versus the per-sponsorship windows but lets us match
+        // window membership in memory below — typical sponsor cohorts are
+        // small, so the round-trip cost is bounded.
+        var transactions = await db.PaymentTransactions
+            .AsNoTracking()
+            .Where(t => learnerIds.Contains(t.LearnerUserId) && t.Status == "completed")
+            .ToListAsync(ct);
+
+        var invoices = new List<SponsorInvoice>();
+        foreach (var sponsorship in sponsorships)
+        {
+            var windowEnd = sponsorship.RevokedAt ?? now;
+            foreach (var tx in transactions)
+            {
+                if (tx.LearnerUserId != sponsorship.LearnerUserId) continue;
+                if (tx.CreatedAt < sponsorship.CreatedAt) continue;
+                if (tx.CreatedAt > windowEnd) continue;
+                invoices.Add(new SponsorInvoice(
+                    Id: tx.Id,
+                    SponsorshipId: sponsorship.Id,
+                    LearnerUserId: tx.LearnerUserId,
+                    LearnerEmail: sponsorship.LearnerEmail,
+                    Gateway: tx.Gateway,
+                    GatewayTransactionId: tx.GatewayTransactionId,
+                    TransactionType: tx.TransactionType,
+                    ProductType: tx.ProductType,
+                    ProductId: tx.ProductId,
+                    Amount: tx.Amount,
+                    Currency: tx.Currency,
+                    Status: tx.Status,
+                    CreatedAt: tx.CreatedAt));
+            }
+        }
+
+        var totalSpend = invoices.Sum(i => i.Amount);
+        var currentMonthSpend = invoices
+            .Where(i => i.CreatedAt >= monthStart)
+            .Sum(i => i.Amount);
+
+        // Aggregate currency: only meaningful when every invoice shares one.
+        string? aggregateCurrency = null;
+        if (invoices.Count > 0)
+        {
+            var distinctCurrencies = invoices.Select(i => i.Currency).Distinct().ToList();
+            aggregateCurrency = distinctCurrencies.Count == 1 ? distinctCurrencies[0] : null;
+        }
+
+        var orderedInvoices = invoices
+            .OrderByDescending(i => i.CreatedAt)
+            .Take(50)
+            .ToArray();
+
+        return new SponsorBillingSnapshot(totalSpend, currentMonthSpend, aggregateCurrency, orderedInvoices);
+    }
+
     public async Task<object> GetDashboardAsync(string sponsorUserId, CancellationToken ct)
     {
         var sponsor = await db.SponsorAccounts
@@ -22,6 +109,8 @@ public class SponsorService(LearnerDbContext db, ILogger<SponsorService> logger)
         var pendingCount = sponsorships.Count(s => s.Status == "Pending");
         var totalCount = sponsorships.Count(s => s.Status != "Revoked");
 
+        var billing = await ComputeBillingAsync(sponsorUserId, ct);
+
         return new
         {
             sponsorName = sponsor.Name,
@@ -29,7 +118,8 @@ public class SponsorService(LearnerDbContext db, ILogger<SponsorService> logger)
             learnersSponsored = totalCount,
             activeSponsorships = activeCount,
             pendingSponsorships = pendingCount,
-            totalSpend = 0m, // placeholder — billing integration is future work
+            totalSpend = billing.TotalSpend,
+            currency = billing.Currency,
         };
     }
 
@@ -129,16 +219,39 @@ public class SponsorService(LearnerDbContext db, ILogger<SponsorService> logger)
             .AsNoTracking()
             .CountAsync(s => s.SponsorUserId == sponsorUserId && s.Status != "Revoked", ct);
 
-        // Billing summary — placeholder values until billing integration is complete
+        var billing = await ComputeBillingAsync(sponsorUserId, ct);
+
         return new
         {
             sponsorName = sponsor.Name,
             organizationName = sponsor.OrganizationName,
             totalSponsorships,
-            totalSpend = 0m,
-            currentMonthSpend = 0m,
+            totalSpend = billing.TotalSpend,
+            currentMonthSpend = billing.CurrentMonthSpend,
+            currency = billing.Currency,
             billingCycle = "monthly",
-            invoices = Array.Empty<object>(),
+            invoices = billing.Invoices,
         };
     }
 }
+
+internal sealed record SponsorBillingSnapshot(
+    decimal TotalSpend,
+    decimal CurrentMonthSpend,
+    string? Currency,
+    IReadOnlyList<SponsorInvoice> Invoices);
+
+public sealed record SponsorInvoice(
+    Guid Id,
+    Guid SponsorshipId,
+    string LearnerUserId,
+    string LearnerEmail,
+    string Gateway,
+    string GatewayTransactionId,
+    string TransactionType,
+    string? ProductType,
+    string? ProductId,
+    decimal Amount,
+    string Currency,
+    string Status,
+    DateTimeOffset CreatedAt);

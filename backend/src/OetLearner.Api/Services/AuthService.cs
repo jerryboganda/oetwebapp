@@ -710,6 +710,7 @@ public sealed class AuthService(
             }
 
             await db.SaveChangesAsync(cancellationToken);
+            ClearRefreshCookie();
         }
         catch (DbUpdateConcurrencyException)
         {

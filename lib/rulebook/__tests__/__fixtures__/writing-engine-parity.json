@@ -1,0 +1,106 @@
+{
+  "$schema-note": "Shared parity corpus for writing-rules.ts (TS) and WritingRuleEngine.cs (.NET). Both engines MUST produce the same set of non-info ruleIds for each fixture. See lib/rulebook/__tests__/writing-rule-fixtures.test.ts and backend/tests/OetLearner.Api.Tests/Rulebook/WritingEngineParityTests.cs.",
+  "fixtures": [
+    {
+      "id": "A-clean-routine",
+      "letterType": "routine_referral",
+      "profession": "medicine",
+      "patientIsMinor": false,
+      "recipientSpecialty": "cardiologist",
+      "caseNotesMarkers": {
+        "patientInitiatedReferral": false,
+        "consentDocumented": false,
+        "atopicCondition": false,
+        "resultsEnclosed": false
+      },
+      "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his recurrent chest pain.\n\nMr Jones is a non-smoker and consumes alcohol occasionally within recommended limits. He presented today with central chest tightness on exertion lasting two weeks. His blood pressure was 140 over 90 and his pulse was regular.\n\nI would appreciate your specialist review. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
+      "expectedRuleIds": [
+        "R04.1",
+        "R12.3"
+      ]
+    },
+    {
+      "id": "B-missing-smoking-drinking",
+      "letterType": "routine_referral",
+      "profession": "medicine",
+      "patientIsMinor": false,
+      "recipientSpecialty": "cardiologist",
+      "caseNotesMarkers": {
+        "patientInitiatedReferral": false,
+        "consentDocumented": false,
+        "atopicCondition": false,
+        "resultsEnclosed": false
+      },
+      "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his recurrent chest pain.\n\nMr Jones presented today with central chest tightness on exertion lasting two weeks. His blood pressure was 140 over 90 and his pulse was regular. Examination was otherwise unremarkable.\n\nI would appreciate your specialist review. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
+      "expectedRuleIds": [
+        "R03.4",
+        "R04.1"
+      ]
+    },
+    {
+      "id": "C-the-patient-next-visit-asap-yesterday",
+      "letterType": "routine_referral",
+      "profession": "medicine",
+      "patientIsMinor": false,
+      "recipientSpecialty": "cardiologist",
+      "caseNotesMarkers": {
+        "patientInitiatedReferral": false,
+        "consentDocumented": false,
+        "atopicCondition": false,
+        "resultsEnclosed": false
+      },
+      "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his chest pain.\n\nThe patient is a non-smoker and consumes alcohol occasionally. On the next visit, he reported worsening symptoms. Yesterday he experienced palpitations at rest. His blood pressure was 150 over 95.\n\nPlease see him ASAP. I would appreciate your specialist review.\n\nYours sincerely,\n\nDr A B",
+      "expectedRuleIds": [
+        "R04.1",
+        "R06.7",
+        "R08.14",
+        "R08.7",
+        "R08.9",
+        "R10.14",
+        "R12.2",
+        "R12.3",
+        "R13.10"
+      ]
+    },
+    {
+      "id": "D-however-and-abbreviated-year",
+      "letterType": "routine_referral",
+      "profession": "medicine",
+      "patientIsMinor": false,
+      "recipientSpecialty": "cardiologist",
+      "caseNotesMarkers": {
+        "patientInitiatedReferral": false,
+        "consentDocumented": false,
+        "atopicCondition": false,
+        "resultsEnclosed": false
+      },
+      "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his chest pain.\n\nMr Jones is a non-smoker and consumes alcohol occasionally. He has been compliant with treatment, However, she reported worsening symptoms over the past week. His most recent review was on 01/01/'25 and his blood pressure was 150 over 95.\n\nI would appreciate your specialist review. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
+      "expectedRuleIds": [
+        "R04.1",
+        "R05.6",
+        "R12.3",
+        "R12.9"
+      ]
+    },
+    {
+      "id": "E-discharge-was-presented-no-plan",
+      "letterType": "discharge",
+      "profession": "medicine",
+      "patientIsMinor": false,
+      "recipientSpecialty": "general_practitioner",
+      "caseNotesMarkers": {
+        "patientInitiatedReferral": false,
+        "consentDocumented": false,
+        "atopicCondition": false,
+        "resultsEnclosed": false
+      },
+      "letter": "Dr A B\nGeneral Hospital\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to update you regarding Mr Jones who was discharged from our ward today.\n\nMr Jones was presented with central chest pain and shortness of breath on admission. Initial investigations confirmed a non-ST-elevation myocardial infarction. He was managed with dual antiplatelet therapy and underwent coronary angiography during his admission.\n\nHis condition stabilised and he was discharged in good general condition. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
+      "expectedRuleIds": [
+        "R03.4",
+        "R04.1",
+        "R14.6",
+        "R14.7"
+      ]
+    }
+  ]
+}

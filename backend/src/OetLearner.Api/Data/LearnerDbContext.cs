@@ -329,6 +329,10 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<SpeakingCalibrationScore> SpeakingCalibrationScores => Set<SpeakingCalibrationScore>();
     public DbSet<SpeakingFeedbackComment> SpeakingFeedbackComments => Set<SpeakingFeedbackComment>();
 
+    // Writing module runtime-mutable settings (singleton row, id="global").
+    // See WritingOptionsProvider; bootstrapped lazily on first read.
+    public DbSet<WritingOptions> WritingOptions => Set<WritingOptions>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ContentItem>().HasIndex(x => new { x.SubtestCode, x.Status });

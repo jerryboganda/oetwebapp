@@ -57,6 +57,10 @@ public sealed class AiCredentialResolver(
         AiFeatureCodes.AdminVocabularyDraft,
         AiFeatureCodes.AdminConversationDraft,
         AiFeatureCodes.AdminListeningDraft,
+        AiFeatureCodes.AdminWritingDraft,
+        AiFeatureCodes.PronunciationScore,
+        AiFeatureCodes.PronunciationFeedback,
+        AiFeatureCodes.ConversationEvaluation,
     };
 
     public async Task<AiCredentialResolution> ResolveAsync(
@@ -142,7 +146,10 @@ public sealed class AiCredentialResolver(
             chosen = usable.FirstOrDefault(c =>
                 string.Equals(c.ProviderCode, callerRequestedProviderCode, StringComparison.OrdinalIgnoreCase));
         }
-        chosen ??= usable.FirstOrDefault();
+        else
+        {
+            chosen = usable.FirstOrDefault();
+        }
 
         if (chosen is not null)
         {

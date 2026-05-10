@@ -1,8 +1,4 @@
-// Local copy of freeze-effective logic used by app/billing/page.tsx.
-// Kept here so the billing sub-pages (upgrade, score-guarantee, referral)
-// share identical semantics without modifying lib/api.ts.
-// TODO(billing-impl-c): consider extracting `isFreezeEffective` to lib/freeze
-// and importing from a single source of truth.
+// Shared freeze-effective logic for all learner billing surfaces.
 
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
 

@@ -14,6 +14,20 @@ using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services;
 
+public interface IWritingEntitlementService
+{
+    Task<WritingEntitlement> CheckAsync(string? userId, CancellationToken ct);
+}
+
+public sealed record WritingEntitlement(
+    bool Allowed,
+    string Tier,
+    int Remaining,
+    int LimitPerWindow,
+    int WindowDays,
+    DateTimeOffset? ResetAt,
+    string Reason);
+
 public sealed record GeneratedDownloadFile(Stream Stream, string ContentType, string FileName);
 
 public sealed record PaymentWebhookRetryResult(
@@ -34,7 +48,8 @@ public partial class LearnerService(
     WalletService walletService,
     PaymentGatewayService paymentGateways,
     DisputeService? disputeService = null,
-    IOptions<BillingOptions>? billingOptions = null)
+    IOptions<BillingOptions>? billingOptions = null,
+    global::OetLearner.Api.Services.IWritingEntitlementService? writingEntitlement = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
@@ -562,6 +577,35 @@ public partial class LearnerService(
                 state = ToApiState(x.State),
                 route = $"/diagnostic/{x.SubtestCode}"
             })
+        };
+    }
+
+    public async Task<object> GetDiagnosticTaskAsync(string subtest, CancellationToken cancellationToken)
+    {
+        var normalizedSubtest = NormalizeDiagnosticSubtest(subtest);
+        var contentType = $"{normalizedSubtest}_task";
+        var item = await db.ContentItems
+            .AsNoTracking()
+            .Where(x => x.SubtestCode == normalizedSubtest
+                && x.ContentType == contentType
+                && x.Status == ContentStatus.Published)
+            .OrderByDescending(x => x.IsDiagnosticEligible)
+            .ThenByDescending(x => x.QualityScore)
+            .ThenBy(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw ApiException.NotFound(
+                "diagnostic_task_not_found",
+                $"No diagnostic {ToDisplaySubtest(normalizedSubtest)} task is currently published.");
+
+        return new
+        {
+            taskId = item.Id,
+            contentId = item.Id,
+            subtest = item.SubtestCode,
+            title = item.Title,
+            difficulty = item.Difficulty,
+            estimatedDurationMinutes = item.EstimatedDurationMinutes,
+            diagnosticEligible = item.IsDiagnosticEligible
         };
     }
 
@@ -1271,14 +1315,16 @@ public partial class LearnerService(
 
     public async Task<object> GetWritingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
-        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var attempt = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         return await GetAttemptAsync(attempt.Id, cancellationToken);
     }
 
     public async Task<object> UpdateWritingDraftAsync(string userId, string attemptId, DraftUpdateRequest request, CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
-        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var attempt = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        EnsureWritingDraftEditable(attempt);
+        EnsureWritingReadOnlyPhaseAllowsDraftMutation(attempt, request);
         if (request.DraftVersion.HasValue && request.DraftVersion.Value != attempt.DraftVersion)
         {
             throw ApiException.Conflict(
@@ -1311,10 +1357,48 @@ public partial class LearnerService(
         };
     }
 
+    private static void EnsureWritingDraftEditable(Attempt attempt)
+    {
+        if (attempt.State is AttemptState.NotStarted or AttemptState.InProgress or AttemptState.Paused)
+        {
+            return;
+        }
+
+        throw ApiException.Conflict(
+            "writing_attempt_locked",
+            "This writing attempt has already been submitted and cannot be edited.",
+            [new ApiFieldError("attemptId", "locked", "Start a new writing attempt before editing another response.")]);
+    }
+
     public async Task<object> HeartbeatAttemptAsync(string userId, string attemptId, HeartbeatRequest request, CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        return await HeartbeatAttemptCoreAsync(attempt, request, cancellationToken);
+    }
+
+    public async Task<object> HeartbeatSpeakingAttemptAsync(string userId, string attemptId, HeartbeatRequest request, CancellationToken cancellationToken)
+        => await HeartbeatSubtestAttemptAsync(userId, attemptId, request, "speaking", cancellationToken);
+
+    public async Task<object> HeartbeatListeningAttemptAsync(string userId, string attemptId, HeartbeatRequest request, CancellationToken cancellationToken)
+        => await HeartbeatSubtestAttemptAsync(userId, attemptId, request, "listening", cancellationToken);
+
+    public async Task<object> HeartbeatWritingAttemptAsync(string userId, string attemptId, HeartbeatRequest request, CancellationToken cancellationToken)
+    {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
+        var attempt = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        return await HeartbeatAttemptCoreAsync(attempt, request, cancellationToken);
+    }
+
+    private async Task<object> HeartbeatSubtestAttemptAsync(string userId, string attemptId, HeartbeatRequest request, string subtest, CancellationToken cancellationToken)
+    {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
+        var attempt = await GetSubtestAttemptOwnedByUserAsync(userId, attemptId, subtest, $"{subtest}_attempt_not_found", $"{ToDisplaySubtest(subtest)} attempt not found.", cancellationToken);
+        return await HeartbeatAttemptCoreAsync(attempt, request, cancellationToken);
+    }
+
+    private async Task<object> HeartbeatAttemptCoreAsync(Attempt attempt, HeartbeatRequest request, CancellationToken cancellationToken)
+    {
         attempt.ElapsedSeconds = request.ElapsedSeconds;
         attempt.LastClientSyncAt = DateTimeOffset.UtcNow;
         if (!string.IsNullOrWhiteSpace(request.DeviceType)) attempt.DeviceType = request.DeviceType;
@@ -1325,21 +1409,24 @@ public partial class LearnerService(
     public async Task<object> SubmitWritingAttemptAsync(string userId, string attemptId, SubmitAttemptRequest request, CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
+        var attempt = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var idempotencyScope = $"writing-submit:{userId}:{attempt.Id}";
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
-            var cached = await GetIdempotentResponseAsync("writing-submit", request.IdempotencyKey, cancellationToken);
+            var cached = await GetIdempotentResponseAsync(idempotencyScope, request.IdempotencyKey, cancellationToken);
             if (cached is not null)
             {
                 return cached;
             }
         }
 
-        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         if (attempt.State is AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed)
         {
             var existing = await db.Evaluations.FirstOrDefaultAsync(x => x.AttemptId == attemptId, cancellationToken);
             return new { attemptId = attempt.Id, evaluationId = existing?.Id, state = existing is null ? "queued" : ToAsyncState(existing.State) };
         }
+
+        EnsureWritingReadOnlyPhaseAllowsContentMutation(attempt, request.Content ?? attempt.DraftContent);
 
         if (request.Content is not null) attempt.DraftContent = request.Content;
         if (string.IsNullOrWhiteSpace(attempt.DraftContent))
@@ -1348,6 +1435,24 @@ public partial class LearnerService(
                 "writing_content_required",
                 "Writing content is required before submission.",
                 [new ApiFieldError("content", "required", "Enter your response before submitting.")]);
+        }
+
+        // Free-tier / kill-switch entitlement gate. Premium subscribers
+        // pass through unconditionally; free tier respects the runtime
+        // WritingOptions singleton (default: premium-only).
+        if (writingEntitlement is not null)
+        {
+            var ent = await writingEntitlement.CheckAsync(userId, cancellationToken);
+            if (!ent.Allowed)
+            {
+                var msg = ent.Reason switch
+                {
+                    "premium_required" => "Writing practice requires an active subscription.",
+                    "quota_exceeded" => $"Free tier allows {ent.LimitPerWindow} writing attempts every {ent.WindowDays} days.",
+                    _ => ent.Reason,
+                };
+                throw ApiException.PaymentRequired("writing_quota_exceeded", msg);
+            }
         }
 
         attempt.State = AttemptState.Evaluating;
@@ -1381,10 +1486,35 @@ public partial class LearnerService(
         await RecordEventAsync(attempt.UserId, "task_submitted", new { attemptId = attempt.Id, evaluationId = evaluation.Id, subtest = "writing", contentId = attempt.ContentId }, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
-            await SaveIdempotentResponseAsync("writing-submit", request.IdempotencyKey, response, cancellationToken);
+            await SaveIdempotentResponseAsync(idempotencyScope, request.IdempotencyKey, response, cancellationToken);
         }
         await db.SaveChangesAsync(cancellationToken);
         return response;
+    }
+
+    private static void EnsureWritingReadOnlyPhaseAllowsDraftMutation(Attempt attempt, DraftUpdateRequest request)
+    {
+        var hasDraftMutation = request.Content is not null
+            || request.Scratchpad is not null
+            || request.Checklist is not null;
+        EnsureWritingReadOnlyPhaseAllowsMutation(attempt, hasDraftMutation);
+    }
+
+    private static void EnsureWritingReadOnlyPhaseAllowsContentMutation(Attempt attempt, string? proposedContent)
+        => EnsureWritingReadOnlyPhaseAllowsMutation(attempt, !string.IsNullOrWhiteSpace(proposedContent));
+
+    private static void EnsureWritingReadOnlyPhaseAllowsMutation(Attempt attempt, bool hasWritingBearingMutation)
+    {
+        if (!string.Equals(attempt.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase)) return;
+        if (!string.Equals(attempt.Mode, "exam", StringComparison.OrdinalIgnoreCase)) return;
+        if (!hasWritingBearingMutation) return;
+
+        var readingWindowEndsAt = attempt.StartedAt.AddMinutes(5);
+        if (DateTimeOffset.UtcNow >= readingWindowEndsAt) return;
+
+        throw ApiException.Conflict(
+            "writing_reading_window_active",
+            "The first 5 minutes of OET Writing exam mode are reading-only. Writing is accepted after the reading window ends.");
     }
 
     public async Task<object> GetWritingEvaluationSummaryAsync(string userId, string evaluationId, CancellationToken cancellationToken)
@@ -1402,6 +1532,7 @@ public partial class LearnerService(
             attemptId = attempt.Id,
             taskId = content.Id,
             taskTitle = content.Title,
+            profession = content.ProfessionId ?? "medicine",
             examFamilyCode,
             examFamilyLabel,
             subtest = evaluation.SubtestCode,
@@ -2192,10 +2323,14 @@ public partial class LearnerService(
 
     public async Task<object> GetReadingTaskAsync(string contentId, CancellationToken cancellationToken) => await GetGenericTaskAsync(contentId, "reading", cancellationToken);
     public async Task<object> CreateReadingAttemptAsync(string userId, CreateAttemptRequest request, CancellationToken cancellationToken) => await CreateAttemptAsync(userId, request, "reading", cancellationToken);
-    public async Task<object> GetReadingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken) => await GetWritingAttemptAsync(userId, attemptId, cancellationToken);
-    public async Task<object> UpdateReadingAnswersAsync(string userId, string attemptId, AnswersUpdateRequest request, CancellationToken cancellationToken) => await UpdateAnswersAsync(userId, attemptId, request, cancellationToken);
+    public async Task<object> GetReadingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
+    {
+        var attempt = await GetSubtestAttemptOwnedByUserAsync(userId, attemptId, "reading", "reading_attempt_not_found", "Reading attempt not found.", cancellationToken);
+        return await GetAttemptAsync(attempt.Id, cancellationToken);
+    }
+    public async Task<object> UpdateReadingAnswersAsync(string userId, string attemptId, AnswersUpdateRequest request, CancellationToken cancellationToken) => await UpdateAnswersAsync(userId, attemptId, request, "reading", cancellationToken);
     public async Task<object> SubmitReadingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken) => await SubmitObjectiveAttemptAsync(userId, attemptId, "reading", cancellationToken);
-    public async Task<object> GetReadingEvaluationAsync(string userId, string evaluationId, CancellationToken cancellationToken) => await GetObjectiveEvaluationAsync(userId, evaluationId, cancellationToken);
+    public async Task<object> GetReadingEvaluationAsync(string userId, string evaluationId, CancellationToken cancellationToken) => await GetObjectiveEvaluationAsync(userId, evaluationId, "reading", cancellationToken);
 
     public async Task<object> GetListeningHomeAsync(CancellationToken cancellationToken)
     {
@@ -2234,10 +2369,14 @@ public partial class LearnerService(
 
     public async Task<object> GetListeningTaskAsync(string contentId, CancellationToken cancellationToken) => await GetGenericTaskAsync(contentId, "listening", cancellationToken);
     public async Task<object> CreateListeningAttemptAsync(string userId, CreateAttemptRequest request, CancellationToken cancellationToken) => await CreateAttemptAsync(userId, request, "listening", cancellationToken);
-    public async Task<object> GetListeningAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken) => await GetWritingAttemptAsync(userId, attemptId, cancellationToken);
-    public async Task<object> UpdateListeningAnswersAsync(string userId, string attemptId, AnswersUpdateRequest request, CancellationToken cancellationToken) => await UpdateAnswersAsync(userId, attemptId, request, cancellationToken);
+    public async Task<object> GetListeningAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
+    {
+        var attempt = await GetSubtestAttemptOwnedByUserAsync(userId, attemptId, "listening", "listening_attempt_not_found", "Listening attempt not found.", cancellationToken);
+        return await GetAttemptAsync(attempt.Id, cancellationToken);
+    }
+    public async Task<object> UpdateListeningAnswersAsync(string userId, string attemptId, AnswersUpdateRequest request, CancellationToken cancellationToken) => await UpdateAnswersAsync(userId, attemptId, request, "listening", cancellationToken);
     public async Task<object> SubmitListeningAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken) => await SubmitObjectiveAttemptAsync(userId, attemptId, "listening", cancellationToken);
-    public async Task<object> GetListeningEvaluationAsync(string userId, string evaluationId, CancellationToken cancellationToken) => await GetObjectiveEvaluationAsync(userId, evaluationId, cancellationToken);
+    public async Task<object> GetListeningEvaluationAsync(string userId, string evaluationId, CancellationToken cancellationToken) => await GetObjectiveEvaluationAsync(userId, evaluationId, "listening", cancellationToken);
     public Task<object> GetListeningDrillAsync(string drillId, CancellationToken cancellationToken) => Task.FromResult(BuildListeningDrill(drillId));
 
     public async Task<object> GetBillingQuoteAsync(string userId, BillingQuoteRequest request, CancellationToken cancellationToken)
@@ -3922,6 +4061,26 @@ public partial class LearnerService(
         => await db.Attempts.FirstOrDefaultAsync(x => x.Id == attemptId && x.UserId == userId, cancellationToken)
            ?? throw ApiException.NotFound("attempt_not_found", "Attempt not found.");
 
+    private async Task<Attempt> GetWritingAttemptOwnedByUserAsync(string userId, string attemptId, CancellationToken cancellationToken)
+        => await GetSubtestAttemptOwnedByUserAsync(userId, attemptId, "writing", "writing_attempt_not_found", "Writing attempt not found.", cancellationToken);
+
+    private async Task<Attempt> GetSubtestAttemptOwnedByUserAsync(
+        string userId,
+        string attemptId,
+        string subtest,
+        string notFoundCode,
+        string notFoundMessage,
+        CancellationToken cancellationToken)
+    {
+        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        if (!string.Equals(attempt.SubtestCode, subtest, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.NotFound(notFoundCode, notFoundMessage);
+        }
+
+        return attempt;
+    }
+
     private async Task<Attempt> GetSpeakingAttemptOwnedByUserAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
@@ -4375,10 +4534,11 @@ public partial class LearnerService(
         }, detail);
     }
 
-    private async Task<object> UpdateAnswersAsync(string userId, string attemptId, AnswersUpdateRequest request, CancellationToken cancellationToken)
+    private async Task<object> UpdateAnswersAsync(string userId, string attemptId, AnswersUpdateRequest request, string subtest, CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
-        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var attempt = await GetSubtestAttemptOwnedByUserAsync(userId, attemptId, subtest, $"{subtest}_attempt_not_found", $"{ToDisplaySubtest(subtest)} attempt not found.", cancellationToken);
+        EnsureObjectiveAnswersEditable(attempt);
         var current = JsonSupport.Deserialize<Dictionary<string, string?>>(attempt.AnswersJson, new Dictionary<string, string?>());
         foreach (var (key, value) in request.Answers)
         {
@@ -4392,10 +4552,23 @@ public partial class LearnerService(
         return new { attemptId = attempt.Id, answers = current, lastClientSyncAt = attempt.LastClientSyncAt };
     }
 
+    private static void EnsureObjectiveAnswersEditable(Attempt attempt)
+    {
+        if (attempt.State is AttemptState.NotStarted or AttemptState.InProgress or AttemptState.Paused)
+        {
+            return;
+        }
+
+        throw ApiException.Conflict(
+            "objective_attempt_locked",
+            "This attempt has already been submitted and cannot be edited.",
+            [new ApiFieldError("attemptId", "locked", "Start a new attempt before editing another response.")]);
+    }
+
     private async Task<object> SubmitObjectiveAttemptAsync(string userId, string attemptId, string subtest, CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
-        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var attempt = await GetSubtestAttemptOwnedByUserAsync(userId, attemptId, subtest, $"{subtest}_attempt_not_found", $"{ToDisplaySubtest(subtest)} attempt not found.", cancellationToken);
         if (attempt.State == AttemptState.Completed)
         {
             var existing = await db.Evaluations.FirstAsync(x => x.AttemptId == attempt.Id, cancellationToken);
@@ -4482,10 +4655,20 @@ public partial class LearnerService(
         return new { attemptId = attempt.Id, evaluationId = evaluation.Id, state = "completed" };
     }
 
-    private async Task<object> GetObjectiveEvaluationAsync(string userId, string evaluationId, CancellationToken cancellationToken)
+    private async Task<object> GetObjectiveEvaluationAsync(string userId, string evaluationId, string subtest, CancellationToken cancellationToken)
     {
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
+        if (!string.Equals(evaluation.SubtestCode, subtest, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.NotFound($"{subtest}_evaluation_not_found", $"{ToDisplaySubtest(subtest)} evaluation not found.");
+        }
+
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
+        if (!string.Equals(attempt.SubtestCode, subtest, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.NotFound($"{subtest}_evaluation_not_found", $"{ToDisplaySubtest(subtest)} evaluation not found.");
+        }
+
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
         await RecordEventAsync(userId, "evaluation_viewed", new { evaluationId = evaluation.Id, attemptId = attempt.Id, subtest = evaluation.SubtestCode }, cancellationToken);
         var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(content.DetailJson, new Dictionary<string, object?>());
@@ -5490,6 +5673,21 @@ public partial class LearnerService(
         "listening" => "Listening",
         _ => code
     };
+
+    private static string NormalizeDiagnosticSubtest(string? code)
+    {
+        var value = code?.Trim();
+        var normalized = StringComparer.OrdinalIgnoreCase.Equals(value, "writing") ? "writing"
+            : StringComparer.OrdinalIgnoreCase.Equals(value, "speaking") ? "speaking"
+            : StringComparer.OrdinalIgnoreCase.Equals(value, "reading") ? "reading"
+            : StringComparer.OrdinalIgnoreCase.Equals(value, "listening") ? "listening"
+            : null;
+
+        return normalized ?? throw ApiException.Validation(
+            "unsupported_diagnostic_subtest",
+            "Choose a supported diagnostic subtest.",
+            [new ApiFieldError("subtest", "unsupported", "Choose writing, speaking, reading, or listening.")]);
+    }
 
 
     private async Task<BillingPlan?> FindBillingPlanAsync(string planCode, CancellationToken cancellationToken)
@@ -7059,9 +7257,8 @@ public partial class LearnerService(
 
         await db.SaveChangesAsync(ct);
 
-        // TODO(Impl E): no learner-facing refund-status endpoint exists yet — add
-        // a regression test that captures current behaviour (refund status is only
-        // observable via /v1/billing/invoices) before introducing a new endpoint.
+        // Learners observe refund/payment status through billing invoices; wallet
+        // top-up session creation intentionally returns only the checkout contract.
         return response;
         }
         catch

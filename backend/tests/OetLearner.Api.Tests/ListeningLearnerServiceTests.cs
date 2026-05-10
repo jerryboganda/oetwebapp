@@ -1,3 +1,5 @@
+using System.Reflection;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Listening;
 
 namespace OetLearner.Api.Tests;
@@ -21,5 +23,38 @@ public class ListeningLearnerServiceTests
     public void ResolveAccessTier_MapsTokensToTiers(string? tagsCsv, string expected)
     {
         Assert.Equal(expected, ListeningLearnerService.ResolveAccessTier(tagsCsv));
+    }
+
+    [Fact]
+    public void PaperHomeDto_IncludesSubscriptionGateAndAccessTier()
+    {
+        var paper = new ContentPaper
+        {
+            Id = "listen-paper-locked",
+            Title = "Premium Listening Paper",
+            Slug = "premium-listening-paper",
+            Difficulty = "medium",
+            EstimatedDurationMinutes = 42,
+            TagsCsv = "medicine,access:premium",
+            ExtractedTextJson = """{"listeningQuestions":[{"id":"q1"}]}""",
+            Assets =
+            [
+                new ContentPaperAsset { Role = PaperAssetRole.Audio, IsPrimary = true },
+                new ContentPaperAsset { Role = PaperAssetRole.QuestionPaper, IsPrimary = true },
+                new ContentPaperAsset { Role = PaperAssetRole.AnswerKey, IsPrimary = true },
+                new ContentPaperAsset { Role = PaperAssetRole.AudioScript, IsPrimary = true }
+            ]
+        };
+
+        var method = typeof(ListeningLearnerService).GetMethod("PaperHomeDto", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var dto = method.Invoke(null, [paper, null, 0, true]);
+        Assert.NotNull(dto);
+
+        var dtoType = dto.GetType();
+        Assert.True((bool)dtoType.GetProperty("requiresSubscription")!.GetValue(dto)!);
+        Assert.Equal("premium", dtoType.GetProperty("accessTier")!.GetValue(dto));
+        Assert.Equal(1, dtoType.GetProperty("questionCount")!.GetValue(dto));
     }
 }

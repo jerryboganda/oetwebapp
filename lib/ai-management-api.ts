@@ -40,7 +40,7 @@ export type AiProviderDialect =
   | 'WhisperAsr'
   | 'AzurePhoneme'
   | 'Mock';
-export type AiProviderCategory = 'TextChat' | 'Tts' | 'Asr' | 'Phoneme';
+export type AiProviderCategory = 'TextChat' | 'Tts' | 'Asr' | 'Phoneme' | 'Ocr' | 'PdfExtraction';
 export type AiCredentialStatus = 'Active' | 'Invalid' | 'Revoked';
 
 export interface AiUsageRow {

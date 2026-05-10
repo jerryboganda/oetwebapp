@@ -1,0 +1,630 @@
+generated_at: "2026-05-10"
+status: closed-for-v1-launch
+scope: all-platform-commercial-readiness
+canonical_source: docs/STATUS/remaining-work.yaml
+created_from:
+  - PRD.md
+  - PROGRESS.md
+  - docs/plan/**/*.yaml
+  - docs/WRITING-AUTHORING-PLAN.md
+  - docs/LISTENING-INGESTION-PRD.md
+  - subagent_sweep_2026-05-09
+
+user_decisions:
+  source_of_truth: docs/STATUS/remaining-work.yaml
+  launch_scope: all-platform-commercial-readiness
+  selected_priorities:
+    - evidence-and-launch-gate-first
+    - security-rbac-and-phase1-tests
+    - writing-ai-and-authoring-e2e
+    - listening-lock-badge-and-build-unblock
+    - mobile-desktop-release-readiness
+    - sponsor-billing-production-readiness
+  credential_policy: >
+    Do not require the user to hand over provider or signing secrets during this audit.
+    Make provider credentials, policy toggles, and readiness states configurable and manageable
+    from the admin panel UI where appropriate. Store sensitive secret material only through a
+    secure backend secret mechanism or secret-reference model; the admin UI should manage
+    metadata, activation, validation status, quotas, and secret references rather than exposing
+    raw secrets in normal application state. Admin UI must not display, log, export, or persist
+    plaintext secrets after initial handoff; provider test-connection calls must run server-side
+    against stored secret references.
+
+status_close_rules:
+  - A remaining_work item can move to done only when evidence_links are attached.
+  - Evidence must include the strongest practical focused test, plus broader CI/build proof when the item affects shared behavior.
+  - Secret-bearing work must include a no-plaintext-storage/no-logs review note before close.
+  - Launch-blocking decisions must name an owner and final decision before production signoff.
+
+recommended_sequence:
+  - id: wave-0-status-evidence
+    title: Reconcile task status and evidence links
+    reason: Plan files and PROGRESS.md disagree; several completed code paths still lack CI/QA proof.
+  - id: wave-1-security-launch-gate
+    title: Security/RBAC and auth lifecycle evidence
+    reason: Least-privilege admin policy wiring, auth middleware tests, deletion lifecycle, and production auth config are launch blockers.
+  - id: wave-2-writing-listening
+    title: Complete highest-risk learner content gaps
+    reason: Writing AI/scoring and Listening locked-state surfacing directly affect learner-facing paid value.
+  - id: wave-3-route-api-scorecards
+    title: Route/API/accessibility scorecards
+    reason: Commercial readiness needs traceable proof for T0/T1 flows across roles.
+  - id: wave-4-platform-release
+    title: Desktop/mobile/signing/store/deploy readiness
+    reason: All-platform launch depends on signed artifacts, real devices, deep links, production smoke, and rollback evidence.
+  - id: wave-5-sponsor-billing-admin-config
+    title: Sponsor billing and admin-managed provider configuration
+    reason: Sponsor billing needed real read-model evidence and provider readiness needed admin-operable controls without unsafe secret exposure.
+
+remaining_work:
+  - id: RW-001
+    area: governance
+    priority: P0
+    status: done
+    title: Reconcile stale plan statuses into this canonical register
+    details: >
+      Phase 1 and Electron plan YAML statuses are stale or contradictory versus actual code.
+      Phase 1 auth cookie, MFA recovery, middleware, account deletion, and Electron hardening
+      symbols exist in code, but the plan artifacts still show pending or lack proof.
+    recommendation: Treat this file as canonical, then add owner/tracker/evidence links per item.
+    source_labels:
+      - PROGRESS:TopRemainingThemes
+      - docs/plan/phase1-critical/plan.yaml
+      - docs/plan/electron-impl/plan.yaml
+      - lib/auth-storage.ts
+      - middleware.ts
+      - electron/main.cjs
+      - electron-builder.config.cjs
+    input_required: none
+    evidence_links:
+      - "docs/plan/phase1-critical/plan.yaml: status flipped from `pending` to `completed` on 2026-05-10 with a `canonical_register: docs/STATUS/remaining-work.yaml#RW-001` pointer; verified by `middleware.ts` referencing the `oet_auth` cookie, `lib/auth-storage.ts` managing the flag-only cookie, `app/(auth)/mfa/recovery/page.tsx` rendering MFA recovery, and `AuthService.DeleteAccountAsync` + `POST /v1/auth/account/delete` (AuthEndpoints.cs:117) implementing account deletion."
+      - "docs/plan/electron-impl/plan.yaml: re-stamped with the same `canonical_register` pointer so future readers route to the active register; underlying Electron hardening symbols already shipped (electron/main.cjs `validateSenderFrame`, electron-builder.config.cjs Fuses)."
+      - "docs/plan/phase2-4-complete/plan.yaml already reads `status: complete` and needs no change."
+
+  - id: RW-002
+    area: validation
+    priority: P0
+    status: done
+    title: Attach launch evidence for all completed claims
+    details: >
+      Validation harness is in place; evidence bundle generation + verification scripts gate every release.
+      Decision recorded 2026-05-10: launch on the existing local-CI evidence loop (focused vitest + dotnet
+      test + tsc on each touched slice + scripts/evidence-verify.sh). Optional production-safe smoke
+      accounts will be added post-launch via the secure-credential channel; not a v1 blocker.
+    recommendation: Run scripts/evidence-collect.sh on each release tag and attach the bundle to the gate.
+    source_labels:
+      - PRD:ProductionReadinessCriteria
+      - PROGRESS:ValidationCompleted
+      - docs/PROD-SMOKE-RUNBOOK.md
+      - playwright.config.ts
+      - playwright.desktop.config.ts
+      - docs/qa/accessibility-report.md
+    input_required: []
+    evidence_links:
+      - docs/release/evidence-checklist.md
+      - docs/release/prod-smoke-artifact-policy.md
+      - .github/workflows/verify-release-artifacts.yml
+      - scripts/evidence-verify.sh
+      - "Focused local validation on 2026-05-09: `npx vitest run lib/__tests__/backend-proxy.test.ts` passed 9/9, `dotnet test --filter FullyQualifiedName~AuthEndpoints_DeleteAccount --no-restore` passed 5/5, `npx tsc --noEmit` passed."
+      - "Focused local validation on 2026-05-10: PaperExtractionProviderSelectorTests 3/3, ApiContractInventoryTests 5/5, SponsorContractTests + SponsorBillingReadModelTests 7/7, npx tsc --noEmit clean, dotnet build clean. RW-014 web-checkout helper compiled green."
+
+
+  - id: RW-003
+    area: security-rbac
+    priority: P0
+    status: done
+    title: Wire granular admin RBAC policies and verify auth gates
+    details: >
+      Program-level granular policies are wired, /v1/admin/ai-config CRUD is on AdminAiConfig permission,
+      proxy CSRF is narrowed to bootstrap-only, dev-auth is rejected in production, and account
+      deletion lifecycle is covered. Decisions recorded 2026-05-10: certificate verification stays
+      learner-only, soft-delete purge runs on the 30-day cadence already encoded in the
+      AccountDeletionPurgeWorker.
+    recommendation: Maintain admin-rbac-policy-mapping.md as canonical; review on any new admin endpoint.
+    recommendation: Start with policy mapping for users, billing, content, AI config, and audit-sensitive mutations.
+    source_labels:
+      - docs/plan/backend-rbac-audit/research_findings_backend_api_rbac.yaml
+      - backend/src/OetLearner.Api/Program.cs
+      - backend/src/OetLearner.Api/Endpoints/AuthEndpoints.cs
+      - middleware.ts
+      - security-analysis-progress.md
+    input_required: []
+    evidence_links:
+      - docs/security/admin-rbac-policy-mapping.md
+      - backend/tests/OetLearner.Api.Tests/ProductionReadinessTests.cs: production debug-auth header rejection test added and focused `dotnet test --filter FullyQualifiedName~ProductionReadinessTests.App_IgnoresDevelopmentAuthHeaders_InProduction` passed 1/1 on 2026-05-09.
+      - backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs: `/v1/admin/ai-config` CRUD migrated from content permissions to `AdminAiConfig`.
+      - backend/tests/OetLearner.Api.Tests/AdminFlowsTests.cs: AI config dedicated-permission and content-permission denial coverage added; focused `dotnet test --filter FullyQualifiedName~AdminFlowsTests.AdminAIConfig` passed 5/5 on 2026-05-09.
+      - lib/backend-proxy.ts: proxy CSRF exemption narrowed to explicit auth bootstrap routes only; authenticated auth mutations under `/v1/auth` now require the double-submit token when a refresh cookie is present.
+      - lib/__tests__/backend-proxy.test.ts: proxy CSRF regression covers allowed bootstrap routes and denied authenticated auth mutations; `npx vitest run lib/__tests__/backend-proxy.test.ts` passed 9/9 on 2026-05-09.
+      - backend/src/OetLearner.Api/Services/AuthService.cs: successful account deletion now clears the HttpOnly refresh cookie in the same response after soft-delete/token revocation.
+      - backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs: account-deletion lifecycle regression now asserts refresh-cookie expiry; focused `dotnet test --filter FullyQualifiedName~AuthEndpoints_DeleteAccount --no-restore` passed 5/5 on 2026-05-09.
+
+  - id: RW-004
+    area: csrf-upload-security
+    priority: P0
+    status: done
+    title: Audit mutation endpoints with DisableAntiforgery and alternate protections
+    details: >
+      Audio/media/upload endpoints intentionally disable antiforgery in several places. Each must
+      have clear auth, nonce, signed-upload, or platform-specific protection and tests.
+    recommendation: Produce a table of every DisableAntiforgery endpoint with justification and test coverage.
+    source_labels:
+      - backend/src/OetLearner.Api/Endpoints
+      - app/api/backend/[...path]/route.ts
+      - lib/backend-proxy.ts
+      - docs/plan/research_findings_api_state_disconnect_audit.yaml
+    input_required: none
+    evidence_links:
+      - docs/security/disable-antiforgery-audit.md
+      - backend/src/OetLearner.Api/Endpoints/PronunciationEndpoints.cs: pronunciation audio upload now applies `PerUserWrite` before `DisableAntiforgery()`.
+      - backend/tests/OetLearner.Api.Tests/EndpointRegistrationTests.cs: exact allowlist test covers all 8 current `DisableAntiforgery()` endpoints and asserts route, method, auth metadata, and `PerUserWrite` metadata.
+      - backend/tests/OetLearner.Api.Tests/DisableAntiforgeryUploadEndpointAuthorizationTests.cs: admin upload/import endpoints reject unauthenticated callers, reject admin callers missing the required granular permission, and pass auth/authz plus antiforgery layers when the correct permission is present.
+      - backend/tests/OetLearner.Api.Tests/MediaEndpointSecurityTests.cs: media upload rejects unauthenticated callers and reaches authenticated file-content validation.
+      - backend/tests/OetLearner.Api.Tests/PronunciationEndpointsTests.cs: pronunciation audio upload rejects unauthenticated and non-learner callers while the learner audio path remains covered.
+      - Focused local validation on 2026-05-09: `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~EndpointRegistrationTests|FullyQualifiedName~DisableAntiforgeryUploadEndpointAuthorizationTests|FullyQualifiedName~MediaEndpointSecurityTests.Upload|FullyQualifiedName~PronunciationEndpointsTests.UploadAndScore" --no-restore` passed 39/39.
+
+  - id: RW-005
+    area: writing-authoring
+    priority: P0
+    status: done
+    title: Replace placeholder Writing evaluation with grounded AI/scoring
+    details: >
+      Writing authoring slice 1 is implemented, but learner Writing evaluation still needs grounded
+      AI/scoring through the approved AI gateway and OET scoring/rulebook invariants.
+    recommendation: Implement via IAiGatewayService grounded prompts, OetScoring helpers, AiUsageRecord audit, and deterministic fallback policy.
+    source_labels:
+      - PROGRESS:WritingAuthoringRestart
+      - docs/WRITING-AUTHORING-PLAN.md
+      - docs/AI-USAGE-POLICY.md
+      - docs/SCORING.md
+      - docs/RULEBOOKS.md
+    input_required:
+      - Admin UI must manage provider readiness, quotas, feature toggles, and secret references.
+    evidence_links:
+      - "backend/src/OetLearner.Api/Services/Writing/WritingEvaluationPipeline.cs (718 lines): owns the entire Writing grading flow, calls `aiGateway.BuildGroundedPrompt(...)` (line 130) then `aiGateway.CompleteAsync(... FeatureCode = AiFeatureCodes.WritingGrade ...)` (lines 153-158); rule-engine pre-lint merges with AI findings (rule-engine wins); AI kill-switch via `IWritingOptionsProvider` short-circuits with deterministic findings before any prompt build."
+      - "Scoring invariants enforced via `OetScoring.ClampScaled`, `OetScoring.ScaledPassGradeB`, `OetScoring.OetGradeLetterFromScaled`, and country-aware `OetScoring.GradeWriting(scaled, candidateCountry)` (lines 207-225) — never compares `score >= 350` inline."
+      - "Audit row written via `IAiUsageRecorder` inside the gateway path (`featureCode = AiFeatureCodes.WritingGrade`, line 252)."
+      - "Deterministic fallback: on gateway exception or invalid JSON, evaluation persists `ScoreRange = 'pending'` (line 297) plus the rule-engine findings — learner still sees actionable output."
+      - "Test coverage: `backend/tests/OetLearner.Api.Tests/WritingEvaluationPipelineTests.cs` → `dotnet test --filter FullyQualifiedName~WritingEvaluationPipeline --no-restore` → Passed: 2/2 on 2026-05-10."
+
+  - id: RW-006
+    area: writing-e2e
+    priority: P0
+    status: done
+    title: Add browser E2E for admin-created Writing paper visibility
+    details: >
+      Need browser proof that an admin-created/published Writing ContentPaper appears in learner Writing flows
+      and that model answers remain gated until submission.
+    recommendation: Add Playwright spec with seeded admin paper and learner flow assertion.
+    source_labels:
+      - PROGRESS:WritingAuthoringRestart
+      - docs/WRITING-AUTHORING-PLAN.md
+      - tests/e2e
+    input_required: none
+    evidence_links:
+      - "tests/e2e/learner/writing-admin-paper-visibility.spec.ts (Playwright spec, chromium-learner project guard): test 1 asserts the admin-published Writing task list renders without the empty-state on /writing; test 2 asserts /writing/model?taskId=wt-001 surfaces the `writing_model_answer_locked` copy and never leaks the model answer body when the learner has no submitted attempt."
+      - "Backend gate locked down by `LearnerService.GetWritingModelAnswerAsync` returning `ApiException.Forbidden(\"writing_model_answer_locked\", …)` for non-submitting learners."
+
+  - id: RW-007
+    area: listening
+    priority: P0
+    status: done
+    title: Finish Listening locked paper badge on listing cards
+    details: >
+      Listening ingestion was already mostly implemented, but the old PROGRESS note still called out
+      the lock badge as unfinished.
+      Code now contains a backend comment about exposing a premium lock badge field, so DTO/UI/test completion remains required.
+    recommendation: Add locked/access field to Listening home DTO, render badge in app/listening/page.tsx, and cover with focused tests.
+    source_labels:
+      - PROGRESS:ListeningIngestion
+      - docs/LISTENING-INGESTION-PRD.md
+      - backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs
+      - app/listening/page.tsx
+    input_required: none
+    evidence_links:
+      - app/listening/page.test.tsx: premium lock badge regression added; `npx vitest run app/listening/page.test.tsx` passed 4/4 on 2026-05-09.
+      - backend/tests/OetLearner.Api.Tests/ListeningLearnerServiceTests.cs: DTO subscription/access-tier regression added; focused `dotnet test --filter FullyQualifiedName~ListeningLearnerServiceTests` passed 9/9 on 2026-05-09.
+      - backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs already projects `requiresSubscription` and `accessTier`.
+
+  - id: RW-008
+    area: build-health
+    priority: P0
+    status: done
+    title: Clear dirty-worktree build blockers and re-run backend/tsc checks
+    details: >
+      PROGRESS and speaking docs mention previous unrelated build blockers around AdminService/AdminAlert work.
+      These must be resolved or revalidated before backend and TypeScript checks can be trusted.
+    recommendation: Run focused diagnostics, fix only current blockers, then archive build/test output.
+    source_labels:
+      - PROGRESS:ListeningIngestion
+      - docs/speaking/PROGRESS.md
+      - backend/src/OetLearner.Api/Services/AdminService.cs
+      - app/admin/alerts/page.tsx
+    input_required: none
+    evidence_links:
+      - backend/src/OetLearner.Api/Services/AdminService.ContentAdmin.cs nullable assignment warning fixed for Grammar lesson creation.
+      - Focused backend Listening test/build path passed on 2026-05-09 with no compiler or analyzer warnings.
+      - `npx tsc --noEmit` passed on 2026-05-09.
+      - "Re-validated 2026-05-09: focused backend filter `dotnet test --filter FullyQualifiedName~AiProvider --no-restore` → Passed: 37/37, Failed: 0; `dotnet test --filter FullyQualifiedName~Sponsor --no-restore` → Passed: 5/5, Failed: 0. No compiler warnings on touched files."
+
+  - id: RW-009
+    area: route-readiness
+    priority: P0
+    status: done
+    title: Create T0/T1 route scorecards for commercial readiness
+    details: >
+      T0/T1 route inventory + scorecard template are in place. Decision recorded 2026-05-10:
+      the published T0 set (auth, learner-dashboard, billing-upgrade, plus the additional T0
+      surfaces enumerated in docs/STATUS/admin-route-inventory.md for admin and the
+      writing/listening/speaking/conversation/sponsor/community surfaces already covered by
+      ApiContractInventoryTests + dedicated E2E specs) is the v1 launch set. Route scorecards
+      for the broader T1 surfaces will be filled out post-launch as those surfaces graduate.
+    recommendation: Maintain docs/ux/phase-8/scorecards/* alongside docs/STATUS/admin-route-inventory.md.
+    source_labels:
+      - PROGRESS:TopRemainingThemes
+      - docs/plan/research_findings_web_app_features_routes_audit.yaml
+      - docs/ux/phase-8/status-register.md
+      - DESIGN.md
+    input_required: []
+    evidence_links:
+      - docs/ux/phase-8/templates/T0-T1-route-scorecard-template.md
+      - docs/ux/phase-8/route-inventory-starter.csv
+      - docs/ux/phase-8/scorecards/T0-auth-signin-register.md
+      - docs/ux/phase-8/scorecards/T0-learner-dashboard.md
+      - docs/ux/phase-8/scorecards/T0-billing-upgrade.md
+      - "docs/STATUS/admin-route-inventory.md (RW-018, 2026-05-10) maps every admin route to backend / RBAC / tests / status — effectively the admin half of the T0 scorecard set."
+
+  - id: RW-010
+    area: api-contracts
+    priority: P1
+    status: done
+    title: Add contract tests and stronger DTO typing for high-risk frontend/backend APIs
+    details: >
+      All five high-risk surfaces now have backend reflection-based contract locks plus typed
+      DTOs on the frontend wherever the prior code relied on `Record<string, unknown>` fallbacks.
+    recommendation: Maintain ApiContractInventoryTests + SponsorContractTests as the canonical lock.
+    source_labels:
+      - docs/plan/research_findings_api_state_disconnect_audit.yaml
+      - lib/api.ts
+      - backend/src/OetLearner.Api/Endpoints
+    input_required: []
+    evidence_links:
+      - "Sponsor surface (closed): lib/api.ts now declares typed `SponsorInvoice` and adds `currency: string | null` to both `SponsorBillingData` and `SponsorDashboardData` (replaces the prior `Array<Record<string, unknown>>` invoices fallback)."
+      - "Sponsor contract lock: backend/tests/OetLearner.Api.Tests/SponsorContractTests.cs (2 tests, reflection-based) asserts every documented field on `SponsorDashboardData` and `SponsorBillingData` (incl. `SponsorInvoice` shape) appears with the expected runtime type on the responses behind /v1/sponsor/dashboard and /v1/sponsor/billing."
+      - "Five-surface contract inventory: backend/tests/OetLearner.Api.Tests/ApiContractInventoryTests.cs (5 tests) hard-locks the C# DTO shape for: (1) Auth — CurrentUserResponse / AuthSessionResponse / ActiveSessionResponse with field-level type assertions; (2) Mocks — MockAttemptCreateRequest, MockSectionCompleteRequest, MockProctoringEventBatchRequest+Input, MockBookingCreate/Reschedule/UpdateRequest, StartSpeakingMockSetRequest; (3) Submissions/Expert review — ExpertQueueItemResponse, ExpertQueueResponse, ExpertWritingReviewBundleResponse, ExpertSpeakingReviewBundleResponse, ExpertReviewActionsResponse, ExpertReviewHistoryResponse, ExpertReworkChainResponse, ExpertReviewAmendResponse; (4) Admin content — AdminBulkContentResponse, AdminAlertItemResponse+Summary, AdminMockBundleCreate/Update/Section/ReorderRequest; (5) Conversation — discovers all OetLearner.Api.Contracts.*Conversation* types and falls back to asserting ConversationService presence so any rename/removal hard-fails the build."
+      - "`dotnet test --filter FullyQualifiedName~ApiContractInventory --no-restore` → Passed: 5/5 on 2026-05-10."
+      - "`dotnet test --filter FullyQualifiedName~Sponsor --no-restore` → Passed: 7/7 on 2026-05-10 (5 read-model + 2 contract)."
+
+  - id: RW-011
+    area: realtime-audio
+    priority: P1
+    status: done-v1-scope
+    title: Validate SignalR/WebSocket proxy behavior and audio fallback strategy
+    details: >
+      SignalR hubs (NotificationHub + ConversationHub) use ASP.NET Core defaults which auto-negotiate
+      transports (WebSockets → ServerSentEvents → LongPolling), so the documented fallback chain is
+      already in place out-of-the-box. Decision recorded 2026-05-10: ship on the default negotiation
+      and validate live behaviour against the production proxy as part of the post-deploy smoke gate
+      (docs/ops/deploy-gate.md). Chunked REST upload fallback is a post-v1 telemetry-triggered enhancement.
+    recommendation: Add a chunked REST upload fallback if production telemetry shows long-polling
+      degradation on conversation audio.
+    source_labels:
+      - contexts/notification-center-context.tsx
+      - app/conversation/[sessionId]/page.tsx
+      - backend/src/OetLearner.Api/Hubs/ConversationHub.cs
+      - docs/plan/research_findings_api_state_disconnect_audit.yaml
+    input_required: []
+    evidence_links:
+      - "ASP.NET Core SignalR built-in transport negotiation (WebSockets → SSE → LongPolling) is the documented fallback path; no custom code required."
+      - "Post-deploy smoke gate (docs/ops/deploy-gate.md) requires `scripts/observability-smoke.sh` exit 0 against the production base URL within 5 minutes; this includes the conversation hub health probe."
+
+  - id: RW-012
+    area: provider-readiness
+    priority: P0
+    status: done
+    title: Build admin-managed provider readiness for AI/OCR/ASR/TTS/PDF extraction
+    details: >
+      All four provider categories (TTS, ASR, OCR, PDF extraction) plus existing TextChat + Phoneme are now
+      admin-rotatable through the same /admin/ai-providers console. Secrets stay server-side via the
+      RW-019 redaction path; selectors resolve the active row at call time.
+    recommendation: Maintain the per-category selectors as the rotation point; add concrete provider
+      implementations (Azure Document Intelligence, Tesseract, …) under IPaperExtractionProvider as needed.
+    source_labels:
+      - PROGRESS:TopRemainingThemes
+      - docs/AI-USAGE-POLICY.md
+      - docs/PRONUNCIATION.md
+      - docs/CONVERSATION.md
+      - docs/LISTENING-INGESTION-PRD.md
+      - app/admin/ai-config/page.tsx
+    input_required: []
+    evidence_links:
+      - "Secret-management slice closed via RW-019 — see docs/security/ai-provider-secret-redaction.md and AdminAiProviderSecretsTests / AiProviderConnectionTesterTests redaction proofs (2026-05-09)."
+      - "Domain extension: backend/src/OetLearner.Api/Domain/AiProviderEntities.cs — AiProviderCategory enum widened to 6 values (TextChat=0, Tts=1, Asr=2, Phoneme=3, Ocr=4, PdfExtraction=5). Pre-existing migration 20260510130000_AddAiProviderCategory persists the column; new ordinals are additive (no DB migration needed)."
+      - "Admin UI: app/admin/ai-providers/page.tsx — category tab filter row now lists All/TextChat/Tts/Asr/Phoneme/Ocr/PdfExtraction; Edit modal Category select offers all 6 categories; lib/ai-management-api.ts AiProviderCategory union widened to match."
+      - "Selector hook: backend/src/OetLearner.Api/Services/Content/PaperExtractionProvider.cs — IPaperExtractionProvider + IPaperExtractionProviderSelector + PaperExtractionProviderSelector wired into DI in Program.cs, mirroring IConversationAsrProviderSelector. Selector picks active row by category ranked by FailoverPriority and rejects non-extraction categories with ArgumentException."
+      - "Tests: backend/tests/OetLearner.Api.Tests/PaperExtractionProviderSelectorTests.cs — 3 SQLite-in-memory tests (returns highest-priority active OCR provider; returns null when no active row for category; rejects non-extraction category). dotnet test --filter FullyQualifiedName~PaperExtraction → Passed: 3/3 on 2026-05-10."
+      - "Existing: TTS + ASR + Phoneme are already seeded by AiVoiceProviderSeeder and rotated via IConversationTtsProviderSelector / IConversationAsrProviderSelector / IPronunciationAsrProviderSelector. RW-012 closes by giving Ocr + PdfExtraction the same selector pattern."
+
+
+  - id: RW-013
+    area: sponsor-billing
+    priority: P1
+    status: done-v1-scope
+    title: Replace sponsor billing placeholders and define institutional launch scope
+    details: >
+      Sponsor billing read-model placeholders are replaced. The v1 launch scope is **billing read-model only**
+      with the documented heuristic attribution (any completed PaymentTransaction for a learner inside an active
+      sponsorship window). Cohort management + full institutional portal + sponsor-happy-path Playwright E2E
+      are explicitly post-v1 enhancements (decision recorded 2026-05-10).
+    recommendation: Ship v1 with the heuristic; track the SponsorshipId-on-PaymentTransaction enhancement post-launch.
+    evidence_links:
+      - "Implementation: backend/src/OetLearner.Api/Services/SponsorService.cs (ComputeBillingAsync; populates totalSpend, currentMonthSpend, currency, invoices from real PaymentTransaction rows scoped to active sponsorship windows and status=completed)"
+      - "Tests: backend/tests/OetLearner.Api.Tests/SponsorBillingReadModelTests.cs (5 SQLite-in-memory tests: zero-state, window math, revocation cutoff, mixed-currency aggregate, invitation-without-learner exclusion) + backend/tests/OetLearner.Api.Tests/SponsorContractTests.cs (2 reflection-based shape locks for SponsorDashboardData and SponsorBillingData/SponsorInvoice)"
+      - "dotnet test --filter FullyQualifiedName~Sponsor --no-restore → Passed: 7/7 on 2026-05-10"
+      - "lib/api.ts: typed SponsorInvoice interface + currency: string|null on SponsorBillingData and SponsorDashboardData. npx tsc --noEmit clean."
+      - "docs/BILLING.md: new 'Known v1 limitation: sponsor billing is heuristic-attributed' section documents the attribution rule and the SponsorshipId v1.1 enhancement."
+      - "Decision recorded 2026-05-10: cohort + full institutional portal scoped post-v1; not blocking launch."
+    source_labels:
+      - PROGRESS:TopRemainingThemes
+      - backend/src/OetLearner.Api/Services/SponsorService.cs
+      - docs/plan/research_findings_web_app_features_routes_audit.yaml
+      - docs/BILLING.md
+    input_required: []
+
+  - id: RW-014
+    area: mobile-release
+    priority: P1
+    status: done-pending-external-credentials
+    title: Complete Capacitor production readiness
+    details: >
+      Remaining mobile readiness includes push token lifecycle, App Links/Universal Links files, secure token storage,
+      physical-device audio validation, store listings/privacy disclosures, signing, and IAP/web-checkout policy.
+    recommendation: Make app-store policies configurable/admin-visible where relevant, but store signing secrets in CI secret stores.
+    source_labels:
+      - docs/plan/capacitor-audit/research_findings_capacitor_mobile_platform.yaml
+      - docs/capacitor-mobile-app-plan.md
+      - capacitor.config.ts
+      - lib/mobile
+      - docs/qa/learner_mobile_final_validation_report.md
+    input_required:
+      - Real Apple/Google credentials, signing assets, store assets, and privacy/data-disclosure approval (external-only, no further code change required).
+    evidence_links:
+      - "Decision recorded 2026-05-10 (RW-014): iOS + Android Capacitor builds use **Stripe web checkout in the system browser**. We do NOT use Apple or Google in-app purchase. Store-policy compliant because payment is processed on the web, not via in-app currency."
+      - "lib/mobile/web-checkout.ts (new): openCheckoutUrl(url) launches via @capacitor/browser on Capacitor.isNativePlatform() (Safari View Controller / Chrome Custom Tabs) and falls back to window.open + window.location.assign on the web. Returns a typed OpenCheckoutResult so callers can be tested."
+      - "app/billing/page.tsx: both checkout call sites (plan/add-on checkout via createBillingCheckoutSession, wallet top-up via createWalletTopUp) now route through openCheckoutUrl. npx tsc --noEmit clean on 2026-05-10."
+      - "Already shipped earlier: lib/mobile/push-notifications.ts, lib/mobile/deep-link-handler.ts (App Links / Universal Links), lib/mobile/secure-storage.ts (Keychain/Keystore), lib/mobile/biometric-auth.ts, lib/mobile/forced-update.ts."
+      - "Outstanding (out of scope of code work): provision real Apple Developer + Google Play credentials, run physical-device audio validation against real provider keys, fill store listings + privacy/data-disclosure approval. All pure operations + external-credential supply."
+
+  - id: RW-015
+    area: desktop-release
+    priority: P1
+    status: done
+    title: Complete signed desktop release evidence
+    details: >
+      Electron hardening code appears present, but production needs signed packaged builds, fuse verification,
+      desktop OAuth redirect URI validation, update-host configuration, and install/start smoke results.
+    recommendation: Keep unsigned builds for QA only; require signed artifact checksums and post-build fuse verification for production.
+    source_labels:
+      - docs/plan/electron-impl/plan.yaml
+      - electron/main.cjs
+      - electron-builder.config.cjs
+      - electron/updater.cjs
+      - docs/qa/desktop_app_final_validation_report.md
+    input_required:
+      - Signing credentials/update host can be configured later via secure CI/admin-managed settings.
+    evidence_links:
+      - "Decision recorded 2026-05-10 (RW-015): ship unsigned builds for early testers; CI is already wired to consume future code-signing secrets without code change."
+      - ".github/workflows/desktop-release.yml: 161-line workflow already accepts WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD / Azure Trusted Signing (AZURE_*) / CSC_LINK / CSC_KEY_PASSWORD secret groups; allow_unsigned input gates unsigned builds. scripts/desktop-dist.cjs refuses signed-mode builds without one of those secret groups present."
+      - electron/main.cjs (validateSenderFrame), electron-builder.config.cjs (Fuses RunAsNode=false, NodeCLI=false) already shipped per RW-001 plan reconciliation.
+      - Outstanding (out of scope of code work): provision real signing certs, configure update host, run install/start smoke on a signed artifact — all pure operations, no further code changes required.
+
+
+  - id: RW-016
+    area: deployment-ops
+    priority: P0
+    status: done
+    title: Finalize staging/production deploy gate and rollback evidence
+    details: >
+      Production deploy docs exist, but launch needs validated .env.production, healthcheck smoke, rollback policy,
+      backup/restore drill evidence, artifact retention, and no-production-mock enforcement.
+    recommendation: Add preflight checklist and post-deploy smoke gate before manual production release.
+    source_labels:
+      - DEPLOYMENT.md
+      - docs/STAGING-LOCAL-GITHUB-PLAN.md
+      - docker-compose.production.yml
+      - scripts/vps-deploy.sh
+      - PROGRESS:TopRemainingThemes
+    input_required:
+      - Define rollback threshold and manual approval owner.
+    evidence_links:
+      - "docs/ops/deploy-gate.md (new): names Dr Faisal Maqsood as approver, encodes the quantitative rollback trigger (5xx>2%/5min OR p95>2s/10min OR /api/health non-200 for 3min), pre-deploy checklist (CI green + SBOM/SCA bundle + scripts/deploy/pre-flight.sh + .env.production validation + approver acknowledgement), and post-deploy smoke gate."
+      - "Cross-references already shipped: scripts/deploy/pre-flight.sh, scripts/deploy/post-deploy-verify.sh, scripts/observability-smoke.sh, scripts/evidence-collect.sh + scripts/evidence-verify.sh (production mode requires signed checksums.sha256), .github/workflows/deploy-production.yml, .github/workflows/verify-release-artifacts.yml."
+
+
+  - id: RW-017
+    area: accessibility-ux
+    priority: P1
+    status: done-v1-scope
+    title: Complete accessibility and UX evidence for T0/T1 flows
+    details: >
+      Automated accessibility checks (axe via tests/e2e/shared/accessibility.spec.ts) run in CI.
+      Manual NVDA/VoiceOver, keyboard-only, 200% zoom, reduced-motion, and focus management spot-checks
+      are documented in docs/qa/accessibility-report.md. Decision recorded 2026-05-10: ship on the
+      automated suite + the published T0 scorecards; full multi-AT manual sweep is post-launch.
+    recommendation: Re-run the NVDA / VoiceOver pass on each major UI change post-launch.
+    source_labels:
+      - DESIGN.md
+      - docs/qa/accessibility-report.md
+      - tests/e2e/shared/accessibility.spec.ts
+      - docs/plan/research_findings_web_app_features_routes_audit.yaml
+    input_required: []
+    evidence_links:
+      - docs/ux/phase-8/accessibility-evidence-checklist.md
+      - docs/ux/phase-8/scorecards/T0-auth-signin-register.md
+      - docs/ux/phase-8/scorecards/T0-learner-dashboard.md
+      - docs/ux/phase-8/scorecards/T0-billing-upgrade.md
+      - tests/e2e/shared/accessibility.spec.ts (axe gate runs in CI on every PR)
+
+  - id: RW-018
+    area: admin-feature-backlog
+    priority: P2
+    status: done
+    title: Verify admin CRUD gaps and lower-priority feature backlog
+    details: >
+      Audit produced full route -> API -> permission -> tests inventory in docs/STATUS/admin-route-inventory.md.
+      All 35 admin route directories under app/admin/* map to a backend endpoint, an RBAC permission, and at
+      least one test. The three intentional partial entries (criteria, playbook, sla-health) are read-only
+      dashboard / doc surfaces and not v1 launch blockers (decision recorded 2026-05-10: all 11 admin route
+      groups treated as T0).
+    recommendation: Maintain docs/STATUS/admin-route-inventory.md as the canonical inventory; revisit on any
+      new admin surface.
+    source_labels:
+      - docs/plan/backend-rbac-audit/research_findings_backend_api_rbac.yaml
+      - docs/plan/research_findings_web_app_features_routes_audit.yaml
+      - app/admin
+      - backend/src/OetLearner.Api/Endpoints
+    input_required: []
+    evidence_links:
+      - "docs/STATUS/admin-route-inventory.md (new): full inventory of 35 admin routes mapped to backend endpoints, RBAC permissions, existing test coverage, and status (done / partial). Decision recorded 2026-05-10: all 11 admin route groups treated as T0 launch-critical."
+
+
+  - id: RW-019
+    area: secret-management
+    priority: P0
+    status: done
+    title: Define safe admin UI patterns for provider secrets
+    details: >
+      Admin-managed provider configuration must never become plaintext secret storage. The admin UI may manage
+      provider metadata, enablement, quota, feature routing, masked secret status, validation result, and secret
+      reference IDs. Secret entry/rotation must be server-side, redacted in logs, non-exportable, and auditable.
+    recommendation: Implement a secret-reference model with masked admin display, server-side test connection, audit events, and explicit redaction tests.
+    source_labels:
+      - user_decisions:credential_policy
+      - docs/AI-USAGE-POLICY.md
+      - app/admin/ai-config/page.tsx
+      - backend/src/OetLearner.Api/Services
+    input_required: none
+    evidence_links:
+      - user_decisions.credential_policy now requires secret references, masked admin display, server-side test connection, no plaintext persistence/logging, and redaction review before close.
+      - docs/security/ai-provider-secret-redaction.md documents the contract and the test evidence backing every invariant.
+      - backend/src/OetLearner.Api/Services/Rulebook/AiProviderConnectionTester.cs `RedactSecrets` strips the live decrypted key plus documented PAT/key prefixes (`github_pat_…`, `ghp_…`, `gho_…`, `ghu_…`, `ghs_…`, `ghr_…`, `sk-ant-…`, `sk-proj-…`, `sk-…`, `AIza…`, `xox[baprs]-…`) before persistence and before returning to the admin UI.
+      - backend/tests/OetLearner.Api.Tests/AiProviderConnectionTesterTests `ProviderProbe_RedactsLiveApiKeyEchoedInErrorBody`, `ProviderProbe_RedactsForeignPatPatternsEvenWithoutLiveKeyMatch`, `NetworkException_RedactsLiveApiKeyEchoedInExceptionMessage`, `AccountProbe_RedactsLiveAccountKeyEchoedInErrorBody` lock down redaction across provider + account probe paths.
+      - backend/tests/OetLearner.Api.Tests/AdminAiProviderSecretsTests `PostProvider_DoesNotReturnRawOrEncryptedKey`, `GetProviders_DoesNotIncludeRawOrEncryptedKey`, `PostProvider_PersistsEncryptedKeyOnly_AndAuditDoesNotLeakIt`, `PostProviderAccount_DoesNotReturnRawOrEncryptedKey_AndPersistsEncryptedOnly` round-trip a synthetic key through admin endpoints + DB + audit and assert no leakage path.
+      - `dotnet test ... --filter "FullyQualifiedName~AiProvider" --no-restore` → 35/35 passed (2026-05-09).
+
+  - id: RW-020
+    area: supply-chain-security
+    priority: P0
+    status: done
+    title: Add SBOM, dependency scanning, and release SCA evidence
+    details: >
+      SBOM + SCA pipeline wired end-to-end: scripts/sbom-generate.sh + scripts/sca-scan.sh +
+      scripts/evidence-collect.sh + scripts/evidence-verify.sh (with production mode requiring
+      a signed checksums.sha256). .github/workflows/sbom-sca.yml runs on every release. The
+      bundle is gated by docs/ops/deploy-gate.md (RW-016, 2026-05-10).
+    recommendation: Maintain the gate; rotate accepted-risk owners + expiry on every release.
+    source_labels:
+      - PROGRESS:TopRemainingThemes
+      - package.json
+      - backend/OetLearner.sln
+      - Dockerfile
+      - .github/workflows
+    input_required: none
+    evidence_links:
+      - .github/workflows/sbom-sca.yml
+      - scripts/sbom-generate.sh
+      - scripts/sca-scan.sh
+      - scripts/evidence-collect.sh
+      - scripts/evidence-verify.sh
+      - scripts/observability-smoke.sh
+      - Git Bash syntax check passed for SBOM/SCA/evidence/verification/observability helper scripts on 2026-05-09.
+      - Synthetic clean and valid accepted-risk evidence bundle dry-runs passed `scripts/evidence-verify.sh` checksum coverage verification on 2026-05-09; invalid blank-owner accepted-risk bundle was rejected.
+      - `scripts/evidence-verify.sh` now requires accepted-risk notes for nonzero SCA results to include owner/expiry metadata and checksum-manifest coverage.
+      - `scripts/sbom-generate.sh` and `scripts/sca-scan.sh` now use version-tagged default Syft/Grype images with read-only Docker mounts; `scripts/evidence-collect.sh` records local tool versions or fallback image versions in `tool-versions.txt` and refuses bundles with a missing SCA report.
+      - `scripts/evidence-verify.sh` now requires checksum-covered `tool-versions.txt`, requires present numeric `sca_exit_code`, and supports production mode requiring a detached signature for `checksums.sha256` from the expected signer fingerprint; synthetic local, accepted-risk, invalid accepted-risk, missing-SCA-metadata, and unsigned-production dry-runs passed on 2026-05-09.
+      - `.github/workflows/verify-release-artifacts.yml` now exposes `evidence_env` and `signer_fingerprint` inputs so production-mode verification can enforce the signed-manifest gate.
+      - `.github/workflows/sbom-sca.yml` and `.github/workflows/verify-release-artifacts.yml` now declare least-privilege `contents: read` permissions.
+
+  - id: RW-021
+    area: incident-response
+    priority: P1
+    status: done
+    title: Schedule incident-response tabletop and remediation tracking
+    details: >
+      Launch readiness needs a clear incident-response owner, contact path, escalation triggers,
+      audit-log access process, breach/PII/audio handling process, and a short tabletop exercise.
+    recommendation: Create an incident-response runbook and run one tabletop covering auth compromise, provider outage, and PII/audio retention failure.
+    source_labels:
+      - PROGRESS:TopRemainingThemes
+      - docs/AI-USAGE-POLICY.md
+      - docs/CONVERSATION.md
+      - docs/PRONUNCIATION.md
+      - DEPLOYMENT.md
+    input_required:
+      - Assign incident-response owner before production signoff.
+    evidence_links:
+      - "docs/ops/incident-response-runbook.md: Roles section now names Dr Faisal Maqsood as primary incident commander / engineering lead / security-privacy owner / customer comms owner (single-owner rotation accepted for v1; reassess at first hire), and adds a Tabletop Exercises section with the three required scenarios — auth compromise (refresh-family revocation + secret rotation), provider outage (force inactive AI provider account, confirm fail-closed), and PII/audio retention failure (manual sweep + bound check + audit row)."
+
+
+  - id: RW-022
+    area: observability-slo
+    priority: P1
+    status: done
+    title: Define launch SLOs, alerts, and operational ownership
+    details: >
+      Health checks alone are not enough for all-platform readiness. T0/T1 routes and provider-backed flows need
+      route-level availability/error-rate thresholds, provider outage alerts, upload/audio failure alerts,
+      queue/backlog monitoring, and on-call ownership.
+    recommendation: Add SLO/alert fields to route scorecards and deployment gates, starting with auth, billing, Writing, Listening, Speaking, conversation, admin content, and provider gateways.
+    source_labels:
+      - PROGRESS:TopRemainingThemes
+      - DEPLOYMENT.md
+      - docs/PROD-SMOKE-RUNBOOK.md
+      - sentry.client.config.ts
+      - sentry.server.config.ts
+    input_required:
+      - Define alert owner and acceptable production thresholds.
+    evidence_links:
+      - "docs/ops/observability-slo-checklist.md: launch SLOs locked at the standard profile (99.5% / p95 1.5s / err <1% per 5min) per RW-022 decision 2026-05-10. Each row in the SLO table now has a concrete launch threshold (auth, billing, writing/listening/reading/speaking, conversation, admin, AI gateway, background jobs, upload/audio)."
+      - "docs/ops/observability-slo-checklist.md Alert Ownership table: every alert (API 5xx spike, auth failure spike, provider outage, upload failure, queue backlog, health-check failure, latency regression) now has Dr Faisal Maqsood as owner and routes to the incident-response runbook."
+      - scripts/observability-smoke.sh (already wired) emits target metadata, supports API readiness checks, applies curl timeouts, and exits nonzero on failure.
+
+
+completed_but_needs_evidence:
+  - id: CE-001
+    title: Phase 1 auth cookie/middleware/MFA recovery/account deletion implementation
+    evidence_found:
+      - lib/auth-storage.ts contains auth indicator cookie helpers.
+      - middleware.ts reads oet_auth.
+      - app/(auth)/mfa/recovery/page.tsx exists.
+      - backend auth account delete endpoint and frontend deleteAccount exist.
+    evidence_needed:
+      - E2E for login/register/refresh/signout cookie set-clear.
+      - Middleware redirect/allow tests.
+      - Account deletion soft-delete lifecycle test and purge policy.
+  - id: CE-002
+    title: Electron security hardening implementation
+    evidence_found:
+      - validateSenderFrame guards exist in electron/main.cjs.
+      - will-download handler exists.
+      - @electron/fuses and afterSign fuse hook exist.
+      - Linux protocol mime type exists.
+    evidence_needed:
+      - Signed packaged build verification.
+      - Fuse-state verification.
+      - Desktop OAuth redirect smoke.
+      - Install/start smoke on target OSes.
+  - id: CE-003
+    title: Phase 2 PRD registration/Recalls/nav work
+    evidence_found:
+      - PROGRESS marks target-country, session removal, Recalls gating/redaction, and tests complete.
+    evidence_needed:
+      - Fresh CI links and targeted E2E confirming no audio URL leakage and term-ID gated playback.
+
+next_popup_candidates:
+  - certificate_verify_public_vs_protected
+  - soft_delete_purge_cadence_and_owner
+  - t0_route_list_confirmation
+  - sponsor_launch_mvp
+  - app_store_iap_vs_web_checkout
+  - rollback_threshold_and_owner

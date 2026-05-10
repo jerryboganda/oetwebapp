@@ -19,10 +19,15 @@ export interface UpdateCheckResult {
 
 // ── Configuration ───────────────────────────────────────────────
 
-const STORE_URLS = {
-  android: 'https://play.google.com/store/apps/details?id=com.oetprep.learner',
-  ios: 'https://apps.apple.com/app/oet-prep-learner/id0000000000', // Replace with actual App Store ID
-} as const;
+const DEFAULT_ANDROID_STORE_URL = 'https://play.google.com/store/apps/details?id=com.oetprep.learner';
+
+function getStoreUrl(platform: 'android' | 'ios'): string | null {
+  if (platform === 'android') {
+    return process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL || DEFAULT_ANDROID_STORE_URL;
+  }
+
+  return process.env.NEXT_PUBLIC_IOS_APP_STORE_URL || null;
+}
 
 // ── Version Retrieval ───────────────────────────────────────────
 
@@ -90,7 +95,7 @@ export async function checkForUpdate(
   }
 
   const platform = appVersion.platform as 'android' | 'ios';
-  const storeUrl = STORE_URLS[platform] ?? null;
+  const storeUrl = getStoreUrl(platform);
 
   try {
     const response = await fetch(versionCheckUrl, {
@@ -141,7 +146,7 @@ export async function checkForUpdate(
 
 export async function openAppStore(): Promise<void> {
   const platform = Capacitor.getPlatform() as 'android' | 'ios';
-  const storeUrl = STORE_URLS[platform];
+  const storeUrl = getStoreUrl(platform);
 
   if (!storeUrl) {
     return;

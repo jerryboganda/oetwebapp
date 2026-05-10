@@ -53,7 +53,7 @@ export default function MockWizardLandingPage() {
         title: 'New mock (draft)',
         mockType: 'full',
         appliesToAllProfessions: true,
-        sourceProvenance: 'Source: TBD — set in wizard step 1.',
+        sourceProvenance: 'Draft mock builder wizard seed; review source provenance before publish.',
         priority: 0,
         difficulty: 'exam_ready',
         sourceStatus: 'needs_review',

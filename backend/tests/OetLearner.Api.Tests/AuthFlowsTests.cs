@@ -577,6 +577,10 @@ public class AuthFlowsTests
 
         var deleteResponse = await harness.Client.SendAsync(deleteRequest);
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+        Assert.Contains(deleteResponse.Headers.GetValues("Set-Cookie"), value =>
+            value.StartsWith("oet_rt=", StringComparison.OrdinalIgnoreCase)
+            && value.Contains("expires=", StringComparison.OrdinalIgnoreCase)
+            && value.Contains("path=/", StringComparison.OrdinalIgnoreCase));
 
         // Verify soft-delete fields
         await using var scope = harness.Factory.Services.CreateAsyncScope();

@@ -1,11 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import type { WritingTask, WritingSubmission } from '@/lib/mock-data';
 
-const { mockFetchWritingHome, mockFetchWritingTasks, mockFetchWritingSubmissions, mockFetchMockReports, mockTrack } = vi.hoisted(() => ({
+const { mockFetchWritingHome, mockFetchWritingTasks, mockFetchWritingSubmissions, mockFetchMockReports, mockFetchWritingEntitlement, mockTrack } = vi.hoisted(() => ({
   mockFetchWritingHome: vi.fn(),
   mockFetchWritingTasks: vi.fn(),
   mockFetchWritingSubmissions: vi.fn(),
   mockFetchMockReports: vi.fn(),
+  mockFetchWritingEntitlement: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -29,6 +30,7 @@ vi.mock('@/lib/api', () => ({
   fetchWritingTasks: mockFetchWritingTasks,
   fetchWritingSubmissions: mockFetchWritingSubmissions,
   fetchMockReports: mockFetchMockReports,
+  fetchWritingEntitlement: mockFetchWritingEntitlement,
 }));
 
 import WritingHome from './page';
@@ -65,6 +67,15 @@ describe('Writing home page', () => {
 
     mockFetchWritingSubmissions.mockResolvedValue([] satisfies WritingSubmission[]);
     mockFetchMockReports.mockResolvedValue([]);
+    mockFetchWritingEntitlement.mockResolvedValue({
+      allowed: true,
+      tier: 'premium',
+      remaining: null,
+      limitPerWindow: null,
+      windowDays: 7,
+      resetAt: null,
+      reason: 'allowed',
+    });
   });
 
   it('shows rulebook entry points on the writing home surface', async () => {

@@ -52,6 +52,13 @@ describe('mobile runtime', () => {
           vaultPath: 'C:/tmp/desktop-secrets.json',
         }),
       },
+      offlineCache: {
+        store: async (key) => ({ success: true, key }),
+        get: async () => null,
+        delete: async (key) => ({ success: true, key }),
+        list: async () => [],
+        clear: async () => ({ success: true, cleared: 0 }),
+      },
       notifications: {
         show: async () => ({ ok: true }),
       },

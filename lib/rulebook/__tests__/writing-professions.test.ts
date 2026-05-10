@@ -43,6 +43,10 @@ describe('writing rulebooks — Phase D coverage', () => {
         expect(book.rules.length).toBeGreaterThan(0);
       });
 
+      it('has the canonical 172-rule baseline (locks against silent deletions)', () => {
+        expect(book.rules.length).toBe(172);
+      });
+
       it('every rule has id, severity, title, and body', () => {
         for (const rule of book.rules) {
           expect(rule.id).toBeTruthy();

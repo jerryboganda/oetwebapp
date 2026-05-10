@@ -818,6 +818,8 @@ const DETECTORS: Record<string, Detector> = {
   },
 };
 
+export const SUPPORTED_WRITING_CHECK_IDS = Object.freeze(Object.keys(DETECTORS).sort());
+
 // ---------------------------------------------------------------------------
 // Generic detectors: forbidden patterns baked into rule JSON
 // ---------------------------------------------------------------------------

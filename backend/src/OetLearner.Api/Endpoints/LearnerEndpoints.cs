@@ -55,6 +55,7 @@ public static class LearnerEndpoints
 
         var diagnostic = v1.MapGroup("/diagnostic");
         diagnostic.MapGet("/overview", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticOverviewAsync(http.UserId(), ct)));
+        diagnostic.MapGet("/tasks", async ([FromQuery] string subtest, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticTaskAsync(subtest, ct)));
         diagnostic.MapPost("/attempts", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateOrResumeDiagnosticAsync(http.UserId(), ct)));
         diagnostic.MapGet("/attempts/{diagnosticId}", async (HttpContext http, string diagnosticId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticAttemptAsync(http.UserId(), diagnosticId, ct)));
         diagnostic.MapGet("/attempts/{diagnosticId}/hub", async (HttpContext http, string diagnosticId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticHubAsync(http.UserId(), diagnosticId, ct)));
@@ -75,12 +76,29 @@ public static class LearnerEndpoints
 
         var writing = v1.MapGroup("/writing");
         writing.MapGet("/home", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingHomeAsync(http.UserId(), ct)));
+        writing.MapGet("/entitlement", async (
+            HttpContext http,
+            IWritingEntitlementService entitlement,
+            CancellationToken ct) =>
+        {
+            var result = await entitlement.CheckAsync(http.UserId(), ct);
+            return Results.Ok(new
+            {
+                allowed = result.Allowed,
+                tier = result.Tier,
+                remaining = result.Remaining == int.MaxValue ? (int?)null : result.Remaining,
+                limitPerWindow = result.LimitPerWindow == int.MaxValue ? (int?)null : result.LimitPerWindow,
+                windowDays = result.WindowDays,
+                resetAt = result.ResetAt,
+                reason = result.Reason,
+            });
+        });
         writing.MapGet("/tasks", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingTasksAsync(ct)));
         writing.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingTaskAsync(contentId, ct)));
         writing.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateWritingAttemptAsync(http.UserId(), request, ct)));
         writing.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingAttemptAsync(http.UserId(), attemptId, ct)));
         writing.MapPatch("/attempts/{attemptId}/draft", async (HttpContext http, string attemptId, DraftUpdateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.UpdateWritingDraftAsync(http.UserId(), attemptId, request, ct)));
-        writing.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatAttemptAsync(http.UserId(), attemptId, request, ct)));
+        writing.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatWritingAttemptAsync(http.UserId(), attemptId, request, ct)));
         writing.MapPost("/attempts/{attemptId}/submit", async (HttpContext http, string attemptId, SubmitAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitWritingAttemptAsync(http.UserId(), attemptId, request, ct)));
         writing.MapGet("/evaluations/{evaluationId}/summary", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingEvaluationSummaryAsync(http.UserId(), evaluationId, ct)));
         writing.MapGet("/evaluations/{evaluationId}/feedback", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingFeedbackAsync(http.UserId(), evaluationId, ct)));
@@ -97,7 +115,7 @@ public static class LearnerEndpoints
         speaking.MapPost("/attempts/{attemptId}/audio/upload-session", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct, [FromQuery] string? contentId, [FromQuery] string? mockSessionId) => Results.Ok(await service.CreateSpeakingUploadSessionAsync(http.UserId(), attemptId, contentId, mockSessionId, ct)));
         speaking.MapPut("/upload-sessions/{uploadSessionId}/content", async (HttpContext http, string uploadSessionId, LearnerService service, CancellationToken ct) => Results.Ok(await service.UploadSpeakingAudioAsync(http.UserId(), uploadSessionId, http.Request.Body, http.Request.ContentType, ct)));
         speaking.MapPost("/attempts/{attemptId}/audio/complete", async (HttpContext http, string attemptId, UploadCompleteRequest request, LearnerService service, CancellationToken ct, [FromQuery] string? contentId, [FromQuery] string? mockSessionId) => Results.Ok(await service.CompleteSpeakingUploadAsync(http.UserId(), attemptId, request, contentId, mockSessionId, ct)));
-        speaking.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatAttemptAsync(http.UserId(), attemptId, request, ct)));
+        speaking.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatSpeakingAttemptAsync(http.UserId(), attemptId, request, ct)));
         speaking.MapPost("/attempts/{attemptId}/submit", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct, [FromQuery] string? contentId, [FromQuery] string? mockSessionId) => Results.Ok(await service.SubmitSpeakingAttemptAsync(http.UserId(), attemptId, contentId, mockSessionId, ct)));
         speaking.MapGet("/attempts/{attemptId}/processing", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingProcessingAsync(http.UserId(), attemptId, ct)));
         speaking.MapGet("/evaluations/{evaluationId}/summary", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingEvaluationSummaryAsync(http.UserId(), evaluationId, ct)));
@@ -170,7 +188,7 @@ public static class LearnerEndpoints
         listening.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateListeningAttemptAsync(http.UserId(), request, ct)));
         listening.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningAttemptAsync(http.UserId(), attemptId, ct)));
         listening.MapPatch("/attempts/{attemptId}/answers", async (HttpContext http, string attemptId, AnswersUpdateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.UpdateListeningAnswersAsync(http.UserId(), attemptId, request, ct)));
-        listening.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatAttemptAsync(http.UserId(), attemptId, request, ct)));
+        listening.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatListeningAttemptAsync(http.UserId(), attemptId, request, ct)));
         listening.MapPost("/attempts/{attemptId}/submit", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitListeningAttemptAsync(http.UserId(), attemptId, ct)));
         listening.MapGet("/evaluations/{evaluationId}", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningEvaluationAsync(http.UserId(), evaluationId, ct)));
         listening.MapGet("/drills/{drillId}", async (string drillId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningDrillAsync(drillId, ct)));

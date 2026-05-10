@@ -136,7 +136,7 @@ public static class NotificationCatalog
             NotificationEventKey.ExpertPrivateSpeakingAssigned => $"New private speaking session booked for {ReadToken(tokens, "sessionTime", "upcoming")}",
             NotificationEventKey.ExpertPrivateSpeakingReminder => $"Upcoming session in {ReadToken(tokens, "hoursUntil", "a few")} hours",
             NotificationEventKey.ExpertPrivateSpeakingCancelled => "A private speaking session has been cancelled",
-            NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked: {ReadToken(tokens, "tutorName", "tutor")} at {ReadToken(tokens, "sessionTime", "TBD")}",
+            NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked: {ReadToken(tokens, "tutorName", "tutor")} at {ReadToken(tokens, "sessionTime", "time to be confirmed")}",
             _ when Entries.TryGetValue(key, out var entry) => entry.Label,
             _ => "Notification update"
         };
@@ -185,7 +185,7 @@ public static class NotificationCatalog
             NotificationEventKey.ExpertPrivateSpeakingAssigned => $"A learner has booked a private session for {ReadToken(tokens, "sessionTime", "an upcoming time")}. Check your schedule for details.",
             NotificationEventKey.ExpertPrivateSpeakingReminder => $"Your private speaking session starts in {ReadToken(tokens, "hoursUntil", "a few")} hours. Use the Zoom start link in your session details.",
             NotificationEventKey.ExpertPrivateSpeakingCancelled => ReadToken(tokens, "message", "A private speaking session has been cancelled by the learner or admin."),
-            NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked with {ReadToken(tokens, "tutorName", "a tutor")} at {ReadToken(tokens, "sessionTime", "TBD")}. Booking ID: {ReadToken(tokens, "bookingId", "unknown")}.",
+            NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked with {ReadToken(tokens, "tutorName", "a tutor")} at {ReadToken(tokens, "sessionTime", "time to be confirmed")}. Booking ID: {ReadToken(tokens, "bookingId", "unknown")}.",
             _ when Entries.TryGetValue(key, out var entry) => entry.Description,
             _ => "A new notification is available."
         };

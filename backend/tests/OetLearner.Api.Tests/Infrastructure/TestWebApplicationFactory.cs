@@ -12,6 +12,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Tests.Infrastructure;
 
@@ -81,8 +82,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Development");
 
-        // Replace AI provider registrations so tests run against the
-        // deterministic MockAiProvider instead of OpenAi/Anthropic, which
+        // Replace AI provider registrations so tests run against a
+        // deterministic local provider instead of OpenAi/Anthropic, which
         // would fail without real credentials. Q3 of the Speaking module
         // (docs/SPEAKING-MODULE-PLAN.md §6) is now fail-loud on AI errors,
         // so the previous silent rule-engine fallback is gone — tests must
@@ -105,8 +106,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                     services.RemoveAt(i);
                 }
             }
-            services.AddSingleton<OetLearner.Api.Services.Rulebook.IAiModelProvider,
-                OetLearner.Api.Services.Rulebook.MockAiProvider>();
+            services.AddSingleton<IAiModelProvider, TestAiModelProvider>();
         });
 
         if (_useFirstPartyAuth)
@@ -389,6 +389,36 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
     private static string ToEnvironmentVariableName(string configurationKey)
         => configurationKey.Replace(":", "__", StringComparison.Ordinal);
+
+    private sealed class TestAiModelProvider : IAiModelProvider
+    {
+        public string Name => "mock";
+
+        public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
+        {
+            const string text = """
+                {
+                    "findings": [],
+                    "criteriaScores": {
+                        "purpose": 2,
+                        "content": 5,
+                        "conciseness_clarity": 5,
+                        "genre_style": 5,
+                        "organisation_layout": 5,
+                        "language": 5
+                    },
+                    "estimatedScaledScore": 360,
+                    "estimatedGrade": "B",
+                    "passed": true,
+                    "passRequires": "350",
+                    "advisory": "Test AI provider returned a complete grounded Writing scoring contract.",
+                    "strengths": ["Clear purpose."]
+                }
+                """;
+
+            return Task.FromResult(new AiProviderCompletion { Text = text, Usage = new AiUsage() });
+        }
+    }
 }
 
 public sealed class FirstPartyAuthTestWebApplicationFactory : TestWebApplicationFactory

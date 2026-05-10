@@ -51,7 +51,8 @@ import type {
 } from '@/lib/billing-types';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
 import { formatMoney } from '@/lib/money';
-import { maskProviderId } from '@/components/domain/billing';
+import { isFreezeEffective, maskProviderId } from '@/components/domain/billing';
+import { openCheckoutUrl } from '@/lib/mobile/web-checkout';
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -87,21 +88,6 @@ function getPaymentBanner(payment: string | null, gateway: string | null) {
     default:
       return { variant: 'info' as const, message: `Checkout status: ${payment}.` };
   }
-}
-
-function normalizeFreezeStatus(status?: string | null) {
-  return String(status ?? '').toLowerCase();
-}
-
-function isFreezeEffective(freezeState: LearnerFreezeStatus | null) {
-  const currentFreeze = freezeState?.currentFreeze;
-  if (!currentFreeze) return false;
-  const status = normalizeFreezeStatus(currentFreeze.status);
-  if (status === 'active') return true;
-  if (status === 'scheduled' && currentFreeze.scheduledStartAt) {
-    return new Date(currentFreeze.scheduledStartAt).getTime() <= Date.now();
-  }
-  return false;
 }
 
 type BillingTabId = 'overview' | 'plans' | 'credits' | 'invoices';
@@ -256,7 +242,7 @@ export default function BillingPage() {
         idempotencyKey: newIdempotencyKey(),
       } as Parameters<typeof createBillingCheckoutSession>[0];
       const response = await createBillingCheckoutSession(checkoutPayload);
-      window.open(response.checkoutUrl, '_blank', 'noopener,noreferrer');
+      await openCheckoutUrl(response.checkoutUrl);
       setSuccess(`${label ?? prettyProductType(productType)} checkout opened with a validated quote.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start checkout.');
@@ -331,9 +317,8 @@ export default function BillingPage() {
     try {
       const result = (await createWalletTopUp(amount, selectedGateway, newIdempotencyKey())) as Record<string, unknown>;
       const checkoutUrl = typeof result.checkoutUrl === 'string' ? result.checkoutUrl : null;
-      if (checkoutUrl && typeof window !== 'undefined') {
-        const popup = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
-        if (!popup) window.location.assign(checkoutUrl);
+      if (checkoutUrl) {
+        await openCheckoutUrl(checkoutUrl);
       }
       setSuccess(
         `Top-up checkout opened. ${result.totalCredits ?? amount} credits will be added after payment is confirmed.`,

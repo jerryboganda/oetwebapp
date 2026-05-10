@@ -506,6 +506,22 @@ public record AdminGrammarAiDraftRequest(
     int? TargetExerciseCount,
     string? Profession);
 
+public record AdminWritingAiDraftRequest(
+    string Prompt,
+    string? Profession,
+    string? LetterType,
+    string? RecipientSpecialty,
+    string? Difficulty,
+    int? TargetCaseNoteCount);
+
+public record AdminWritingOptionsUpdateRequest(
+    bool AiGradingEnabled,
+    bool AiCoachEnabled,
+    string? KillSwitchReason,
+    bool FreeTierEnabled,
+    int FreeTierLimit,
+    int FreeTierWindowDays);
+
 // ── Vocabulary Admin ──
 
 public record AdminVocabularyItemCreateRequest(

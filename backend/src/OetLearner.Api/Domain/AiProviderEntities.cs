@@ -51,6 +51,10 @@ public enum AiProviderCategory
     Asr = 2,
     /// <summary>Phoneme-level pronunciation scoring.</summary>
     Phoneme = 3,
+    /// <summary>Optical character recognition (image / scanned PDF text extraction).</summary>
+    Ocr = 4,
+    /// <summary>Structured PDF extraction (tables, forms, native-text PDFs).</summary>
+    PdfExtraction = 5,
 }
 
 /// <summary>

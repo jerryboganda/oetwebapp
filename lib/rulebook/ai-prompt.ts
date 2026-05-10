@@ -313,7 +313,7 @@ function renderTaskInstruction(
   passGrade: 'B' | 'C+',
 ): string {
   // H2: Require explicit letter/card type at grounded-prompt build time. The
-  // prior code emitted the literal string 'letter type TBD' / 'card type TBD'
+  // prior code emitted a placeholder letter/card type
   // when the field was missing, which meant a downstream AI would produce
   // generic, non-scenario-specific feedback the learner could not act on.
   // Failing fast here surfaces the authoring bug at the source instead of

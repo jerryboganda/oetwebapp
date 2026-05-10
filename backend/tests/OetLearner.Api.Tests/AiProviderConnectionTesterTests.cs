@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -118,6 +119,97 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
         Assert.True(result.ErrorMessage!.Length <= 512);
     }
 
+    // ── RW-019: secret-redaction proofs ────────────────────────────
+    // Providers commonly echo the offending Authorization header back
+    // in error bodies. Anything we persist into LastTestError or hand
+    // back to the admin UI must have the live secret + standard PAT/key
+    // patterns scrubbed BEFORE it leaves the tester.
+
+    [Fact]
+    public async Task ProviderProbe_RedactsLiveApiKeyEchoedInErrorBody()
+    {
+        const string liveKey = "github_pat_AAAAAAAAAAAAAAAAAA_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, liveKey);
+        var tester = NewTester(db, _ => Task.FromResult(BuildJsonError(
+            HttpStatusCode.Unauthorized,
+            $"Invalid Authorization header value: Bearer {liveKey}")));
+
+        var result = await tester.TestProviderAsync("copilot", default);
+
+        Assert.Equal(AiProviderTestStatuses.Auth, result.Status);
+        Assert.NotNull(result.ErrorMessage);
+        Assert.DoesNotContain(liveKey, result.ErrorMessage);
+        Assert.Contains("***REDACTED***", result.ErrorMessage);
+
+        var persisted = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        Assert.NotNull(persisted.LastTestError);
+        Assert.DoesNotContain(liveKey, persisted.LastTestError!);
+    }
+
+    [Fact]
+    public async Task ProviderProbe_RedactsForeignPatPatternsEvenWithoutLiveKeyMatch()
+    {
+        // Provider's own key is something innocuous; provider error body
+        // accidentally contains a different vendor's token. We still scrub
+        // it because pattern-based redaction is the safer default.
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "harmless-key-1234567890");
+        const string foreignToken = "sk-ant-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        var tester = NewTester(db, _ => Task.FromResult(BuildJsonError(
+            HttpStatusCode.Unauthorized,
+            $"Upstream rejected token {foreignToken}; please rotate.")));
+
+        var result = await tester.TestProviderAsync("copilot", default);
+
+        Assert.NotNull(result.ErrorMessage);
+        Assert.DoesNotContain(foreignToken, result.ErrorMessage);
+        Assert.Contains("***REDACTED***", result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task NetworkException_RedactsLiveApiKeyEchoedInExceptionMessage()
+    {
+        const string liveKey = "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, liveKey);
+        var tester = NewTester(db, _ => Task.FromException<HttpResponseMessage>(
+            new HttpRequestException($"connection refused while sending Bearer {liveKey}")));
+
+        var result = await tester.TestProviderAsync("copilot", default);
+
+        Assert.Equal(AiProviderTestStatuses.Network, result.Status);
+        Assert.NotNull(result.ErrorMessage);
+        Assert.DoesNotContain(liveKey, result.ErrorMessage);
+
+        var persisted = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        Assert.DoesNotContain(liveKey, persisted.LastTestError ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task AccountProbe_RedactsLiveAccountKeyEchoedInErrorBody()
+    {
+        const string accountKey = "github_pat_CCCCCCCCCCCCCCCCCC_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD";
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-provider-key12345");
+        var providerId = await db.AiProviders.AsNoTracking()
+            .Where(p => p.Code == "copilot").Select(p => p.Id).FirstAsync();
+        var accountId = await SeedAccountAsync(db, providerId, "primary", accountKey);
+        var tester = NewTester(db, _ => Task.FromResult(BuildJsonError(
+            HttpStatusCode.Unauthorized,
+            $"Bad credentials: {accountKey}")));
+
+        var result = await tester.TestAccountAsync(providerId, accountId, default);
+
+        Assert.Equal(AiProviderTestStatuses.Auth, result.Status);
+        Assert.NotNull(result.ErrorMessage);
+        Assert.DoesNotContain(accountKey, result.ErrorMessage);
+
+        var account = await db.AiProviderAccounts.AsNoTracking().FirstAsync(a => a.Id == accountId);
+        Assert.NotNull(account.LastTestError);
+        Assert.DoesNotContain(accountKey, account.LastTestError!);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────
 
     private AiProviderConnectionTester NewTester(
@@ -180,6 +272,15 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
         return new HttpResponseMessage(status)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
+    }
+
+    private static HttpResponseMessage BuildJsonError(HttpStatusCode status, string message)
+    {
+        var json = JsonSerializer.Serialize(new { error = new { message } });
+        return new HttpResponseMessage(status)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
         };
     }
 

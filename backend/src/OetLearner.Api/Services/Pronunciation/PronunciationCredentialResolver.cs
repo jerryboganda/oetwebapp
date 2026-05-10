@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Pronunciation;
@@ -58,8 +56,7 @@ public sealed record PronunciationCredentials(
 
 public sealed class PronunciationCredentialResolver(
     IServiceScopeFactory scopeFactory,
-    IMemoryCache cache,
-    IOptions<PronunciationOptions> options) : IPronunciationCredentialResolver
+    IMemoryCache cache) : IPronunciationCredentialResolver
 {
     private const string CacheKey = "pronunciation:registry-snapshot:v1";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);

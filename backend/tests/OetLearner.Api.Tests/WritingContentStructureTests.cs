@@ -74,7 +74,7 @@ public class WritingContentStructureTests
         var report = WritingContentStructure.Validate(paper);
 
         Assert.False(report.IsPublishReady);
-        var issue = Assert.Single(report.Issues.Where(i => i.Code == "profession_letter_type"));
+        var issue = Assert.Single(report.Issues, i => i.Code == "profession_letter_type");
         Assert.Equal("error", issue.Severity);
         Assert.Contains("veterinary", issue.Message);
         Assert.Contains("non_medical_referral", issue.Message);

@@ -31,7 +31,8 @@ public sealed class WhisperConversationAsrProvider(
         audioContent.Headers.ContentType = new MediaTypeHeaderValue(request.AudioMimeType);
         form.Add(audioContent, "file", GuessFileName(request.AudioMimeType));
         form.Add(new StringContent(ReadOptions().WhisperModel), "model");
-        var lang = (request.Locale ?? "en-GB").Length >= 2 ? request.Locale.Substring(0, 2) : "en";
+        var locale = request.Locale ?? "en-GB";
+        var lang = locale.Length >= 2 ? locale.Substring(0, 2) : "en";
         form.Add(new StringContent(lang), "language");
         form.Add(new StringContent("verbose_json"), "response_format");
 

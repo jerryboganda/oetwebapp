@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -9,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -45,6 +47,22 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         Assert.Equal(TimeSpan.FromDays(30), options.RefreshTokenLifetime);
         Assert.Equal(TimeSpan.FromMinutes(10), options.OtpLifetime);
         Assert.Equal("OET Learner", options.AuthenticatorIssuer);
+    }
+
+    [Fact]
+    public async Task App_IgnoresDevelopmentAuthHeaders_InProduction()
+    {
+        using var factory = CreateProductionFactory(settings =>
+        {
+            settings["Auth:UseDevelopmentAuth"] = "true";
+        });
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
+        client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.SystemAdmin);
+
+        var response = await client.GetAsync("/v1/admin/dashboard");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]

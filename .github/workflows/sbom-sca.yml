@@ -1,0 +1,49 @@
+name: SBOM and SCA
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      fail_on:
+        description: Vulnerability severity threshold for grype
+        required: false
+        default: high
+
+concurrency:
+  group: sbom-sca-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sbom-sca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM
+        env:
+          SBOM_OUTPUT: release-evidence/sbom.json
+        run: bash scripts/sbom-generate.sh
+
+      - name: Run SCA scan
+        env:
+          SBOM_OUTPUT: release-evidence/sbom.json
+          SCA_OUTPUT: release-evidence/sca.json
+          SCA_FAIL_ON: ${{ inputs.fail_on || 'high' }}
+        run: bash scripts/sca-scan.sh
+
+      - name: Upload SBOM/SCA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-sca-artifacts
+          path: release-evidence/
+          if-no-files-found: error

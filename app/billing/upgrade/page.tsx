@@ -18,9 +18,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { analytics } from '@/lib/analytics';
-// TODO(billing-impl-c): expose a typed `fetchBillingUpgradePath()` helper in
-// lib/api.ts so this page no longer has to call apiClient.request directly.
-import { apiClient, fetchFreezeStatus } from '@/lib/api';
+import { fetchBillingUpgradePath, fetchFreezeStatus, type BillingUpgradeData } from '@/lib/api';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
 import {
   BackToBillingLink,
@@ -28,34 +26,6 @@ import {
   FREEZE_UNVERIFIED_MESSAGE,
   isFreezeEffective,
 } from '@/components/domain/billing';
-
-interface PlanInfo {
-  planId: string;
-  planCode: string;
-  planName: string;
-  description: string;
-  price: number;
-  currency: string;
-  interval: string;
-  includedCredits: number;
-  trialDays: number;
-  isCurrent: boolean;
-  isUpgrade: boolean;
-  isDowngrade: boolean;
-  entitlements: Record<string, unknown>;
-}
-
-interface UpgradeData {
-  currentPlan: { planId: string; planName: string; price: number; includedCredits: number } | null;
-  usage: {
-    reviewsUsedThisMonth: number;
-    creditsRemaining: number;
-    subscriptionStarted: string | null;
-    subscriptionEnds: string | null;
-  };
-  plans: PlanInfo[];
-  recommendation: string;
-}
 
 import { formatMoneyWhole } from '@/lib/money';
 
@@ -72,7 +42,7 @@ const linkButtonStyles = {
 } as const;
 
 export default function BillingUpgradePage() {
-  const [data, setData] = useState<UpgradeData | null>(null);
+  const [data, setData] = useState<BillingUpgradeData | null>(null);
   const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
   const [freezeLoadFailed, setFreezeLoadFailed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -81,7 +51,7 @@ export default function BillingUpgradePage() {
   useEffect(() => {
     analytics.track('billing_upgrade_path_viewed');
     Promise.allSettled([
-      apiClient.request<UpgradeData>('/v1/learner/billing/upgrade-path'),
+      fetchBillingUpgradePath(),
       fetchFreezeStatus(),
     ])
       .then(([upgradeResult, freezeResult]) => {

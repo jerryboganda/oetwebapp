@@ -1,0 +1,12 @@
+RouteID,RouteName,Path,Portal,Stage,PrimaryPersona,TopJTBD,Owner,RW_IDs,CurrentStatus,LastValidationDate,ScorecardRef,Priority,Notes
+T0-AUTH-001,Sign In,/sign-in,public,T0,learner,Access account securely,,RW-002;RW-003;RW-017,in-progress,2026-05-09,scorecards/T0-auth-signin-register.md,P0,Starter scorecard created; needs current browser evidence.
+T0-LRN-001,Learner Dashboard,/dashboard,learner,T0,learner,Resume study and see progress,,RW-009;RW-017;RW-022,in-progress,2026-05-09,scorecards/T0-learner-dashboard.md,P0,Starter scorecard created; needs current smoke and SLO evidence.
+T0-BILL-001,Billing Center And Upgrade,/billing,learner,T0,learner,Choose plan and manage payment state,,RW-009;RW-013;RW-017;RW-022,in-progress,2026-05-09,scorecards/T0-billing-upgrade.md,P0,Starter scorecard created; sponsor billing remains separate.
+T0-WRT-001,Writing Practice,/writing,learner,T0,learner,Complete writing task and receive grounded feedback,,RW-005;RW-006;RW-009;RW-017,open,,templates/T0-T1-route-scorecard-template.md,P0,
+T0-LST-001,Listening Hub,/listening,learner,T0,learner,Choose available listening paper and understand locked premium papers,,RW-007;RW-009;RW-017,in-progress,2026-05-09,templates/T0-T1-route-scorecard-template.md,P0,RW-007 lock badge evidence complete; full route scorecard pending.
+T0-SPK-001,Speaking Practice,/speaking,learner,T0,learner,Practice speaking tasks and review feedback,,RW-009;RW-017;RW-022,open,,templates/T0-T1-route-scorecard-template.md,P0,
+T0-ADM-001,Admin Content,/admin/content,admin,T0,admin,Manage publishable content safely,,RW-003;RW-004;RW-009;RW-018,open,,templates/T0-T1-route-scorecard-template.md,P0,
+T0-ADM-002,Admin Users,/admin/users,admin,T0,admin,Manage users with least privilege,,RW-003;RW-004;RW-009,open,,templates/T0-T1-route-scorecard-template.md,P0,
+T0-EXP-001,Expert Reviews,/expert,expert,T0,expert,Review learner work and manage queues,,RW-009;RW-017;RW-018,open,,templates/T0-T1-route-scorecard-template.md,P0,
+T0-SPN-001,Sponsor Dashboard,/sponsor,sponsor,T0,sponsor,Manage sponsored learners and billing,,RW-013;RW-009;RW-017,open,,templates/T0-T1-route-scorecard-template.md,P0,
+T1-COM-001,Community Threads,/community/threads,learner,T1,learner,Ask and answer peer questions,,RW-009;RW-018,open,,templates/T0-T1-route-scorecard-template.md,P1,

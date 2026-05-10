@@ -1,0 +1,48 @@
+name: Verify Release Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      evidence_dir:
+        description: Directory containing release evidence files
+        required: false
+        default: release-evidence
+      evidence_env:
+        description: Verification mode for evidence signature requirements
+        required: false
+        default: local
+        type: choice
+        options:
+          - local
+          - staging
+          - production
+      signer_fingerprint:
+        description: Required GPG signer fingerprint when evidence_env is production
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release-artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Collect evidence bundle
+        shell: bash
+        env:
+          EVIDENCE_DIR: ${{ inputs.evidence_dir }}
+        run: bash scripts/evidence-collect.sh
+
+      - name: Verify required evidence files
+        shell: bash
+        env:
+          EVIDENCE_DIR: ${{ inputs.evidence_dir }}
+          EVIDENCE_ENV: ${{ inputs.evidence_env }}
+          EVIDENCE_SIGNER_FINGERPRINT: ${{ inputs.signer_fingerprint }}
+        run: bash scripts/evidence-verify.sh

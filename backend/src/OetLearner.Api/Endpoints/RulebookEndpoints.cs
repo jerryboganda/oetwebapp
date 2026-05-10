@@ -1,4 +1,7 @@
 using System.Security.Claims;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
 
@@ -27,7 +30,7 @@ public static class RulebookEndpoints
 
         group.MapGet("/writing/{profession}", (string profession, IRulebookLoader loader) =>
         {
-            if (!Enum.TryParse<ExamProfession>(profession, ignoreCase: true, out var p))
+            if (!RulebookProfessionParser.TryParse(profession, out var p))
                 return Results.BadRequest(new { error = $"Unknown profession '{profession}'." });
             try { return Results.Ok(loader.Load(RuleKind.Writing, p)); }
             catch (RulebookNotFoundException) { return Results.NotFound(new { error = "Rulebook not registered." }); }
@@ -35,7 +38,7 @@ public static class RulebookEndpoints
 
         group.MapGet("/speaking/{profession}", (string profession, IRulebookLoader loader) =>
         {
-            if (!Enum.TryParse<ExamProfession>(profession, ignoreCase: true, out var p))
+            if (!RulebookProfessionParser.TryParse(profession, out var p))
                 return Results.BadRequest(new { error = $"Unknown profession '{profession}'." });
             try { return Results.Ok(loader.Load(RuleKind.Speaking, p)); }
             catch (RulebookNotFoundException) { return Results.NotFound(new { error = "Rulebook not registered." }); }
@@ -43,7 +46,7 @@ public static class RulebookEndpoints
 
         group.MapGet("/conversation/{profession}", (string profession, IRulebookLoader loader) =>
         {
-            if (!Enum.TryParse<ExamProfession>(profession, ignoreCase: true, out var p))
+            if (!RulebookProfessionParser.TryParse(profession, out var p))
                 return Results.BadRequest(new { error = $"Unknown profession '{profession}'." });
             try { return Results.Ok(loader.Load(RuleKind.Conversation, p)); }
             catch (RulebookNotFoundException) { return Results.NotFound(new { error = "Rulebook not registered." }); }
@@ -52,7 +55,7 @@ public static class RulebookEndpoints
         group.MapGet("/writing/{profession}/rule/{ruleId}",
             (string profession, string ruleId, IRulebookLoader loader) =>
             {
-                if (!Enum.TryParse<ExamProfession>(profession, ignoreCase: true, out var p))
+                if (!RulebookProfessionParser.TryParse(profession, out var p))
                     return Results.BadRequest(new { error = "Unknown profession." });
                 var rule = loader.FindRule(RuleKind.Writing, p, ruleId);
                 return rule is null ? Results.NotFound() : Results.Ok(rule);
@@ -61,7 +64,7 @@ public static class RulebookEndpoints
         group.MapGet("/speaking/{profession}/rule/{ruleId}",
             (string profession, string ruleId, IRulebookLoader loader) =>
             {
-                if (!Enum.TryParse<ExamProfession>(profession, ignoreCase: true, out var p))
+                if (!RulebookProfessionParser.TryParse(profession, out var p))
                     return Results.BadRequest(new { error = "Unknown profession." });
                 var rule = loader.FindRule(RuleKind.Speaking, p, ruleId);
                 return rule is null ? Results.NotFound() : Results.Ok(rule);
@@ -75,18 +78,27 @@ public static class RulebookEndpoints
         });
 
         // Writing linter
-        app.MapPost("/v1/writing/lint", (WritingLintRequest body, WritingRuleEngine engine) =>
+        app.MapPost("/v1/writing/lint", async Task<IResult> (WritingLintRequest body, WritingRuleEngine engine, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
-            if (!Enum.TryParse<ExamProfession>(body.Profession ?? "medicine", ignoreCase: true, out var prof))
+            var serverSource = await ResolveWritingLintSourceAsync(body, db, http, ct);
+            if (serverSource.Error is not null) return serverSource.Error;
+
+            var source = serverSource.Source;
+            var professionText = source?.ProfessionId ?? body.Profession ?? "medicine";
+            if (!RulebookProfessionParser.TryParse(professionText, out var prof))
                 prof = ExamProfession.Medicine;
+
+            var letterType = body.LetterType ?? source?.LetterType ?? "routine_referral";
+            var caseNotesMarkers = source?.CaseNotesMarkers ?? body.CaseNotesMarkers;
+
             var input = new WritingLintInput(
                 body.LetterText ?? "",
-                body.LetterType ?? "routine_referral",
+                letterType,
                 body.RecipientSpecialty,
                 body.RecipientName,
                 body.PatientAge,
                 body.PatientIsMinor,
-                body.CaseNotesMarkers,
+                caseNotesMarkers,
                 prof);
             var findings = engine.Lint(input);
             return Results.Ok(new
@@ -105,7 +117,7 @@ public static class RulebookEndpoints
         // Speaking auditor
         app.MapPost("/v1/speaking/audit", (SpeakingAuditRequest body, SpeakingRuleEngine engine) =>
         {
-            if (!Enum.TryParse<ExamProfession>(body.Profession ?? "medicine", ignoreCase: true, out var prof))
+            if (!RulebookProfessionParser.TryParse(body.Profession ?? "medicine", out var prof))
                 prof = ExamProfession.Medicine;
             var input = new SpeakingAuditInput(
                 body.Transcript ?? Array.Empty<SpeakingTurn>(),
@@ -125,7 +137,7 @@ public static class RulebookEndpoints
         {
             if (!Enum.TryParse<RuleKind>(body.Kind ?? "writing", ignoreCase: true, out var kind))
                 return Results.BadRequest(new { error = "Unknown rulebook kind." });
-            if (!Enum.TryParse<ExamProfession>(body.Profession ?? "medicine", ignoreCase: true, out var prof))
+            if (!RulebookProfessionParser.TryParse(body.Profession ?? "medicine", out var prof))
                 prof = ExamProfession.Medicine;
             if (!Enum.TryParse<AiTaskMode>(body.Task ?? "score", ignoreCase: true, out var task))
                 task = AiTaskMode.Score;
@@ -206,6 +218,115 @@ public static class RulebookEndpoints
             _ => AiFeatureCodes.Unclassified,
         };
     }
+
+    private static async Task<(WritingLintSource? Source, IResult? Error)> ResolveWritingLintSourceAsync(
+        WritingLintRequest body,
+        LearnerDbContext db,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(body.AttemptId))
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId)) return (null, Results.Unauthorized());
+
+            var attemptSource = await (
+                from attempt in db.Attempts.AsNoTracking()
+                join content in db.ContentItems.AsNoTracking() on attempt.ContentId equals content.Id
+                where attempt.Id == body.AttemptId
+                    && attempt.UserId == userId
+                    && attempt.SubtestCode == "writing"
+                    && content.SubtestCode == "writing"
+                select new
+                {
+                    content.CaseNotes,
+                    content.ProfessionId,
+                    content.ScenarioType,
+                    content.DetailJson,
+                }).FirstOrDefaultAsync(ct);
+
+            if (attemptSource is null)
+            {
+                return (null, Results.NotFound(new { error = "Writing attempt not found." }));
+            }
+
+            return (BuildWritingLintSource(
+                attemptSource.CaseNotes,
+                attemptSource.ProfessionId,
+                attemptSource.ScenarioType,
+                attemptSource.DetailJson), null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(body.ContentId))
+        {
+            var contentSource = await db.ContentItems
+                .AsNoTracking()
+                .Where(content => content.Id == body.ContentId
+                    && content.SubtestCode == "writing"
+                    && content.Status == ContentStatus.Published)
+                .Select(content => new
+                {
+                    content.CaseNotes,
+                    content.ProfessionId,
+                    content.ScenarioType,
+                    content.DetailJson,
+                })
+                .FirstOrDefaultAsync(ct);
+
+            if (contentSource is null)
+            {
+                return (null, Results.NotFound(new { error = "Writing content not found." }));
+            }
+
+            return (BuildWritingLintSource(
+                contentSource.CaseNotes,
+                contentSource.ProfessionId,
+                contentSource.ScenarioType,
+                contentSource.DetailJson), null);
+        }
+
+        return (null, null);
+    }
+
+    private static WritingLintSource BuildWritingLintSource(
+        string? caseNotes,
+        string? professionId,
+        string? scenarioType,
+        string? detailJson)
+        => new(
+            WritingCaseNotesMarkerExtractor.Derive(caseNotes),
+            ExtractDetailString(detailJson, "letterType", "taskType") ?? scenarioType,
+            professionId);
+
+    private static string? ExtractDetailString(string? detailJson, params string[] names)
+    {
+        if (string.IsNullOrWhiteSpace(detailJson)) return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(detailJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            foreach (var name in names)
+            {
+                if (doc.RootElement.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String)
+                {
+                    var text = value.GetString();
+                    if (!string.IsNullOrWhiteSpace(text)) return text;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private sealed record WritingLintSource(
+        WritingCaseNotesMarkers CaseNotesMarkers,
+        string? LetterType,
+        string? ProfessionId);
 }
 
 public sealed record WritingLintRequest(
@@ -216,7 +337,9 @@ public sealed record WritingLintRequest(
     int? PatientAge,
     bool PatientIsMinor,
     WritingCaseNotesMarkers? CaseNotesMarkers,
-    string? Profession);
+    string? Profession,
+    string? AttemptId,
+    string? ContentId);
 
 public sealed record SpeakingAuditRequest(
     IReadOnlyList<SpeakingTurn>? Transcript,

@@ -21,7 +21,7 @@ const CSRF_HEADER = 'x-csrf-token';
  * (single-use refresh-token rotation, password+email validation, MFA, etc.),
  * so skipping the proxy CSRF here does not weaken the security model.
  */
-const AUTH_BOOTSTRAP_PATH_PATTERN = /^\/?api\/backend\/v1\/auth(\/|$)/i;
+const AUTH_BOOTSTRAP_PATH_PATTERN = /^\/?api\/backend\/v1\/auth\/(?:register|sign-in|refresh|sign-out|external\/[^/]+\/exchange|email\/(?:send-verification-otp|verify-otp)|forgot-password|reset-password|mfa\/(?:challenge|recovery))\/?$/i;
 
 function isAuthBootstrapRequest(request: Request): boolean {
   try {
@@ -86,7 +86,7 @@ export function validateProxyCsrf(request: Request): boolean {
   if (CSRF_SAFE_METHODS.has(method)) return true;
 
   // Auth bootstrap endpoints (sign-in, refresh, sign-out, register, MFA, SSO,
-  // password reset, email verification) are exempt — they ARE the mechanism
+  // password reset, email verification) are exempt because they are the mechanism
   // that establishes the CSRF cookie. A user with a stale refresh cookie but
   // expired CSRF cookie must still be able to sign in.
   if (isAuthBootstrapRequest(request)) return true;

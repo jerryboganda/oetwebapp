@@ -47,6 +47,7 @@ import type {
   DiagnosticSession,
   DiagnosticResult,
   CriterionFeedback,
+  AnchoredComment,
   Confidence,
   SubTest,
   SettingsSectionData,
@@ -663,6 +664,8 @@ export async function lintWritingViaApi(input: WritingLintInput): Promise<Writin
     method: 'POST',
     body: JSON.stringify({
       letterText: input.letterText,
+      attemptId: input.attemptId,
+      contentId: input.contentId,
       letterType: input.letterType,
       recipientSpecialty: input.recipientSpecialty,
       recipientName: input.recipientName,
@@ -751,6 +754,10 @@ function evaluationCacheKey(subtest: string, contentId: string) {
   return `oet.${subtest}.evaluation.${contentId}`;
 }
 
+function isReusableAttemptState(state: unknown) {
+  return state === 'not_started' || state === 'in_progress' || state === 'paused';
+}
+
 async function ensureAttempt(subtest: 'writing' | 'speaking' | 'reading' | 'listening', contentId: string, mode: string) {
   const key = attemptCacheKey(subtest, contentId, mode);
   const cached = cacheGet(key);
@@ -758,7 +765,7 @@ async function ensureAttempt(subtest: 'writing' | 'speaking' | 'reading' | 'list
   if (cached) {
     try {
       const existing = await apiRequest<ApiRecord>(`/v1/${subtest}/attempts/${cached}`);
-      if (existing.state !== 'completed') {
+      if (isReusableAttemptState(existing.state)) {
         return existing;
       }
       cacheRemove(key);
@@ -778,6 +785,36 @@ async function ensureAttempt(subtest: 'writing' | 'speaking' | 'reading' | 'list
   });
   cacheSet(key, created.attemptId);
   return created;
+}
+
+export interface WritingAttemptSession {
+  attemptId: string;
+  contentId: string;
+  context: string;
+  mode: string;
+  state: string;
+  startedAt: string;
+  draftVersion: number;
+  draftContent: string;
+}
+
+export async function ensureWritingAttempt(taskId: string, mode: 'exam' | 'learning' = 'exam'): Promise<WritingAttemptSession> {
+  const attempt = await ensureAttempt('writing', taskId, mode);
+  const startedAt = typeof attempt.startedAt === 'string' ? attempt.startedAt : '';
+  if (!startedAt || Number.isNaN(Date.parse(startedAt))) {
+    throw new Error('Writing attempt start time was missing from the API response.');
+  }
+
+  return {
+    attemptId: String(attempt.attemptId ?? ''),
+    contentId: String(attempt.contentId ?? taskId),
+    context: String(attempt.context ?? (mode === 'exam' ? 'exam' : 'practice')),
+    mode: String(attempt.mode ?? mode),
+    state: String(attempt.state ?? 'in_progress'),
+    startedAt,
+    draftVersion: Number(attempt.draftVersion ?? 1),
+    draftContent: typeof attempt.draftContent === 'string' ? attempt.draftContent : '',
+  };
 }
 
 async function latestEvaluationIdForContent(contentId: string, subtest: string): Promise<string | null> {
@@ -876,11 +913,26 @@ function mapCriterionFeedback(criterionScores: ApiRecord[], feedbackItems: ApiRe
       maxScore,
       grade: scoreToGrade(score),
       explanation: criterion.explanation ?? '',
-      anchoredComments: relatedFeedback.map((item, index) => ({
-        id: item.feedbackItemId ?? `${criterionCode}-${index}`,
-        text: item.anchor?.snippet ?? item.anchor?.lineId ?? normalizeCriterionName(criterionCode),
-        comment: item.message ?? '',
-      })),
+      anchoredComments: relatedFeedback.map((item, index) => {
+        const rawSeverity = typeof item.severity === 'string' ? item.severity.toLowerCase() : '';
+        const severity: AnchoredComment['severity'] | undefined =
+          rawSeverity === 'critical' || rawSeverity === 'major' || rawSeverity === 'minor' || rawSeverity === 'info'
+            ? (rawSeverity as AnchoredComment['severity'])
+            : undefined;
+        const rawSource = typeof item.source === 'string' ? item.source.toLowerCase() : '';
+        const source: AnchoredComment['source'] | undefined =
+          rawSource === 'rule_engine' || rawSource === 'ai' ? (rawSource as AnchoredComment['source']) : undefined;
+        return {
+          id: item.feedbackItemId ?? `${criterionCode}-${index}`,
+          text: item.anchor?.snippet ?? item.anchor?.lineId ?? normalizeCriterionName(criterionCode),
+          comment: item.message ?? '',
+          ruleId: typeof item.ruleId === 'string' && item.ruleId ? item.ruleId : undefined,
+          severity,
+          source,
+          suggestedFix:
+            typeof item.suggestedFix === 'string' && item.suggestedFix ? item.suggestedFix : undefined,
+        };
+      }),
       omissions: [],
       unnecessaryDetails: [],
       revisionSuggestions: relatedFeedback.map((item) => item.suggestedFix).filter(Boolean),
@@ -1367,6 +1419,20 @@ export async function submitWritingTask(taskId: string, content: string, mode: '
   };
 }
 
+export interface WritingEntitlement {
+  allowed: boolean;
+  tier: string;
+  remaining: number | null;
+  limitPerWindow: number | null;
+  windowDays: number;
+  resetAt: string | null;
+  reason: string;
+}
+
+export async function fetchWritingEntitlement(): Promise<WritingEntitlement> {
+  return apiRequest<WritingEntitlement>('/v1/writing/entitlement');
+}
+
 export async function fetchWritingResult(resultId: string): Promise<WritingResult> {
   const [summary, feedback] = await Promise.all([
     apiRequest<ApiRecord>(`/v1/writing/evaluations/${resultId}/summary`),
@@ -1379,6 +1445,7 @@ export async function fetchWritingResult(resultId: string): Promise<WritingResul
     id: resultId,
     taskId: summary.taskId,
     taskTitle: summary.taskTitle,
+    profession: typeof summary.profession === 'string' ? summary.profession : 'medicine',
     examFamilyCode: toExamFamilyCode(summary.examFamilyCode),
     examFamilyLabel: summary.examFamilyLabel ?? titleCase(summary.examFamilyCode ?? 'oet'),
     estimatedScoreRange: scoreRangeDisplay(summary.scoreRange),
@@ -3050,6 +3117,38 @@ export async function fetchBilling(): Promise<BillingData> {
   };
 }
 
+export interface BillingUpgradePlan {
+  planId: string;
+  planCode: string;
+  planName: string;
+  description: string;
+  price: number;
+  currency: string;
+  interval: string;
+  includedCredits: number;
+  trialDays: number;
+  isCurrent: boolean;
+  isUpgrade: boolean;
+  isDowngrade: boolean;
+  entitlements: Record<string, unknown>;
+}
+
+export interface BillingUpgradeData {
+  currentPlan: { planId: string; planName: string; price: number; includedCredits: number } | null;
+  usage: {
+    reviewsUsedThisMonth: number;
+    creditsRemaining: number;
+    subscriptionStarted: string | null;
+    subscriptionEnds: string | null;
+  };
+  plans: BillingUpgradePlan[];
+  recommendation: string;
+}
+
+export async function fetchBillingUpgradePath(): Promise<BillingUpgradeData> {
+  return apiRequest<BillingUpgradeData>('/v1/learner/billing/upgrade-path');
+}
+
 export async function fetchBillingQuote(input: {
   productType: BillingProductType;
   quantity: number;
@@ -3257,8 +3356,9 @@ export async function fetchDiagnosticTaskId(subTest: SubTest): Promise<string> {
     const taskId = response.taskId ?? response.contentId ?? null;
     if (taskId) return String(taskId);
   } catch {
-    // Backend endpoint not ready yet — fall through to legacy fallback.
+    // Backend endpoint may lag behind static diagnostic fixtures during deploy.
   }
+
   const fallback = LEGACY_DIAGNOSTIC_TASK_IDS[subTest];
   console.warn(`[Diagnostic] Dynamic task endpoint unavailable for ${subTest}. Using legacy fallback ${fallback}.`);
   return fallback;
@@ -7072,8 +7172,66 @@ export interface GrammarEntitlement {
   reason: string;
 }
 
+export async function adminGenerateWritingAiDraft(params: {
+  prompt: string;
+  profession: string;
+  letterType: string;
+  recipientSpecialty?: string;
+  difficulty: string;
+  targetCaseNoteCount: number;
+}) {
+  // Grounded, platform-only. The backend builds the AI prompt via
+  // IAiGatewayService and refuses ungrounded prompts. On AI-parse failure
+  // the server returns a deterministic starter template + `warning`.
+  return apiRequest<{
+    contentId: string;
+    title: string;
+    caseNoteCount: number;
+    modelLetterWordCount: number;
+    rulebookVersion: string;
+    appliedRuleIds: string[];
+    warning: string | null;
+  }>('/v1/admin/writing/ai-draft', {
+    method: 'POST',
+    body: JSON.stringify({
+      prompt: params.prompt,
+      profession: params.profession,
+      letterType: params.letterType,
+      recipientSpecialty: params.recipientSpecialty ?? null,
+      difficulty: params.difficulty,
+      targetCaseNoteCount: params.targetCaseNoteCount,
+    }),
+  });
+}
+
 export async function fetchGrammarEntitlement(): Promise<GrammarEntitlement> {
   return apiRequest<GrammarEntitlement>('/v1/grammar/entitlement');
+}
+
+// ── Writing Options (admin: AI kill-switch + entitlement) ──
+
+export interface AdminWritingOptions {
+  aiGradingEnabled: boolean;
+  aiCoachEnabled: boolean;
+  killSwitchReason: string | null;
+  freeTierEnabled: boolean;
+  freeTierLimit: number;
+  freeTierWindowDays: number;
+  updatedAt: string | null;
+  updatedByAdminId: string | null;
+}
+
+export async function adminGetWritingOptions(): Promise<AdminWritingOptions> {
+  return apiRequest<AdminWritingOptions>('/v1/admin/writing/options');
+}
+
+export async function adminUpdateWritingOptions(
+  input: Omit<AdminWritingOptions, 'updatedAt' | 'updatedByAdminId'>,
+): Promise<AdminWritingOptions> {
+  return apiRequest<AdminWritingOptions>('/v1/admin/writing/options', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function adminFetchGrammarPublishGate(lessonId: string) {
@@ -8558,6 +8716,7 @@ export interface SponsorDashboardData {
   activeSponsorships: number;
   pendingSponsorships: number;
   totalSpend: number;
+  currency: string | null;
 }
 
 export interface SponsoredLearner {
@@ -8569,14 +8728,31 @@ export interface SponsoredLearner {
   revokedAt: string | null;
 }
 
+export interface SponsorInvoice {
+  id: string;
+  sponsorshipId: string;
+  learnerUserId: string;
+  learnerEmail: string;
+  gateway: string;
+  gatewayTransactionId: string;
+  transactionType: string;
+  productType: string | null;
+  productId: string | null;
+  amount: number;
+  currency: string;
+  status: string;
+  createdAt: string;
+}
+
 export interface SponsorBillingData {
   sponsorName: string;
   organizationName: string | null;
   totalSponsorships: number;
   totalSpend: number;
   currentMonthSpend: number;
+  currency: string | null;
   billingCycle: string;
-  invoices: Array<Record<string, unknown>>;
+  invoices: SponsorInvoice[];
 }
 
 export async function fetchSponsorDashboard(): Promise<SponsorDashboardData> {

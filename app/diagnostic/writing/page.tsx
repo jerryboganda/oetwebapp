@@ -84,7 +84,7 @@ export default function DiagnosticWritingPage() {
         // Save locally first
         localStorage.setItem(`diag-writing-draft-${taskId}`, content);
         // Then attempt server save
-        await submitWritingDraft(taskId, content);
+        await submitWritingDraft(taskId, content, 'learning');
         setSaveStatus('saved');
       } catch {
         // If server fails, we still have the local save
@@ -111,7 +111,7 @@ export default function DiagnosticWritingPage() {
     if (!content.trim() || !taskId) return;
     try {
       setSubmitting(true);
-      await submitWritingTask(taskId, content);
+      await submitWritingTask(taskId, content, 'learning');
       localStorage.removeItem(`diag-writing-draft-${taskId}`);
       track('task_submitted', { subTest: 'Writing', mode: 'diagnostic', taskId });
       router.push('/diagnostic/hub');

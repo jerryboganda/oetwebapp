@@ -140,6 +140,8 @@ export interface LintFinding {
 
 export interface WritingLintInput {
   letterText: string;
+  attemptId?: string | null;
+  contentId?: string | null;
   letterType: LetterType;
   recipientSpecialty?: string;
   recipientName?: string | null;

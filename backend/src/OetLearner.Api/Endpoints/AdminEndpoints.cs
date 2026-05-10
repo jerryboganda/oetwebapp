@@ -179,23 +179,23 @@ public static class AdminEndpoints
 
         admin.MapGet("/ai-config", async (AdminService service, CancellationToken ct, string? status)
             => Results.Ok(await service.GetAIConfigListAsync(status, ct)))
-            .WithAdminRead("AdminContentRead");
+            .WithAdminRead("AdminAiConfig");
 
         admin.MapPost("/ai-config", async (HttpContext http, AdminAIConfigCreateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.CreateAIConfigAsync(http.AdminId(), http.AdminName(), request, ct)))
-            .WithAdminWrite("AdminContentWrite");
+            .WithAdminWrite("AdminAiConfig");
 
         admin.MapPut("/ai-config/{configId}", async (string configId, HttpContext http, AdminAIConfigUpdateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.UpdateAIConfigAsync(http.AdminId(), http.AdminName(), configId, request, ct)))
-            .WithAdminWrite("AdminContentWrite");
+            .WithAdminWrite("AdminAiConfig");
 
         admin.MapPost("/ai-config/{configId}/activate", async (string configId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ActivateAIConfigAsync(http.AdminId(), http.AdminName(), configId, ct)))
-            .WithAdminWrite("AdminContentWrite");
+            .WithAdminWrite("AdminAiConfig");
 
         admin.MapDelete("/ai-config/{configId}", async (string configId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.DeleteAIConfigAsync(http.AdminId(), http.AdminName(), configId, ct)))
-            .WithAdminWrite("AdminContentWrite");
+            .WithAdminWrite("AdminAiConfig");
 
         // ── Feature Flags ───────────────────────────────────
 
@@ -908,6 +908,98 @@ public static class AdminEndpoints
                 }
             })
             .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/writing/ai-draft",
+            async (HttpContext http,
+                AdminWritingAiDraftRequest body,
+                OetLearner.Api.Services.Writing.IWritingDraftService draft,
+                CancellationToken ct) =>
+            {
+                if (body is null || string.IsNullOrWhiteSpace(body.Prompt))
+                    return Results.BadRequest(new { error = "prompt is required" });
+
+                try
+                {
+                    var result = await draft.GenerateAsync(new OetLearner.Api.Services.Writing.WritingDraftRequest(
+                        Profession: body.Profession ?? "medicine",
+                        LetterType: body.LetterType ?? "routine_referral",
+                        RecipientSpecialty: body.RecipientSpecialty,
+                        Prompt: body.Prompt,
+                        Difficulty: body.Difficulty ?? "medium",
+                        TargetCaseNoteCount: body.TargetCaseNoteCount ?? 12),
+                        adminId: http.AdminId(),
+                        adminName: http.AdminName(),
+                        authAccountId: http.User.FindFirst("aid")?.Value,
+                        ct);
+                    return Results.Ok(new
+                    {
+                        contentId = result.ContentId,
+                        title = result.Title,
+                        caseNoteCount = result.CaseNoteCount,
+                        modelLetterWordCount = result.ModelLetterWordCount,
+                        rulebookVersion = result.RulebookVersion,
+                        appliedRuleIds = result.AppliedRuleIds,
+                        warning = result.Warning,
+                    });
+                }
+                catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException qex)
+                {
+                    return Results.Json(new { errorCode = qex.ErrorCode, error = qex.Message }, statusCode: 429);
+                }
+            })
+            .WithAdminWrite("AdminContentWrite");
+
+        // ── Writing Options (kill-switch + entitlement) ────────────────
+
+        admin.MapGet("/writing/options",
+            async (OetLearner.Api.Services.Writing.IWritingOptionsProvider provider,
+                CancellationToken ct) =>
+            {
+                var opts = await provider.GetAsync(ct);
+                return Results.Ok(new
+                {
+                    aiGradingEnabled = opts.AiGradingEnabled,
+                    aiCoachEnabled = opts.AiCoachEnabled,
+                    killSwitchReason = opts.KillSwitchReason,
+                    freeTierEnabled = opts.FreeTierEnabled,
+                    freeTierLimit = opts.FreeTierLimit,
+                    freeTierWindowDays = opts.FreeTierWindowDays,
+                    updatedAt = opts.UpdatedAt,
+                    updatedByAdminId = opts.UpdatedByAdminId,
+                });
+            })
+            .WithAdminRead("AdminAiConfig");
+
+        admin.MapPut("/writing/options",
+            async (HttpContext http,
+                AdminWritingOptionsUpdateRequest body,
+                OetLearner.Api.Services.Writing.IWritingOptionsProvider provider,
+                CancellationToken ct) =>
+            {
+                var update = new OetLearner.Api.Domain.WritingOptions
+                {
+                    Id = "global",
+                    AiGradingEnabled = body.AiGradingEnabled,
+                    AiCoachEnabled = body.AiCoachEnabled,
+                    KillSwitchReason = body.KillSwitchReason,
+                    FreeTierEnabled = body.FreeTierEnabled,
+                    FreeTierLimit = body.FreeTierLimit,
+                    FreeTierWindowDays = body.FreeTierWindowDays,
+                };
+                var saved = await provider.UpdateAsync(update, http.AdminId(), ct);
+                return Results.Ok(new
+                {
+                    aiGradingEnabled = saved.AiGradingEnabled,
+                    aiCoachEnabled = saved.AiCoachEnabled,
+                    killSwitchReason = saved.KillSwitchReason,
+                    freeTierEnabled = saved.FreeTierEnabled,
+                    freeTierLimit = saved.FreeTierLimit,
+                    freeTierWindowDays = saved.FreeTierWindowDays,
+                    updatedAt = saved.UpdatedAt,
+                    updatedByAdminId = saved.UpdatedByAdminId,
+                });
+            })
+            .WithAdminWrite("AdminAiConfig");
 
         // ── Vocabulary Admin CRUD ────────────────────────
 

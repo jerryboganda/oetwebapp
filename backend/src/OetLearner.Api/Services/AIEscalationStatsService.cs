@@ -52,6 +52,8 @@ public sealed class AIEscalationStatsService(LearnerDbContext db, ILogger<AIEsca
 
     public async Task<AIEscalationStatsResponse> GetStatsAsync(string? configId, CancellationToken ct)
     {
+        logger.LogDebug("Loading AI escalation stats for config {ConfigId}", configId ?? "all");
+
         var thirtyDaysAgo = DateTimeOffset.UtcNow.AddDays(-30);
 
         // Count evaluations in last 30 days

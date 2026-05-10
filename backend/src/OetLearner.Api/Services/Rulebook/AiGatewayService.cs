@@ -66,17 +66,6 @@ public sealed class AiGatewayService(
             ? AiFeatureCodes.Unclassified
             : request.FeatureCode!;
 
-        // ── Credential resolution (Slice 4) ──────────────────────────────────
-        // Decide BYOK vs platform before quota enforcement — BYOK short-circuits
-        // the quota check, so the resolver's decision must come first.
-        AiCredentialResolution? resolution = null;
-        if (credentialResolver is not null)
-        {
-            resolution = await credentialResolver.ResolveAsync(
-                request.UserId, featureCode, request.Provider, ct);
-        }
-        var prospectiveKeySource = resolution?.KeySource ?? AiKeySource.Platform;
-
         // ── Grounding invariant: physically refuse ungrounded prompts ────────
         // The throw still happens (contract preserved), but we also record
         // the refusal so the admin explorer can surface "ungrounded attempts"
@@ -111,9 +100,13 @@ public sealed class AiGatewayService(
 
         // ── Provider selection ───────────────────────────────────────────────
         IAiModelProvider? provider = null;
+        string? routedModel = null;
+        string? selectedProviderCode = null;
+        string? selectedProviderDefaultModel = null;
         if (!string.IsNullOrWhiteSpace(request.Provider))
         {
             provider = providers.FirstOrDefault(p => string.Equals(p.Name, request.Provider, StringComparison.OrdinalIgnoreCase));
+            selectedProviderCode = request.Provider;
         }
 
         // Phase 7: per-feature override. Consulted only when the caller did
@@ -126,21 +119,20 @@ public sealed class AiGatewayService(
                 var route = await featureRouteResolver.ResolveAsync(featureCode, ct);
                 if (route is not null)
                 {
-                    var routeRow = (await providerRegistry.ListActiveAsync(ct))
-                        .FirstOrDefault(p => string.Equals(p.Code, route.ProviderCode, StringComparison.OrdinalIgnoreCase));
+                    var routeRow = await providerRegistry.FindByCodeAsync(route.ProviderCode, ct);
                     if (routeRow is not null)
                     {
-                        var preferredName = routeRow.Dialect switch
-                        {
-                            AiProviderDialect.Cloudflare => "cloudflare",
-                            AiProviderDialect.Anthropic => "anthropic",
-                            AiProviderDialect.Copilot => "copilot",
-                            AiProviderDialect.OpenAiCompatible => "registry",
-                            _ => null,
-                        };
+                        var preferredName = ProviderNameForDialect(routeRow.Dialect);
                         if (preferredName is not null)
                         {
-                            provider = providers.FirstOrDefault(p => string.Equals(p.Name, preferredName, StringComparison.OrdinalIgnoreCase));
+                            var routedProvider = providers.FirstOrDefault(p => string.Equals(p.Name, preferredName, StringComparison.OrdinalIgnoreCase));
+                            if (routedProvider is not null)
+                            {
+                                provider = routedProvider;
+                                selectedProviderCode = routeRow.Code;
+                                selectedProviderDefaultModel = routeRow.DefaultModel;
+                                routedModel = string.IsNullOrWhiteSpace(route.Model) ? routeRow.DefaultModel : route.Model;
+                            }
                         }
                     }
                 }
@@ -164,17 +156,15 @@ public sealed class AiGatewayService(
                 var topRow = (await providerRegistry.ListActiveAsync(ct)).FirstOrDefault();
                 if (topRow is not null)
                 {
-                    var preferredName = topRow.Dialect switch
-                    {
-                        AiProviderDialect.Cloudflare => "cloudflare",
-                        AiProviderDialect.Anthropic => "anthropic",
-                        AiProviderDialect.Copilot => "copilot",
-                        AiProviderDialect.OpenAiCompatible => "registry",
-                        _ => null,
-                    };
+                    var preferredName = ProviderNameForDialect(topRow.Dialect);
                     if (preferredName is not null)
                     {
                         provider = providers.FirstOrDefault(p => string.Equals(p.Name, preferredName, StringComparison.OrdinalIgnoreCase));
+                        if (provider is not null)
+                        {
+                            selectedProviderCode = topRow.Code;
+                            selectedProviderDefaultModel = topRow.DefaultModel;
+                        }
                     }
                 }
             }
@@ -198,6 +188,23 @@ public sealed class AiGatewayService(
                 ct);
             throw new InvalidOperationException("No AI model provider registered.");
         }
+
+        var effectiveModel = !string.IsNullOrWhiteSpace(request.Model)
+            ? request.Model
+            : routedModel ?? selectedProviderDefaultModel ?? string.Empty;
+
+        // ── Credential resolution (Slice 4) ──────────────────────────────────
+        // Decide BYOK vs platform before quota enforcement — BYOK short-circuits
+        // the quota check, so the resolver's decision must come first. Feature
+        // routes are resolved above so BYOK matching is constrained to the
+        // same provider the gateway will actually dispatch to.
+        AiCredentialResolution? resolution = null;
+        if (credentialResolver is not null)
+        {
+            resolution = await credentialResolver.ResolveAsync(
+                request.UserId, featureCode, selectedProviderCode ?? request.Provider, ct);
+        }
+        var prospectiveKeySource = resolution?.KeySource ?? AiKeySource.Platform;
 
         // ── Quota / policy enforcement (Slice 2) ─────────────────────────────
         // Skipped when the gateway is constructed without a quota service
@@ -273,7 +280,8 @@ public sealed class AiGatewayService(
             {
                 completion = await provider.CompleteAsync(new AiProviderRequest
                 {
-                    Model = request.Model,
+                    ProviderCode = selectedProviderCode,
+                    Model = effectiveModel,
                     SystemPrompt = request.Prompt.SystemPrompt,
                     UserPrompt = userPrompt,
                     Temperature = request.Temperature,
@@ -348,7 +356,7 @@ public sealed class AiGatewayService(
                 await usageRecorder.RecordFailureAsync(
                     context,
                     providerId: provider.Name,
-                    model: request.Model,
+                    model: effectiveModel,
                     keySource: prospectiveKeySource,
                     outcome: AiCallOutcome.Cancelled,
                     errorCode: "cancelled",
@@ -368,7 +376,7 @@ public sealed class AiGatewayService(
                 await usageRecorder.RecordFailureAsync(
                     context,
                     providerId: provider.Name,
-                    model: request.Model,
+                    model: effectiveModel,
                     keySource: prospectiveKeySource,
                     outcome: AiCallOutcome.Timeout,
                     errorCode: "timeout",
@@ -418,7 +426,7 @@ public sealed class AiGatewayService(
                 await usageRecorder.RecordFailureAsync(
                     context,
                     providerId: provider.Name,
-                    model: request.Model,
+                    model: effectiveModel,
                     keySource: prospectiveKeySource,
                     outcome: AiCallOutcome.ProviderError,
                     errorCode: errorCode,
@@ -448,7 +456,7 @@ public sealed class AiGatewayService(
             await usageRecorder.RecordSuccessAsync(
                 context,
                 providerId: provider.Name,
-                model: request.Model,
+                model: effectiveModel,
                 keySource: prospectiveKeySource,
                 usage: aggregatedUsage,
                 latencyMs: (int)stopwatch.ElapsedMilliseconds,
@@ -476,7 +484,7 @@ public sealed class AiGatewayService(
                 // Cost estimate: rate card × token counts, if the provider
                 // exposes it. Falls back to 0 so the counter still moves.
                 var costEstimate = await ComputeCostEstimateAsync(
-                    provider.Name, aggregatedUsage!, CancellationToken.None);
+                    selectedProviderCode ?? provider.Name, aggregatedUsage!, CancellationToken.None);
 
                 await quotaService!.CommitAsync(
                     request.UserId,
@@ -562,6 +570,15 @@ public sealed class AiGatewayService(
         var combined = $"{first} | {second}";
         return combined.Length <= 256 ? combined : combined[..256];
     }
+
+    private static string? ProviderNameForDialect(AiProviderDialect dialect) => dialect switch
+    {
+        AiProviderDialect.Cloudflare => "cloudflare",
+        AiProviderDialect.Anthropic => "anthropic",
+        AiProviderDialect.Copilot => "copilot",
+        AiProviderDialect.OpenAiCompatible => "registry",
+        _ => null,
+    };
 
     /// <summary>
     /// USD cost estimate = (prompt_tokens / 1k × prompt_rate) +
@@ -1074,7 +1091,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
     }
 
     // H2: Require explicit letter/card type at grounded-prompt build time. The
-    // prior code emitted the literal string "letter type TBD" or "card type TBD"
+    // prior code emitted a placeholder letter/card type
     // when the field was missing, which meant a downstream AI would produce
     // generic, non-scenario-specific feedback the learner could not act on.
     // Failing fast here surfaces the authoring bug at the source instead of
@@ -1197,7 +1214,7 @@ public sealed class AiGatewayRequest
     public AiGroundedPrompt? Prompt { get; init; }
     public string? UserInput { get; init; }
     public string Provider { get; init; } = "";
-    public string Model { get; init; } = "mock";
+    public string Model { get; init; } = "";
     public double Temperature { get; init; } = 0.2;
     public int? MaxTokens { get; init; }
 
@@ -1254,6 +1271,7 @@ public interface IAiModelProvider
 
 public sealed class AiProviderRequest
 {
+    public string? ProviderCode { get; init; }
     public string Model { get; init; } = "";
     public string SystemPrompt { get; init; } = "";
     public string UserPrompt { get; init; } = "";

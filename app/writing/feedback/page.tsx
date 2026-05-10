@@ -41,6 +41,14 @@ function Highlight({ id, children, active, onToggle }: { id: string; children: R
   );
 }
 
+function writingProfessionSlug(value: string | null | undefined) {
+  return value?.trim().toLowerCase().replace(/[\s_]+/g, '-') || 'medicine';
+}
+
+function writingRulebookHref(ruleId: string, profession: string | null | undefined) {
+  return `/writing/rulebook/${encodeURIComponent(ruleId)}?profession=${encodeURIComponent(writingProfessionSlug(profession))}`;
+}
+
 export default function WritingDetailedFeedback() {
   const searchParams = useSearchParams();
   const resultId = searchParams?.get('id') ?? '';
@@ -187,11 +195,46 @@ export default function WritingDetailedFeedback() {
                       <div className="space-y-3">
                         {criterion.anchoredComments.map(comment => {
                           const isActive = activeComment === comment.id;
+                          const severityVariant: 'danger' | 'warning' | 'info' | 'muted' =
+                            comment.severity === 'critical' ? 'danger'
+                            : comment.severity === 'major' ? 'warning'
+                            : comment.severity === 'minor' ? 'info'
+                            : 'muted';
+                          const sourceLabel =
+                            comment.source === 'rule_engine' ? 'Rule check'
+                            : comment.source === 'ai' ? 'AI feedback'
+                            : null;
                           return (
                             <button key={comment.id} type="button" onClick={() => setActiveComment(isActive ? null : comment.id)}
                               className={`w-full cursor-pointer rounded-2xl border p-4 text-left transition-all ${isActive ? 'border-primary/20 bg-primary/5 shadow-sm' : 'border-border bg-background-light hover:border-border-hover'}`}>
+                               {(comment.ruleId || comment.severity || sourceLabel) && (
+                                 <div className="mb-2 flex flex-wrap items-center gap-2">
+                                   {comment.ruleId ? (
+                                     <Link
+                                       href={writingRulebookHref(comment.ruleId, result.profession)}
+                                       onClick={(e) => e.stopPropagation()}
+                                       className="inline-flex items-center rounded border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+                                       data-testid="rule-badge"
+                                     >
+                                       [{comment.ruleId}]
+                                     </Link>
+                                   ) : null}
+                                   {comment.severity ? (
+                                     <Badge variant={severityVariant} size="sm">{comment.severity}</Badge>
+                                   ) : null}
+                                   {sourceLabel ? (
+                                     <span className="text-[11px] font-medium uppercase tracking-wider text-muted">{sourceLabel}</span>
+                                   ) : null}
+                                 </div>
+                               )}
                                <div className="mb-2 border-l-2 border-border pl-3 text-sm italic text-muted">&quot;{comment.text}&quot;</div>
                                <div className="text-sm font-medium text-navy">{comment.comment}</div>
+                               {comment.suggestedFix ? (
+                                 <div className="mt-3 rounded-lg border border-success/30 bg-success/5 p-3 text-sm">
+                                   <div className="text-[11px] font-bold uppercase tracking-wider text-success mb-1">Suggested fix</div>
+                                   <div className="text-navy/80">{comment.suggestedFix}</div>
+                                 </div>
+                               ) : null}
                               </button>
                           );
                         })}

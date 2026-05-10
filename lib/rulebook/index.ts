@@ -9,5 +9,6 @@ export * from './types';
 export * from './loader';
 export * from './context';
 export * from './writing-rules';
+export * from './writing-coverage';
 export * from './speaking-rules';
 export * from './ai-prompt';

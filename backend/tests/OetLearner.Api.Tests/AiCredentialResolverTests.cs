@@ -87,6 +87,18 @@ public class AiCredentialResolverTests
     }
 
     [Fact]
+    public async Task Resolves_Platform_WhenRequestedProviderDoesNotMatchStoredByokCredential()
+    {
+        var (db, resolver, _) = await BuildAsync(hasByokKey: true, byokProvider: "openrouter");
+        var r = await resolver.ResolveAsync("u1", AiFeatureCodes.ConversationReply, "openai-platform", default);
+        Assert.Equal(AiKeySource.Platform, r.KeySource);
+        Assert.Equal("openai-platform", r.ProviderCode);
+        Assert.Null(r.ApiKeyPlaintext);
+        Assert.Contains("platform_fallback", r.PolicyTrace);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Resolves_Platform_ForNonScoring_WhenNoKeyStored()
     {
         var (db, resolver, _) = await BuildAsync(hasByokKey: false);
@@ -123,6 +135,27 @@ public class AiCredentialResolverTests
         var (db, resolver, _) = await BuildAsync(mode: AiCredentialMode.ByokOnly, hasByokKey: true);
         var r = await resolver.ResolveAsync("u1", AiFeatureCodes.AdminContentGeneration, null, default);
         Assert.Equal(AiKeySource.Platform, r.KeySource);
+        Assert.Contains("platform_only", r.PolicyTrace);
+        await db.DisposeAsync();
+    }
+
+    [Theory]
+    [InlineData(AiFeatureCodes.PronunciationScore)]
+    [InlineData(AiFeatureCodes.PronunciationFeedback)]
+    [InlineData(AiFeatureCodes.ConversationEvaluation)]
+    public async Task Resolves_Platform_ForPlatformOnlyEvaluationFeatures_RegardlessOfKey(string featureCode)
+    {
+        var (db, resolver, _) = await BuildAsync(
+            allowByokOnScoring: true,
+            allowByokOnNonScoring: true,
+            mode: AiCredentialMode.ByokOnly,
+            hasByokKey: true);
+
+        var r = await resolver.ResolveAsync("u1", featureCode, null, default);
+
+        Assert.Equal(AiKeySource.Platform, r.KeySource);
+        Assert.Equal("digitalocean-serverless", r.ProviderCode);
+        Assert.Null(r.ApiKeyPlaintext);
         Assert.Contains("platform_only", r.PolicyTrace);
         await db.DisposeAsync();
     }

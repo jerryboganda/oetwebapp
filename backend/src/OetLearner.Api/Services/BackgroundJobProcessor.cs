@@ -132,7 +132,9 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         switch (job.Type)
         {
             case JobType.WritingEvaluation:
-                await CompleteWritingEvaluationAsync(db, notifications, job, cancellationToken);
+                await services.GetRequiredService<OetLearner.Api.Services.Writing.IWritingEvaluationPipeline>()
+                    .CompleteEvaluationAsync(job, cancellationToken);
+                await CompleteWritingEvaluationSideEffectsAsync(db, notifications, job, cancellationToken);
                 break;
             case JobType.SpeakingTranscription:
                 await services.GetRequiredService<ISpeakingEvaluationPipeline>()
@@ -405,57 +407,23 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         record.EntitlementConsumed = true;
     }
 
-    private static async Task CompleteWritingEvaluationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteWritingEvaluationSideEffectsAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
 
         var attempt = await db.Attempts.FirstAsync(x => x.Id == job.AttemptId, cancellationToken);
         var evaluation = await db.Evaluations.FirstAsync(x => x.AttemptId == attempt.Id, cancellationToken);
 
-        // Per Writing Module Technical Specification v1.0 (Dr. Ahmed Hesham),
-        // the platform must NOT evaluate response length. Scoring bands here
-        // are length-independent placeholder values for the mock evaluation
-        // pipeline; tutor review remains the final marking path.
-        _ = attempt.DraftContent;
-        var concisenessBand = "4-5/6";
+        // Only emit success-side analytics + notifications when the
+        // pipeline actually completed grading. On Failed evaluations the
+        // pipeline preserves rule-engine findings and surfaces the failure
+        // through evaluation.StatusReasonCode; the evaluation_failed-style
+        // notification path lives elsewhere (job retry / SLA worker).
+        if (evaluation.State != AsyncState.Completed)
+        {
+            return;
+        }
 
-        evaluation.State = AsyncState.Completed;
-        evaluation.ScoreRange = "330-360";
-        evaluation.GradeRange = "C+-B";
-        evaluation.ConfidenceBand = ConfidenceBand.Medium;
-        evaluation.StrengthsJson = JsonSupport.Serialize(new[]
-        {
-            "Your structure stays focused on the receiving clinician.",
-            "Core postoperative actions are covered clearly."
-        });
-        evaluation.IssuesJson = JsonSupport.Serialize(new[]
-        {
-            "Trim lower-priority procedural detail more aggressively.",
-            "Proofread for small wording repetitions before submission."
-        });
-        evaluation.CriterionScoresJson = JsonSupport.Serialize(new[]
-        {
-            new { criterionCode = "purpose", scoreRange = "4-5/6", confidenceBand = "medium", explanation = "Purpose is clear in the opening lines." },
-            new { criterionCode = "content", scoreRange = "4-5/6", confidenceBand = "high", explanation = "Key discharge details are present." },
-            new { criterionCode = "conciseness_clarity", scoreRange = concisenessBand, confidenceBand = "medium", explanation = "Conciseness & Clarity improve when only ongoing-care information is retained." },
-            new { criterionCode = "genre_style", scoreRange = "4/7", confidenceBand = "medium", explanation = "Tone and register remain professional overall." },
-            new { criterionCode = "organisation_layout", scoreRange = "4/7", confidenceBand = "medium", explanation = "The sequence and layout of information are logical." },
-            new { criterionCode = "language", scoreRange = "4/6", confidenceBand = "medium", explanation = "Grammar and wording are generally secure." }
-        });
-        evaluation.FeedbackItemsJson = JsonSupport.Serialize(new[]
-        {
-            new { feedbackItemId = $"{evaluation.Id}-1", criterionCode = "conciseness_clarity", type = "anchored_comment", anchor = new { snippet = attempt.DraftContent.Length > 80 ? attempt.DraftContent[..80] : attempt.DraftContent }, message = "Prioritise information that changes the reader's follow-up actions.", severity = "medium", suggestedFix = "Remove low-impact procedural details." }
-        });
-        evaluation.GeneratedAt = DateTimeOffset.UtcNow;
-        evaluation.ModelExplanationSafe = "This training estimate is based on criterion-level writing signals and is not an official OET result.";
-        evaluation.LearnerDisclaimer = "Use tutor review when you need a higher-trust external check.";
-        evaluation.StatusReasonCode = "completed";
-        evaluation.StatusMessage = "Writing evaluation completed.";
-        evaluation.RetryAfterMs = null;
-        evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
-
-        attempt.State = AttemptState.Completed;
-        attempt.CompletedAt = DateTimeOffset.UtcNow;
         db.AnalyticsEvents.Add(new AnalyticsEventRecord
         {
             Id = $"evt-{Guid.NewGuid():N}",

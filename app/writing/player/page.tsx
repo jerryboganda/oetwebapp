@@ -14,11 +14,11 @@ import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-pa
 import { WritingEditor } from '@/components/domain/writing-editor';
 import { RulebookFindingsPanel } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchWritingTask, fetchWritingChecklist, submitWritingDraft, submitWritingTask, completeMockSection } from '@/lib/api';
+import { fetchWritingTask, fetchWritingChecklist, ensureWritingAttempt, submitWritingDraft, submitWritingTask, completeMockSection, fetchWritingEntitlement, lintWritingViaApi, ApiError, type WritingEntitlement } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingTask } from '@/lib/mock-data';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { deriveWritingCaseNotesMarkers, inferWritingLetterType, lintWritingLetter } from '@/lib/rulebook';
+import { inferWritingLetterType, type ExamProfession, type LintFinding } from '@/lib/rulebook';
 import {
   normalizeWritingPracticeMode,
   WRITING_CRITERIA,
@@ -27,6 +27,57 @@ import {
 } from '@/lib/writing/workflow';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
+
+function normalizeExamProfession(value: string | null | undefined): ExamProfession {
+  const normalized = (value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const professions: Record<string, ExamProfession> = {
+    medicine: 'medicine',
+    nursing: 'nursing',
+    dentistry: 'dentistry',
+    pharmacy: 'pharmacy',
+    physiotherapy: 'physiotherapy',
+    veterinary: 'veterinary',
+    optometry: 'optometry',
+    radiography: 'radiography',
+    occupationaltherapy: 'occupational-therapy',
+    speechpathology: 'speech-pathology',
+    podiatry: 'podiatry',
+    dietetics: 'dietetics',
+    otheralliedhealth: 'other-allied-health',
+  };
+
+  return professions[normalized] ?? 'medicine';
+}
+
+function writingRulebookHref(ruleId: string, profession: string | null | undefined) {
+  return `/writing/rulebook/${encodeURIComponent(ruleId)}?profession=${encodeURIComponent(normalizeExamProfession(profession))}`;
+}
+
+type WritingPhase = 'reading' | 'writing';
+
+interface ExamTimerState {
+  startedAt: string;
+  phase: WritingPhase;
+  initialSeconds: number;
+}
+
+function deriveExamTimerState(startedAt: string): ExamTimerState {
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000));
+  if (elapsedSeconds < WRITING_READING_WINDOW_SECONDS) {
+    return {
+      startedAt,
+      phase: 'reading',
+      initialSeconds: WRITING_READING_WINDOW_SECONDS - elapsedSeconds,
+    };
+  }
+
+  const writingElapsedSeconds = elapsedSeconds - WRITING_READING_WINDOW_SECONDS;
+  return {
+    startedAt,
+    phase: 'writing',
+    initialSeconds: Math.max(0, WRITING_WINDOW_SECONDS - writingElapsedSeconds),
+  };
+}
 
 /**
  * Official OET Writing exam phases. Source: Dr. Ahmed Hesham corrections.
@@ -57,11 +108,23 @@ export default function WritingPlayer() {
   const [content, setContent] = useState('');
   const [scratchpad, setScratchpad] = useState('');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [lintFindings, setLintFindings] = useState<LintFinding[]>([]);
+  const [lintError, setLintError] = useState(false);
   const [fontSize, setFontSize] = useState(16);
   const [isDistractionFree, setIsDistractionFree] = useState(false);
   const [activeTab, setActiveTab] = useState<'notes' | 'scratchpad' | 'checklist'>('notes');
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  /**
+   * Entitlement gate — server is the source of truth (HTTP 402 with
+   * `writing_quota_exceeded` is enforced regardless), but we surface a
+   * friendly modal up-front when the cached entitlement says the learner
+   * cannot grade right now.
+   */
+  const [entitlementBlock, setEntitlementBlock] = useState<
+    | { reason: 'premium_required' | 'quota_exceeded'; resetAt: string | null }
+    | null
+  >(null);
   const [timerRunning, setTimerRunning] = useState(true);
   const [mobileView, setMobileView] = useState<'notes' | 'editor'>('notes');
   /**
@@ -71,9 +134,11 @@ export default function WritingPlayer() {
    *
    * Source: Dr. Ahmed Hesham corrections (applies to ALL OET professions).
    */
-  const [phase, setPhase] = useState<'reading' | 'writing'>(() => (isExamMode ? 'reading' : 'writing'));
+  const [phase, setPhase] = useState<WritingPhase>(() => (isExamMode ? 'reading' : 'writing'));
+  const [examTimerState, setExamTimerState] = useState<ExamTimerState | null>(null);
   const isReadingPhase = isExamMode && phase === 'reading';
   const saveTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const examAttemptStartedAtRef = useRef<string | null>(null);
   const hasUnsavedChanges = useRef(false);
   const latestContentRef = useRef('');
   const isSubmittingRef = useRef(false);
@@ -90,7 +155,6 @@ export default function WritingPlayer() {
   const lintReady = trimmedContentLength >= LINT_MIN_CONTENT_CHARS;
 
   const inferredLetterType = useMemo(() => inferWritingLetterType(task ?? {}), [task]);
-  const caseNotesMarkers = useMemo(() => deriveWritingCaseNotesMarkers(task?.caseNotes), [task?.caseNotes]);
 
   // Live, advisory word counter. Pure UI hint — the platform never blocks
   // submission on word count; canonical enforcement (where it exists) lives in
@@ -174,33 +238,92 @@ export default function WritingPlayer() {
     </div>
   );
 
-  const lintFindings = useMemo(() => {
-    if (!task || !lintReady) return [];
-    const minorAgeMatch = task.caseNotes.match(/\b(\d+)\s*(years? old|year-old)\b/i);
-    return lintWritingLetter({
-      letterText: content,
-      letterType: inferredLetterType,
-      profession: 'medicine',
-      recipientSpecialty: task.title,
-      recipientName: null,
-      patientAge: minorAgeMatch ? Number(minorAgeMatch[1]) : null,
-      patientIsMinor: minorAgeMatch ? Number(minorAgeMatch[1]) < 18 : false,
-      caseNotesMarkers,
-    });
-  }, [task, lintReady, content, inferredLetterType, caseNotesMarkers]);
+  useEffect(() => {
+    let cancelled = false;
 
-  const lintInactiveMessage = !lintReady
+    if (!task || !lintReady) {
+      setLintFindings([]);
+      setLintError(false);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      const minorAgeMatch = task.caseNotes.match(/\b(\d+)\s*(years? old|year-old)\b/i);
+      const patientAge = minorAgeMatch ? Number(minorAgeMatch[1]) : null;
+
+      try {
+        const result = await lintWritingViaApi({
+          letterText: content,
+          contentId: task.id,
+          letterType: inferredLetterType,
+          profession: normalizeExamProfession(task.profession),
+          recipientSpecialty: task.title,
+          recipientName: task.recipient ?? null,
+          patientAge,
+          patientIsMinor: patientAge !== null && patientAge < 18,
+        });
+
+        if (!cancelled) {
+          setLintFindings(result.findings);
+          setLintError(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setLintFindings([]);
+          setLintError(true);
+        }
+      }
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [task, lintReady, content, inferredLetterType]);
+
+  const lintInactiveMessage = lintError
+    ? 'The live rulebook checker could not refresh. Your draft is still saved normally.'
+    : !lintReady
     ? 'The live rulebook checker starts once you have written a few sentences, so early brainstorming does not create noisy warnings.'
     : undefined;
 
   useEffect(() => {
-    Promise.all([fetchWritingTask(taskId), fetchWritingChecklist()])
-      .then(([t, cl]) => {
+    let cancelled = false;
+    setLoading(true);
+
+    const attemptPromise = isExamMode ? ensureWritingAttempt(taskId, practiceMode) : Promise.resolve(null);
+    Promise.all([fetchWritingTask(taskId), fetchWritingChecklist(), attemptPromise])
+      .then(([t, cl, attempt]) => {
+        if (cancelled) return;
         setTask(t);
         setChecklist(cl.map(c => ({ id: String(c.id), label: c.text, checked: c.completed })));
+        if (attempt) {
+          examAttemptStartedAtRef.current = attempt.startedAt;
+          const nextTimerState = deriveExamTimerState(attempt.startedAt);
+          setExamTimerState(nextTimerState);
+          setPhase(nextTimerState.phase);
+          if (nextTimerState.phase === 'writing') {
+            setMobileView('editor');
+          }
+          if (attempt.draftContent && !latestContentRef.current) {
+            latestContentRef.current = attempt.draftContent;
+            setContent(attempt.draftContent);
+            hasUnsavedChanges.current = false;
+          }
+        } else {
+          examAttemptStartedAtRef.current = null;
+          setExamTimerState(null);
+          setPhase('writing');
+        }
       })
-      .finally(() => setLoading(false));
-  }, [taskId]);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isExamMode, practiceMode, taskId]);
 
   useEffect(() => {
     return () => {
@@ -265,6 +388,22 @@ export default function WritingPlayer() {
 
   const handleSubmit = async () => {
     if (submitting) return;
+    if (isReadingPhase) {
+      setSaveStatus('idle');
+      return;
+    }
+
+    // Pre-flight entitlement check. Server still enforces (HTTP 402); this
+    // just avoids the round-trip when we already know the answer.
+    try {
+      const ent: WritingEntitlement = await fetchWritingEntitlement();
+      if (!ent.allowed && (ent.reason === 'premium_required' || ent.reason === 'quota_exceeded')) {
+        setEntitlementBlock({ reason: ent.reason, resetAt: ent.resetAt });
+        return;
+      }
+    } catch {
+      // Non-fatal: fall through to submit and let the server enforce.
+    }
 
     isSubmittingRef.current = true;
     autosaveSequenceRef.current += 1;
@@ -313,10 +452,17 @@ export default function WritingPlayer() {
           window.location.assign(resultUrl);
         }
       }, 500);
-    } catch {
+    } catch (err) {
       isSubmittingRef.current = false;
       setSubmitting(false);
       setSaveStatus('failed');
+      // Surface server-side quota gate (HTTP 402) gracefully rather than as
+      // a generic submission failure.
+      if (err instanceof ApiError && err.status === 402 && err.code === 'writing_quota_exceeded') {
+        setEntitlementBlock({ reason: 'quota_exceeded', resetAt: null });
+      } else if (err instanceof ApiError && err.code === 'writing_reading_window_active') {
+        setSaveStatus('idle');
+      }
     }
   };
 
@@ -332,6 +478,15 @@ export default function WritingPlayer() {
    */
   const handleReadingWindowComplete = useCallback(() => {
     if (!isExamMode) return;
+    const startedAt = examAttemptStartedAtRef.current;
+    if (startedAt) {
+      const nextTimerState = deriveExamTimerState(startedAt);
+      setExamTimerState({
+        ...nextTimerState,
+        phase: 'writing',
+        initialSeconds: nextTimerState.phase === 'writing' ? nextTimerState.initialSeconds : WRITING_WINDOW_SECONDS,
+      });
+    }
     setPhase(prev => {
       if (prev !== 'reading') return prev;
       analytics.track('writing_reading_window_ended', { taskId, mode: practiceMode });
@@ -341,6 +496,13 @@ export default function WritingPlayer() {
     // the learner immediately sees where to start writing.
     setMobileView(prev => (prev === 'notes' ? 'editor' : prev));
   }, [isExamMode, practiceMode, taskId]);
+
+  const timerInitialSeconds = isExamMode
+    ? examTimerState?.initialSeconds ?? (isReadingPhase ? WRITING_READING_WINDOW_SECONDS : WRITING_WINDOW_SECONDS)
+    : 0;
+  const timerKey = isExamMode
+    ? `${examTimerState?.startedAt ?? 'pending'}-${phase}-${timerInitialSeconds}`
+    : 'learning';
 
   const handleWritingWindowComplete = useCallback(() => {
     // Writing window expired — auto-submit so the learner does not lose work.
@@ -413,8 +575,8 @@ export default function WritingPlayer() {
 
                 <div className="flex items-center gap-2 self-end sm:gap-3 sm:self-auto sm:justify-end">
                   <Timer
-                    key={`writing-timer-${phase}`}
-                    initialSeconds={isExamMode ? (isReadingPhase ? WRITING_READING_WINDOW_SECONDS : WRITING_WINDOW_SECONDS) : 0}
+                    key={`writing-timer-${timerKey}`}
+                    initialSeconds={timerInitialSeconds}
                     running={timerRunning}
                     mode={isExamMode ? 'countdown' : 'elapsed'}
                     size={isMobile ? 'sm' : 'md'}
@@ -429,7 +591,7 @@ export default function WritingPlayer() {
                   >
                     <Maximize className="h-5 w-5" />
                   </button>
-                  <Button size={isMobile ? 'sm' : 'md'} onClick={handleSubmit} loading={submitting} className="shrink-0 whitespace-nowrap touch-target">
+                  <Button size={isMobile ? 'sm' : 'md'} onClick={handleSubmit} loading={submitting} disabled={isReadingPhase || submitting} className="shrink-0 whitespace-nowrap touch-target">
                     Submit
                   </Button>
                 </div>
@@ -535,8 +697,8 @@ export default function WritingPlayer() {
               className="absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full border border-border bg-surface px-4 py-2 shadow-lg"
             >
               <Timer
-                key={`writing-timer-df-${phase}`}
-                initialSeconds={isExamMode ? (isReadingPhase ? WRITING_READING_WINDOW_SECONDS : WRITING_WINDOW_SECONDS) : 0}
+                key={`writing-timer-df-${timerKey}`}
+                initialSeconds={timerInitialSeconds}
                 running={timerRunning}
                 mode={isExamMode ? 'countdown' : 'elapsed'}
                 size="sm"
@@ -639,7 +801,7 @@ export default function WritingPlayer() {
                           findings={lintFindings}
                           inactiveMessage={lintInactiveMessage}
                           className="shrink-0 rounded-none rounded-b-[24px] border-t border-border"
-                          ruleHref={(ruleId) => `/writing/rulebook/${ruleId}`}
+                          ruleHref={(ruleId) => writingRulebookHref(ruleId, task.profession)}
                         />
                       ) : null}
                     </div>
@@ -694,7 +856,7 @@ export default function WritingPlayer() {
                     findings={lintFindings}
                     inactiveMessage={lintInactiveMessage}
                     className="shrink-0 rounded-none rounded-b-[24px] border-t border-border"
-                    ruleHref={(ruleId) => `/writing/rulebook/${ruleId}`}
+                    ruleHref={(ruleId) => writingRulebookHref(ruleId, task.profession)}
                   />
                 ) : null}
               </div>
@@ -711,6 +873,25 @@ export default function WritingPlayer() {
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button variant="secondary" onClick={() => setShowLeaveModal(false)}>Stay</Button>
             <Button variant="destructive" onClick={() => router.push('/writing')}>Leave</Button>
+          </div>
+        </Modal>
+
+        {/* Entitlement Gate Modal — premium-required or quota-exceeded. */}
+        <Modal
+          open={entitlementBlock !== null}
+          onClose={() => setEntitlementBlock(null)}
+          title={entitlementBlock?.reason === 'premium_required' ? 'AI grading is a premium feature' : 'Free quota reached'}
+        >
+          <p className="mb-6 text-sm text-muted">
+            {entitlementBlock?.reason === 'premium_required'
+              ? 'Upgrade to get instant rule-cited feedback on every writing submission. Your draft has been saved.'
+              : entitlementBlock?.resetAt
+                ? `You\u2019ve used all your free AI gradings for this week. Quota resets ${new Date(entitlementBlock.resetAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Upgrade for unlimited grading.`
+                : 'You\u2019ve reached the free grading quota. Upgrade for unlimited rule-cited feedback.'}
+          </p>
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setEntitlementBlock(null)}>Not now</Button>
+            <Button variant="primary" onClick={() => router.push('/billing/subscribe')}>Upgrade</Button>
           </div>
         </Modal>
       </div>

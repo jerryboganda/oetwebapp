@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
@@ -141,7 +142,7 @@ public sealed class AiProviderConnectionTester(
 
             using var response = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
             stopwatch.Stop();
-            return ClassifyResponse(response, stopwatch.ElapsedMilliseconds, startedAt);
+            return ClassifyResponse(response, stopwatch.ElapsedMilliseconds, startedAt, apiKey);
         }
         catch (HttpRequestException ex)
         {
@@ -149,11 +150,11 @@ public sealed class AiProviderConnectionTester(
             logger.LogInformation(ex, "AI provider probe network failure for {Provider}", provider.Code);
             return new AiProviderTestResult(
                 AiProviderTestStatuses.Network,
-                Truncate(ex.Message, 512),
+                Truncate(RedactSecrets(ex.Message, apiKey), 512),
                 (int)stopwatch.ElapsedMilliseconds,
                 startedAt);
         }
-        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
             stopwatch.Stop();
             return new AiProviderTestResult(
@@ -168,13 +169,13 @@ public sealed class AiProviderConnectionTester(
             logger.LogWarning(ex, "AI provider probe unknown failure for {Provider}", provider.Code);
             return new AiProviderTestResult(
                 AiProviderTestStatuses.Unknown,
-                Truncate(ex.Message, 512),
+                Truncate(RedactSecrets(ex.Message, apiKey), 512),
                 (int)stopwatch.ElapsedMilliseconds,
                 startedAt);
         }
     }
 
-    internal static AiProviderTestResult ClassifyResponse(HttpResponseMessage response, long latencyMs, DateTimeOffset startedAt)
+    internal static AiProviderTestResult ClassifyResponse(HttpResponseMessage response, long latencyMs, DateTimeOffset startedAt, string? apiKey = null)
     {
         if ((int)response.StatusCode is >= 200 and < 300)
         {
@@ -191,18 +192,23 @@ public sealed class AiProviderConnectionTester(
         };
 
         // Best-effort body sniff for a friendlier message; never blocking.
+        // Redact BEFORE truncating so a secret straddling the 256-byte
+        // body cutoff cannot survive as a partial token (matches the
+        // exception-path ordering above).
         string? message = null;
         try
         {
             var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             if (!string.IsNullOrWhiteSpace(body))
             {
-                message = TryExtractErrorMessage(body) ?? Truncate(body, 256);
+                var redactedBody = RedactSecrets(body, apiKey) ?? string.Empty;
+                message = TryExtractErrorMessage(redactedBody) ?? Truncate(redactedBody, 256);
             }
         }
         catch { /* fail-soft; status code is enough */ }
 
-        return new AiProviderTestResult(status, $"HTTP {(int)response.StatusCode}: {message ?? response.ReasonPhrase}", (int)latencyMs, startedAt);
+        var raw = $"HTTP {(int)response.StatusCode}: {message ?? response.ReasonPhrase}";
+        return new AiProviderTestResult(status, RedactSecrets(raw, apiKey), (int)latencyMs, startedAt);
     }
 
     private static string? TryExtractErrorMessage(string body)
@@ -226,4 +232,36 @@ public sealed class AiProviderConnectionTester(
         if (string.IsNullOrEmpty(value)) return value;
         return value.Length <= max ? value : value[..max];
     }
+
+    // RW-019 redaction: providers can echo the offending Authorization
+    // header back in error bodies. We persist LastTestError into the
+    // database AND return it in the admin "test connection" payload, so
+    // anything that lands here must have the live secret + any common
+    // PAT/key patterns scrubbed BEFORE persistence/serialisation. This
+    // is the only place these strings are produced inside the tester.
+    internal static string? RedactSecrets(string? value, string? apiKey)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+
+        var result = value;
+        if (!string.IsNullOrWhiteSpace(apiKey) && apiKey.Length >= 8)
+        {
+            // Replace the literal decrypted key first — covers the case
+            // where the provider echoed the exact Authorization value.
+            result = result.Replace(apiKey, "***REDACTED***", StringComparison.Ordinal);
+        }
+
+        // Generic PAT/key shapes (case-insensitive). Patterns are anchored
+        // on the documented prefixes for the providers we currently support
+        // plus the most common third-party prefixes so admins do not see
+        // raw secret material in error messages even if the offending key
+        // belongs to a different provider whose body got mirrored back.
+        result = SecretPatterns.Replace(result, "***REDACTED***");
+        return result;
+    }
+
+    private static readonly Regex SecretPatterns = new(
+        @"(?:github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|ghr_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_\-]{20,}|sk-proj-[A-Za-z0-9_\-]{20,}|sk-[A-Za-z0-9_\-]{20,}|AIza[0-9A-Za-z_\-]{20,}|xox[baprs]-[A-Za-z0-9\-]{20,})",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase,
+        TimeSpan.FromMilliseconds(50));
 }

@@ -1,8 +1,8 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const { mockApiRequest, mockFetchFreezeStatus, mockTrack } = vi.hoisted(() => ({
-  mockApiRequest: vi.fn(),
+const { mockFetchBillingUpgradePath, mockFetchFreezeStatus, mockTrack } = vi.hoisted(() => ({
+  mockFetchBillingUpgradePath: vi.fn(),
   mockFetchFreezeStatus: vi.fn(),
   mockTrack: vi.fn(),
 }));
@@ -32,7 +32,7 @@ vi.mock('@/lib/analytics', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  apiClient: { request: mockApiRequest },
+  fetchBillingUpgradePath: mockFetchBillingUpgradePath,
   fetchFreezeStatus: mockFetchFreezeStatus,
 }));
 
@@ -87,7 +87,7 @@ const sampleData = {
 describe('Billing upgrade page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockApiRequest.mockResolvedValue(sampleData);
+    mockFetchBillingUpgradePath.mockResolvedValue(sampleData);
     mockFetchFreezeStatus.mockResolvedValue(null);
   });
 
@@ -105,7 +105,7 @@ describe('Billing upgrade page', () => {
   });
 
   it('renders the empty state when the upgrade endpoint fails', async () => {
-    mockApiRequest.mockRejectedValueOnce(new Error('upgrade unavailable'));
+    mockFetchBillingUpgradePath.mockRejectedValueOnce(new Error('upgrade unavailable'));
 
     renderWithRouter(<BillingUpgradePage />);
 

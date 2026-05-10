@@ -50,6 +50,13 @@ declare global {
         vaultPath: string;
       }>;
     };
+    offlineCache: {
+      store: (key: string, data: unknown) => Promise<{ success: true; key: string }>;
+      get: (key: string) => Promise<{ cachedAt: number; data: unknown } | null>;
+      delete: (key: string) => Promise<{ success: true; key: string }>;
+      list: () => Promise<Array<{ key: string; sizeBytes: number; modifiedAt: number }>>;
+      clear: () => Promise<{ success: true; cleared: number }>;
+    };
     notifications: {
       show: (title: string, body: string, route?: string) => Promise<{ ok: boolean }>;
     };

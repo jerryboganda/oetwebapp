@@ -204,9 +204,15 @@ export default function GrammarLessonPage() {
                   <div className="space-y-2">
                     <h2 className="text-xl font-bold text-navy">Ready to learn?</h2>
                     <p className="mx-auto max-w-md text-sm leading-6 text-muted">
-                      Review the teaching notes, then complete{' '}
-                      <span className="font-semibold text-navy">{exerciseCount} exercises</span>{' '}
-                      graded instantly by the server.
+                      {exerciseCount > 0 ? (
+                        <>
+                          Review the teaching notes, then complete{' '}
+                          <span className="font-semibold text-navy">{exerciseCount} exercises</span>{' '}
+                          graded instantly by the server.
+                        </>
+                      ) : (
+                        <>Review the teaching notes for this lesson and return to the grammar hub when you are ready for the next activity.</>
+                      )}
                     </p>
                   </div>
 
@@ -261,13 +267,13 @@ export default function GrammarLessonPage() {
                   disabled={exerciseCount === 0}
                 >
                   {exerciseCount === 0
-                    ? 'No exercises yet'
+                    ? 'Study notes only'
                     : `Practise now · ${exerciseCount} exercises`}
                 </Button>
               </div>
 
               {exerciseCount === 0 ? (
-                <p className="text-sm text-muted">Exercises for this lesson are coming soon.</p>
+                <p className="text-sm text-muted">This lesson is available as a focused study-note activity.</p>
               ) : null}
             </MotionItem>
           ) : null}

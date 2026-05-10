@@ -28,6 +28,21 @@ public class MediaEndpointSecurityTests(TestWebApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task Upload_requires_authenticated_user()
+    {
+        using var firstPartyFactory = new FirstPartyAuthTestWebApplicationFactory();
+        using var client = firstPartyFactory.CreateClient();
+        using var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent("not-a-pdf"u8.ToArray());
+        file.Headers.ContentType = new("application/pdf");
+        content.Add(file, "file", "fake.pdf");
+
+        var response = await client.PostAsync("/v1/media/upload", content);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Download_denies_published_paper_media_without_active_entitlement()
     {
         var mediaId = $"media-{Guid.NewGuid():N}";

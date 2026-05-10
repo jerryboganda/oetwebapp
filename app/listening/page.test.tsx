@@ -59,6 +59,8 @@ describe('Listening page', () => {
         sourceKind: 'content_paper',
         objectiveReady: true,
         questionCount: 42,
+        requiresSubscription: true,
+        accessTier: 'premium',
         assetReadiness: { audio: true, questionPaper: true, answerKey: true, audioScript: true },
         lastAttempt: null,
       }],
@@ -97,5 +99,10 @@ describe('Listening page', () => {
     expect((await screen.findAllByText('OET Listening Practice Paper 1')).length).toBeGreaterThan(0);
     expect(screen.getByText(/31 \/ 42 raw/)).toBeInTheDocument();
     expect(screen.getByText('Resume Attempt')).toBeInTheDocument();
+  });
+
+  it('renders the premium lock badge for subscription-gated listening papers', async () => {
+    render(<ListeningHome />);
+    expect(await screen.findByText('Premium — Subscription Required')).toBeInTheDocument();
   });
 });

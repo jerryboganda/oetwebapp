@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { MotionSection, MotionItem, MotionCollapse } from '@/components/ui/motion-primitives';
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
-import { fetchWritingHome, fetchWritingTasks, fetchWritingSubmissions, fetchMockReports } from '@/lib/api';
+import { fetchWritingHome, fetchWritingTasks, fetchWritingSubmissions, fetchMockReports, fetchWritingEntitlement, type WritingEntitlement } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import type { WritingTask, WritingSubmission, MockReport } from '@/lib/mock-data';
@@ -64,6 +64,70 @@ const difficultyFilterGroup: FilterGroup = { id: 'difficulty', label: 'Difficult
   { id: 'Easy', label: 'Easy' }, { id: 'Medium', label: 'Medium' }, { id: 'Hard', label: 'Hard' },
 ]};
 
+function WritingEntitlementBanner({ entitlement }: { entitlement: WritingEntitlement | null }) {
+  if (!entitlement) return null;
+
+  // Premium / unlimited tier — no banner needed.
+  if (entitlement.allowed && entitlement.limitPerWindow == null) {
+    return null;
+  }
+
+  if (entitlement.allowed && typeof entitlement.remaining === 'number') {
+    const remaining = entitlement.remaining;
+    const grading = remaining === 1 ? 'AI grading' : 'AI gradings';
+    return (
+      <div
+        role="status"
+        data-testid="writing-entitlement-remaining"
+        className="rounded-2xl border border-info/30 bg-info/5 px-4 py-3 text-sm text-info"
+      >
+        <span className="font-semibold">{remaining}</span> {grading} remaining this week.
+      </div>
+    );
+  }
+
+  if (!entitlement.allowed && entitlement.reason === 'premium_required') {
+    return (
+      <div
+        role="status"
+        data-testid="writing-entitlement-premium-required"
+        className="flex flex-col gap-3 rounded-2xl border border-amber-200/60 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div>
+          <span className="font-semibold">AI grading is a premium feature</span>
+          <span className="ml-1">— Upgrade for instant rule-cited feedback.</span>
+        </div>
+        <Link href="/billing/subscribe">
+          <Button variant="primary" size="sm">Upgrade</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  if (!entitlement.allowed && entitlement.reason === 'quota_exceeded') {
+    const reset = entitlement.resetAt
+      ? new Date(entitlement.resetAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      : 'soon';
+    return (
+      <div
+        role="status"
+        data-testid="writing-entitlement-quota-exceeded"
+        className="flex flex-col gap-3 rounded-2xl border border-red-200/60 bg-red-50 px-4 py-3 text-sm text-red-900 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div>
+          <span className="font-semibold">Free quota reached.</span>
+          <span className="ml-1">Resets {reset}.</span>
+        </div>
+        <Link href="/billing/subscribe">
+          <Button variant="primary" size="sm">Upgrade for more</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export default function WritingHome() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('practice');
@@ -71,6 +135,7 @@ export default function WritingHome() {
   const [tasks, setTasks] = useState<WritingTask[]>([]);
   const [submissions, setSubmissions] = useState<WritingSubmission[]>([]);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
+  const [entitlement, setEntitlement] = useState<WritingEntitlement | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, string[]>>({});
@@ -95,6 +160,12 @@ export default function WritingHome() {
       })
       .catch(() => setError('Failed to load writing tasks. Please try again.'))
       .finally(() => setLoading(false));
+    fetchWritingEntitlement()
+      .then((ent) => setEntitlement(ent))
+      .catch(() => {
+        // Entitlement fetch failure is non-fatal; the submit-flow gate still
+        // surfaces server-side 402 quota errors. Silently ignore here.
+      });
   }, []);
 
   const handleFilterChange = useCallback((groupId: string, optionId: string) => {
@@ -210,6 +281,8 @@ export default function WritingHome() {
         <LearnerSkillSwitcher compact />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+        <WritingEntitlementBanner entitlement={entitlement} />
 
         {/* Resume Draft — backend tracks an in-progress Writing attempt for this learner */}
         {resumeAction ? (

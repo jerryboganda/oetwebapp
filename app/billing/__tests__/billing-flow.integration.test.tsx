@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 
-const { mockApiRequest, mockFetchFreezeStatus, mockTrack } = vi.hoisted(() => ({
-  mockApiRequest: vi.fn(),
+const { mockFetchBillingUpgradePath, mockFetchFreezeStatus, mockTrack } = vi.hoisted(() => ({
+  mockFetchBillingUpgradePath: vi.fn(),
   mockFetchFreezeStatus: vi.fn(),
   mockTrack: vi.fn(),
 }));
@@ -17,7 +17,7 @@ vi.mock('@/lib/analytics', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  apiClient: { request: mockApiRequest },
+  fetchBillingUpgradePath: mockFetchBillingUpgradePath,
   fetchFreezeStatus: mockFetchFreezeStatus,
 }));
 
@@ -28,7 +28,7 @@ import { renderWithRouter } from '@/tests/test-utils';
  * Slice H — frontend integration smoke for the billing upgrade journey.
  *
  * Walks the upgrade surface through three lifecycle stages with the
- * `apiClient` mocked end-to-end:
+ * `fetchBillingUpgradePath` mocked end-to-end:
  *
  *   Stage 1 — "quote-like" load:    skeleton renders while data is in-flight.
  *   Stage 2 — "checkout-like" view: plans + upgrade CTA render after resolve.
@@ -98,7 +98,7 @@ describe('Billing upgrade — 3-stage integration smoke', () => {
     // ── Stage 1 — quote-like loading. Use a deferred promise so the page
     //    sits in its skeleton state for the first frame.
     let resolveUpgrade!: (value: typeof upgradeData) => void;
-    mockApiRequest.mockImplementationOnce(
+    mockFetchBillingUpgradePath.mockImplementationOnce(
       () => new Promise((resolve) => { resolveUpgrade = resolve; }),
     );
     mockFetchFreezeStatus.mockResolvedValueOnce(null);
@@ -130,7 +130,7 @@ describe('Billing upgrade — 3-stage integration smoke', () => {
     //    simulate the post-checkout (or freeze-blocked) terminal surface.
     //    The CTAs must downgrade to disabled buttons with the freeze copy.
     unmount();
-    mockApiRequest.mockResolvedValueOnce(upgradeData);
+    mockFetchBillingUpgradePath.mockResolvedValueOnce(upgradeData);
     mockFetchFreezeStatus.mockResolvedValueOnce({
       currentFreeze: {
         status: 'active',

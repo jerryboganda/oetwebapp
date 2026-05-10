@@ -12,6 +12,69 @@ namespace OetLearner.Api.Services.Rulebook;
 /// </summary>
 public sealed class WritingRuleEngine(IRulebookLoader loader)
 {
+    private static readonly HashSet<string> SupportedCheckIdSet = new(StringComparer.Ordinal)
+    {
+        "address_punctuation",
+        "ago_requires_past_simple",
+        "blank_before_closing_phrase",
+        "blank_line_between_paragraphs",
+        "body_forbidden_phrase_next_visit",
+        "body_forbidden_phrase_the_patient",
+        "body_forbidden_phrase_yesterday",
+        "body_no_todays_date",
+        "body_uses_last_name_only",
+        "closure_mentions_consent_if_flagged",
+        "closure_mentions_patient_request_if_flagged",
+        "closure_mentions_review_if_required",
+        "conditions_lowercase",
+        "content_requires_allergy_for_atopic",
+        "content_requires_smoking_drinking",
+        "date_blank_line_sandwich",
+        "date_format_consistent",
+        "discharge_admitted_with_past_simple",
+        "discharge_intro_no_identity",
+        "discharge_intro_template",
+        "discharge_omits_knownto_gp",
+        "discharge_plan_present",
+        "enclosure_results_phrase",
+        "for_duration_requires_present_perfect",
+        "intro_contains_purpose",
+        "intro_sentence_count",
+        "latin_abbreviations_translated",
+        "letter_body_length",
+        "letter_paragraph_count",
+        "letter_structure_order",
+        "linker_density",
+        "linker_however_punctuation",
+        "linker_in_addition_punctuation",
+        "linker_therefore_punctuation",
+        "min_body_paragraphs",
+        "minor_naming_convention",
+        "no_asap_in_letter",
+        "no_contractions",
+        "no_date_prefix",
+        "non_medical_no_jargon",
+        "re_line_age_dob",
+        "salutation_last_name_only",
+        "salutation_re_adjacent",
+        "sentence_length_guard",
+        "since_requires_present_perfect",
+        "surgery_past_simple",
+        "treatment_for_not_from",
+        "urgent_body_starts_today",
+        "urgent_closure_phrase",
+        "urgent_intro_contains_urgent",
+        "urgent_token_not_repeated",
+        "year_not_abbreviated",
+        "yours_sincerely_capitalisation",
+        "yours_sincerely_vs_faithfully",
+    };
+
+    public static IReadOnlySet<string> SupportedCheckIds => SupportedCheckIdSet;
+
+    public static bool IsSupportedCheckId(string? checkId)
+        => !string.IsNullOrWhiteSpace(checkId) && SupportedCheckIdSet.Contains(checkId);
+
     public IReadOnlyList<LintFinding> Lint(WritingLintInput input)
     {
         var book = loader.Load(RuleKind.Writing, input.Profession);
@@ -177,6 +240,21 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "conditions_lowercase" => DetectConditionsLowercase,
         "linker_however_punctuation" => DetectHoweverPunctuation,
         "no_asap_in_letter" => DetectForbidden(@"\bASAP\b", "Never write 'ASAP'. Use 'at your earliest convenience'."),
+        "address_punctuation" => DetectAddressPunctuation,
+        "re_line_age_dob" => DetectReLineAgeDob,
+        "yours_sincerely_capitalisation" => DetectYoursSincerelyCapitalisation,
+        "intro_sentence_count" => DetectIntroSentenceCount,
+        "closure_mentions_patient_request_if_flagged" => DetectClosurePatientRequest,
+        "closure_mentions_consent_if_flagged" => DetectClosureConsent,
+        "blank_before_closing_phrase" => DetectBlankBeforeClosing,
+        "since_requires_present_perfect" => DetectSinceRequiresPresentPerfect,
+        "for_duration_requires_present_perfect" => DetectForDurationRequiresPresentPerfect,
+        "surgery_past_simple" => DetectSurgeryPastSimple,
+        "ago_requires_past_simple" => DetectAgoRequiresPastSimple,
+        "linker_therefore_punctuation" => DetectThereforePunctuation,
+        "linker_in_addition_punctuation" => DetectInAdditionPunctuation,
+        "date_format_consistent" => DetectDateFormatConsistent,
+        "year_not_abbreviated" => DetectYearNotAbbreviated,
         "discharge_intro_template" => DetectDischargeIntroTemplate,
         "discharge_omits_knownto_gp" => DetectDischargeOmits,
         "discharge_admitted_with_past_simple" => DetectDischargeAdmittedWith,
@@ -616,6 +694,219 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 yield return new LintFinding(rule.Id, rule.Severity,
                     $"Paragraph uses {count} linkers. Max {max} per paragraph.");
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Newly ported detectors (mirror lib/rulebook/writing-rules.ts)
+    // ---------------------------------------------------------------------
+
+    // R05.2 — address must not have trailing commas / full stops on any line
+    private static IEnumerable<LintFinding> DetectAddressPunctuation(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var boundary = s.DateIndex ?? s.SalutationIndex ?? s.Lines.Length;
+        for (int i = 0; i < boundary && i < s.Lines.Length; i++)
+        {
+            var trimmed = s.Lines[i].Trim();
+            if (trimmed.Length == 0) continue;
+            if (Regex.IsMatch(trimmed, @"[,.]$"))
+                yield return new LintFinding(rule.Id, rule.Severity,
+                    $"Address line contains punctuation: \"{trimmed}\". No commas or full stops in the address.",
+                    Quote: trimmed);
+        }
+    }
+
+    // R06.8 — Re: line must not contain "Age:" (capitalised). 'aged 40' lowercase is OK.
+    private static IEnumerable<LintFinding> DetectReLineAgeDob(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.ReLineIndex is null) yield break;
+        var reLine = s.Lines[s.ReLineIndex.Value];
+        if (Regex.IsMatch(reLine, @"\bAge\s*:", RegexOptions.IgnoreCase))
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Use 'aged 40' (lowercase, no colon) not 'Age: 40' in the Re: line.",
+                Quote: reLine.Trim());
+    }
+
+    // R06.12 — Yours capitalisation + spelling
+    private static IEnumerable<LintFinding> DetectYoursSincerelyCapitalisation(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.YoursIndex is null) yield break;
+        var yours = s.Lines[s.YoursIndex.Value].Trim();
+        // Lowercase 'yours' is wrong (port of TS check)
+        if (Regex.IsMatch(yours, @"^yours\s+(sincerely|faithfully)", RegexOptions.IgnoreCase)
+            && !Regex.IsMatch(yours, @"^Yours\s+(sincerely|faithfully)"))
+        {
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Capitalise 'Yours' (capital Y, lowercase s in 'sincerely').",
+                Quote: yours);
+            yield break;
+        }
+        // Misspellings of 'sincerely' / 'faithfully'
+        if (Regex.IsMatch(yours, @"sincerly|sincerley|sincrely|faithfuly", RegexOptions.IgnoreCase))
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Check spelling of the closing phrase (S-I-N-C-E-R-E-L-Y).",
+                Quote: yours);
+    }
+
+    // R07.1 — intro paragraph must not exceed maxSentences (default 3)
+    private static IEnumerable<LintFinding> DetectIntroSentenceCount(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.SalutationIndex is null || s.BodyParagraphs.Count == 0) yield break;
+        var max = 3;
+        if (rule.Params.HasValue && rule.Params.Value.ValueKind == System.Text.Json.JsonValueKind.Object
+            && rule.Params.Value.TryGetProperty("maxSentences", out var ms) && ms.TryGetInt32(out var mv))
+            max = mv;
+        var intro = s.BodyParagraphs[0];
+        var sentences = Regex.Split(intro, @"(?<=[.!?])\s+")
+            .Where(x => x.Trim().Length > 0)
+            .Count();
+        if (sentences > max)
+            yield return new LintFinding(rule.Id, rule.Severity,
+                $"Introduction has {sentences} sentences. Keep it to {max} maximum.");
+    }
+
+    // R09.7 — patient-initiated referral phrase
+    private static IEnumerable<LintFinding> DetectClosurePatientRequest(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (input.CaseNotesMarkers?.PatientInitiatedReferral != true) yield break;
+        if (!Regex.IsMatch(input.LetterText,
+            @"\bat (his|her|mr|ms|mrs|miss|dr) .*?(\brequest|\bown request)\b|upon (his|her) request",
+            RegexOptions.IgnoreCase))
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Patient-initiated referral — include 'upon his/her request' or 'at [Name]'s request'.");
+    }
+
+    // R09.8 — consent statement
+    private static IEnumerable<LintFinding> DetectClosureConsent(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (input.CaseNotesMarkers?.ConsentDocumented != true) yield break;
+        if (!Regex.IsMatch(input.LetterText,
+            @"\b(fully informed|has consented|has been informed|aware of (his|her) (diagnosis|management))\b",
+            RegexOptions.IgnoreCase))
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Consent was documented in case notes — include the consent statement in closure.");
+    }
+
+    // R09.9 — blank line before "Yours sincerely,"
+    private static IEnumerable<LintFinding> DetectBlankBeforeClosing(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.YoursIndex is null || s.YoursIndex.Value == 0) yield break;
+        var prev = s.Lines[s.YoursIndex.Value - 1];
+        if (prev.Trim().Length > 0)
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Leave one blank line between the last body paragraph and 'Yours sincerely,'.");
+    }
+
+    // R10.5 — "since" requires present perfect
+    private static IEnumerable<LintFinding> DetectSinceRequiresPresentPerfect(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var re = new Regex(
+            @"\b(?:she|he|they|the patient|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(had|has)\s+([a-z]+)\s+since\b",
+            RegexOptions.IgnoreCase);
+        foreach (Match m in re.Matches(s.Body))
+        {
+            if (string.Equals(m.Groups[1].Value, "had", StringComparison.OrdinalIgnoreCase))
+                yield return new LintFinding(rule.Id, rule.Severity,
+                    "With 'since', use present perfect ('has had X since ...'), not past simple.",
+                    Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+        }
+    }
+
+    // R10.6 — "for [duration]" requires present perfect
+    private static IEnumerable<LintFinding> DetectForDurationRequiresPresentPerfect(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var re = new Regex(
+            @"\b(she|he|they)\s+had\s+([a-z ]+?)\s+for\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(years?|months?|weeks?|days?)\b",
+            RegexOptions.IgnoreCase);
+        foreach (Match m in re.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "With 'for [duration]', use present perfect ('has had X for Y').",
+                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+        }
+    }
+
+    // R10.8 — surgery uses past simple, not present perfect
+    private static IEnumerable<LintFinding> DetectSurgeryPastSimple(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var re = new Regex(
+            @"\bhas\s+had\s+(a\s+|an\s+)?([a-z]+(?:ectomy|otomy|ostomy|plasty)|surgery|operation)\b",
+            RegexOptions.IgnoreCase);
+        var m = re.Match(s.Body);
+        if (m.Success)
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Surgery uses past simple: 'had a cholecystectomy in 2018'. Do not use present perfect for surgery.",
+                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+    }
+
+    // R10.10 — "X ago" requires past simple
+    private static IEnumerable<LintFinding> DetectAgoRequiresPastSimple(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var re = new Regex(
+            @"\bhas\s+(\w+ed)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(years?|months?|weeks?|days?)\s+ago\b",
+            RegexOptions.IgnoreCase);
+        var m = re.Match(s.Body);
+        if (m.Success)
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "'X ago' always takes past simple, not present perfect. Write 'She presented 3 weeks ago.'",
+                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+    }
+
+    // R12.10 — 'therefore' / 'thus' must be preceded by ';'
+    private static IEnumerable<LintFinding> DetectThereforePunctuation(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var re = new Regex(@"([^\n;]{5,})\b(therefore|thus)\b", RegexOptions.IgnoreCase);
+        foreach (Match m in re.Matches(s.Body))
+        {
+            if (!m.Groups[1].Value.TrimEnd().EndsWith(';'))
+                yield return new LintFinding(rule.Id, rule.Severity,
+                    "Precede 'therefore'/'thus' with a semicolon: '[clause]; therefore, [clause].'",
+                    Quote: m.Value.Trim(), Start: m.Index, End: m.Index + m.Length);
+        }
+    }
+
+    // R12.11 — 'in addition' (clause joiner; not 'in addition to/with') must be preceded by ';'
+    private static IEnumerable<LintFinding> DetectInAdditionPunctuation(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var re = new Regex(@"([^\n;]{5,})\bin addition\b(?!\s+(to|with)\b)", RegexOptions.IgnoreCase);
+        foreach (Match m in re.Matches(s.Body))
+        {
+            if (!m.Groups[1].Value.TrimEnd().EndsWith(';'))
+                yield return new LintFinding(rule.Id, rule.Severity,
+                    "Precede 'in addition' (as a clause joiner) with a semicolon.",
+                    Quote: m.Value.Trim(), Start: m.Index, End: m.Index + m.Length);
+        }
+    }
+
+    // R05.5 — date format consistency. Distinguishes DD/MM/YYYY (slash-numeric),
+    // "1 January 2024" (day-first long), and "January 1, 2024" (month-first long).
+    // If two or more distinct styles appear in the same letter, flag major.
+    private static IEnumerable<LintFinding> DetectDateFormatConsistent(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var re = new Regex(
+            @"\b(\d{1,2}\/\d{1,2}\/\d{4}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4})\b");
+        var hasSlash = false;
+        var hasDayFirstLong = false;
+        var hasMonthFirstLong = false;
+        foreach (Match m in re.Matches(input.LetterText))
+        {
+            if (m.Value.Contains('/')) hasSlash = true;
+            else if (char.IsDigit(m.Value[0])) hasDayFirstLong = true;
+            else hasMonthFirstLong = true;
+        }
+        var styles = (hasSlash ? 1 : 0) + (hasDayFirstLong ? 1 : 0) + (hasMonthFirstLong ? 1 : 0);
+        if (styles > 1)
+            yield return new LintFinding(rule.Id, RuleSeverity.Major,
+                "Date format must be consistent throughout the letter.");
+    }
+
+    // R05.6 — year not abbreviated (e.g. 01/01/'24)
+    private static IEnumerable<LintFinding> DetectYearNotAbbreviated(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var m = Regex.Match(input.LetterText, @"\b\d{1,2}\/\d{1,2}\/'?\d{2}\b");
+        if (m.Success && !m.Value.Contains("19") && !m.Value.Contains("20"))
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Do not abbreviate the year (write 2024, not '24).",
+                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
     }
 
     // Forbidden patterns baked into the JSON (not tied to a specific checkId)

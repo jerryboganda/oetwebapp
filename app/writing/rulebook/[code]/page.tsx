@@ -1,10 +1,14 @@
+'use client';
+
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, BookOpen, ShieldAlert } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { loadRulebook } from '@/lib/rulebook';
+import { fetchWritingRulebook } from '@/lib/api';
+import type { ExamProfession, Rule, Rulebook, RulebookSection } from '@/lib/rulebook';
 
 const severityVariant = {
   critical: 'danger',
@@ -13,13 +17,113 @@ const severityVariant = {
   info: 'muted',
 } as const;
 
-export default async function WritingRulePage({ params }: { params: Promise<{ code: string }> }) {
-  const { code } = await params;
-  const book = loadRulebook('writing', 'medicine');
-  const rule = book.rules.find((entry) => entry.id.toLowerCase() === code.toLowerCase());
-  if (!rule) notFound();
+type RulePageState =
+  | { status: 'loading'; book: null; rule: null; section: null; message: null }
+  | { status: 'ready'; book: Rulebook; rule: Rule; section: RulebookSection | null; message: null }
+  | { status: 'missing' | 'error'; book: null; rule: null; section: null; message: string };
 
-  const section = book.sections.find((entry) => entry.id === rule.section);
+const supportedWritingProfessions = new Set<ExamProfession>([
+  'medicine',
+  'nursing',
+  'dentistry',
+  'pharmacy',
+  'physiotherapy',
+  'veterinary',
+  'optometry',
+  'radiography',
+  'occupational-therapy',
+  'speech-pathology',
+  'podiatry',
+  'dietetics',
+  'other-allied-health',
+]);
+
+function normalizeWritingProfession(value: string | null): ExamProfession {
+  const candidate = value?.trim().toLowerCase().replace(/[\s_]+/g, '-');
+  return candidate && supportedWritingProfessions.has(candidate as ExamProfession)
+    ? candidate as ExamProfession
+    : 'medicine';
+}
+
+export default function WritingRulePage() {
+  const params = useParams<{ code?: string | string[] }>();
+  const searchParams = useSearchParams();
+  const codeParam = params?.code;
+  const code = Array.isArray(codeParam) ? codeParam[0] : codeParam;
+  const profession = normalizeWritingProfession(searchParams?.get('profession') ?? null);
+  const [state, setState] = useState<RulePageState>({
+    status: 'loading',
+    book: null,
+    rule: null,
+    section: null,
+    message: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!code) {
+        setState({ status: 'missing', book: null, rule: null, section: null, message: 'Rule code is missing.' });
+        return;
+      }
+
+      setState({ status: 'loading', book: null, rule: null, section: null, message: null });
+      try {
+        const activeBook = await fetchWritingRulebook(profession);
+        if (cancelled) return;
+        const activeRule = activeBook.rules.find((entry) => entry.id.toLowerCase() === code.toLowerCase());
+        if (!activeRule) {
+          setState({ status: 'missing', book: null, rule: null, section: null, message: `Rule ${code} was not found in the active ${profession} Writing rulebook.` });
+          return;
+        }
+        setState({
+          status: 'ready',
+          book: activeBook,
+          rule: activeRule,
+          section: activeBook.sections.find((entry) => entry.id === activeRule.section) ?? null,
+          message: null,
+        });
+      } catch (error) {
+        if (cancelled) return;
+        setState({
+          status: 'error',
+          book: null,
+          rule: null,
+          section: null,
+          message: error instanceof Error ? error.message : 'Could not load the active Writing rulebook.',
+        });
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [code, profession]);
+
+  if (state.status !== 'ready') {
+    return (
+      <LearnerDashboardShell pageTitle="Writing Rulebook">
+        <div className="space-y-6">
+          <div className="flex items-center gap-3 text-sm text-muted">
+            <Link href="/writing/library" className="inline-flex items-center gap-2 font-semibold text-primary hover:underline">
+              <ArrowLeft className="h-4 w-4" /> Back to writing library
+            </Link>
+          </div>
+          <Card className="border-border bg-surface p-8">
+            <div className="flex items-center gap-3">
+              <BookOpen className="h-5 w-5 text-primary" />
+              <p className="text-sm font-semibold text-muted">
+                {state.status === 'loading' ? 'Loading active Writing rulebook...' : state.message}
+              </p>
+            </div>
+          </Card>
+        </div>
+      </LearnerDashboardShell>
+    );
+  }
+
+  const { book, rule, section } = state;
 
   return (
     <LearnerDashboardShell pageTitle={`Writing Rule ${rule.id}`}>

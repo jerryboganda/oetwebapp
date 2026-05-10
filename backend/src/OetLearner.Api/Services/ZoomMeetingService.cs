@@ -40,6 +40,7 @@ public sealed partial class ZoomMeetingService(
                 Password: "sandbox123");
         }
 
+        var hostUserId = RequireOption(_opts.HostUserId, nameof(ZoomOptions.HostUserId));
         var token = await GetAccessTokenAsync(ct);
         var client = httpClientFactory.CreateClient("ZoomApi");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -66,7 +67,7 @@ public sealed partial class ZoomMeetingService(
         var json = JsonSerializer.Serialize(payload, JsonOpts);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = $"{_opts.ApiBaseUrl}/users/{_opts.HostUserId}/meetings";
+        var url = $"{_opts.ApiBaseUrl}/users/{hostUserId}/meetings";
         var response = await client.PostAsync(url, content, ct);
 
         if (!response.IsSuccessStatusCode)
@@ -134,16 +135,19 @@ public sealed partial class ZoomMeetingService(
                 return _cachedToken;
 
             var client = httpClientFactory.CreateClient("ZoomAuth");
+            var accountId = RequireOption(_opts.AccountId, nameof(ZoomOptions.AccountId));
+            var clientId = RequireOption(_opts.ClientId, nameof(ZoomOptions.ClientId));
+            var clientSecret = RequireOption(_opts.ClientSecret, nameof(ZoomOptions.ClientSecret));
 
             var credentials = Convert.ToBase64String(
-                Encoding.ASCII.GetBytes($"{_opts.ClientId}:{_opts.ClientSecret}"));
+                Encoding.ASCII.GetBytes($"{clientId}:{clientSecret}"));
             client.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Basic", credentials);
 
             var form = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["grant_type"] = "account_credentials",
-                ["account_id"] = _opts.AccountId
+                ["account_id"] = accountId
             });
 
             var response = await client.PostAsync(_opts.TokenUrl, form, ct);
@@ -159,6 +163,8 @@ public sealed partial class ZoomMeetingService(
             var json = await response.Content.ReadAsStringAsync(ct);
             var tokenResponse = JsonSerializer.Deserialize<ZoomTokenResponse>(json, JsonOpts)
                 ?? throw new InvalidOperationException("Failed to deserialize Zoom token response");
+            if (string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
+                throw new InvalidOperationException("Zoom token response did not include an access token");
 
             _cachedToken = tokenResponse.AccessToken;
             _tokenExpiresAt = DateTimeOffset.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
@@ -179,6 +185,14 @@ public sealed partial class ZoomMeetingService(
         var sanitized = SensitiveJsonValueRegex().Replace(body, "$1\"[redacted]\"");
         sanitized = sanitized.Replace('\r', ' ').Replace('\n', ' ');
         return sanitized.Length <= 512 ? sanitized : sanitized[..512] + "...";
+    }
+
+    private static string RequireOption(string? value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException($"Zoom option {name} is required when sandbox fallback is disabled.");
+
+        return value;
     }
 
     [GeneratedRegex("(?i)(\"(?:access_token|refresh_token|token|api_key|client_secret|secret|password)\"\\s*:\\s*)\"[^\"]*\"")]

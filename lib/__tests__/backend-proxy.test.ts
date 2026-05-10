@@ -110,10 +110,22 @@ describe('backend proxy helpers', () => {
     expect(validateProxyCsrf(invalid)).toBe(false);
   });
 
-  it('exempts auth bootstrap endpoints from CSRF even with a stale refresh cookie', () => {
+  it('exempts only auth bootstrap endpoints from CSRF even with a stale refresh cookie', () => {
     // Returning user with stale oet_rt cookie but expired/missing oet_csrf
     // must still be able to sign in / refresh / sign out.
-    for (const authPath of ['v1/auth/sign-in', 'v1/auth/refresh', 'v1/auth/sign-out', 'v1/auth/register']) {
+    for (const authPath of [
+      'v1/auth/sign-in',
+      'v1/auth/refresh',
+      'v1/auth/sign-out',
+      'v1/auth/register',
+      'v1/auth/external/google/exchange',
+      'v1/auth/email/send-verification-otp',
+      'v1/auth/email/verify-otp',
+      'v1/auth/forgot-password',
+      'v1/auth/reset-password',
+      'v1/auth/mfa/challenge',
+      'v1/auth/mfa/recovery',
+    ]) {
       const request = new Request(`https://app.example.com/api/backend/${authPath}`, {
         method: 'POST',
         headers: {
@@ -122,6 +134,25 @@ describe('backend proxy helpers', () => {
         },
       });
       expect(validateProxyCsrf(request)).toBe(true);
+    }
+  });
+
+  it('requires CSRF for authenticated auth mutations even under /v1/auth', () => {
+    for (const [method, authPath] of [
+      ['POST', 'v1/auth/account/delete'],
+      ['POST', 'v1/auth/mfa/authenticator/begin'],
+      ['POST', 'v1/auth/mfa/authenticator/confirm'],
+      ['DELETE', 'v1/auth/sessions'],
+      ['DELETE', 'v1/auth/sessions/2f0e15c5-2e9f-4e91-b421-877fa3ba6f7d'],
+    ] as const) {
+      const request = new Request(`https://app.example.com/api/backend/${authPath}`, {
+        method,
+        headers: {
+          Cookie: 'oet_rt=active-refresh',
+        },
+      });
+
+      expect(validateProxyCsrf(request)).toBe(false);
     }
   });
 });

@@ -381,7 +381,7 @@ export default function AiProvidersPage() {
         <AdminRoutePanel title="Registered providers">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted">Filter by category:</span>
-            {(['All', 'TextChat', 'Tts', 'Asr', 'Phoneme'] as const).map((cat) => (
+            {(['All', 'TextChat', 'Tts', 'Asr', 'Phoneme', 'Ocr', 'PdfExtraction'] as const).map((cat) => (
               <Button
                 key={cat}
                 variant={categoryFilter === cat ? 'primary' : 'outline'}
@@ -445,6 +445,8 @@ export default function AiProvidersPage() {
                   { value: 'Tts', label: 'Text-to-speech' },
                   { value: 'Asr', label: 'Speech-to-text (ASR)' },
                   { value: 'Phoneme', label: 'Phoneme scoring' },
+                  { value: 'Ocr', label: 'OCR (image / scanned PDF)' },
+                  { value: 'PdfExtraction', label: 'PDF extraction (tables / forms / native text)' },
                 ]} />
               <Input label="Base URL" value={editing.baseUrl} onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })} />
               <Input label={creating ? 'API key' : 'API key (leave blank to keep)'} type="password" value={editing.apiKey ?? ''} onChange={(e) => setEditing({ ...editing, apiKey: e.target.value })} />

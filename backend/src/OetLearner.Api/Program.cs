@@ -543,6 +543,8 @@ builder.Services.AddScoped<MockItemAnalysisService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Recalls.RecallsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.RefundService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.RulebookAdminService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.IWritingRulebookCoverageValidator,
+    OetLearner.Api.Services.Rulebooks.WritingRulebookCoverageValidator>();
 builder.Services.AddScoped<SpeakingTutorCalibrationService>();
 builder.Services.AddScoped<IIeltsMockEngine, IeltsMockEngine>();
 builder.Services.AddScoped<OetLearner.Api.Services.Entitlements.IEffectiveEntitlementResolver, OetLearner.Api.Services.Entitlements.EffectiveEntitlementResolver>();
@@ -569,6 +571,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService
 builder.Services.AddScoped<OetLearner.Api.Services.Recalls.IRecallsTtsService, OetLearner.Api.Services.Recalls.RecallsTtsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.IWritingPdfService, OetLearner.Api.Services.WritingPdfService>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingEvaluationPipeline, OetLearner.Api.Services.Writing.WritingEvaluationPipeline>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.SpeakingAudioRetentionWorker>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<ExpertOnboardingService>();
@@ -636,6 +639,13 @@ builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversatio
     OetLearner.Api.Services.Conversation.Asr.DeepgramConversationAsrProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationAsrProviderSelector,
     OetLearner.Api.Services.Conversation.Asr.ConversationAsrProviderSelector>();
+
+// RW-012 — admin-managed PDF / OCR provider selector. Concrete
+// IPaperExtractionProvider implementations register against this hook;
+// the selector resolves the active row at call time so admins can rotate
+// providers via /admin/ai-providers without a redeploy.
+builder.Services.AddScoped<OetLearner.Api.Services.Content.IPaperExtractionProviderSelector,
+    OetLearner.Api.Services.Content.PaperExtractionProviderSelector>();
 
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
     OetLearner.Api.Services.Conversation.Tts.MockConversationTtsProvider>();
@@ -727,8 +737,19 @@ builder.Services.AddHostedService<OetLearner.Api.Services.PartitionMaintenanceWo
 // OET rulebook engine + grounded AI gateway. These services are the single
 // source of truth for rule enforcement and for every AI call: no code path
 // invokes a model without a rulebook-grounded prompt built here.
-builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IRulebookLoader,
-    OetLearner.Api.Services.Rulebook.RulebookLoader>();
+//
+// IRulebookLoader resolves to DbBackedRulebookLoader (Scoped — depends on
+// LearnerDbContext) so admin-published DB overrides take precedence over the
+// embedded JSON. The plain RulebookLoader is registered as a Singleton fallback
+// that the DB-backed loader composes for JSON content (Tables, StateMachines,
+// AssessmentCriteria, and (kind, profession) pairs without a Published row).
+// All current IRulebookLoader consumers (WritingRuleEngine, SpeakingRuleEngine,
+// AiGatewayService, RulebookEndpoints, VocabularyDraft/Gloss, GrammarDraft,
+// PronunciationAdminDraft, BuiltInTools) are Scoped, so the lifetime change
+// from Singleton → Scoped is safe.
+builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.RulebookLoader>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IRulebookLoader,
+    OetLearner.Api.Services.Rulebook.DbBackedRulebookLoader>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.WritingRuleEngine>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.SpeakingRuleEngine>();
 builder.Services.AddHttpClient("AiOpenAiCompatible", client =>
@@ -943,10 +964,16 @@ builder.Services.AddHostedService<OetLearner.Api.Services.AiTools.AiToolCatalogS
 builder.Services.AddHostedService<OetLearner.Api.Services.Voice.AiVoiceProviderSeeder>();
 builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarDraftService,
     OetLearner.Api.Services.Grammar.GrammarDraftService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDraftService,
+    OetLearner.Api.Services.Writing.WritingDraftService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarPublishGateService,
     OetLearner.Api.Services.Grammar.GrammarPublishGateService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarEntitlementService,
     OetLearner.Api.Services.Grammar.GrammarEntitlementService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingOptionsProvider,
+    OetLearner.Api.Services.Writing.WritingOptionsProvider>();
+builder.Services.AddScoped<IWritingEntitlementService,
+    OetLearner.Api.Services.Writing.WritingEntitlementService>();
 
 // ── Private Speaking Sessions ──
 builder.Services.Configure<ZoomOptions>(builder.Configuration.GetSection("Zoom"));

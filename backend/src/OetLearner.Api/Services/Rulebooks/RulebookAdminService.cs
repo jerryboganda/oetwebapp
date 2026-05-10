@@ -21,11 +21,16 @@ public sealed class RulebookAdminService
 {
     private readonly LearnerDbContext _db;
     private readonly IMemoryCache _cache;
+    private readonly IWritingRulebookCoverageValidator _writingCoverageValidator;
 
-    public RulebookAdminService(LearnerDbContext db, IMemoryCache cache)
+    public RulebookAdminService(
+        LearnerDbContext db,
+        IMemoryCache cache,
+        IWritingRulebookCoverageValidator writingCoverageValidator)
     {
         _db = db;
         _cache = cache;
+        _writingCoverageValidator = writingCoverageValidator;
     }
 
     /// <summary>
@@ -161,6 +166,11 @@ public sealed class RulebookAdminService
     {
         var v = await _db.RulebookVersions.FirstOrDefaultAsync(x => x.Id == id, ct)
             ?? throw new RulebookNotFoundException(id);
+
+        var publishRules = await _db.RulebookRuleRows.AsNoTracking()
+            .Where(r => r.RulebookVersionId == id)
+            .ToListAsync(ct);
+        _writingCoverageValidator.ValidateForPublish(v, publishRules);
 
         // Archive any other Published row for the same (kind, profession).
         var others = await _db.RulebookVersions
@@ -429,6 +439,8 @@ public sealed class RulebookAdminService
                 if (sectionCodes.Count > 0 && !sectionCodes.Contains(sec))
                     throw ApiException.Validation("unknown_section", $"Rule '{code}' references unknown section '{sec}'.");
             }
+
+            _writingCoverageValidator.ValidateForImport(kind, profession, root);
 
             var id = $"rb_{kind}_{profession}_{version}".ToLowerInvariant().Replace(" ", "-");
             var existing = await _db.RulebookVersions.FirstOrDefaultAsync(v => v.Id == id, ct);

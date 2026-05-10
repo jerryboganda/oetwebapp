@@ -80,7 +80,9 @@ public static class PronunciationEndpoints
                 stream, file.ContentType ?? "application/octet-stream",
                 file.Length, durationForm, ct);
             return Results.Ok(fr);
-        }).DisableAntiforgery();
+        })
+        .RequireRateLimiting("PerUserWrite")
+        .DisableAntiforgery();
 
         // Back-compat alias: POST /drills/{id}/attempt  { audioUrl } — now rejects
         // with a clear upgrade notice rather than pretending to score.

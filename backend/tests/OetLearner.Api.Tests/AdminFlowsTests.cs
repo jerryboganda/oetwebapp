@@ -384,6 +384,116 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         Assert.Equal("active", updateJson.RootElement.GetProperty("status").GetString());
     }
 
+    [Fact]
+    public async Task AdminAIConfig_AllowsDedicatedAiConfigPermission()
+    {
+        var previous = Environment.GetEnvironmentVariable("Auth__UseDevelopmentAuth");
+        Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", "true");
+        try
+        {
+            using var factory = new TestWebApplicationFactory();
+            using var client = factory.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
+            client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.AiConfig);
+
+            var listResponse = await client.GetAsync("/v1/admin/ai-config");
+            listResponse.EnsureSuccessStatusCode();
+
+            var createResponse = await client.PostAsJsonAsync("/v1/admin/ai-config", new
+            {
+                model = "ai-config-rbac-model",
+                provider = "digitalocean-serverless",
+                taskType = "writing",
+                accuracy = 88.0,
+                confidenceThreshold = 0.75
+            });
+            createResponse.EnsureSuccessStatusCode();
+
+            var writingOptionsResponse = await client.GetAsync("/v1/admin/writing/options");
+            writingOptionsResponse.EnsureSuccessStatusCode();
+
+            var updateWritingOptionsResponse = await client.PutAsJsonAsync("/v1/admin/writing/options", new
+            {
+                aiGradingEnabled = true,
+                aiCoachEnabled = true,
+                killSwitchReason = (string?)null,
+                freeTierEnabled = false,
+                freeTierLimit = 0,
+                freeTierWindowDays = 7
+            });
+            updateWritingOptionsResponse.EnsureSuccessStatusCode();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", previous);
+        }
+    }
+
+    [Theory]
+    [InlineData(AdminPermissions.ContentRead)]
+    [InlineData(AdminPermissions.ContentWrite)]
+    public async Task AdminAIConfig_DoesNotAllowContentPermissionsForCrudRoutes(string permission)
+    {
+        var previous = Environment.GetEnvironmentVariable("Auth__UseDevelopmentAuth");
+        Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", "true");
+        try
+        {
+            using var factory = new TestWebApplicationFactory();
+            using var client = factory.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
+            client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", permission);
+
+            var requests = new[]
+            {
+                new HttpRequestMessage(HttpMethod.Get, "/v1/admin/ai-config"),
+                new HttpRequestMessage(HttpMethod.Get, "/v1/admin/writing/options"),
+                new HttpRequestMessage(HttpMethod.Post, "/v1/admin/ai-config")
+                {
+                    Content = JsonContent.Create(new
+                    {
+                        model = "denied-ai-config-model",
+                        provider = "digitalocean-serverless",
+                        taskType = "writing",
+                        accuracy = 88.0,
+                        confidenceThreshold = 0.75
+                    })
+                },
+                new HttpRequestMessage(HttpMethod.Put, "/v1/admin/ai-config/missing-config")
+                {
+                    Content = JsonContent.Create(new
+                    {
+                        status = "active",
+                        accuracy = 91.0
+                    })
+                },
+                new HttpRequestMessage(HttpMethod.Put, "/v1/admin/writing/options")
+                {
+                    Content = JsonContent.Create(new
+                    {
+                        aiGradingEnabled = true,
+                        aiCoachEnabled = true,
+                        killSwitchReason = (string?)null,
+                        freeTierEnabled = false,
+                        freeTierLimit = 0,
+                        freeTierWindowDays = 7
+                    })
+                },
+                new HttpRequestMessage(HttpMethod.Post, "/v1/admin/ai-config/missing-config/activate"),
+                new HttpRequestMessage(HttpMethod.Delete, "/v1/admin/ai-config/missing-config")
+            };
+
+            foreach (var request in requests)
+            {
+                using var response = await client.SendAsync(request);
+                Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", previous);
+        }
+    }
+
     // ── Feature Flags ──────────────────────────
 
     [Fact]

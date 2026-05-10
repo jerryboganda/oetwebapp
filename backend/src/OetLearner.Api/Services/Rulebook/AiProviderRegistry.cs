@@ -96,7 +96,10 @@ public sealed class RegistryBackedProvider(
         var providers = (await registry.ListActiveAsync(ct))
             .Where(p => p.Dialect == AiProviderDialect.OpenAiCompatible)
             .ToList();
-        var first = providers.FirstOrDefault();
+        var first = !string.IsNullOrWhiteSpace(request.ProviderCode)
+            ? providers.FirstOrDefault(p => string.Equals(p.Code, request.ProviderCode, StringComparison.OrdinalIgnoreCase))
+            : providers.FirstOrDefault();
+        first ??= providers.FirstOrDefault();
         if (first is not null)
         {
             // Per-provider ReasoningEffort overrides env default when set.

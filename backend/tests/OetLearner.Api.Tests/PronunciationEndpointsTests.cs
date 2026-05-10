@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -181,6 +182,39 @@ public class PronunciationEndpointsTests : IClassFixture<TestWebApplicationFacto
         progressResponse.EnsureSuccessStatusCode();
         using var progressJson = JsonDocument.Parse(await progressResponse.Content.ReadAsStringAsync());
         Assert.True(progressJson.RootElement.GetArrayLength() >= 1);
+    }
+
+    [Fact]
+    public async Task UploadAndScore_RequiresAuthenticatedLearner()
+    {
+        using var firstPartyFactory = new FirstPartyAuthTestWebApplicationFactory();
+        using var client = firstPartyFactory.CreateClient();
+        using var audioContent = new ByteArrayContent(Encoding.UTF8.GetBytes("fake-audio"));
+        audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/webm");
+
+        var response = await client.PostAsync(
+            "/v1/pronunciation/drills/pd-001/attempt/missing-attempt/audio",
+            audioContent);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadAndScore_RejectsAuthenticatedNonLearner()
+    {
+        using var firstPartyFactory = new FirstPartyAuthTestWebApplicationFactory();
+        using var client = firstPartyFactory.CreateAuthenticatedClient(
+            SeedData.AdminEmail,
+            SeedData.LocalSeedPassword,
+            expectedRole: "admin");
+        using var audioContent = new ByteArrayContent(Encoding.UTF8.GetBytes("fake-audio"));
+        audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/webm");
+
+        var response = await client.PostAsync(
+            "/v1/pronunciation/drills/pd-001/attempt/missing-attempt/audio",
+            audioContent);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]

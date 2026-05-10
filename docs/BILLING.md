@@ -1,7 +1,7 @@
 # Billing Module — Canonical Reference
 
 > Status: living document. Owner: Billing slice (see `docs/billing-hardening/README.md`).
-> Last reviewed: 2026-05-04.
+> Last reviewed: 2026-05-10.
 
 This document is the canonical reference for the OET Prep billing subsystem.
 It describes the runtime architecture, the data model, the state machines that
@@ -14,6 +14,27 @@ If a behaviour described here is not yet implemented, the gap is recorded in
 [`docs/billing-hardening/I-docs.md`](./billing-hardening/I-docs.md) and tracked
 against the owning slice. Do **not** silently weaken this document to match
 current code — fix the code or escalate.
+
+## Known v1 limitation: sponsor billing is heuristic-attributed
+
+The sponsor billing read model in `SponsorService.ComputeBillingAsync`
+attributes any **completed** `PaymentTransaction` row whose `LearnerUserId`
+matches a learner inside an **active** sponsorship window
+(`Sponsorship.CreatedAt..RevokedAt ?? now`) to that sponsor. This is a
+**heuristic for the v1 launch** (decision recorded 2026-05-10 against
+`RW-013` in `docs/STATUS/remaining-work.yaml`), not a true sponsor-paid
+invoice link. Practical implication:
+
+- If a sponsored learner pays for an upgrade themselves while a sponsorship
+  is active, that spend currently shows on the sponsor's billing surface.
+- If a sponsorship is revoked retroactively, transactions inside the prior
+  active window remain attributed to the sponsor.
+
+The post-v1 follow-up is a `SponsorshipId` foreign key (or a `payer_type`
+column) on `PaymentTransaction`, populated from Stripe metadata at checkout.
+Until then, the heuristic is intentionally simple and locked down by
+`SponsorBillingReadModelTests` (5 cases) plus `SponsorContractTests` (2
+shape locks).
 
 ---
 

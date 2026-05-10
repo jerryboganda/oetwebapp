@@ -80,6 +80,10 @@ export interface AnchoredComment {
   id: string;
   text: string;
   comment: string;
+  ruleId?: string;
+  severity?: 'critical' | 'major' | 'minor' | 'info';
+  source?: 'rule_engine' | 'ai';
+  suggestedFix?: string;
 }
 
 export interface CriterionFeedback {
@@ -100,6 +104,7 @@ export interface WritingResult {
   id: string;
   taskId: string;
   taskTitle: string;
+  profession: string;
   examFamilyCode: ExamFamilyCode;
   examFamilyLabel: string;
   estimatedScoreRange: string;
