@@ -9,6 +9,7 @@ import {
   ListChecks,
   Lock,
   PlayCircle,
+  Printer,
   Sparkles,
   Target,
   TrendingUp,
@@ -29,7 +30,7 @@ import {
 } from '@/lib/reading-authoring-api';
 import { fetchMockReports } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
-import { formatListeningReadingDisplay, isListeningReadingPassByRaw } from '@/lib/scoring';
+import { isListeningReadingPassByScaled } from '@/lib/scoring';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
@@ -206,6 +207,15 @@ export default function ReadingHome() {
                           <span className="rounded-lg bg-background-light px-2 py-2">B {paper.partBCount}</span>
                           <span className="rounded-lg bg-background-light px-2 py-2">C {paper.partCCount}</span>
                         </div>
+                        {home?.policy.allowPaperReadingMode && !(paper.entitlement ? !paper.entitlement.allowed : false) ? (
+                          <Link
+                            href={`${paper.route}?presentation=paper`}
+                            className="mt-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-navy hover:border-border-hover hover:bg-surface"
+                          >
+                            <Printer className="h-4 w-4" aria-hidden />
+                            Paper simulation
+                          </Link>
+                        ) : null}
                       </LearnerSurfaceCard>
                     </MotionItem>
                   ))}
@@ -408,8 +418,9 @@ function paperCard(paper: ReadingHomePaperDto, attempts: ReadingHomeAttemptDto[]
 }
 
 function resultCard(result: ReadingHomeResultDto): LearnerSurfaceCardModel {
-  const isPracticeOnly = result.scaledScore == null;
-  const passed = !isPracticeOnly && isListeningReadingPassByRaw(result.rawScore);
+  const scaled = result.scaledScore;
+  const isPracticeOnly = scaled == null;
+  const passed = typeof scaled === 'number' && isListeningReadingPassByScaled(scaled);
   return {
     kind: 'evidence',
     sourceType: 'backend_summary',
@@ -419,7 +430,7 @@ function resultCard(result: ReadingHomeResultDto): LearnerSurfaceCardModel {
     title: result.paperTitle,
     description: isPracticeOnly
       ? `${result.rawScore}/${result.maxRawScore} practice marks`
-      : formatListeningReadingDisplay(result.rawScore),
+      : `${result.rawScore}/${result.maxRawScore} raw | ${scaled}/500 scaled`,
     metaItems: [
       { icon: FileText, label: isPracticeOnly ? 'No OET grade' : `Grade ${result.gradeLetter}` },
       { icon: Clock, label: result.submittedAt ? formatDate(result.submittedAt) : 'Submitted' },

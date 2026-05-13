@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 
-export default function LegacyReadingResultsRedirect() {
-  redirect('/reading');
+export default async function LegacyReadingResultsRedirect({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  redirect(`/reading?legacyReadingResultId=${encodeURIComponent(id)}`);
 }

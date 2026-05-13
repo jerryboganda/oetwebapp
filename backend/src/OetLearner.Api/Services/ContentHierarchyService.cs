@@ -328,8 +328,22 @@ public class ContentHierarchyService(LearnerDbContext db)
 
     // ── Free Preview Assets ──
 
-    public async Task<List<FreePreviewAsset>> GetFreePreviewAssetsAsync(CancellationToken ct)
-        => await db.FreePreviewAssets.OrderBy(a => a.DisplayOrder).ToListAsync(ct);
+    public async Task<List<FreePreviewAssetLearnerDto>> GetFreePreviewAssetsAsync(CancellationToken ct)
+        => await db.FreePreviewAssets
+            .AsNoTracking()
+            .Where(a => a.Status == ContentStatus.Published)
+            .OrderBy(a => a.DisplayOrder)
+            .Select(a => new FreePreviewAssetLearnerDto(
+                a.Id,
+                a.Title,
+                a.PreviewType,
+                a.ContentItemId,
+                a.ConversionCtaText,
+                a.TargetPackageId,
+                a.Status,
+                a.DisplayOrder,
+                a.CreatedAt))
+            .ToListAsync(ct);
 
     // ── Testimonials ──
 
@@ -371,3 +385,14 @@ public class ContentHierarchyService(LearnerDbContext db)
         return resource;
     }
 }
+
+public sealed record FreePreviewAssetLearnerDto(
+    string Id,
+    string Title,
+    string PreviewType,
+    string? ContentItemId,
+    string? ConversionCtaText,
+    string? TargetPackageId,
+    ContentStatus Status,
+    int DisplayOrder,
+    DateTimeOffset CreatedAt);

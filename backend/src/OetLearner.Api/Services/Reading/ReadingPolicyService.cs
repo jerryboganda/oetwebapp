@@ -50,7 +50,8 @@ public sealed record ReadingResolvedPolicy(
     int ExtraTimeEntitlementPct,
     bool AllowMultipleConcurrentAttempts,
     bool AllowPausingAttempt,
-    bool AllowResumeAfterExpiry);
+    bool AllowResumeAfterExpiry,
+    bool AllowPaperReadingMode);
 
 public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensions.Caching.Memory.IMemoryCache cache)
     : IReadingPolicyService
@@ -111,7 +112,8 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
             ExtraTimeEntitlementPct: extraPct,
             AllowMultipleConcurrentAttempts: g.AllowMultipleConcurrentAttempts,
             AllowPausingAttempt: g.AllowPausingAttempt,
-            AllowResumeAfterExpiry: g.AllowResumeAfterExpiry);
+            AllowResumeAfterExpiry: g.AllowResumeAfterExpiry,
+            AllowPaperReadingMode: g.AllowPaperReadingMode);
     }
 
     public async Task<ReadingPolicy> UpsertGlobalAsync(ReadingPolicy next, string adminId, CancellationToken ct)

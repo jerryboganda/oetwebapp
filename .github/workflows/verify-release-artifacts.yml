@@ -17,7 +17,7 @@ on:
           - staging
           - production
       signer_fingerprint:
-        description: Required GPG signer fingerprint when evidence_env is production
+        description: Optional GPG signer fingerprint for local/staging verification. Production uses the protected environment variable.
         required: false
         default: ''
 
@@ -27,6 +27,8 @@ permissions:
 jobs:
   verify-release-artifacts:
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.evidence_env }}
     timeout-minutes: 10
 
     steps:
@@ -39,10 +41,27 @@ jobs:
           EVIDENCE_DIR: ${{ inputs.evidence_dir }}
         run: bash scripts/evidence-collect.sh
 
+      - name: Sign production evidence manifest
+        if: inputs.evidence_env == 'production'
+        shell: bash
+        env:
+          EVIDENCE_DIR: ${{ inputs.evidence_dir }}
+          EVIDENCE_SIGNER_FINGERPRINT: ${{ vars.EVIDENCE_SIGNER_FINGERPRINT }}
+          EVIDENCE_GPG_PRIVATE_KEY: ${{ secrets.PRODUCTION_EVIDENCE_GPG_PRIVATE_KEY }}
+          EVIDENCE_GPG_PASSPHRASE: ${{ secrets.PRODUCTION_EVIDENCE_GPG_PASSPHRASE }}
+        run: bash scripts/evidence-sign.sh
+
       - name: Verify required evidence files
         shell: bash
         env:
           EVIDENCE_DIR: ${{ inputs.evidence_dir }}
           EVIDENCE_ENV: ${{ inputs.evidence_env }}
-          EVIDENCE_SIGNER_FINGERPRINT: ${{ inputs.signer_fingerprint }}
+          EVIDENCE_SIGNER_FINGERPRINT: ${{ inputs.evidence_env == 'production' && vars.EVIDENCE_SIGNER_FINGERPRINT || inputs.signer_fingerprint }}
         run: bash scripts/evidence-verify.sh
+
+      - name: Upload verified evidence bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: ${{ inputs.evidence_dir }}/
+          if-no-files-found: error

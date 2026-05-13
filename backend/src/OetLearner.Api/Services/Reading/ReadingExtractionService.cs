@@ -351,3 +351,15 @@ public sealed class StubReadingExtractionAi : IReadingExtractionAi
             StubReason: "AI gateway not configured for Reading extraction; returning deterministic placeholder structure."));
     }
 }
+
+public sealed class DisabledReadingExtractionAi : IReadingExtractionAi
+{
+    public Task<ReadingExtractionAiResult> ExtractAsync(
+        string paperId,
+        string? mediaAssetId,
+        CancellationToken ct)
+    {
+        throw new InvalidOperationException(
+            "Reading AI extraction is disabled outside Development until a production provider is configured.");
+    }
+}

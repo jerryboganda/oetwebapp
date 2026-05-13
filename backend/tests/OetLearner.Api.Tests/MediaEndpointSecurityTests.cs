@@ -56,6 +56,36 @@ public class MediaEndpointSecurityTests(TestWebApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task Download_and_signedUrl_deny_premium_primary_paper_media_even_when_freePreviewed()
+    {
+        var mediaId = $"media-{Guid.NewGuid():N}";
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedPublishedPaperMediaAsync(mediaId, learnerId, hasActiveSubscription: false);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        db.FreePreviewAssets.Add(new FreePreviewAsset
+        {
+            Id = $"preview-{Guid.NewGuid():N}",
+            Title = "Premium paper media should not become free",
+            PreviewType = "sample_task",
+            MediaAssetId = mediaId,
+            Status = ContentStatus.Published,
+            DisplayOrder = 1,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = CreateLearnerClient(learnerId);
+        var contentResponse = await client.GetAsync($"/v1/media/{mediaId}/content");
+        var urlResponse = await client.GetAsync($"/v1/media/{mediaId}/url");
+
+        Assert.Equal(HttpStatusCode.NotFound, contentResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, urlResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Download_allows_published_paper_media_for_matching_entitled_learner()
     {
         var mediaId = $"media-{Guid.NewGuid():N}";
@@ -159,6 +189,52 @@ public class MediaEndpointSecurityTests(TestWebApplicationFactory factory) : ICl
         var response = await client.GetAsync($"/v1/media/{mediaId}/content");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task FreePreviews_endpoint_returns_only_published_preview_metadata_without_media_ids()
+    {
+        var mediaId = $"media-{Guid.NewGuid():N}";
+        var publishedPreviewId = $"preview-published-{Guid.NewGuid():N}";
+        var draftPreviewId = $"preview-draft-{Guid.NewGuid():N}";
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedStandaloneMediaAsync(mediaId, uploadedBy: "admin-1");
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        db.FreePreviewAssets.AddRange(
+            new FreePreviewAsset
+            {
+                Id = publishedPreviewId,
+                Title = "Published preview",
+                PreviewType = "sample_task",
+                MediaAssetId = mediaId,
+                Status = ContentStatus.Published,
+                DisplayOrder = 1,
+                CreatedAt = DateTimeOffset.UtcNow,
+            },
+            new FreePreviewAsset
+            {
+                Id = draftPreviewId,
+                Title = "Draft preview",
+                PreviewType = "sample_task",
+                MediaAssetId = mediaId,
+                Status = ContentStatus.Draft,
+                DisplayOrder = 2,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        await db.SaveChangesAsync();
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync("/v1/free-previews");
+        var payload = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(publishedPreviewId, payload, StringComparison.Ordinal);
+        Assert.DoesNotContain(draftPreviewId, payload, StringComparison.Ordinal);
+        Assert.DoesNotContain("mediaAssetId", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(mediaId, payload, StringComparison.Ordinal);
     }
 
     [Fact]

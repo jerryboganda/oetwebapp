@@ -5,7 +5,7 @@ Use this checklist for every staging or production release. Attach the filled ch
 ## Release Metadata
 
 - Release version:
-- Git SHA:
+- Git SHA (must match `release-evidence/release-metadata.env git_sha`):
 - Branch/tag:
 - Environment: staging | production
 - Release owner:
@@ -25,15 +25,18 @@ For each item, record status, owner, evidence file or link, and notes.
 - Backend build: `npm run backend:build` or `dotnet build` report.
 - Playwright smoke: HTML report artifact.
 - Prod smoke: `docs/PROD-SMOKE-RUNBOOK.md` run output.
+- Reading/media smoke: `scripts/deploy/reading-media-smoke.sh` output for disabled paper mode, entitled PDF access, protected media denial, and legacy route 410 checks.
 - Accessibility: automated axe plus manual signoff.
 - SBOM: `release-evidence/sbom.json`.
 - SCA report: `release-evidence/sca.json`.
 - Tool versions: `release-evidence/tool-versions.txt` with local scanner versions or version-tagged fallback images.
 - Evidence checksums: `release-evidence/checksums.sha256` covering metadata, tool versions, SBOM, SCA, and accepted-risk files when applicable.
-- Production evidence signature: detached GPG signature for `release-evidence/checksums.sha256` plus expected signer fingerprint when `EVIDENCE_ENV=production`.
+- Production evidence signature: detached GPG signature for `release-evidence/checksums.sha256` plus expected signer fingerprint from the protected environment when `EVIDENCE_ENV=production`.
+- Production deploy provenance: `scripts/evidence-verify.sh` output with `EXPECTED_GIT_SHA` set to the deployed `HEAD`.
 - Build artifacts: artifact names and SHA256 checksums.
 - Deployment pre-flight: `scripts/deploy/pre-flight.sh` output.
 - Post-deploy smoke: `scripts/deploy/post-deploy-verify.sh` output.
+- Observability smoke: `scripts/observability-smoke.sh` output.
 - Rollback checkpoint: backup ID and rollback owner.
 
 ## Secret Safety Checks

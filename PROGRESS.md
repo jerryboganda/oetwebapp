@@ -1,10 +1,27 @@
 # Master Remaining Work Audit
 
-Updated: 2026-05-10
+Updated: 2026-05-12
 
 ## Backend Solution Test Sweep — 2026-05-10 (closure)
 
 Full `dotnet test backend/OetLearner.sln` (OetLearner.Api.Tests project) — **1356/1356 PASSED in 28.0 minutes**. The duration is driven by MockSampleSeeder + heavy EF in-memory fixtures (`Saved 1209 entities`, `Saved 657 entities`, full bundle ingest from `Project Real Content`) firing in `WebApplicationFactory` setups; no hang, no failures, no flakes. `--blame-hang-timeout 120s` produced no hang report. Trx artifact: `%TEMP%\dnresult.trx`. With this, no Writing-adjacent or sln-wide test is deferred.
+
+## Reading And Production Gate Hardening — 2026-05-12
+
+- Closed the remaining high-risk Reading paper-mode gap: learner paper-source PDF buttons now fetch through the authenticated media proxy (`fetchAuthorizedObjectUrl`) and open short-lived blob URLs instead of exposing raw API links. Regression coverage covers the simulation component and canonical paper player; player tests use a frozen clock to avoid date rot.
+- Closed the production deploy provenance gap: production deploy verification now passes `EXPECTED_GIT_SHA` to `scripts/evidence-verify.sh`, and evidence verification fails if `release-metadata.env git_sha` does not match the deployed `HEAD`.
+- Added `scripts/evidence-sign.sh` and changed SBOM/SCA + release-artifact workflows to collect/upload complete release-evidence bundles; production verification signs `checksums.sha256` with the protected environment key and verifies against the protected signer fingerprint.
+- Hardened the production deploy path: workflow is manual-only, binds to the protected `production` environment, requires the approver and Reading/media smoke acknowledgement, requires `VPS_SSH_FINGERPRINT`, uses the protected GitHub `EVIDENCE_SIGNER_FINGERPRINT` as the verifier trust root, pins the SSH action to a commit SHA, declares no GitHub token permissions, and runs pre-flight -> SHA-pinned signed evidence verification -> deploy -> post-deploy verify -> observability smoke -> executable Reading/media smoke.
+- Added `scripts/deploy/reading-media-smoke.sh` as the production gate for disabled paper mode, entitled paper PDF access, protected media 404s, no answer/explanation leaks, and legacy `/v1/reading/home` returning 410. The smoke now mints a fresh short-lived token from a least-privilege smoke learner instead of storing a static bearer token.
+- Expanded production env validation and template coverage: `.env.production.example`, duplicate-key rejection, Sentry DSNs, SMTP credentials, backup alert webhook, offsite backup S3 credentials, evidence signer fingerprint, Reading smoke account/fixture values, no wildcard/local CORS, no sandbox billing fallbacks, and placeholder rejection.
+- Hardened backup/deploy execution: cron env values are shell-quoted before sourcing, backup encryption uses passphrase-fd, S3 uploads require AWS credentials, pre-flight uses the encrypted backup sidecar instead of a plaintext host dump, image builds fail closed per service, and `scripts/deploy/mock-stub-scan.sh` rejects mock/stub/noop production config markers.
+- Reading AI extraction now fails closed outside Development: the deterministic `StubReadingExtractionAi` is only registered in Development, production uses `DisabledReadingExtractionAi`, and new `ReadingPolicy` rows default `AiExtractionEnabled=false`.
+- Signed evidence is verified for `DEPLOY_REF`/`origin/main` before the deploy wrapper resets into that target and runs target-checkout scripts; the GitHub production workflow now calls the same wrapper instead of duplicating deploy logic inline, and rollback uses `DEPLOY_REF=<previous-good-sha> bash ./scripts/deploy/deploy-prod.sh` so the same signed-evidence and smoke gates apply.
+- Retired the legacy `scripts/vps-deploy.sh` bypass by delegating it to the gated wrapper, and aligned production volume docs on the pinned `oetwebsite_*` Docker volumes.
+- Hardened production DB helper scripts (`create-admin.sh`, `inspect-admin-gates.sh`) by validating operator inputs and passing values through `psql -v` variables instead of raw SQL interpolation.
+- Updated ops docs and smoke runbooks for `/opt/oetwebapp`, `learner-api`, SHA-pinned signed evidence, pinned SSH host fingerprint, observability smoke, Sentry/backup alert requirements, and the executable Reading/media smoke gate.
+
+Focused validation completed after these changes: Reading frontend Vitest suite 14/14 passed, backend Reading/media security tests 87/87 passed before the extraction fail-closed adjustment, final Reading extraction tests 3/3 passed, backend API build passed, Bash syntax passed for deploy/evidence/smoke/admin/backup scripts, production env template/duplicate-key/lowercase-placeholder guards fail closed, mock/stub scan rejects mock values, and synthetic evidence dry-run proved matching `EXPECTED_GIT_SHA` passes while mismatched evidence is rejected.
 
 ## Writing Rulebook 100% Implementation — 2026-05-10
 
@@ -379,7 +396,7 @@ Scope: executed Ralph/OmO ultrawork update for OET Reading rulebook closure, cov
 - Existing Reading implementation plan is `docs/READING-MODULE-A-Z-IMPLEMENTATION-PLAN.md`.
 - No `rulebooks/reading/**` files exist in the workspace; current Reading design treats the rulebook as objective structured behavior, not a JSON rulebook file.
 - Canonical frontend route family exists at `/reading/paper/[paperId]` and `/reading/paper/[paperId]/results`.
-- Legacy frontend `/reading/player/[id]` now redirects to `/reading`; diagnostic Reading redirects to `/reading`.
+- Legacy frontend `/reading/player/[id]` and `/reading/results/[id]` now redirect to `/reading` with `legacyReadingTaskId` / `legacyReadingResultId` query preservation; diagnostic Reading redirects to `/reading`.
 - Backend learner Reading is canonical under `/v1/reading-papers/*`; legacy `/v1/reading/*` returns `410 Gone` with `reading_legacy_gone`.
 
 ## Execution Queue
@@ -388,11 +405,43 @@ Scope: executed Ralph/OmO ultrawork update for OET Reading rulebook closure, cov
 - [x] R1: Shut down legacy Reading routes safely: replace links to `/reading/player/[id]` and `/reading/results/[id]`, preserve saved-link redirects where needed, and disable or compatibility-wrap legacy `/v1/reading/attempts/*` without breaking active canonical flows.
 - [x] R2: Harden backend strict marking, structure, and timing: enforce 20/6/16/42 publish rules, Part A 15-minute lock, B/C 45-minute shared deadline, no answer leakage, idempotent submit, exact objective grading, and `30/42 = 350` through canonical scoring only.
 - [x] R3: Complete computer-delivered UI tools in the canonical player: timer state, answered/unanswered/flagged navigator, autosave recovery, Part A lockout, B/C auto-submit, highlight, notes, strike-through, keyboard access, and small-screen exam warning.
-- [x] R4: Complete paper simulation: original PDF access/paper presentation path, answer-sheet style entry/review, 15-minute Part A collection behavior, and explicit paper presentation controls over the canonical backend attempt.
+- [x] R4: Complete paper simulation: policy-gated original PDF access/paper presentation path, answer-sheet style entry, 15-minute Part A collection behavior, and explicit paper presentation controls over the canonical backend attempt. Results remain the canonical item review surface.
 - [x] R5: Add regression tests: backend validation/redaction/timing/grading, Vitest route/UI tools, Playwright Reading route smoke, and legacy route shutdown assertions.
-- [x] R6: Run final validation: `npx tsc --noEmit`, `npm run lint`, focused Vitest, focused backend tests, Reading Playwright smoke, `npm run build`, then independent Reading rulebook gap review.
+- [x] R6: Run final validation: `npx tsc --noEmit`, `npm run lint`, focused Vitest, focused backend tests, `npm run build`, current Playwright attempt/evidence-blocker note, then independent Reading rulebook gap review.
 
-## Final Validation Evidence
+## 2026-05-12 Corrective Closure Evidence
+
+Corrective pass after the May 10 closure found and fixed remaining Reading production-readiness gaps:
+
+- Backend learner structure now exposes `allowPaperReadingMode` and returns original `questionPaperAssets` only when paper mode is enabled, while continuing to redact answers, synonyms, and explanations. Direct media access for Reading question-paper PDFs is denied when paper mode is disabled, including when a PDF is also configured as a free preview.
+- Learner-safe Reading option projection now strips unsafe answer/explanation fields from `OptionsJson`; authoring validation rejects MCQ option objects containing non-whitelisted or non-string fields.
+- Media authorization now classifies all published paper asset links before the free-preview fallback, so premium primary question papers, non-primary Reading question papers, and protected paper assets (answer keys, scripts, model answers, etc.) cannot become downloadable through `/v1/media/{id}/content` or `/v1/media/{id}/url` just because a `FreePreviewAsset` row exists.
+- Learner free-preview listing now returns only published preview metadata and omits raw `mediaAssetId` values.
+- `ReadingPolicy.AllowPaperReadingMode` has a database default/backfill migration (`20260512103000_DefaultReadingPaperMode`) aligned with the documented runtime default, while explicit admin-updated disables remain preserved.
+- Reading home exposes the paper simulation entry only when policy and entitlement allow it.
+- Reading home recent-result cards now use backend scaled scores, not raw-score thresholds, for pass evidence; raw/max and scaled/500 are displayed together.
+- Canonical `/reading/paper/[paperId]` honors `?presentation=paper`, renders original PDF/print controls in the paper simulation, and falls back to computer delivery with a warning when policy disables paper mode.
+- Error Bank review links now include `attemptId` and `#item-review`; legacy player/results routes preserve old IDs on the Reading hub instead of pretending they are structured paper IDs.
+- Reading results now display backend raw/max and scaled/500 evidence, with pass evidence routed through the canonical scaled-score pass helper; the regression test now distinguishes scaled-score pass evidence from raw-score pass evidence.
+- Ops gate drift corrected: production deploy docs/scripts now use `/opt/oetwebapp`, call the safer `scripts/deploy-production.sh` driver, run redacted `.env.production` validation, distinguish web `/api/health` from API `/health/ready`, remove hard-coded recovery/audit email targets, and require Reading/media smoke checks plus signed evidence-manifest verification. The active production workflow is manual-only, targets the protected `production` GitHub Environment through a constant expression, validates dispatch inputs before SSH, passes deploy inputs to the remote shell through environment variables, hardcodes production smoke URLs, requires the named approver/smoke acknowledgement/signer fingerprint inputs, fails closed when production deploy secrets are missing, rejects stale checkout paths, preserves the evidence bundle through cleanup, and runs pre-flight, evidence verification, deploy, post-deploy verification, and observability smoke in order.
+
+Current validation evidence from this corrective pass:
+
+- `npx vitest run app/reading/page.test.tsx "app/reading/paper/[paperId]/page.test.tsx" "app/reading/paper/[paperId]/results/page.test.tsx" components/domain/reading-paper-simulation.test.tsx lib/reading-paper-simulation.test.ts` - PASS, 5 files / 14 tests.
+- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~ReadingAuthoringTests|FullyQualifiedName~MediaEndpointSecurityTests" --no-restore` - PASS, 87/87 tests.
+- `npx tsc --noEmit` - PASS.
+- `npm run lint` - PASS.
+- `dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --no-restore` - PASS.
+- `npm run build` - PASS; production build includes `/reading`, `/reading/paper/[paperId]`, `/reading/paper/[paperId]/results`, and closed legacy `/reading/player/[id]` / `/reading/results/[id]` routes.
+- Git Bash syntax check for touched deploy/ops shell scripts - PASS (`bash -n` via Git's bundled `bash.exe`; plain `bash` is not on PATH in this Windows session).
+- `git diff --check` - PASS with only pre-existing CRLF normalization warnings on `app/reading/player/[id]/page.tsx` and `components/domain/reading-paper-simulation.tsx`.
+- VS Code diagnostics on the production deploy workflow - PASS, no errors.
+- VS Code diagnostics on touched Reading frontend/backend/test files - PASS, no errors.
+- Current Playwright rerun attempted with `npx playwright test tests/e2e/learner/player-workflows.spec.ts tests/e2e/learner/deep-link-smoke.spec.ts --project chromium-learner --workers 1 --grep "legacy reading player|/reading/player/rt-001"`; blocked before route execution because the local API was not running (`ECONNREFUSED ::1:5198`) and Docker is unavailable on this machine (`docker` not recognized), so the local E2E stack cannot be started here. Treat the May 10 Playwright entry below as historical evidence, not fresh May 12 evidence.
+- Independent review found additional real gaps in option redaction, free-preview media bypass, Reading home scaled evidence, DB default drift, and ops gate drift; all were fixed and covered by the backend/frontend focused tests and static gates above.
+- Final independent post-fix review found no remaining security/deploy blockers after the primary premium-paper media fallback fix, production workflow protected-environment hardening, missing-secret fail-closed behavior, and SSH input validation/env passing. Remaining gaps are live-environment checks only: GitHub `production` environment reviewer rules, secret values, VPS checkout contents, GPG trust, DNS/TLS, and live smoke responses.
+
+## 2026-05-10 Historical Validation Evidence
 
 - `npm test -- lib/reading-paper-simulation.test.ts app/diagnostic/reading/page.test.tsx lib/__tests__/api.test.ts app/reading/page.test.tsx lib/scoring.test.ts` - PASS, 5 files / 107 tests.
 - Focused backend Reading tests - PASS, 60/60.
@@ -405,4 +454,4 @@ Scope: executed Ralph/OmO ultrawork update for OET Reading rulebook closure, cov
 
 ## Release Gate
 
-- Completion criteria met for the implemented Reading rulebook closure. Known residuals are non-blocking and unrelated to Reading correctness: Prisma/OpenTelemetry build warning and existing expert review hook dependency warnings.
+- Code closure criteria are met for the implemented Reading rulebook closure after the 2026-05-12 corrective pass. Launch evidence still needs fresh Playwright/route smoke on a running local or staging stack because the API stack was unavailable here and Docker is not installed in this environment. Use the existing Playwright command plus the deploy-gate Reading/media smoke checks once the learner stack is running.

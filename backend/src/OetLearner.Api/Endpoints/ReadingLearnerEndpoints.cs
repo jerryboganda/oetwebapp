@@ -48,6 +48,7 @@ public static class ReadingLearnerEndpoints
             string paperId,
             HttpContext http,
             LearnerDbContext db,
+            IReadingPolicyService policyService,
             IContentEntitlementService entitlements,
             CancellationToken ct) =>
         {
@@ -62,6 +63,27 @@ public static class ReadingLearnerEndpoints
                 return Results.NotFound();
 
             await entitlements.RequireAccessAsync(userId, paper, ct);
+            var resolvedPolicy = await policyService.ResolveForUserAsync(userId, ct);
+
+            List<QuestionPaperAssetDto> questionPaperAssets = [];
+            if (resolvedPolicy.AllowPaperReadingMode)
+            {
+                questionPaperAssets = await db.ContentPaperAssets.AsNoTracking()
+                    .Where(a => a.PaperId == paperId
+                        && a.Role == PaperAssetRole.QuestionPaper
+                        && a.IsPrimary
+                        && a.MediaAsset != null
+                        && a.MediaAsset.Status == MediaAssetStatus.Ready)
+                    .Include(a => a.MediaAsset)
+                    .OrderBy(a => a.DisplayOrder)
+                    .ThenBy(a => a.Part)
+                    .Select(a => new QuestionPaperAssetDto(
+                        a.Id,
+                        a.Part,
+                        a.Title ?? a.MediaAsset!.OriginalFilename,
+                        $"/v1/media/{a.MediaAssetId}/content"))
+                    .ToListAsync(ct);
+            }
 
             var parts = await db.ReadingParts.AsNoTracking()
                 .Where(p => p.PaperId == paperId)
@@ -73,7 +95,15 @@ public static class ReadingLearnerEndpoints
             // Project every question to the learner-safe shape. Critical.
             return Results.Ok(new
             {
-                paper = new { paper.Id, paper.Title, paper.Slug, paper.SubtestCode },
+                paper = new
+                {
+                    paper.Id,
+                    paper.Title,
+                    paper.Slug,
+                    paper.SubtestCode,
+                    allowPaperReadingMode = resolvedPolicy.AllowPaperReadingMode,
+                    questionPaperAssets,
+                },
                 parts = parts.Select(p => new
                 {
                     p.Id,
@@ -94,7 +124,7 @@ public static class ReadingLearnerEndpoints
                         questionType = q.QuestionType.ToString(),
                         q.Stem,
                         // options visible; correct answer + explanation + synonyms NOT.
-                        options = SafeParseOptions(q.OptionsJson),
+                        options = SafeProjectOptions(q.OptionsJson),
                     }),
                 }),
             });
@@ -915,18 +945,61 @@ public static class ReadingLearnerEndpoints
         return null;
     }
 
-    private static object SafeParseOptions(string json)
+    private static IReadOnlyList<object> SafeProjectOptions(string json)
     {
-        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
+        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<object>();
         try
         {
             using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.Clone();
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<object>();
+            }
+
+            var options = new List<object>();
+            foreach (var option in doc.RootElement.EnumerateArray())
+            {
+                if (option.ValueKind == JsonValueKind.String)
+                {
+                    options.Add(option.GetString() ?? string.Empty);
+                    continue;
+                }
+
+                if (option.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                var value = ReadSafeOptionText(option, "value")
+                    ?? ReadSafeOptionText(option, "label")
+                    ?? ReadSafeOptionText(option, "text")
+                    ?? ReadSafeOptionText(option, "title");
+                var label = ReadSafeOptionText(option, "label")
+                    ?? ReadSafeOptionText(option, "text")
+                    ?? ReadSafeOptionText(option, "title")
+                    ?? value;
+                if (!string.IsNullOrWhiteSpace(label))
+                {
+                    options.Add(new { value = string.IsNullOrWhiteSpace(value) ? label : value, label });
+                }
+            }
+
+            return options;
         }
         catch (JsonException)
         {
-            return Array.Empty<string>();
+            return Array.Empty<object>();
         }
+    }
+
+    private static string? ReadSafeOptionText(JsonElement option, string propertyName)
+    {
+        if (!option.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        return property.GetString();
     }
 
     private static object? SafeParseJson(string? json)
@@ -1004,7 +1077,8 @@ public static class ReadingLearnerEndpoints
             ExtraTimeEntitlementPct: 0,
             AllowMultipleConcurrentAttempts: false,
             AllowPausingAttempt: false,
-            AllowResumeAfterExpiry: false);
+            AllowResumeAfterExpiry: false,
+            AllowPaperReadingMode: false);
     }
 
     private static async Task<bool> CanLearnerSeePaperAsync(
@@ -1032,6 +1106,12 @@ public static class ReadingLearnerEndpoints
         return !string.IsNullOrWhiteSpace(profession)
             && string.Equals(paper.ProfessionId, profession, StringComparison.OrdinalIgnoreCase);
     }
+
+    private sealed record QuestionPaperAssetDto(
+        string Id,
+        string? Part,
+        string Title,
+        string DownloadPath);
 
     private sealed record ReadingReviewItem(
         string QuestionId,

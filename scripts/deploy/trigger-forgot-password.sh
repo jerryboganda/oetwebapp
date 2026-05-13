@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-EMAIL="mindreader420123@gmail.com"
+: "${EMAIL:?Set EMAIL to the account that needs password recovery}"
+API_BASE_URL="${API_BASE_URL:-https://api.oetwithdrhesham.co.uk}"
 
 echo "=== Triggering /v1/auth/forgot-password for ${EMAIL} ==="
 
@@ -9,7 +10,7 @@ echo "=== Triggering /v1/auth/forgot-password for ${EMAIL} ==="
 RESPONSE_FILE=$(mktemp)
 
 HTTP=$(curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' \
-    -X POST https://api.oetwithdrhesham.co.uk/v1/auth/forgot-password \
+    -X POST "${API_BASE_URL%/}/v1/auth/forgot-password" \
     -H 'Content-Type: application/json' \
     -H 'Accept: application/json' \
     --data-binary "{\"email\":\"${EMAIL}\"}")

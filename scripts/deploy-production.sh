@@ -5,6 +5,7 @@
 # Aggressive cleanup BEFORE build to prevent disk-space failures.
 # Logs every step; only exits 1 on critical failure.
 # --------------------------------------
+set -Eeuo pipefail
 
 LOGFILE="/tmp/deploy-production-$(date +%s).log"
 exec > >(tee "$LOGFILE") 2>&1
@@ -34,6 +35,8 @@ if [ ! -f ".env.production" ]; then
   exit 1
 fi
 echo "[deploy] .env.production exists"
+bash scripts/deploy/validate-production-env.sh .env.production
+bash scripts/deploy/mock-stub-scan.sh .env.production
 
 # -- Step 1: Pre-build cleanup (free disk space without destroying layer cache) --
 echo ""
@@ -54,9 +57,11 @@ echo ""
 echo "[deploy] STEP 2/5: building images..."
 echo "[deploy] build started at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 build_images() {
-  docker compose --env-file .env.production -f docker-compose.production.yml build --pull db-backup 2>&1
-  docker compose --env-file .env.production -f docker-compose.production.yml build --pull learner-api 2>&1
-  docker compose --env-file .env.production -f docker-compose.production.yml build --pull web 2>&1
+  local service
+  for service in db-backup learner-api web; do
+    echo "[deploy] building $service"
+    docker compose --env-file .env.production -f docker-compose.production.yml build --pull "$service" 2>&1 || return $?
+  done
 }
 
 if build_images; then

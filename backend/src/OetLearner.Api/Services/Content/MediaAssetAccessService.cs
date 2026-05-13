@@ -2,10 +2,14 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Services.Content;
 
-public sealed class MediaAssetAccessService(LearnerDbContext db, IContentEntitlementService contentEntitlements)
+public sealed class MediaAssetAccessService(
+    LearnerDbContext db,
+    IContentEntitlementService contentEntitlements,
+    IReadingPolicyService readingPolicy)
 {
     public async Task<bool> CanAccessAsync(ClaimsPrincipal principal, string mediaAssetId, CancellationToken ct)
     {
@@ -33,11 +37,6 @@ public sealed class MediaAssetAccessService(LearnerDbContext db, IContentEntitle
             return false;
         }
 
-        if (await IsPublishedFreePreviewMediaAsync(media.Id, ct))
-        {
-            return true;
-        }
-
         var profession = principal.FindFirstValue("prof") ?? principal.FindFirstValue("profession");
         if (string.IsNullOrWhiteSpace(profession))
         {
@@ -50,26 +49,54 @@ public sealed class MediaAssetAccessService(LearnerDbContext db, IContentEntitle
 
         var normalizedProfession = profession?.Trim().ToLowerInvariant();
         var learnerVisibleRoles = LearnerVisiblePaperAssetRoles;
-        var candidatePapers = await db.ContentPaperAssets
+        var attachedPaperAssets = await db.ContentPaperAssets
             .AsNoTracking()
             .Where(asset => asset.MediaAssetId == media.Id
-                && asset.IsPrimary
-                && learnerVisibleRoles.Contains(asset.Role)
                 && asset.Paper != null
-                && asset.Paper.Status == ContentStatus.Published
+                && asset.Paper.Status == ContentStatus.Published)
+            .Select(asset => new
+            {
+                asset.Role,
+                asset.IsPrimary,
+                Paper = asset.Paper!,
+            })
+            .ToListAsync(ct);
+
+        var isReadingQuestionPaperAsset = attachedPaperAssets.Any(candidate =>
+            candidate.Role == PaperAssetRole.QuestionPaper
+            && string.Equals(candidate.Paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase));
+        if (isReadingQuestionPaperAsset
+            && !(await readingPolicy.ResolveForUserAsync(userId, ct)).AllowPaperReadingMode)
+        {
+            return false;
+        }
+
+        var candidatePaperAssets = attachedPaperAssets
+            .Where(asset => asset.IsPrimary
+                && learnerVisibleRoles.Contains(asset.Role)
                 && (asset.Paper.AppliesToAllProfessions
                     || (!string.IsNullOrWhiteSpace(normalizedProfession)
                         && asset.Paper.ProfessionId == normalizedProfession)))
-            .Select(asset => asset.Paper!)
-            .ToListAsync(ct);
+            .ToList();
 
-        foreach (var paper in candidatePapers)
+        foreach (var candidate in candidatePaperAssets)
         {
+            var paper = candidate.Paper;
             var entitlement = await contentEntitlements.AllowAccessAsync(userId, paper, ct);
             if (entitlement.Allowed)
             {
                 return true;
             }
+        }
+
+        if (attachedPaperAssets.Count > 0)
+        {
+            return false;
+        }
+
+        if (await IsPublishedFreePreviewMediaAsync(media.Id, ct))
+        {
+            return true;
         }
 
         return false;

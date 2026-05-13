@@ -131,7 +131,7 @@ authored structures — bank columns stay null and never affect grading.
 | `FontScaleUserControl` (global) | Learner can scale text in the player | `true` | `false` |
 | `HighContrastMode` (global) | "Exam-like" high-contrast theme available | `true` | `false` |
 | `ScreenReaderOptimised` (global) | Extra ARIA live regions in the player | `true` | `false` |
-| `AllowPaperReadingMode` (global) | Learner can switch to "read-only" (PDF view + paper answering) and upload answers later — slower turnaround | `false` | `true` |
+| `AllowPaperReadingMode` (global) | Learner can switch to paper simulation with original PDF links and answer-sheet style entry. When disabled, Reading question-paper PDF media is withheld from learners. | `true` | `false` |
 | `ExtraTimeApprovalWorkflow` (global) | Learners can request + admins approve extra-time entitlements | `true` | `false` |
 
 **Safe fallback**: all defaults are accessibility-on. Turning them off

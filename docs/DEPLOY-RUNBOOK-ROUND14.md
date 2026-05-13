@@ -1,4 +1,7 @@
-# Deploy Runbook — Round 14 (commit `c426423`)
+# Archived Deploy Runbook — Round 14 (commit `c426423`)
+
+> Archived historical runbook. Use [ops/deploy-gate.md](ops/deploy-gate.md) for
+> current production deploy and rollback procedures.
 
 > GitHub is up to date: `main @ c426423` (<https://github.com/jerryboganda/oetwebapp>).
 > This runbook is what **you** run on the VPS. The agent does NOT execute these
@@ -17,18 +20,16 @@ ssh root@185.252.233.186
 ## 2. Pull latest and rebuild
 
 ```bash
-cd /root/oetwebsite
+cd /opt/oetwebapp
 git fetch origin
 git log --oneline -1               # sanity: confirm current HEAD
-git reset --hard origin/main       # hard-sync to c426423
-git log --oneline -1               # confirm: c426423 feat(perf): ship rounds 11-13 perf sweep
 
-# Build + rollout (standalone Next.js + .NET API)
-docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+# Current gated rollout path. Requires signed release evidence for the target SHA.
+bash ./scripts/deploy/deploy-prod.sh
 
 # Watch until healthy
-docker compose -f docker-compose.production.yml ps
-docker compose -f docker-compose.production.yml logs -f web api --tail=200
+docker compose --env-file .env.production -f docker-compose.production.yml ps
+docker compose --env-file .env.production -f docker-compose.production.yml logs -f web learner-api --tail=200
 # Ctrl-C once you see: "Next.js ... ready in ..." and ".NET ... Now listening on: http://[::]:8080"
 ```
 
@@ -70,9 +71,8 @@ If any of those are not `2xx`/`3xx`, jump to Rollback.
 Previous known-good commit: **`ca9b0a8`**.
 
 ```bash
-cd /root/oetwebsite
-git reset --hard ca9b0a8
-docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+cd /opt/oetwebapp
+DEPLOY_REF=ca9b0a8 bash ./scripts/deploy/deploy-prod.sh
 ```
 
 **DO NOT** touch the postgres volume. The DB schema was not changed in this

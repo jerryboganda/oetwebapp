@@ -87,6 +87,16 @@ Minimum values you must set correctly:
 - `SMTP__HOST`
 - `SMTP__USERNAME`
 - `SMTP__PASSWORD`
+- `SENTRY_DSN`
+- `NEXT_PUBLIC_SENTRY_DSN`
+- `BACKUP_GPG_PASSPHRASE`
+- `BACKUP_S3_URL`
+- `BACKUP_AWS_ACCESS_KEY_ID`
+- `BACKUP_AWS_SECRET_ACCESS_KEY`
+- `BACKUP_ALERT_WEBHOOK`
+- `EVIDENCE_SIGNER_FINGERPRINT`
+- `READING_SMOKE_LEARNER_EMAIL` / `READING_SMOKE_LEARNER_PASSWORD` for a least-privilege smoke learner
+- `READING_SMOKE_*_ID` fixture values for the deploy-gate media smoke
 
 Notes:
 
@@ -100,11 +110,17 @@ Notes:
 - `SMTP__USERNAME` and `SMTP__PASSWORD` are required for production SMTP relay delivery.
 - `SEED_DEMO_DATA` should stay `false` in production.
 - `AUTH__USEDEVELOPMENTAUTH` is only for local development and should remain `false` in production.
+- The production GitHub Environment variable `EVIDENCE_SIGNER_FINGERPRINT` must match `.env.production`; the protected GitHub value is the deploy verifier trust root.
+- The Reading/media smoke learner should have only the fixture entitlement needed by `scripts/deploy/reading-media-smoke.sh` and should not require MFA.
 
 ## 3. Build and start the stack
 
+Production rollout is gated through the deploy helper so evidence, pre-flight,
+post-deploy, observability, and Reading/media smoke checks run before the deploy
+is considered complete:
+
 ```bash
-docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+bash ./scripts/deploy/deploy-prod.sh
 ```
 
 The API runs database migrations automatically on startup when `AUTO_MIGRATE=true`.
@@ -126,7 +142,7 @@ Attach your Nginx Proxy Manager container to the same external Docker network.
 Create these proxy hosts:
 
 1. `app.example.com` -> forward host `oet-web`, port `3000`
-2. `api.example.com` -> forward host `oet-api`, port `8080`
+2. `api.example.com` -> forward host `learner-api`, port `8080`
 
 Recommended Nginx Proxy Manager settings:
 
@@ -160,8 +176,8 @@ curl https://app.example.com/api/health
 
 The stack persists:
 
-- PostgreSQL data in `oet_postgres_data`
-- Uploaded learner audio in `oet_learner_storage`
+- PostgreSQL data in Docker volume `oetwebsite_oet_postgres_data`
+- Uploaded learner audio in Docker volume `oetwebsite_oet_learner_storage`
 
 Back up both named volumes before upgrades or VPS maintenance.
 
@@ -170,23 +186,20 @@ Back up both named volumes before upgrades or VPS maintenance.
 For a clean redeploy that rebuilds all containers and prunes stale Docker build/image cache, run:
 
 ```bash
-bash ./scripts/deploy-production.sh
+bash ./scripts/deploy/deploy-prod.sh
 ```
 
-That script preserves named volumes, so PostgreSQL data and uploaded learner files remain intact while the application containers are rebuilt. Its cleanup is intentionally limited to stopped containers, dangling/unused images, and BuildKit/build cache.
+That script preserves named volumes, verifies signed release evidence for the deployed SHA, runs pre-flight/post-deploy/observability/Reading-media gates, and then rebuilds the application containers. Its cleanup is intentionally limited to stopped containers, dangling/unused images, and BuildKit/build cache.
 
 Do **not** run `docker compose down -v`, `docker volume prune`, `docker system prune --volumes`, or manually delete `oetwebsite_*` named volumes as part of a normal redeploy. Volume cleanup is a separate destructive maintenance task and requires an explicit backup, restore plan, and approval naming the exact volume.
 
-```bash
-git pull
-docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
-```
+Direct `docker compose up -d --build` is reserved for local rehearsal and emergency use after explicit approval; it bypasses the production evidence gate.
 
 ## Troubleshooting
 
 - If the API exits on startup, check the first-party auth and SMTP settings first. The app fails fast when production settings are incomplete.
 - If the API exits on startup after enabling Brevo API mode, check `BREVO__APIKEY`, `BREVO__FROMEMAIL`, and the required template IDs first. If you are using Brevo SMTP relay, check `SMTP__HOST`, `SMTP__USERNAME`, `SMTP__PASSWORD`, `SMTP__FROMEMAIL`, and `SMTP__ENABLESSL=true`.
-- If browser uploads fail, confirm `PUBLIC_API_BASE_URL` is correct and that Nginx Proxy Manager can reach `oet-api:8080`.
+- If browser uploads fail, confirm `PUBLIC_API_BASE_URL` is correct and that Nginx Proxy Manager can reach `learner-api:8080`.
 - If the frontend cannot call the API, confirm `NEXT_PUBLIC_API_BASE_URL` matches the public API host and `CORS_ALLOWED_ORIGINS` includes the frontend host.
 
 ## Docker Desktop local deployment
@@ -219,7 +232,7 @@ Notes:
 
 ## Disaster Recovery
 
-The production compose stack includes an oet-db-backup sidecar that runs an encrypted pg_dump on BACKUP_SCHEDULE (default 02:17 UTC daily). Backups are kept locally in the oet_db_backups volume for BACKUP_RETENTION_DAYS (default 14) and optionally pushed to S3-compatible storage via BACKUP_S3_URL.
+The production compose stack includes an oet-db-backup sidecar that runs an encrypted pg_dump on BACKUP_SCHEDULE (default 02:17 UTC daily). Backups are kept locally in the `oetwebsite_oet_db_backups` Docker volume for BACKUP_RETENTION_DAYS (default 14) and pushed to S3-compatible storage via BACKUP_S3_URL.
 
 ### Prerequisites
 
@@ -229,32 +242,46 @@ The production compose stack includes an oet-db-backup sidecar that runs an encr
 
 ### Run a backup immediately
 
-``nssh root@185.252.233.186
-cd /root/oetwebsite
-docker compose -f docker-compose.production.yml exec -e RUN_ONCE_NOW=YES db-backup /usr/local/bin/entrypoint.sh
-``n
+```bash
+ssh root@185.252.233.186
+cd /opt/oetwebapp
+docker compose --env-file .env.production -f docker-compose.production.yml exec \
+  -e RUN_ONCE_NOW=YES \
+  db-backup /usr/local/bin/entrypoint.sh
+```
+
 ### List backups
 
-``ndocker compose -f docker-compose.production.yml exec db-backup ls -lh /backups
-``n
+```bash
+cd /opt/oetwebapp
+docker compose --env-file .env.production -f docker-compose.production.yml exec db-backup ls -lh /backups
+```
+
 ### Restore procedure
 
-1. Copy the target backup from S3 (or pick a local one from the volume) into the sidecar container.
-2. Restore into a **non-live** database first and verify:
+1. Copy the target backup from S3/R2, or pick a local one from the `oetwebsite_oet_db_backups` volume, into the sidecar container.
+2. Export `BACKUP_GPG_PASSPHRASE` in the shell or load it from the approved secret channel. Do not paste the passphrase into command history.
+3. Restore into a **non-live** database first and verify:
 
-``ndocker compose -f docker-compose.production.yml exec \\
-  -e CONFIRM_RESTORE=YES \\
-  -e BACKUP_FILE=/backups/oet-20260423T021700Z.dump.gpg \\
-  -e BACKUP_GPG_PASSPHRASE=... \\
-  -e TARGET_DB=oet_learner_restore_check \\
+```bash
+cd /opt/oetwebapp
+docker compose --env-file .env.production -f docker-compose.production.yml exec \
+  -e CONFIRM_RESTORE=YES \
+  -e BACKUP_FILE=/backups/oet-20260423T021700Z.dump.gpg \
+  -e BACKUP_GPG_PASSPHRASE \
+  -e TARGET_DB=oet_learner_restore_check \
   db-backup /usr/local/bin/postgres-restore.sh
-``n
-3. Point a temporary API container at the restored DB and run smoke tests.
-4. Only if (3) succeeds, restore into the live DB by also setting RESTORE_INTO_LIVE=YES and TARGET_DB=\. Announce a maintenance window first.
+```
+
+4. Point a temporary API container at the restored DB and run smoke tests.
+5. Only if (4) succeeds, restore into the live DB by also setting `RESTORE_INTO_LIVE=YES` and `TARGET_DB=`. Announce a maintenance window first.
 
 ### Verify backups are happening
 
-``ndocker compose -f docker-compose.production.yml logs -f db-backup
-``n
-A successful run ends with [backup] ok: /backups/oet-...dump.gpg. If you see nothing for 48 hours, the sidecar is not running \u2014 check BACKUP_SCHEDULE and docker compose ps db-backup.
+```bash
+cd /opt/oetwebapp
+docker compose --env-file .env.production -f docker-compose.production.yml logs -f db-backup
+```
+
+A successful run ends with `[backup] ok: /backups/oet-...dump.gpg`. If you see nothing for 48 hours, the sidecar is not running; check `BACKUP_SCHEDULE` and `docker compose --env-file .env.production -f docker-compose.production.yml ps db-backup`.
 

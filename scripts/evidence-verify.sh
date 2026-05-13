@@ -4,6 +4,7 @@ set -euo pipefail
 EVIDENCE_DIR="${EVIDENCE_DIR:-release-evidence}"
 EVIDENCE_ENV="${EVIDENCE_ENV:-local}"
 EVIDENCE_SIGNER_FINGERPRINT="${EVIDENCE_SIGNER_FINGERPRINT:-}"
+EXPECTED_GIT_SHA="${EXPECTED_GIT_SHA:-}"
 if [ -n "$EVIDENCE_SIGNER_FINGERPRINT" ]; then
   EVIDENCE_SIGNER_FINGERPRINT=$(printf '%s' "$EVIDENCE_SIGNER_FINGERPRINT" | tr '[:lower:]' '[:upper:]')
 fi
@@ -82,6 +83,30 @@ case "$sca_exit_code" in
     exit 1
     ;;
 esac
+
+if [ -n "$EXPECTED_GIT_SHA" ]; then
+  case "$EXPECTED_GIT_SHA" in
+    *[!0-9A-Fa-f]*)
+      echo "EXPECTED_GIT_SHA must be hexadecimal; found: $EXPECTED_GIT_SHA" >&2
+      exit 1
+      ;;
+  esac
+  expected_git_sha_length=${#EXPECTED_GIT_SHA}
+  if [ "$expected_git_sha_length" -ne 40 ]; then
+    echo "EXPECTED_GIT_SHA must be a full 40-character SHA; found length $expected_git_sha_length" >&2
+    exit 1
+  fi
+  evidence_git_sha=$(awk -F= '$1 == "git_sha" { print $2 }' "$EVIDENCE_DIR/release-metadata.env" | tail -n 1)
+  evidence_git_sha=$(printf '%s' "$evidence_git_sha" | awk '{$1=$1; print}')
+  if [ -z "$evidence_git_sha" ]; then
+    echo "release-metadata.env must include git_sha when EXPECTED_GIT_SHA is set." >&2
+    exit 1
+  fi
+  if [ "$evidence_git_sha" != "$EXPECTED_GIT_SHA" ]; then
+    echo "Evidence git_sha ($evidence_git_sha) does not match deployed HEAD ($EXPECTED_GIT_SHA)." >&2
+    exit 1
+  fi
+fi
 
 if command -v jq >/dev/null 2>&1; then
   jq empty "$EVIDENCE_DIR/sbom.json" "$EVIDENCE_DIR/sca.json"

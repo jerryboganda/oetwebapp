@@ -316,7 +316,7 @@ remaining_work:
     input_required: []
     evidence_links:
       - "ASP.NET Core SignalR built-in transport negotiation (WebSockets → SSE → LongPolling) is the documented fallback path; no custom code required."
-      - "Post-deploy smoke gate (docs/ops/deploy-gate.md) requires `scripts/observability-smoke.sh` exit 0 against the production base URL within 5 minutes; this includes the conversation hub health probe."
+      - "Post-deploy smoke gate (docs/ops/deploy-gate.md) requires `scripts/observability-smoke.sh` exit 0 against the production base URL within 5 minutes; SignalR transport fallback is documented, while an authenticated ConversationHub negotiate/connect probe remains a launch smoke extension rather than part of the generic observability script."
 
   - id: RW-012
     area: provider-readiness
@@ -437,8 +437,10 @@ remaining_work:
     input_required:
       - Define rollback threshold and manual approval owner.
     evidence_links:
-      - "docs/ops/deploy-gate.md (new): names Dr Faisal Maqsood as approver, encodes the quantitative rollback trigger (5xx>2%/5min OR p95>2s/10min OR /api/health non-200 for 3min), pre-deploy checklist (CI green + SBOM/SCA bundle + scripts/deploy/pre-flight.sh + .env.production validation + approver acknowledgement), and post-deploy smoke gate."
-      - "Cross-references already shipped: scripts/deploy/pre-flight.sh, scripts/deploy/post-deploy-verify.sh, scripts/observability-smoke.sh, scripts/evidence-collect.sh + scripts/evidence-verify.sh (production mode requires signed checksums.sha256), .github/workflows/deploy-production.yml, .github/workflows/verify-release-artifacts.yml."
+      - "docs/ops/deploy-gate.md: names Dr Faisal Maqsood as approver, encodes the quantitative rollback trigger (5xx>2%/5min OR p95>2s/10min OR web /api/health or API /health/ready non-200 for 3min), pre-deploy checklist (CI green + SBOM/SCA bundle + scripts/deploy/pre-flight.sh + redacted .env.production validation + scripts/deploy/mock-stub-scan.sh + approver acknowledgement + VPS_SSH_FINGERPRINT), executable Reading/media smoke checks, encrypted backup sidecar snapshot, and post-deploy smoke gate. Active checkout path is /opt/oetwebapp; /root/oetwebsite is stale."
+      - "Cross-references already shipped: scripts/deploy/pre-flight.sh, scripts/deploy/post-deploy-verify.sh, scripts/deploy/validate-production-env.sh, scripts/deploy/mock-stub-scan.sh, scripts/deploy/reading-media-smoke.sh, scripts/observability-smoke.sh, scripts/evidence-collect.sh + scripts/evidence-sign.sh + scripts/evidence-verify.sh (production mode requires checksums.sha256 + checksums.sha256.asc + expected signer fingerprint and can require EXPECTED_GIT_SHA), .github/workflows/deploy-production.yml, .github/workflows/verify-release-artifacts.yml. The production workflow is manual-only, targets the protected production GitHub Environment through a constant expression, validates dispatch inputs before SSH, passes deploy inputs to the remote shell through environment variables, pins the SSH host fingerprint, pins appleboy/ssh-action to commit 029f5b4aeeeb58fdfe1410a5d17f967dacf36262, uses the protected GitHub EVIDENCE_SIGNER_FINGERPRINT as the deploy verifier trust root, declares no GitHub token permissions, and invokes the canonical `scripts/deploy/deploy-prod.sh` wrapper. The wrapper verifies signed evidence for the target SHA before resetting into the target checkout, fails closed when deploy secrets or required vars are missing, refuses stale checkout paths, preserves the release-evidence bundle, and runs signed evidence verification -> pre-flight -> deploy -> post-deploy verify -> observability smoke -> Reading/media smoke."
+      - "Rollback path now uses the same gated wrapper with `DEPLOY_REF=<previous-good-sha> bash ./scripts/deploy/deploy-prod.sh`; the signed evidence bundle must match that rollback SHA. Production Compose project name is pinned to `oetwebsite`, and deploy-gate docs use the `oetwebsite_*` volume names."
+      - "Legacy `scripts/vps-deploy.sh` no longer performs backup/reset/deploy directly; it delegates to `scripts/deploy/deploy-prod.sh`, so the signed-evidence, pre-flight, deploy, post-deploy, observability, and Reading/media gates cannot be bypassed through that helper."
 
 
   - id: RW-017
@@ -520,7 +522,7 @@ remaining_work:
     details: >
       SBOM + SCA pipeline wired end-to-end: scripts/sbom-generate.sh + scripts/sca-scan.sh +
       scripts/evidence-collect.sh + scripts/evidence-verify.sh (with production mode requiring
-      a signed checksums.sha256). .github/workflows/sbom-sca.yml runs on every release. The
+      checksums.sha256, checksums.sha256.asc, and the expected signer fingerprint). .github/workflows/sbom-sca.yml runs on every release. The
       bundle is gated by docs/ops/deploy-gate.md (RW-016, 2026-05-10).
     recommendation: Maintain the gate; rotate accepted-risk owners + expiry on every release.
     source_labels:
@@ -535,6 +537,7 @@ remaining_work:
       - scripts/sbom-generate.sh
       - scripts/sca-scan.sh
       - scripts/evidence-collect.sh
+      - scripts/evidence-sign.sh
       - scripts/evidence-verify.sh
       - scripts/observability-smoke.sh
       - Git Bash syntax check passed for SBOM/SCA/evidence/verification/observability helper scripts on 2026-05-09.
@@ -542,8 +545,12 @@ remaining_work:
       - `scripts/evidence-verify.sh` now requires accepted-risk notes for nonzero SCA results to include owner/expiry metadata and checksum-manifest coverage.
       - `scripts/sbom-generate.sh` and `scripts/sca-scan.sh` now use version-tagged default Syft/Grype images with read-only Docker mounts; `scripts/evidence-collect.sh` records local tool versions or fallback image versions in `tool-versions.txt` and refuses bundles with a missing SCA report.
       - `scripts/evidence-verify.sh` now requires checksum-covered `tool-versions.txt`, requires present numeric `sca_exit_code`, and supports production mode requiring a detached signature for `checksums.sha256` from the expected signer fingerprint; synthetic local, accepted-risk, invalid accepted-risk, missing-SCA-metadata, and unsigned-production dry-runs passed on 2026-05-09.
-      - `.github/workflows/verify-release-artifacts.yml` now exposes `evidence_env` and `signer_fingerprint` inputs so production-mode verification can enforce the signed-manifest gate.
-      - `.github/workflows/sbom-sca.yml` and `.github/workflows/verify-release-artifacts.yml` now declare least-privilege `contents: read` permissions.
+      - `scripts/evidence-verify.sh` now supports `EXPECTED_GIT_SHA`; production deploy sets it to deployed `HEAD`, so a signed evidence bundle from a different commit is rejected.
+      - `scripts/evidence-sign.sh` creates the detached manifest signature from an existing local signing key or an imported protected CI private key.
+      - `.github/workflows/verify-release-artifacts.yml` now uses the selected protected environment, signs production evidence with `PRODUCTION_EVIDENCE_GPG_PRIVATE_KEY` and `PRODUCTION_EVIDENCE_GPG_PASSPHRASE`, verifies with the protected `EVIDENCE_SIGNER_FINGERPRINT`, and uploads the verified bundle as `release-evidence-${{ github.sha }}`.
+      - `.github/workflows/sbom-sca.yml` now runs `scripts/evidence-collect.sh` and uploads the complete release evidence bundle instead of only raw SBOM/SCA files; both release workflows declare least-privilege `contents: read` permissions.
+      - `.env.production.example` is now a single canonical template with no duplicate active keys; `scripts/deploy/validate-production-env.sh` rejects duplicate keys, missing S3 credentials, placeholder Sentry/backup/smoke values, and malformed smoke-account email.
+      - `scripts/deploy/mock-stub-scan.sh` rejects production env values and rendered Compose config containing mock/stub/noop markers; `scripts/deploy-production.sh` runs it before build.
 
   - id: RW-021
     area: incident-response
@@ -587,7 +594,9 @@ remaining_work:
     evidence_links:
       - "docs/ops/observability-slo-checklist.md: launch SLOs locked at the standard profile (99.5% / p95 1.5s / err <1% per 5min) per RW-022 decision 2026-05-10. Each row in the SLO table now has a concrete launch threshold (auth, billing, writing/listening/reading/speaking, conversation, admin, AI gateway, background jobs, upload/audio)."
       - "docs/ops/observability-slo-checklist.md Alert Ownership table: every alert (API 5xx spike, auth failure spike, provider outage, upload failure, queue backlog, health-check failure, latency regression) now has Dr Faisal Maqsood as owner and routes to the incident-response runbook."
+      - "docs/ops/observability-slo-checklist.md now records production deploy validation requirements for Sentry DSNs, the backup alert webhook, and `scripts/observability-smoke.sh`; external alert-provider dashboard IDs and alert-channel proof remain release-evidence attachments before final launch approval."
       - scripts/observability-smoke.sh (already wired) emits target metadata, supports API readiness checks, applies curl timeouts, and exits nonzero on failure.
+      - docker-compose.production.yml and Dockerfile now pass Sentry DSNs to the backend and Next.js production build/runtime; scripts/deploy/validate-production-env.sh rejects missing or placeholder DSNs, missing backup alert webhook, missing offsite backup credentials, duplicate keys, and malformed Reading smoke-account credentials.
 
 
 completed_but_needs_evidence:

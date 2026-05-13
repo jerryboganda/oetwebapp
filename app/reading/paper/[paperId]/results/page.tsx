@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { getReadingAttemptReview, type ReadingAttemptReviewDto } from '@/lib/reading-authoring-api';
-import { formatListeningReadingDisplay, isListeningReadingPassByRaw } from '@/lib/scoring';
+import { isListeningReadingPassByScaled } from '@/lib/scoring';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
 export default function ReadingPaperResultsPage({ params }: { params: Promise<{ paperId: string }> }) {
@@ -74,7 +74,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
   const raw = review?.attempt.rawScore ?? 0;
   const scaled = review?.attempt.scaledScore ?? null;
   const isPracticeOnly = scaled === null;
-  const passed = !isPracticeOnly && isListeningReadingPassByRaw(raw);
+  const passed = !isPracticeOnly && typeof scaled === 'number' && isListeningReadingPassByScaled(scaled);
 
   return (
     <LearnerDashboardShell pageTitle="Reading Results" backHref="/reading">
@@ -95,7 +95,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               title={review.paper.title}
               description={isPracticeOnly
                 ? `${raw}/${review.attempt.maxRawScore} practice marks`
-                : formatListeningReadingDisplay(raw)}
+                : `${raw}/${review.attempt.maxRawScore} raw | ${scaled}/500 scaled`}
               highlights={[
                 { icon: Target, label: 'Raw score', value: `${raw}/${review.attempt.maxRawScore}` },
                 { icon: FileText, label: 'Scaled score', value: isPracticeOnly ? 'Practice only' : `${scaled}/500` },

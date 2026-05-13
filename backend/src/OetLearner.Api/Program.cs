@@ -600,7 +600,14 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningPathwayPro
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.TeacherClassService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningV2BackfillService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAnalyticsService, OetLearner.Api.Services.Reading.ReadingAnalyticsService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.StubReadingExtractionAi>();
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.StubReadingExtractionAi>();
+}
+else
+{
+    builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.DisabledReadingExtractionAi>();
+}
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionService, OetLearner.Api.Services.Reading.ReadingExtractionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPathwayService, OetLearner.Api.Services.Reading.ReadingPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService, OetLearner.Api.Services.Reading.ReadingReviewService>();

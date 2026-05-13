@@ -712,7 +712,8 @@ public sealed class ReadingAttemptService(
             ExtraTimeEntitlementPct: 0,
             AllowMultipleConcurrentAttempts: false,
             AllowPausingAttempt: false,
-            AllowResumeAfterExpiry: false);
+            AllowResumeAfterExpiry: false,
+            AllowPaperReadingMode: false);
     }
 
     private static DateTimeOffset ResolvePartADeadline(ReadingAttempt attempt, ReadingResolvedPolicy policy)

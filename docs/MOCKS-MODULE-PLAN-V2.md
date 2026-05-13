@@ -67,7 +67,7 @@ These come from `AGENTS.md` MISSION-CRITICAL contracts and **must not be violate
 4. **Reading authoring** — exact-match grading; learner DTOs must never expose answer keys. Already enforced; do not regress.
 5. **AudIO/files** — all audio I/O via `IFileStorage`, content-addressed SHA-256.
 6. **Billing** — review credits flow only through existing wallet/reservation lifecycle. Score guarantee remains billing-owned.
-7. **Migrations** — every new entity gets a migration; never recreate `oet_postgres_data`.
+7. **Migrations** — every new entity gets a migration; never recreate `oetwebsite_oet_postgres_data` in production.
 
 ---
 

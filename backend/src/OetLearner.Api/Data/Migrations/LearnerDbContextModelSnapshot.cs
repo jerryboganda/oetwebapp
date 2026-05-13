@@ -10794,7 +10794,8 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("AllowPaperReadingMode")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("AllowPausingAttempt")
                         .HasColumnType("boolean");

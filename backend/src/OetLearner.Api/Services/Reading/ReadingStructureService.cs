@@ -864,6 +864,7 @@ public sealed class ReadingStructureService : IReadingStructureService
                     var expectedCount = type == ReadingQuestionType.MultipleChoice3 ? 3 : 4;
                     if (options.GetArrayLength() != expectedCount)
                         throw new InvalidOperationException($"MCQ{expectedCount} must have exactly {expectedCount} options.");
+                    EnsureLearnerSafeMcqOptions(options);
                     if (correct.ValueKind != JsonValueKind.String)
                         throw new InvalidOperationException("MCQ CorrectAnswerJson must be a single string letter.");
                     var ans = correct.GetString() ?? string.Empty;
@@ -906,6 +907,38 @@ public sealed class ReadingStructureService : IReadingStructureService
                 throw new InvalidOperationException($"Unknown question type {type}.");
         }
     }
+
+    private static void EnsureLearnerSafeMcqOptions(JsonElement options)
+    {
+        foreach (var option in options.EnumerateArray())
+        {
+            if (option.ValueKind == JsonValueKind.String)
+            {
+                continue;
+            }
+
+            if (option.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidOperationException("MCQ OptionsJson entries must be strings or learner-safe option objects.");
+            }
+
+            foreach (var property in option.EnumerateObject())
+            {
+                if (!LearnerSafeOptionKeys.Contains(property.Name) || property.Value.ValueKind != JsonValueKind.String)
+                {
+                    throw new InvalidOperationException("MCQ option objects may only contain string value, label, text, or title fields.");
+                }
+            }
+        }
+    }
+
+    private static readonly HashSet<string> LearnerSafeOptionKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "value",
+        "label",
+        "text",
+        "title",
+    };
 
     private static void ValidateManifest(ReadingStructureManifest manifest, bool replaceExisting)
     {

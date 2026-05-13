@@ -1,5 +1,7 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -43,6 +45,13 @@ public class ReadingAuthoringTests
         var entitlements = new ContentEntitlementService(db, new EffectiveEntitlementResolver(db));
         var attempt = new ReadingAttemptService(db, policy, grader, entitlements, NullLogger<ReadingAttemptService>.Instance);
         return (db, structure, policy, grader, attempt);
+    }
+
+    private static async Task EnableReadingAiExtractionAsync(ReadingPolicyService policy)
+    {
+        var current = await policy.GetGlobalAsync(default);
+        current.AiExtractionEnabled = true;
+        await policy.UpsertGlobalAsync(current, "test-admin", default);
     }
 
     private static async Task SeedPaperAsync(LearnerDbContext db, string paperId, ContentStatus status = ContentStatus.Published)
@@ -315,6 +324,325 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Learner_structure_endpoint_redacts_answers_explanations_synonyms_and_exposes_question_paper_assets()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var structure = new ReadingStructureService(db);
+        var paperId = "redaction-paper";
+
+        await SeedPaperAsync(db, paperId);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorPaperAsync(db, structure, paperId);
+
+        var firstQuestion = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == paperId)
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
+            .FirstAsync();
+        firstQuestion.CorrectAnswerJson = "\"SECRET-ANSWER\"";
+        firstQuestion.AcceptedSynonymsJson = "[\"SECRET-SYNONYM\"]";
+        firstQuestion.ExplanationMarkdown = "SECRET-EXPLANATION";
+        var firstMcq = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == paperId && q.QuestionType == ReadingQuestionType.MultipleChoice3)
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+        firstMcq.OptionsJson = """
+            [
+                {"value":"A","label":"Safe option","isCorrect":true,"correctAnswer":"SECRET-OPTION-ANSWER","acceptedSynonyms":["SECRET-OPTION-SYNONYM"],"explanationMarkdown":"SECRET-OPTION-EXPLANATION"},
+                "Distractor B",
+                "Distractor C"
+            ]
+            """;
+
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = "media-redaction-paper",
+            OriginalFilename = "reading-original.pdf",
+            MimeType = "application/pdf",
+            Format = "pdf",
+            SizeBytes = 1024,
+            StoragePath = "reading/redaction/original.pdf",
+            Status = MediaAssetStatus.Ready,
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = "asset-redaction-paper",
+            PaperId = paperId,
+            Role = PaperAssetRole.QuestionPaper,
+            Part = "A",
+            MediaAssetId = "media-redaction-paper",
+            Title = "Original Part A PDF",
+            DisplayOrder = 0,
+            IsPrimary = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "mock-user-001");
+        var response = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/structure");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var payload = json.RootElement.GetRawText();
+
+        Assert.DoesNotContain("CorrectAnswerJson", payload);
+        Assert.DoesNotContain("correctAnswer", payload);
+        Assert.DoesNotContain("AcceptedSynonymsJson", payload);
+        Assert.DoesNotContain("acceptedSynonyms", payload);
+        Assert.DoesNotContain("ExplanationMarkdown", payload);
+        Assert.DoesNotContain("explanationMarkdown", payload);
+        Assert.DoesNotContain("SECRET-ANSWER", payload);
+        Assert.DoesNotContain("SECRET-SYNONYM", payload);
+        Assert.DoesNotContain("SECRET-EXPLANATION", payload);
+        Assert.DoesNotContain("isCorrect", payload);
+        Assert.DoesNotContain("correctAnswer", payload);
+        Assert.DoesNotContain("acceptedSynonyms", payload);
+        Assert.DoesNotContain("explanationMarkdown", payload);
+        Assert.DoesNotContain("SECRET-OPTION-ANSWER", payload);
+        Assert.DoesNotContain("SECRET-OPTION-SYNONYM", payload);
+        Assert.DoesNotContain("SECRET-OPTION-EXPLANATION", payload);
+        Assert.Contains("Safe option", payload);
+
+        var paper = json.RootElement.GetProperty("paper");
+        Assert.True(paper.GetProperty("allowPaperReadingMode").GetBoolean());
+        var assets = paper.GetProperty("questionPaperAssets").EnumerateArray().ToList();
+        var asset = Assert.Single(assets);
+        Assert.Equal("A", asset.GetProperty("part").GetString());
+        Assert.Equal("/v1/media/media-redaction-paper/content", asset.GetProperty("downloadPath").GetString());
+    }
+
+    [Fact]
+    public async Task Learner_structure_endpoint_withholds_question_paper_assets_when_paper_mode_is_disabled()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var structure = new ReadingStructureService(db);
+        var paperId = "policy-disabled-paper";
+
+        await SeedPaperAsync(db, paperId);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorPaperAsync(db, structure, paperId);
+
+        db.ReadingPolicies.Add(new ReadingPolicy
+        {
+            Id = "global",
+            AllowPaperReadingMode = false,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = "media-policy-disabled-paper",
+            OriginalFilename = "reading-original.pdf",
+            MimeType = "application/pdf",
+            Format = "pdf",
+            SizeBytes = 1024,
+            StoragePath = "reading/policy/original.pdf",
+            Status = MediaAssetStatus.Ready,
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = "asset-policy-disabled-paper",
+            PaperId = paperId,
+            Role = PaperAssetRole.QuestionPaper,
+            Part = "A",
+            MediaAssetId = "media-policy-disabled-paper",
+            Title = "Original Part A PDF",
+            DisplayOrder = 0,
+            IsPrimary = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        db.FreePreviewAssets.Add(new FreePreviewAsset
+        {
+            Id = "preview-policy-disabled-paper",
+            Title = "Preview should not bypass disabled Reading paper mode",
+            PreviewType = "sample_task",
+            MediaAssetId = "media-policy-disabled-paper",
+            Status = ContentStatus.Published,
+            DisplayOrder = 0,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "mock-user-001");
+        var response = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/structure");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var paper = json.RootElement.GetProperty("paper");
+        Assert.False(paper.GetProperty("allowPaperReadingMode").GetBoolean());
+        Assert.Empty(paper.GetProperty("questionPaperAssets").EnumerateArray());
+        Assert.DoesNotContain("/v1/media/media-policy-disabled-paper/content", json.RootElement.GetRawText());
+
+        var access = scope.ServiceProvider.GetRequiredService<MediaAssetAccessService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "mock-user-001"),
+            new Claim(ClaimTypes.Role, ApplicationUserRoles.Learner),
+        }, "Test"));
+        Assert.False(await access.CanAccessAsync(principal, "media-policy-disabled-paper", default));
+
+        var directMediaResponse = await client.GetAsync("/v1/media/media-policy-disabled-paper/content");
+        Assert.Equal(HttpStatusCode.NotFound, directMediaResponse.StatusCode);
+        var signedUrlResponse = await client.GetAsync("/v1/media/media-policy-disabled-paper/url");
+        Assert.Equal(HttpStatusCode.NotFound, signedUrlResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Media_access_blocks_free_preview_bypass_for_non_primary_or_protected_paper_assets()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+        var paperId = "protected-preview-paper";
+
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = paperId,
+            SubtestCode = "reading",
+            Title = "Protected preview paper",
+            Slug = "protected-preview-paper",
+            ProfessionId = "medicine",
+            AppliesToAllProfessions = false,
+            Difficulty = "standard",
+            EstimatedDurationMinutes = 60,
+            Status = ContentStatus.Published,
+            SourceProvenance = ContentDefaults.DefaultSourceProvenance,
+            TagsCsv = "access:premium",
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        db.MediaAssets.AddRange(
+            new MediaAsset
+            {
+                Id = "media-non-primary-question-paper",
+                OriginalFilename = "old-reading-paper.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "reading/protected/old.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-answer-key-preview",
+                OriginalFilename = "reading-answer-key.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "reading/protected/answer-key.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            });
+        db.ContentPaperAssets.AddRange(
+            new ContentPaperAsset
+            {
+                Id = "asset-non-primary-question-paper",
+                PaperId = paperId,
+                Role = PaperAssetRole.QuestionPaper,
+                MediaAssetId = "media-non-primary-question-paper",
+                IsPrimary = false,
+                DisplayOrder = 0,
+                CreatedAt = now,
+            },
+            new ContentPaperAsset
+            {
+                Id = "asset-answer-key-preview",
+                PaperId = paperId,
+                Role = PaperAssetRole.AnswerKey,
+                MediaAssetId = "media-answer-key-preview",
+                IsPrimary = true,
+                DisplayOrder = 0,
+                CreatedAt = now,
+            });
+        db.FreePreviewAssets.AddRange(
+            new FreePreviewAsset
+            {
+                Id = "preview-non-primary-question-paper",
+                Title = "Non-primary paper preview should not bypass",
+                PreviewType = "sample_task",
+                MediaAssetId = "media-non-primary-question-paper",
+                Status = ContentStatus.Published,
+                DisplayOrder = 0,
+                CreatedAt = now,
+            },
+            new FreePreviewAsset
+            {
+                Id = "preview-answer-key",
+                Title = "Answer key preview should not bypass",
+                PreviewType = "sample_task",
+                MediaAssetId = "media-answer-key-preview",
+                Status = ContentStatus.Published,
+                DisplayOrder = 1,
+                CreatedAt = now,
+            });
+        await db.SaveChangesAsync();
+
+        var access = scope.ServiceProvider.GetRequiredService<MediaAssetAccessService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "mock-user-001"),
+            new Claim(ClaimTypes.Role, ApplicationUserRoles.Learner),
+            new Claim("prof", "medicine"),
+        }, "Test"));
+
+        Assert.False(await access.CanAccessAsync(principal, "media-non-primary-question-paper", default));
+        Assert.False(await access.CanAccessAsync(principal, "media-answer-key-preview", default));
+    }
+
+    [Fact]
+    public async Task Legacy_reading_api_routes_return_gone_with_canonical_replacements()
+    {
+        using var factory = new TestWebApplicationFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "mock-user-001");
+
+        var cases = new[]
+        {
+            (HttpMethod.Get, "/v1/reading/home", "/v1/reading-papers/home"),
+            (HttpMethod.Get, "/v1/reading/tasks/rt-001", "/v1/reading-papers/papers/rt-001/structure"),
+            (HttpMethod.Post, "/v1/reading/attempts", "/v1/reading-papers/papers/{paperId}/attempts"),
+            (HttpMethod.Get, "/v1/reading/attempts/attempt-1", "/v1/reading-papers/attempts/{attemptId}"),
+            (HttpMethod.Patch, "/v1/reading/attempts/attempt-1/answers", "/v1/reading-papers/attempts/{attemptId}/answers/{questionId}"),
+            (HttpMethod.Patch, "/v1/reading/attempts/attempt-1/heartbeat", (string?)null),
+            (HttpMethod.Post, "/v1/reading/attempts/attempt-1/submit", "/v1/reading-papers/attempts/{attemptId}/submit"),
+            (HttpMethod.Get, "/v1/reading/evaluations/eval-1", "/v1/reading-papers/attempts/{attemptId}/review"),
+        };
+
+        foreach (var (method, path, replacementRoute) in cases)
+        {
+            using var request = new HttpRequestMessage(method, path);
+            if (method == HttpMethod.Post || method == HttpMethod.Patch)
+            {
+                request.Content = JsonContent.Create(new { });
+            }
+
+            using var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal("reading_legacy_gone", json.RootElement.GetProperty("code").GetString());
+            if (replacementRoute is null)
+            {
+                Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("replacementRoute").ValueKind);
+            }
+            else
+            {
+                Assert.Equal(replacementRoute, json.RootElement.GetProperty("replacementRoute").GetString());
+            }
+        }
+    }
+
+    [Fact]
     public async Task Reading_home_does_not_project_subset_practice_as_oet_result()
     {
         var (db, structure, policy, _, attemptSvc) = Build();
@@ -513,6 +841,17 @@ public class ReadingAuthoringTests
                 ReadingQuestionType.MultipleChoice3,
                 "[\"a\",\"b\",\"c\"]",
                 "\"Z\"", null));
+    }
+
+    [Fact]
+    public void ValidatePayload_rejects_unsafe_mcq_option_object_fields()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ReadingStructureService.ValidateQuestionPayload(
+                ReadingQuestionType.MultipleChoice3,
+                "[{\"value\":\"A\",\"label\":\"A\",\"isCorrect\":true},\"b\",\"c\"]",
+                "\"A\"", null));
+        Assert.Contains("option objects", ex.Message);
     }
 
     [Fact]
@@ -1981,6 +2320,7 @@ public class ReadingAuthoringTests
         var (db, structure, policy, _, _) = Build();
         await SeedPaperAsync(db, "p1", ContentStatus.Draft);
         await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
 
         var ai = new OetLearner.Api.Services.Reading.StubReadingExtractionAi();
         var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
@@ -2008,6 +2348,7 @@ public class ReadingAuthoringTests
         var (db, structure, policy, _, _) = Build();
         await SeedPaperAsync(db, "p1", ContentStatus.Draft);
         await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
 
         var ai = new OetLearner.Api.Services.Reading.StubReadingExtractionAi();
         var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);

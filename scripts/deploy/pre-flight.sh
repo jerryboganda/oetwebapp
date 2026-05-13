@@ -2,20 +2,31 @@
 # Production pre-flight snapshot — run on the VPS
 set -euo pipefail
 
-cd /root/oetwebsite
+APP_DIR="${VPS_APP_DIR:-/opt/oetwebapp}"
+cd "$APP_DIR"
 TS=$(date -u +%Y%m%d-%H%M%S)
 echo "=== BACKUP_TIMESTAMP: ${TS} ==="
 
-mkdir -p /root/oet-backups
+bash scripts/deploy/validate-production-env.sh .env.production
 
-# Pull Postgres creds from env file
-# shellcheck disable=SC2046
-export $(grep -E '^POSTGRES_(USER|DB|PASSWORD)=' .env.production | xargs)
+read_env_value() {
+  local key="$1"
+  local line value
+  line=$(grep -E "^${key}=" .env.production | tail -n 1)
+  value="${line#*=}"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf '%s' "$value"
+}
 
-echo "--- Dumping postgres (compressed custom format)..."
-docker exec oet-postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-acl \
-  > "/root/oet-backups/prod-dump-${TS}.dump"
-ls -lh "/root/oet-backups/prod-dump-${TS}.dump"
+POSTGRES_USER=$(read_env_value POSTGRES_USER)
+POSTGRES_DB=$(read_env_value POSTGRES_DB)
+export POSTGRES_USER POSTGRES_DB
+
+echo "--- Running encrypted backup sidecar snapshot..."
+docker compose --env-file .env.production -f docker-compose.production.yml run --rm -e RUN_ONCE_NOW=YES db-backup
 
 echo "--- Migration count BEFORE ---"
 docker exec oet-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At \

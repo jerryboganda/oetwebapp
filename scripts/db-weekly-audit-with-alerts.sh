@@ -5,7 +5,7 @@
 #     * Sentry event (if SENTRY_DSN is set)
 #     * Email via Brevo transactional API (if BREVO_API_KEY is set)
 #
-# Env inputs (from /root/oetwebsite/.env.production plus /root/.audit-alerts.env):
+# Env inputs (from ${VPS_APP_DIR:-/opt/oetwebapp}/.env.production plus /root/.audit-alerts.env):
 #   SENTRY_DSN            e.g. https://<key>@oXXX.ingest.sentry.io/<projectId>
 #   BREVO_API_KEY         Brevo v3 API key (same as Brevo__ApiKey)
 #   ALERT_EMAIL_TO        recipient address
@@ -14,7 +14,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE_APP=/root/oetwebsite/.env.production
+ENV_FILE_APP="${VPS_APP_DIR:-/opt/oetwebapp}/.env.production"
 ENV_FILE_ALERT=/root/.audit-alerts.env
 
 # Load env
@@ -26,7 +26,7 @@ if [ -f "$ENV_FILE_APP" ]; then
   BREVO_API_KEY="${BREVO_API_KEY:-$(grep -E '^BREVO__APIKEY=' "$ENV_FILE_APP" | cut -d= -f2- | tr -d '"')}"
 fi
 
-ALERT_EMAIL_TO="${ALERT_EMAIL_TO:-manwara575@gmail.com}"
+: "${ALERT_EMAIL_TO:?Set ALERT_EMAIL_TO in /root/.audit-alerts.env}"
 ALERT_EMAIL_FROM="${ALERT_EMAIL_FROM:-alerts@oetwithdrhesham.co.uk}"
 ALERT_EMAIL_FROM_NAME="${ALERT_EMAIL_FROM_NAME:-OET DB Monitor}"
 

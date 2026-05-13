@@ -8,7 +8,9 @@ Production deploys must leave enough evidence for a reviewer to understand exact
 - Frontend and backend build logs.
 - Playwright smoke HTML report and screenshots.
 - Production smoke output from `docs/PROD-SMOKE-RUNBOOK.md`.
+- Reading/media smoke output from `scripts/deploy/reading-media-smoke.sh`.
 - SBOM JSON and SCA JSON.
+- Signed release evidence manifest (`checksums.sha256` + `checksums.sha256.asc`) and verification output proving `release-metadata.env git_sha` matches deployed `HEAD`.
 - Docker image IDs and tags.
 - Desktop/mobile artifact checksums when those platforms are included.
 - Deployment pre-flight backup ID and post-deploy verification output.

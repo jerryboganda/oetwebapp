@@ -8,10 +8,19 @@ set -eu
 # Default: 02:17 UTC daily. Override with BACKUP_SCHEDULE="*/30 * * * *" etc.
 SCHEDULE="${BACKUP_SCHEDULE:-17 2 * * *}"
 
-# Carry all BACKUP_* / POSTGRES_* / BACKUP_S3_* / BACKUP_GPG_* env vars into
-# the cron-invoked shell. By default cron runs with a minimal environment and
-# secrets would be lost.
-env | grep -E '^(POSTGRES|PG|BACKUP|AWS|UPLOAD)_' > /etc/cron.env || true
+# Carry all BACKUP_* / POSTGRES_* / PG_* / AWS_* / UPLOAD_* env vars into the
+# cron-invoked shell. Cron runs with a minimal environment, so quote every value
+# before sourcing it from the scheduled shell.
+: > /etc/cron.env
+env | while IFS='=' read -r key value; do
+    case "$key" in
+        POSTGRES_*|PG_*|BACKUP_*|AWS_*|UPLOAD_*)
+            escaped=$(printf '%s' "$value" | sed "s/'/'\\''/g")
+            printf "export %s='%s'\n" "$key" "$escaped" >> /etc/cron.env
+            ;;
+    esac
+done
+chmod 600 /etc/cron.env
 
 cat <<EOF > /etc/crontabs/root
 ${SCHEDULE} PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/sh -lc '. /etc/cron.env; exec /usr/local/bin/postgres-backup.sh' >> /var/log/backup.log 2>&1

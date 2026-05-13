@@ -74,6 +74,7 @@ describe('Reading page', () => {
         allowResumeAfterExpiry: false,
         showCorrectAnswerOnReview: true,
         showExplanationsAfterSubmit: true,
+        allowPaperReadingMode: true,
       },
       safeDrills: [],
     });
@@ -85,6 +86,7 @@ describe('Reading page', () => {
     expect(await screen.findByText('Build reading accuracy before you validate it in mocks')).toBeInTheDocument();
     expect(screen.getByText('Reading Sample Paper 1')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /start paper/i })).toHaveAttribute('href', '/reading/paper/paper-1');
+    expect(screen.getByRole('link', { name: /paper simulation/i })).toHaveAttribute('href', '/reading/paper/paper-1?presentation=paper');
     expect(container.querySelector('a[href="/reading/player/rt-001"]')).not.toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
     expect(container.querySelector('[class*="max-w-5xl"][class*="mx-auto"][class*="px-4"]')).not.toBeInTheDocument();
@@ -103,6 +105,7 @@ describe('Reading page', () => {
         allowResumeAfterExpiry: false,
         showCorrectAnswerOnReview: true,
         showExplanationsAfterSubmit: true,
+        allowPaperReadingMode: true,
       },
       safeDrills: [
         {
@@ -126,5 +129,44 @@ describe('Reading page', () => {
       'href',
       '/reading/paper/paper-1/results?attemptId=attempt-1#part-breakdown',
     );
+  });
+
+  it('uses scaled score rather than raw score for recent Reading evidence', async () => {
+    mockGetReadingHome.mockResolvedValueOnce({
+      intro: 'Reading practice uses full structured papers.',
+      papers: [],
+      activeAttempts: [],
+      recentResults: [
+        {
+          attemptId: 'attempt-349',
+          paperId: 'paper-1',
+          paperTitle: 'Reading Sample Paper 1',
+          rawScore: 30,
+          maxRawScore: 42,
+          scaledScore: 349,
+          gradeLetter: 'C+',
+          submittedAt: '2026-05-12T10:00:00Z',
+          route: '/reading/paper/paper-1/results?attemptId=attempt-349',
+        },
+      ],
+      policy: {
+        partATimerMinutes: 15,
+        partBCTimerMinutes: 45,
+        allowPausingAttempt: false,
+        allowResumeAfterExpiry: false,
+        showCorrectAnswerOnReview: true,
+        showExplanationsAfterSubmit: true,
+        allowPaperReadingMode: true,
+      },
+      safeDrills: [],
+    });
+
+    render(<ReadingPage />);
+
+    expect(await screen.findByText('Reading Sample Paper 1')).toBeInTheDocument();
+    expect(screen.getByText('30/42 raw | 349/500 scaled')).toBeInTheDocument();
+    expect(screen.getByText('Review Focus')).toBeInTheDocument();
+    expect(screen.getByText('Needs work')).toBeInTheDocument();
+    expect(screen.queryByText('Pass Evidence')).not.toBeInTheDocument();
   });
 });

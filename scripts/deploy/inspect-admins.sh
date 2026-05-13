@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Inspect admin accounts in production
 set -euo pipefail
-cd /root/oetwebsite
+APP_DIR="${VPS_APP_DIR:-/opt/oetwebapp}"
+cd "$APP_DIR"
 
 # shellcheck disable=SC2046
 export $(grep -E '^POSTGRES_(USER|DB|PASSWORD)=' .env.production | xargs)

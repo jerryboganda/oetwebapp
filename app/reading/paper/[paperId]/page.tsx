@@ -68,7 +68,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   // is the resumed attempt itself — we read this only to render
   // pre-resume context like "starting Drill…").
   const urlMode = search?.get('mode') ?? '';
-  const presentation = search?.get('presentation') === 'paper' ? 'paper' : 'computer';
+  const requestedPresentation = search?.get('presentation') === 'paper' ? 'paper' : 'computer';
   // Mocks V2 — BuildLaunchRoute attaches mockAttemptId/mockSectionId when
   // this paper is launched as a section of a mock attempt. Submission then
   // writes the score back via completeMockSection so the mock report is
@@ -219,6 +219,9 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   }, [activePart, activeQuestionId, displayedCurrentPart, firstDisplayedPart]);
 
   const isPracticeMode = attempt !== null && attempt.mode !== 'Exam';
+  const presentation = requestedPresentation === 'paper' && structure?.paper.allowPaperReadingMode !== false
+    ? 'paper'
+    : 'computer';
   const totalQuestions = useMemo(() => {
     if (!structure) return 0;
     if (attempt?.scopeQuestionIds && attempt.scopeQuestionIds.length > 0) {
@@ -471,6 +474,9 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             You&rsquo;re taking this section as part of a mock. Submitting will mark this section complete and return you to the mock dashboard.
           </InlineAlert>
         ) : null}
+        {requestedPresentation === 'paper' && presentation !== 'paper' ? (
+          <InlineAlert variant="warning">Paper simulation is disabled by the current Reading policy. Computer-delivered mode is open.</InlineAlert>
+        ) : null}
         <div className="md:hidden">
           <InlineAlert variant="warning">Full Reading exam mode is designed for a tablet or desktop-sized screen.</InlineAlert>
         </div>
@@ -550,6 +556,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
                 partBCDeadlineAt={attempt.partBCDeadlineAt}
                 nowMs={nowMs}
                 locked={attemptInputsLocked || (partALocked && activePart === 'A')}
+                questionPaperAssets={structure.paper.questionPaperAssets ?? []}
                 onAnswerChange={setAnswer}
               />
             ) : null}

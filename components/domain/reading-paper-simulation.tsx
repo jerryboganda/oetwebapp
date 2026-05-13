@@ -1,9 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Eraser, Highlighter, Pencil } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, Pencil, Printer } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { fetchAuthorizedObjectUrl } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { ReadingLearnerStructureDto, ReadingQuestionLearnerDto } from '@/lib/reading-authoring-api';
 import {
@@ -16,6 +17,8 @@ import {
 
 type PaperTool = 'pencil' | 'highlighter' | 'eraser';
 
+type QuestionPaperAsset = NonNullable<ReadingLearnerStructureDto['paper']['questionPaperAssets']>[number];
+
 export interface ReadingPaperSimulationProps {
   structure: ReadingLearnerStructureDto;
   answers: Record<string, string>;
@@ -23,6 +26,7 @@ export interface ReadingPaperSimulationProps {
   partBCDeadlineAt: string;
   nowMs: number;
   locked: boolean;
+  questionPaperAssets?: QuestionPaperAsset[];
   onAnswerChange: (question: ReadingQuestionLearnerDto, value: unknown) => void;
 }
 
@@ -33,6 +37,7 @@ export function ReadingPaperSimulation({
   partBCDeadlineAt,
   nowMs,
   locked,
+  questionPaperAssets = [],
   onAnswerChange,
 }: ReadingPaperSimulationProps) {
   const [tool, setTool] = useState<PaperTool>('pencil');
@@ -54,7 +59,10 @@ export function ReadingPaperSimulation({
           label={phase === 'partA' ? 'Part A wall timer' : 'B/C wall timer'}
           seconds={Math.max(0, Math.floor((new Date(phase === 'partA' ? partADeadlineAt : partBCDeadlineAt).getTime() - nowMs) / 1000))}
         />
-        <ReadingPaperAnnotationToolbar value={tool} onChange={setTool} />
+        <div className="flex flex-wrap items-center gap-2">
+          <ReadingPaperSourceControls assets={questionPaperAssets} />
+          <ReadingPaperAnnotationToolbar value={tool} onChange={setTool} />
+        </div>
       </div>
 
       {phase === 'partA' && partA ? (
@@ -75,6 +83,66 @@ export function ReadingPaperSimulation({
         />
       )}
     </section>
+  );
+}
+
+export function ReadingPaperSourceControls({ assets }: { assets: QuestionPaperAsset[] }) {
+  const [openingAssetId, setOpeningAssetId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleOpen = async (asset: QuestionPaperAsset) => {
+    setOpeningAssetId(asset.id);
+    setError(null);
+    const openedWindow = window.open('about:blank', '_blank');
+    if (openedWindow) {
+      openedWindow.opener = null;
+    }
+    try {
+      const objectUrl = await fetchAuthorizedObjectUrl(asset.downloadPath);
+      if (openedWindow && !openedWindow.closed) {
+        openedWindow.location.assign(objectUrl);
+      } else {
+        const fallbackWindow = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+        if (!fallbackWindow) {
+          throw new Error('The browser blocked the PDF popup.');
+        }
+      }
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+    } catch (err) {
+      if (openedWindow && !openedWindow.closed) {
+        openedWindow.close();
+      }
+      setError(err instanceof Error ? err.message : 'Unable to open original paper');
+    } finally {
+      setOpeningAssetId(null);
+    }
+  };
+
+  const handlePrint = () => {
+    if (typeof window !== 'undefined') window.print();
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2" aria-label="Original paper controls">
+      {assets.map((asset, index) => (
+        <Button
+          key={asset.id}
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void handleOpen(asset)}
+          disabled={openingAssetId === asset.id}
+        >
+          <FileText className="h-4 w-4" aria-hidden="true" />
+          {asset.part ? `PDF ${asset.part}` : index === 0 ? 'Original PDF' : asset.title}
+        </Button>
+      ))}
+      <Button variant="outline" size="sm" onClick={handlePrint} aria-label="Print paper view">
+        <Printer className="h-4 w-4" aria-hidden="true" />
+        Print
+      </Button>
+      {error ? <span className="text-xs font-medium text-danger" role="alert">{error}</span> : null}
+    </div>
   );
 }
 

@@ -55,7 +55,8 @@ Screenshots of each learner surface will be written to `playwright-report-prod/`
 1. Open `playwright-report-prod/` screenshots to identify which surface broke.
 2. Check live server logs on the VPS:
    ```bash
-   docker compose -f docker-compose.production.yml logs --tail=300 web api
+   docker compose --env-file .env.production -f docker-compose.production.yml logs --tail=300 web learner-api
    ```
-3. If the issue is a regression from `c426423`, rollback per
-   [DEPLOY-RUNBOOK-ROUND14.md](DEPLOY-RUNBOOK-ROUND14.md#4-rollback-only-if-needed).
+3. If the issue is a deployment regression, follow the rollback procedure in
+   [ops/deploy-gate.md](ops/deploy-gate.md#rollback-procedure) using the latest
+   approved previous-good SHA from release evidence.

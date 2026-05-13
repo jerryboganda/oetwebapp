@@ -419,7 +419,7 @@ export default function ReadingPracticePage() {
                         {entry.paper ? (
                           <Link
                             className="text-blue-700 hover:underline"
-                            href={`/reading/paper/${entry.paper.id}/results`}
+                            href={`/reading/paper/${entry.paper.id}/results?attemptId=${entry.lastWrongAttemptId}#item-review`}
                           >
                             {entry.paper.title}
                           </Link>

@@ -696,6 +696,7 @@ public static class LearnerEndpoints
                 policy.AllowResumeAfterExpiry,
                 policy.ShowCorrectAnswerOnReview,
                 policy.ShowExplanationsAfterSubmit,
+                policy.AllowPaperReadingMode,
             },
             safeDrills,
         };

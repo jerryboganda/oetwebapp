@@ -215,7 +215,7 @@ tests/e2e/                    # Playwright E2E tests
 
 | Component | Detail |
 | ----------- | -------- |
-| VPS | `185.252.233.186`, `/root/oetwebsite/` |
+| VPS | `185.252.233.186`, `/opt/oetwebapp/` |
 | Frontend | `app.oetwithdrhesham.co.uk` (port 3000) |
 | API | `api.oetwithdrhesham.co.uk` (port 8080) |
 | Database | PostgreSQL 17 (internal network) |
@@ -226,9 +226,8 @@ tests/e2e/                    # Playwright E2E tests
 
 ```bash
 ssh root@185.252.233.186
-cd /root/oetwebsite
-git fetch origin && git reset --hard origin/main
-docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+cd /opt/oetwebapp
+bash ./scripts/deploy/deploy-prod.sh
 ```
 
 ### Staging / GitHub-only flow
@@ -253,7 +252,7 @@ docker compose --env-file .env.production -f docker-compose.production.yml up -d
 
 ### IMPORTANT
 
-- Docker volumes use `oetwebsite_` prefix. **Never** recreate `oet_postgres_data` without backup.
+- Docker volumes use the `oetwebsite_` prefix. **Never** recreate `oetwebsite_oet_postgres_data` without backup.
 - `.env.production` must be present on the VPS (not in Git).
 - Web container healthcheck: `GET /api/health`.
 

@@ -1,20 +1,58 @@
 name: Deploy Production
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      approver:
+        description: "Named deploy approver"
+        required: true
+        type: string
+      evidence_bundle_dir:
+        description: "Evidence bundle directory already present in the production checkout"
+        required: true
+        default: "release-evidence"
+        type: string
+      reading_media_smoke_ack:
+        description: "I confirm the deploy-gate Reading/media smoke checklist is ready to run after deploy"
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: production-deploy
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ format('{0}', 'production') }}
 
     steps:
+      - name: Enforce production deploy gate inputs
+        shell: bash
+        env:
+          APPROVER: ${{ inputs.approver }}
+          READING_MEDIA_SMOKE_ACK: ${{ inputs.reading_media_smoke_ack }}
+          EVIDENCE_BUNDLE_DIR: ${{ inputs.evidence_bundle_dir }}
+        run: |
+          if [ "$APPROVER" != "Dr Faisal Maqsood" ]; then
+            echo "Production deploy approver must be Dr Faisal Maqsood." >&2
+            exit 1
+          fi
+          if [ "$READING_MEDIA_SMOKE_ACK" != "true" ]; then
+            echo "Reading/media smoke checklist acknowledgement is required." >&2
+            exit 1
+          fi
+          case "$EVIDENCE_BUNDLE_DIR" in
+            ""|.*|*/*|*\\*|*..*|*[!A-Za-z0-9._-]*)
+              echo "Evidence bundle directory must be a simple relative directory name." >&2
+              exit 1
+              ;;
+          esac
+
       - name: Check deployment secrets
         id: secrets
         shell: bash
@@ -24,36 +62,50 @@ jobs:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_FINGERPRINT: ${{ vars.VPS_SSH_FINGERPRINT }}
+          EVIDENCE_SIGNER_FINGERPRINT: ${{ vars.EVIDENCE_SIGNER_FINGERPRINT }}
         run: |
-          if [ -n "$VPS_HOST" ] && [ -n "$VPS_USER" ] && [ -n "$VPS_SSH_KEY" ] && [ -n "$VPS_APP_DIR" ]; then
+          if [ -n "$VPS_HOST" ] && [ -n "$VPS_USER" ] && [ -n "$VPS_SSH_KEY" ] && [ -n "$VPS_APP_DIR" ] && [ -n "$VPS_SSH_FINGERPRINT" ] && [ -n "$EVIDENCE_SIGNER_FINGERPRINT" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
             echo "port=${VPS_PORT:-22}" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Skip deploy when secrets are missing
+      - name: Fail deploy when secrets are missing
         if: steps.secrets.outputs.enabled != 'true'
-        run: echo "Production deploy secrets are not configured, so deployment is skipped."
+        run: |
+          echo "Production deploy secrets are not configured; refusing to produce a green no-op deploy." >&2
+          exit 1
 
       - name: Deploy over SSH
         if: steps.secrets.outputs.enabled == 'true'
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        env:
+          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          EVIDENCE_BUNDLE_DIR: ${{ inputs.evidence_bundle_dir }}
+          EVIDENCE_SIGNER_FINGERPRINT: ${{ vars.EVIDENCE_SIGNER_FINGERPRINT }}
+          APP_PUBLIC_URL: https://app.oetwithdrhesham.co.uk
+          API_PUBLIC_URL: https://api.oetwithdrhesham.co.uk
+          READING_MEDIA_SMOKE_ACK: ${{ inputs.reading_media_smoke_ack }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ steps.secrets.outputs.port }}
+          fingerprint: ${{ vars.VPS_SSH_FINGERPRINT }}
           command_timeout: 30m
           script_stop: true
+          envs: VPS_APP_DIR,EVIDENCE_BUNDLE_DIR,EVIDENCE_SIGNER_FINGERPRINT,APP_PUBLIC_URL,API_PUBLIC_URL,READING_MEDIA_SMOKE_ACK
           script: |
             set -eo pipefail
             echo "[ci] SSH connected at $(date -u)"
-            cd "${{ secrets.VPS_APP_DIR }}"
-            echo "[ci] git pull..."
-            git fetch origin main
-            git reset --hard origin/main
-            git clean -fd
-            echo "[ci] running deploy script..."
-            bash ./scripts/deploy-production.sh
+            cd "$VPS_APP_DIR"
+            if [ "$(pwd)" != "/opt/oetwebapp" ]; then
+              echo "[ci] refusing deploy from stale/noncanonical checkout: $(pwd)" >&2
+              exit 1
+            fi
+            echo "[ci] running gated deploy wrapper..."
+            VPS_APP_DIR="$VPS_APP_DIR" EVIDENCE_DIR="$EVIDENCE_BUNDLE_DIR" EVIDENCE_SIGNER_FINGERPRINT="$EVIDENCE_SIGNER_FINGERPRINT" APP_PUBLIC_URL="$APP_PUBLIC_URL" API_PUBLIC_URL="$API_PUBLIC_URL" bash ./scripts/deploy/deploy-prod.sh
+            echo "[ci] deploy-gate Reading/media smoke acknowledgement: $READING_MEDIA_SMOKE_ACK"
             echo "[ci] SSH session complete at $(date -u)"

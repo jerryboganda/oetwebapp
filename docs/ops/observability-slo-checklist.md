@@ -8,6 +8,12 @@ Launch SLOs locked 2026-05-10 against RW-022. Threshold profile: **standard
 (99.5% / p95 1.5s / err <1% per 5min)**. Stricter ratios may be applied per
 route when justified by scorecard evidence.
 
+Production deploy validation now requires Sentry DSNs in `.env.production`, an
+alerting webhook for the backup sidecar, and the deploy-time
+`scripts/observability-smoke.sh` health probe. External alert-provider dashboard
+IDs and alert-channel proof still need to be attached to release evidence for
+final launch approval.
+
 | Area | Launch SLO | Primary signals |
 | --- | --- | --- |
 | Web/API availability | **99.5% monthly** | HTTP 5xx rate, uptime checks |
@@ -44,7 +50,7 @@ rotation accepted; reassess at first hire). Runbook: `incident-response-runbook.
 | Provider outage | provider route unavailable or refusing for 5 min | Dr Faisal Maqsood | incident-response-runbook.md |
 | Upload failure | upload error rate > 1% for 5 min | Dr Faisal Maqsood | incident-response-runbook.md |
 | Queue backlog | oldest critical job > 10 min | Dr Faisal Maqsood | incident-response-runbook.md |
-| Health-check failure | `/api/health` non-200 for 3 consecutive min | Dr Faisal Maqsood | incident-response-runbook.md |
+| Health-check failure | web `/api/health` or API `/health/ready` non-200 for 3 consecutive min | Dr Faisal Maqsood | incident-response-runbook.md |
 | Latency regression | p95 > 2 s for 10 min on T0 routes | Dr Faisal Maqsood | incident-response-runbook.md |
 
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /root/oetwebsite
+APP_DIR="${VPS_APP_DIR:-/opt/oetwebapp}"
+cd "$APP_DIR"
 
 echo "=== EMAIL CONFIG KEYS PRESENT (values hidden) ==="
 grep -oE '^(SMTP__[A-Z_]+|BREVO__[A-Z_]+|EMAILVERIFICATION__[A-Z_]+)=' .env.production \

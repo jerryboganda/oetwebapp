@@ -88,7 +88,7 @@ fi
 # ── 2. Optional GPG encryption ──────────────────────────────────────────────
 if [ -n "${BACKUP_GPG_PASSPHRASE}" ]; then
     echo "[backup] encrypting with gpg"
-    if ! gpg --batch --yes --passphrase "${BACKUP_GPG_PASSPHRASE}" \
+    if ! printf '%s' "${BACKUP_GPG_PASSPHRASE}" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
             --symmetric --cipher-algo AES256 \
             --output "${dump_path}.gpg" "${dump_path}"
     then
@@ -107,6 +107,8 @@ fi
 
 # ── 3. Optional offsite push (S3-compatible) ────────────────────────────────
 if [ -n "${BACKUP_S3_URL}" ]; then
+    : "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID must be set when BACKUP_S3_URL is set}"
+    : "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY must be set when BACKUP_S3_URL is set}"
     echo "[backup] uploading ${final_path} -> ${BACKUP_S3_URL}"
     # shellcheck disable=SC2086  # we WANT word-splitting on BACKUP_S3_EXTRA_ARGS
     if ! aws s3 cp "${final_path}" "${BACKUP_S3_URL}" ${BACKUP_S3_EXTRA_ARGS}; then

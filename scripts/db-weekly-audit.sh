@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-REPO_DIR=/root/oetwebsite
+REPO_DIR=${VPS_APP_DIR:-/opt/oetwebapp}
 OUT_DIR=/root/backups/db-audits
 AUDIT_SQL="$REPO_DIR/scripts/db-audit.sql"
 RETENTION_DIR="$REPO_DIR/scripts/db-retention-audit.sql"   # optional; see below

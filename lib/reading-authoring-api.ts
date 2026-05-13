@@ -289,12 +289,25 @@ export interface ReadingHomeDto {
     allowResumeAfterExpiry: boolean;
     showCorrectAnswerOnReview: boolean;
     showExplanationsAfterSubmit: boolean;
+    allowPaperReadingMode: boolean;
   };
   safeDrills: ReadingHomeSafeDrillDto[];
 }
 
 export interface ReadingLearnerStructureDto {
-  paper: { id: string; title: string; slug: string; subtestCode: string };
+  paper: {
+    id: string;
+    title: string;
+    slug: string;
+    subtestCode: string;
+    allowPaperReadingMode?: boolean;
+    questionPaperAssets?: Array<{
+      id: string;
+      part: string | null;
+      title: string;
+      downloadPath: string;
+    }>;
+  };
   parts: Array<{
     id: string;
     partCode: ReadingPartCode;
