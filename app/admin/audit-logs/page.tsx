@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Download, FileText, Search } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
@@ -22,9 +23,16 @@ type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 export default function AuditLogsPage() {
   const { isAuthenticated, role } = useAdminAuth();
+  // Slice G shared diff (May 2026 billing hardening). Deep-links from
+  // /admin/billing surfaces use `/admin/audit-logs?search=billing`,
+  // `?search=wallet_tier`, etc., so the table pre-filters to the relevant
+  // events without an extra click. The existing onChange handler keeps the
+  // local state authoritative once the user starts typing.
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams?.get('search') ?? '';
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [filters, setFilters] = useState<Record<string, string[]>>({ action: [], actor: [] });
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [rows, setRows] = useState<AdminAuditLogRow[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);

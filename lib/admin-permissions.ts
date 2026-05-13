@@ -6,7 +6,14 @@ export const AdminPermission = {
   ContentEditorReview: 'content:editor_review',
   ContentPublisherApproval: 'content:publisher_approval',
   BillingRead: 'billing:read',
+  /** Legacy superset write permission. Continues to grant every billing-write surface. */
   BillingWrite: 'billing:write',
+  /** Billing I-7: refund + dispute mutations only. */
+  BillingRefundWrite: 'billing:refund_write',
+  /** Billing I-7: catalog (plans, add-ons, coupons, wallet-tiers, free-tier, score-guarantee) mutations only. */
+  BillingCatalogWrite: 'billing:catalog_write',
+  /** Billing I-7: subscription lifecycle (create/change-plan/extend/cancel/reactivate/status/wallet spend) mutations only. */
+  BillingSubscriptionWrite: 'billing:subscription_write',
   UsersRead: 'users:read',
   UsersWrite: 'users:write',
   ReviewOps: 'review_ops',

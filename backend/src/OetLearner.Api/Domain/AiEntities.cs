@@ -253,6 +253,15 @@ public static class AiFeatureCodes
     public const string AdminListeningDraft = "admin.listening_draft";
     public const string AdminWritingDraft = "admin.writing_draft";
 
+    // Listening V2 admin tooling (platform-only — admin authoring assist).
+    // Reserved up-front by PRD-LISTENING-V2.md §5.2 / §5.4 so that any future
+    // AI-assisted skill-tag classification or transcript time-coding routes
+    // through IAiGatewayService with grounding + IAiUsageRecorder, never
+    // through a learner BYOK key. Manual tagging today; constants exist to
+    // prevent the most common mission-critical drift (critic HIGH #4).
+    public const string AdminListeningSkillTag = "admin.listening.skill_tag";
+    public const string AdminListeningTranscriptSegment = "admin.listening.transcript_segment";
+
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.
     public const string Unclassified = "unclassified";

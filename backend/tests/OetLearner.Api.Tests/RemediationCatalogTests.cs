@@ -60,4 +60,54 @@ public class RemediationCatalogTests
         Assert.Contains("low_writing", tags);
         Assert.Contains("low_speaking", tags);
     }
+
+    // V2 Medium #5 (May 2026 audit closure) — canonical drill ID + route gates.
+
+    [Fact]
+    public void AllDrillIds_AreNonEmpty_AndUniquePerCatalog()
+    {
+        var drillIds = RemediationCatalog.AllDrillIds;
+        Assert.NotEmpty(drillIds);
+        Assert.All(drillIds, id => Assert.False(string.IsNullOrWhiteSpace(id)));
+        Assert.Equal(drillIds.Count, drillIds.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void AllDrillIds_FollowDottedNamespaceShape()
+    {
+        // Every drill ID is dotted (`<area>.<sub>...`) so future migration to a
+        // canonical drill table can map by namespace prefix.
+        foreach (var drillId in RemediationCatalog.AllDrillIds)
+        {
+            Assert.True(
+                drillId.Contains('.'),
+                $"Drill id '{drillId}' is missing a dotted namespace separator. Use 'area.sub' shape.");
+            Assert.False(
+                drillId.StartsWith('.') || drillId.EndsWith('.'),
+                $"Drill id '{drillId}' has a leading/trailing dot.");
+        }
+    }
+
+    [Fact]
+    public void AllRouteHrefs_StartWithACanonicalAppPrefix()
+    {
+        var prefixes = RemediationCatalog.CanonicalRoutePrefixes;
+        Assert.NotEmpty(prefixes);
+
+        foreach (var href in RemediationCatalog.AllRouteHrefs)
+        {
+            Assert.True(
+                prefixes.Any(p => href == p || href.StartsWith(p + "/", StringComparison.Ordinal)),
+                $"Route '{href}' does not start with any canonical prefix ({string.Join(", ", prefixes)}).");
+        }
+    }
+
+    [Fact]
+    public void Generic_FallbackDrill_PointsAtTheDashboard()
+    {
+        // The generic fallback in RemediationPlanService.ResolveDrillsFor
+        // uses /dashboard. Locking this here so a future refactor doesn't
+        // silently drop the canonical fallback target.
+        Assert.Contains("/dashboard", RemediationCatalog.CanonicalRoutePrefixes);
+    }
 }

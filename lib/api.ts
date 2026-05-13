@@ -472,7 +472,7 @@ function isRetryable(status: number): boolean {
   return status >= 500 || status === 408 || status === 429;
 }
 
-async function apiRequest<T = any>(path: string, init?: RequestInit, options?: { json?: boolean }): Promise<T> {
+async function apiRequest<T = any>(path: string, init?: RequestInit, options?: { json?: boolean; acceptedStatuses?: number[] }): Promise<T> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -481,6 +481,15 @@ async function apiRequest<T = any>(path: string, init?: RequestInit, options?: {
         ...init,
         headers: await getHeaders(path, init?.headers, options),
       });
+
+      const acceptedStatuses = options?.acceptedStatuses ?? [];
+      if (!response.ok && acceptedStatuses.includes(response.status)) {
+        if (response.status === 204) {
+          return undefined as T;
+        }
+
+        return response.json() as Promise<T>;
+      }
 
       if (!response.ok) {
         let code = 'unknown_error';
@@ -601,6 +610,14 @@ export const apiClient = {
   post<T = any>(path: string, body?: ApiClientBody, init?: ApiClientInit): Promise<T> {
     const payload = toRequestBody(body);
     return apiRequest<T>(path, { ...init, method: 'POST', body: payload.body }, { json: payload.json });
+  },
+  postWithAcceptedStatuses<T = any>(path: string, body: ApiClientBody, acceptedStatuses: number[], init?: ApiClientInit): Promise<T> {
+    const payload = toRequestBody(body);
+    return apiRequest<T>(
+      path,
+      { ...init, method: 'POST', body: payload.body },
+      { json: payload.json, acceptedStatuses },
+    );
   },
   put<T = any>(path: string, body?: ApiClientBody, init?: ApiClientInit): Promise<T> {
     const payload = toRequestBody(body);

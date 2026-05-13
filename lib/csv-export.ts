@@ -1,15 +1,32 @@
 /**
  * RFC 4180-compliant CSV export utility.
  * Browser-side only — no backend changes needed.
+ *
+ * Formula-prefix sanitization (CSV injection / OWASP-style attack class):
+ * Excel, Numbers, and Google Sheets evaluate any cell whose first character is
+ * `=`, `+`, `-`, `@`, `\t`, `\r`, or `\u0000` as a formula. An attacker who
+ * controls a learner-facing string (e.g. "+cmd|' /C calc'!A1") could escalate a
+ * benign export into RCE on the operator's machine. We prefix any such cell
+ * with a single quote so the spreadsheet engine renders it as plain text.
+ *
+ * Slice G — May 2026 admin billing hardening; lifted to the shared helper
+ * during 2026-05-12 closure so every export across the app benefits.
  */
+
+const CSV_INJECTION_PREFIXES = new Set(['=', '+', '-', '@', '\t', '\r', '\u0000']);
+
+function sanitizeCsvCell(str: string): string {
+  if (str.length === 0) return str;
+  return CSV_INJECTION_PREFIXES.has(str[0]) ? `'${str}` : str;
+}
 
 function escapeCsvValue(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const str = String(value);
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return `"${str.replace(/"/g, '""')}"`;
+  const sanitized = sanitizeCsvCell(String(value));
+  if (sanitized.includes(',') || sanitized.includes('"') || sanitized.includes('\n') || sanitized.includes('\r')) {
+    return `"${sanitized.replace(/"/g, '""')}"`;
   }
-  return str;
+  return sanitized;
 }
 
 export function convertToCsvString(data: Record<string, unknown>[]): string {

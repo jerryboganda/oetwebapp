@@ -1,7 +1,10 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Data;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Listening;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -81,6 +84,33 @@ public static class ExpertEndpoints
         expert.MapPost("/reviews/{reviewRequestId}/speaking/submit", async (string reviewRequestId, HttpContext http, ExpertReviewSubmitRequest request, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.SubmitSpeakingReviewAsync(reviewRequestId, http.ExpertId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
+
+        expert.MapPut("/listening/attempts/{attemptId}/questions/{questionId}/score-override", async (
+            string attemptId,
+            string questionId,
+            ExpertListeningScoreOverrideRequest request,
+            HttpContext http,
+            LearnerDbContext db,
+            ListeningGradingService grading,
+            CancellationToken ct) =>
+        {
+            var expertId = http.ExpertId();
+            var expertName = await db.ExpertUsers.AsNoTracking()
+                .Where(expert => expert.Id == expertId)
+                .Select(expert => expert.DisplayName)
+                .FirstOrDefaultAsync(ct);
+            return Results.Ok(await grading.ApplyScoreOverrideAsync(
+                attemptId,
+                questionId,
+                request.Override,
+                expertId,
+                expertName,
+                request.Reason,
+                ct));
+        })
+            .RequireRateLimiting("PerUserWrite")
+            .WithName("OverrideListeningAttemptScore")
+            .WithSummary("Apply a post-submission human score override to one Listening answer");
 
         // Rework
         expert.MapPost("/reviews/{reviewRequestId}/rework", async (string reviewRequestId, HttpContext http, ExpertReworkRequest request, ExpertService service, CancellationToken ct)
@@ -240,3 +270,5 @@ public static class ExpertEndpoints
 }
 
 public record ExpertVerifiedReplyRequest(string Body);
+
+public sealed record ExpertListeningScoreOverrideRequest(int Override, string Reason);

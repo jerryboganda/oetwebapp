@@ -93,6 +93,43 @@ public static class RemediationCatalog
     /// regression tests to prove every advertised tag resolves to ≥1 drill.
     /// </summary>
     public static IReadOnlyList<string> AllWeaknessTags { get; } = Map.Keys.ToArray();
+
+    /// <summary>
+    /// V2 Medium #5 (May 2026 audit closure). Distinct list of every
+    /// <c>DrillId</c> the catalog references. The drill ID itself is a free
+    /// string today (not tied to a backend drill table), so the regression
+    /// test that consumes this list asserts uniqueness + non-empty + dotted
+    /// namespace shape (e.g. <c>listening.partA.spelling</c>) rather than
+    /// resolving to a real entity. When the canonical drill table lands
+    /// (see <c>docs/MOCKS-OPTION-ID-MIGRATION.md</c> follow-up wave), this
+    /// list will be cross-checked against the table at module load.
+    /// </summary>
+    public static IReadOnlyList<string> AllDrillIds { get; } =
+        Map.Values.SelectMany(d => d).Select(d => d.DrillId).Distinct(StringComparer.Ordinal).ToArray();
+
+    /// <summary>
+    /// Distinct list of every <c>RouteHref</c> the catalog points to. The
+    /// regression test asserts each href starts with one of the canonical
+    /// app routes — so a typo in a route never silently 404s for a learner.
+    /// </summary>
+    public static IReadOnlyList<string> AllRouteHrefs { get; } =
+        Map.Values.SelectMany(d => d).Select(d => d.RouteHref).Distinct(StringComparer.Ordinal).ToArray();
+
+    /// <summary>
+    /// Canonical app route prefixes the catalog is allowed to point at.
+    /// Update this list when a new top-level learner surface ships.
+    /// </summary>
+    public static IReadOnlyList<string> CanonicalRoutePrefixes { get; } = new[]
+    {
+        "/listening",
+        "/reading",
+        "/writing",
+        "/speaking",
+        "/recalls",
+        "/dashboard",
+        "/study-plan",
+        "/mocks",
+    };
 }
 
 /// <summary>

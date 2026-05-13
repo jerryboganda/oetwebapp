@@ -1071,7 +1071,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("      \"transcriptExcerpt\": \"...\",       // quote from the audio script supporting the answer");
                 sb.AppendLine("      \"distractorExplanation\": \"...\",   // why wrong options are tempting (MCQ only)");
                 sb.AppendLine("      \"optionDistractorWhy\": [\"...\",\"...\",\"...\"],  // per-option (MCQ only); same length as options");
-                sb.AppendLine("      \"optionDistractorCategory\": [\"too_strong|too_weak|wrong_speaker|opposite_meaning|reused_keyword\"],");
+                sb.AppendLine("      \"optionDistractorCategory\": [\"too_strong|too_weak|wrong_speaker|opposite_meaning|reused_keyword|out_of_scope\"],");
                 sb.AppendLine("      \"speakerAttitude\": \"concerned|optimistic|doubtful|critical|neutral|other\", // Part C only");
                 sb.AppendLine("      \"transcriptEvidenceStartMs\": 0,    // optional, ms in section audio");
                 sb.AppendLine("      \"transcriptEvidenceEndMs\": 0,      // optional, ms in section audio");

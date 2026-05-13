@@ -553,6 +553,22 @@ describe('apiClient', () => {
     expect(calls.map((call) => JSON.parse(String(call.body)))).toEqual([{ a: 1 }, { b: 2 }, { c: 3 }]);
   });
 
+  it('returns JSON for explicitly accepted non-2xx statuses', async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ outcome: 'confirm-required' }), {
+      status: 412,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const { apiClient } = await import('../api');
+    const payload = await apiClient.postWithAcceptedStatuses<{ outcome: string }>(
+      '/v1/listening/v2/attempts/att-1/advance',
+      { toState: 'a1_preview', confirmToken: null },
+      [412],
+    );
+
+    expect(payload).toEqual({ outcome: 'confirm-required' });
+  });
+
   it('does not force JSON content type for form uploads', async () => {
     let headers: Headers | null = null;
     globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {

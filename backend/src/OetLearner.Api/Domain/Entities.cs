@@ -642,6 +642,17 @@ public class Wallet
     public int CreditBalance { get; set; }
     public string LedgerSummaryJson { get; set; } = "[]";
     public DateTimeOffset LastUpdatedAt { get; set; }
+
+    /// <summary>
+    /// Cross-DB optimistic-concurrency row version. PostgreSQL maps this to
+    /// the <c>xmin</c> system column at runtime via the existing
+    /// <c>ConfigureXminToken</c> path; SQLite/in-memory test providers use
+    /// EF's shadow-managed <c>byte[]</c> rowversion. Nullable so the
+    /// 20260512100000_AddWalletRowVersion migration is safe against existing
+    /// rows. Slice A — May 2026 billing hardening.
+    /// </summary>
+    [ConcurrencyCheck]
+    public byte[]? RowVersion { get; set; }
 }
 
 public class Invoice

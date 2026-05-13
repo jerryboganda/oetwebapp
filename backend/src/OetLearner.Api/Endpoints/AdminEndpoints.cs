@@ -299,11 +299,11 @@ public static class AdminEndpoints
 
         admin.MapPost("/billing/plans", async (HttpContext http, AdminBillingPlanCreateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.CreateBillingPlanAsync(http.AdminId(), http.AdminName(), request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingCatalogWrite");
 
         admin.MapPut("/billing/plans/{planId}", async (string planId, HttpContext http, AdminBillingPlanUpdateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.UpdateBillingPlanAsync(http.AdminId(), http.AdminName(), planId, request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingCatalogWrite");
 
         admin.MapGet("/billing/plans/{planId}/versions", async (string planId, AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetBillingPlanVersionsAsync(planId, ct)))
@@ -332,7 +332,7 @@ public static class AdminEndpoints
                     });
                 }
             })
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingCatalogWrite");
 
         admin.MapPost("/billing/wallets/spend", async (HttpContext http, AdminWalletSpendRequest request, WalletService service, CancellationToken ct) =>
         {
@@ -367,7 +367,7 @@ public static class AdminEndpoints
                 return Results.Conflict(new { error = "wallet_spend_not_allowed", message = ex.Message });
             }
         })
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
 
         admin.MapGet("/billing/add-ons", async (AdminService service, CancellationToken ct, string? status)
             => Results.Ok(await service.GetBillingAddOnsAsync(status, ct)))
@@ -375,11 +375,11 @@ public static class AdminEndpoints
 
         admin.MapPost("/billing/add-ons", async (HttpContext http, AdminBillingAddOnCreateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.CreateBillingAddOnAsync(http.AdminId(), http.AdminName(), request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingCatalogWrite");
 
         admin.MapPut("/billing/add-ons/{addOnId}", async (string addOnId, HttpContext http, AdminBillingAddOnUpdateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.UpdateBillingAddOnAsync(http.AdminId(), http.AdminName(), addOnId, request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingCatalogWrite");
 
         admin.MapGet("/billing/add-ons/{addOnId}/versions", async (string addOnId, AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetBillingAddOnVersionsAsync(addOnId, ct)))
@@ -391,11 +391,11 @@ public static class AdminEndpoints
 
         admin.MapPost("/billing/coupons", async (HttpContext http, AdminBillingCouponCreateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.CreateBillingCouponAsync(http.AdminId(), http.AdminName(), request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingCatalogWrite");
 
         admin.MapPut("/billing/coupons/{couponId}", async (string couponId, HttpContext http, AdminBillingCouponUpdateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.UpdateBillingCouponAsync(http.AdminId(), http.AdminName(), couponId, request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingCatalogWrite");
 
         admin.MapGet("/billing/coupons/{couponId}/versions", async (string couponId, AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetBillingCouponVersionsAsync(couponId, ct)))
@@ -410,27 +410,27 @@ public static class AdminEndpoints
         // projection so the UI can update the row without a refetch.
         admin.MapPost("/billing/subscriptions", async (HttpContext http, AdminSubscriptionCreateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.CreateSubscriptionAsync(http.AdminId(), http.AdminName(), request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
 
         admin.MapPost("/billing/subscriptions/{subscriptionId}/change-plan", async (string subscriptionId, HttpContext http, AdminSubscriptionChangePlanRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ChangeSubscriptionPlanAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
 
         admin.MapPost("/billing/subscriptions/{subscriptionId}/extend", async (string subscriptionId, HttpContext http, AdminSubscriptionExtendRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ExtendSubscriptionAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
 
         admin.MapPost("/billing/subscriptions/{subscriptionId}/cancel", async (string subscriptionId, HttpContext http, AdminSubscriptionCancelRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.CancelSubscriptionAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
 
         admin.MapPost("/billing/subscriptions/{subscriptionId}/reactivate", async (string subscriptionId, HttpContext http, AdminSubscriptionReactivateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ReactivateSubscriptionAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
 
         admin.MapPost("/billing/subscriptions/{subscriptionId}/status", async (string subscriptionId, HttpContext http, AdminSubscriptionStatusRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.SetSubscriptionStatusAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
 
         admin.MapGet("/billing/entitlement-diagnostics", async (AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetBillingEntitlementDiagnosticsAsync(ct)))
@@ -481,7 +481,7 @@ public static class AdminEndpoints
                 return Results.Conflict(new { error = "refund_not_allowed", message = ex.Message });
             }
         })
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingRefundWrite");
 
         admin.MapGet("/billing/disputes", async (LearnerDbContext db, CancellationToken ct,
             string? status, string? gateway, string? search, int? page, int? pageSize) =>
@@ -685,7 +685,7 @@ public static class AdminEndpoints
         admin.MapPost("/score-guarantee-claims/{pledgeId}/review", async (string pledgeId, HttpContext http,
             AdminScoreGuaranteeReviewRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ReviewScoreGuaranteeClaimAsync(http.AdminId(), http.AdminName(), pledgeId, request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingCatalogWrite");
 
         // ── A4: Content Quality Scoring ─────────────────
 
@@ -1403,7 +1403,7 @@ public static class AdminEndpoints
 
         admin.MapPut("/free-tier", async (HttpContext http, AdminFreeTierConfigUpdateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.UpdateFreeTierConfigAsync(http.AdminId(), http.AdminName(), request, ct)))
-            .WithAdminWrite("AdminBillingWrite");
+            .WithAdminWrite("AdminBillingCatalogWrite");
 
         admin.MapGet("/free-tier/usage-stats", async (AdminService service, CancellationToken ct,
             int? page, int? pageSize)
@@ -1505,7 +1505,11 @@ public static class AdminEndpoints
                 new { id = "system_admin", name = "System Admin", description = "Full system access", isBuiltIn = true, permissions = AdminPermissions.All },
                 new { id = "content_editor", name = "Content Editor", description = "Content read/write access", isBuiltIn = true, permissions = new[] { AdminPermissions.ContentRead, AdminPermissions.ContentWrite } },
                 new { id = "reviewer", name = "Reviewer", description = "Review operations access", isBuiltIn = true, permissions = new[] { AdminPermissions.ContentRead, AdminPermissions.ReviewOps } },
-                new { id = "billing_admin", name = "Billing Admin", description = "Billing management access", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingWrite } }
+                new { id = "billing_admin", name = "Billing Admin", description = "Full billing management (legacy superset)", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingWrite } },
+                // Billing-hardening I-7: granular billing role presets.
+                new { id = "refund_specialist", name = "Refund Specialist", description = "Read billing data and issue refunds / handle disputes only", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingRefundWrite } },
+                new { id = "catalog_editor", name = "Catalog Editor", description = "Read billing data and edit plans, add-ons, coupons, wallet tiers, free-tier, score-guarantee", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingCatalogWrite } },
+                new { id = "subscription_manager", name = "Subscription Manager", description = "Read billing data and manage subscriptions + wallet spend only", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingSubscriptionWrite } }
             };
             return Results.Ok(new { roles = builtInRoles });
         }).WithAdminRead("AdminSystemAdmin");

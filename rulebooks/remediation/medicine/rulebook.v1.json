@@ -1,0 +1,92 @@
+{
+  "version": "0.1.0",
+  "kind": "remediation",
+  "profession": "medicine",
+  "publishedAt": "2026-05-12T00:00:00Z",
+  "authoritySource": "OET Platform — Remediation Rulebook (V0 stub for the AI-personalisation feature flag).",
+  "stubMarker": true,
+  "stubExplanation": "This file is a placeholder so the rulebook directory exists alongside writing/, speaking/, grammar/, etc. The RemediationPlanService.EnableAiPersonalisation flag is gated false until: (1) RuleKind.Remediation is added to the .NET enum + folder switch, (2) the AiGatewayService prompt builder gets a Remediation branch, (3) this file is replaced with real grounded content (see docs/MOCKS-RANDOMISATION.md and docs/audits/rulebook-compliance-2026-05-11-closure.md for the schedule).",
+  "sections": [
+    {
+      "id": "RM01",
+      "title": "Plan voice and tone",
+      "order": 1
+    },
+    {
+      "id": "RM02",
+      "title": "Weakness-to-drill mapping",
+      "order": 2
+    },
+    {
+      "id": "RM03",
+      "title": "Day-by-day pacing",
+      "order": 3
+    }
+  ],
+  "rules": [
+    {
+      "id": "RM01.1",
+      "section": "RM01",
+      "severity": "critical",
+      "title": "Address the candidate directly",
+      "body": "All AI-generated remediation plan summaries must address the candidate in the second person ('you'). Never refer to the candidate by name, never use third person.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RM01.2",
+      "section": "RM01",
+      "severity": "critical",
+      "title": "No clinical advice",
+      "body": "Remediation summaries are about exam preparation, not clinical care. Never offer medical advice, diagnosis, or treatment recommendations even if the underlying mock content is clinical.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RM01.3",
+      "section": "RM01",
+      "severity": "critical",
+      "title": "No invented rule IDs",
+      "body": "Summaries must not invent or fabricate rule identifiers. The deterministic plan and weakness tags shipped by RemediationPlanService are the only ground truth.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RM01.4",
+      "section": "RM01",
+      "severity": "critical",
+      "title": "Never produce a candidate score",
+      "body": "Remediation summaries must never project, estimate, or infer an OET scaled score, grade letter, or pass/fail outcome. Scoring is the exclusive responsibility of OetScoring.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RM02.1",
+      "section": "RM02",
+      "severity": "major",
+      "title": "Frame the week, not the day list",
+      "body": "Summaries must frame the focus of the week (e.g. 'this week prioritises Listening Part B and Reading Part C') rather than reciting the day-by-day list verbatim — the deterministic UI already shows the day list.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RM02.2",
+      "section": "RM02",
+      "severity": "major",
+      "title": "Stay under 240 characters",
+      "body": "Summaries are advisory, not instructional, and must stay under 240 characters total so the layout remains compact.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RM03.1",
+      "section": "RM03",
+      "severity": "minor",
+      "title": "Encourage without false confidence",
+      "body": "Use encouraging tone but avoid promising a band-7 outcome or any outcome the deterministic data cannot support.",
+      "appliesTo": "all"
+    }
+  ],
+  "criticalRuleSummary": [
+    "Address the candidate as 'you'.",
+    "No clinical advice.",
+    "No invented rule IDs.",
+    "Never produce a candidate score.",
+    "Frame the week, not the day list.",
+    "Stay under 240 characters."
+  ]
+}

@@ -165,7 +165,26 @@ public static class AdminPermissions
     public const string ContentEditorReview = "content:editor_review";
     public const string ContentPublisherApproval = "content:publisher_approval";
     public const string BillingRead = "billing:read";
+
+    /// <summary>
+    /// Legacy superset write permission. Continues to grant every billing-write
+    /// surface. Billing-hardening I-7 (May 2026) introduces 3 granular siblings
+    /// below that should be preferred for new role definitions; existing
+    /// admins with just <c>billing:write</c> remain fully capable.
+    /// </summary>
     public const string BillingWrite = "billing:write";
+
+    /// <summary>Billing-hardening I-7: grants refund + dispute mutations only.</summary>
+    public const string BillingRefundWrite = "billing:refund_write";
+
+    /// <summary>Billing-hardening I-7: grants catalog (plans, add-ons, coupons,
+    /// wallet-tiers, free-tier, score-guarantee review) mutations only.</summary>
+    public const string BillingCatalogWrite = "billing:catalog_write";
+
+    /// <summary>Billing-hardening I-7: grants subscription lifecycle mutations
+    /// (create, change-plan, extend, cancel, reactivate, status, wallet spend) only.</summary>
+    public const string BillingSubscriptionWrite = "billing:subscription_write";
+
     public const string UsersRead = "users:read";
     public const string UsersWrite = "users:write";
     public const string ReviewOps = "review_ops";
@@ -182,6 +201,7 @@ public static class AdminPermissions
         ContentRead, ContentWrite, ContentPublish,
         ContentEditorReview, ContentPublisherApproval,
         BillingRead, BillingWrite,
+        BillingRefundWrite, BillingCatalogWrite, BillingSubscriptionWrite,
         UsersRead, UsersWrite,
         ReviewOps, QualityAnalytics, AiConfig,
         FeatureFlags, AuditLogs, SystemAdmin,
