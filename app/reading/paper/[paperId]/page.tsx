@@ -486,6 +486,13 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
                 ? `Loading your ${urlMode.replace('-', ' ')} practice attempt…`
                 : 'Start a server-authoritative Reading attempt. Part A locks after its window, then Parts B and C share the remaining timer.'}
             </p>
+            <p
+              className="mx-auto mt-4 max-w-2xl rounded-2xl border border-border bg-background-light px-4 py-3 text-xs font-semibold leading-5 text-muted"
+              data-testid="reading-integrity-reminder"
+              role="note"
+            >
+              OET test content is confidential — do not redistribute or share questions outside this practice context.
+            </p>
             {!urlMode || urlMode === 'exam' ? (
               <div className="mt-5 flex justify-center">
                 <Button variant="primary" onClick={() => void start()} loading={starting}>
@@ -680,9 +687,15 @@ function AttemptToolbar({
 
 function ReadingZoomControls({ zoomLevel, onZoomChange }: { zoomLevel: number; onZoomChange: (next: number) => void }) {
   const changeZoom = (next: number) => onZoomChange(Math.min(125, Math.max(80, next)));
+  const hint = 'Use the in-app zoom; browser Ctrl+/- may misalign the timer.';
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-background-light p-1" aria-label="Reading zoom controls">
+    <div
+      className="inline-flex items-center gap-1 rounded-xl border border-border bg-background-light p-1"
+      aria-label="Reading zoom controls"
+      aria-describedby="reading-zoom-hint"
+      title={hint}
+    >
       <Button variant="ghost" size="sm" className="h-9 w-9 px-0" onClick={() => changeZoom(zoomLevel - 5)} aria-label="Zoom out" title="Zoom out">
         <ZoomOut className="h-4 w-4" aria-hidden="true" />
       </Button>
@@ -693,6 +706,9 @@ function ReadingZoomControls({ zoomLevel, onZoomChange }: { zoomLevel: number; o
       <Button variant="ghost" size="sm" className="h-9 w-9 px-0" onClick={() => changeZoom(100)} aria-label="Reset zoom" title="Reset zoom">
         <RotateCcw className="h-4 w-4" aria-hidden="true" />
       </Button>
+      <span id="reading-zoom-hint" className="sr-only">
+        {hint}
+      </span>
     </div>
   );
 }

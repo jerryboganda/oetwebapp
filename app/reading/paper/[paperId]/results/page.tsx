@@ -111,6 +111,14 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                       ? 'This subset attempt reports practice marks only. Use the item review to choose the next focused route.'
                       : 'Reading pass evidence is anchored to 30/42 equalling 350/500. Use the item review to choose the next practice route.'}
                   </p>
+                  {!isPracticeOnly ? (
+                    <p
+                      className="mt-3 border-t border-border pt-3 text-xs font-semibold leading-5 text-muted"
+                      data-testid="reading-results-estimate-disclaimer"
+                    >
+                      This is an estimate, not an official OET conversion.
+                    </p>
+                  ) : null}
                 </div>
               )}
             />
