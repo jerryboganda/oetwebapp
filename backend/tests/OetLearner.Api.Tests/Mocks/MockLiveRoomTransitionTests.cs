@@ -49,6 +49,9 @@ public class MockLiveRoomTransitionTests
         Assert.Single(hub.ClientsProxy.Messages);
         Assert.Equal(MockLiveRoomHub.BookingGroup(BookingId), hub.ClientsProxy.Messages[0].GroupName);
         Assert.Equal(MockLiveRoomHub.LiveRoomStateChangedEvent, hub.ClientsProxy.Messages[0].Method);
+        var payload = Assert.IsType<MockLiveRoomStateChanged>(Assert.Single(hub.ClientsProxy.Messages[0].Args));
+        Assert.Equal(MockLiveRoomStates.LearnerNoShow, payload.ToState);
+        Assert.Equal(MockLiveRoomStates.LearnerNoShow, payload.LiveRoomState);
     }
 
     [Fact]

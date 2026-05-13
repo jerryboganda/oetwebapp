@@ -8154,6 +8154,7 @@ export async function archiveAdminMockBundle(bundleId: string) {
 // Mocks V2 Wave 3 — item analysis admin endpoints.
 export interface AdminMockItemAnalysisRow {
   id: string;
+  paperId?: string | null;
   subtest: string;
   label?: string | null;
   totalAttempts: number;

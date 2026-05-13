@@ -66,6 +66,7 @@ public class MockItemAnalysisListeningTests
 
         var first = snapshots[0];
         Assert.Equal("Listening A1 · Q1", first.Label);
+        Assert.Equal(ListeningPaperId, first.ContentPaperId);
         Assert.Equal(5, first.TotalAttempts);
         Assert.Equal(4, first.CorrectCount);
         Assert.InRange(first.Difficulty, 0.799, 0.801);
@@ -75,6 +76,7 @@ public class MockItemAnalysisListeningTests
 
         var second = snapshots[1];
         Assert.Equal("Listening B · Q2", second.Label);
+        Assert.Equal(ListeningPaperId, second.ContentPaperId);
         Assert.Equal(5, second.TotalAttempts);
         Assert.Equal(2, second.CorrectCount);
         Assert.InRange(second.Difficulty, 0.399, 0.401);
@@ -317,6 +319,7 @@ public class MockItemAnalysisListeningTests
         {
             Id = "snap-reading-noise",
             MockBundleId = BundleId,
+            ContentPaperId = ReadingPaperId,
             ItemId = "rq-1",
             SubtestCode = "reading",
             Label = "Reading A · Q1",
@@ -345,6 +348,52 @@ public class MockItemAnalysisListeningTests
             .ToArray();
         Assert.Equal(new[] { "Listening A1 · Q1", "Listening B · Q2" }, labels);
         Assert.DoesNotContain(labels, l => l.StartsWith("Reading", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetDashboardAsync_FiltersByPaperId_WhenNoBundleFilterProvided()
+    {
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+
+        db.MockItemAnalysisSnapshots.AddRange(
+            new MockItemAnalysisSnapshot
+            {
+                Id = "snap-listening-paper-filter",
+                MockBundleId = BundleId,
+                ContentPaperId = ListeningPaperId,
+                ItemId = "lq-filter",
+                SubtestCode = "listening",
+                Label = "Listening A1 · Q1",
+                TotalAttempts = 10,
+                CorrectCount = 8,
+                Difficulty = 0.8d,
+                DistractorJson = "{}",
+                GeneratedAt = now,
+            },
+            new MockItemAnalysisSnapshot
+            {
+                Id = "snap-reading-paper-filter",
+                MockBundleId = BundleId,
+                ContentPaperId = ReadingPaperId,
+                ItemId = "rq-filter",
+                SubtestCode = "reading",
+                Label = "Reading A · Q1",
+                TotalAttempts = 10,
+                CorrectCount = 6,
+                Difficulty = 0.6d,
+                DistractorJson = "{}",
+                GeneratedAt = now,
+            });
+        await db.SaveChangesAsync();
+
+        var payload = await new MockItemAnalysisService(db).GetDashboardAsync(null, ListeningPaperId, CancellationToken.None);
+        var items = (Array)payload.GetType().GetProperty("items")!.GetValue(payload)!;
+
+        Assert.Single(items);
+        var item = items.Cast<object>().Single();
+        Assert.Equal("lq-filter", item.GetType().GetProperty("id")!.GetValue(item));
+        Assert.Equal(ListeningPaperId, item.GetType().GetProperty("paperId")!.GetValue(item));
     }
 
     // ─────────────────────────────────────────────────────────────────────

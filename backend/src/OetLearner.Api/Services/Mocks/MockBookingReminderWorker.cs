@@ -116,6 +116,7 @@ public sealed class MockBookingReminderWorker(
 
                 try
                 {
+                    var eventCountBefore = await db.NotificationEvents.CountAsync(ct);
                     var notificationId = string.Equals(planned.AudienceRole, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase)
                         ? await notifications.CreateForExpertAsync(
                             planned.EventKey,
@@ -134,7 +135,8 @@ public sealed class MockBookingReminderWorker(
                             payload,
                             ct);
 
-                    if (!string.IsNullOrEmpty(notificationId))
+                    if (!string.IsNullOrEmpty(notificationId)
+                        && await db.NotificationEvents.CountAsync(ct) > eventCountBefore)
                     {
                         dispatched++;
                     }

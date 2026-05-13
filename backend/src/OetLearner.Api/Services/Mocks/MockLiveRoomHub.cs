@@ -56,11 +56,18 @@ public sealed class MockLiveRoomHub(LearnerDbContext dbContext) : Hub
             ?? Context.User?.FindFirstValue("sub");
 }
 
+// NOTE: Property names below are the source of truth for the SignalR
+// payload contract consumed by `lib/mocks/live-room-hub.ts`. Adding,
+// removing, or renaming a field here is a wire-format break — update
+// the TS interface in lockstep and the contract test in
+// `MockLiveRoomTransitionTests`.
 public sealed record MockLiveRoomSnapshot(
     string BookingId,
     string LiveRoomState,
     string Status,
     int TransitionVersion,
+    DateTimeOffset ScheduledStartAt,
+    string TimezoneIana,
     DateTimeOffset UpdatedAt)
 {
     public static MockLiveRoomSnapshot From(MockBooking booking) => new(
@@ -68,6 +75,8 @@ public sealed record MockLiveRoomSnapshot(
         booking.LiveRoomState,
         booking.Status,
         booking.LiveRoomTransitionVersion,
+        booking.ScheduledStartAt,
+        booking.TimezoneIana,
         booking.UpdatedAt);
 }
 
@@ -75,17 +84,25 @@ public sealed record MockLiveRoomStateChanged(
     string BookingId,
     string FromState,
     string ToState,
+    string LiveRoomState,
     string Status,
     string ActorRole,
     int TransitionVersion,
+    DateTimeOffset ScheduledStartAt,
+    string TimezoneIana,
+    string? Reason,
     DateTimeOffset OccurredAt)
 {
-    public static MockLiveRoomStateChanged From(MockBooking booking, string fromState, string actorRole, DateTimeOffset occurredAt) => new(
+    public static MockLiveRoomStateChanged From(MockBooking booking, string fromState, string actorRole, string? reason, DateTimeOffset occurredAt) => new(
         booking.Id,
         fromState,
+        booking.LiveRoomState,
         booking.LiveRoomState,
         booking.Status,
         actorRole,
         booking.LiveRoomTransitionVersion,
+        booking.ScheduledStartAt,
+        booking.TimezoneIana,
+        reason,
         occurredAt);
 }

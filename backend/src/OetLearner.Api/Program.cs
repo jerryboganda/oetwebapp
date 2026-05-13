@@ -362,7 +362,8 @@ void ConfigureJwtBearer(JwtBearerOptions options)
             var accessToken = context.Request.Query["access_token"].FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(accessToken)
                 && (context.HttpContext.Request.Path.StartsWithSegments("/v1/notifications/hub")
-                    || context.HttpContext.Request.Path.StartsWithSegments("/v1/conversations/hub")))
+                    || context.HttpContext.Request.Path.StartsWithSegments("/v1/conversations/hub")
+                    || context.HttpContext.Request.Path.StartsWithSegments("/v1/mocks/live-room/hub")))
             {
                 context.Token = accessToken;
             }

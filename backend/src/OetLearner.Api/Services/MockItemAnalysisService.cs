@@ -25,10 +25,15 @@ public sealed class MockItemAnalysisService
 
     public MockItemAnalysisService(LearnerDbContext db) { _db = db; }
 
-    public async Task<object> GetForBundleAsync(string bundleId, CancellationToken ct)
+    public Task<object> GetForBundleAsync(string bundleId, CancellationToken ct)
+        => GetForBundleAsync(bundleId, paperId: null, ct);
+
+    private async Task<object> GetForBundleAsync(string bundleId, string? paperId, CancellationToken ct)
     {
+        var normalizedPaperId = NormalizeOptionalFilter(paperId);
         var rows = await _db.MockItemAnalysisSnapshots.AsNoTracking()
-            .Where(x => x.MockBundleId == bundleId)
+            .Where(x => x.MockBundleId == bundleId
+                && (normalizedPaperId == null || x.ContentPaperId == normalizedPaperId))
             .OrderBy(x => x.SubtestCode)
             .ThenBy(x => x.Label)
             .ToListAsync(ct);
@@ -37,10 +42,12 @@ public sealed class MockItemAnalysisService
         return new
         {
             bundleId,
+            paperId = normalizedPaperId,
             generatedAt,
             items = rows.Select(r => new
             {
                 id = r.ItemId,
+                paperId = r.ContentPaperId,
                 subtest = r.SubtestCode,
                 label = r.Label,
                 totalAttempts = r.TotalAttempts,
@@ -56,12 +63,15 @@ public sealed class MockItemAnalysisService
 
     public async Task<object> GetDashboardAsync(string? bundleId, string? paperId, CancellationToken ct)
     {
+        bundleId = NormalizeOptionalFilter(bundleId);
+        paperId = NormalizeOptionalFilter(paperId);
         if (!string.IsNullOrWhiteSpace(bundleId))
         {
-            return await GetForBundleAsync(bundleId, ct);
+            return await GetForBundleAsync(bundleId, paperId, ct);
         }
 
         var rows = await _db.MockItemAnalysisSnapshots.AsNoTracking()
+            .Where(x => paperId == null || x.ContentPaperId == paperId)
             .OrderByDescending(x => x.GeneratedAt)
             .ThenBy(x => x.MockBundleId)
             .Take(500)
@@ -77,6 +87,7 @@ public sealed class MockItemAnalysisService
             {
                 id = r.ItemId,
                 bundleId = r.MockBundleId,
+                paperId = r.ContentPaperId,
                 subtest = r.SubtestCode,
                 label = r.Label,
                 totalAttempts = r.TotalAttempts,
@@ -166,6 +177,7 @@ public sealed class MockItemAnalysisService
             items = rows.Select(r => new
             {
                 id = r.ItemId,
+                paperId = r.ContentPaperId,
                 label = r.Label,
                 totalAttempts = r.TotalAttempts,
                 correctCount = r.CorrectCount,
@@ -244,6 +256,7 @@ public sealed class MockItemAnalysisService
             {
                 Id = Guid.NewGuid().ToString("N"),
                 MockBundleId = bundleId,
+                ContentPaperId = paperId,
                 ItemId = q.Id,
                 SubtestCode = "listening",
                 Label = $"Listening {q.PartCode} · Q{q.QuestionNumber}",
@@ -318,6 +331,7 @@ public sealed class MockItemAnalysisService
             {
                 Id = Guid.NewGuid().ToString("N"),
                 MockBundleId = bundleId,
+                ContentPaperId = paperId,
                 ItemId = q.Id,
                 SubtestCode = "reading",
                 Label = $"Reading {q.PartCode} · Q{q.QuestionNumber}",
@@ -347,6 +361,9 @@ public sealed class MockItemAnalysisService
         var bottom = scored.TakeLast(cohortSize).Count(response => response.IsCorrect) / (double)cohortSize;
         return top - bottom;
     }
+
+    private static string? NormalizeOptionalFilter(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private readonly record struct ItemResponse(string AttemptId, bool IsCorrect);
 }

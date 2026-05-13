@@ -11,6 +11,7 @@ namespace OetLearner.Api.Domain;
 /// </summary>
 [Index(nameof(MockBundleId))]
 [Index(nameof(MockBundleId), nameof(SubtestCode))]
+[Index(nameof(ContentPaperId))]
 [Index(nameof(MockBundleId), nameof(ItemId), IsUnique = true,
     Name = "UX_MockItemAnalysis_Bundle_Item")]
 public class MockItemAnalysisSnapshot
@@ -21,6 +22,9 @@ public class MockItemAnalysisSnapshot
 
     [MaxLength(64)]
     public string MockBundleId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ContentPaperId { get; set; } = default!;
 
     /// <summary>Canonical item identifier (reading question id, listening item id, etc.).</summary>
     [MaxLength(64)]

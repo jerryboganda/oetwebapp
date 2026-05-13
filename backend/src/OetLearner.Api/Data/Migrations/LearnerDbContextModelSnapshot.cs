@@ -8350,6 +8350,11 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int>("CorrectCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ContentPaperId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<double>("Difficulty")
                         .HasColumnType("double precision");
 
@@ -8392,6 +8397,8 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("MockBundleId");
+
+                    b.HasIndex("ContentPaperId");
 
                     b.HasIndex("MockBundleId", "SubtestCode");
 

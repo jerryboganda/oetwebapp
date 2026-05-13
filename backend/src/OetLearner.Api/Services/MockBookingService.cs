@@ -257,7 +257,7 @@ public sealed class MockBookingService
 
         await _liveRoomHub.Clients.Group(MockLiveRoomHub.BookingGroup(booking.Id)).SendAsync(
             MockLiveRoomHub.LiveRoomStateChangedEvent,
-            MockLiveRoomStateChanged.From(booking, current, actorRole, now),
+            MockLiveRoomStateChanged.From(booking, current, actorRole, transition.Reason, now),
             ct);
 
         return Project(booking, isAdmin: isAdmin);
