@@ -7967,6 +7967,9 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int>("LiveRoomTransitionVersion")
+                        .HasColumnType("integer");
+
                     b.Property<string>("MockAttemptId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -8038,6 +8041,67 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("UserId", "ScheduledStartAt");
 
                     b.ToTable("MockBookings");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.MockLiveRoomTransition", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ActorRole")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("BookingId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ClientTransitionId")
+                        .HasMaxLength(96)
+                        .HasColumnType("character varying(96)");
+
+                    b.Property<string>("FromState")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("MetadataJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("ToState")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("TransitionVersion")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookingId", "ClientTransitionId");
+
+                    b.HasIndex("BookingId", "OccurredAt");
+
+                    b.HasIndex("BookingId", "TransitionVersion")
+                        .IsUnique();
+
+                    b.ToTable("MockLiveRoomTransitions");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.MockBundle", b =>
@@ -8287,6 +8351,9 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("integer");
 
                     b.Property<double>("Difficulty")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("DiscriminationIndex")
                         .HasColumnType("double precision");
 
                     b.Property<string>("DistractorJson")
@@ -13743,6 +13810,74 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("WritingCoachSuggestions");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.WritingRuleViolation", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AttemptId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("EvaluationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("GeneratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LetterType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("Profession")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Quote")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("RuleId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttemptId");
+
+                    b.HasIndex("Profession", "GeneratedAt");
+
+                    b.HasIndex("RuleId", "GeneratedAt");
+
+                    b.ToTable("WritingRuleViolations");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.WritingOptions", b =>
                 {
                     b.Property<string>("Id")
@@ -14012,9 +14147,22 @@ namespace OetLearner.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.Navigation("LiveRoomTransitions");
+
                     b.Navigation("MockAttempt");
 
                     b.Navigation("MockBundle");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.MockLiveRoomTransition", b =>
+                {
+                    b.HasOne("OetLearner.Api.Domain.MockBooking", "Booking")
+                        .WithMany("LiveRoomTransitions")
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Booking");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.MockBundleSection", b =>
