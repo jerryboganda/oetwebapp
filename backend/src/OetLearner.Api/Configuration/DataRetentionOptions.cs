@@ -30,6 +30,17 @@ public sealed class DataRetentionOptions
     public TimeSpan PaymentWebhookEvents { get; set; } = TimeSpan.FromDays(180);
 
     /// <summary>
+    /// Billing-hardening I-9: tiered PII retention. After this age, the
+    /// <c>PaymentWebhookEvent.PayloadJson</c> column is nulled to <c>"{}"</c>
+    /// by <see cref="OetLearner.Api.Services.Billing.WebhookPiiRetentionWorker"/>
+    /// while the row itself (id, status, timestamps, gateway transaction id)
+    /// is preserved for forensic chain-of-custody. Set to
+    /// <see cref="TimeSpan.Zero"/> to disable the null-out step.
+    /// Default: 90 days — half the row-delete window above.
+    /// </summary>
+    public TimeSpan PaymentWebhookPiiNullOutAge { get; set; } = TimeSpan.FromDays(90);
+
+    /// <summary>
     /// How long <c>NotificationDeliveryAttempts</c> rows are kept.
     /// Default: 90 days. Enough to debug delivery issues without letting
     /// the retry-attempts table grow unbounded.

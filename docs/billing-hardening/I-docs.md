@@ -30,6 +30,13 @@ This slice does **not** modify any service, endpoint, or entity file.
 
 ## Behaviour-vs-doc gaps surfaced for owning slices
 
+> **2026-05-12 reconciliation:** Slice J reviewed each of the 9 gaps below
+> against `main` and confirmed 7 are now live. The 2 remaining items
+> (granular billing permissions split, scheduled webhook-payload retention
+> worker) are explicit v1.1 follow-ups, not v1 launch blockers.
+> See [`J-final-integration.md`](./J-final-integration.md) for the per-gap
+> resolution table with file/line evidence.
+
 The following claims in `docs/BILLING.md` and the runbook depend on
 behaviours that may not yet exist in code. Each is flagged here for the
 owning slice; doc text already calls them out as planned / pending.

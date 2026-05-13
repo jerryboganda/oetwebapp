@@ -19,6 +19,7 @@ rather than applied directly, to avoid parallel-write conflicts.
 | G — Frontend admin billing | `app/admin/billing/**`, `components/admin/billing/**` | none |
 | H — Tests | `backend/tests/OetLearner.Api.Tests/**Billing*.cs` (NEW files only — do NOT edit existing tests except to extend assertions), `app/billing/__tests__/**`, `app/admin/billing/__tests__/**` (NEW files only), `tests/e2e/billing.spec.ts` (NEW) | none |
 | I — Docs, observability, runbook | `docs/BILLING.md` (create), `docs/runbooks/billing-incident.md` (create), `instrumentation.ts` augmentations | none |
+| J — Final integration & closure (2026-05-12) | `docs/billing-hardening/J-final-integration.md`, `Domain/Entities.cs` (Wallet.RowVersion), `Data/LearnerDbContext.cs` (append-only), `Data/Migrations/20260512100000_AddWalletRowVersion.cs`, `lib/csv-export.ts`, `lib/__tests__/csv-export-injection.test.ts`, `app/admin/audit-logs/page.tsx`, `app/admin/audit-logs/page.test.tsx` | none |
 
 ## Coordination rules
 
