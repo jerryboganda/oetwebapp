@@ -171,15 +171,13 @@ export const importReadingManifest = (
     { manifest, replaceExisting },
   );
 
-export const setReadingPart = (
-  paperId: string,
-  partCode: ReadingPartCode,
-  body: { timeLimitMinutes?: number | null; instructions?: string | null },
-) =>
-  apiClient.put<unknown>(
-    `/v1/admin/papers/${encodeURIComponent(paperId)}/reading/parts/${partCode}`,
-    body,
-  );
+// Wizard Medium #6 (May 2026 audit closure): the previous `setReadingPart`
+// helper here had no callers — the canonical write path is the manifest
+// import (`importReadingManifest` above) which covers part metadata
+// (time-limit, instructions) alongside texts + questions. The helper was
+// removed to avoid dead code; the underlying
+// `PUT /v1/admin/papers/{id}/reading/parts/{code}` endpoint remains
+// available server-side for future per-part patches.
 
 export const setWritingStructure = (
   paperId: string,

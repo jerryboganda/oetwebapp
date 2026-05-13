@@ -154,7 +154,11 @@ export default function AdminMockLeakReportsPage() {
             </Link>
           </div>
 
-          <div className="mb-6 flex flex-wrap gap-2">
+          <div
+            className="mb-6 flex flex-wrap gap-2"
+            role="toolbar"
+            aria-label="Filter leak reports by status"
+          >
             {STATUS_FILTERS.map((option) => {
               const isActive = filter === option.value;
               const count =
@@ -164,6 +168,8 @@ export default function AdminMockLeakReportsPage() {
                   key={option.value || 'all'}
                   variant={isActive ? 'primary' : 'secondary'}
                   onClick={() => setFilter(option.value)}
+                  aria-pressed={isActive}
+                  aria-label={`${option.label} reports (${count})`}
                 >
                   {option.label}
                   <span className="ml-2 rounded-full bg-white/30 px-2 py-0.5 text-xs">
@@ -173,6 +179,21 @@ export default function AdminMockLeakReportsPage() {
               );
             })}
           </div>
+
+          {/* V2 Medium #2 (May 2026 audit closure): screen-reader-only
+              live region that announces the result count when filters
+              change, so non-sighted operators learn how many rows the
+              new filter loaded without needing to scan the table. */}
+          <p
+            className="sr-only"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {loading
+              ? 'Loading leak reports.'
+              : `${rows.length} leak report${rows.length === 1 ? '' : 's'} loaded for the current filter.`}
+          </p>
 
           {loading ? (
             <div className="space-y-3">
@@ -188,7 +209,13 @@ export default function AdminMockLeakReportsPage() {
             />
           ) : (
             <div className="overflow-x-auto rounded-2xl border border-border">
-              <table className="min-w-full divide-y divide-border text-sm">
+              <table
+                className="min-w-full divide-y divide-border text-sm"
+                aria-label="Mock leak reports queue"
+              >
+                <caption className="sr-only">
+                  Mock leak reports queue. Each row is one learner-submitted report; columns include bundle, severity, reason, reporter, creation timestamp, status, and triage actions.
+                </caption>
                 <thead className="bg-background-light">
                   <tr className="text-left text-xs font-black uppercase tracking-widest text-muted">
                     <th className="px-4 py-3">Bundle</th>
@@ -255,11 +282,16 @@ export default function AdminMockLeakReportsPage() {
                           ) : null}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-2">
+                          <div
+                            className="flex flex-wrap gap-2"
+                            role="group"
+                            aria-label={`Triage actions for report ${row.id}`}
+                          >
                             <Button
                               variant="secondary"
                               onClick={() => openAction(row, 'investigating')}
                               disabled={isTerminal}
+                              aria-label={`Mark report ${row.id} as investigating`}
                             >
                               Investigate
                             </Button>
@@ -267,6 +299,7 @@ export default function AdminMockLeakReportsPage() {
                               variant="primary"
                               onClick={() => openAction(row, 'resolved')}
                               disabled={isTerminal}
+                              aria-label={`Mark report ${row.id} as resolved`}
                             >
                               Resolve
                             </Button>
@@ -274,6 +307,7 @@ export default function AdminMockLeakReportsPage() {
                               variant="secondary"
                               onClick={() => openAction(row, 'dismissed')}
                               disabled={isTerminal}
+                              aria-label={`Dismiss report ${row.id}`}
                             >
                               Dismiss
                             </Button>

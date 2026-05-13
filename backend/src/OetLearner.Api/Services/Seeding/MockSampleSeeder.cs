@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -217,7 +218,34 @@ public sealed class MockSampleSeeder(
             Details = bundleSlug,
         });
 
-        await db.SaveChangesAsync(ct);
+        // Wizard Medium #3 (May 2026 audit closure): explicit transaction so
+        // the bundle, its 4 papers + 4 section rows, every PaperAsset row,
+        // every MediaAsset row, and the audit row commit atomically. EF
+        // change-tracker rollback handled the in-memory case before; the
+        // transaction also covers the multi-statement sequence on Postgres
+        // where each SaveChanges before this one would have been its own
+        // implicit txn. Skipped on EF InMemory provider via TryStart pattern
+        // so unit tests don't trip the InMemory transaction-ignored warning.
+        IDbContextTransaction? tx = null;
+        if (db.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory")
+        {
+            tx = await db.Database.BeginTransactionAsync(ct);
+        }
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            if (tx is not null) await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync(ct);
+            throw;
+        }
+        finally
+        {
+            if (tx is not null) await tx.DisposeAsync();
+        }
+
         logger.LogInformation(
             "MockSampleSeeder: created bundle '{Slug}' ({Title}) with {SectionCount} draft sections.",
             bundleSlug, bundle.Title, SectionPlan.Length);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
@@ -145,6 +145,28 @@ function bundlesFromOptions(bundles: MockBundleOption[]): DiagnosticBundleSummar
 }
 
 export default function DiagnosticMockPage() {
+  // V2 Medium #3 (May 2026 audit closure). Wrap in Suspense so the
+  // LearnerDashboardShell paints a skeleton during the initial client
+  // mount + first network round-trip instead of flashing the empty
+  // landing state. Mirrors the pattern used in `/reading/.../results`.
+  return (
+    <Suspense
+      fallback={(
+        <LearnerDashboardShell>
+          <div className="space-y-4">
+            <Skeleton className="h-32 w-full rounded-2xl" />
+            <Skeleton className="h-48 w-full rounded-2xl" />
+            <Skeleton className="h-32 w-full rounded-2xl" />
+          </div>
+        </LearnerDashboardShell>
+      )}
+    >
+      <DiagnosticMockPageContent />
+    </Suspense>
+  );
+}
+
+function DiagnosticMockPageContent() {
   const router = useRouter();
   const [entitlement, setEntitlement] = useState<MockDiagnosticEntitlement | null>(null);
   const [studyPath, setStudyPath] = useState<DiagnosticStudyPath | null>(null);

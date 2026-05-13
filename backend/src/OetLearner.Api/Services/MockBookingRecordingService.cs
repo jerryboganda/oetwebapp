@@ -26,6 +26,19 @@ public sealed class MockBookingRecordingService
     public const long MaxChunkBytes = 8L * 1024 * 1024; // 8 MiB per chunk
     public const int MaxChunks = 240; // ~20 min at 5s/chunk
     public const long MaxTotalBytes = 200L * 1024 * 1024; // 200 MiB safety cap
+
+    /// <summary>
+    /// V2 closure (May 2026): per-day rate limit on accepted chunks for this
+    /// booking, on top of the global <c>PerUserWrite</c> rate-limit policy at
+    /// the endpoint boundary. <see cref="MaxChunks"/> is the lifetime cap;
+    /// this is the rolling-24-hour cap so a misbehaving client (or a
+    /// compromised browser session) cannot drain the cap in a single burst by
+    /// repeatedly retrying with new part indices. Set to twice
+    /// <see cref="MaxChunks"/> so legitimate retries (browser reconnect, slow
+    /// network) still succeed.
+    /// </summary>
+    public const int MaxChunksPerDay = MaxChunks * 2;
+
     private const string Root = "mock-bookings";
 
     private readonly LearnerDbContext _db;
@@ -72,6 +85,22 @@ public sealed class MockBookingRecordingService
 
         if (manifest.Chunks.Count >= MaxChunks && existingForPart is null)
             throw ApiException.Validation("chunk_cap_reached", $"Maximum {MaxChunks} chunks per booking.");
+
+        // V2 closure (May 2026): rolling 24-hour rate limit. Count chunks
+        // whose ReceivedAt is within the last day; reject if the new chunk
+        // would push us over MaxChunksPerDay. Skipped on the duplicate-part
+        // path because that returns early without mutating the manifest.
+        if (existingForPart is null)
+        {
+            var dayThreshold = DateTimeOffset.UtcNow.AddHours(-24);
+            var chunksLastDay = manifest.Chunks.Count(c => c.ReceivedAt >= dayThreshold);
+            if (chunksLastDay >= MaxChunksPerDay)
+            {
+                throw ApiException.Validation(
+                    "chunk_rate_limit",
+                    $"Booking has accepted {chunksLastDay} chunks in the last 24 hours; limit is {MaxChunksPerDay}.");
+            }
+        }
 
         // Buffer with bounded read so we can hash + measure before writing.
         using var buffer = new MemoryStream();

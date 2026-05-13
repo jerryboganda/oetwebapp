@@ -1,7 +1,8 @@
 # Mocks Module Progress
 
-> Last updated: 2026-05-08  
+> Last updated: 2026-05-12 (Track B closure)
 > Source of truth: `docs/mocks/PRD.md`
+> Closure manifest: `docs/CLOSURE-2026-05-12.md`
 
 ## Status Summary
 
@@ -27,6 +28,11 @@ The Mocks module has a real backend model, learner flow, report flow, admin list
 | 2026-05-08 | V2 Wave 8 — Admin leak-report queue + randomisation helper | Done | New admin route `/admin/content/mocks/leak-reports` (status chips, table, action modal). New `MockService.ListLeakReportsAsync` (`AsNoTracking`, paged) + `UpdateLeakReportAsync` (status validation, terminal-state lock, `AuditEvent` on every mutation). PII guard in `ToLeakReportSummary` — only `displayName`, no email. New endpoints: `GET /v1/admin/mocks/leak-reports?status=&limit=` (`AdminContentRead`), `PATCH /v1/admin/mocks/leak-reports/{id}` (`AdminContentWrite`). Mocks list page got `<LeakReportsLink>` chip with cheap open-count badge. Separate deterministic `RandomisationHelper.SeededShuffle<T>(items, seed, saltKey)` (Fisher-Yates + FNV-1a salt) with 9 unit tests — **NOT yet wired** into Reading/Listening DTOs because current option storage is positional-array + letter-keyed answers; structural payload migration to option IDs required before grading-safe shuffling can be enabled. 4 leak-report endpoint tests, all green. | Wire structural option-ID migration in a separate wave; then enable shuffle on grading-side projection. |
 | 2026-05-08 | V2 reviewer pass | Done | Independent `agency-reviewer` returned **APPROVED WITH FIXES**: 1 Critical + 2 High + 6 Medium/Low. All 3 blockers applied: (1) `RecordingManifestJson` widened to Postgres `text` (`MockEntities.cs`, snapshot, migration `ALTER TABLE ... TYPE text`); (2) `MockBookingRecordingService.AppendChunkAsync` now idempotent on `part` (same sha = no-op success, different sha = `part_already_uploaded` rejection); (3) `RemediationPlanService.EnableAiPersonalisation` demoted from `public const` to `private const` with explicit reviewer comment that flipping requires real `RuleKind.Remediation` rulebook. Also applied chunk endpoint Medium: `RequireRateLimiting("PerUserWrite")` + `RequestSizeLimit(MaxChunkBytes + 64KiB)` at boundary. | 6 Medium/Low items remain (test coverage for chunk dedup retries; admin leak-report list UI accessibility audit; W7 diagnostic UI Suspense boundary; W8 randomisation helper docs; remediation drill ID lookup vs canonical drill table; option-ID migration plan). |
 | 2026-05-08 | V2 final validation | Done | `dotnet build backend/OetLearner.sln` (0 errors, pre-existing warnings only); `dotnet test --filter "MockBookingLearnerDto|MockLeakReportAdmin|RemediationCatalog|RandomisationHelper|MockV2EndpointTests"` → **26/26 pass**; `npx tsc --noEmit` → EXIT=0; scoped `npx eslint` on all 35+ touched files → EXIT=0. | Full `npm test` + `npm run lint` + `npm run test:e2e:smoke` before release. |
+| 2026-05-12 | Track B — wizard Mediums | Done | Removed unused `setReadingPart` export from `lib/mock-wizard/api.ts`. Added `caseSensitive` toggle to `StepReading.tsx` for short-answer / word-pool questions. Added "Parts B and C share a single 45-minute window" clarification near the part tabs. Created `lib/wizard/sanitize-html.ts` defense-in-depth wrapper (10/10 tests). | — |
+| 2026-05-12 | Track B — V2 Mediums | Done | `/mocks/diagnostic` wrapped in Suspense with skeleton fallback. `/admin/content/mocks/leak-reports` a11y: `role="toolbar"` + `aria-pressed` on filter tabs, `<caption>` for screen readers, `role="group"` + `aria-label` on the per-row action buttons, sr-only live region announcing result counts. New docs: `docs/MOCKS-RANDOMISATION.md` (helper API + safety matrix) + `docs/MOCKS-OPTION-ID-MIGRATION.md` (5-step v1.1 plan). | — |
+| 2026-05-12 | Track B — Backend Mediums | Done | `MockBookingRecordingService.MaxChunksPerDay = 480` rolling-24h rate limit on top of the existing global `PerUserWrite`. `MockSampleSeeder.SeedBundleAsync` now wraps every bundle's writes in `BeginTransactionAsync` (skipped on EF InMemory). `RemediationCatalog` exposes `AllDrillIds` + `AllRouteHrefs` + `CanonicalRoutePrefixes` for regression locks (5 new tests). `rulebooks/remediation/medicine/rulebook.v1.json` stub created so the future `RuleKind.Remediation` flip has a canonical content home. | Add `RuleKind.Remediation` enum + folder switch + prompt branch when flipping `EnableAiPersonalisation`. |
+| 2026-05-12 | Track B — chunked-upload retry coverage | Done | New `backend/tests/OetLearner.Api.Tests/Mocks/MockBookingRecordingServiceRetryTests.cs` covers same-Part+same-SHA dedup, same-Part+different-SHA rejection, accumulating different parts, invalid-part bounds, post-finalize rejection, missing consent, foreign owner. **7/7 pass.** New `tests/e2e/learner/mocks-diagnostic-flow.spec.ts` registers 38 matrix tests (`@learner @smoke @mocks`). | — |
+| 2026-05-12 | Track B — Follow-Up Waves roadmap | Done | New `docs/mocks/FOLLOW-UP-WAVES.md` enumerates the 5 waves with current state, acceptance criteria, dependencies, and effort estimates. Wave 3 (diagnostic E2E smoke) has its spec shipped above. Waves 1, 2, 4, 5 deferred to v1.1+. | — |
 
 ## Gap Register
 
@@ -56,6 +62,11 @@ The Mocks module has a real backend model, learner flow, report flow, admin list
 | 2026-05-08 | Lint (scoped) | Passed | `npx eslint` over `app/admin/content/mocks/wizard/**`, `components/domain/mock-wizard/**`, `lib/mock-wizard/**`, and 4 player pages with `--max-warnings=0`. |
 | 2026-05-08 | Vitest (scoped) | Passed | 10/10 in player suites (`app/listening/player`, `app/writing/player`). Covers `completeMockSection` mock + grading pipeline. |
 | 2026-05-08 | Backend build | Passed | `dotnet build backend/OetLearner.sln` — 0 errors, 5 pre-existing warnings (unrelated to mocks). |
+| 2026-05-12 | Backend build (API) | Passed | `dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj` — 0 errors, 7.9s (Track B closure). |
+| 2026-05-12 | Backend tests (focused) | Passed | `dotnet test --no-build --filter "FullyQualifiedName~RemediationCatalogTests\|FullyQualifiedName~MockBookingRecordingServiceRetryTests\|FullyQualifiedName~RandomisationHelper\|FullyQualifiedName~MockBookingLearnerDto"` — **28/28 pass**. |
+| 2026-05-12 | Frontend tests (Track B + C) | Passed | `npx vitest run lib/__tests__/csv-export-injection.test.ts lib/csv-export.test.ts lib/wizard/__tests__/sanitize-html.test.ts app/admin/audit-logs` — **38/38 pass** (12 + 14 + 10 + 2). |
+| 2026-05-12 | Playwright E2E (Track B) | Compiled | `npx playwright test tests/e2e/learner/mocks-diagnostic-flow.spec.ts tests/e2e/learner/mocks-chunked-upload-retry.spec.ts --list` — both specs register across the full project matrix. |
+| 2026-05-12 | TypeScript | Passed | `npx tsc --noEmit` — 0 errors. |
 
 ## Decisions
 
@@ -66,8 +77,12 @@ The Mocks module has a real backend model, learner flow, report flow, admin list
 
 ## Follow-Up Waves
 
-1. Server-resolved section result adapters for Reading/Listening first, then Writing/Speaking review-aware aggregation.
-2. Tutor/admin-owned live-room controls with learner read-only state transitions.
-3. Dedicated diagnostic mock learner route and study-path handoff.
-4. Expanded admin item analysis beyond Reading where reliable item-level data exists.
-5. Booking reminders with notification caps and idempotent background jobs.
+See [`docs/mocks/FOLLOW-UP-WAVES.md`](./FOLLOW-UP-WAVES.md) for the full v1.1+ roadmap (current state, acceptance criteria, dependencies, effort estimates).
+
+| # | Wave | v1 state | v1.1 target |
+| - | ---- | -------- | ----------- |
+| 1 | Server-resolved section result adapters | Client evidence still trusted; per-section grading writes are authoritative on `main`. | Refactor `MockService` to project from `ReadingAttempt` / `ListeningAttempt` directly. |
+| 2 | Tutor / admin-owned live-room controls | Learner state machine ships, tutor view read-only. | New `POST /v1/expert/mocks/bookings/{id}/transition` + admin override + SignalR push. |
+| 3 | Dedicated diagnostic learner route | ✅ **Shipped 2026-05-08** (`/mocks/diagnostic` page). E2E smoke `tests/e2e/learner/mocks-diagnostic-flow.spec.ts` added 2026-05-12. | — |
+| 4 | Expanded admin item analysis | Reading item analysis ships. | Mirror endpoint for Listening once `ListeningAnswer` per-item data is exposed. |
+| 5 | Booking reminders worker | None. | `MockBookingReminderWorker` (BackgroundService) + 30-min and 24-h reminders + idempotency. |

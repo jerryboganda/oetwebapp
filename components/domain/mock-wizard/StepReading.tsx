@@ -37,6 +37,15 @@ interface QuestionDraft {
   optionsCsv: string;
   correctAnswer: string;
   acceptedSynonymsCsv: string;
+  /**
+   * Wizard Medium #5 (May 2026 audit closure). Surfaces the
+   * `caseSensitive` field on the manifest so the author can opt into
+   * case-sensitive matching for short-answer / word-pool questions where
+   * a clinical term must keep its original capitalisation (e.g. proper
+   * nouns, drug brand names). Default false to preserve existing
+   * behaviour for already-authored papers.
+   */
+  caseSensitive: boolean;
   points: number;
   textDisplayOrder: number | null;
 }
@@ -114,6 +123,7 @@ export function StepReading() {
         optionsCsv: '',
         correctAnswer: '',
         acceptedSynonymsCsv: '',
+        caseSensitive: false,
         points: 1,
         textDisplayOrder: null,
       },
@@ -165,7 +175,7 @@ export function StepReading() {
             acceptedSynonymsJson: q.acceptedSynonymsCsv
               ? JSON.stringify(q.acceptedSynonymsCsv.split(',').map((s) => s.trim()).filter(Boolean))
               : null,
-            caseSensitive: false,
+            caseSensitive: q.caseSensitive,
             explanationMarkdown: null,
             skillTag: null,
             readingTextDisplayOrder: q.textDisplayOrder,
@@ -260,6 +270,9 @@ export function StepReading() {
             <h3 className="text-sm font-bold uppercase tracking-wider text-muted">Authoring</h3>
             <p className="text-xs text-muted">
               Items: A {counts.A}/20 · B {counts.B}/6 · C {counts.C}/16
+            </p>
+            <p className="mt-1 text-[11px] font-semibold text-muted">
+              Time: Part A is a standalone 15-minute window; Parts B and C share a single 45-minute window per OET specification.
             </p>
           </div>
           <div className="flex gap-1">
@@ -396,6 +409,17 @@ export function StepReading() {
                     />
                   ) : null}
                 </div>
+                {q.questionType === 'ShortAnswer' || q.questionType === 'WordPool' ? (
+                  <label className="flex items-center gap-2 text-xs font-semibold text-navy">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
+                      checked={q.caseSensitive}
+                      onChange={(e) => updateQuestion(q.id, { caseSensitive: e.target.checked })}
+                    />
+                    Match answers case-sensitively (e.g. for proper nouns or drug brand names)
+                  </label>
+                ) : null}
               </div>
             ))
           )}

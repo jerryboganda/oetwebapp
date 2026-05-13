@@ -439,6 +439,14 @@ export default function MockCenter() {
           highlights={heroHighlights}
         />
 
+        <p
+          className="rounded-2xl border border-border bg-background-light px-4 py-3 text-xs font-semibold leading-5 text-muted"
+          data-testid="mocks-integrity-reminder"
+          role="note"
+        >
+          OET test content is confidential — do not redistribute or share questions outside this practice context.
+        </p>
+
         <LearnerSkillSwitcher compact />
 
         {!loading && !error && fullMocks.length === 0 && subTestMocks.length === 0 ? (
