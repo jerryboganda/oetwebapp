@@ -12,6 +12,10 @@ export default defineConfig([{
         "**/node_modules/**",
         "**/coverage/**",
         "OET Web App Login only screens take from here/**",
+        ".storybook/**",
+        "**/__stories__/**",
+        "**/*.stories.ts",
+        "**/*.stories.tsx",
     ],
     extends: [...next],
 }]);

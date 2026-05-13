@@ -108,3 +108,6 @@ repomix-output*.xml
 repomix-output*.md
 repomix-output*.json
 repomix-output*.txt
+
+# Storybook
+storybook-static/

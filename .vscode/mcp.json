@@ -2,6 +2,15 @@
   "servers": {
     "jcodemunch": {
       "command": "C:\\Users\\Dr Faisal Maqsood PC\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\jcodemunch-mcp.exe"
+    },
+    "mempalace": {
+      "type": "stdio",
+      "command": "C:\\Users\\Dr Faisal Maqsood PC\\AppData\\Roaming\\uv\\tools\\mempalace\\Scripts\\mempalace-mcp.exe",
+      "args": [],
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1"
+      }
     }
   }
 }

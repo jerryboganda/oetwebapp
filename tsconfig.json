@@ -24,5 +24,12 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "OET Web App Login only screens take from here"]
+  "exclude": [
+    "node_modules",
+    "OET Web App Login only screens take from here",
+    ".storybook/**/*",
+    "**/__stories__/**/*",
+    "**/*.stories.ts",
+    "**/*.stories.tsx"
+  ]
 }
