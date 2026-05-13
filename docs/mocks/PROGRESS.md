@@ -32,7 +32,8 @@ The Mocks module has a real backend model, learner flow, report flow, admin list
 | 2026-05-12 | Track B — V2 Mediums | Done | `/mocks/diagnostic` wrapped in Suspense with skeleton fallback. `/admin/content/mocks/leak-reports` a11y: `role="toolbar"` + `aria-pressed` on filter tabs, `<caption>` for screen readers, `role="group"` + `aria-label` on the per-row action buttons, sr-only live region announcing result counts. New docs: `docs/MOCKS-RANDOMISATION.md` (helper API + safety matrix) + `docs/MOCKS-OPTION-ID-MIGRATION.md` (5-step v1.1 plan). | — |
 | 2026-05-12 | Track B — Backend Mediums | Done | `MockBookingRecordingService.MaxChunksPerDay = 480` rolling-24h rate limit on top of the existing global `PerUserWrite`. `MockSampleSeeder.SeedBundleAsync` now wraps every bundle's writes in `BeginTransactionAsync` (skipped on EF InMemory). `RemediationCatalog` exposes `AllDrillIds` + `AllRouteHrefs` + `CanonicalRoutePrefixes` for regression locks (5 new tests). `rulebooks/remediation/medicine/rulebook.v1.json` stub created so the future `RuleKind.Remediation` flip has a canonical content home. | Add `RuleKind.Remediation` enum + folder switch + prompt branch when flipping `EnableAiPersonalisation`. |
 | 2026-05-12 | Track B — chunked-upload retry coverage | Done | New `backend/tests/OetLearner.Api.Tests/Mocks/MockBookingRecordingServiceRetryTests.cs` covers same-Part+same-SHA dedup, same-Part+different-SHA rejection, accumulating different parts, invalid-part bounds, post-finalize rejection, missing consent, foreign owner. **7/7 pass.** New `tests/e2e/learner/mocks-diagnostic-flow.spec.ts` registers 38 matrix tests (`@learner @smoke @mocks`). | — |
-| 2026-05-12 | Track B — Follow-Up Waves roadmap | Done | New `docs/mocks/FOLLOW-UP-WAVES.md` enumerates the 5 waves with current state, acceptance criteria, dependencies, and effort estimates. Wave 3 (diagnostic E2E smoke) has its spec shipped above. Waves 1, 2, 4, 5 deferred to v1.1+. | — |
+| 2026-05-12 | Track B — Follow-Up Waves roadmap | Done | New `docs/mocks/FOLLOW-UP-WAVES.md` enumerates the 5 waves with current state, acceptance criteria, dependencies, and effort estimates. Wave 3 (diagnostic E2E smoke) had its spec shipped first; waves 1, 2, 4, and 5 were subsequently closed on 2026-05-13. | — |
+| 2026-05-13 | Follow-Up Waves 1/2/4/5 closure | Done | Wave 1 now routes mock report generation through `IMockReportAggregationService` + Reading/Listening authoritative result adapters; Wave 2 adds durable live-room transitions, expert/admin REST endpoints, SignalR group updates, and admin/expert/learner UI wiring; Wave 4 adds Listening item-analysis, discrimination index, and admin tabs; Wave 5 reminder planning fans out to learners plus assigned experts with idempotent notification dedupe. | Remaining mocks follow-ups are lower-priority UX/E2E expansion items, not the original trust-boundary gaps. |
 
 ## Gap Register
 
@@ -45,8 +46,8 @@ The Mocks module has a real backend model, learner flow, report flow, admin list
 | MOCK-GAP-005 | Generic learner booking PATCH can mutate terminal status. | Critical | Resolved: learner-supplied `status` is rejected; reschedule/cancel remain dedicated endpoints. |
 | MOCK-GAP-006 | Remediation generator expects stale `subtestScores` and hard-codes `350`. | High | Resolved: parses current `subTests` payload and uses `OetScoring` constants. |
 | MOCK-GAP-007 | Pending/non-numeric subtests map to zero in Statement of Results adapter. | High | Resolved: readiness guard and provisional warning added before rendering SoR. |
-| MOCK-GAP-008 | Launch/completion contract remains transitional and can still rely on client evidence. | Critical | **Resolved 2026-05-08:** All 4 subtest players (Listening, Reading, Writing, Speaking) now read `mockAttemptId`/`mockSectionId` from `MockService.BuildLaunchRoute` query params and POST `completeMockSection` with rawScore/maxRawScore/scaledScore/grade after grading. Speaking auto-marked path uses `awaitingTutorReview: true`; report aggregation can now trust per-section evidence instead of falling back to client-only state. |
-| MOCK-GAP-009 | Speaking live-room transition ownership is still incomplete end-to-end. | High | **Resolved 2026-05-08:** Learner audio-only state machine + chunked recording + expert read-only room landed in V2 Wave 6. |
+| MOCK-GAP-008 | Launch/completion contract remains transitional and can still rely on client evidence. | Critical | **Resolved 2026-05-13:** `MockReportAggregationService` resolves Reading/Listening from `ReadingAttempt` / `ListeningAttempt` via adapters and rewrites section evidence metadata with `evidenceSource`; resolver tests prove tampered section scores are overwritten. |
+| MOCK-GAP-009 | Speaking live-room transition ownership is still incomplete end-to-end. | High | **Resolved 2026-05-13:** `MockLiveRoomTransition` table + transition versioning, expert/admin endpoints, SignalR `/v1/mocks/live-room/hub`, learner/expert realtime subscription, and admin operations controls are live. |
 | MOCK-GAP-010 | Full diagnostic learner journey is not clearly surfaced. | Medium | **Resolved 2026-05-08:** New `/mocks/diagnostic` page wires entitlement → chooser → study path → SoR card (V2 Wave 7). |
 
 ## Validation Log
@@ -67,6 +68,9 @@ The Mocks module has a real backend model, learner flow, report flow, admin list
 | 2026-05-12 | Frontend tests (Track B + C) | Passed | `npx vitest run lib/__tests__/csv-export-injection.test.ts lib/csv-export.test.ts lib/wizard/__tests__/sanitize-html.test.ts app/admin/audit-logs` — **38/38 pass** (12 + 14 + 10 + 2). |
 | 2026-05-12 | Playwright E2E (Track B) | Compiled | `npx playwright test tests/e2e/learner/mocks-diagnostic-flow.spec.ts tests/e2e/learner/mocks-chunked-upload-retry.spec.ts --list` — both specs register across the full project matrix. |
 | 2026-05-12 | TypeScript | Passed | `npx tsc --noEmit` — 0 errors. |
+| 2026-05-13 | Backend tests (focused) | Passed | Mock reminder planner, live-room transitions, Listening item analysis, section-result resolver, billing granular permissions, and Writing drill coverage tests all passed in focused sweeps. |
+| 2026-05-13 | Frontend tests (focused) | Passed | `cmd /c npx vitest run lib/writing-drills/__tests__/loader.test.ts` — 5/5 pass, locking 12 professions x 6 drill types. |
+| 2026-05-13 | TypeScript | Passed | `cmd /c npx tsc --noEmit` — 0 errors after live-room/admin/billing/drill changes. |
 
 ## Decisions
 
@@ -81,8 +85,8 @@ See [`docs/mocks/FOLLOW-UP-WAVES.md`](./FOLLOW-UP-WAVES.md) for the full v1.1+ r
 
 | # | Wave | v1 state | v1.1 target |
 | - | ---- | -------- | ----------- |
-| 1 | Server-resolved section result adapters | Client evidence still trusted; per-section grading writes are authoritative on `main`. | Refactor `MockService` to project from `ReadingAttempt` / `ListeningAttempt` directly. |
-| 2 | Tutor / admin-owned live-room controls | Learner state machine ships, tutor view read-only. | New `POST /v1/expert/mocks/bookings/{id}/transition` + admin override + SignalR push. |
+| 1 | Server-resolved section result adapters | Shipped 2026-05-13 via report aggregation adapters. | Add broader fixture corpus if new subtest evidence types are introduced. |
+| 2 | Tutor / admin-owned live-room controls | Shipped 2026-05-13 via durable transitions, SignalR, expert/admin endpoints, and UI controls. | Add Playwright realtime multi-role smoke when browser matrix budget allows. |
 | 3 | Dedicated diagnostic learner route | ✅ **Shipped 2026-05-08** (`/mocks/diagnostic` page). E2E smoke `tests/e2e/learner/mocks-diagnostic-flow.spec.ts` added 2026-05-12. | — |
-| 4 | Expanded admin item analysis | Reading item analysis ships. | Mirror endpoint for Listening once `ListeningAnswer` per-item data is exposed. |
-| 5 | Booking reminders worker | None. | `MockBookingReminderWorker` (BackgroundService) + 30-min and 24-h reminders + idempotency. |
+| 4 | Expanded admin item analysis | Shipped 2026-05-13 with Listening rows and discrimination index. | Expand UI trend charts after more production attempts accumulate. |
+| 5 | Booking reminders worker | Shipped 2026-05-13 for 24h / 2h / 30m learner and expert reminders. | Tune notification copy after launch analytics. |

@@ -67,20 +67,17 @@ owning slice; doc text already calls them out as planned / pending.
    `ProcessingStatus = 'failed'`" policy and an admin "webhook backlog"
    view. Confirm both exist; if the threshold is different in code, update
    `docs/BILLING.md` §6.2 to match implementation.
-7. **Granular billing permissions** — RBAC matrix in `docs/BILLING.md` §7
-   notes that today only `billing:read` and `billing:write` exist. Slice C
-   may want `billing:catalog_publish` and `billing:refund` as additions;
-   `AdminPermissions.All` and the seed roles in
-   `Endpoints/AdminEndpoints.cs` would need updating.
+7. **Granular billing permissions** — resolved 2026-05-13. The RBAC matrix in
+   `docs/BILLING.md` §7 now lists `billing:refund_write`,
+   `billing:catalog_write`, and `billing:subscription_write`; legacy
+   `billing:write` remains a superset.
 8. **`Subscription` lacks paused / past-due states in current enum** —
    state machine §4.1 lists `Pending / Active / PastDue / Paused / Cancelled / Failed`.
    Confirm `SubscriptionStatus` enum covers all values; slice D to add any
    missing ones via additive migration.
-9. **PII retention 180-day webhook payload nulling** — runbook §8 of
-   `docs/BILLING.md` claims `PaymentWebhookEvent.PayloadJson` is nulled
-   after 180 days. No retention worker exists today. Slice B should
-   schedule a `PaymentWebhookRetentionWorker` analogous to the
-   `PronunciationAudioRetentionWorker` pattern.
+9. **PII retention 180-day webhook payload nulling** — resolved 2026-05-13.
+   `WebhookPiiRetentionWorker` schedules the aged-payload sweep and focused
+   tests cover the retention cutoff behavior.
 
 These gaps are **doc-truth** (what the system should guarantee), and are
 deliberately included so the owning slices have a checklist. Where a

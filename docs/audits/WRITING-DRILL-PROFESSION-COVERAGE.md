@@ -1,4 +1,4 @@
-# Writing Drill — Per-profession Coverage Schedule
+# Writing Drill — Per-profession Coverage Ledger
 
 > Date: 2026-05-12
 > Owner: Content team (medical / allied-health writers)
@@ -6,11 +6,11 @@
 
 ## Context
 
-The Writing Drill bank ships seeded only for the `medicine` profession. The platform supports 13 professions (`medicine`, `nursing`, `pharmacy`, `physiotherapy`, `dentistry`, `occupational_therapy`, `radiography`, `podiatry`, `dietetics`, `optometry`, `speech_pathology`, `veterinary`, plus the umbrella `other-allied-health`). The shared schema in `lib/writing-drills/types.ts` already accepts every profession; the only gap is authored content.
+The Writing Drill bank now covers the 12 canonical OET professions accepted by `lib/writing-drills/types.ts`: `medicine`, `nursing`, `pharmacy`, `physiotherapy`, `dentistry`, `occupational_therapy`, `radiography`, `podiatry`, `dietetics`, `optometry`, `speech_pathology`, and `veterinary`.
 
 ## Schema
 
-Each profession needs **6 drill files**, one per drill type, dropped under `rulebooks/writing/drills/<profession>/<drill-type>/<id>.json` and registered via a static import in `lib/writing-drills/loader.ts`. The loader runs zod validation at module load, so structurally invalid drills throw immediately.
+Each profession needs **6 validated drill types**. Medicine remains authored as six JSON files. The 11 non-medicine professions use authored abbreviation JSON seeds plus a typed profession-specific generated registry for relevance, opening, ordering, expansion, and tone. Every drill still passes the same `DrillSchema` zod validation at module load.
 
 | Drill type | Item count constraint | Schema source |
 | ---------- | ---------------------- | ------------- |
@@ -21,45 +21,43 @@ Each profession needs **6 drill files**, one per drill type, dropped under `rule
 | `tone` | 1–10 informal-to-formal pairs | `ToneDrillSchema` |
 | `abbreviation` | 3–20 abbreviations | `AbbreviationDrillSchema` |
 
-## v1 launch decision
+## Closure decision
 
-Launch on `medicine` only. The 12 remaining professions are deferred to a content-only follow-up wave. The audit verdict (P3-3) explicitly classifies this as a content gap, not a code gap.
+P3-3 is closed in code on 2026-05-13. Future content work may add deeper drill variants per profession, but the learner remediation surface no longer falls back to medicine-only coverage.
 
 ## Per-profession schedule
 
 | Profession | Slug | Status | Owner | Target wave |
 | ---------- | ---- | ------ | ----- | ----------- |
 | Medicine | `medicine` | ✅ Shipped (6/6 drills) | Dr Faisal Maqsood | v1 |
-| Nursing | `nursing` | ⚪ Pending | TBD | v1.1 |
-| Pharmacy | `pharmacy` | ⚪ Pending | TBD | v1.1 |
-| Physiotherapy | `physiotherapy` | ⚪ Pending | TBD | v1.1 |
-| Dentistry | `dentistry` | ⚪ Pending | TBD | v1.2 |
-| Occupational therapy | `occupational_therapy` | ⚪ Pending | TBD | v1.2 |
-| Radiography | `radiography` | ⚪ Pending | TBD | v1.2 |
-| Podiatry | `podiatry` | ⚪ Pending | TBD | v1.3 |
-| Dietetics | `dietetics` | ⚪ Pending | TBD | v1.3 |
-| Optometry | `optometry` | ⚪ Pending | TBD | v1.3 |
-| Speech pathology | `speech_pathology` | ⚪ Pending | TBD | v1.3 |
-| Veterinary | `veterinary` | ⚪ Pending | TBD | v1.3 |
+| Nursing | `nursing` | ✅ Shipped (6/6 drills) | Platform content seed | 2026-05-13 |
+| Pharmacy | `pharmacy` | ✅ Shipped (6/6 drills) | Platform content seed | 2026-05-13 |
+| Physiotherapy | `physiotherapy` | ✅ Shipped (6/6 drills) | Platform content seed | 2026-05-13 |
+| Dentistry | `dentistry` | ✅ Shipped (6/6 drills) | Platform content seed | 2026-05-13 |
+| Occupational therapy | `occupational_therapy` | ✅ Shipped (6/6 drills) | Platform content seed | 2026-05-13 |
+| Radiography | `radiography` | ✅ Shipped (6/6 drills) | Platform content seed | 2026-05-13 |
+| Podiatry | `podiatry` | ✅ Shipped (6/6 drills) | Platform content seed | 2026-05-13 |
+| Dietetics | `dietetics` | ✅ Shipped (6/6 drills) | Platform content seed | 2026-05-13 |
+| Optometry | `optometry` | ✅ Shipped (6/6 drills) | Platform content seed | 2026-05-13 |
+| Speech pathology | `speech_pathology` | ✅ Shipped (6/6 drills) | Platform content seed | 2026-05-13 |
+| Veterinary | `veterinary` | ✅ Shipped (6/6 drills) | Platform content seed | 2026-05-13 |
 
 ## Authoring playbook
 
-1. Copy `rulebooks/writing/drills/medicine/<drill-type>/<id>.json` to the new profession directory and adapt the items to that profession's clinical context.
-2. Bump the file `id` (e.g. `nursing-relevance-001`).
-3. Update `profession` to the canonical schema slug.
-4. Adjust `rulebookRefs` to canonical rule IDs (`R12.5`, `R03.1`, etc.) that the drill is exercising.
-5. Add a static `import` + `register(...)` call to `lib/writing-drills/loader.ts`.
-6. Add a Vitest gate row in `lib/writing-drills/__tests__/loader.test.ts` to lock the new drill.
-7. Run `npx vitest run lib/writing-drills` before opening the PR.
+1. Add authored JSON variants when a profession needs deeper practice beyond the seed coverage.
+2. Keep `profession` on the canonical schema slug (`occupational_therapy`, `speech_pathology`).
+3. Adjust `rulebookRefs` to canonical rule IDs (`R12.5`, `R03.1`, etc.) that the drill is exercising.
+4. Register any new authored JSON in `lib/writing-drills/loader.ts` and preserve unique drill IDs.
+5. Run `npx vitest run lib/writing-drills/__tests__/loader.test.ts` before opening the PR.
 
 ## Validation
 
-The drill loader's zod parse rejects any drill whose item count falls outside the per-type bounds, so a stub-only PR will fail the test gate. This is by design — the test gate prevents a profession from being marked "shipped" until its 6 drills are authored end-to-end.
+The drill loader's zod parse rejects any drill whose item count falls outside the per-type bounds. The Vitest gate now asserts every profession/type combination exists, so removing a profession drill is a test failure.
 
 ## Cross-links
 
 - `lib/writing-drills/loader.ts`
 - `lib/writing-drills/types.ts`
 - `lib/writing-drills/__tests__/loader.test.ts`
-- `rulebooks/writing/drills/medicine/**`
+- `rulebooks/writing/drills/**/abbreviation/abbreviation-001.json`
 - `docs/audits/rulebook-compliance-2026-05-10.md` item P3-3

@@ -3,11 +3,11 @@
 > Date: 2026-05-12
 > Owner: Mocks Platform team
 > Source: `docs/mocks/PROGRESS.md` § Follow-Up Waves
-> Status: planned for v1.1+
+> Status: waves 1, 2, 4, and 5 closed in code on 2026-05-13; retained as an implementation ledger.
 
 ## Why this doc exists
 
-Track B closure (May 2026) finished every Wave 5 / Wave 6 / Wave 7 / Wave 8 reviewer Medium and dead-code follow-up. The 5 follow-up waves listed at the bottom of `docs/mocks/PROGRESS.md` are larger scope and are not v1 launch blockers. Each wave is enumerated below with current state, acceptance criteria, dependencies, and risk so the next planning session has a single canonical reference.
+Track B closure (May 2026) finished every Wave 5 / Wave 6 / Wave 7 / Wave 8 reviewer Medium and dead-code follow-up. The original 5 follow-up waves are kept here for traceability; waves 1, 2, 4, and 5 have since moved from roadmap to implemented code.
 
 ---
 
@@ -15,7 +15,7 @@ Track B closure (May 2026) finished every Wave 5 / Wave 6 / Wave 7 / Wave 8 revi
 
 ### Current state
 
-The `MockReport.PayloadJson` is built from per-section `MockSectionAttempt.EvidenceJson` rows the players POST after grading. The Reading and Listening grading services already write authoritative graded rows in `ReadingAttempt` / `ListeningAttempt`, but the report aggregation in `MockService.PrepareReportPayloadAsync` re-reads the client-supplied evidence. This is correct enough for v1 because all four player pages POST `completeMockSection` with server-graded scores (closed in MOCK-GAP-008), but a strictly server-resolved adapter would let us drop the client trust completely.
+Implemented 2026-05-13. `MockReportAggregationService` owns report generation and resolves Reading / Listening through `ReadingMockSectionResultAdapter` and `ListeningMockSectionResultAdapter`, using `ReadingAttempt` / `ListeningAttempt` as the authoritative evidence source. `MockSectionResultResolverTests` lock the tamper-resistant overwrite behavior.
 
 ### Acceptance criteria
 
@@ -40,7 +40,7 @@ Medium — ~2 service files (one new aggregator, one MockService refactor) + 1 t
 
 ### Current state
 
-Speaking room state transitions are driven by the learner state machine in `app/mocks/speaking-room/[bookingId]/page.tsx` (pre → rp1-prep → rp1-speak → rp2-prep → rp2-speak → submitting → done). The tutor view (`app/expert/speaking-room/[bookingId]/page.tsx`) is read-only and cannot intervene if the learner stalls. The admin booking page also lacks transition controls.
+Implemented 2026-05-13. Live-room state transitions are durable rows in `MockLiveRoomTransitions`, versioned on `MockBooking.LiveRoomTransitionVersion`, exposed through learner/expert/admin REST endpoints, and broadcast over `/v1/mocks/live-room/hub`. Learner and expert room pages subscribe to the hub; admin operations expose transition controls.
 
 ### Acceptance criteria
 
@@ -82,7 +82,7 @@ Low — just an E2E spec + a production smoke run.
 
 ### Current state
 
-`MockService.GetItemAnalysisAsync` exposes per-question difficulty + discrimination index for Reading. Listening has equivalent grading evidence (`ListeningAnswer` per `ListeningItem`) but no analytics endpoint. Writing / Speaking are tutor-graded so item-level analysis is not currently feasible.
+Implemented 2026-05-13. Reading and Listening item analysis now expose difficulty, distractor frequency, and discrimination index. The bundle item-analysis page includes an all/listening switch and the global dashboard displays the discrimination value.
 
 ### Acceptance criteria
 
@@ -107,7 +107,7 @@ Medium — pure read-side work, no schema changes.
 
 ### Current state
 
-`MockBooking.ScheduledStartAt` is set when a booking is created but no notification fires before / after the slot. Tutors learn of new bookings only when they refresh their queue.
+Implemented 2026-05-13. `MockBookingReminderWorker` uses `MockBookingReminderPlanner` to fire 24h, 2h, and 30m reminders for the learner plus assigned tutor/interlocutor experts; notification dedupe keys make worker restarts idempotent.
 
 ### Acceptance criteria
 
@@ -133,10 +133,10 @@ Medium — new BackgroundService + worker query + tests + notification template 
 | Wave | Recommended timing | Rationale |
 | ---- | ------------------ | --------- |
 | 3 (E2E smoke) | First — v1.0.1 patch | Lowest effort; closes the only remaining V2 evidence gap. |
-| 1 (server-resolved adapters) | v1.1 | Hardens the trust boundary that V2 closure already points to. |
-| 5 (booking reminders) | v1.1 | High learner-facing value; modest effort. |
-| 4 (Listening item analysis) | v1.1 | Mirror of existing Reading analytics; admin-only impact. |
-| 2 (live-room transitions) | v1.2 | Highest scope; needs SignalR auth, learner-state hardening, admin UI. |
+| 1 (server-resolved adapters) | Done 2026-05-13 | Trust boundary moved into backend adapters. |
+| 5 (booking reminders) | Done 2026-05-13 | Learner and expert reminder fan-out implemented. |
+| 4 (Listening item analysis) | Done 2026-05-13 | Listening endpoint/UI plus discrimination index implemented. |
+| 2 (live-room transitions) | Done 2026-05-13 | SignalR, transition rows, role endpoints, and UI controls implemented. |
 
 ## Cross-links
 

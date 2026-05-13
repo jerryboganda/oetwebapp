@@ -83,17 +83,17 @@ Slice I surfaced 9 cross-slice gaps. Slice J updates the status here so the doc 
 | 4. Quote immutability (I1, I3, I11) | "no DB-level CHECK or trigger" | ✅ Live — `BillingCatalogVersionImmutabilityInterceptor` (Slice C) blocks UPDATE/DELETE on snapshot rows at the SaveChanges boundary, which covers the same threat surface as a trigger. |
 | 5. Webhook payload integrity (I5) | "no test" | ✅ Live — `PaymentWebhookHardeningTests` covers SHA-256 recomputation + diff rejection in the retry path. |
 | 6. Webhook dead-letter (I3) | "confirm threshold" | ✅ Live — `BillingOptions.WebhookMaxAttempts = 5` → `ResolveWebhookFailureStatus` → `dead_letter`. |
-| 7. Granular billing permissions | "billing:read / billing:write only" | 🟡 **DEFERRED to v1.1** — `billing:catalog_publish` and `billing:refund` would be pure-additive splits; current single `BillingWrite` covers refund + catalog publish via the same admin role and is sufficient for the launch profile. |
+| 7. Granular billing permissions | "billing:read / billing:write only" | ✅ **Live 2026-05-13** — backend policies and frontend gates now split `billing:refund_write`, `billing:catalog_write`, and `billing:subscription_write`; legacy `billing:write` remains a superset. |
 | 8. SubscriptionStatus enum coverage | "verify enum has paused / past-due" | ✅ Live — `Subscription.SubscriptionStatus` enum covers `Trial`, `Pending`, `Active`, `PastDue`, `Suspended`, `Cancelled`, `Expired`. The dispute path is modelled on `PaymentDispute` rather than a dedicated `Disputed` status; `SubscriptionStateMachine` flips `Active → Suspended` on dispute open via the audited transition path. |
-| 9. PII retention 180-day webhook payload nulling | "no retention worker" | 🟡 **DEFERRED to v1.1** — `PaymentWebhookEvent.PayloadJson` is already only the redactor's safe projection (Slice B). A scheduled retention worker is purely additive and not a launch blocker. Tracked in `docs/runbooks/billing-incident.md` §8 and `docs/BILLING.md` §8. |
+| 9. PII retention 180-day webhook payload nulling | "no retention worker" | ✅ **Live 2026-05-13** — `WebhookPiiRetentionWorker` sweeps aged webhook payloads under the configured retention window; `WebhookPiiRetentionWorkerTests` cover the nulling behavior. |
 
-Net: 7 of 9 gaps are live on `main`. The remaining 2 are explicit v1.1 follow-ups, not v1 launch blockers.
+Net: 9 of 9 gaps are live on `main`.
 
 ## Risks / follow-ups
 
 1. **Listening V2 is uncommitted.** The dirty `LearnerDbContext.cs` will need a snapshot regeneration when EF tooling next runs `dotnet ef migrations add`. Slice J's edit is append-only at line 411 and does not collide with the in-flight diff.
 2. **`Wallet.RowVersion` on Postgres production**. `IsRowVersion()` on Npgsql resolves to `xmin`, but the existing `ConfigureXminToken<>` path is the canonical mechanism for billing entities. The Wallet pairing of `LastUpdatedAt + RowVersion` is intentionally belt-and-braces; production DB performance impact is zero (no extra column reads when neither token changes).
-3. **`v1.1` follow-ups documented above** — none block launch.
+3. **Operational follow-up:** confirm production retention settings during deployment review; no schema or code gap remains.
 
 ## Validation
 
@@ -121,7 +121,7 @@ The full Slice J adjacent test sweep runs as part of Track D's cross-track valid
 
 1. Applied 5 outstanding shared-file diffs from slices A and G: `Wallet.RowVersion` (byte[] + EF model + migration `20260512100000`), `lib/csv-export.ts` formula-prefix sanitization, and `app/admin/audit-logs/page.tsx` `?search=...` hydration.
 2. Verified 13 of the 18 proposed shared diffs across slices A/B/C/D/F/G are already live on `main` via separate commits.
-3. Reconciled Slice I's 9 doc-truth gaps: 7 live, 2 explicit v1.1 follow-ups (granular billing permissions, PII retention worker).
+3. Reconciled Slice I's 9 doc-truth gaps: 9 live after granular billing permissions and PII retention worker closure.
 4. Added 14 new tests (12 csv-export injection + 2 audit-logs hydration); 0 regressions in 14 existing csv-export tests.
 5. Backend build clean (0 errors); frontend `tsc --noEmit` clean.
 6. The Listening V2 in-flight diff is preserved — Slice J's `LearnerDbContext.cs` edit is append-only at the existing Wallet section and does not touch the dirty Listening V2 region further down the file.

@@ -6,8 +6,11 @@ Related documents:
 
 - [Master Product Manual](./master-product-manual.md)
 - [Expert Console Manual](./expert-console-manual.md)
+- [Sponsor Portal Manual](./sponsor-portal-manual.md)
 - [Admin Dashboard and CMS Manual](./admin-dashboard-cms-manual.md)
 - [Cross-System Business Logic and Workflows](./cross-system-business-logic-and-workflows.md)
+- [Route, API, and Domain Surface Index](./route-api-domain-surface-index.md)
+- [Reference Appendix](./reference-appendix.md)
 
 Status labels used in this document:
 
@@ -15,61 +18,110 @@ Status labels used in this document:
 - `partial`: available but still transitional, constrained, or not fully data-driven
 - `unclear`: referenced by the system, but not confirmed strongly enough to document as a complete behavior
 
+These labels follow the canonical vocabulary in [README](./README.md) and do not by themselves mean end-to-end release validation.
+
 ## Learner Route Inventory
 
-Primary learner routes:
+The learner surface is larger than the original core OET loop. Current route coverage is grouped below; the full snapshot is maintained in [Route, API, and Domain Surface Index](./route-api-domain-surface-index.md).
+
+Core preparation:
 
 - `/`
 - `/onboarding`
+- `/onboarding-tour`
 - `/goals`
+- `/goals/study-commitment`
 - `/diagnostic`
 - `/diagnostic/hub`
 - `/diagnostic/results`
+- `/diagnostic/insights`
 - `/diagnostic/writing`
 - `/diagnostic/speaking`
 - `/diagnostic/reading`
 - `/diagnostic/listening`
 - `/study-plan`
-- `/writing`
-- `/writing/library`
-- `/writing/player`
-- `/writing/result`
-- `/writing/feedback`
-- `/writing/revision`
-- `/writing/model`
-- `/writing/expert-request`
-- `/speaking`
-- `/speaking/selection`
-- `/speaking/check`
-- `/speaking/roleplay/[id]`
-- `/speaking/task/[id]`
-- `/speaking/results/[id]`
-- `/speaking/transcript/[id]`
-- `/speaking/phrasing/[id]`
-- `/speaking/expert-review/[id]`
-- `/reading`
-- `/reading/player/[id]`
-- `/reading/results/[id]`
-- `/listening`
-- `/listening/player/[id]`
-- `/listening/results/[id]`
-- `/listening/review/[id]`
-- `/listening/drills/[id]`
-- `/mocks`
-- `/mocks/setup`
-- `/mocks/player/[id]`
-- `/mocks/report/[id]`
-- `/mocks/[id]`
-- `/progress`
+- `/study-plan/drift`
+- `/dashboard`
+- `/dashboard/project`
+- `/dashboard/score-calculator`
+- `/next-actions`
+- `/predictions`
 - `/readiness`
-- `/submissions`
-- `/submissions/[id]`
-- `/submissions/compare`
-- `/billing`
-- `/settings`
-- `/settings/[section]`
+- `/progress`
+- `/progress/comparative`
+- `/remediation`
+- `/learning-paths`
 
-Support and account routes exist separately under the auth route group and are not the main learner preparation surface.
+OET sub-test and mock routes:
+
+- `/writing`, `/writing/library`, `/writing/player`, `/writing/result`, `/writing/feedback`, `/writing/revision`, `/writing/model`, `/writing/expert-request`, `/writing/analytics`, `/writing/compare`, `/writing/phrase-suggestions`, `/writing/rulebook`, `/writing/rulebook/[code]`, `/writing/drills`, `/writing/drills/[type]`, `/writing/drills/[type]/[id]`
+- `/speaking`, `/speaking/selection`, `/speaking/check`, `/speaking/roleplay/[id]`, `/speaking/task/[id]`, `/speaking/results/[id]`, `/speaking/transcript/[id]`, `/speaking/phrasing/[id]`, `/speaking/expert-review/[id]`, `/speaking/mocks`, `/speaking/mocks/[id]`, `/speaking/drills`, `/speaking/fluency-timeline`, `/speaking/rulebook`, `/speaking/rulebook/[code]`
+- `/reading`, `/reading/practice`, `/reading/player/[id]`, `/reading/results/[id]`, `/reading/paper/[paperId]`, `/reading/paper/[paperId]/results`
+- `/listening`, `/listening/player/[id]`, `/listening/results`, `/listening/results/[id]`, `/listening/review/[id]`, `/listening/drills/[id]`, `/listening/pathway`, `/listening/curriculum`, `/listening/classes`, `/listening/test-rules`, `/listening/analytics`
+- `/mocks`, `/mocks/setup`, `/mocks/player/[id]`, `/mocks/report/[id]`, `/mocks/[id]`, `/mocks/diagnostic`, `/mocks/simulation`, `/mocks/bookings`, `/mocks/speaking-room/[bookingId]`
+- `/submissions`, `/submissions/[id]`, `/submissions/compare`
+
+Learning, language support, and practice:
+
+- `/grammar`, `/grammar/[lessonId]`, `/grammar/topics/[slug]`
+- `/pronunciation`, `/pronunciation/[drillId]`, `/pronunciation/discrimination/[drillId]`
+- `/conversation`, `/conversation/[sessionId]`, `/conversation/[sessionId]/results`
+- `/vocabulary`, `/vocabulary/browse`, `/vocabulary/flashcards`, `/vocabulary/quiz`, `/vocabulary/quiz/history`, `/vocabulary/terms/[termId]`
+- `/recalls`, `/recalls/cards`, `/recalls/library`, `/recalls/words`
+- `/lessons`, `/lessons/[id]`, `/lessons/discover`, `/lessons/programs`, `/lessons/programs/[programId]`
+- `/strategies`, `/strategies/[id]`
+- `/practice`, `/practice/interleaved`, `/practice/quick-session`
+
+Community, commercial, and support:
+
+- `/community`, `/community/groups`, `/community/ask-an-expert`, `/community/threads/my`, `/community/threads/new`, `/community/threads/[threadId]`, `/community/threads/[threadId]/edit`
+- `/peer-review`, `/review`, `/reviews`, `/escalations`, `/escalations/[id]`
+- `/billing`, `/billing/plans`, `/billing/upgrade`, `/billing/score-guarantee`, `/billing/referral`, `/pricing`, `/freeze`, `/referral`
+- `/marketplace`, `/marketplace/packages`, `/private-speaking`, `/private-speaking/success`, `/private-speaking/cancel`, `/tutoring`, `/exam-booking`
+- `/achievements`, `/achievements/certificate`, `/achievements/certificates`, `/leaderboard`
+- `/settings`, `/settings/[section]`, `/settings/ai`, `/settings/reminders`, `/settings/sessions`
+- `/score-calculator`, `/exam-guide`, `/feedback-guide`, `/test-day`, `/ielts-guide`, `/history`
+
+Support and account routes include `/sign-in`, `/register`, `/register/success`, `/forgot-password`, `/forgot-password/verify`, `/reset-password`, `/reset-password/success`, `/verify-email`, `/mfa/challenge`, `/mfa/setup`, `/mfa/recovery`, `/auth/callback/[provider]`, `/terms`, and `/privacy`.
+
+Route semantics to remember:
+
+- `/dashboard` and `/dashboard/project` re-export the root dashboard.
+- `/score-calculator` and `/dashboard/score-calculator` are separate implementations.
+- `/pricing` is public acquisition/comparison, while `/billing/plans` is the authenticated billing-plan surface.
+- `/referral` and `/billing/referral` are separate referral/growth flows and should be checked together during release QA.
+
+## Current Coverage Addendum
+
+The detailed sections below still describe the original core preparation loop. The following domains must also be treated as learner-facing product surfaces:
+
+- Grammar: server-authoritative lessons and topic routes, governed by admin authoring, entitlement, and grounded AI draft policy.
+- Pronunciation and Recalls: pronunciation drills and discrimination routes exist, while learner navigation emphasizes Recalls as the integrated recall/pronunciation surface.
+- AI Conversation: session and result routes backed by server-authoritative ASR/TTS/AI provider policy and admin scenario management; learner availability depends on published scenarios/task types and entitlement.
+- Learner AI Settings: BYOK credentials, usage, preferences, and credits live under `/settings/ai` and `/v1/me/ai/*`, with user-derived identity, credential validation throttling, per-feature overrides, platform fallback behavior, and quota/credit visibility.
+- Vocabulary: browse, terms, flashcards, quiz, history, admin import, and AI draft support.
+- Lessons and Strategies: video/program discovery and strategy guide surfaces, some feature-flagged through learner navigation.
+- Writing analytics: route and UI exist, but the learner-facing page currently uses deterministic seed weakness data until a learner weaknesses API ships.
+- Practice and Remediation: quick-session, interleaved practice, learning paths, remediation, next actions, and predictions extend the study-plan loop.
+- Community and review: threads, groups, ask-an-expert, peer review, reviews, and escalations create social/support evidence around preparation.
+- Commercial workflows: billing, plans, upgrade, score guarantee, referral, marketplace, private speaking, tutoring, exam booking, pricing, and freeze routes affect entitlement and service delivery.
+- Gamification: achievements, certificates, and leaderboard surfaces connect learner progress to motivation and proof-of-completion artifacts.
+
+## Compact Feature Directory for Newer Domains
+
+| Domain | Status | Learner value | Key caveat |
+| --- | --- | --- | --- |
+| Grammar | `implemented` | lesson/topic practice | server-authoritative with entitlement and grounded admin drafts |
+| Pronunciation / Recalls | `implemented` | recall cards, pronunciation drills, discrimination | learner nav emphasizes Recalls while legacy pronunciation routes remain |
+| AI Conversation | `partial` | scenario conversation practice and results | server-authoritative, but learner availability depends on published scenarios/task types and entitlement |
+| Vocabulary | `implemented` | browse, terms, flashcards, quiz history | admin import and AI draft quality affect learner coverage |
+| Lessons | `partial` | video/program learning | release-flag and published-content dependent |
+| Strategies | `partial` | exam strategy guides | release-flag and published-content dependent |
+| Practice / Remediation | `implemented` | quick, interleaved, targeted recovery work | depends on evidence quality from diagnostics and attempts |
+| Community / Review | `implemented` | peer, expert, and escalation support | moderation and escalation governance determine operational quality |
+| Commercial workflows | `implemented` | billing, marketplace, private speaking, tutoring | entitlement/payment behavior must be checked per release |
+| Gamification | `implemented` | achievements, certificates, leaderboard | proof artifacts depend on canonical progress data |
+| Learner AI settings | `implemented` | BYOK credentials, usage, preferences, credits | credential custody, fallback policy, and quotas are security-sensitive |
 
 ## 1. Onboarding
 
@@ -820,16 +872,20 @@ Support and account routes exist separately under the auth route group and are n
 - Business logic served: Supports one of the two objective OET sub-tests with direct answer-based practice.
 - Location:
   - `/reading`
+  - `/reading/practice`
   - `/reading/player/[id]`
   - `/reading/results/[id]`
+  - `/reading/paper/[paperId]`
+  - `/reading/paper/[paperId]/results`
 - Who uses it: Learners
 - When it is used: During reading preparation or mock sections
 - Inputs:
   - reading task
+  - reading paper or scoped practice mode
   - learner answers
 - Outputs / Results:
   - submitted attempt
-  - score and explanations
+  - score and review metadata; answer-key-only field exposure remains an unresolved release-blocking issue tracked as PM-001
 - Main user actions:
   - open reading task
   - navigate questions
@@ -846,7 +902,10 @@ Support and account routes exist separately under the auth route group and are n
 - Edge cases / States:
   - practice vs exam mode in player
 - Notes:
-  - Reading results are objective and explanation-driven rather than human reviewed.
+  - Reading results are objective and review-driven rather than human reviewed.
+  - Current post-submit correct-answer/explanation exposure conflicts with the learner-safe DTO invariant and must be reconciled by the Reading owner before release sign-off.
+  - Per the AGENTS hard ban, learner-facing endpoints must never serialize `CorrectAnswerJson`, `ExplanationMarkdown`, or `AcceptedSynonymsJson` in any pre- or post-attempt projection. PM-001 tracks the open backend conflict where this can occur today.
+  - Reading authoring remains canonical 42-item structure: 20 Part A, 6 Part B, and 16 Part C items.
 
 ## 9. Listening Module
 
@@ -859,6 +918,11 @@ Support and account routes exist separately under the auth route group and are n
   - `/listening/results/[id]`
   - `/listening/review/[id]`
   - `/listening/drills/[id]`
+  - `/listening/pathway`
+  - `/listening/curriculum`
+  - `/listening/classes`
+  - `/listening/test-rules`
+  - `/listening/analytics`
 - Who uses it: Learners
 - When it is used: During listening preparation or mock sections
 - Inputs:
@@ -887,6 +951,9 @@ Support and account routes exist separately under the auth route group and are n
   - practice vs exam playback constraints
   - results-to-review navigation
   - drill targeting behavior
+- Notes:
+  - Listening full-test authoring remains canonical 42-item structure: Part A 24, Part B 6, and Part C 12.
+  - Listening raw-to-scaled conversion must use the canonical OET scoring service.
 
 ## 10. Mock Center
 
@@ -970,6 +1037,9 @@ Support and account routes exist separately under the auth route group and are n
   - report loading from session completion
   - prior-comparison rendering
   - weakest-area CTA into study plan
+- Notes:
+  - When canonical subtest data is available, the learner-facing OET Statement of Results card is produced through the `MockReport -> OetStatementOfResults` adapter.
+  - The result card keeps the practice disclaimer and remains bound to `docs/OET-RESULT-CARD-SPEC.md`.
 
 ## 11. Readiness
 
@@ -1116,6 +1186,34 @@ Support and account routes exist separately under the auth route group and are n
   - speaking audio experience
   - readiness target logic
 
+## 16. Learner AI Settings
+
+- Status: `implemented`
+- Purpose: Let learners manage AI credential custody, provider preferences, usage visibility, and credit balances.
+- Business logic served: Supports BYOK/platform-fallback choices without accepting arbitrary user IDs from input.
+- Location:
+  - `/settings/ai`
+  - `/v1/me/ai/credentials`
+  - `/v1/me/ai/usage`
+  - `/v1/me/ai/preferences`
+  - `/v1/me/ai/credits`
+- Who uses it: Learners using AI-supported features where policy permits personal provider preferences.
+- Main inputs:
+  - provider code and API key for BYOK credentials
+  - model allowlist
+  - AI preference mode
+  - per-feature override JSON
+- Main outputs:
+  - credential list and key hints
+  - usage/quota snapshot
+  - stored preference row
+  - credit balance and ledger entries
+- Important constraints:
+  - user identity is derived from the authenticated token, not from request body input
+  - credential creation uses the AI credential validation rate limiter
+  - platform-only AI features can still refuse BYOK even when learner credentials exist
+  - usage and credit visibility must match admin AI quota and billing policy
+
 ## Learner QA Focus Areas
 
 - onboarding -> goals -> diagnostic routing
@@ -1129,11 +1227,14 @@ Support and account routes exist separately under the auth route group and are n
 - submission history compare and feedback reopening
 - billing impact on review-request eligibility
 - settings persistence by section
+- AI settings credential validation, fallback mode, usage, and credit visibility
+- Conversation empty state when no scenario/task types are published or entitled
 
 ## Observed Gaps and Partial Implementations
 
 - Diagnostic flows are implemented but still use fixed task IDs in the current UI.
 - Speaking task mode selection exposes an AI path that is not functionally available.
+- AI Conversation routes exist, but learner availability depends on published scenarios/task types and entitlement.
 - Mock player orchestration is real but not fully data-driven yet.
 - Some UI copy contains encoding artifacts.
 - Reading and Listening review flows are solid for objective practice, but the remediation depth is lighter than the productive-skill revision loop.

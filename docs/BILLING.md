@@ -288,34 +288,35 @@ new provider must be written behind `IPaymentGatewayService`.
 
 The current granular permission set lives in
 [`backend/src/OetLearner.Api/Domain/AuthEntities.cs`](../backend/src/OetLearner.Api/Domain/AuthEntities.cs#L160)
-(`AdminPermissions`). Two billing-specific values exist today:
-`billing:read` and `billing:write`. `system_admin` grants everything.
+(`AdminPermissions`). Billing uses a read permission plus granular write scopes.
+`billing:write` is retained as a legacy superset and `system_admin` grants everything.
 
 | Endpoint surface | Required permission |
 | ---------------- | ------------------- |
 | `GET /v1/admin/billing/plans` and version history | `billing:read` |
-| `POST/PATCH /v1/admin/billing/plans/**` (catalog mutation) | `billing:write` |
+| `POST/PATCH /v1/admin/billing/plans/**` (catalog mutation) | `billing:catalog_write` or `billing:write` |
 | `GET /v1/admin/billing/addons` / `GET .../coupons` | `billing:read` |
-| `POST/PATCH /v1/admin/billing/addons/**` / `.../coupons/**` | `billing:write` |
+| `POST/PATCH /v1/admin/billing/addons/**` / `.../coupons/**` | `billing:catalog_write` or `billing:write` |
 | `GET /v1/admin/billing/subscriptions` | `billing:read` |
-| `POST /v1/admin/billing/subscriptions/{id}/cancel`, `.../pause`, `.../resume` | `billing:write` |
+| `POST /v1/admin/billing/subscriptions/{id}/cancel`, `.../pause`, `.../resume`, manual create/change/extend/status | `billing:subscription_write` or `billing:write` |
 | `GET /v1/admin/billing/invoices` | `billing:read` |
-| `POST /v1/admin/billing/refunds` | `billing:write` |
+| `POST /v1/admin/billing/refunds` | `billing:refund_write` or `billing:write` |
 | `GET /v1/admin/billing/disputes` | `billing:read` |
-| `POST /v1/admin/billing/disputes/{id}/evidence` | `billing:write` |
+| `POST /v1/admin/billing/disputes/{id}/evidence` | `billing:refund_write` or `billing:write` |
 | `GET /v1/admin/billing/webhooks` (backlog view) | `billing:read` |
-| `POST /v1/admin/billing/webhooks/{id}/retry` | `billing:write` |
+| `POST /v1/admin/billing/webhooks/{id}/retry` | `billing:subscription_write` or `billing:write` |
 | `GET /v1/admin/billing/wallet/{userId}` | `billing:read` |
-| `POST /v1/admin/billing/wallet/{userId}/adjust` | `billing:write` |
-| `POST /v1/admin/billing/wallet/tiers/**` | `billing:write` |
+| `POST /v1/admin/billing/wallet/{userId}/adjust` | `billing:subscription_write` or `billing:write` |
+| `POST /v1/admin/billing/wallet/tiers/**` | `billing:catalog_write` or `billing:write` |
 | Any endpoint that grants `manage_permissions` itself | `manage_permissions` (separate from `billing:*`) |
 | `POST /v1/billing/webhooks/{provider}` | unauthenticated; signature gates access |
 | `GET /v1/billing/quote`, `POST /v1/billing/quote`, `POST /v1/billing/checkout` | learner JWT |
 | `GET /v1/wallet`, `POST /v1/wallet/top-up` | learner JWT |
 
-> **Gap:** there is no granular split for refunds vs catalog edits. Slice C
-> may propose `billing:refund` and `billing:catalog_publish` as additions.
-> Tracked in `docs/billing-hardening/I-docs.md`.
+Frontend admin billing pages mirror the same split: catalog controls require
+`billing:catalog_write`, subscription lifecycle controls require
+`billing:subscription_write`, and legacy `billing:write` keeps existing admins
+working as a superset.
 
 ---
 

@@ -6,8 +6,11 @@ Related documents:
 
 - [Master Product Manual](./master-product-manual.md)
 - [Learner App Manual](./learner-app-manual.md)
+- [Sponsor Portal Manual](./sponsor-portal-manual.md)
 - [Admin Dashboard and CMS Manual](./admin-dashboard-cms-manual.md)
 - [Cross-System Business Logic and Workflows](./cross-system-business-logic-and-workflows.md)
+- [Route, API, and Domain Surface Index](./route-api-domain-surface-index.md)
+- [Reference Appendix](./reference-appendix.md)
 
 Status labels used in this document:
 
@@ -15,19 +18,72 @@ Status labels used in this document:
 - `partial`
 - `unclear`
 
+`implemented` means the current UI and API surface exist. `partial` means the surface exists but depends on upstream artifacts, policy, capacity, or transitional data. `unclear` means the route or workflow is referenced but was not confirmed strongly enough to document as complete behavior.
+
+These labels follow the canonical vocabulary in [README](./README.md) and do not by themselves mean end-to-end release validation.
+
 ## Expert Route Inventory
+
+The expert surface currently contains 26 page routes. It includes the original review console plus onboarding, private speaking, messages, compensation, quality tooling, and live/mock speaking operations.
+
+Review and dashboard routes:
 
 - `/expert`
 - `/expert/queue`
-- `/expert/calibration`
-- `/expert/calibration/[caseId]`
-- `/expert/metrics`
-- `/expert/schedule`
-- `/expert/learners`
-- `/expert/learners/[learnerId]`
+- `/expert/queue-priority`
 - `/expert/review/[reviewRequestId]`
 - `/expert/review/writing/[reviewRequestId]`
 - `/expert/review/speaking/[reviewRequestId]`
+
+Quality, calibration, and performance routes:
+
+- `/expert/calibration`
+- `/expert/calibration/[caseId]`
+- `/expert/calibration/speaking`
+- `/expert/metrics`
+- `/expert/scoring-quality`
+- `/expert/rubric-reference`
+
+Learner, schedule, and tutor operations:
+
+- `/expert/learners`
+- `/expert/learners/[learnerId]`
+- `/expert/schedule`
+- `/expert/private-speaking`
+- `/expert/speaking-room/[bookingId]`
+- `/expert/mocks/bookings`
+- `/expert/messages`
+- `/expert/messages/[threadId]`
+- `/expert/compensation`
+- `/expert/onboarding`
+
+Assisted-review and support routes:
+
+- `/expert/ask-an-expert`
+- `/expert/ai-prefill`
+- `/expert/annotation-templates`
+- `/expert/mobile-review`
+
+## Current Coverage Addendum
+
+- Private speaking is a first-class expert workstream, not only a learner commercial route.
+- Mock booking and speaking-room routes connect expert operations to learner speaking-room experiences.
+- Messages and ask-an-expert routes support communication outside the formal review workspace.
+- Compensation gives experts an operational view of payable or completed work.
+- Queue priority, scoring quality, rubric reference, annotation templates, AI prefill, mobile review, and speaking calibration are specialist review-quality surfaces.
+- Onboarding can be inserted into the expert nav for experts whose profile is incomplete.
+
+## Additional Expert Workstream Reference
+
+| Workstream | Status | Purpose | QA focus |
+| --- | --- | --- | --- |
+| Private speaking | `implemented` | manage tutor availability and paid speaking work | booking visibility, schedule alignment, room launch |
+| Speaking room | `implemented` | deliver booked live speaking sessions | booking auth, audio/session state, completion handling |
+| Mock bookings | `implemented` | support scheduled mock-related speaking work | queue visibility and handoff to room/review surfaces |
+| Messages and ask-an-expert | `implemented` | communicate outside formal review workspaces | thread routing, permissions, notification behavior |
+| Compensation | `implemented` | expose payable/completed expert work | period filters and payout-state accuracy |
+| Onboarding | `implemented` | complete expert profile readiness | nav insertion and completion persistence |
+| Quality aids | `implemented` | AI prefill, annotation templates, queue priority, rubric reference, scoring quality, mobile review | advisory-only AI use, template persistence, mobile-safe review |
 
 ## 1. Expert Dashboard
 
@@ -311,5 +367,6 @@ Status labels used in this document:
 
 - Expert workspaces are implemented and detailed, but they depend on upstream artifact readiness; transcript or AI-flag readiness can produce partial review states.
 - The redirect route `/expert/review/[reviewRequestId]` is operational infrastructure and should be tested whenever sub-test routing logic changes.
-- No separate reviewer scheduling marketplace or advanced capacity-balancing surface was confirmed beyond weekly availability management.
+- Advanced capacity is split across schedule, queue priority, private speaking, mock bookings, messages, compensation, and admin review/private-speaking operations rather than one single capacity screen.
 
+Revision source: `ROUTE-SNAPSHOT-2026-05-13`.

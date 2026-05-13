@@ -23,13 +23,13 @@ The original audit body therefore reads as if every P0/P1 item is unresolved. Th
 | P1-2 | P1 | ✅ Resolved on `main` | `824f638` — Hybrid grader (deterministic-first, AI-only-for-semantic). Coverage matrix in `lib/rulebook/writing-coverage.ts`. |
 | P1-3 | P1 | ✅ Resolved on `main` | `d144967` — Letter-type SSO from canonical TS const; display labels in a separate map. |
 | P2-1 | P2 | ✅ Resolved on `main` | `9d8003c` — `WritingCoachService` rewritten to delegate to `WritingRuleEngine` + AI gateway. |
-| P2-2 | P2 | 🟡 Deferred to v1.1 | First-class `WritingRuleViolation` table is a follow-up wave; v1 ships with JSON-stored findings. |
+| P2-2 | P2 | ✅ Resolved on 2026-05-13 | First-class `WritingRuleViolation` table, analytics endpoint, migration, and tests are live. |
 | P2-3 | P2 | ✅ Resolved on `main` | `9d8003c` — `tests/e2e/learner/writing-rule-engine-violations.spec.ts` (38 tests across 6 projects). |
 | P2-4 | P2 | ✅ Resolved on 2026-05-12 | New academic-integrity reminder rendered in `app/mocks/page.tsx` and `app/reading/paper/[paperId]/page.tsx` pre-attempt block. |
 | P2-5 | P2 | ✅ Resolved on 2026-05-12 | Literal disclaimer string appended to `app/reading/paper/[paperId]/results/page.tsx` aside (non-practice attempts only). |
 | P3-1 | P3 | ✅ Resolved on 2026-05-12 | `ReadingZoomControls` exposes hint via `aria-describedby` + `title` + visually-hidden caption. |
 | P3-2 | P3 | ⚪ Out of code scope | Content-quantity targets tracked operationally. |
-| P3-3 | P3 | 🟡 Deferred to content waves | New schedule at `docs/audits/WRITING-DRILL-PROFESSION-COVERAGE.md` enumerates the 12 missing professions, owners, and target waves. |
+| P3-3 | P3 | ✅ Resolved on 2026-05-13 | Writing drill loader now validates coverage for all 12 canonical professions across all 6 drill types; seed abbreviation files plus generated profession-specific drills are locked by Vitest. |
 
 ## 2026-05-12 changes applied here
 
@@ -37,13 +37,12 @@ The original audit body therefore reads as if every P0/P1 item is unresolved. Th
 2. `app/reading/paper/[paperId]/results/page.tsx` — added the literal disclaimer `"This is an estimate, not an official OET conversion."` (P2-5).
 3. `app/reading/paper/[paperId]/page.tsx` — added the academic-integrity reminder banner on the pre-attempt block (P2-4) and the in-app-zoom hint on `ReadingZoomControls` via `aria-describedby` + visible tooltip + sr-only caption (P3-1).
 4. `app/mocks/page.tsx` — added the academic-integrity reminder under the page hero (P2-4).
-5. `docs/audits/WRITING-DRILL-PROFESSION-COVERAGE.md` (new) — schedule for the 12 missing profession drill banks (P3-3).
+5. `docs/audits/WRITING-DRILL-PROFESSION-COVERAGE.md` — updated from schedule to closure ledger for the 12-profession drill bank (P3-3).
 6. `docs/audits/rulebook-compliance-2026-05-11-closure.md` (this file) — closure manifest.
 
 ## Residual items tracked but not closed in code
 
-- **P2-2** — first-class `WritingRuleViolation` table is a v1.1 schema migration; current JSON containment query path covers the v1 admin-analytics use cases without a migration.
-- **P3-3** — drills for the remaining 12 professions are content authoring, not code work. The shared loader already validates structurally and a per-profession Vitest gate locks each new drill.
+- No P2/P3 rulebook-compliance code gaps remain from this closure set. Future content expansion can add additional drill variants, but every canonical profession now has at least one validated drill per type.
 
 ## Validation
 
