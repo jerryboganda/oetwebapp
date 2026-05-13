@@ -8,8 +8,28 @@ production build stays green whether or not Storybook is installed.
 
 ## First-time install
 
+Storybook devDependencies are intentionally **not** in `package.json`
+because Storybook 9's `@storybook/nextjs-vite` peer-depends on `vite@^7`
+which conflicts with our test stack (`vitest@4` pulls a different
+`vite`). Adding them would break `npm ci` on the production VPS.
+
+To work on stories locally, install Storybook on demand with
+`--legacy-peer-deps` (this writes nothing to the lockfile because it
+only touches your local `node_modules`):
+
 ```bash
-npm install
+npm install --save-dev --legacy-peer-deps \
+  storybook@^9 \
+  @storybook/nextjs-vite@^9 \
+  @storybook/react@^9 \
+  @storybook/addon-a11y@^9
+```
+
+Then add the scripts to your local `package.json` (don't commit them):
+
+```jsonc
+"storybook": "storybook dev -p 6006",
+"build-storybook": "storybook build"
 ```
 
 That pulls the Storybook devDependencies declared in `package.json`:
