@@ -33,6 +33,7 @@ const DISTRACTOR_CATEGORY_OPTIONS: { value: ListeningDistractorCategory | ''; la
   { value: 'wrong_speaker',     label: 'Wrong speaker held the view' },
   { value: 'opposite_meaning',  label: 'Opposite meaning / negation flip' },
   { value: 'reused_keyword',    label: 'Re-used keyword from the audio' },
+  { value: 'out_of_scope',      label: 'Out of scope / not answered by audio' },
 ];
 
 const SPEAKER_ATTITUDE_OPTIONS: { value: ListeningSpeakerAttitude | ''; label: string }[] = [

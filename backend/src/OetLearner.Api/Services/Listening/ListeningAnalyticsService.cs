@@ -25,6 +25,8 @@ public interface IListeningAnalyticsService
 {
     Task<ListeningStudentAnalyticsDto> GetMyAnalyticsAsync(string userId, CancellationToken ct);
     Task<ListeningAdminAnalyticsDto> GetAdminAnalyticsAsync(int days, CancellationToken ct);
+    Task<ListeningClassAnalyticsDto> GetClassAnalyticsAsync(string ownerUserId, string classId, int days, CancellationToken ct);
+    Task<ListeningAttemptExportDto> ExportAttemptAsync(string attemptId, CancellationToken ct);
 }
 
 public sealed record ListeningPartBreakdownDto(
@@ -80,6 +82,80 @@ public sealed record ListeningAdminAnalyticsDto(
     IReadOnlyList<ListeningHardestQuestionDto> HardestQuestions,
     IReadOnlyList<ListeningDistractorHeatDto> DistractorHeat,
     IReadOnlyList<ListeningCommonMisspellingDto> CommonMisspellings);
+
+public sealed record ListeningClassAnalyticsDto(
+    string ClassId,
+    string ClassName,
+    string? Description,
+    int MemberCount,
+    ListeningTeacherAnalyticsDto Analytics);
+
+public sealed record ListeningTeacherDistractorHeatDto(
+    string PaperId,
+    int QuestionNumber,
+    string CorrectAnswer,
+    int WrongAnswerCount);
+
+public sealed record ListeningTeacherAnalyticsDto(
+    int Days,
+    int CompletedAttempts,
+    int? AverageScaledScore,
+    double PercentLikelyPassing,
+    IReadOnlyList<ListeningPartBreakdownDto> ClassPartAverages,
+    IReadOnlyList<ListeningHardestQuestionDto> HardestQuestions,
+    IReadOnlyList<ListeningTeacherDistractorHeatDto> DistractorHeat);
+
+public sealed record ListeningAttemptExportDto(
+    string Source,
+    string AttemptId,
+    string UserId,
+    string PaperId,
+    string Status,
+    string Mode,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? SubmittedAt,
+    int? RawScore,
+    int? ScaledScore,
+    int? MaxRawScore,
+    string? AnswersJson,
+    string? DraftContent,
+    string? Scratchpad,
+    string? ChecklistJson,
+    string? TranscriptJson,
+    string? AnalysisJson,
+    string? AudioMetadataJson,
+    string? PolicySnapshotJson,
+    string? ScopeJson,
+    string? NavigationStateJson,
+    string? AudioCueTimelineJson,
+    string? TechReadinessJson,
+    string? AnnotationsJson,
+    string? HumanScoreOverridesJson,
+    string? LastQuestionVersionMapJson,
+    IReadOnlyList<ListeningAttemptAnswerExportDto> Answers,
+    IReadOnlyList<ListeningAttemptEvaluationExportDto> Evaluations);
+
+public sealed record ListeningAttemptAnswerExportDto(
+    string AnswerId,
+    string QuestionId,
+    string UserAnswerJson,
+    bool? IsCorrect,
+    int PointsEarned,
+    string? SelectedDistractorCategory,
+    int? QuestionVersionSnapshot,
+    int? OptionVersionSnapshot,
+    DateTimeOffset AnsweredAt);
+
+public sealed record ListeningAttemptEvaluationExportDto(
+    string EvaluationId,
+    string SubtestCode,
+    string State,
+    string ScoreRange,
+    string? GradeRange,
+    string CriterionScoresJson,
+    DateTimeOffset? GeneratedAt,
+    string StatusReasonCode,
+    string StatusMessage);
 
 public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningAnalyticsService
 {
@@ -257,7 +333,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
 
         int? best = scaledByAttempt.Count == 0 ? null : scaledByAttempt.Values.Max();
         int? avg = scaledByAttempt.Count == 0 ? null : (int)Math.Round(scaledByAttempt.Values.Average());
-        var passing = (best ?? 0) >= 350;
+        var passing = (best ?? 0) >= OetScoring.ScaledPassGradeB;
 
         var plan = BuildStudentActionPlan(weaknesses, partBreakdown, passing);
 
@@ -311,33 +387,228 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
     // ── Admin view ───────────────────────────────────────────────────────
 
     public async Task<ListeningAdminAnalyticsDto> GetAdminAnalyticsAsync(int days, CancellationToken ct)
+        => await BuildAggregateAnalyticsAsync(days, scopedTeacherClassId: null, ct);
+
+    public async Task<ListeningAttemptExportDto> ExportAttemptAsync(string attemptId, CancellationToken ct)
+    {
+        var relationalAttempt = await db.ListeningAttempts.AsNoTracking()
+            .FirstOrDefaultAsync(attempt => attempt.Id == attemptId, ct);
+        if (relationalAttempt is not null)
+        {
+            var answers = await db.ListeningAnswers.AsNoTracking()
+                .Where(answer => answer.ListeningAttemptId == attemptId)
+                .OrderBy(answer => answer.ListeningQuestionId)
+                .Select(answer => new ListeningAttemptAnswerExportDto(
+                    answer.Id,
+                    answer.ListeningQuestionId,
+                    answer.UserAnswerJson,
+                    answer.IsCorrect,
+                    answer.PointsEarned,
+                    answer.SelectedDistractorCategory == null ? null : answer.SelectedDistractorCategory.ToString(),
+                    answer.QuestionVersionSnapshot,
+                    answer.OptionVersionSnapshot,
+                    answer.AnsweredAt))
+                .ToListAsync(ct);
+            var evaluations = await LoadEvaluationExportsAsync(attemptId, ct);
+
+            return new ListeningAttemptExportDto(
+                Source: "listening-v2",
+                AttemptId: relationalAttempt.Id,
+                UserId: relationalAttempt.UserId,
+                PaperId: relationalAttempt.PaperId,
+                Status: relationalAttempt.Status.ToString(),
+                Mode: relationalAttempt.Mode.ToString(),
+                StartedAt: relationalAttempt.StartedAt,
+                SubmittedAt: relationalAttempt.SubmittedAt,
+                RawScore: relationalAttempt.RawScore,
+                ScaledScore: relationalAttempt.ScaledScore,
+                MaxRawScore: relationalAttempt.MaxRawScore,
+                AnswersJson: null,
+                DraftContent: null,
+                Scratchpad: null,
+                ChecklistJson: null,
+                TranscriptJson: null,
+                AnalysisJson: null,
+                AudioMetadataJson: null,
+                PolicySnapshotJson: relationalAttempt.PolicySnapshotJson,
+                ScopeJson: relationalAttempt.ScopeJson,
+                NavigationStateJson: relationalAttempt.NavigationStateJson,
+                AudioCueTimelineJson: relationalAttempt.AudioCueTimelineJson,
+                TechReadinessJson: relationalAttempt.TechReadinessJson,
+                AnnotationsJson: relationalAttempt.AnnotationsJson,
+                HumanScoreOverridesJson: relationalAttempt.HumanScoreOverridesJson,
+                LastQuestionVersionMapJson: relationalAttempt.LastQuestionVersionMapJson,
+                Answers: answers,
+                Evaluations: evaluations);
+        }
+
+        var legacyAttempt = await db.Attempts.AsNoTracking()
+            .FirstOrDefaultAsync(attempt => attempt.Id == attemptId && attempt.SubtestCode == Subtest, ct)
+            ?? throw new KeyNotFoundException($"Listening attempt {attemptId} not found.");
+        var legacyEvaluations = await LoadEvaluationExportsAsync(attemptId, ct);
+        var scaledScore = legacyEvaluations
+            .Select(evaluation => new
+            {
+                evaluation.GeneratedAt,
+                Scaled = TryReadScaled(evaluation.CriterionScoresJson),
+            })
+            .Where(item => item.Scaled.HasValue)
+            .OrderByDescending(item => item.GeneratedAt)
+            .FirstOrDefault()
+            ?.Scaled;
+
+        return new ListeningAttemptExportDto(
+            Source: "legacy",
+            AttemptId: legacyAttempt.Id,
+            UserId: legacyAttempt.UserId,
+            PaperId: legacyAttempt.ContentId,
+            Status: legacyAttempt.State.ToString(),
+            Mode: legacyAttempt.Mode,
+            StartedAt: legacyAttempt.StartedAt,
+            SubmittedAt: legacyAttempt.SubmittedAt,
+            RawScore: null,
+            ScaledScore: scaledScore,
+            MaxRawScore: null,
+            AnswersJson: legacyAttempt.AnswersJson,
+            DraftContent: legacyAttempt.DraftContent,
+            Scratchpad: legacyAttempt.Scratchpad,
+            ChecklistJson: legacyAttempt.ChecklistJson,
+            TranscriptJson: legacyAttempt.TranscriptJson,
+            AnalysisJson: legacyAttempt.AnalysisJson,
+            AudioMetadataJson: legacyAttempt.AudioMetadataJson,
+            PolicySnapshotJson: null,
+            ScopeJson: null,
+            NavigationStateJson: null,
+            AudioCueTimelineJson: null,
+            TechReadinessJson: null,
+            AnnotationsJson: null,
+            HumanScoreOverridesJson: null,
+            LastQuestionVersionMapJson: null,
+            Answers: [],
+            Evaluations: legacyEvaluations);
+    }
+
+    public async Task<ListeningClassAnalyticsDto> GetClassAnalyticsAsync(
+        string ownerUserId,
+        string classId,
+        int days,
+        CancellationToken ct)
+    {
+        var teacherClass = await db.TeacherClasses.AsNoTracking()
+            .FirstOrDefaultAsync(row => row.Id == classId && row.OwnerUserId == ownerUserId, ct)
+            ?? throw new KeyNotFoundException($"Class {classId} not found.");
+
+        var memberCount = await db.TeacherClassMembers.AsNoTracking()
+            .Where(member => member.TeacherClassId == classId)
+            .Select(member => member.UserId)
+            .Distinct()
+            .CountAsync(ct);
+
+        var analytics = await BuildAggregateAnalyticsAsync(days, scopedTeacherClassId: classId, ct);
+        return new ListeningClassAnalyticsDto(
+            teacherClass.Id,
+            teacherClass.Name,
+            teacherClass.Description,
+            memberCount,
+            ToTeacherSafeAnalytics(analytics));
+    }
+
+    private static ListeningTeacherAnalyticsDto ToTeacherSafeAnalytics(ListeningAdminAnalyticsDto analytics)
+        => new(
+            Days: analytics.Days,
+            CompletedAttempts: analytics.CompletedAttempts,
+            AverageScaledScore: analytics.AverageScaledScore,
+            PercentLikelyPassing: analytics.PercentLikelyPassing,
+            ClassPartAverages: analytics.ClassPartAverages,
+            HardestQuestions: analytics.HardestQuestions,
+            DistractorHeat: analytics.DistractorHeat
+                .Select(item => new ListeningTeacherDistractorHeatDto(
+                    PaperId: item.PaperId,
+                    QuestionNumber: item.QuestionNumber,
+                    CorrectAnswer: item.CorrectAnswer,
+                    WrongAnswerCount: item.WrongAnswerHistogram.Values.Sum()))
+                .ToList());
+
+    private async Task<List<ListeningAttemptEvaluationExportDto>> LoadEvaluationExportsAsync(
+        string attemptId,
+        CancellationToken ct)
+        => await db.Evaluations.AsNoTracking()
+            .Where(evaluation => evaluation.AttemptId == attemptId && evaluation.SubtestCode == Subtest)
+            .OrderBy(evaluation => evaluation.GeneratedAt)
+            .Select(evaluation => new ListeningAttemptEvaluationExportDto(
+                evaluation.Id,
+                evaluation.SubtestCode,
+                evaluation.State.ToString(),
+                evaluation.ScoreRange,
+                evaluation.GradeRange,
+                evaluation.CriterionScoresJson,
+                evaluation.GeneratedAt,
+                evaluation.StatusReasonCode,
+                evaluation.StatusMessage))
+            .ToListAsync(ct);
+
+    private async Task<ListeningAdminAnalyticsDto> BuildAggregateAnalyticsAsync(
+        int days,
+        string? scopedTeacherClassId,
+        CancellationToken ct)
     {
         if (days <= 0) days = 30;
         if (days > 365) days = 365;
 
         var since = DateTimeOffset.UtcNow.AddDays(-days);
-        var attempts = await db.Attempts.AsNoTracking()
+        var clientSideSubmittedAtFilter = db.Database.IsSqlite();
+        var attemptsQuery = db.Attempts.AsNoTracking()
             .Where(a => a.SubtestCode == Subtest
-                && (a.State == AttemptState.Submitted || a.State == AttemptState.Completed)
-                && a.SubmittedAt >= since)
-            .ToListAsync(ct);
+                && (a.State == AttemptState.Submitted || a.State == AttemptState.Completed));
+        if (!clientSideSubmittedAtFilter)
+        {
+            attemptsQuery = attemptsQuery.Where(a => a.SubmittedAt >= since);
+        }
+        if (!string.IsNullOrWhiteSpace(scopedTeacherClassId))
+        {
+            var members = db.TeacherClassMembers.AsNoTracking()
+                .Where(member => member.TeacherClassId == scopedTeacherClassId);
+            attemptsQuery = attemptsQuery
+                .Join(members, attempt => attempt.UserId, member => member.UserId, (attempt, _) => attempt)
+                .Distinct();
+        }
 
-        var relationalAttempts = await db.ListeningAttempts.AsNoTracking()
-            .Where(a => a.Status == ListeningAttemptStatus.Submitted
-                && a.SubmittedAt >= since)
+        var attempts = await attemptsQuery
             .ToListAsync(ct);
+        if (clientSideSubmittedAtFilter)
+        {
+            attempts = attempts
+                .Where(a => a.SubmittedAt is not null && a.SubmittedAt.Value >= since)
+                .ToList();
+        }
+
+        var relationalAttemptsQuery = db.ListeningAttempts.AsNoTracking()
+            .Where(a => a.Status == ListeningAttemptStatus.Submitted);
+        if (!clientSideSubmittedAtFilter)
+        {
+            relationalAttemptsQuery = relationalAttemptsQuery.Where(a => a.SubmittedAt >= since);
+        }
+        if (!string.IsNullOrWhiteSpace(scopedTeacherClassId))
+        {
+            var members = db.TeacherClassMembers.AsNoTracking()
+                .Where(member => member.TeacherClassId == scopedTeacherClassId);
+            relationalAttemptsQuery = relationalAttemptsQuery
+                .Join(members, attempt => attempt.UserId, member => member.UserId, (attempt, _) => attempt)
+                .Distinct();
+        }
+
+        var relationalAttempts = await relationalAttemptsQuery
+            .ToListAsync(ct);
+        if (clientSideSubmittedAtFilter)
+        {
+            relationalAttempts = relationalAttempts
+                .Where(a => a.SubmittedAt is not null && a.SubmittedAt.Value >= since)
+                .ToList();
+        }
 
         if (attempts.Count == 0 && relationalAttempts.Count == 0)
         {
-            return new ListeningAdminAnalyticsDto(
-                Days: days,
-                CompletedAttempts: 0,
-                AverageScaledScore: null,
-                PercentLikelyPassing: 0,
-                ClassPartAverages: [],
-                HardestQuestions: [],
-                DistractorHeat: [],
-                CommonMisspellings: []);
+            return EmptyAdminAnalytics(days);
         }
 
         var attemptIds = attempts.Select(a => a.Id).ToList();
@@ -386,6 +657,8 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
         {
             if (relationalAttempt.ScaledScore is int scaledScore)
             {
+                // Relational Listening V2 attempts are the source of truth when both legacy
+                // Evaluation rows and the normalized attempt row have a scaled score.
                 scaledByAttempt[relationalAttempt.Id] = scaledScore;
             }
         }
@@ -567,6 +840,17 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             DistractorHeat: heat,
             CommonMisspellings: spelling);
     }
+
+    private static ListeningAdminAnalyticsDto EmptyAdminAnalytics(int days)
+        => new(
+            Days: days,
+            CompletedAttempts: 0,
+            AverageScaledScore: null,
+            PercentLikelyPassing: 0,
+            ClassPartAverages: [],
+            HardestQuestions: [],
+            DistractorHeat: [],
+            CommonMisspellings: []);
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -751,11 +1035,14 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
     };
 
     private static int? TryReadScaled(Evaluation evaluation)
+        => TryReadScaled(evaluation.CriterionScoresJson);
+
+    private static int? TryReadScaled(string? criterionScoresJson)
     {
-        if (string.IsNullOrWhiteSpace(evaluation.CriterionScoresJson)) return null;
+        if (string.IsNullOrWhiteSpace(criterionScoresJson)) return null;
         try
         {
-            using var doc = JsonDocument.Parse(evaluation.CriterionScoresJson);
+            using var doc = JsonDocument.Parse(criterionScoresJson);
             if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
             foreach (var el in doc.RootElement.EnumerateArray())
             {

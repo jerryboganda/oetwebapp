@@ -22,7 +22,8 @@ export type ListeningDistractorCategory =
   | 'too_weak'
   | 'wrong_speaker'
   | 'opposite_meaning'
-  | 'reused_keyword';
+  | 'reused_keyword'
+  | 'out_of_scope';
 
 /** Phase 4: speaker attitude tag for Part C extracts. */
 export type ListeningSpeakerAttitude =
@@ -469,6 +470,17 @@ export interface ListeningAdminAnalytics {
 
 export const getListeningAdminAnalytics = (days: number = 30) =>
   api<ListeningAdminAnalytics>(`/v1/admin/listening/analytics?days=${days}`);
+
+/**
+ * Admin-only: export the full normalized + legacy JSON for a single Listening
+ * attempt. The backend records this call as an `AuditEvent` of type
+ * `ListeningAttemptExported`. Gated by `AdminContentRead`.
+ *
+ * Returns the parsed JSON payload — the shape is provider-defined and not
+ * stable for clients, so it is intentionally typed as `unknown`.
+ */
+export const exportListeningAdminAttempt = (attemptId: string) =>
+  api<unknown>(`/v1/admin/listening/attempts/${encodeURIComponent(attemptId)}/export`);
 
 // ── Canonical scaffold ─────────────────────────────────────────────────────
 

@@ -117,7 +117,7 @@ public sealed class ListeningLearnerService(
                     a.StartedAt,
                     LastClientSyncAt = (DateTimeOffset?)a.LastActivityAt,
                     answeredCount = relationalAnswerCounts.GetValueOrDefault(a.Id),
-                    route = $"/listening/player/{Uri.EscapeDataString(a.PaperId)}?attemptId={Uri.EscapeDataString(a.Id)}&mode={Uri.EscapeDataString(ToApiMode(a.Mode))}"
+                    route = RelationalAttemptRoute(a)
                 }))
             .OrderByDescending(a => a.LastClientSyncAt ?? a.StartedAt)
             .Take(3)
@@ -303,12 +303,16 @@ public sealed class ListeningLearnerService(
         };
     }
 
-    public async Task<object> GetSessionAsync(string userId, string paperId, string? mode, string? attemptId, CancellationToken ct)
+    public Task<object> GetSessionAsync(string userId, string paperId, string? mode, string? attemptId, CancellationToken ct)
+        => GetSessionAsync(userId, paperId, mode, attemptId, pathwayStage: null, ct);
+
+    public async Task<object> GetSessionAsync(string userId, string paperId, string? mode, string? attemptId, string? pathwayStage, CancellationToken ct)
     {
         await EnsureLearnerAsync(userId, ct);
         await RequirePaperAccessIfAuthoredAsync(userId, paperId, ct);
         var source = await ResolveSourceAsync(paperId, ct);
         var normalizedMode = NormalizeMode(mode);
+        var normalizedPathwayStage = NormalizePathwayStage(pathwayStage);
         ListeningAttempt? relationalAttempt = null;
         Attempt? attempt = null;
 
@@ -336,13 +340,15 @@ public sealed class ListeningLearnerService(
             var requestedRelationalMode = ToRelationalMode(normalizedMode);
             if (source.UsesRelationalStructure)
             {
-                relationalAttempt = await db.ListeningAttempts.AsNoTracking()
+                var relationalCandidates = await db.ListeningAttempts.AsNoTracking()
                     .Where(a => a.UserId == userId
                         && a.PaperId == source.Id
                         && a.Mode == requestedRelationalMode
                         && a.Status == ListeningAttemptStatus.InProgress)
                     .OrderByDescending(a => a.LastActivityAt)
-                    .FirstOrDefaultAsync(ct);
+                    .ToListAsync(ct);
+                relationalAttempt = relationalCandidates.FirstOrDefault(a =>
+                    ListeningAttemptScope.MatchesRequestedPathwayStage(a.ScopeJson, normalizedPathwayStage));
             }
 
             if (relationalAttempt is null)
@@ -389,6 +395,7 @@ public sealed class ListeningLearnerService(
                     "home" => "kiosk_fullscreen",
                     "paper" => "printable_booklet",
                     "exam" => "exam_standard",
+                    "diagnostic" => "diagnostic",
                     _ => "practice"
                 },
                 integrityLockRequired = effectiveMode == "home",
@@ -412,7 +419,10 @@ public sealed class ListeningLearnerService(
         };
     }
 
-    public async Task<object> StartAttemptAsync(string userId, string paperId, string? mode, CancellationToken ct)
+    public Task<object> StartAttemptAsync(string userId, string paperId, string? mode, CancellationToken ct)
+        => StartAttemptAsync(userId, paperId, mode, pathwayStage: null, ct);
+
+    public async Task<object> StartAttemptAsync(string userId, string paperId, string? mode, string? pathwayStage, CancellationToken ct)
     {
         await EnsureLearnerMutationAllowedAsync(userId, ct);
 
@@ -427,9 +437,10 @@ public sealed class ListeningLearnerService(
         }
 
         var normalizedMode = NormalizeMode(mode);
+        var normalizedPathwayStage = NormalizePathwayStage(pathwayStage);
         if (source.UsesRelationalStructure)
         {
-            return await StartRelationalAttemptAsync(userId, source, normalizedMode, ct);
+            return await StartRelationalAttemptAsync(userId, source, normalizedMode, normalizedPathwayStage, ct);
         }
 
         var existing = await db.Attempts
@@ -747,16 +758,17 @@ public sealed class ListeningLearnerService(
         await db.SaveChangesAsync(ct);
     }
 
-    private async Task<object> StartRelationalAttemptAsync(string userId, ListeningSource source, string normalizedMode, CancellationToken ct)
+    private async Task<object> StartRelationalAttemptAsync(string userId, ListeningSource source, string normalizedMode, string? normalizedPathwayStage, CancellationToken ct)
     {
         var relationalMode = ToRelationalMode(normalizedMode);
-        var existing = await db.ListeningAttempts
+        var existingCandidates = await db.ListeningAttempts
             .Where(a => a.UserId == userId
                 && a.PaperId == source.Id
                 && a.Mode == relationalMode
                 && a.Status == ListeningAttemptStatus.InProgress)
             .OrderByDescending(a => a.LastActivityAt)
-            .FirstOrDefaultAsync(ct);
+            .ToListAsync(ct);
+        var existing = existingCandidates.FirstOrDefault(a => ListeningAttemptScope.MatchesRequestedPathwayStage(a.ScopeJson, normalizedPathwayStage));
         if (existing is not null)
         {
             return RelationalAttemptDto(existing, await LoadRelationalAnswersAsync(existing.Id, ct));
@@ -788,7 +800,7 @@ public sealed class ListeningLearnerService(
                     ? "kiosk_fullscreen"
                     : normalizedMode == "paper" ? "printable_booklet" : normalizedMode,
             }),
-            ScopeJson = JsonSupport.Serialize(new { mode = normalizedMode, sourceKind = source.SourceKind }),
+            ScopeJson = ListeningAttemptScope.Build(normalizedMode, source.SourceKind, normalizedPathwayStage),
         };
 
         db.ListeningAttempts.Add(attempt);
@@ -801,7 +813,7 @@ public sealed class ListeningLearnerService(
             Action = $"ListeningAttemptStarted_{normalizedMode}",
             ResourceType = "ListeningAttempt",
             ResourceId = attempt.Id,
-            Details = $"paper={source.Id}; mode={normalizedMode}; structure=relational",
+            Details = $"paper={source.Id}; mode={normalizedMode}; pathwayStage={normalizedPathwayStage ?? "none"}; structure=relational",
         });
         await db.SaveChangesAsync(ct);
         return RelationalAttemptDto(attempt, new Dictionary<string, string?>());
@@ -1059,6 +1071,7 @@ public sealed class ListeningLearnerService(
     {
         "home" => ListeningAttemptMode.Home,
         "paper" => ListeningAttemptMode.Paper,
+        "diagnostic" => ListeningAttemptMode.Diagnostic,
         "practice" => ListeningAttemptMode.Learning,
         _ => ListeningAttemptMode.Exam,
     };
@@ -1071,6 +1084,7 @@ public sealed class ListeningLearnerService(
         ListeningAttemptMode.Drill => "practice",
         ListeningAttemptMode.MiniTest => "practice",
         ListeningAttemptMode.ErrorBank => "practice",
+        ListeningAttemptMode.Diagnostic => "diagnostic",
         _ => "exam",
     };
 
@@ -1087,6 +1101,7 @@ public sealed class ListeningLearnerService(
             "wrong_speaker" => ListeningDistractorCategory.WrongSpeaker,
             "opposite_meaning" => ListeningDistractorCategory.OppositeMeaning,
             "reused_keyword" => ListeningDistractorCategory.ReusedKeyword,
+            "out_of_scope" => ListeningDistractorCategory.OutOfScope,
             _ => null,
         };
     }
@@ -1544,6 +1559,25 @@ public sealed class ListeningLearnerService(
         }
     }
 
+    private static IReadOnlyDictionary<string, ListeningHumanScoreOverride> ParseHumanScoreOverrides(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, ListeningHumanScoreOverride>();
+        try
+        {
+            var overrides = JsonSerializer.Deserialize<List<ListeningHumanScoreOverride>>(
+                json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+            return overrides
+                .Where(scoreOverride => !string.IsNullOrWhiteSpace(scoreOverride.QuestionId))
+                .GroupBy(scoreOverride => scoreOverride.QuestionId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal);
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<string, ListeningHumanScoreOverride>();
+        }
+    }
+
     private static IReadOnlyList<ListeningTranscriptSegmentDto> ExtractTranscriptSegmentsFromJson(string? json, string? fallbackPartCode)
     {
         if (string.IsNullOrWhiteSpace(json)) return [];
@@ -1628,6 +1662,7 @@ public sealed class ListeningLearnerService(
         ListeningDistractorCategory.WrongSpeaker => "wrong_speaker",
         ListeningDistractorCategory.OppositeMeaning => "opposite_meaning",
         ListeningDistractorCategory.ReusedKeyword => "reused_keyword",
+        ListeningDistractorCategory.OutOfScope => "out_of_scope",
         _ => category.ToString(),
     };
 
@@ -1648,7 +1683,8 @@ public sealed class ListeningLearnerService(
             CompletedAt: attempt.CompletedAt ?? attempt.SubmittedAt,
             Answers: DeserializeAnswers(attempt.AnswersJson),
             Source: source,
-            Evaluation: evaluation);
+            Evaluation: evaluation,
+            ScoreOverrides: new Dictionary<string, ListeningHumanScoreOverride>());
 
     private ListeningReviewDto BuildReview(
         ListeningAttempt attempt,
@@ -1660,18 +1696,21 @@ public sealed class ListeningLearnerService(
             CompletedAt: attempt.SubmittedAt,
             Answers: answers,
             Source: source,
-            Evaluation: evaluation);
+            Evaluation: evaluation,
+            ScoreOverrides: ParseHumanScoreOverrides(attempt.HumanScoreOverridesJson));
 
     private ListeningReviewDto BuildReviewCore(
         string AttemptId,
         DateTimeOffset? CompletedAt,
         IReadOnlyDictionary<string, string?> Answers,
         ListeningSource Source,
-        Evaluation? Evaluation)
+        Evaluation? Evaluation,
+        IReadOnlyDictionary<string, ListeningHumanScoreOverride> ScoreOverrides)
     {
         var orderedQuestions = Source.Questions.OrderBy(q => q.Number).ToList();
         var items = orderedQuestions
             .Select(q => ReviewItemDto(q, Answers.GetValueOrDefault(q.Id), orderedQuestions))
+            .Select(item => ApplyHumanScoreOverride(item, ScoreOverrides))
             .ToList();
         var raw = Math.Clamp(items.Sum(i => i.PointsEarned), 0, CanonicalRawMax);
         var score = OetScoring.GradeListeningReading(Subtest, raw);
@@ -1741,7 +1780,30 @@ public sealed class ListeningLearnerService(
             OptionAnalysis: optionAnalysis,
             SpeakerAttitude: q.SpeakerAttitude,
             TranscriptEvidenceStartMs: q.TranscriptEvidenceStartMs,
-            TranscriptEvidenceEndMs: q.TranscriptEvidenceEndMs);
+            TranscriptEvidenceEndMs: q.TranscriptEvidenceEndMs,
+            ScoreOverride: null);
+    }
+
+    private static ListeningReviewItemDto ApplyHumanScoreOverride(
+        ListeningReviewItemDto item,
+        IReadOnlyDictionary<string, ListeningHumanScoreOverride> overrides)
+    {
+        if (!overrides.TryGetValue(item.QuestionId, out var scoreOverride)) return item;
+
+        var isCorrect = scoreOverride.Override == 1;
+        var message = isCorrect
+            ? "Marked correct by human reviewer."
+            : "Marked incorrect by human reviewer.";
+        return item with
+        {
+            IsCorrect = isCorrect,
+            PointsEarned = isCorrect ? item.MaxPoints : 0,
+            ErrorType = isCorrect ? null : item.ErrorType ?? "human_override",
+            Explanation = message,
+            ScoreOverride = new ListeningHumanScoreOverrideDto(
+                scoreOverride.Override,
+                message)
+        };
     }
 
     /// <summary>
@@ -2260,7 +2322,7 @@ public sealed class ListeningLearnerService(
         => JsonSupport.Deserialize<Dictionary<string, string?>>(json, new Dictionary<string, string?>());
 
     /// <summary>
-    /// Phase 9 tail: accept the four learner-visible Listening modes.
+    /// Phase 9 tail: accept the learner-visible Listening modes.
     ///
     ///   <c>practice</c> — default. Free replay, scrubbable, pause allowed.
     ///   <c>exam</c>     — one-play, no scrub, no pause. Standard CBT-style.
@@ -2268,6 +2330,7 @@ public sealed class ListeningLearnerService(
     ///                     timer + one-play behave like <c>exam</c>.
     ///   <c>paper</c>    — paper-simulation: printable booklet UI; timer +
     ///                     one-play behave like <c>exam</c>.
+    ///   <c>diagnostic</c> — fixed-form placement attempt for the pathway.
     ///
     /// Anything else collapses to <c>practice</c> so a malformed query
     /// param can never accidentally promote a learner into a high-stakes
@@ -2281,15 +2344,41 @@ public sealed class ListeningLearnerService(
             "exam" => "exam",
             "home" => "home",
             "paper" => "paper",
+            "diagnostic" => "diagnostic",
             _ => "practice",
         };
+    }
+
+    private static string? NormalizePathwayStage(string? stage)
+    {
+        if (string.IsNullOrWhiteSpace(stage)) return null;
+
+        var normalized = stage.Trim();
+        if (ListeningPathwayProgressService.PathwayStages.Contains(normalized, StringComparer.Ordinal))
+        {
+            return normalized;
+        }
+
+        throw ApiException.Validation(
+            "listening_pathway_stage_invalid",
+            "The requested Listening pathway stage is not supported.");
     }
 
     /// <summary>True for any mode that is graded under exam-integrity rules
     /// (one-play, no pause, no scrub). <c>practice</c> is the only non-exam
     /// mode.</summary>
     private static bool IsExamMode(string normalizedMode)
-        => normalizedMode is "exam" or "home" or "paper";
+        => normalizedMode is "exam" or "home" or "paper" or "diagnostic";
+
+    private static string RelationalAttemptRoute(ListeningAttempt attempt)
+    {
+        var mode = ToApiMode(attempt.Mode);
+        var route = $"/listening/player/{Uri.EscapeDataString(attempt.PaperId)}?attemptId={Uri.EscapeDataString(attempt.Id)}&mode={Uri.EscapeDataString(mode)}";
+        var scopedStage = ListeningAttemptScope.ReadPathwayStage(attempt.ScopeJson);
+        return scopedStage.HasScope && !string.IsNullOrWhiteSpace(scopedStage.Stage)
+            ? $"{route}&pathwayStage={Uri.EscapeDataString(scopedStage.Stage)}"
+            : route;
+    }
 
     private static string? AssetDownloadPath(ContentPaperAsset? asset)
         => asset?.MediaAsset is null ? null : $"/v1/media/{asset.MediaAsset.Id}/content";
@@ -2298,9 +2387,12 @@ public sealed class ListeningLearnerService(
         => string.Equals(NormalizeObjectiveAnswer(learnerAnswer), NormalizeObjectiveAnswer(correctAnswer), StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizeObjectiveAnswer(string? value)
-        => string.IsNullOrWhiteSpace(value)
-            ? string.Empty
-            : new string(value.Trim().ToLowerInvariant().Where(ch => char.IsLetterOrDigit(ch) || char.IsWhiteSpace(ch)).ToArray());
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+
+        var filtered = new string(value.Trim().ToLowerInvariant().Where(ch => char.IsLetterOrDigit(ch) || char.IsWhiteSpace(ch)).ToArray());
+        return System.Text.RegularExpressions.Regex.Replace(filtered, @"\s+", " ");
+    }
 
     /// <summary>
     /// Categorise a wrong answer into one of the spec-defined error types.
@@ -2620,7 +2712,7 @@ public sealed class ListeningLearnerService(
         // Options when populated; missing entries fall back to DistractorExplanation.
         IReadOnlyList<string?> OptionDistractorWhy,
         // Phase 4: per-option distractor category enum: too_strong | too_weak |
-        // wrong_speaker | opposite_meaning | reused_keyword. Same length as Options.
+        // wrong_speaker | opposite_meaning | reused_keyword | out_of_scope. Same length as Options.
         IReadOnlyList<string?> OptionDistractorCategory,
         // Phase 4: speaker attitude on Part C: concerned | optimistic | doubtful |
         // critical | neutral | other. Null on Part A/B.
@@ -2657,13 +2749,18 @@ public sealed class ListeningLearnerService(
         // Phase 5: time-coded transcript evidence (ms) so the learner UI can
         // jump directly to the proof segment in the section audio.
         int? TranscriptEvidenceStartMs,
-        int? TranscriptEvidenceEndMs);
+        int? TranscriptEvidenceEndMs,
+        ListeningHumanScoreOverrideDto? ScoreOverride);
+
+    private sealed record ListeningHumanScoreOverride(string QuestionId, int Override, string? By, string? Reason);
+
+    private sealed record ListeningHumanScoreOverrideDto(int Override, string Message);
 
     private sealed record ListeningOptionAnalysisDto(
         string OptionLabel,                 // "A" | "B" | "C"
         string OptionText,
         bool IsCorrect,
-        string? DistractorCategory,         // too_strong | too_weak | wrong_speaker | opposite_meaning | reused_keyword
+        string? DistractorCategory,         // too_strong | too_weak | wrong_speaker | opposite_meaning | reused_keyword | out_of_scope
         string? WhyMarkdown);
 
     private sealed record ListeningErrorClusterDto(string ErrorType, string Label, int Count, IReadOnlyList<string> AffectedQuestionIds);

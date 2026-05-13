@@ -13,6 +13,9 @@ const {
   mockUseSearchParams,
   mockReplace,
   mockPush,
+  mockV2GetState,
+  mockV2Advance,
+  mockRecordTechReadiness,
 } = vi.hoisted(() => ({
   mockGetListeningSession: vi.fn(),
   mockStartListeningAttempt: vi.fn(),
@@ -24,6 +27,9 @@ const {
   mockUseSearchParams: vi.fn(),
   mockReplace: vi.fn(),
   mockPush: vi.fn(),
+  mockV2GetState: vi.fn(),
+  mockV2Advance: vi.fn(),
+  mockRecordTechReadiness: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -39,6 +45,22 @@ vi.mock('@/lib/listening-api', () => ({
   submitListeningAttempt: mockSubmit,
   saveListeningAnswer: mockSaveAnswer,
   recordListeningIntegrityEvent: mockRecordIntegrity,
+}));
+
+vi.mock('@/lib/listening/v2-api', () => ({
+  listeningV2Api: {
+    getState: mockV2GetState,
+    advance: mockV2Advance,
+    recordTechReadiness: mockRecordTechReadiness,
+  },
+}));
+
+vi.mock('@/components/domain/listening/TechReadinessCheck', () => ({
+  TechReadinessCheck: ({ onReady }: { onReady: (result: { audioOk: boolean; durationMs: number }) => void }) => (
+    <button type="button" onClick={() => onReady({ audioOk: true, durationMs: 1500 })}>
+      Run mocked readiness
+    </button>
+  ),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -140,6 +162,59 @@ function makeSession(overrides: SessionOverrides = {}) {
   };
 }
 
+function makeV2State(state = 'a1_preview') {
+  return {
+    attemptId: 'attempt-1',
+    mode: 'exam',
+    state,
+    locks: [],
+    windowDurationMs: 30_000,
+    windowRemainingMs: 30_000,
+    confirmRequired: true,
+    freeNavigation: false,
+    oneWayLocks: true,
+    unansweredWarningRequired: true,
+  };
+}
+
+function makeTwoSectionSession(overrides: SessionOverrides = {}) {
+  const session = makeSession(overrides);
+  return {
+    ...session,
+    paper: {
+      ...session.paper,
+      extracts: [
+        {
+          partCode: 'A1', displayOrder: 1, kind: 'consultation', title: 'Extract 1',
+          accentCode: 'en-GB', speakers: [],
+          audioStartMs: 12_000, audioEndMs: 240_000,
+        },
+        {
+          partCode: 'A2', displayOrder: 2, kind: 'consultation', title: 'Extract 2',
+          accentCode: 'en-GB', speakers: [],
+          audioStartMs: 250_000, audioEndMs: 480_000,
+        },
+      ],
+    },
+    questions: [
+      { id: 'q-a1', number: 1, partCode: 'A1', text: 'A1 first blank?', type: 'short_answer', options: [], points: 1 },
+      { id: 'q-a2', number: 13, partCode: 'A2', text: 'A2 resumed blank?', type: 'short_answer', options: [], points: 1 },
+    ],
+  };
+}
+
+function makeAdvanceResult(overrides: Record<string, unknown> = {}) {
+  return {
+    outcome: 'applied',
+    state: makeV2State(),
+    confirmToken: null,
+    confirmTokenTtlMs: null,
+    rejectionReason: null,
+    rejectionDetail: null,
+    ...overrides,
+  };
+}
+
 describe('Listening player — CBLA fidelity (preview / attempt timer / one-play / extract progress)', () => {
   let seekCalls: number[];
   let playCalls: number;
@@ -151,6 +226,14 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     mockHeartbeat.mockResolvedValue({ attemptId: 'attempt-1', elapsedSeconds: 0, lastClientSyncAt: '' });
     mockSaveAnswer.mockResolvedValue(undefined);
     mockRecordIntegrity.mockResolvedValue(undefined);
+    mockV2GetState.mockResolvedValue(makeV2State());
+    mockV2Advance.mockResolvedValue(makeAdvanceResult());
+    mockRecordTechReadiness.mockResolvedValue({
+      audioOk: true,
+      durationMs: 1500,
+      checkedAt: '2026-04-01T00:00:00Z',
+      ttlMs: 900_000,
+    });
     mockUseSearchParams.mockReturnValue({
       get: (key: string) => {
         if (key === 'attemptId') return 'attempt-1';
@@ -192,8 +275,231 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       expect(screen.getByTestId('listening-preview-banner')).toBeInTheDocument();
     });
     expect(screen.getByTestId('listening-preview-banner')).toHaveTextContent(/Reading time/i);
+    expect(mockRecordTechReadiness).not.toHaveBeenCalled();
+    expect(mockV2Advance).not.toHaveBeenCalled();
     // Audio must NOT have been auto-played during the preview window.
     expect(playCalls).toBe(0);
+  });
+
+  it('requires tech readiness and applies the first V2 transition before strict exam start', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+    mockV2Advance
+      .mockResolvedValueOnce(makeAdvanceResult({
+        outcome: 'confirm-required',
+        state: null,
+        confirmToken: 'confirm-1',
+        confirmTokenTtlMs: 30_000,
+      }))
+      .mockResolvedValueOnce(makeAdvanceResult());
+
+    const { container } = render(<ListeningPlayer />);
+
+    const startButton = await screen.findByRole('button', { name: /start audio/i });
+    expect(startButton).toBeDisabled();
+    expect(container.querySelector('audio')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /run mocked readiness/i }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /start audio/i })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: /start audio/i }));
+
+    await waitFor(() => {
+      expect(mockRecordTechReadiness).toHaveBeenCalledWith('attempt-1', { audioOk: true, durationMs: 1500 });
+    });
+    expect(mockV2Advance).toHaveBeenNthCalledWith(1, 'attempt-1', 'a1_preview', null);
+    expect(mockV2Advance).toHaveBeenNthCalledWith(2, 'attempt-1', 'a1_preview', 'confirm-1');
+    await waitFor(() => {
+      expect(screen.getByTestId('listening-preview-banner')).toBeInTheDocument();
+    });
+    expect(container.querySelector('audio')).not.toBeNull();
+  });
+
+  it('derives strict exam behavior from mock launch params when mode is absent', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'mockAttemptId') return 'mock-1';
+        if (key === 'mockSectionId') return 'section-1';
+        if (key === 'mockMode') return 'exam';
+        if (key === 'strictness') return 'exam';
+        if (key === 'deliveryMode') return 'computer';
+        if (key === 'strictTimer') return 'true';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+
+    render(<ListeningPlayer />);
+
+    expect(await screen.findByRole('button', { name: /start audio/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /run mocked readiness/i })).toBeInTheDocument();
+    expect(mockGetListeningSession).toHaveBeenCalledWith('lp-001', { mode: 'exam', attemptId: null });
+  });
+
+  it('passes pathwayStage from launch URL to scoped session lookup', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'mode') return 'practice';
+        if (key === 'pathwayStage') return 'foundation_partA';
+        return null;
+      },
+    });
+    const session = makeSession();
+    mockGetListeningSession.mockResolvedValue({ ...session, attempt: null });
+
+    render(<ListeningPlayer />);
+
+    await waitFor(() => {
+      expect(mockGetListeningSession).toHaveBeenCalledWith('lp-001', {
+        mode: 'practice',
+        attemptId: null,
+        pathwayStage: 'foundation_partA',
+      });
+    });
+    expect(await screen.findByRole('button', { name: /start audio/i })).not.toBeDisabled();
+  });
+
+  it('renders R08 tools for Part B/C questions', async () => {
+    const baseSession = makeSession();
+    mockGetListeningSession.mockResolvedValue({
+      ...baseSession,
+      paper: {
+        ...baseSession.paper,
+        extracts: [
+          {
+            partCode: 'B', displayOrder: 1, kind: 'workplace', title: 'Extract B',
+            accentCode: 'en-GB', speakers: [],
+            audioStartMs: 12_000, audioEndMs: 90_000,
+          },
+        ],
+      },
+      questions: [
+        {
+          id: 'q-b-1', number: 7, partCode: 'B', text: 'What should the nurse do next?', type: 'single_choice',
+          options: ['Update the chart', 'Call the family', 'Delay the medicine'], points: 1,
+        },
+      ],
+    });
+
+    render(<ListeningPlayer />);
+
+    await waitFor(() => expect(screen.getByText('What should the nurse do next?')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /highlight question 7 stem/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /strike out option a/i })).toBeInTheDocument();
+    const questionSurface = screen.getByTestId('listening-question-surface');
+    expect(questionSurface).toHaveStyle({ fontSize: '100%' });
+    fireEvent.click(screen.getByRole('button', { name: /increase question zoom/i }));
+    await waitFor(() => expect(screen.getByTestId('listening-question-surface')).toHaveStyle({ fontSize: '110%' }));
+
+    mockGetListeningSession.mockResolvedValue(makeSession());
+  });
+
+  it('fails closed on strict resume when V2 state cannot be verified', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+    mockV2GetState.mockRejectedValueOnce(new Error('state unavailable'));
+
+    const { container } = render(<ListeningPlayer />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/could not verify this strict listening attempt/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('listening-preview-banner')).not.toBeInTheDocument();
+    expect(container.querySelector('audio')).toBeNull();
+  });
+
+  it('uses the server session policy to fail closed for strict resumes even when mode is absent', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+    mockV2GetState.mockRejectedValueOnce(new Error('state unavailable'));
+
+    const { container } = render(<ListeningPlayer />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/could not verify this strict listening attempt/i)).toBeInTheDocument();
+    });
+    expect(mockGetListeningSession).toHaveBeenCalledWith('lp-001', { mode: 'practice', attemptId: 'attempt-1' });
+    expect(screen.queryByTestId('listening-preview-banner')).not.toBeInTheDocument();
+    expect(container.querySelector('audio')).toBeNull();
+  });
+
+  it('hydrates a strict resume from the V2 FSM section and phase', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeTwoSectionSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+    mockV2GetState.mockResolvedValueOnce({
+      ...makeV2State('a2_audio'),
+      windowDurationMs: 240_000,
+      windowRemainingMs: 180_000,
+    });
+
+    render(<ListeningPlayer />);
+
+    await waitFor(() => {
+      expect(screen.getByText('A2 resumed blank?')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('A1 first blank?')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('listening-preview-banner')).not.toBeInTheDocument();
+  });
+
+  it('keeps strict exam on the start screen when the V2 readiness transition is rejected', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+    mockV2Advance.mockResolvedValueOnce(makeAdvanceResult({
+      outcome: 'rejected',
+      state: null,
+      rejectionReason: 'tech-readiness-required',
+      rejectionDetail: 'Audio readiness check is required before starting this Listening attempt.',
+    }));
+
+    render(<ListeningPlayer />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /run mocked readiness/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /start audio/i })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: /start audio/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/audio readiness check is required/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('listening-preview-banner')).not.toBeInTheDocument();
   });
 
   it('auto-advances from preview to audio when the countdown reaches zero', async () => {
@@ -225,6 +531,193 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('advances strict preview through the V2 FSM before playing audio', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+    mockV2GetState.mockResolvedValueOnce(makeV2State('a1_preview'));
+    mockV2Advance
+      .mockResolvedValueOnce(makeAdvanceResult({
+        outcome: 'confirm-required',
+        state: null,
+        confirmToken: 'confirm-audio',
+        confirmTokenTtlMs: 30_000,
+      }))
+      .mockResolvedValueOnce(makeAdvanceResult({ state: makeV2State('a1_audio') }));
+
+    vi.useFakeTimers();
+    try {
+      render(<ListeningPlayer />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByTestId('listening-preview-banner')).toBeInTheDocument();
+
+      for (let i = 0; i <= LISTENING_PREVIEW_SECONDS.A1 + 1; i += 1) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1_000);
+        });
+      }
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(mockV2Advance).toHaveBeenNthCalledWith(1, 'attempt-1', 'a1_audio', null);
+      expect(mockV2Advance).toHaveBeenNthCalledWith(2, 'attempt-1', 'a1_audio', 'confirm-audio');
+      expect(playCalls).toBeGreaterThanOrEqual(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails closed when strict preview advance is rejected', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+    mockV2GetState.mockResolvedValueOnce(makeV2State('a1_preview'));
+    mockV2Advance.mockResolvedValueOnce(makeAdvanceResult({
+      outcome: 'rejected',
+      state: null,
+      rejectionReason: 'invalid-transition',
+      rejectionDetail: 'Server refused audio transition.',
+    }));
+
+    vi.useFakeTimers();
+    try {
+      render(<ListeningPlayer />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      for (let i = 0; i <= LISTENING_PREVIEW_SECONDS.A1 + 1; i += 1) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1_000);
+        });
+      }
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockV2Advance).toHaveBeenCalledTimes(1);
+      expect(mockV2Advance).toHaveBeenCalledWith('attempt-1', 'a1_audio', null);
+      expect(screen.getByText(/server refused audio transition/i)).toBeInTheDocument();
+      expect(playCalls).toBe(0);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
+        await Promise.resolve();
+      });
+      expect(mockV2Advance).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('opens strict review through the V2 FSM and keeps the server review window', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+    mockV2GetState.mockResolvedValueOnce(makeV2State('a1_audio'));
+    mockV2Advance
+      .mockResolvedValueOnce(makeAdvanceResult({
+        outcome: 'confirm-required',
+        state: null,
+        confirmToken: 'confirm-review',
+        confirmTokenTtlMs: 30_000,
+      }))
+      .mockResolvedValueOnce(makeAdvanceResult({
+        state: { ...makeV2State('a1_review'), windowDurationMs: 75_000, windowRemainingMs: 75_000 },
+      }));
+
+    const { container } = render(<ListeningPlayer />);
+
+    const audio = await waitFor(() => {
+      const element = container.querySelector('audio');
+      if (!element) throw new Error('audio element not yet mounted');
+      return element as HTMLAudioElement;
+    });
+    (audio as unknown as { __ct?: number }).__ct = 240;
+    fireEvent.timeUpdate(audio);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^next$/i })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /open review window/i }));
+
+    await waitFor(() => {
+      expect(mockV2Advance).toHaveBeenNthCalledWith(1, 'attempt-1', 'a1_review', null);
+    });
+    expect(mockV2Advance).toHaveBeenNthCalledWith(2, 'attempt-1', 'a1_review', 'confirm-review');
+    expect(await screen.findByTestId('listening-review-banner')).toHaveTextContent('01:15');
+  });
+
+  it('locks strict review through the V2 FSM before opening the next section', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeTwoSectionSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+    mockV2GetState.mockResolvedValueOnce({
+      ...makeV2State('a1_review'),
+      windowDurationMs: 75_000,
+      windowRemainingMs: 75_000,
+    });
+    mockV2Advance
+      .mockResolvedValueOnce(makeAdvanceResult({
+        outcome: 'confirm-required',
+        state: null,
+        confirmToken: 'confirm-next',
+        confirmTokenTtlMs: 30_000,
+      }))
+      .mockResolvedValueOnce(makeAdvanceResult({
+        state: { ...makeV2State('a2_preview'), windowDurationMs: 30_000, windowRemainingMs: 30_000 },
+      }));
+
+    render(<ListeningPlayer />);
+
+    expect(await screen.findByTestId('listening-review-banner')).toHaveTextContent('01:15');
+    fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /lock & continue/i }));
+
+    await waitFor(() => {
+      expect(mockV2Advance).toHaveBeenNthCalledWith(1, 'attempt-1', 'a2_preview', null);
+    });
+    expect(mockV2Advance).toHaveBeenNthCalledWith(2, 'attempt-1', 'a2_preview', 'confirm-next');
+    await waitFor(() => {
+      expect(screen.getByText('A2 resumed blank?')).toBeInTheDocument();
+      expect(screen.getByTestId('listening-preview-banner')).toHaveTextContent('00:30');
+    });
   });
 
   it('auto-submits the attempt when the whole-attempt timer expires in exam mode', async () => {
@@ -331,6 +824,8 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       if (!el) throw new Error('audio not yet rendered');
       return el as HTMLAudioElement;
     });
+
+    await waitFor(() => expect(seekCalls).toContain(12));
 
     // Establish a forward-only known time at t=50.
     (audio as unknown as { __ct?: number }).__ct = 50;

@@ -106,6 +106,25 @@ public class ListeningAuthoringServiceTests
     }
 
     [Fact]
+    public async Task PatchQuestion_AllowsOutOfScopeDistractorCategory()
+    {
+        var (db, svc) = Build();
+        var paper = await SeedPaperAsync(db);
+
+        var patch = new ListeningQuestionPatch(
+            Type: "multiple_choice_3",
+            Options: new[] { "A", "B", "C" },
+            CorrectAnswer: "A",
+            OptionDistractorCategory: new string?[] { null, "out_of_scope", "reused_keyword" });
+
+        var result = await svc.PatchQuestionAsync(
+            paper.Id, "lq-1", patch, adminId: "admin-42", default);
+
+        var updated = result.Questions.Single();
+        Assert.Equal(new string?[] { null, "out_of_scope", "reused_keyword" }, updated.OptionDistractorCategory);
+    }
+
+    [Fact]
     public async Task PatchQuestion_404_WhenMissing()
     {
         var (db, svc) = Build();

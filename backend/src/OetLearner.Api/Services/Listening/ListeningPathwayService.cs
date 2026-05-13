@@ -164,7 +164,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
                 PaperId: anchorPaperId,
                 Route: "/listening");
         }
-        else if (bestScaled is int bs2 && bs2 < 350)
+        else if (bestScaled is int bs2 && bs2 < OetScoring.ScaledPassGradeB)
         {
             stage = "mini_tests";
             nextAction = new ListeningPathwayAction(
@@ -215,7 +215,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
             new("scaled_300", "Reach 300 scaled",
                 bestScaled is int s1 && s1 >= 300, bestScaled, 300),
             new("scaled_350", "Reach 350 scaled (Grade B)",
-                bestScaled is int s2 && s2 >= 350, bestScaled, 350),
+                bestScaled is int s2 && s2 >= OetScoring.ScaledPassGradeB, bestScaled, OetScoring.ScaledPassGradeB),
             new("first_mock_pass", "Pass a Listening mock",
                 listeningMockCount >= 1, listeningMockCount, 1),
         };

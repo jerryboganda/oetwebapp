@@ -54,6 +54,24 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
     public const int CanonicalPartCCount = 12;
     public const int CanonicalTotalItems = CanonicalPartACount + CanonicalPartBCount + CanonicalPartCCount; // 42
 
+    private static readonly HashSet<string> AllowedDistractorCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "too_strong",
+        "too_weak",
+        "wrong_speaker",
+        "opposite_meaning",
+        "reused_keyword",
+        "out_of_scope",
+    };
+
+    private static readonly HashSet<string> LegalAttestationValues = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "original-authoring-attested",
+        "licensed-content-attested",
+        "permission-attested",
+        "copyright-cleared",
+    };
+
     public async Task<ListeningValidationReport> ValidatePaperAsync(string paperId, CancellationToken ct)
     {
         var paper = await db.ContentPapers.AsNoTracking()
@@ -61,6 +79,13 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             ?? throw new InvalidOperationException("Paper not found.");
 
         var issues = new List<ListeningValidationIssue>();
+        if (!HasSourceLegalAttestation(paper.SourceProvenance))
+        {
+            issues.Add(new(
+                Code: "listening_source_provenance",
+                Severity: "error",
+                Message: "Source provenance and original/legal-content attestation are required before publishing a Listening paper."));
+        }
 
         // Prefer the relational ListeningQuestion table when authoring has
         // migrated off the legacy ExtractedTextJson blob; fall back to the
@@ -135,16 +160,32 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             .AsNoTracking()
             .Where(p => partIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, p => p.PartCode, StringComparer.Ordinal, ct);
+        var extractIds = questions
+            .Select(q => q.ListeningExtractId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var extracts = await db.Set<ListeningExtract>()
+            .AsNoTracking()
+            .Where(extract => extractIds.Contains(extract.Id))
+            .ToDictionaryAsync(extract => extract.Id, StringComparer.Ordinal, ct);
         var rows = questions
             .Select(q => new
             {
                 PartCode = parts.GetValueOrDefault(q.ListeningPartId),
+                q.ListeningExtractId,
                 q.QuestionNumber,
                 q.QuestionType,
                 q.Stem,
                 q.CorrectAnswerJson,
+                q.SkillTag,
+                q.TranscriptEvidenceText,
+                q.TranscriptEvidenceStartMs,
+                q.TranscriptEvidenceEndMs,
+                q.DifficultyLevel,
                 Options = q.Options
-                    .Select(o => new RelationalOption(o.OptionKey, o.Text, o.IsCorrect))
+                    .Select(o => new RelationalOption(o.OptionKey, o.Text, o.IsCorrect, o.DistractorCategory))
                     .ToArray(),
             })
             .ToList();
@@ -207,6 +248,67 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Part C requires single-select MCQ with exactly 3 options and a matching correct answer per item; {partCItemsWithoutThreeOptions} item(s) violate this."));
         }
 
+        var missingExtractLinks = rows.Count(row => string.IsNullOrWhiteSpace(row.ListeningExtractId)
+            || !extracts.ContainsKey(row.ListeningExtractId!));
+        if (missingExtractLinks > 0)
+        {
+            warnings.Add(new("listening_extract_links", "error",
+                $"Every Listening question must be linked to an authored audio extract; {missingExtractLinks} item(s) are missing a valid extract link."));
+        }
+
+        var invalidExtractTimings = extracts.Values.Count(extract => !HasValidTimingWindow(extract.AudioStartMs, extract.AudioEndMs));
+        if (invalidExtractTimings > 0)
+        {
+            warnings.Add(new("listening_extract_timing", "error",
+                $"Every Listening extract requires valid audio cue timings; {invalidExtractTimings} extract(s) are missing start/end ms or have an invalid window."));
+        }
+
+        var missingExtractDifficulty = extracts.Values.Count(extract => !IsValidDifficulty(extract.DifficultyRating));
+        if (missingExtractDifficulty > 0)
+        {
+            warnings.Add(new("listening_extract_difficulty", "error",
+                $"Every Listening extract requires a difficulty rating from 1 to 5; {missingExtractDifficulty} extract(s) are missing or invalid."));
+        }
+
+        var missingSkillTags = rows.Count(row => string.IsNullOrWhiteSpace(row.SkillTag));
+        if (missingSkillTags > 0)
+        {
+            warnings.Add(new("listening_skill_tags", "error",
+                $"Every Listening question requires a skill tag; {missingSkillTags} item(s) are missing one."));
+        }
+
+        var invalidSkillTags = rows.Count(row => !string.IsNullOrWhiteSpace(row.SkillTag) && !ListeningSkillTags.IsValid(row.SkillTag));
+        if (invalidSkillTags > 0)
+        {
+            warnings.Add(new("listening_skill_tags_invalid", "error",
+                $"Every Listening skill tag must use the canonical vocabulary; {invalidSkillTags} item(s) have an unsupported value."));
+        }
+
+        var invalidEvidence = rows.Count(row => string.IsNullOrWhiteSpace(row.TranscriptEvidenceText)
+            || !HasValidTimingWindow(row.TranscriptEvidenceStartMs, row.TranscriptEvidenceEndMs));
+        if (invalidEvidence > 0)
+        {
+            warnings.Add(new("listening_transcript_evidence", "error",
+                $"Every Listening question requires transcript evidence text with valid start/end timestamps; {invalidEvidence} item(s) are incomplete."));
+        }
+
+        var missingQuestionDifficulty = rows.Count(row => !IsValidDifficulty(row.DifficultyLevel));
+        if (missingQuestionDifficulty > 0)
+        {
+            warnings.Add(new("listening_question_difficulty", "error",
+                $"Every Listening question requires a difficulty level from 1 to 5; {missingQuestionDifficulty} item(s) are missing or invalid."));
+        }
+
+        var wrongOptionsMissingDistractorCategory = rows
+            .Where(row => row.QuestionType == ListeningQuestionType.MultipleChoice3)
+            .SelectMany(row => row.Options)
+            .Count(option => !option.IsCorrect && option.DistractorCategory is null);
+        if (wrongOptionsMissingDistractorCategory > 0)
+        {
+            warnings.Add(new("listening_distractor_categories", "error",
+                $"Every wrong Part B/C option requires a distractor category; {wrongOptionsMissingDistractorCategory} option(s) are untagged."));
+        }
+
         return (a, b, c, a + b + c, warnings);
     }
 
@@ -220,6 +322,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         if (string.IsNullOrWhiteSpace(extractedTextJson)) return (0, 0, 0, 0, warnings);
 
         List<Dictionary<string, object?>> questions;
+        List<Dictionary<string, object?>> extracts;
         try
         {
             var root = JsonSerializer.Deserialize<Dictionary<string, object?>>(extractedTextJson);
@@ -227,6 +330,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             if (raw is null) return (0, 0, 0, 0, warnings);
             questions = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(JsonSerializer.Serialize(raw))
                         ?? new List<Dictionary<string, object?>>();
+            extracts = ReadObjectList(root?.GetValueOrDefault("listeningExtracts"));
         }
         catch (JsonException)
         {
@@ -242,6 +346,12 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         var blankAnswers = 0;
         var blankStems = 0;
         var numbers = new Dictionary<int, int>();
+        var missingSkillTags = 0;
+        var invalidSkillTags = 0;
+        var invalidEvidence = 0;
+        var missingQuestionDifficulty = 0;
+        var wrongOptionsMissingDistractorCategory = 0;
+        var wrongOptionsInvalidDistractorCategory = 0;
 
         foreach (var q in questions)
         {
@@ -251,6 +361,20 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             }
             if (string.IsNullOrWhiteSpace(ReadString(q, "text") ?? ReadString(q, "stem"))) blankStems++;
             if (string.IsNullOrWhiteSpace(ReadString(q, "correctAnswer"))) blankAnswers++;
+            var skillTag = ReadString(q, "skillTag");
+            if (string.IsNullOrWhiteSpace(skillTag)) missingSkillTags++;
+            else if (!ListeningSkillTags.IsValid(skillTag)) invalidSkillTags++;
+
+            if (string.IsNullOrWhiteSpace(ReadString(q, "transcriptEvidenceText") ?? ReadString(q, "transcriptExcerpt"))
+                || !HasValidTimingWindow(TryGetInt(q, "transcriptEvidenceStartMs"), TryGetInt(q, "transcriptEvidenceEndMs")))
+            {
+                invalidEvidence++;
+            }
+
+            if (!IsValidDifficulty(TryGetInt(q, "difficultyLevel") ?? TryGetInt(q, "difficultyRating")))
+            {
+                missingQuestionDifficulty++;
+            }
 
             var partCode = (q.GetValueOrDefault("partCode") ?? q.GetValueOrDefault("part"))?.ToString()
                 ?.Trim().ToUpperInvariant() ?? "A";
@@ -265,6 +389,9 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             {
                 b++;
                 if (!HasValidMcqShape(q)) partBItemsWithoutThreeOptions++;
+                var distractorIssues = CountJsonDistractorCategoryIssues(q);
+                wrongOptionsMissingDistractorCategory += distractorIssues.Missing;
+                wrongOptionsInvalidDistractorCategory += distractorIssues.Invalid;
             }
             else if (partCode.StartsWith("C", StringComparison.Ordinal))
             {
@@ -272,6 +399,9 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 if (partCode == "C1") c1++;
                 else if (partCode == "C2") c2++;
                 if (!HasValidMcqShape(q)) partCItemsWithoutThreeOptions++;
+                var distractorIssues = CountJsonDistractorCategoryIssues(q);
+                wrongOptionsMissingDistractorCategory += distractorIssues.Missing;
+                wrongOptionsInvalidDistractorCategory += distractorIssues.Invalid;
             }
         }
 
@@ -317,6 +447,64 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Part C requires single-select MCQ with exactly 3 options and a matching correct answer per item; {partCItemsWithoutThreeOptions} item(s) violate this."));
         }
 
+        if (extracts.Count == 0)
+        {
+            warnings.Add(new("listening_extract_timing", "error",
+                "At least one authored Listening extract with audio cue timings is required before publishing."));
+        }
+        else
+        {
+            var invalidExtractTimings = extracts.Count(extract => !HasValidTimingWindow(TryGetInt(extract, "audioStartMs"), TryGetInt(extract, "audioEndMs")));
+            if (invalidExtractTimings > 0)
+            {
+                warnings.Add(new("listening_extract_timing", "error",
+                    $"Every Listening extract requires valid audio cue timings; {invalidExtractTimings} extract(s) are missing start/end ms or have an invalid window."));
+            }
+
+            var missingExtractDifficulty = extracts.Count(extract => !IsValidDifficulty(TryGetInt(extract, "difficultyRating") ?? TryGetInt(extract, "difficultyLevel")));
+            if (missingExtractDifficulty > 0)
+            {
+                warnings.Add(new("listening_extract_difficulty", "error",
+                    $"Every Listening extract requires a difficulty rating from 1 to 5; {missingExtractDifficulty} extract(s) are missing or invalid."));
+            }
+        }
+
+        if (missingSkillTags > 0)
+        {
+            warnings.Add(new("listening_skill_tags", "error",
+                $"Every Listening question requires a skill tag; {missingSkillTags} item(s) are missing one."));
+        }
+
+        if (invalidSkillTags > 0)
+        {
+            warnings.Add(new("listening_skill_tags_invalid", "error",
+                $"Every Listening skill tag must use the canonical vocabulary; {invalidSkillTags} item(s) have an unsupported value."));
+        }
+
+        if (invalidEvidence > 0)
+        {
+            warnings.Add(new("listening_transcript_evidence", "error",
+                $"Every Listening question requires transcript evidence text with valid start/end timestamps; {invalidEvidence} item(s) are incomplete."));
+        }
+
+        if (missingQuestionDifficulty > 0)
+        {
+            warnings.Add(new("listening_question_difficulty", "error",
+                $"Every Listening question requires a difficulty level from 1 to 5; {missingQuestionDifficulty} item(s) are missing or invalid."));
+        }
+
+        if (wrongOptionsMissingDistractorCategory > 0)
+        {
+            warnings.Add(new("listening_distractor_categories", "error",
+                $"Every wrong Part B/C option requires a distractor category; {wrongOptionsMissingDistractorCategory} option(s) are untagged."));
+        }
+
+        if (wrongOptionsInvalidDistractorCategory > 0)
+        {
+            warnings.Add(new("listening_distractor_categories_invalid", "error",
+                $"Every wrong Part B/C option distractor category must use the canonical vocabulary; {wrongOptionsInvalidDistractorCategory} option(s) have unsupported values."));
+        }
+
         return (a, b, c, a + b + c, warnings);
     }
 
@@ -332,7 +520,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             return false;
         }
 
-        return options.Count(option => string.Equals(option.Trim(), correctAnswer, StringComparison.OrdinalIgnoreCase)) == 1;
+        return ResolveJsonCorrectOptionIndex(options, correctAnswer) >= 0;
     }
 
     private static bool HasValidMcqShape(
@@ -358,6 +546,105 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             && matchingOptions[0].IsCorrect;
     }
 
+    private static (int Missing, int Invalid) CountJsonDistractorCategoryIssues(Dictionary<string, object?> question)
+    {
+        var options = ReadOptions(question);
+        var correctAnswer = ReadString(question, "correctAnswer")?.Trim();
+        var correctOptionIndex = ResolveJsonCorrectOptionIndex(options, correctAnswer);
+        var categories = ReadStringList(question.GetValueOrDefault("optionDistractorCategory"))
+            ?? ReadStringList(question.GetValueOrDefault("perOptionDistractorCategory"))
+            ?? Array.Empty<string?>();
+        var missing = 0;
+        var invalid = 0;
+
+        for (var optionIndex = 0; optionIndex < options.Count; optionIndex++)
+        {
+            if (optionIndex == correctOptionIndex) continue;
+
+            var category = optionIndex < categories.Count ? categories[optionIndex] : null;
+            if (string.IsNullOrWhiteSpace(category)) missing++;
+            else if (!AllowedDistractorCategories.Contains(category.Trim())) invalid++;
+        }
+
+        return (missing, invalid);
+    }
+
+    private static bool HasSourceLegalAttestation(string? sourceProvenance)
+    {
+        if (string.IsNullOrWhiteSpace(sourceProvenance)) return false;
+        var tokens = sourceProvenance.Split([';', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var token in tokens)
+        {
+            var separatorIndex = token.IndexOf('=', StringComparison.Ordinal);
+            if (separatorIndex <= 0) continue;
+
+            var key = token[..separatorIndex].Trim();
+            var value = token[(separatorIndex + 1)..].Trim();
+            if (string.Equals(key, "legal", StringComparison.OrdinalIgnoreCase)
+                && LegalAttestationValues.Contains(value))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int ResolveJsonCorrectOptionIndex(IReadOnlyList<string> options, string? correctAnswer)
+    {
+        if (options.Count != 3 || string.IsNullOrWhiteSpace(correctAnswer)) return -1;
+
+        var normalized = correctAnswer.Trim();
+        if (normalized.Length == 1)
+        {
+            var optionKeyIndex = char.ToUpperInvariant(normalized[0]) switch
+            {
+                'A' => 0,
+                'B' => 1,
+                'C' => 2,
+                _ => -1,
+            };
+            if (optionKeyIndex >= 0)
+            {
+                var matchingTextCount = options.Count(option => string.Equals(option.Trim(), normalized, StringComparison.OrdinalIgnoreCase));
+                return matchingTextCount > 1 ? -1 : optionKeyIndex;
+            }
+        }
+
+        var matches = options
+            .Select((option, index) => new { Option = option.Trim(), Index = index })
+            .Where(option => string.Equals(option.Option, normalized, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return matches.Length == 1 ? matches[0].Index : -1;
+    }
+
+    private static List<Dictionary<string, object?>> ReadObjectList(object? raw)
+    {
+        if (raw is null) return new List<Dictionary<string, object?>>();
+        try
+        {
+            return JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(JsonSerializer.Serialize(raw))
+                ?? new List<Dictionary<string, object?>>();
+        }
+        catch (JsonException)
+        {
+            return new List<Dictionary<string, object?>>();
+        }
+    }
+
+    private static IReadOnlyList<string?>? ReadStringList(object? raw)
+    {
+        if (raw is null) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<List<string?>>(JsonSerializer.Serialize(raw));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     private static IReadOnlyList<string> ReadOptions(Dictionary<string, object?> question)
     {
         var raw = question.GetValueOrDefault("options");
@@ -373,7 +660,17 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         catch (JsonException) { return Array.Empty<string>(); }
     }
 
-    private sealed record RelationalOption(string OptionKey, string Text, bool IsCorrect);
+    private sealed record RelationalOption(
+        string OptionKey,
+        string Text,
+        bool IsCorrect,
+        ListeningDistractorCategory? DistractorCategory);
+
+    private static bool HasValidTimingWindow(int? startMs, int? endMs)
+        => startMs is >= 0 && endMs is > 0 && endMs > startMs;
+
+    private static bool IsValidDifficulty(int? value)
+        => value is >= 1 and <= 5;
 
     private static string? ReadString(Dictionary<string, object?> question, string key)
         => question.GetValueOrDefault(key)?.ToString();

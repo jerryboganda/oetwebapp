@@ -32,6 +32,7 @@ public class ListeningStructureServiceTests
             Title = "Listening Paper Test",
             Slug = $"listening-{Guid.NewGuid():N}",
             Status = ContentStatus.Draft,
+            SourceProvenance = "source=unit-test; legal=original-authoring-attested",
             ExtractedTextJson = extractedTextJson ?? string.Empty,
             CreatedAt = now,
             UpdatedAt = now,
@@ -46,15 +47,45 @@ public class ListeningStructureServiceTests
         var list = new List<object>();
         var num = 1;
         for (var i = 0; i < partA; i++)
-            list.Add(new { id = $"a-{i}", number = num++, partCode = i < partA / 2 ? "A1" : "A2", type = "short_answer", text = "q", correctAnswer = "x" });
+        {
+            list.Add(new
+            {
+                id = $"a-{i}",
+                number = num,
+                partCode = i < partA / 2 ? "A1" : "A2",
+                type = "short_answer",
+                text = "q",
+                correctAnswer = "x",
+                skillTag = "note_completion",
+                transcriptExcerpt = "x",
+                transcriptEvidenceStartMs = num * 1000,
+                transcriptEvidenceEndMs = num * 1000 + 500,
+                difficultyLevel = 3,
+            });
+            num++;
+        }
         for (var i = 0; i < partB; i++)
             list.Add(new { id = $"b-{i}", number = num++, partCode = "B", type = "multiple_choice_3", text = "q",
                 options = Enumerable.Range(0, partBOptionCount).Select(x => $"opt-{x}").ToArray(),
-                correctAnswer = "opt-0" });
+                correctAnswer = "opt-0", skillTag = "detail", transcriptExcerpt = "opt-0",
+                transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500,
+                difficultyLevel = 3,
+                optionDistractorCategory = Enumerable.Range(0, partBOptionCount).Select(index => index == 0 ? null : "reused_keyword").ToArray() });
         for (var i = 0; i < partC; i++)
             list.Add(new { id = $"c-{i}", number = num++, partCode = i < partC / 2 ? "C1" : "C2", type = "multiple_choice_3", text = "q",
-                options = new[] { "1", "2", "3" }, correctAnswer = "1" });
-        return JsonSerializer.Serialize(new { listeningQuestions = list });
+                options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "attitude",
+                transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000,
+                transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3,
+                optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
+        var extracts = new[]
+        {
+            new { partCode = "A1", displayOrder = 1, kind = "consultation", title = "A1", audioStartMs = 0, audioEndMs = 60_000, difficultyRating = 3 },
+            new { partCode = "A2", displayOrder = 1, kind = "consultation", title = "A2", audioStartMs = 60_000, audioEndMs = 120_000, difficultyRating = 3 },
+            new { partCode = "B", displayOrder = 1, kind = "workplace", title = "B", audioStartMs = 120_000, audioEndMs = 180_000, difficultyRating = 3 },
+            new { partCode = "C1", displayOrder = 1, kind = "presentation", title = "C1", audioStartMs = 180_000, audioEndMs = 240_000, difficultyRating = 3 },
+            new { partCode = "C2", displayOrder = 1, kind = "presentation", title = "C2", audioStartMs = 240_000, audioEndMs = 300_000, difficultyRating = 3 },
+        };
+        return JsonSerializer.Serialize(new { listeningQuestions = list, listeningExtracts = extracts });
     }
 
     [Fact]
@@ -65,7 +96,7 @@ public class ListeningStructureServiceTests
 
         var report = await svc.ValidatePaperAsync(paper.Id, default);
 
-        Assert.True(report.IsPublishReady);
+        Assert.True(report.IsPublishReady, string.Join("; ", report.Issues.Select(issue => $"{issue.Code}:{issue.Message}")));
         Assert.Equal(24, report.Counts.PartACount);
         Assert.Equal(6, report.Counts.PartBCount);
         Assert.Equal(12, report.Counts.PartCCount);
@@ -103,6 +134,76 @@ public class ListeningStructureServiceTests
     }
 
     [Fact]
+    public async Task MissingSourceProvenance_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var paper = await AddPaperAsync(db, BuildQuestionsJson(24, 6, 12));
+        paper.SourceProvenance = null;
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_source_provenance" && issue.Severity == "error");
+    }
+
+    [Fact]
+    public async Task SourceProvenanceWithoutLegalAttestation_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var paper = await AddPaperAsync(db, BuildQuestionsJson(24, 6, 12));
+        paper.SourceProvenance = "source=unit-test-only";
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_source_provenance" && issue.Severity == "error");
+    }
+
+    [Fact]
+    public async Task SourceProvenanceWithNonLegalKey_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var paper = await AddPaperAsync(db, BuildQuestionsJson(24, 6, 12));
+        paper.SourceProvenance = "source=unit-test; illegal=original-authoring-attested";
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_source_provenance" && issue.Severity == "error");
+    }
+
+    [Fact]
+    public async Task JsonCanonicalCounts_WithMissingPublishGateMetadata_BlockPublish()
+    {
+        var (db, svc) = Build();
+        using var doc = JsonDocument.Parse(BuildQuestionsJson(24, 6, 12));
+        var questions = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningQuestions").GetRawText())!;
+        var extracts = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningExtracts").GetRawText())!;
+        questions[0]["skillTag"] = "";
+        questions[1]["transcriptEvidenceStartMs"] = null;
+        questions[2]["difficultyLevel"] = null;
+        questions[24]["optionDistractorCategory"] = new string?[] { null, null, null };
+        extracts[0]["audioEndMs"] = 0;
+        extracts[1]["difficultyRating"] = null;
+        var paper = await AddPaperAsync(db, JsonSerializer.Serialize(new { listeningQuestions = questions, listeningExtracts = extracts }));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_skill_tags" && issue.Severity == "error");
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_transcript_evidence" && issue.Severity == "error");
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_question_difficulty" && issue.Severity == "error");
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_distractor_categories" && issue.Severity == "error");
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_extract_timing" && issue.Severity == "error");
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_extract_difficulty" && issue.Severity == "error");
+    }
+
+    [Fact]
     public async Task MalformedJson_BlocksPublish_WithExplicitIssue()
     {
         var (db, svc) = Build();
@@ -135,18 +236,24 @@ public class ListeningStructureServiceTests
         var list = new List<object>();
         var num = 1;
         for (var i = 0; i < 24; i++)
-            list.Add(new { id = $"a-{i}", number = num++, partCode = "A", type = "short_answer", text = "q", correctAnswer = "x" });
+            list.Add(new { id = $"a-{i}", number = num++, partCode = "A", type = "short_answer", text = "q", correctAnswer = "x", skillTag = "note_completion", transcriptExcerpt = "x", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3 });
         for (var i = 0; i < 6; i++)
             list.Add(new { id = $"b-{i}", number = num++, partCode = "B", type = "multiple_choice_3", text = "q",
-                options = new[] { "1", "2", "3" }, correctAnswer = "1" });
+                options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "detail", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, optionDistractorCategory = new string?[] { null, "too_weak", "reused_keyword" } });
         for (var i = 0; i < 12; i++)
-            list.Add(new { id = $"c-{i}", number = num++, partCode = "C", type = "multiple_choice_3", text = "q", options = new[] { "1", "2", "3" }, correctAnswer = "1" });
-        var json = JsonSerializer.Serialize(new { listeningQuestions = list });
+            list.Add(new { id = $"c-{i}", number = num++, partCode = "C", type = "multiple_choice_3", text = "q", options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "attitude", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
+        var extracts = new[]
+        {
+            new { partCode = "A", displayOrder = 1, kind = "consultation", title = "A", audioStartMs = 0, audioEndMs = 120_000, difficultyRating = 3 },
+            new { partCode = "B", displayOrder = 1, kind = "workplace", title = "B", audioStartMs = 120_000, audioEndMs = 180_000, difficultyRating = 3 },
+            new { partCode = "C", displayOrder = 1, kind = "presentation", title = "C", audioStartMs = 180_000, audioEndMs = 300_000, difficultyRating = 3 },
+        };
+        var json = JsonSerializer.Serialize(new { listeningQuestions = list, listeningExtracts = extracts });
         var paper = await AddPaperAsync(db, json);
 
         var report = await svc.ValidatePaperAsync(paper.Id, default);
 
-        Assert.True(report.IsPublishReady);
+        Assert.True(report.IsPublishReady, string.Join("; ", report.Issues.Select(issue => $"{issue.Code}:{issue.Message}")));
         Assert.Equal(24, report.Counts.PartACount);
         Assert.Equal(6, report.Counts.PartBCount);
         Assert.Equal(12, report.Counts.PartCCount);
@@ -227,6 +334,36 @@ public class ListeningStructureServiceTests
         var partC1 = AddPart(ListeningPartCode.C1, 6);
         var partC2 = AddPart(ListeningPartCode.C2, 6);
 
+        ListeningExtract AddExtract(ListeningPart part, int startMs, int endMs)
+        {
+            var extract = new ListeningExtract
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ListeningPartId = part.Id,
+                DisplayOrder = 1,
+                Kind = part.PartCode == ListeningPartCode.B ? ListeningExtractKind.Workplace : part.PartCode is ListeningPartCode.C1 or ListeningPartCode.C2 ? ListeningExtractKind.Presentation : ListeningExtractKind.Consultation,
+                Title = $"Extract {part.PartCode}",
+                SpeakersJson = "[]",
+                TranscriptSegmentsJson = "[]",
+                AudioStartMs = startMs,
+                AudioEndMs = endMs,
+                DifficultyRating = 3,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            };
+            db.Set<ListeningExtract>().Add(extract);
+            return extract;
+        }
+
+        var extractByPartId = new Dictionary<string, ListeningExtract>
+        {
+            [partA1.Id] = AddExtract(partA1, 0, 60_000),
+            [partA2.Id] = AddExtract(partA2, 60_000, 120_000),
+            [partB.Id] = AddExtract(partB, 120_000, 180_000),
+            [partC1.Id] = AddExtract(partC1, 180_000, 240_000),
+            [partC2.Id] = AddExtract(partC2, 240_000, 300_000),
+        };
+
         var qNum = 1;
         void AddQuestions(ListeningPart part, int count, ListeningQuestionType qType)
         {
@@ -237,12 +374,18 @@ public class ListeningStructureServiceTests
                     Id = Guid.NewGuid().ToString("N"),
                     PaperId = paper.Id,
                     ListeningPartId = part.Id,
+                    ListeningExtractId = extractByPartId[part.Id].Id,
                     QuestionNumber = qNum++,
                     DisplayOrder = i + 1,
                     Points = 1,
                     QuestionType = qType,
                     Stem = "stem",
                     CorrectAnswerJson = qType == ListeningQuestionType.MultipleChoice3 ? "\"A\"" : "\"x\"",
+                    SkillTag = qType == ListeningQuestionType.MultipleChoice3 ? "detail" : "note_completion",
+                    TranscriptEvidenceText = "evidence",
+                    TranscriptEvidenceStartMs = qNum * 1000,
+                    TranscriptEvidenceEndMs = qNum * 1000 + 500,
+                    DifficultyLevel = 3,
                     CreatedAt = DateTimeOffset.UtcNow,
                     UpdatedAt = DateTimeOffset.UtcNow,
                 };
@@ -259,6 +402,7 @@ public class ListeningStructureServiceTests
                             Text = $"opt-{k}",
                             DisplayOrder = k + 1,
                             IsCorrect = k == 0,
+                            DistractorCategory = k == 0 ? null : ListeningDistractorCategory.ReusedKeyword,
                         });
                     }
                 }
@@ -281,6 +425,42 @@ public class ListeningStructureServiceTests
         Assert.Equal(12, report.Counts.PartCCount);
         Assert.Equal(42, report.Counts.TotalItems);
         Assert.Empty(report.Issues);
+    }
+
+    [Fact]
+    public async Task JsonPartB_WithCorrectAnswerLetter_IsPublishReady()
+    {
+        var (db, svc) = Build();
+        using var doc = JsonDocument.Parse(BuildQuestionsJson(24, 6, 12));
+        var questions = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningQuestions").GetRawText())!;
+        var extracts = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningExtracts").GetRawText())!;
+        questions[24]["correctAnswer"] = "A";
+        var paper = await AddPaperAsync(db, JsonSerializer.Serialize(new { listeningQuestions = questions, listeningExtracts = extracts }));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.True(report.IsPublishReady, string.Join("; ", report.Issues.Select(issue => $"{issue.Code}:{issue.Message}")));
+        Assert.Empty(report.Issues);
+    }
+
+    [Fact]
+    public async Task JsonPartB_WithInvalidDistractorCategory_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        using var doc = JsonDocument.Parse(BuildQuestionsJson(24, 6, 12));
+        var questions = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningQuestions").GetRawText())!;
+        var extracts = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningExtracts").GetRawText())!;
+        questions[24]["optionDistractorCategory"] = new string?[] { null, "not_a_real_category", "reused_keyword" };
+        var paper = await AddPaperAsync(db, JsonSerializer.Serialize(new { listeningQuestions = questions, listeningExtracts = extracts }));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_distractor_categories_invalid" && issue.Severity == "error");
     }
 
     [Fact]

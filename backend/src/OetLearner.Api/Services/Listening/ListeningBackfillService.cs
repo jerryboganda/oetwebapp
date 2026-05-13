@@ -511,6 +511,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
             "wrong_speaker" => ListeningDistractorCategory.WrongSpeaker,
             "opposite_meaning" => ListeningDistractorCategory.OppositeMeaning,
             "reused_keyword" => ListeningDistractorCategory.ReusedKeyword,
+            "out_of_scope" => ListeningDistractorCategory.OutOfScope,
             _ => null,
         };
     }

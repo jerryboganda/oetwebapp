@@ -195,6 +195,53 @@ public class ListeningRelationalRuntimeTests
     }
 
     [Fact]
+    public async Task Review_HidesHumanOverrideAuditReasonFromLearnerPayload()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, questionId) = await SeedRelationalPaperAsync(db);
+        const string internalReason = "Internal calibration note: accept phonetic spelling.";
+
+        await svc.StartAttemptAsync(userId, paperId, "home", default);
+        var attempt = await db.ListeningAttempts.SingleAsync(a => a.UserId == userId && a.PaperId == paperId);
+        await svc.SaveAnswerAsync(userId, attempt.Id, questionId, new ListeningAnswerSaveRequest("wrong"), default);
+        await svc.SubmitAsync(userId, attempt.Id, default);
+
+        attempt.HumanScoreOverridesJson = $"[{{\"questionId\":\"{questionId}\",\"override\":1,\"by\":\"expert-1\",\"reason\":\"{internalReason}\"}}]";
+        await db.SaveChangesAsync();
+
+        var review = await svc.GetReviewAsync(userId, attempt.Id, default);
+        var reviewJson = JsonSerializer.Serialize(review);
+
+        Assert.Contains("Marked correct by human reviewer.", reviewJson);
+        Assert.DoesNotContain(internalReason, reviewJson);
+        Assert.DoesNotContain("expert-1", reviewJson);
+    }
+
+    [Theory]
+    [InlineData("5", true)]
+    [InlineData("five   milligrams", true)]
+    [InlineData("five milligrams tablets", false)]
+    public async Task RelationalSubmit_UsesAcceptedVariantsWithoutPartialCredit(
+        string learnerAnswer,
+        bool expectedCorrect)
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, questionId) = await SeedRelationalPaperAsync(db);
+        var question = await db.ListeningQuestions.SingleAsync(item => item.Id == questionId);
+        question.AcceptedSynonymsJson = "[\"5\",\"five milligrams\"]";
+        await db.SaveChangesAsync();
+
+        await svc.StartAttemptAsync(userId, paperId, "home", default);
+        var attempt = await db.ListeningAttempts.SingleAsync(item => item.UserId == userId && item.PaperId == paperId);
+        await svc.SaveAnswerAsync(userId, attempt.Id, questionId, new ListeningAnswerSaveRequest(learnerAnswer), default);
+        await svc.SubmitAsync(userId, attempt.Id, default);
+
+        var savedAnswer = await db.ListeningAnswers.SingleAsync(answer => answer.ListeningAttemptId == attempt.Id);
+        Assert.Equal(expectedCorrect, savedAnswer.IsCorrect);
+        Assert.Equal(expectedCorrect ? 1 : 0, savedAnswer.PointsEarned);
+    }
+
+    [Fact]
     public async Task SubmitAfterDeadline_GradesPersistedAnswersAndIgnoresLateFinalPayload()
     {
         var (db, svc) = Build();
@@ -263,6 +310,93 @@ public class ListeningRelationalRuntimeTests
 
         Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("attempt").ValueKind);
         Assert.Equal("paper", doc.RootElement.GetProperty("modePolicy").GetProperty("mode").GetString());
+    }
+
+    [Fact]
+    public async Task StartAttemptAsync_ScopesInProgressReuseByPathwayStage()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
+
+        await svc.StartAttemptAsync(userId, paperId, "practice", default);
+        await svc.StartAttemptAsync(userId, paperId, "practice", "foundation_partA", default);
+        await svc.StartAttemptAsync(userId, paperId, "practice", "foundation_partA", default);
+
+        var attempts = await db.ListeningAttempts
+            .Where(a => a.UserId == userId && a.PaperId == paperId)
+            .OrderBy(a => a.StartedAt)
+            .ToListAsync();
+
+        Assert.Equal(2, attempts.Count);
+        Assert.DoesNotContain("pathwayStage", attempts[0].ScopeJson);
+        Assert.Contains("foundation_partA", attempts[1].ScopeJson);
+    }
+
+    [Fact]
+    public async Task StartAttemptAsync_ReusesLegacyStageCodeScopeKey()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
+        var now = DateTimeOffset.UtcNow;
+        db.ListeningAttempts.Add(new ListeningAttempt
+        {
+            Id = "lat-existing-legacy-stage-code",
+            UserId = userId,
+            PaperId = paperId,
+            StartedAt = now.AddMinutes(-5),
+            LastActivityAt = now,
+            Status = ListeningAttemptStatus.InProgress,
+            Mode = ListeningAttemptMode.Learning,
+            MaxRawScore = OetLearner.Api.Services.OetScoring.ListeningReadingRawMax,
+            ScopeJson = """{"mode":"practice","sourceKind":"content_paper","stageCode":"foundation_partA"}""",
+        });
+        await db.SaveChangesAsync();
+
+        await svc.StartAttemptAsync(userId, paperId, "practice", "foundation_partA", default);
+
+        var attempts = await db.ListeningAttempts
+            .Where(a => a.UserId == userId && a.PaperId == paperId)
+            .ToListAsync();
+
+        Assert.Single(attempts);
+        Assert.Equal("lat-existing-legacy-stage-code", attempts.Single().Id);
+    }
+
+    [Fact]
+    public async Task GetSessionAsync_ScopesImplicitInProgressResumeByPathwayStage()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
+
+        await svc.StartAttemptAsync(userId, paperId, "practice", default);
+        await svc.StartAttemptAsync(userId, paperId, "practice", "foundation_partA", default);
+
+        var attempts = await db.ListeningAttempts
+            .Where(a => a.UserId == userId && a.PaperId == paperId)
+            .OrderBy(a => a.StartedAt)
+            .ToListAsync();
+
+        var genericSession = await svc.GetSessionAsync(userId, paperId, "practice", attemptId: null, default);
+        var scopedSession = await svc.GetSessionAsync(userId, paperId, "practice", attemptId: null, pathwayStage: "foundation_partA", default);
+
+        using var genericDoc = JsonDocument.Parse(JsonSerializer.Serialize(genericSession));
+        using var scopedDoc = JsonDocument.Parse(JsonSerializer.Serialize(scopedSession));
+
+        Assert.Equal(attempts[0].Id, genericDoc.RootElement.GetProperty("attempt").GetProperty("attemptId").GetString());
+        Assert.Equal(attempts[1].Id, scopedDoc.RootElement.GetProperty("attempt").GetProperty("attemptId").GetString());
+    }
+
+    [Fact]
+    public async Task StartAttemptAsync_CreatesDiagnosticRelationalAttemptForPathwayDiagnosticLaunch()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
+
+        await svc.StartAttemptAsync(userId, paperId, "diagnostic", "diagnostic", default);
+
+        var attempt = await db.ListeningAttempts.SingleAsync(a => a.UserId == userId && a.PaperId == paperId);
+        Assert.Equal(ListeningAttemptMode.Diagnostic, attempt.Mode);
+        Assert.Contains("diagnostic", attempt.ScopeJson);
     }
 
     [Fact]

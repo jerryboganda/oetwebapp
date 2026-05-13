@@ -72,7 +72,7 @@ public class ListeningBackfillServiceTests
                 text = $"Part B item {i + 1}",
                 options = new[] { "First option", "Second option", "Third option" },
                 correctAnswer = "First option",
-                optionDistractorCategory = new[] { (string?)null, "too_strong", "wrong_speaker" },
+                optionDistractorCategory = new[] { (string?)null, "too_strong", "out_of_scope" },
                 optionDistractorWhy = new[] { (string?)null, "Stronger than the speaker said.", "This was the wrong speaker." },
             });
         for (var i = 0; i < 12; i++)
@@ -162,7 +162,7 @@ public class ListeningBackfillServiceTests
         Assert.Null(bOpts[0].DistractorCategory);
         Assert.Equal(ListeningDistractorCategory.TooStrong, bOpts[1].DistractorCategory);
         Assert.Equal("Stronger than the speaker said.", bOpts[1].WhyWrongMarkdown);
-        Assert.Equal(ListeningDistractorCategory.WrongSpeaker, bOpts[2].DistractorCategory);
+        Assert.Equal(ListeningDistractorCategory.OutOfScope, bOpts[2].DistractorCategory);
     }
 
     [Fact]

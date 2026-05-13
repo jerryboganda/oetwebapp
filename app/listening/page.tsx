@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, Lock, MonitorCheck, Printer, Sparkles, Target, TrendingUp, Volume2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, Lock, MonitorCheck, Printer, Sparkles, Target, TrendingUp, Users, Volume2 } from 'lucide-react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
@@ -291,6 +291,26 @@ export default function ListeningHome() {
             </LearnerSurfaceCard>
           </section>
         ) : null}
+
+        <section aria-label="Listening teacher tools">
+          <LearnerSurfaceCard
+            card={{
+              kind: 'navigation',
+              sourceType: 'frontend_navigation',
+              accent: 'blue',
+              eyebrow: 'Teacher Classes',
+              eyebrowIcon: Users,
+              title: 'Review class Listening analytics',
+              description: 'Open roster-scoped score signals, part accuracy, hardest questions, and distractor heat for your own classes.',
+              metaItems: [
+                { icon: Users, label: 'Owner-scoped classes' },
+                { icon: Target, label: 'A/B/C breakdown' },
+                { icon: TrendingUp, label: 'Class readiness signals' },
+              ],
+              primaryAction: { label: 'Open Class Analytics', href: '/listening/classes', variant: 'outline' },
+            }}
+          />
+        </section>
 
         {loading ? (
           <LearnerSkeleton variant="dashboard" />

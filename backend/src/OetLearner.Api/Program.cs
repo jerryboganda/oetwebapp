@@ -472,6 +472,10 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .RequireRole(ApplicationUserRoles.Sponsor)
         .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
+    options.AddPolicy("TeachingStaffOnly", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireRole(ApplicationUserRoles.Expert, ApplicationUserRoles.Sponsor, ApplicationUserRoles.Admin)
+        .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
     options.AddPolicy("RulebookReader", policy => policy
         .RequireAuthenticatedUser()
         .RequireRole(ApplicationUserRoles.Learner, ApplicationUserRoles.Expert, ApplicationUserRoles.Admin));
@@ -504,6 +508,20 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminBillingWrite", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "system_admin")));
+
+    // Billing-hardening I-7: granular billing-write policies. Each accepts
+    // the specific granular permission OR the legacy billing:write superset
+    // OR system_admin, preserving backward compatibility for existing admins
+    // whose grants only include billing:write.
+    options.AddPolicy("AdminBillingRefundWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:refund_write", "billing:write", "system_admin")));
+    options.AddPolicy("AdminBillingCatalogWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:catalog_write", "billing:write", "system_admin")));
+    options.AddPolicy("AdminBillingSubscriptionWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:subscription_write", "billing:write", "system_admin")));
     options.AddPolicy("AdminFreezeRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "users:read", "system_admin")));
@@ -563,6 +581,14 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractio
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionService, OetLearner.Api.Services.Listening.ListeningExtractionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionDraftService, OetLearner.Api.Services.Listening.ListeningExtractionDraftService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPathwayService, OetLearner.Api.Services.Listening.ListeningPathwayService>();
+// ── Listening V2 — strategy + FSM + version-pinned grading + pathway + classes ──
+builder.Services.AddSingleton<OetLearner.Api.Services.Listening.ListeningModePolicyResolver>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Listening.ListeningConfirmTokenService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningSessionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningGradingService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningPathwayProgressService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.TeacherClassService>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningV2BackfillService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAnalyticsService, OetLearner.Api.Services.Reading.ReadingAnalyticsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.StubReadingExtractionAi>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionService, OetLearner.Api.Services.Reading.ReadingExtractionService>();
@@ -728,6 +754,18 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Auth.AuthDataRetention
 builder.Services.Configure<OetLearner.Api.Configuration.DataRetentionOptions>(
     builder.Configuration.GetSection("DataRetention"));
 builder.Services.AddHostedService<OetLearner.Api.Services.DataRetentionWorker>();
+
+// Billing-hardening I-9: tiered PII retention. Nulls the payload column on
+// PaymentWebhookEvents at the PaymentWebhookPiiNullOutAge cutoff (default
+// 90 days) while keeping the event metadata for forensic chain-of-custody.
+// The companion DataRetentionWorker deletes the row entirely at the longer
+// PaymentWebhookEvents cutoff (default 180 days).
+builder.Services.AddHostedService<OetLearner.Api.Services.Billing.WebhookPiiRetentionWorker>();
+
+// Mocks Wave 5: dispatches the 24-h / 2-h / 30-min pre-booking reminder
+// notifications for upcoming MockBookings. Idempotent via the
+// NotificationService dedupe-key contract; ticks every 5 min.
+builder.Services.AddHostedService<OetLearner.Api.Services.Mocks.MockBookingReminderWorker>();
 
 // Partition-maintenance worker: keeps next-month range partitions pre-created
 // for candidate time-ordered tables (AnalyticsEvents, AuditEvents, AiUsageRecords).
@@ -1293,6 +1331,7 @@ app.MapListeningAuthoringAdminEndpoints();
 app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
 app.MapListeningLearnerEndpoints();
+app.MapListeningV2Endpoints();
 app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
 app.MapRecallsEndpoints();
@@ -1401,9 +1440,7 @@ app.Run();
 static bool HasAdminPermission(AuthorizationHandlerContext ctx, params string[] anyOf)
 {
     var perms = ctx.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
-    if (string.IsNullOrEmpty(perms)) return false;
-    var granted = perms.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-    return anyOf.Any(p => granted.Contains(p, StringComparer.OrdinalIgnoreCase));
+    return OetLearner.Api.Security.AdminPermissionEvaluator.HasAny(perms, anyOf);
 }
 
 public partial class Program;

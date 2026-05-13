@@ -1,4 +1,7 @@
 using System.Security.Claims;
+using System.Text.Json;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Listening;
 
 namespace OetLearner.Api.Endpoints;
@@ -28,6 +31,50 @@ public static class ListeningAdminAnalyticsEndpoints
         })
             .WithName("GetListeningAdminAnalytics")
             .WithSummary("Class-wide Listening analytics over a rolling window");
+
+        group.MapGet("/attempts/{attemptId}/export", async (
+            string attemptId,
+            IListeningAnalyticsService svc,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var export = await svc.ExportAttemptAsync(attemptId, ct);
+                var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+                var adminName = http.User.FindFirstValue(ClaimTypes.Name) ?? adminId;
+                db.AuditEvents.Add(new AuditEvent
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    OccurredAt = DateTimeOffset.UtcNow,
+                    ActorId = adminId,
+                    ActorName = adminName,
+                    Action = "ListeningAttemptExported",
+                    ResourceType = "ListeningAttempt",
+                    ResourceId = export.AttemptId,
+                    Details = JsonSerializer.Serialize(new
+                    {
+                        export.Source,
+                        export.UserId,
+                        export.PaperId,
+                        AnswerCount = export.Answers.Count,
+                        EvaluationCount = export.Evaluations.Count,
+                    }),
+                });
+                await db.SaveChangesAsync(ct);
+
+                return Results.Ok(export);
+            }
+            catch (KeyNotFoundException)
+            {
+                return Results.NotFound();
+            }
+        })
+            .WithName("ExportListeningAdminAttemptJson")
+            .WithSummary("Admin-only full Listening attempt JSON export")
+            .Produces<ListeningAttemptExportDto>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
 
         // Phase 2 follow-up: bulk JSON→relational backfill across every
         // Listening paper. Gated separately under AdminContentWrite +

@@ -349,23 +349,24 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 export const getListeningHome = () =>
   api<ListeningHomeDto>('/v1/listening/home');
 
-export type ListeningSessionMode = 'practice' | 'exam' | 'home' | 'paper';
+export type ListeningSessionMode = 'practice' | 'exam' | 'home' | 'paper' | 'diagnostic';
 
 export function getListeningSession(
   paperId: string,
-  options: { mode?: ListeningSessionMode; attemptId?: string | null } = {},
+  options: { mode?: ListeningSessionMode; attemptId?: string | null; pathwayStage?: string | null } = {},
 ) {
   const params = new URLSearchParams();
   if (options.mode) params.set('mode', options.mode);
   if (options.attemptId) params.set('attemptId', options.attemptId);
+  if (options.pathwayStage) params.set('pathwayStage', options.pathwayStage);
   const suffix = params.toString() ? `?${params.toString()}` : '';
   return api<ListeningSessionDto>(`/v1/listening-papers/papers/${encodeURIComponent(paperId)}/session${suffix}`);
 }
 
-export const startListeningAttempt = (paperId: string, mode: ListeningSessionMode) =>
+export const startListeningAttempt = (paperId: string, mode: ListeningSessionMode, options: { pathwayStage?: string | null } = {}) =>
   api<ListeningAttemptDto>(`/v1/listening-papers/papers/${encodeURIComponent(paperId)}/attempts`, {
     method: 'POST',
-    body: JSON.stringify({ mode }),
+    body: JSON.stringify({ mode, pathwayStage: options.pathwayStage ?? undefined }),
   });
 
 export const saveListeningAnswer = (attemptId: string, questionId: string, userAnswer: string) =>

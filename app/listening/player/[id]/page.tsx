@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, CheckCircle2, ChevronRight, Clock, FileText, Loader2, Lock, Pause, Play, Save, Timer, Volume2, WifiOff } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, Loader2, Volume2 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -24,18 +24,34 @@ import {
   type ListeningSessionDto,
 } from '@/lib/listening-api';
 import {
-  LISTENING_PREVIEW_LABEL,
   LISTENING_PREVIEW_SECONDS,
   LISTENING_REVIEW_SECONDS,
   LISTENING_SECTION_LABEL,
   LISTENING_SECTION_SEQUENCE,
-  LISTENING_SECTION_SHORT_LABEL,
-  formatReviewSeconds,
   groupQuestionsBySection,
   type ListeningSectionCode,
 } from '@/lib/listening-sections';
+import {
+  listeningPositionForState,
+  listeningStateForPosition,
+  listeningWindowSeconds,
+  type ListeningFsmState,
+} from '@/lib/listening/transitions';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
+import { BCQuestionRenderer } from '@/components/domain/listening/BCQuestionRenderer';
+import { PartARenderer } from '@/components/domain/listening/PartARenderer';
+import { ZoomControls } from '@/components/domain/listening/ZoomControls';
+import { ListeningIntroCard } from '@/components/domain/listening/player/ListeningIntroCard';
+import { ListeningAudioTransport } from '@/components/domain/listening/player/ListeningAudioTransport';
+import { ListeningSectionStepper } from '@/components/domain/listening/player/ListeningSectionStepper';
+import { ListeningPreviewBanner, ListeningReviewBanner } from '@/components/domain/listening/player/ListeningPhaseBanner';
 import { completeMockSection } from '@/lib/api';
+import { resolveBlockedSeekTarget, shouldResumeAfterBlockedPause } from '@/lib/listening/audio-integrity';
+import { listeningV2Api, type AdvanceResult, type ListeningV2SessionState } from '@/lib/listening/v2-api';
+
+const FIRST_STRICT_STATE: ListeningFsmState = 'a1_preview';
+
+type ListeningPlayerMode = 'practice' | 'exam' | 'home' | 'paper' | 'diagnostic';
 
 function formatTime(seconds: number) {
   if (!seconds || Number.isNaN(seconds)) return '00:00';
@@ -65,9 +81,50 @@ function formatMilliseconds(value: number | null | undefined) {
   return formatTime(seconds);
 }
 
-function describeSpeakers(extract: NonNullable<ListeningSessionDto['paper']['extracts']>[number]) {
-  if (!extract.speakers?.length) return 'Speakers not specified';
-  return extract.speakers.map((speaker) => [speaker.role, speaker.accent ?? extract.accentCode].filter(Boolean).join(' · ')).join(', ');
+function derivePlayerMode({
+  rawMode,
+  mockMode,
+  strictness,
+  deliveryMode,
+  strictTimer,
+}: {
+  rawMode: string;
+  mockMode: string;
+  strictness: string;
+  deliveryMode: string;
+  strictTimer: string;
+}): ListeningPlayerMode {
+  if (rawMode === 'exam' || rawMode === 'home' || rawMode === 'paper' || rawMode === 'diagnostic') return rawMode;
+  const normalizedDelivery = deliveryMode.trim().toLowerCase();
+  if (normalizedDelivery === 'paper') return 'paper';
+  const normalizedMockMode = mockMode.trim().toLowerCase();
+  const normalizedStrictness = strictness.trim().toLowerCase();
+  const strictLaunch = normalizedMockMode === 'exam'
+    || normalizedStrictness === 'exam'
+    || normalizedStrictness === 'final_readiness'
+    || strictTimer.trim().toLowerCase() === 'true';
+  if (strictLaunch && normalizedDelivery === 'oet_home') return 'home';
+  if (strictLaunch) return 'exam';
+  return 'practice';
+}
+
+function advanceRejectionMessage(result: AdvanceResult) {
+  return result.rejectionDetail ?? result.rejectionReason ?? 'The server rejected the Listening start transition.';
+}
+
+async function advanceStrictTransition(attemptId: string, toState: ListeningFsmState): Promise<ListeningV2SessionState> {
+  const first = await listeningV2Api.advance(attemptId, toState, null);
+  if (first.outcome === 'applied') return first.state ?? listeningV2Api.getState(attemptId);
+  if (first.outcome === 'confirm-required' && first.confirmToken) {
+    const confirmed = await listeningV2Api.advance(attemptId, toState, first.confirmToken);
+    if (confirmed.outcome === 'applied') return confirmed.state ?? listeningV2Api.getState(attemptId);
+    throw new Error(advanceRejectionMessage(confirmed));
+  }
+  throw new Error(advanceRejectionMessage(first));
+}
+
+async function advanceStrictStart(attemptId: string) {
+  await advanceStrictTransition(attemptId, FIRST_STRICT_STATE);
 }
 
 function PlayerContent() {
@@ -75,12 +132,9 @@ function PlayerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = firstParam(params?.id);
-  // Phase 9 tail: accept practice | exam | home | paper from the URL.
-  // Anything else collapses to practice (mirrors backend NormalizeMode).
   const rawMode = searchParams?.get('mode') ?? '';
-  const mode: 'practice' | 'exam' | 'home' | 'paper' =
-    rawMode === 'exam' || rawMode === 'home' || rawMode === 'paper' ? rawMode : 'practice';
   const attemptIdFromRoute = searchParams?.get('attemptId');
+  const pathwayStage = searchParams?.get('pathwayStage') ?? null;
   const drillId = searchParams?.get('drill');
   // Mocks V2 — when this player is launched as a section of a mock attempt,
   // BuildLaunchRoute writes mockAttemptId/mockSectionId/mockMode/strictness
@@ -88,6 +142,17 @@ function PlayerContent() {
   // report no longer shows "Pending". Standalone practice keeps these null.
   const mockAttemptId = searchParams?.get('mockAttemptId') ?? null;
   const mockSectionId = searchParams?.get('mockSectionId') ?? null;
+  const mockMode = searchParams?.get('mockMode') ?? '';
+  const mockStrictness = searchParams?.get('strictness') ?? '';
+  const mockDeliveryMode = searchParams?.get('deliveryMode') ?? '';
+  const mockStrictTimer = searchParams?.get('strictTimer') ?? '';
+  const mode = derivePlayerMode({
+    rawMode,
+    mockMode,
+    strictness: mockStrictness,
+    deliveryMode: mockDeliveryMode,
+    strictTimer: mockStrictTimer,
+  });
 
   const rootRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -95,6 +160,9 @@ function PlayerContent() {
   // C8e — last-known forward-only audio time. onTimeUpdate keeps this in sync;
   // onSeeking snaps backwards seeks back to this value in exam mode.
   const lastKnownTimeRef = useRef<number>(0);
+  const programmaticSeekTargetRef = useRef<number | null>(null);
+  const programmaticSeekResetTimerRef = useRef<number | null>(null);
+  const allowedPauseRef = useRef<boolean>(false);
   // C8e — set true once the active extract's audioEndMs has been crossed in
   // exam mode. Subsequent play() calls (e.g. user clicking the OS play key)
   // are immediately re-paused.
@@ -113,6 +181,14 @@ function PlayerContent() {
   // marked the attempt Submitted. Setting this ref first thing in
   // handleSubmit closes that race deterministically.
   const isSubmittingRef = useRef<boolean>(false);
+  // C8g — flips true whenever the audio element actually ends up paused
+  // (i.e. a pause that is NOT immediately auto-resumed by the blocked-pause
+  // protector). The next `play` event reads & clears this and triggers a
+  // server-side `audio-resume` call so the backend grace window is honoured.
+  const wasPausedRef = useRef<boolean>(false);
+  const audioResumeInFlightRef = useRef<boolean>(false);
+  const applyStrictServerStateRef = useRef<((state: ListeningV2SessionState) => void) | null>(null);
+  const strictAdvanceTargetRef = useRef<ListeningFsmState | null>(null);
   const [session, setSession] = useState<ListeningSessionDto | null>(null);
   const [attempt, setAttempt] = useState<ListeningAttemptDto | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -121,14 +197,19 @@ function PlayerContent() {
   const [contentLockedMessage, setContentLockedMessage] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [integrityWarning, setIntegrityWarning] = useState<string | null>(null);
+  const [audioResumeWarning, setAudioResumeWarning] = useState<string | null>(null);
   const [audioState, setAudioState] = useState<'idle' | 'buffering' | 'ready' | 'error'>('idle');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [hasStarted, setHasStarted] = useState(Boolean(attemptIdFromRoute));
+  const [hasStarted, setHasStarted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+  const [isAdvancingPhase, setIsAdvancingPhase] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [techReadiness, setTechReadiness] = useState<{ audioOk: boolean; durationMs: number } | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   // C8f — pre-audio reading window precedes the audio of every section so
   // candidates can read the questions before audio playback starts. Initial
@@ -139,6 +220,8 @@ function PlayerContent() {
   const [phase, setPhase] = useState<'preview' | 'audio' | 'review'>('audio');
   const [previewSecondsRemaining, setPreviewSecondsRemaining] = useState(0);
   const [reviewSecondsRemaining, setReviewSecondsRemaining] = useState(0);
+  const [questionZoomPercent, setQuestionZoomPercent] = useState(100);
+  const [strictServerState, setStrictServerState] = useState<ListeningV2SessionState | null>(null);
   const [showNextConfirm, setShowNextConfirm] = useState(false);
   // C8d — whole-attempt 40-minute countdown driven by attempt.expiresAt.
   const [attemptSecondsRemaining, setAttemptSecondsRemaining] = useState<number | null>(null);
@@ -148,6 +231,10 @@ function PlayerContent() {
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const sectionMotion = getSurfaceMotion('section', reducedMotion);
   const listMotion = getSurfaceMotion('list', reducedMotion);
+  const strictReadinessRequired = mode === 'exam'
+    || mode === 'home'
+    || session?.modePolicy.mode === 'exam'
+    || session?.modePolicy.mode === 'home';
 
   useEffect(() => {
     if (!id) return;
@@ -159,7 +246,7 @@ function PlayerContent() {
         if (cancelled) return null;
         setLoadingTask(true);
         setLoadError(null);
-        return getListeningSession(id, { mode, attemptId: attemptIdFromRoute });
+        return getListeningSession(id, { mode, attemptId: attemptIdFromRoute, ...(pathwayStage ? { pathwayStage } : {}) });
       })
       .then((data) => {
         if (cancelled || !data) return;
@@ -188,7 +275,7 @@ function PlayerContent() {
       cancelled = true;
       Object.values(timers).forEach(clearTimeout);
     };
-  }, [attemptIdFromRoute, id, mode]);
+  }, [attemptIdFromRoute, id, mode, pathwayStage]);
 
   useEffect(() => {
     if (!attempt?.attemptId || !hasStarted || isSubmitting) return;
@@ -206,6 +293,112 @@ function PlayerContent() {
     if (!attempt?.attemptId || !session?.modePolicy.integrityLockRequired) return;
     void recordListeningIntegrityEvent(attempt.attemptId, eventType, details).catch(() => undefined);
   }, [attempt?.attemptId, session?.modePolicy.integrityLockRequired]);
+
+  const pauseAudio = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      allowedPauseRef.current = false;
+      return;
+    }
+    allowedPauseRef.current = true;
+    audio.pause();
+  }, []);
+
+  const seekAudioTo = useCallback((seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const target = Math.max(0, seconds);
+    programmaticSeekTargetRef.current = target;
+    if (programmaticSeekResetTimerRef.current) window.clearTimeout(programmaticSeekResetTimerRef.current);
+    programmaticSeekResetTimerRef.current = window.setTimeout(() => {
+      if (programmaticSeekTargetRef.current === target) programmaticSeekTargetRef.current = null;
+      programmaticSeekResetTimerRef.current = null;
+    }, 1000);
+    try {
+      audio.currentTime = target;
+      setProgress(target);
+      lastKnownTimeRef.current = target;
+    } catch {
+      programmaticSeekTargetRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => {
+    if (programmaticSeekResetTimerRef.current) window.clearTimeout(programmaticSeekResetTimerRef.current);
+  }, []);
+
+  // C8g — server-authoritative audio-resume protocol. When the audio element
+  // resumes after any pause in strict mode (exam / home / @home), the backend
+  // must validate the cue point against its 5s grace window. Inside the grace
+  // window the call is a no-op; outside, the server force-advances to the
+  // next *_review state and the client must align playhead + surface a
+  // user-visible alert.
+  const handleAudioResume = useCallback(() => {
+    const audio = audioRef.current;
+    const attemptId = attempt?.attemptId;
+    if (!audio || !attemptId) return;
+    if (!strictReadinessRequired) return;
+    if (audio.currentTime === 0) return;
+    if (!wasPausedRef.current) return;
+    if (audioResumeInFlightRef.current) return;
+    wasPausedRef.current = false;
+    audioResumeInFlightRef.current = true;
+    const cuePointMs = Math.round(audio.currentTime * 1000);
+    setAudioResumeWarning(null);
+    allowedPauseRef.current = true;
+    setIsPlaying(false);
+    try {
+      audio.pause();
+    } catch {
+      // ignore — audio element may already be paused
+    }
+    listeningV2Api
+      .audioResume(attemptId, cuePointMs)
+      .then((result) => {
+        if (!result) return;
+        if (result.resume) {
+          audioResumeInFlightRef.current = false;
+          setIsPlaying(true);
+          const playResult = audio.play();
+          if (playResult && typeof playResult.catch === 'function') {
+            playResult.catch((err) => handleAudioPlaybackError(err, setAudioError));
+          }
+          return;
+        }
+        // Outside grace OR server already past audio — force-align playhead
+        // and surface a small inline alert. The server has already moved on
+        // and locked the previous audio state on its side, so additionally
+        // pause the local element to prevent further out-of-window audio.
+        void listeningV2Api.getState(attemptId)
+          .then((state) => applyStrictServerStateRef.current?.(state))
+          .catch(() => undefined);
+        const targetSeconds = Math.max(0, (result.resumeAtMs ?? 0) / 1000);
+        if (targetSeconds > 0) seekAudioTo(targetSeconds);
+        setAudioResumeWarning('Your section moved on while audio was paused.');
+        allowedPauseRef.current = true;
+        try {
+          audio.pause();
+        } catch {
+          // ignore — audio element may already be paused
+        }
+        wasPausedRef.current = true;
+      })
+      .catch(() => {
+        setAudioResumeWarning('Audio resume could not be verified with the server. Playback has been paused; try resuming again.');
+        allowedPauseRef.current = true;
+        setIsPlaying(false);
+        try {
+          audio.pause();
+        } catch {
+          // ignore — audio element may already be paused
+        }
+        wasPausedRef.current = true;
+      })
+      .finally(() => {
+        audioResumeInFlightRef.current = false;
+      });
+  }, [attempt?.attemptId, seekAudioTo, strictReadinessRequired]);
 
   useEffect(() => {
     if (!attempt?.attemptId || !hasStarted || !session?.modePolicy.integrityLockRequired) return;
@@ -238,15 +431,29 @@ function PlayerContent() {
   const ensureAttempt = async () => {
     if (!session) throw new Error('Listening session is not ready.');
     if (attempt) return attempt;
-    const started = await startListeningAttempt(session.paper.id, mode);
+    const started = await startListeningAttempt(session.paper.id, mode, { pathwayStage });
     setAttempt(started);
     return started;
   };
 
   const startTask = async () => {
     if (!session?.paper.audioAvailable || !session.readiness.objectiveReady) return;
+    const readinessSnapshot = techReadiness;
+    if (strictReadinessRequired && !readinessSnapshot?.audioOk) {
+      setStartError('Complete the audio readiness check before starting this strict Listening attempt.');
+      return;
+    }
+    setIsStarting(true);
+    setStartError(null);
     try {
       const started = await ensureAttempt();
+      if (strictReadinessRequired) {
+        if (!readinessSnapshot?.audioOk) {
+          throw new Error('Complete the audio readiness check before starting this strict Listening attempt.');
+        }
+        await listeningV2Api.recordTechReadiness(started.attemptId, readinessSnapshot);
+        await advanceStrictStart(started.attemptId);
+      }
       if (session.modePolicy.integrityLockRequired && rootRef.current && !document.fullscreenElement) {
         try {
           await rootRef.current.requestFullscreen();
@@ -257,7 +464,16 @@ function PlayerContent() {
         }
       }
       setHasStarted(true);
-      router.replace(`/listening/player/${session.paper.id}?attemptId=${started.attemptId}&mode=${started.mode}${drillId ? `&drill=${encodeURIComponent(drillId)}` : ''}`);
+      const nextParams = new URLSearchParams({ attemptId: started.attemptId, mode: started.mode });
+      if (pathwayStage) nextParams.set('pathwayStage', pathwayStage);
+      if (drillId) nextParams.set('drill', drillId);
+      if (mockAttemptId) nextParams.set('mockAttemptId', mockAttemptId);
+      if (mockSectionId) nextParams.set('mockSectionId', mockSectionId);
+      if (mockMode) nextParams.set('mockMode', mockMode);
+      if (mockStrictness) nextParams.set('strictness', mockStrictness);
+      if (mockDeliveryMode) nextParams.set('deliveryMode', mockDeliveryMode);
+      if (mockStrictTimer) nextParams.set('strictTimer', mockStrictTimer);
+      router.replace(`/listening/player/${session.paper.id}?${nextParams.toString()}`);
       // C8f — do NOT auto-play here. Entering hasStarted triggers the
       // currentSection effect, which drops into the pre-audio reading
       // window. Audio play() fires when the preview countdown hits zero.
@@ -266,7 +482,9 @@ function PlayerContent() {
         setContentLockedMessage(readContentLockedMessage(err));
         return;
       }
-      setLoadError(err instanceof Error ? err.message : 'Could not start this Listening attempt.');
+      setStartError(err instanceof Error ? err.message : 'Could not start this Listening attempt.');
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -275,7 +493,13 @@ function PlayerContent() {
     if (isPlaying && session?.modePolicy.canPause === false) return;
     if (!isPlaying && session?.modePolicy.onePlayOnly && hasReachedEndRef.current) return;
     if (!audioRef.current) return;
-    if (isPlaying) audioRef.current.pause();
+    if (!isPlaying && audioResumeInFlightRef.current) {
+      allowedPauseRef.current = true;
+      setIsPlaying(false);
+      audioRef.current.pause();
+      return;
+    }
+    if (isPlaying) pauseAudio();
     else audioRef.current.play().catch((err) => handleAudioPlaybackError(err, setAudioError));
   };
 
@@ -309,7 +533,7 @@ function PlayerContent() {
     // cannot race a Submitted attempt and trip the 409 diagnostics check.
     isSubmittingRef.current = true;
     setIsSubmitting(true);
-    audioRef.current?.pause();
+    pauseAudio();
     for (const timer of Object.values(saveTimers.current)) clearTimeout(timer);
     saveTimers.current = {};
     try {
@@ -359,20 +583,113 @@ function PlayerContent() {
   const currentExtracts = currentSection
     ? extracts.filter((extract) => extract.partCode === currentSection || (currentSection === 'B' && extract.partCode === 'B'))
     : [];
-  // C1 — first extract of the active section drives audio cue points.
-  // Multiple extracts (Part B) just play through; we only enforce the
-  // outermost window of the first one to keep the player simple.
   const activeExtract = currentExtracts[0] ?? null;
+  const currentExtractWindows = currentExtracts.filter((extract) => (
+    extract.audioStartMs != null
+    && extract.audioEndMs != null
+    && extract.audioEndMs > extract.audioStartMs
+  ));
+  const currentSectionAudioStartMs = currentExtractWindows.length > 0
+    ? Math.min(...currentExtractWindows.map((extract) => extract.audioStartMs!))
+    : null;
+  const currentSectionAudioEndMs = currentExtractWindows.length > 0
+    ? Math.max(...currentExtractWindows.map((extract) => extract.audioEndMs!))
+    : null;
   const isLastSection = currentSection !== null && currentSectionIndex >= sectionsInPaper.length - 1;
   const currentSectionReviewSeconds = currentSection ? LISTENING_REVIEW_SECONDS[currentSection] : 0;
   const currentSectionPreviewSeconds = currentSection ? LISTENING_PREVIEW_SECONDS[currentSection] : 0;
   const canSkipPreview = session?.modePolicy.mode === 'practice';
-  const activeExtractKey = activeExtract ? `${activeExtract.partCode}-${activeExtract.displayOrder}` : null;
-  const activeExtractCompleted = activeExtractKey ? completedExtractIds.has(activeExtractKey) : true;
+  const allCurrentExtractsCompleted = currentExtracts.every((extract) => {
+    if (extract.audioEndMs == null) return true;
+    return completedExtractIds.has(`${extract.partCode}-${extract.displayOrder}`);
+  });
   const canOpenReviewWindow = Boolean(
     currentSection
-    && (session?.modePolicy.canScrub !== false || activeExtractCompleted || activeExtract?.audioEndMs == null),
+    && (session?.modePolicy.canScrub !== false || allCurrentExtractsCompleted || currentSectionAudioEndMs == null),
   );
+  const strictServerNavigationActive = strictReadinessRequired && Boolean(attempt?.attemptId ?? attemptIdFromRoute);
+
+  const applyStrictServerState = useCallback((state: ListeningV2SessionState) => {
+    setStrictServerState(state);
+    const position = listeningPositionForState(state.state);
+    if (!position) return;
+
+    const sectionIndex = sectionsInPaper.indexOf(position.section);
+    if (sectionIndex >= 0) setCurrentSectionIndex(sectionIndex);
+
+    const secondsRemaining = listeningWindowSeconds(state.windowRemainingMs);
+    setPhase(position.phase);
+    if (position.phase === 'preview') {
+      previewArmedRef.current = true;
+      setPreviewSecondsRemaining(secondsRemaining);
+      setReviewSecondsRemaining(0);
+      return;
+    }
+    previewArmedRef.current = false;
+    setPreviewSecondsRemaining(0);
+    setReviewSecondsRemaining(position.phase === 'review' ? secondsRemaining : 0);
+  }, [sectionsInPaper]);
+  applyStrictServerStateRef.current = applyStrictServerState;
+
+  useEffect(() => {
+    if (!session) return;
+    if (!attemptIdFromRoute) {
+      setStrictServerState(null);
+      setHasStarted(false);
+      return;
+    }
+    if (!strictReadinessRequired) {
+      setStrictServerState(null);
+      setHasStarted(true);
+      return;
+    }
+    let alive = true;
+    listeningV2Api
+      .getState(attemptIdFromRoute)
+      .then((state) => {
+        if (!alive) return;
+        setStartError(null);
+        if (state.state === 'intro') {
+          setStrictServerState(state);
+          setHasStarted(false);
+          setTechReadiness(null);
+          return;
+        }
+        applyStrictServerState(state);
+        setHasStarted(true);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setStrictServerState(null);
+        setHasStarted(false);
+        setStartError('Could not verify this strict Listening attempt with the server. Run the readiness check again before starting.');
+      });
+    return () => {
+      alive = false;
+    };
+  }, [applyStrictServerState, attemptIdFromRoute, session, strictReadinessRequired]);
+
+  const advanceStrictPhaseIfNeeded = useCallback(async (toState: ListeningFsmState) => {
+    if (!strictReadinessRequired) return true;
+    const activeAttemptId = attempt?.attemptId ?? attemptIdFromRoute;
+    if (!activeAttemptId) return true;
+    if (strictAdvanceTargetRef.current) return false;
+
+    strictAdvanceTargetRef.current = toState;
+    setIsAdvancingPhase(true);
+    setAudioError(null);
+    try {
+      const state = await advanceStrictTransition(activeAttemptId, toState);
+      applyStrictServerState(state);
+      return true;
+    } catch (err) {
+      setAudioError(err instanceof Error ? err.message : 'The server rejected this Listening transition.');
+      return false;
+    } finally {
+      strictAdvanceTargetRef.current = null;
+      setIsAdvancingPhase(false);
+    }
+  }, [applyStrictServerState, attempt?.attemptId, attemptIdFromRoute, strictReadinessRequired]);
 
   // 1-second countdown during review windows.
   useEffect(() => {
@@ -395,6 +712,7 @@ function PlayerContent() {
   // when the section has no preview seconds authored (e.g. legacy data).
   useEffect(() => {
     if (!hasStarted || !currentSection) return;
+    if (strictReadinessRequired && strictServerState) return;
     if (phase === 'review') return;
     // Reset per-section forward-only end-of-extract latch.
     hasReachedEndRef.current = false;
@@ -421,10 +739,17 @@ function PlayerContent() {
     // The currentSection effect above re-enters preview for the new section.
   };
 
-  const advanceFromReview = () => {
+  const advanceFromReview = async () => {
     if (isLastSection) {
       void handleSubmit();
       return;
+    }
+    const nextSection = sectionsInPaper[currentSectionIndex + 1];
+    const nextState = nextSection ? listeningStateForPosition(nextSection, 'preview') : null;
+    if (nextState) {
+      const advanced = await advanceStrictPhaseIfNeeded(nextState);
+      if (!advanced) return;
+      if (strictServerNavigationActive) return;
     }
     advanceToNextSection();
   };
@@ -432,7 +757,7 @@ function PlayerContent() {
   // Auto-advance when countdown hits zero.
   useEffect(() => {
     if (phase === 'review' && reviewSecondsRemaining === 0 && hasStarted && currentSection !== null) {
-      advanceFromReview();
+      void advanceFromReview();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, reviewSecondsRemaining, hasStarted, currentSection]);
@@ -445,15 +770,22 @@ function PlayerContent() {
     if (!hasStarted || !currentSection) return;
     if (!previewArmedRef.current) return;
     previewArmedRef.current = false;
-    setPhase('audio');
-    const audio = audioRef.current;
-    if (audio) {
-      const result = audio.play();
-      if (result && typeof result.catch === 'function') {
-        result.catch((err) => handleAudioPlaybackError(err, setAudioError));
+    const targetState = listeningStateForPosition(currentSection, 'audio');
+    void (async () => {
+      if (targetState) {
+        const advanced = await advanceStrictPhaseIfNeeded(targetState);
+        if (!advanced) return;
       }
-    }
-  }, [phase, previewSecondsRemaining, hasStarted, currentSection]);
+      setPhase('audio');
+      const audio = audioRef.current;
+      if (audio) {
+        const result = audio.play();
+        if (result && typeof result.catch === 'function') {
+          result.catch((err) => handleAudioPlaybackError(err, setAudioError));
+        }
+      }
+    })();
+  }, [advanceStrictPhaseIfNeeded, phase, previewSecondsRemaining, hasStarted, currentSection]);
 
   // C8d — whole-attempt 40-minute countdown. Driven by attempt.expiresAt.
   // Auto-submits in exam/home modes (canScrub === false) when the timer
@@ -499,28 +831,36 @@ function PlayerContent() {
     if (phase !== 'audio' && phase !== 'preview') return;
     const audio = audioRef.current;
     if (!audio) return;
-    const startMs = activeExtract?.audioStartMs;
-    const endMs = activeExtract?.audioEndMs;
+    const startMs = currentSectionAudioStartMs;
+    const endMs = currentSectionAudioEndMs;
     if (startMs == null || endMs == null || endMs <= startMs) return;
-    try {
-      audio.currentTime = Math.max(0, startMs / 1000);
-    } catch {
-      // Some browsers throw if metadata isn't loaded yet — onLoadedMetadata
-      // re-runs this effect via the activeExtract dependency.
-    }
-  }, [activeExtract, phase]);
+    seekAudioTo(startMs / 1000);
+  }, [currentSectionAudioStartMs, currentSectionAudioEndMs, phase, seekAudioTo]);
 
-  const confirmNextFromAudio = () => {
+  const confirmNextFromAudio = async () => {
     if (!currentSection) return;
     if (!canOpenReviewWindow) return;
-    audioRef.current?.pause();
+    pauseAudio();
     if (currentSectionReviewSeconds > 0) {
+      const reviewState = listeningStateForPosition(currentSection, 'review');
+      if (reviewState) {
+        const advanced = await advanceStrictPhaseIfNeeded(reviewState);
+        if (!advanced) return;
+        if (strictServerNavigationActive) return;
+      }
       setPhase('review');
       setReviewSecondsRemaining(currentSectionReviewSeconds);
     } else {
       if (isLastSection) {
         void handleSubmit();
         return;
+      }
+      const nextSection = sectionsInPaper[currentSectionIndex + 1];
+      const nextState = nextSection ? listeningStateForPosition(nextSection, 'preview') : null;
+      if (nextState) {
+        const advanced = await advanceStrictPhaseIfNeeded(nextState);
+        if (!advanced) return;
+        if (strictServerNavigationActive) return;
       }
       advanceToNextSection();
     }
@@ -580,10 +920,11 @@ function PlayerContent() {
 
   const isExam = session.modePolicy.onePlayOnly;
   const answeredCount = Object.values(answers).filter((value) => value.trim().length > 0).length;
+  const shouldMountAudio = session.paper.audioAvailable && (!strictReadinessRequired || hasStarted);
 
   return (
     <AppShell pageTitle={session.paper.title} distractionFree>
-      {session.paper.audioAvailable ? (
+      {shouldMountAudio ? (
         <audio
           ref={audioRef}
           src={session.paper.audioUrl ?? undefined}
@@ -594,15 +935,15 @@ function PlayerContent() {
             const now = audio.currentTime;
             setProgress(now);
             // C8e — track forward-only audio progress for the seek snap-back.
-            if (now > lastKnownTimeRef.current) {
+            if (!audio.seeking && now > lastKnownTimeRef.current) {
               lastKnownTimeRef.current = now;
             }
             // C1 / C8e — soft enforcement of the active extract's
             // audioEndMs in exam mode. Practice mode keeps full scrub
             // freedom. We pause and latch hasReachedEnd; subsequent
             // play() invocations are immediately re-paused.
-            const startMs = activeExtract?.audioStartMs;
-            const endMs = activeExtract?.audioEndMs;
+            const startMs = currentSectionAudioStartMs;
+            const endMs = currentSectionAudioEndMs;
             if (
               session?.modePolicy.canScrub === false
               && startMs != null
@@ -612,38 +953,59 @@ function PlayerContent() {
               && !audio.paused
             ) {
               hasReachedEndRef.current = true;
+              allowedPauseRef.current = true;
               audio.pause();
             }
             // C8c — mark this extract as completed once its audioEndMs is
             // crossed (regardless of mode), so the section panel renders a
             // checkmark next to the row.
-            if (
-              activeExtract
-              && endMs != null
-              && now * 1000 >= endMs
-            ) {
-              const key = `${activeExtract.partCode}-${activeExtract.displayOrder}`;
+            const completedNow = currentExtracts.filter((extract) => (
+              extract.audioEndMs != null
+              && now * 1000 >= extract.audioEndMs
+            ));
+            if (completedNow.length > 0) {
               setCompletedExtractIds((prev) => {
-                if (prev.has(key)) return prev;
+                if (completedNow.every((extract) => prev.has(`${extract.partCode}-${extract.displayOrder}`))) return prev;
                 const next = new Set(prev);
-                next.add(key);
+                for (const extract of completedNow) {
+                  next.add(`${extract.partCode}-${extract.displayOrder}`);
+                }
                 return next;
               });
             }
           }}
           onSeeking={() => {
-            // C8e — in exam/home modes (canScrub === false) snap any
-            // backwards seek back to the last forward-only known time.
             const audio = audioRef.current;
             if (!audio) return;
-            if (session?.modePolicy.canScrub !== false) return;
-            if (audio.currentTime < lastKnownTimeRef.current) {
-              audio.currentTime = lastKnownTimeRef.current;
+            const blockedTarget = resolveBlockedSeekTarget({
+              canScrub: session?.modePolicy.canScrub !== false,
+              requestedTime: audio.currentTime,
+              lastKnownTime: lastKnownTimeRef.current,
+              allowedProgrammaticTarget: programmaticSeekTargetRef.current,
+            });
+            if (blockedTarget !== null) {
+              logIntegrityEvent('audio_seek_blocked', `requested=${audio.currentTime.toFixed(2)};allowed=${blockedTarget.toFixed(2)}`);
+              programmaticSeekTargetRef.current = blockedTarget;
+              if (programmaticSeekResetTimerRef.current) window.clearTimeout(programmaticSeekResetTimerRef.current);
+              programmaticSeekResetTimerRef.current = window.setTimeout(() => {
+                if (programmaticSeekTargetRef.current === blockedTarget) programmaticSeekTargetRef.current = null;
+                programmaticSeekResetTimerRef.current = null;
+              }, 1000);
+              audio.currentTime = blockedTarget;
+              setProgress(blockedTarget);
             }
+          }}
+          onSeeked={() => {
+            programmaticSeekTargetRef.current = null;
           }}
           onLoadedMetadata={() => {
             if (!audioRef.current) return;
             setDuration(audioRef.current.duration);
+            const startMs = currentSectionAudioStartMs;
+            const endMs = currentSectionAudioEndMs;
+            if ((phase === 'audio' || phase === 'preview') && startMs != null && endMs != null && endMs > startMs) {
+              seekAudioTo(startMs / 1000);
+            }
             setAudioState('ready');
           }}
           onWaiting={() => setAudioState('buffering')}
@@ -653,6 +1015,8 @@ function PlayerContent() {
             // exam mode, any subsequent play() is immediately re-paused.
             const audio = audioRef.current;
             if (audio && hasReachedEndRef.current && session?.modePolicy.onePlayOnly) {
+              logIntegrityEvent('audio_replay_blocked');
+              allowedPauseRef.current = true;
               audio.pause();
               return;
             }
@@ -661,10 +1025,42 @@ function PlayerContent() {
               audio.pause();
               return;
             }
+            if (audio && audioResumeInFlightRef.current) {
+              allowedPauseRef.current = true;
+              setIsPlaying(false);
+              audio.pause();
+              return;
+            }
             setIsPlaying(true);
+            // C8g — validate the resume against the server grace window.
+            handleAudioResume();
           }}
-          onPause={() => setIsPlaying(false)}
-          onEnded={() => setIsPlaying(false)}
+          onPause={() => {
+            const audio = audioRef.current;
+            const allowedProgrammaticPause = allowedPauseRef.current;
+            allowedPauseRef.current = false;
+            if (shouldResumeAfterBlockedPause({
+              canPause: session?.modePolicy.canPause !== false,
+              phase,
+              hasStarted,
+              hasReachedEnd: hasReachedEndRef.current,
+              allowedProgrammaticPause,
+            })) {
+              logIntegrityEvent('audio_pause_blocked');
+              // C8g — flag the upcoming play() as a resume so the onPlay
+              // handler issues a server-side audio-resume validation.
+              wasPausedRef.current = true;
+              audio?.play().catch((err) => handleAudioPlaybackError(err, setAudioError));
+              return;
+            }
+            // C8g — flag the next play() as a resume.
+            if (!audioResumeInFlightRef.current) wasPausedRef.current = true;
+            setIsPlaying(false);
+          }}
+          onEnded={() => {
+            if (session?.modePolicy.onePlayOnly) hasReachedEndRef.current = true;
+            setIsPlaying(false);
+          }}
           onError={() => {
             setAudioState('error');
             setAudioError('Audio failed to load. Reload the audio or return to Listening if the media asset is still processing.');
@@ -675,212 +1071,37 @@ function PlayerContent() {
 
       <div ref={rootRef} className="mx-auto max-w-3xl px-4 py-8 pb-24 sm:px-6 lg:px-8">
         {!hasStarted ? (
-          <motion.div
-            {...sectionMotion}
-            className="mt-8 rounded-2xl border border-border bg-surface p-8 text-center shadow-sm sm:p-12"
-          >
-            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-              <Volume2 className="h-10 w-10 text-primary" />
-            </div>
-            <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted">
-              {session.modePolicy.mode === 'home'
-                ? 'OET@Home Mode'
-                : session.modePolicy.mode === 'paper'
-                  ? 'Paper-Simulation Mode'
-                  : isExam
-                    ? 'Exam Mode'
-                    : 'Practice Mode'}
-            </p>
-            <h2 className="mb-4 text-2xl font-black text-navy">{session.paper.title}</h2>
-            {drillId ? (
-              <p className="mx-auto mb-4 max-w-lg text-sm text-muted">
-                This launch came from a focused drill route, so listen for the error pattern before returning to review.
-              </p>
-            ) : null}
-
-            <div className="mx-auto mb-8 max-w-lg space-y-4 rounded-2xl bg-background-light p-6 text-left">
-              <h3 className="text-sm font-black uppercase tracking-widest text-muted">Before you start</h3>
-              <ul className="space-y-3 text-sm text-muted">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
-                  <span>Answers autosave to your server attempt as you work.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
-                  <span>Transcript evidence and answer keys stay locked until submit.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Lock className="h-5 w-5 shrink-0 text-warning" />
-                  <span><strong className="text-navy">Forward-only exam:</strong> once you press Next on a section, it locks permanently and you cannot return to it.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Timer className="h-5 w-5 shrink-0 text-warning" />
-                  <span><strong className="text-navy">Review windows:</strong> A1 = 60s, A2 = 60s, C1 = 30s, C2 = 120s. Part B has no review window. Answer boxes remain editable during each window for its own section only.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Volume2 className="h-5 w-5 shrink-0 text-muted" />
-                  <span>Part B consists of six short workplace extracts (~40 seconds each), one multiple-choice item per extract.</span>
-                </li>
-                {isExam ? (
-                  <li className="flex items-start gap-2">
-                    <AlertCircle className="h-5 w-5 shrink-0 text-danger" />
-                    <span className="font-bold text-danger">Exam mode plays once and disables pause/scrub controls.</span>
-                  </li>
-                ) : (
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
-                    <span>Practice mode allows pause and scrubbing while you build accuracy.</span>
-                  </li>
-                )}
-                {session.modePolicy.integrityLockRequired ? (
-                  <li className="flex items-start gap-2">
-                    <Lock className="h-5 w-5 shrink-0 text-danger" />
-                    <span className="font-bold text-danger">
-                      OET@Home: stay in full-screen for the entire test. Leaving full-screen flags an integrity event.
-                    </span>
-                  </li>
-                ) : null}
-                {session.modePolicy.printableBooklet ? (
-                  <li className="flex items-start gap-2">
-                    <FileText className="h-5 w-5 shrink-0 text-warning" />
-                    <span>
-                      Paper-simulation: open the printable booklet alongside the player and write your answers there before transcribing them online.
-                    </span>
-                  </li>
-                ) : null}
-              </ul>
-            </div>
-
-            {extracts.length > 0 ? (
-              <div className="mx-auto mb-8 max-w-2xl rounded-2xl border border-border bg-surface p-5 text-left">
-                <h3 className="text-sm font-black uppercase tracking-widest text-muted">Extract metadata</h3>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {extracts.map((extract) => (
-                    <div key={`${extract.partCode}-${extract.displayOrder}`} className="rounded-xl border border-border bg-background-light p-3 text-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-bold text-navy">{extract.partCode} · {extract.title}</span>
-                        <span className="text-xs font-semibold uppercase text-muted">{extract.kind}</span>
-                      </div>
-                      <p className="mt-2 text-xs text-muted">{extract.accentCode ?? 'Accent not specified'} · {describeSpeakers(extract)}</p>
-                      {extract.audioStartMs != null || extract.audioEndMs != null ? (
-                        <p className="mt-1 text-xs text-muted">
-                          Audio window {formatMilliseconds(extract.audioStartMs) ?? '00:00'} - {formatMilliseconds(extract.audioEndMs) ?? 'end'}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {session.modePolicy.printableBooklet ? (
-              <div className="mx-auto mb-8 max-w-2xl rounded-2xl border border-border bg-surface p-5 text-left">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 className="text-sm font-black uppercase tracking-widest text-muted">Printable booklet</h3>
-                    <p className="mt-1 text-sm text-muted">Print the answer sheet before starting, then transcribe final answers into the online boxes.</p>
-                  </div>
-                  <Button variant="outline" onClick={() => window.print()} className="gap-2">
-                    <FileText className="h-4 w-4" /> Print
-                  </Button>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted sm:grid-cols-4">
-                  {session.questions.map((question) => (
-                    <div key={`print-preview-${question.id}`} className="rounded-lg border border-border bg-background-light px-3 py-2">
-                      Q{question.number} <span className="text-muted/70">{question.partCode}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {!session.paper.audioAvailable ? (
-              <InlineAlert variant="warning" className="mx-auto mb-6 max-w-lg text-left">
-                {session.paper.audioUnavailableReason ?? 'Audio is not available for this task yet.'}
-              </InlineAlert>
-            ) : null}
-            {!session.readiness.objectiveReady ? (
-              <InlineAlert variant="warning" className="mx-auto mb-6 max-w-lg text-left">
-                {session.readiness.missingReason ?? 'Structured Listening questions are not ready yet.'}
-              </InlineAlert>
-            ) : null}
-            {audioError ? <InlineAlert variant="error" className="mx-auto mb-6 max-w-lg text-left">{audioError}</InlineAlert> : null}
-
-            <div className="flex flex-col justify-center gap-3 sm:flex-row">
-              <Button size="lg" onClick={startTask} disabled={!session.paper.audioAvailable || !session.readiness.objectiveReady} className="gap-2">
-                <Play className="h-5 w-5" /> Start Audio &amp; Task
-              </Button>
-              {session.paper.questionPaperUrl ? (
-                <Link href={session.paper.questionPaperUrl} target="_blank">
-                  <Button size="lg" variant="outline" className="gap-2">
-                    <FileText className="h-5 w-5" /> Question Paper
-                  </Button>
-                </Link>
-              ) : null}
-            </div>
-          </motion.div>
+          <ListeningIntroCard
+            session={session}
+            isExam={isExam}
+            drillId={drillId ?? null}
+            strictReadinessRequired={strictReadinessRequired}
+            techReadiness={techReadiness}
+            isStarting={isStarting}
+            audioError={audioError}
+            startError={startError}
+            onTechReadinessReady={(result) => {
+              setTechReadiness(result);
+              setStartError(null);
+            }}
+            onStart={startTask}
+          />
         ) : (
           <motion.div {...listMotion} className="space-y-8">
-            <div className="sticky top-20 z-20 flex items-center gap-4 rounded-2xl bg-navy p-4 text-white shadow-xl shadow-navy/10 sm:p-5">
-              <button
-                onClick={togglePlayPause}
-                disabled={phase === 'preview'}
-                aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
-                className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors ${
-                  phase === 'preview'
-                    ? 'cursor-not-allowed bg-white/10 text-white/30'
-                    : 'bg-surface text-navy hover:bg-background-light'
-                }`}
-              >
-                {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="ml-1 h-6 w-6" />}
-              </button>
-              <div className="flex flex-1 flex-col gap-1.5">
-                <div className="flex justify-between font-mono text-xs font-bold text-white/70">
-                  <span>{formatTime(progress)}</span>
-                  <span>{formatTime(duration)}</span>
-                </div>
-                <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-white/20">
-                  <div
-                    className="absolute left-0 top-0 h-full bg-info transition-all duration-100 ease-linear"
-                    style={{ width: `${duration > 0 ? (progress / duration) * 100 : 0}%` }}
-                  />
-                  {session.modePolicy.canScrub ? (
-                    <input
-                      type="range"
-                      min="0"
-                      max={duration || 100}
-                      value={progress}
-                      onChange={handleScrub}
-                      className="absolute left-0 top-0 h-full w-full cursor-pointer opacity-0"
-                    />
-                  ) : null}
-                </div>
-              </div>
-              <div className="hidden items-center gap-2 text-xs font-bold text-white/60 sm:flex">
-                {audioState === 'buffering' ? <Loader2 className="h-4 w-4 animate-spin" /> : audioState === 'error' ? <WifiOff className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-                {saveState === 'saving' ? 'Saving' : saveState === 'error' ? 'Save issue' : `${answeredCount}/${session.questions.length} saved`}
-              </div>
-              {/* C8d — whole-attempt countdown. Visible whenever the
-                  backend has projected an expiresAt onto the attempt. */}
-              {attemptSecondsRemaining !== null ? (
-                <div
-                  data-testid="listening-attempt-timer"
-                  className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 font-mono text-sm font-black ${
-                    attemptSecondsRemaining === 0
-                      ? 'bg-danger/20 text-danger'
-                      : attemptSecondsRemaining <= 30
-                        ? 'bg-danger/20 text-danger'
-                        : attemptSecondsRemaining <= 120
-                          ? 'bg-warning/20 text-warning'
-                          : 'bg-white/10 text-white'
-                  }`}
-                  aria-label={`Attempt time remaining ${formatReviewSeconds(attemptSecondsRemaining)}`}
-                >
-                  <Clock className="h-4 w-4" />
-                  {attemptSecondsRemaining === 0 ? 'Time up' : formatReviewSeconds(attemptSecondsRemaining)}
-                </div>
-              ) : null}
-            </div>
+            <ListeningAudioTransport
+              isPlaying={isPlaying}
+              progressSeconds={progress}
+              durationSeconds={duration}
+              canScrub={session.modePolicy.canScrub !== false}
+              isPreviewPhase={phase === 'preview'}
+              audioState={audioState}
+              saveState={saveState}
+              answeredCount={answeredCount}
+              totalQuestions={session.questions.length}
+              attemptSecondsRemaining={attemptSecondsRemaining}
+              onTogglePlayPause={togglePlayPause}
+              onScrub={handleScrub}
+            />
 
             {/* C8e — practice mode disclosure: replay is allowed in this
                 mode but the real CBLA exam plays once. */}
@@ -898,6 +1119,7 @@ function PlayerContent() {
             {audioError ? <InlineAlert variant="error">{audioError}</InlineAlert> : null}
             {saveState === 'error' ? <InlineAlert variant="warning">One answer did not autosave. Keep working; submit will retry saving all answers.</InlineAlert> : null}
             {integrityWarning ? <InlineAlert variant="warning">{integrityWarning}</InlineAlert> : null}
+            {audioResumeWarning ? <InlineAlert variant="warning">{audioResumeWarning}</InlineAlert> : null}
 
             {currentExtracts.length > 0 ? (
               <div className="rounded-2xl border border-border bg-surface p-4">
@@ -925,99 +1147,31 @@ function PlayerContent() {
             ) : null}
 
             {/* Section stepper — forward only. Completed sections are permanently locked. */}
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3 text-xs font-black uppercase tracking-widest">
-              {sectionsInPaper.map((code, idx) => {
-                const state = idx < currentSectionIndex
-                  ? 'locked'
-                  : idx === currentSectionIndex
-                    ? (phase === 'review' ? 'reviewing' : 'active')
-                    : 'pending';
-                return (
-                  <span
-                    key={code}
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 ${
-                      state === 'locked'
-                        ? 'bg-background-light text-muted/60'
-                        : state === 'active'
-                          ? 'bg-primary text-white'
-                          : state === 'reviewing'
-                            ? 'bg-warning/10 text-warning'
-                            : 'bg-background-light text-muted'
-                    }`}
-                  >
-                    {state === 'locked' ? <Lock className="h-3 w-3" /> : state === 'reviewing' ? <Timer className="h-3 w-3" /> : null}
-                    {LISTENING_SECTION_SHORT_LABEL[code]}
-                  </span>
-                );
-              })}
-              <span className="ml-auto hidden text-[10px] normal-case tracking-normal text-muted sm:inline">
-                Forward-only — completed sections cannot be revisited.
-              </span>
-            </div>
+            <ListeningSectionStepper
+              sections={sectionsInPaper}
+              currentIndex={currentSectionIndex}
+              isReviewing={phase === 'review'}
+            />
 
             {/* C8f — pre-audio reading window. Audio stays paused; answer
                 inputs remain editable so candidates can mark in advance. */}
             {phase === 'preview' && currentSection ? (
-              <div
-                data-testid="listening-preview-banner"
-                className="flex flex-col gap-3 rounded-2xl border-2 border-info/30 bg-info/10 p-5 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex items-start gap-3">
-                  <Timer className="mt-0.5 h-5 w-5 shrink-0 text-info" />
-                  <div>
-                    <p className="text-sm font-black text-info">
-                      {LISTENING_PREVIEW_LABEL} — {previewSecondsRemaining} seconds left
-                    </p>
-                    <p className="mt-0.5 text-xs text-info">
-                      {LISTENING_SECTION_LABEL[currentSection]} — read the questions and mark answers in advance. Audio will start automatically when the timer hits zero.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="rounded-xl bg-info/20 px-3 py-2 font-mono text-lg font-black text-info">
-                    {formatReviewSeconds(previewSecondsRemaining)}
-                  </span>
-                  {canSkipPreview ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setPreviewSecondsRemaining(0)}
-                      className="gap-1"
-                    >
-                      <Play className="h-4 w-4" /> Start audio
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
+              <ListeningPreviewBanner
+                section={currentSection}
+                secondsRemaining={previewSecondsRemaining}
+                canSkip={canSkipPreview}
+                onSkip={() => setPreviewSecondsRemaining(0)}
+              />
             ) : null}
 
             {/* Review-window countdown banner — answer boxes stay editable. */}
             {phase === 'review' && currentSection ? (
-              <div className="flex flex-col gap-3 rounded-2xl border-2 border-warning/30 bg-warning/10 p-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <Timer className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
-                  <div>
-                    <p className="text-sm font-black text-warning">
-                      {LISTENING_SECTION_LABEL[currentSection]} — review window
-                    </p>
-                    <p className="mt-0.5 text-xs text-warning">
-                      You can finish completing any words you abbreviated. Answers for this section remain fully editable until the timer hits zero or you press Next.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="rounded-xl bg-warning/20 px-3 py-2 font-mono text-lg font-black text-warning">
-                    {formatReviewSeconds(reviewSecondsRemaining)}
-                  </span>
-                  <Button
-                    size="sm"
-                    onClick={() => (isLastSection ? setShowSubmitConfirm(true) : setShowNextConfirm(true))}
-                    className="gap-1"
-                  >
-                    {isLastSection ? 'Finish & Submit' : 'Next'} <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+              <ListeningReviewBanner
+                section={currentSection}
+                secondsRemaining={reviewSecondsRemaining}
+                isLastSection={isLastSection}
+                onNext={() => (isLastSection ? setShowSubmitConfirm(true) : setShowNextConfirm(true))}
+              />
             ) : null}
 
             <div className="space-y-6">
@@ -1059,67 +1213,46 @@ function PlayerContent() {
                     </div>
                   ) : null}
 
-                  {(sectionGroups?.[currentSection] ?? []).map((question) => {
-                  // Answer editing is allowed during both audio phase and the
-                  // current section's review window. Locked sections (earlier
-                  // indices) are never shown here, so their inputs are
-                  // physically unreachable — that's the forward-only lock.
-                  const canEdit = true;
-                  return (
-                    <div id={`listening-question-${question.id}`} key={question.id} className="rounded-2xl border border-border bg-surface p-6 shadow-sm scroll-mt-48 sm:p-8">
-                      <h3 className="mb-6 text-lg font-medium leading-relaxed text-navy">
-                        <span className="mb-2 block text-xs font-black uppercase tracking-widest text-muted">
-                          {LISTENING_SECTION_LABEL[currentSection]} / Question {question.number}
-                        </span>
-                        {question.text}
-                      </h3>
-                      {question.options.length > 0 ? (
-                        <div className="space-y-3">
-                          {question.options.map((option) => {
-                            const isSelected = answers[question.id] === option;
-                            return (
-                              <button
-                                key={option}
-                                onClick={() => canEdit && handleAnswerChange(question.id, option)}
-                                disabled={!canEdit}
-                                className={`w-full rounded-xl border-2 p-4 text-left transition-all sm:p-5 ${
-                                  isSelected
-                                    ? 'border-primary bg-primary/5 font-medium text-primary'
-                                    : 'border-border text-navy hover:border-border-hover hover:bg-background-light'
-                                } ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}
-                              >
-                                <div className="flex items-center gap-4">
-                                  <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                                    isSelected ? 'border-primary' : 'border-border-hover'
-                                  }`}>
-                                    {isSelected ? <div className="h-2.5 w-2.5 rounded-full bg-primary" /> : null}
-                                  </div>
-                                  <span className="leading-relaxed">{option}</span>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <label htmlFor={`listening-answer-${question.id}`} className="text-xs font-black uppercase tracking-widest text-muted">
-                            Your answer
-                          </label>
-                          <input
-                            id={`listening-answer-${question.id}`}
-                            type="text"
+                  <ZoomControls value={questionZoomPercent} onChange={setQuestionZoomPercent} />
+
+                  <div data-testid="listening-question-surface" className="space-y-6" style={{ fontSize: `${questionZoomPercent}%` }}>
+                    {(sectionGroups?.[currentSection] ?? []).map((question) => {
+                      // Answer editing is allowed during both audio phase and the
+                      // current section's review window. Locked sections (earlier
+                      // indices) are never shown here, so their inputs are
+                      // physically unreachable — that's the forward-only lock.
+                      const canEdit = true;
+                      if (question.options.length === 0) {
+                        return (
+                          <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
+                            <PartARenderer
+                              questionNumber={question.number}
+                              partLabel={LISTENING_SECTION_LABEL[currentSection]}
+                              prompt={question.text}
+                              inputId={`listening-answer-${question.id}`}
+                              value={answers[question.id] ?? ''}
+                              onChange={(value) => handleAnswerChange(question.id, value)}
+                              locked={!canEdit}
+                            />
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
+                          <BCQuestionRenderer
+                            questionNumber={question.number}
+                            partLabel={LISTENING_SECTION_LABEL[currentSection]}
+                            prompt={question.text}
+                            options={question.options}
                             value={answers[question.id] ?? ''}
-                            onChange={(event) => handleAnswerChange(question.id, event.target.value)}
-                            readOnly={!canEdit}
-                            placeholder="Type your answer here..."
-                            className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base text-navy outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
-                            aria-label={`Answer for question ${question.number}`}
+                            onChange={(value) => handleAnswerChange(question.id, value)}
+                            locked={!canEdit}
                           />
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
                 </>
               )}
             </div>
@@ -1136,7 +1269,7 @@ function PlayerContent() {
                 <Button
                   size="lg"
                   onClick={() => setShowNextConfirm(true)}
-                  disabled={!canOpenReviewWindow}
+                  disabled={!canOpenReviewWindow || isAdvancingPhase}
                   className="gap-2"
                 >
                   Next <ChevronRight className="h-5 w-5" />
@@ -1162,12 +1295,13 @@ function PlayerContent() {
                 <div className="flex justify-end gap-3">
                   <Button variant="outline" onClick={() => setShowNextConfirm(false)}>Keep listening</Button>
                   <Button
-                    onClick={() => {
+                    disabled={isAdvancingPhase}
+                    onClick={async () => {
                       setShowNextConfirm(false);
                       if (phase === 'review') {
-                        advanceFromReview();
+                        await advanceFromReview();
                       } else {
-                        confirmNextFromAudio();
+                        await confirmNextFromAudio();
                       }
                     }}
                   >

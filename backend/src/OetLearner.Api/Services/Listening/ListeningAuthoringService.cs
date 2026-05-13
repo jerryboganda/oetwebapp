@@ -132,7 +132,7 @@ public sealed record ListeningAuthoredQuestion(
     string? DistractorExplanation,
     int Points,
     // Phase 4: per-option (Part B/C) "why wrong" + distractor category enum
-    // (too_strong | too_weak | wrong_speaker | opposite_meaning | reused_keyword).
+    // (too_strong | too_weak | wrong_speaker | opposite_meaning | reused_keyword | out_of_scope).
     IReadOnlyList<string?>? OptionDistractorWhy = null,
     IReadOnlyList<string?>? OptionDistractorCategory = null,
     // Phase 4: speaker attitude tag for Part C
@@ -679,7 +679,7 @@ public sealed class ListeningAuthoringService(
 
     private static readonly HashSet<string> AllowedDistractorCategories = new(StringComparer.OrdinalIgnoreCase)
     {
-        "too_strong", "too_weak", "wrong_speaker", "opposite_meaning", "reused_keyword",
+        "too_strong", "too_weak", "wrong_speaker", "opposite_meaning", "reused_keyword", "out_of_scope",
     };
 
     private static readonly HashSet<string> AllowedSpeakerAttitudes = new(StringComparer.OrdinalIgnoreCase)

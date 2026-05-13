@@ -158,12 +158,19 @@ Admin uploads Question-Paper PDF + Audio Script PDF + Answer Key PDF →
 AI extraction proposes 42 items via `IAiGatewayService` with a strict JSON
 schema for `ListeningAuthoredQuestion`. Mirrors Reading Phase 6.
 
-### Phase 9 — Test-rules lesson + paper/home modes **(shipped — `/listening/test-rules`; `paper` + `home` modes wired via `NormalizeMode` + `modePolicy` + player UI: full-screen integrity telemetry for `home`, printable booklet/answer sheet for `paper`)**
+### Phase 9 — Test-rules lesson + paper/home modes **(shipped — `/listening/test-rules`; `paper` + `home` modes wired via `NormalizeMode` + `modePolicy` + player UI: full-screen integrity telemetry for `home`, printable booklet/answer sheet for `paper`; extracted active-player components + Storybook; admin per-question deep dive; live learner-route Playwright smoke contracts)**
 
 - Pre-flight "Listening Test Rules" lesson surface (one-play, no negative
   marking, MCQ vs gap-fill, exam integrity).
 - Mode toggle for paper / computer / OET@Home (mostly UI affordances:
   printable booklet, full-screen kiosk-style mode).
+- Active player chrome extracted to reusable `components/domain/listening/player/*`
+  components with focused tests and opt-in Storybook coverage.
+- Admin hardest-question analytics links into the routed per-question deep-dive
+  panel for accuracy, distractor heat, and misspelling signal.
+- Strict exam and paper-mode Playwright specs are live route smoke contracts;
+  full multi-part paper free-navigation E2E still needs a seeded multi-part
+  paper fixture.
 
 ### Phase 10 — Course pathway content (12-stage curriculum) **(shipped — endpoint + `/listening/curriculum`)**
 

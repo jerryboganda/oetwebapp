@@ -257,6 +257,11 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ListeningPolicy> ListeningPolicies => Set<ListeningPolicy>();
     public DbSet<ListeningUserPolicyOverride> ListeningUserPolicyOverrides => Set<ListeningUserPolicyOverride>();
     public DbSet<ListeningExtractionDraft> ListeningExtractionDrafts => Set<ListeningExtractionDraft>();
+    // Listening V2 — pathway + cross-skill teacher classes + per-attempt notes.
+    public DbSet<ListeningPathwayProgress> ListeningPathwayProgress => Set<ListeningPathwayProgress>();
+    public DbSet<TeacherClass> TeacherClasses => Set<TeacherClass>();
+    public DbSet<TeacherClassMember> TeacherClassMembers => Set<TeacherClassMember>();
+    public DbSet<ListeningAttemptNote> ListeningAttemptNotes => Set<ListeningAttemptNote>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<BillingPlanVersion> BillingPlanVersions => Set<BillingPlanVersion>();
     public DbSet<WalletTopUpTierConfig> WalletTopUpTierConfigs => Set<WalletTopUpTierConfig>();
@@ -404,6 +409,18 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<LearnerUser>().Property(x => x.AccountStatus).IsConcurrencyToken();
         modelBuilder.Entity<ExpertUser>().Property(x => x.IsActive).IsConcurrencyToken();
         modelBuilder.Entity<Wallet>().Property(x => x.LastUpdatedAt).IsConcurrencyToken();
+        // Slice A (May 2026 billing hardening) — cross-DB rowversion token so
+        // SQLite/in-memory tests get the same optimistic-concurrency
+        // semantics as production Postgres (which already gets xmin via the
+        // ConfigureXminToken path further down). Nullable; tolerates legacy
+        // NULLs from the additive 20260512100000_AddWalletRowVersion
+        // migration. ValueGeneratedOnAddOrUpdate so EF assigns a fresh
+        // shadow value on every write.
+        modelBuilder.Entity<Wallet>()
+            .Property(x => x.RowVersion)
+            .IsRowVersion()
+            .IsConcurrencyToken()
+            .ValueGeneratedOnAddOrUpdate();
 
         // Optimistic concurrency via Postgres system column xmin on high-risk
         // billing + evaluation entities. SQLite/in-memory test providers do
@@ -434,6 +451,19 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             modelBuilder.Entity<Evaluation>().Property(x => x.FeedbackItemsJson).HasColumnType("jsonb");
             modelBuilder.Entity<PaymentWebhookEvent>().Property(x => x.PayloadJson).HasColumnType("jsonb");
             modelBuilder.Entity<NotificationTemplate>().Property(x => x.MetadataJson).HasColumnType("jsonb");
+
+            // Listening V2 — additive jsonb columns on ListeningAttempt
+            // (NavigationStateJson, AudioCueTimelineJson, TechReadinessJson,
+            // AnnotationsJson, HumanScoreOverridesJson, LastQuestionVersionMapJson).
+            // Per repo memory ef-core-sqlite-translation.md: NEVER LINQ-into
+            // any of these columns. Reads must materialise the row first then
+            // parse client-side. SQLite test harness keeps them as TEXT.
+            modelBuilder.Entity<ListeningAttempt>().Property(x => x.NavigationStateJson).HasColumnType("jsonb");
+            modelBuilder.Entity<ListeningAttempt>().Property(x => x.AudioCueTimelineJson).HasColumnType("jsonb");
+            modelBuilder.Entity<ListeningAttempt>().Property(x => x.TechReadinessJson).HasColumnType("jsonb");
+            modelBuilder.Entity<ListeningAttempt>().Property(x => x.AnnotationsJson).HasColumnType("jsonb");
+            modelBuilder.Entity<ListeningAttempt>().Property(x => x.HumanScoreOverridesJson).HasColumnType("jsonb");
+            modelBuilder.Entity<ListeningAttempt>().Property(x => x.LastQuestionVersionMapJson).HasColumnType("jsonb");
 
             // Gap N5: AuditEvent.Details routinely carries before/after JSON
             // snapshots that exceed the legacy varchar(1024) cap. Promote the
@@ -818,6 +848,27 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             .HasForeignKey(d => d.PaperId)
             .HasPrincipalKey(p => p.Id)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // ── Listening V2 — pathway + teacher classes + attempt notes ──
+        // Notes follow attempt lifecycle (cascade). Class members follow
+        // their class (cascade). Pathway progress NEVER cascades from User
+        // (Restrict) — anonymisation worker writes a tombstone instead.
+        modelBuilder.Entity<ListeningAttemptNote>()
+            .HasOne<ListeningAttempt>()
+            .WithMany()
+            .HasForeignKey(n => n.ListeningAttemptId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<TeacherClassMember>()
+            .HasOne(m => m.Class)
+            .WithMany(c => c.Members)
+            .HasForeignKey(m => m.TeacherClassId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // ListeningPathwayProgress: no FK to User (UserId is a free string id
+        // matching the project-wide convention) — leaves cascade implicit and
+        // safe under account-anonymisation. The unique (UserId, StageCode)
+        // index already exists via the [Index] attribute on the entity.
     }
 
     /// <summary>

@@ -6,9 +6,11 @@
 // admin analytics DTO from `/v1/admin/listening/analytics`.
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { BarChart3, Gauge, Headphones, ListChecks, Target, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/form-controls';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import {
@@ -21,6 +23,7 @@ import {
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   getListeningAdminAnalytics,
+  exportListeningAdminAttempt,
   type ListeningAdminAnalytics,
 } from '@/lib/listening-authoring-api';
 
@@ -53,6 +56,11 @@ export default function ListeningAnalyticsPage() {
   const [days, setDays] = useState(30);
   const [analytics, setAnalytics] = useState<ListeningAdminAnalytics | null>(null);
 
+  // Audit export controls
+  const [exportAttemptId, setExportAttemptId] = useState('');
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
   useEffect(() => {
     if (!isAuthenticated || role !== 'admin') return;
     let cancelled = false;
@@ -70,6 +78,39 @@ export default function ListeningAnalyticsPage() {
     })();
     return () => { cancelled = true; };
   }, [days, isAuthenticated, role]);
+
+  async function handleExportAttempt() {
+    const id = exportAttemptId.trim();
+    if (!id) {
+      setExportError('Enter an attempt id.');
+      return;
+    }
+    setExportError(null);
+    setIsExporting(true);
+    try {
+      const payload = await exportListeningAdminAttempt(id);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `listening-attempt-${id}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      const err = e as { status?: number; message?: string };
+      if (err?.status === 404) {
+        setExportError(`Attempt "${id}" not found.`);
+      } else if (err?.status === 403) {
+        setExportError('You do not have permission to export this attempt.');
+      } else {
+        setExportError(err?.message || 'Export failed. Try again.');
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   const partAccuracyMap = useMemo(() => {
     const map: Record<string, number | null> = { A: null, B: null, C: null };
@@ -195,6 +236,14 @@ export default function ListeningAnalyticsPage() {
                       <div className="flex items-center gap-3">
                         <Badge variant="muted">{q.attemptCount} attempts</Badge>
                         <span className="text-sm font-semibold text-danger">{formatPercent(q.accuracyPercent)}</span>
+                        <Link
+                          href={`/admin/analytics/listening/question/${encodeURIComponent(q.paperId)}/${q.questionNumber}`}
+                          aria-label={`Deep-dive Q${q.questionNumber} of ${q.paperTitle}`}
+                        >
+                          <Button type="button" size="sm" variant="outline">
+                            Deep dive
+                          </Button>
+                        </Link>
                       </div>
                     </div>
                   ))}
@@ -256,6 +305,35 @@ export default function ListeningAnalyticsPage() {
           </MotionSection>
         </div>
       ) : null}
+
+      <MotionSection delayIndex={5}>
+        <AdminRoutePanel title="Audit export">
+          <p className="text-sm text-muted">
+            Download the full normalized + legacy JSON for a single Listening attempt. The export is recorded as an audit event.
+          </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <Input
+                label="Attempt id"
+                value={exportAttemptId}
+                onChange={(e) => setExportAttemptId(e.currentTarget.value)}
+                placeholder="e.g. 7c2d…"
+                error={exportError ?? undefined}
+                disabled={isExporting}
+                aria-label="Listening attempt id"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleExportAttempt}
+              disabled={isExporting || exportAttemptId.trim().length === 0}
+            >
+              {isExporting ? 'Exporting…' : 'Export'}
+            </Button>
+          </div>
+        </AdminRoutePanel>
+      </MotionSection>
     </AdminRouteWorkspace>
   );
 }

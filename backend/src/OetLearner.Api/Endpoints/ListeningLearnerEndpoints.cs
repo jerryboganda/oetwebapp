@@ -48,10 +48,11 @@ public static class ListeningLearnerEndpoints
             string paperId,
             string? mode,
             string? attemptId,
+            string? pathwayStage,
             HttpContext http,
             ListeningLearnerService service,
             CancellationToken ct) =>
-            Results.Ok(await service.GetSessionAsync(http.UserId(), paperId, mode, attemptId, ct)))
+            Results.Ok(await service.GetSessionAsync(http.UserId(), paperId, mode, attemptId, pathwayStage, ct)))
             .WithName("GetListeningPaperSession")
             .WithSummary("Get a learner-safe Listening paper session")
             .WithDescription("Returns Listening audio metadata, learner-safe questions, policy, and optional attempt state without exposing answer keys before submit.");
@@ -62,7 +63,7 @@ public static class ListeningLearnerEndpoints
             HttpContext http,
             ListeningLearnerService service,
             CancellationToken ct) =>
-            Results.Ok(await service.StartAttemptAsync(http.UserId(), paperId, request.Mode, ct)))
+            Results.Ok(await service.StartAttemptAsync(http.UserId(), paperId, request.Mode, request.PathwayStage, ct)))
             .RequireRateLimiting("PerUserWrite")
             .WithName("StartListeningPaperAttempt")
             .WithSummary("Start or resume a Listening paper attempt");
@@ -154,4 +155,4 @@ public static class ListeningLearnerEndpoints
            ?? throw new InvalidOperationException("Authenticated user id is required.");
 }
 
-public sealed record ListeningAttemptStartRequest(string? Mode);
+public sealed record ListeningAttemptStartRequest(string? Mode, string? PathwayStage);
