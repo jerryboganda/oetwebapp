@@ -580,7 +580,7 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
         HttpClient client,
         string reviewRequestId)
     {
-        const string mediaAssetId = "media-review-queue-002-voice-note";
+        var mediaAssetId = $"media-{reviewRequestId}-voice-note";
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         if (await db.MediaAssets.FindAsync(mediaAssetId) is null)
@@ -589,12 +589,12 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
             db.MediaAssets.Add(new MediaAsset
             {
                 Id = mediaAssetId,
-                OriginalFilename = "review-queue-002-feedback.webm",
+                OriginalFilename = $"{reviewRequestId}-feedback.webm",
                 MimeType = "audio/webm",
                 Format = "webm",
                 SizeBytes = 4096,
                 DurationSeconds = 92,
-                StoragePath = "test/review-queue-002-feedback.webm",
+                StoragePath = $"test/{reviewRequestId}-feedback.webm",
                 Status = MediaAssetStatus.Ready,
                 MediaKind = "audio",
                 UploadedBy = "expert-001",
