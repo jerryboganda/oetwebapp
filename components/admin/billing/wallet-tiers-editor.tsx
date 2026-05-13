@@ -73,7 +73,7 @@ function emptyDraft(defaultCurrency: string, displayOrder: number): DraftRow {
   };
 }
 
-// Server stores amount/credits/bonus as integer cents/credits — reject decimals
+// Server stores amount as whole currency units and credits/bonus as integers — reject decimals
 // client-side too so we don't silently round on save.
 function isPositiveInteger(value: number): boolean {
   return Number.isInteger(value) && value > 0;
@@ -90,7 +90,7 @@ function validateRow(row: DraftRow, defaultCurrency: string): RowErrors {
   const order = Number(row.displayOrder);
 
   if (!row.amount || Number.isNaN(amount) || !isPositiveInteger(amount)) {
-    errs.amount = 'Must be a positive integer (cents)';
+    errs.amount = 'Must be a positive whole-currency amount';
   }
   if (row.credits === '' || Number.isNaN(credits) || !isNonNegativeInteger(credits)) {
     errs.credits = 'Must be a non-negative integer';

@@ -83,13 +83,35 @@ public class MockLiveRoomTransitionTests
         var hub = new RecordingHubContext<MockLiveRoomHub>();
         var service = new MockBookingService(db, hub);
 
-        var request = new LiveRoomTransitionRequest(MockLiveRoomStates.InProgress, ClientTransitionId: "start-once");
+        var request = new LiveRoomTransitionRequest(MockLiveRoomStates.InProgress, ClientTransitionId: " start-once ");
         await service.TransitionLiveRoomAsync("learner-1", ApplicationUserRoles.Learner, false, BookingId, request, CancellationToken.None);
-        await service.TransitionLiveRoomAsync("learner-1", ApplicationUserRoles.Learner, false, BookingId, request, CancellationToken.None);
+        await service.TransitionLiveRoomAsync("learner-1", ApplicationUserRoles.Learner, false, BookingId,
+            new LiveRoomTransitionRequest(MockLiveRoomStates.InProgress, ClientTransitionId: "start-once"), CancellationToken.None);
 
         Assert.Equal(1, await db.MockLiveRoomTransitions.CountAsync(t => t.BookingId == BookingId));
+        Assert.Equal("start-once", await db.MockLiveRoomTransitions.Select(t => t.ClientTransitionId).SingleAsync());
         Assert.Equal(1, await db.AuditEvents.CountAsync(e => e.Action == "mock_live_room_transitioned" && e.ResourceId == BookingId));
         Assert.Single(hub.ClientsProxy.Messages);
+    }
+
+    [Fact]
+    public async Task BlankTargetState_ReturnsValidationInsteadOfNullReference()
+    {
+        await using var db = NewDb();
+        SeedBooking(db);
+        await db.SaveChangesAsync();
+        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>());
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.TransitionLiveRoomAsync(
+            "learner-1",
+            ApplicationUserRoles.Learner,
+            isAdmin: false,
+            BookingId,
+            new LiveRoomTransitionRequest(" "),
+            CancellationToken.None));
+
+        Assert.Equal("invalid_state", ex.ErrorCode);
+        Assert.Empty(db.MockLiveRoomTransitions);
     }
 
     private static void SeedBooking(LearnerDbContext db)

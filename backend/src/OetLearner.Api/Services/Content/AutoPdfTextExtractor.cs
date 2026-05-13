@@ -49,6 +49,12 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
         var azureConfigured =
             !string.IsNullOrWhiteSpace(_options.AzureEndpoint) &&
             !string.IsNullOrWhiteSpace(_options.AzureApiKey);
+        var looksLikePdf = bytes.Length >= 5
+            && bytes[0] == 0x25
+            && bytes[1] == 0x50
+            && bytes[2] == 0x44
+            && bytes[3] == 0x46
+            && bytes[4] == 0x2D;
 
         if (string.Equals(_options.Provider, "azure", StringComparison.OrdinalIgnoreCase))
         {
@@ -57,6 +63,12 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
                 _logger.LogWarning("PdfExtraction Provider=azure but Azure DocIntel not configured; returning empty.");
                 return string.Empty;
             }
+            return await TryAzureAsync(bytes, ct) ?? string.Empty;
+        }
+
+        if (!looksLikePdf)
+        {
+            if (!azureConfigured) return string.Empty;
             return await TryAzureAsync(bytes, ct) ?? string.Empty;
         }
 

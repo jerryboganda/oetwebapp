@@ -63,6 +63,13 @@ public static class ExpertEndpoints
         expert.MapGet("/reviews/{reviewRequestId}/writing", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetWritingReviewBundleAsync(reviewRequestId, http.ExpertId(), ct)));
 
+        expert.MapGet("/reviews/{reviewRequestId}/writing/voice-notes", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetWritingReviewVoiceNotesAsync(reviewRequestId, http.ExpertId(), ct)));
+
+        expert.MapPost("/reviews/{reviewRequestId}/writing/voice-notes", async (string reviewRequestId, HttpContext http, ExpertReviewVoiceNoteCreateRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.AddWritingReviewVoiceNoteAsync(reviewRequestId, http.ExpertId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
         expert.MapGet("/reviews/{reviewRequestId}/speaking", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetSpeakingReviewBundleAsync(reviewRequestId, http.ExpertId(), ct)));
 

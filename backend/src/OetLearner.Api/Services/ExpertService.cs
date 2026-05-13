@@ -40,6 +40,9 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
     private const int MaxChecklistItemCount = 12;
     private const int MaxReworkReasonLength = 1000;
     private const int MaxCalibrationNotesLength = 1500;
+    private const int MaxVoiceNoteTranscriptLength = 12000;
+    private const int MaxVoiceNoteWrittenNotesLength = 4000;
+    private const int MaxVoiceNoteDurationSeconds = 3600;
 
     public async Task<ExpertMeResponse> GetMeAsync(string userId, CancellationToken ct)
     {
@@ -552,6 +555,8 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         }
 
         var writingScores = NormalizeAiSuggestedScores(context.Evaluation, isWriting: true);
+        var paperAssets = await LoadWritingPaperAssetResponsesAsync(context.Attempt.Id, ct);
+        var voiceNotes = await LoadReviewVoiceNoteResponsesAsync(context.ReviewRequest.Id, ct);
         return new ExpertWritingReviewBundleResponse(
             context.ReviewRequest.Id,
             context.Attempt.UserId,
@@ -580,8 +585,92 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             BuildPermissions(context.ReviewRequest, context.ActiveAssignment, reviewerId),
             new Dictionary<string, ExpertArtifactStateResponse>(StringComparer.OrdinalIgnoreCase)
             {
-                ["aiDraftFeedback"] = BuildEvaluationArtifactState(context.Evaluation, "AI draft feedback is still being prepared.")
-            });
+                ["aiDraftFeedback"] = BuildEvaluationArtifactState(context.Evaluation, "AI draft feedback is still being prepared."),
+                ["paperAssets"] = BuildPaperArtifactState(paperAssets),
+                ["voiceNotes"] = BuildVoiceNoteArtifactState(voiceNotes)
+            },
+            paperAssets,
+            voiceNotes);
+    }
+
+    public async Task<object> GetWritingReviewVoiceNotesAsync(string reviewRequestId, string reviewerId, CancellationToken ct)
+    {
+        var context = await LoadReadContextAsync(reviewRequestId, reviewerId, ct, requireActiveAssignment: true);
+        if (!string.Equals(context.ReviewRequest.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation("review_type_mismatch", "This review is not a writing review.");
+        }
+
+        return new { reviewRequestId, items = await LoadReviewVoiceNoteResponsesAsync(reviewRequestId, ct) };
+    }
+
+    public async Task<object> AddWritingReviewVoiceNoteAsync(string reviewRequestId, string reviewerId, ExpertReviewVoiceNoteCreateRequest request, CancellationToken ct)
+    {
+        var context = await LoadWriteContextAsync(reviewRequestId, reviewerId, ct);
+        if (!string.Equals(context.ReviewRequest.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation("review_type_mismatch", "This review is not a writing review.");
+        }
+
+        var media = await db.MediaAssets.FirstOrDefaultAsync(asset => asset.Id == request.MediaAssetId, ct)
+            ?? throw ApiException.NotFound("voice_note_media_not_found", "Upload the voice note before attaching it to the review.");
+        if (!string.Equals(media.UploadedBy, reviewerId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Forbidden("voice_note_forbidden", "You can only attach voice notes uploaded by your expert account.");
+        }
+        if (!media.MimeType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "invalid_voice_note_type",
+                "Voice notes must be audio files.",
+                [new ApiFieldError("mediaAssetId", "invalid_type", "Upload mp3, m4a, wav, ogg, or webm audio.")]);
+        }
+
+        if (request.DurationSeconds is < 0 or > MaxVoiceNoteDurationSeconds)
+        {
+            throw ApiException.Validation(
+                "invalid_voice_note_duration",
+                "Voice note duration is outside the allowed range.",
+                [new ApiFieldError("durationSeconds", "out_of_range", $"Voice notes must be between 0 and {MaxVoiceNoteDurationSeconds} seconds.")]);
+        }
+        var transcriptText = request.TranscriptText?.Trim() ?? string.Empty;
+        if (transcriptText.Length > MaxVoiceNoteTranscriptLength)
+        {
+            throw ApiException.Validation(
+                "voice_note_transcript_too_long",
+                "Voice note transcript is too long.",
+                [new ApiFieldError("transcriptText", "too_long", $"Voice note transcripts cannot exceed {MaxVoiceNoteTranscriptLength} characters.")]);
+        }
+        var writtenNotes = request.WrittenNotes?.Trim() ?? string.Empty;
+        if (writtenNotes.Length > MaxVoiceNoteWrittenNotesLength)
+        {
+            throw ApiException.Validation(
+                "voice_note_notes_too_long",
+                "Voice note written notes are too long.",
+                [new ApiFieldError("writtenNotes", "too_long", $"Voice note written notes cannot exceed {MaxVoiceNoteWrittenNotesLength} characters.")]);
+        }
+        var normalizedRubricScores = NormalizeScores(request.RubricScores ?? new Dictionary<string, int>(), "writing");
+
+        var note = new ReviewVoiceNote
+        {
+            Id = $"rvn-{Guid.NewGuid():N}",
+            ReviewRequestId = reviewRequestId,
+            UploadedByReviewerId = reviewerId,
+            MediaAssetId = media.Id,
+            DurationSeconds = request.DurationSeconds,
+            TranscriptText = transcriptText,
+            WrittenNotes = writtenNotes,
+            RubricJson = JsonSupport.Serialize(normalizedRubricScores),
+            Status = "ready",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        db.ReviewVoiceNotes.Add(note);
+        await LogExpertAuditAsync(reviewerId, context.Expert.DisplayName, "Attached Writing Voice Note", reviewRequestId, $"Voice note {note.Id} attached.", ct);
+        await RecordExpertEventAsync(reviewerId, "expert_writing_voice_note_attached", new { reviewRequestId, voiceNoteId = note.Id }, ct);
+        await db.SaveChangesAsync(ct);
+
+        return new { reviewRequestId, item = (await LoadReviewVoiceNoteResponsesAsync(reviewRequestId, ct)).First(x => x.Id == note.Id) };
     }
 
     public async Task<ExpertSpeakingReviewBundleResponse> GetSpeakingReviewBundleAsync(string reviewRequestId, string reviewerId, CancellationToken ct)
@@ -727,6 +816,16 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         if (!string.Equals(context.ReviewRequest.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
         {
             throw ApiException.Validation("review_type_mismatch", "This review is not a writing review.");
+        }
+
+        var hasVoiceNote = await db.ReviewVoiceNotes
+            .AnyAsync(note => note.ReviewRequestId == reviewRequestId && note.Status == "ready", ct);
+        if (!hasVoiceNote)
+        {
+            throw ApiException.Validation(
+                "voice_note_required",
+                "Attach a voice note before submitting this writing review.",
+                [new ApiFieldError("voiceNotes", "required", "Writing reviews completed by Dr. Ahmed require at least one voice note.")]);
         }
 
         await SubmitReviewAsync(context, reviewerId, request, ct, "Submitted Writing Review", "expert_writing_review_submitted");
@@ -2371,6 +2470,67 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             UploadState.Pending => new ExpertArtifactStateResponse("queued", false, "Audio is not available yet."),
             _ => new ExpertArtifactStateResponse("processing", false, "Audio is still being finalized.")
         };
+    }
+
+    private static ExpertArtifactStateResponse BuildPaperArtifactState(IReadOnlyList<WritingPaperAssetResponse> assets)
+    {
+        if (assets.Count == 0) return new ExpertArtifactStateResponse("empty", false, null);
+        if (assets.All(asset => asset.ExtractionState == "completed")) return new ExpertArtifactStateResponse("completed", false, null);
+        if (assets.Any(asset => asset.ExtractionState == "completed")) return new ExpertArtifactStateResponse("partial", false, "Some handwritten pages could not be extracted.");
+        if (assets.Any(asset => asset.ExtractionState == "processing" || asset.ExtractionState == "queued")) return new ExpertArtifactStateResponse("processing", false, "Handwritten pages are still being processed.");
+        return new ExpertArtifactStateResponse("failed", false, "OCR did not extract readable text from the uploaded pages.");
+    }
+
+    private static ExpertArtifactStateResponse BuildVoiceNoteArtifactState(IReadOnlyList<ReviewVoiceNoteResponse> voiceNotes)
+        => voiceNotes.Count == 0
+            ? new ExpertArtifactStateResponse("empty", false, "Attach a voice note before returning a Dr. Ahmed writing review.")
+            : new ExpertArtifactStateResponse("completed", false, null);
+
+    private async Task<IReadOnlyList<WritingPaperAssetResponse>> LoadWritingPaperAssetResponsesAsync(string attemptId, CancellationToken ct)
+    {
+        var rows = await db.WritingAttemptAssets
+            .AsNoTracking()
+            .Where(asset => asset.AttemptId == attemptId)
+            .OrderBy(asset => asset.PageNumber)
+            .Join(db.MediaAssets.AsNoTracking(), asset => asset.MediaAssetId, media => media.Id, (asset, media) => new { asset, media })
+            .ToListAsync(ct);
+
+        return rows.Select(row => new WritingPaperAssetResponse(
+            row.asset.Id,
+            row.media.Id,
+            row.media.OriginalFilename,
+            row.media.MimeType,
+            row.media.Format,
+            row.media.SizeBytes,
+            row.asset.PageNumber,
+            row.asset.ExtractionState,
+            row.asset.ExtractedText?.Length ?? 0,
+            row.asset.ExtractionMessage,
+            platformLinks.BuildApiUrl($"/v1/media/{Uri.EscapeDataString(row.media.Id)}/content"))).ToList();
+    }
+
+    private async Task<IReadOnlyList<ReviewVoiceNoteResponse>> LoadReviewVoiceNoteResponsesAsync(string reviewRequestId, CancellationToken ct)
+    {
+        var rows = await db.ReviewVoiceNotes
+            .AsNoTracking()
+            .Where(note => note.ReviewRequestId == reviewRequestId)
+            .OrderByDescending(note => note.CreatedAt)
+            .Join(db.MediaAssets.AsNoTracking(), note => note.MediaAssetId, media => media.Id, (note, media) => new { note, media })
+            .ToListAsync(ct);
+
+        return rows.Select(row => new ReviewVoiceNoteResponse(
+            row.note.Id,
+            row.note.ReviewRequestId,
+            row.media.Id,
+            row.media.OriginalFilename,
+            row.media.MimeType,
+            row.note.DurationSeconds,
+            row.note.TranscriptText,
+            row.note.WrittenNotes,
+            JsonSupport.Deserialize<Dictionary<string, int>>(row.note.RubricJson, new Dictionary<string, int>()),
+            row.note.Status,
+            row.note.CreatedAt,
+            platformLinks.BuildApiUrl($"/v1/media/{Uri.EscapeDataString(row.media.Id)}/content"))).ToList();
     }
 
     private static string BuildWritingAiDraftFeedback(Evaluation? evaluation)

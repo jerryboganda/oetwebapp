@@ -68,7 +68,7 @@ export interface ExpertReviewActions {
 }
 
 export interface ExpertArtifactState {
-  state: 'queued' | 'processing' | 'completed' | 'failed' | 'stale';
+  state: 'queued' | 'processing' | 'completed' | 'failed' | 'stale' | 'empty' | 'partial';
   isStale: boolean;
   message?: string | null;
 }
@@ -181,6 +181,35 @@ export interface AIFlag {
   severity: 'info' | 'warning' | 'error';
 }
 
+export interface WritingPaperAsset {
+  id: string;
+  mediaAssetId: string;
+  fileName: string;
+  mimeType: string;
+  format: string;
+  sizeBytes: number;
+  pageNumber: number;
+  extractionState: 'queued' | 'processing' | 'completed' | 'failed' | string;
+  extractedCharCount: number;
+  extractionMessage?: string | null;
+  url: string;
+}
+
+export interface ReviewVoiceNote {
+  id: string;
+  reviewRequestId: string;
+  mediaAssetId: string;
+  fileName: string;
+  mimeType: string;
+  durationSeconds?: number | null;
+  transcriptText: string;
+  writtenNotes: string;
+  rubricScores: Record<string, number>;
+  status: string;
+  createdAt: string;
+  url: string;
+}
+
 export interface WritingReviewDetail extends ReviewRequest {
   learnerResponse: string;
   caseNotes: string;
@@ -190,6 +219,8 @@ export interface WritingReviewDetail extends ReviewRequest {
   existingDraft?: ExpertSavedDraft | null;
   permissions?: ExpertReviewActions;
   artifactStatus?: Record<string, ExpertArtifactState>;
+  paperAssets?: WritingPaperAsset[];
+  voiceNotes?: ReviewVoiceNote[];
 }
 
 export interface SpeakingReviewDetail extends ReviewRequest {

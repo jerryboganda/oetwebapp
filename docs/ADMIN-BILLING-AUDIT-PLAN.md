@@ -1,5 +1,7 @@
 # Admin Billing Audit And Implementation Plan
 
+> Reconciled 2026-05-13: this file remains an audit/implementation ledger. For current billing architecture and operations, use [`BILLING.md`](./BILLING.md) and [`runbooks/billing-incident.md`](./runbooks/billing-incident.md).
+
 ## Scope
 
 This audit covers the admin billing workspace at `/admin/billing` and the business workflow it depends on across learner checkout, coupons, subscriptions, invoices, sponsor billing, content entitlements, permissions, and payment webhooks.
@@ -26,12 +28,12 @@ The admin billing page is a live operational surface, not a mock. It can create 
 
 Learner billing is quote-driven. The learner page loads the current subscription, plans, add-ons, invoices, wallet state, and freeze status. It creates server-priced quotes, opens Stripe or PayPal checkout sessions, and relies on payment webhooks to complete the local subscription, add-on, coupon, invoice, wallet, and billing-event records.
 
-The backend already has useful primitives: `BillingPlan`, `BillingAddOn`, `BillingCoupon`, `BillingCouponRedemption`, `BillingQuote`, `BillingEvent`, `SubscriptionItem`, `PaymentTransaction`, `PaymentWebhookEvent`, and `WalletTopUpTierConfig`. Admin permissions are split into `AdminBillingRead` and `AdminBillingWrite`. The admin billing workspace now also has a read-only provider lifecycle signals panel sourced strictly from sanitized `PaymentWebhookEvent` projections and correlated conservatively to local payment, quote, invoice, subscription, and billing-event evidence.
+The backend already has useful primitives: `BillingPlan`, `BillingAddOn`, `BillingCoupon`, `BillingCouponRedemption`, `BillingQuote`, `BillingEvent`, `SubscriptionItem`, `PaymentTransaction`, `PaymentWebhookEvent`, `OrderRefund`, `PaymentDispute`, and `WalletTopUpTierConfig`. Admin permissions are split into `AdminBillingRead`, legacy `AdminBillingWrite`, and granular `AdminBillingCatalogWrite` / `AdminBillingSubscriptionWrite` / `AdminBillingRefundWrite`. The admin billing workspace also has a provider lifecycle signals panel sourced strictly from sanitized `PaymentWebhookEvent` projections and correlated conservatively to local payment, quote, invoice, subscription, refund, dispute, and billing-event evidence.
 
 ## Wallet Top-Up Tier Operations
 
 - Admin route: `/admin/billing/wallet-tiers`.
-- API routes: `GET /v1/admin/billing/wallet-tiers` requires `AdminBillingRead`; `PUT /v1/admin/billing/wallet-tiers` requires `AdminBillingWrite`.
+- API routes: `GET /v1/admin/billing/wallet-tiers` requires `AdminBillingRead`; `PUT /v1/admin/billing/wallet-tiers` requires `AdminBillingCatalogWrite` or legacy `AdminBillingWrite`.
 - The PUT route is a full-set replacement. It validates at least one active tier, platform wallet currency, positive amount, non-negative credits/bonus/order, label length, and duplicate amount/currency pairs before replacing rows atomically.
 - Every save writes an audit event (`wallet_tiers.replace`) and the learner-facing endpoint immediately reads active rows ordered by display order and amount.
 - Production source-of-truth: once the DB table exists, wallet top-ups fail closed if the table cannot be read. The appsettings tiers are only bootstrap values for empty tables and local configuration, not a silent fallback after DB failures.
@@ -39,7 +41,7 @@ The backend already has useful primitives: `BillingPlan`, `BillingAddOn`, `Billi
 
 Operational smoke after deploy:
 
-1. Visit `/admin/billing/wallet-tiers` as a billing-read admin and confirm the page is read-only without `AdminBillingWrite`.
+1. Visit `/admin/billing/wallet-tiers` as a billing-read admin and confirm the page is read-only without `AdminBillingCatalogWrite` or legacy `AdminBillingWrite`.
 2. Visit the same page as a billing-write admin and save a no-op tier set.
 3. Visit learner `/billing`, open `Credits & Add-ons`, and confirm the visible tier list and currency match the admin page.
 4. Confirm invalid/duplicate/all-inactive tier saves return structured 400 responses and do not change the learner tier set.
@@ -49,13 +51,13 @@ Checkout error note: `quote_mismatch` means the checkout request no longer match
 ## Business Workflow Gaps
 
 1. Sponsor billing is placeholder-only. `SponsorService.GetBillingAsync` returns zero spend and empty invoices, so sponsor-paid learner workflows do not yet have a real billing account, seat ledger, invoice model, or entitlement grant.
-2. Admin subscriptions and invoices are read-only. Admins can retry only verified failed webhook processing attempts from the webhook monitoring surface, but cannot yet cancel a subscription, issue or track refunds, resend receipts, export invoices, or reconcile payment transactions from the billing page.
+2. Admin subscription lifecycle and payment-transaction refund operations have landed behind granular billing permissions. Remaining admin evidence gaps are richer invoice export/receipt resend and provider-level reconciliation workflows.
 3. Coupon reservations are tied to quote creation. A quote currently creates a reserved redemption, so abandoned quotes must be expired and released or coupon limits can be consumed by previews.
 4. Recurring subscription lifecycle is local, not provider-authoritative. Stripe checkout uses one-time payment mode, while local subscriptions carry renewal dates and intervals. Renewal, dunning, cancellation, tax, provider invoices, refunds, and dispute state are visible only as local/webhook evidence signals until dedicated provider-authoritative read models exist.
 5. Catalog changes mutate plans and prices in place. Existing subscriptions and historical invoices can drift if a code, price, interval, or entitlement is edited after purchase. Versioned catalog snapshots are needed.
 6. Entitlement logic is fragmented. Content, grammar, AI quotas, and sponsor access should eventually use one entitlement resolver that combines subscription state, add-ons, free-tier rules, freeze state, and sponsor seats.
 7. Webhook retry is now a bounded verified replay path, not a full inbox processor. Failed legacy or unverified rows are intentionally non-retryable; bulk replay, provider redelivery orchestration, and reconciliation workflows still need to be explicit and observable.
-8. Invoice evidence and provider lifecycle visibility are partially improved. Admins can inspect local invoice, quote, payment, coupon, subscription-item, catalog-anchor, billing-event evidence, and sanitized provider lifecycle/local correlation signals, but production billing still needs provider invoice IDs, line items, tax/VAT fields, receipt URLs, PDF artifacts, provider subscription/customer records, refund/dispute read models, and sponsor ownership.
+8. Invoice evidence and provider lifecycle visibility are partially improved. Admins can inspect local invoice, quote, payment, coupon, subscription-item, catalog-anchor, billing-event, refund, dispute, and sanitized provider lifecycle/local correlation evidence. Production billing still needs richer provider invoice IDs, line items, tax/VAT fields, receipt URLs, PDF artifacts, provider subscription/customer records, and sponsor ownership.
 9. Admin validation is still too loose. JSON entitlement fields, coupon windows, discount caps, interval/currency values, compatible plan references, and usage limits need stronger server-side validation and focused tests.
 10. Test coverage is thin around money-moving behavior. Existing tests cover route shape and hosted checkout configuration, but not enough successful webhook application, coupon limits, add-on compatibility, sponsor billing, or admin mutation behavior.
 
@@ -151,7 +153,7 @@ Remaining scope:
 
 - Add a first-class webhook inbox processor for bulk/backoff retry, leasing, provider redelivery orchestration, and reconciliation warnings beyond the current one-row verified admin replay.
 - Add relational/PostgreSQL retry-path coverage for `jsonb` payload persistence, transactions, filtered unique indexes, and concurrent retry/redelivery behavior.
-- Add provider customer, provider subscription, provider invoice, invoice line, refund, dispute, cancellation, dunning, receipt, tax/VAT, and provider price mapping read models. The new lifecycle signals surface is local evidence correlation only and does not replace provider-authoritative lifecycle state.
+- Add provider customer, provider subscription, provider invoice, invoice line, cancellation, dunning, receipt, tax/VAT, and provider price mapping read models. Local refund and dispute read models now exist, but the lifecycle signals surface remains local evidence correlation and does not replace provider-authoritative lifecycle state.
 - Move recurring subscriptions to provider-authoritative lifecycle handling where available.
 
 Acceptance criteria:

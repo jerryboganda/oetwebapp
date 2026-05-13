@@ -161,6 +161,7 @@ public static class SpeakingContentStructure
             ["warmUpQuestions"] = warmUps,
             ["prepTimeSeconds"] = ReadInt(structure, "prepTimeSeconds") ?? DefaultPrepTimeSeconds,
             ["roleplayTimeSeconds"] = ReadInt(structure, "roleplayTimeSeconds") ?? DefaultRoleplayTimeSeconds,
+            ["roleplayCount"] = Math.Clamp(ReadInt(structure, "roleplayCount", "rolePlayCount", "numberOfRoleplays") ?? 2, 1, 2),
             ["patientEmotion"] = ReadString(structure, "patientEmotion") ?? "neutral",
             ["communicationGoal"] = ReadString(structure, "communicationGoal", "purpose") ?? "Build rapport and complete the clinical task.",
             ["clinicalTopic"] = ReadString(structure, "clinicalTopic") ?? paper.CardType ?? "general_roleplay",

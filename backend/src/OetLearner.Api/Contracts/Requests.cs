@@ -35,7 +35,19 @@ public record DraftUpdateRequest(
 
 public record HeartbeatRequest(int ElapsedSeconds, string? DeviceType);
 
-public record SubmitAttemptRequest(string? Content, string? IdempotencyKey);
+public record SubmitAttemptRequest(
+    string? Content,
+    string? IdempotencyKey,
+    string? ExamMode,
+    string? AssessorType,
+    List<string>? PaperAssetIds,
+    string? TurnaroundOption,
+    List<string>? FocusAreas,
+    string? LearnerNotes);
+
+public record WritingPaperAssetAttachRequest(
+    List<string> MediaAssetIds,
+    bool? ReplaceExisting);
 
 public record UploadCompleteRequest(
     string? UploadSessionId,

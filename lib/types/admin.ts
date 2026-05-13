@@ -729,6 +729,11 @@ export interface AdminReviewQueueItem {
   assignedAt: string;
   subtestCode: string;
   priority: 'high' | 'normal' | 'low';
+  submissionMode?: 'computer' | 'paper' | string;
+  assessorType?: 'ai' | 'instructor' | string;
+  paperAssetCount?: number;
+  paperAssetsExtracted?: number;
+  voiceNoteCount?: number;
 }
 
 export interface AdminReviewFailures {

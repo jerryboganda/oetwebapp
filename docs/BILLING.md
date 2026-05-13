@@ -78,8 +78,8 @@ flowchart LR
 | PaymentGatewayService | Provider abstraction: signature verification, deduplication, normalised event surface. | `Services/PaymentGatewayService.cs` |
 | SubscriptionService | Applies normalised events: subscription create / renew / cancel, invoice create. | `Services/LearnerService.Billing.cs` |
 | WalletService | Credit balance + ledger. Single source of truth for credits. | `Services/WalletService.cs` |
-| RefundService | Issues refunds, writes reversing wallet entries, records `BillingEvent`. | `Services/Billing/RefundService.cs` (slice B) |
-| DisputeService | Tracks chargeback lifecycle, freezes entitlement when configured. | `Services/Billing/DisputeService.cs` (slice B) |
+| RefundService | Issues refunds, writes reversing wallet entries, records `BillingEvent` / `OrderRefund`. | `Services/Billing/RefundService.cs` |
+| DisputeService | Tracks chargeback lifecycle in `PaymentDispute`, freezes entitlement when configured. | `Services/Billing/DisputeService.cs` |
 | EffectiveEntitlementResolver | Composes plan + active add-ons + wallet + temporary grants into the resolved entitlement set. | `Services/EffectiveEntitlementResolver.cs` |
 | AiQuotaService | Maps entitlement to AI feature quotas; consulted by the grounded AI gateway. | `Services/AiQuotaService.cs` |
 
@@ -162,16 +162,20 @@ Subscription / Invoice / Wallet:
 ```mermaid
 stateDiagram-v2
     [*] --> Pending: quote accepted
+    [*] --> Trial: trial granted
+    Trial --> Active: trial converted
+    Trial --> Expired: trial ended
     Pending --> Active: invoice.paid
-    Pending --> Failed: payment_failed
+    Pending --> Expired: checkout_expired
     Active --> PastDue: renewal_failed
     PastDue --> Active: renewal_succeeded
-    PastDue --> Cancelled: dunning_exhausted
+    PastDue --> Suspended: dunning_exhausted
+    Suspended --> Active: admin_reactivate / payment_recovered
+    Suspended --> Cancelled: admin_cancel
     Active --> Cancelled: user_cancel / admin_cancel
+    Active --> Expired: term ended
     Cancelled --> [*]
-    Active --> Paused: admin_pause / score_freeze
-    Paused --> Active: resume
-    Failed --> [*]
+    Expired --> [*]
 ```
 
 ### 4.2 Invoice
@@ -279,7 +283,7 @@ new provider must be written behind `IPaymentGatewayService`.
 | Deduplication | `GatewayEventId` is the unique key. Duplicate ids return HTTP 200 (no-op) and increment `AttemptCount`. |
 | Payload integrity | `PayloadSha256` is recorded on first receipt. Any retry whose hash differs is logged as `verification_status = 'failed'` and quarantined; admin must investigate. |
 | Retry policy | Provider does the retrying. Our endpoint is idempotent; failure responses (5xx) instruct the provider to retry with exponential backoff. |
-| Dead-letter | Events that fail processing 5+ times move to `ProcessingStatus = 'failed'` and surface in the admin "webhook backlog" view. They are never silently dropped. |
+| Dead-letter | Events that fail processing 5+ times move to `ProcessingStatus = 'dead_letter'` and surface in the admin "webhook backlog" view. They are never silently dropped. |
 | Ordering | Not assumed. State machines tolerate out-of-order events by only advancing on monotonic transitions; out-of-order events that would regress state are recorded but ignored. |
 
 ---
@@ -300,7 +304,7 @@ The current granular permission set lives in
 | `GET /v1/admin/billing/subscriptions` | `billing:read` |
 | `POST /v1/admin/billing/subscriptions/{id}/cancel`, `.../pause`, `.../resume`, manual create/change/extend/status | `billing:subscription_write` or `billing:write` |
 | `GET /v1/admin/billing/invoices` | `billing:read` |
-| `POST /v1/admin/billing/refunds` | `billing:refund_write` or `billing:write` |
+| `POST /v1/admin/billing/payment-transactions/{transactionId}/refund` | `billing:refund_write` or `billing:write` |
 | `GET /v1/admin/billing/disputes` | `billing:read` |
 | `POST /v1/admin/billing/disputes/{id}/evidence` | `billing:refund_write` or `billing:write` |
 | `GET /v1/admin/billing/webhooks` (backlog view) | `billing:read` |
@@ -330,7 +334,7 @@ working as a superset.
 | Invoice line items + amounts | `Invoice`, `PaymentTransaction` | **7 years** from issue. | Tax / financial audit. |
 | Webhook payloads | `PaymentWebhookEvent.PayloadJson` | **180 days** from receipt. | Forensic + reconciliation window. After that the row is retained but the payload column is nulled. |
 | Wallet ledger | `WalletTransaction` | Lifetime of account, then **7 years** post-deletion. | Required to reconstruct entitlement history. |
-| Refund / dispute notes | `RefundService` / `DisputeService` rows | **7 years**. | Regulatory + chargeback evidence. |
+| Refund / dispute notes | `OrderRefund` / `PaymentDispute` rows | **7 years**. | Regulatory + chargeback evidence. |
 | Coupon redemption | `BillingCouponRedemption` | Lifetime of account. | Required to enforce per-user limits. |
 
 PII never appears in Sentry events: the global `scrubPii` `beforeSend` hook

@@ -1,12 +1,12 @@
 # Mocks Module Progress
 
-> Last updated: 2026-05-12 (Track B closure)
+> Last updated: 2026-05-13 (closure hardening)
 > Source of truth: `docs/mocks/PRD.md`
 > Closure manifest: `docs/CLOSURE-2026-05-12.md`
 
 ## Status Summary
 
-The Mocks module has a real backend model, learner flow, report flow, admin list/create/publish surface, item analysis, bookings, remediation, and diagnostic entitlement. The current closure work is hardening and completion: align admin UI with existing backend CRUD, make learner/report flows safer, and add regression coverage for the gaps discovered during the May 2026 audit.
+The Mocks module has a real backend model, learner flow, report flow, admin list/create/publish surface, item analysis, bookings, remediation, diagnostic entitlement, learner speaking-room candidate cards, and expert/admin live-room controls. The remaining work is now launch QA breadth and UX polish, not unresolved trust-boundary architecture.
 
 ## Progress Ledger
 
@@ -34,6 +34,7 @@ The Mocks module has a real backend model, learner flow, report flow, admin list
 | 2026-05-12 | Track B — chunked-upload retry coverage | Done | New `backend/tests/OetLearner.Api.Tests/Mocks/MockBookingRecordingServiceRetryTests.cs` covers same-Part+same-SHA dedup, same-Part+different-SHA rejection, accumulating different parts, invalid-part bounds, post-finalize rejection, missing consent, foreign owner. **7/7 pass.** New `tests/e2e/learner/mocks-diagnostic-flow.spec.ts` registers 38 matrix tests (`@learner @smoke @mocks`). | — |
 | 2026-05-12 | Track B — Follow-Up Waves roadmap | Done | New `docs/mocks/FOLLOW-UP-WAVES.md` enumerates the 5 waves with current state, acceptance criteria, dependencies, and effort estimates. Wave 3 (diagnostic E2E smoke) had its spec shipped first; waves 1, 2, 4, and 5 were subsequently closed on 2026-05-13. | — |
 | 2026-05-13 | Follow-Up Waves 1/2/4/5 closure | Done | Wave 1 now routes mock report generation through `IMockReportAggregationService` + Reading/Listening authoritative result adapters; Wave 2 adds durable live-room transitions, expert/admin REST endpoints, SignalR group updates, and admin/expert/learner UI wiring; Wave 4 adds Listening item-analysis, discrimination index, and admin tabs; Wave 5 reminder planning fans out to learners plus assigned experts with idempotent notification dedupe. | Remaining mocks follow-ups are lower-priority UX/E2E expansion items, not the original trust-boundary gaps. |
+| 2026-05-13 | Closure hardening pass | Done | Live-room transitions now validate blank target states before trimming, normalize `ClientTransitionId`, and enforce a unique non-null `(BookingId, ClientTransitionId)` index. Learner booking detail now returns safe candidate-card/timing content only; `/mocks/speaking-room/[bookingId]` fetches detail, renders the candidate card, and honors authored prep/role-play timing and roleplay count. Admin global item-analysis now supports `paperId` filtering without refetching unfiltered rows while typing. | Run broader CI/browser validation before release branch cut. |
 
 ## Gap Register
 

@@ -339,6 +339,8 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     // Writing module runtime-mutable settings (singleton row, id="global").
     // See WritingOptionsProvider; bootstrapped lazily on first read.
     public DbSet<WritingOptions> WritingOptions => Set<WritingOptions>();
+    public DbSet<WritingAttemptAsset> WritingAttemptAssets => Set<WritingAttemptAsset>();
+    public DbSet<ReviewVoiceNote> ReviewVoiceNotes => Set<ReviewVoiceNote>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -543,6 +545,10 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             .WithMany(x => x.LiveRoomTransitions)
             .HasForeignKey(x => x.BookingId)
             .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<MockLiveRoomTransition>()
+            .HasIndex(x => new { x.BookingId, x.ClientTransitionId })
+            .IsUnique()
+            .HasFilter("\"ClientTransitionId\" IS NOT NULL");
         modelBuilder.Entity<MockContentReview>()
             .HasOne(x => x.MockBundle)
             .WithMany()
@@ -559,6 +565,26 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<ExpertReviewAssignment>().HasIndex(x => new { x.ReviewRequestId, x.ClaimState });
         modelBuilder.Entity<ExpertReviewAssignment>().HasIndex(x => x.AssignedReviewerId);
         modelBuilder.Entity<ExpertReviewDraft>().HasIndex(x => new { x.ReviewRequestId, x.ReviewerId });
+        modelBuilder.Entity<WritingAttemptAsset>()
+            .HasOne(x => x.Attempt)
+            .WithMany()
+            .HasForeignKey(x => x.AttemptId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<WritingAttemptAsset>()
+            .HasOne(x => x.MediaAsset)
+            .WithMany()
+            .HasForeignKey(x => x.MediaAssetId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ReviewVoiceNote>()
+            .HasOne(x => x.ReviewRequest)
+            .WithMany()
+            .HasForeignKey(x => x.ReviewRequestId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReviewVoiceNote>()
+            .HasOne(x => x.MediaAsset)
+            .WithMany()
+            .HasForeignKey(x => x.MediaAssetId)
+            .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ExpertCalibrationResult>().HasIndex(x => new { x.CalibrationCaseId, x.ReviewerId });
         modelBuilder.Entity<ExpertAvailability>().HasIndex(x => x.ReviewerId);
         modelBuilder.Entity<ExpertMetricSnapshot>().HasIndex(x => new { x.ReviewerId, x.WindowStart });

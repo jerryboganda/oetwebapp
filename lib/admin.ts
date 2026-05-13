@@ -1011,6 +1011,11 @@ export async function getAdminReviewQueueData(params?: Parameters<typeof fetchAd
     assignedAt: toStringValue(item.assignedAt),
     subtestCode: toStringValue(item.subtestCode),
     priority: normalizePriority(item.priority),
+    submissionMode: toStringValue(item.submissionMode, 'computer'),
+    assessorType: toStringValue(item.assessorType, 'instructor'),
+    paperAssetCount: toNumberValue(item.paperAssetCount),
+    paperAssetsExtracted: toNumberValue(item.paperAssetsExtracted),
+    voiceNoteCount: toNumberValue(item.voiceNoteCount),
   }));
 }
 

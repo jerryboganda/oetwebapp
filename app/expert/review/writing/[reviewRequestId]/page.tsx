@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { Select, Textarea } from '@/components/ui/form-controls';
@@ -8,10 +8,10 @@ import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Timer } from '@/components/ui/timer';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Save, Send, MessageSquare, RotateCcw } from 'lucide-react';
+import { FileAudio, FileText, MessageSquare, Mic, RotateCcw, Save, Send, Square, UploadCloud } from 'lucide-react';
 import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
 import { useParams, useRouter } from 'next/navigation';
-import { fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchWritingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertWritingReview } from '@/lib/api';
+import { addWritingReviewVoiceNote, fetchAuthorizedObjectUrl, fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchWritingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertWritingReview, uploadMedia } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useExpertStore } from '@/lib/stores/expert-store';
 import { paletteFor, WRITING_CRITERIA_ORDER } from '@/lib/writing-criterion-colors';
@@ -160,8 +160,22 @@ export default function WritingReviewWorkspace() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [reviewHistory, setReviewHistory] = useState<ExpertReviewHistory | null>(null);
   const [learnerContext, setLearnerContext] = useState<ExpertLearnerReviewContext | null>(null);
+  const [voiceFile, setVoiceFile] = useState<File | null>(null);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [voiceWrittenNotes, setVoiceWrittenNotes] = useState('');
+  const [isVoiceSaving, setIsVoiceSaving] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [paperAssetUrls, setPaperAssetUrls] = useState<Record<string, string>>({});
+  const [voiceNoteUrls, setVoiceNoteUrls] = useState<Record<string, string>>({});
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
 
   const partialMessage = reviewDetail?.artifactStatus?.aiDraftFeedback?.message ?? 'Some review data is still being prepared.';
+
+  const normalizedScoreNumbers = useMemo(
+    () => Object.fromEntries(Object.entries(scores).filter(([, value]) => value).map(([key, value]) => [key, Number(value)])),
+    [scores],
+  );
 
   const applyDraft = useCallback((draft: DraftCandidate | null) => {
     if (!draft) return;
@@ -244,6 +258,62 @@ export default function WritingReviewWorkspace() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isDirty]);
 
+  useEffect(() => () => {
+    recorderRef.current?.stream.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  useEffect(() => {
+    const assets = reviewDetail?.paperAssets ?? [];
+    if (!assets.length) {
+      return;
+    }
+
+    let cancelled = false;
+    const createdUrls: string[] = [];
+    Promise.all(assets.map(async (asset) => {
+      const objectUrl = await fetchAuthorizedObjectUrl(asset.url);
+      createdUrls.push(objectUrl);
+      return [asset.id, objectUrl] as const;
+    }))
+      .then((entries) => {
+        if (!cancelled) setPaperAssetUrls(Object.fromEntries(entries));
+      })
+      .catch(() => {
+        if (!cancelled) setPaperAssetUrls({});
+      });
+
+    return () => {
+      cancelled = true;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [reviewDetail?.paperAssets]);
+
+  useEffect(() => {
+    const notes = reviewDetail?.voiceNotes ?? [];
+    if (!notes.length) {
+      return;
+    }
+
+    let cancelled = false;
+    const createdUrls: string[] = [];
+    Promise.all(notes.map(async (note) => {
+      const objectUrl = await fetchAuthorizedObjectUrl(note.url);
+      createdUrls.push(objectUrl);
+      return [note.id, objectUrl] as const;
+    }))
+      .then((entries) => {
+        if (!cancelled) setVoiceNoteUrls(Object.fromEntries(entries));
+      })
+      .catch(() => {
+        if (!cancelled) setVoiceNoteUrls({});
+      });
+
+    return () => {
+      cancelled = true;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [reviewDetail?.voiceNotes]);
+
   const persistDraft = useCallback(async (options?: { quiet?: boolean }) => {
     if (!reviewRequestId) return null;
     const payload = {
@@ -295,7 +365,7 @@ export default function WritingReviewWorkspace() {
     if (!reviewRequestId) return;
     const missing = new Set<string>();
     CRITERIA.forEach((criterion) => {
-      if (!scores[criterion.key]) {
+      if (scores[criterion.key] == null) {
         missing.add(criterion.key);
       }
     });
@@ -308,13 +378,17 @@ export default function WritingReviewWorkspace() {
       setToast({ variant: 'error', message: 'Please provide a final overall comment.' });
       return;
     }
+    if ((reviewDetail?.voiceNotes?.length ?? 0) === 0) {
+      setActiveTab('voice');
+      setToast({ variant: 'error', message: 'Attach a voice note before submitting this writing review.' });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       const savedDraft = await persistDraft({ quiet: true });
-      const normalizedScores = Object.fromEntries(Object.entries(scores).map(([key, value]) => [key, Number(value)]));
       await submitExpertWritingReview(reviewRequestId, {
-        scores: normalizedScores,
+        scores: normalizedScoreNumbers,
         criterionComments,
         finalComment,
         version: savedDraft?.version ?? draftVersion,
@@ -334,7 +408,7 @@ export default function WritingReviewWorkspace() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [clearReviewDraft, criterionComments, draftVersion, finalComment, persistDraft, reviewRequestId, router, scores, setIsDirty]);
+  }, [clearReviewDraft, criterionComments, draftVersion, finalComment, normalizedScoreNumbers, persistDraft, reviewDetail?.voiceNotes?.length, reviewRequestId, router, scores, setIsDirty]);
 
   const handleRework = useCallback(async () => {
     if (!reviewRequestId) return;
@@ -439,8 +513,74 @@ export default function WritingReviewWorkspace() {
     window.getSelection()?.removeAllRanges();
   };
 
+  const handleStartRecording = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setToast({ variant: 'error', message: 'Audio recording is not available in this browser.' });
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recordingChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const file = new File([blob], `dr-ahmed-writing-review-${Date.now()}.webm`, { type: blob.type || 'audio/webm' });
+        setVoiceFile(file);
+        stream.getTracks().forEach((track) => track.stop());
+        recorderRef.current = null;
+        setIsRecording(false);
+      };
+      recorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      setToast({ variant: 'error', message: 'Microphone permission was not granted.' });
+    }
+  }, []);
+
+  const handleStopRecording = useCallback(() => {
+    recorderRef.current?.stop();
+  }, []);
+
+  const handleSaveVoiceNote = useCallback(async () => {
+    if (!reviewRequestId || !voiceFile) {
+      setToast({ variant: 'error', message: 'Attach or record an audio note before saving.' });
+      return;
+    }
+
+    setIsVoiceSaving(true);
+    try {
+      const uploaded = await uploadMedia(voiceFile);
+      const response = await addWritingReviewVoiceNote(reviewRequestId, {
+        mediaAssetId: uploaded.id,
+        transcriptText: voiceTranscript.trim(),
+        writtenNotes: voiceWrittenNotes.trim(),
+        rubricScores: normalizedScoreNumbers,
+      });
+      setReviewDetail((current) => current ? {
+        ...current,
+        voiceNotes: [...(current.voiceNotes ?? []), response.item],
+      } : current);
+      setVoiceFile(null);
+      setVoiceTranscript('');
+      setVoiceWrittenNotes('');
+      setToast({ variant: 'success', message: 'Voice note attached to this review.' });
+      analytics.track('writing_voice_note_added', { reviewRequestId });
+    } catch (error) {
+      setToast({ variant: 'error', message: isApiError(error) ? error.userMessage : 'Could not save the voice note.' });
+    } finally {
+      setIsVoiceSaving(false);
+    }
+  }, [normalizedScoreNumbers, reviewRequestId, voiceFile, voiceTranscript, voiceWrittenNotes]);
+
   const tabOptions = [
     { id: 'response', label: 'Learner Response' },
+    { id: 'paper', label: 'Paper Assets' },
+    { id: 'voice', label: 'Voice Notes' },
     { id: 'casenotes', label: 'Case Notes' },
     { id: 'ai', label: 'AI Draft Feedback' },
   ];
@@ -541,6 +681,125 @@ export default function WritingReviewWorkspace() {
                   })}
                 </div>
               )}
+            </TabPanel>
+
+            <TabPanel id="paper" activeTab={activeTab} className="h-full">
+              <div className="space-y-4">
+                <InlineAlert variant="info" title="Paper Submission">
+                  Uploaded pages and extracted text are evidence for paper-mode Writing reviews. Open the source file when handwriting legibility affects scoring.
+                </InlineAlert>
+                {(reviewDetail?.paperAssets ?? []).length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-200 bg-slate-50 p-6 text-sm text-muted">No paper assets are attached to this review.</div>
+                ) : (
+                  <div className="grid gap-3">
+                    {(reviewDetail?.paperAssets ?? []).map((asset) => (
+                      <div key={asset.id} className="rounded-xl border border-gray-200 bg-white p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-sm font-semibold text-navy">
+                              <FileText className="h-4 w-4 text-primary" />
+                              <span className="truncate">Page {asset.pageNumber}: {asset.fileName}</span>
+                            </div>
+                            <p className="mt-1 text-xs text-muted">{asset.format.toUpperCase()} • {Math.round(asset.sizeBytes / 1024)} KB • {asset.extractedCharCount} OCR characters</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={asset.extractionState === 'completed' ? 'success' : 'warning'}>{asset.extractionState}</Badge>
+                            <Button size="sm" variant="outline" onClick={() => paperAssetUrls[asset.id] && window.open(paperAssetUrls[asset.id], '_blank', 'noopener,noreferrer')} disabled={!paperAssetUrls[asset.id]}>Open</Button>
+                          </div>
+                        </div>
+                        {asset.extractionMessage ? <p className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-muted">{asset.extractionMessage}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabPanel>
+
+            <TabPanel id="voice" activeTab={activeTab} className="h-full">
+              <div className="space-y-4">
+                <InlineAlert variant="info" title="Voice-note result">
+                  Save at least one audio note before submitting so the learner receives Dr. Ahmed&apos;s spoken feedback alongside the rubric.
+                </InlineAlert>
+
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-navy">Record or upload audio</p>
+                      <p className="text-xs text-muted">MP3, M4A, WAV, OGG, or WebM audio is accepted.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-navy hover:border-primary/40">
+                        <UploadCloud className="h-4 w-4" /> Upload
+                        <input
+                          type="file"
+                          accept="audio/mpeg,audio/mp4,audio/wav,audio/ogg,audio/webm"
+                          className="sr-only"
+                          disabled={workspaceMeta?.isReadOnly || isVoiceSaving}
+                          onChange={(event) => setVoiceFile(event.currentTarget.files?.[0] ?? null)}
+                        />
+                      </label>
+                      {isRecording ? (
+                        <Button type="button" variant="destructive" onClick={handleStopRecording} disabled={isVoiceSaving}>
+                          <Square className="h-4 w-4" /> Stop
+                        </Button>
+                      ) : (
+                        <Button type="button" variant="outline" onClick={() => void handleStartRecording()} disabled={workspaceMeta?.isReadOnly || isVoiceSaving}>
+                          <Mic className="h-4 w-4" /> Record
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {voiceFile ? (
+                    <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-navy">
+                      <div className="flex items-center gap-2 font-semibold"><FileAudio className="h-4 w-4 text-primary" /> {voiceFile.name}</div>
+                    </div>
+                  ) : null}
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <Textarea
+                      label="Written voice-note summary"
+                      value={voiceWrittenNotes}
+                      onChange={(event) => setVoiceWrittenNotes(event.target.value)}
+                      rows={4}
+                      placeholder="Key spoken feedback points..."
+                      disabled={workspaceMeta?.isReadOnly || isVoiceSaving}
+                    />
+                    <Textarea
+                      label="Transcript"
+                      value={voiceTranscript}
+                      onChange={(event) => setVoiceTranscript(event.target.value)}
+                      rows={4}
+                      placeholder="Optional transcript for accessibility..."
+                      disabled={workspaceMeta?.isReadOnly || isVoiceSaving}
+                    />
+                  </div>
+                  <div className="mt-4 flex justify-end">
+                    <Button onClick={() => void handleSaveVoiceNote()} disabled={workspaceMeta?.isReadOnly || isVoiceSaving || !voiceFile} loading={isVoiceSaving}>
+                      <FileAudio className="h-4 w-4" /> Save Voice Note
+                    </Button>
+                  </div>
+                </div>
+
+                {(reviewDetail?.voiceNotes ?? []).length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-200 bg-slate-50 p-6 text-sm text-muted">No voice notes have been saved yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {(reviewDetail?.voiceNotes ?? []).map((note) => (
+                      <div key={note.id} className="rounded-xl border border-gray-200 bg-white p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-navy">{note.fileName}</p>
+                            <p className="text-xs text-muted">Saved {new Date(note.createdAt).toLocaleString()}</p>
+                          </div>
+                          <Badge variant="success">{note.status}</Badge>
+                        </div>
+                        <audio controls src={voiceNoteUrls[note.id]} className="mt-3 w-full" preload="metadata" />
+                        {note.writtenNotes ? <p className="mt-3 text-sm text-navy">{note.writtenNotes}</p> : null}
+                        {note.transcriptText ? <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-muted">{note.transcriptText}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </TabPanel>
 
             <TabPanel id="casenotes" activeTab={activeTab} className="h-full">

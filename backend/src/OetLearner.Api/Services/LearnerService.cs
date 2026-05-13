@@ -44,6 +44,8 @@ public sealed record PaymentWebhookRetryResult(
 public partial class LearnerService(
     LearnerDbContext db,
     MediaStorageService mediaStorage,
+    IFileStorage fileStorage,
+    IPdfTextExtractor pdfTextExtractor,
     PlatformLinkService platformLinks,
     NotificationService notifications,
     WalletService walletService,
@@ -1181,10 +1183,15 @@ public partial class LearnerService(
                 .ToListAsync(cancellationToken))
                 .OrderByDescending(x => x.CreatedAt)
                 .FirstOrDefault();
+            var voiceNoteCount = review?.State == ReviewRequestState.Completed
+                ? await db.ReviewVoiceNotes.CountAsync(note => note.ReviewRequestId == review.Id && note.Status == "ready", cancellationToken)
+                : 0;
             var canRequestReview = attempt.State == AttemptState.Completed && attempt.SubtestCode is "writing" or "speaking";
+            var metadata = ReadWritingSubmissionMetadata(attempt);
             items.Add(new
             {
                 submissionId = attempt.Id,
+                reviewRequestId = review?.Id,
                 contentId = content.Id,
                 taskName = content.Title,
                 subtest = content.SubtestCode,
@@ -1193,6 +1200,9 @@ public partial class LearnerService(
                 reviewStatus = review is null ? "not_requested" : ToReviewRequestState(review.State),
                 evaluationId = eval?.Id,
                 state = ToApiState(attempt.State),
+                submissionMode = metadata.ExamMode,
+                assessorType = metadata.AssessorType,
+                voiceNoteCount,
                 comparisonGroupId = attempt.ComparisonGroupId,
                 canRequestReview,
                 actions = new
@@ -1213,6 +1223,36 @@ public partial class LearnerService(
         }
 
         return new { items, nextCursor };
+    }
+
+    private static (string ExamMode, string AssessorType) ReadWritingSubmissionMetadata(Attempt attempt)
+    {
+        if (!string.Equals(attempt.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("computer", "ai");
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(attempt.AnalysisJson ?? "{}");
+            if (doc.RootElement.TryGetProperty("writingSubmission", out var submission)
+                && submission.ValueKind == JsonValueKind.Object)
+            {
+                var examMode = submission.TryGetProperty("examMode", out var examModeNode) && examModeNode.ValueKind == JsonValueKind.String
+                    ? examModeNode.GetString() ?? "computer"
+                    : "computer";
+                var assessorType = submission.TryGetProperty("assessorType", out var assessorNode) && assessorNode.ValueKind == JsonValueKind.String
+                    ? assessorNode.GetString() ?? "ai"
+                    : "ai";
+                return (examMode, assessorType);
+            }
+        }
+        catch (JsonException)
+        {
+            return ("computer", "ai");
+        }
+
+        return ("computer", "ai");
     }
 
     public async Task<object> CompareSubmissionsAsync(string userId, string? leftId, string? rightId, CancellationToken cancellationToken)
@@ -1384,6 +1424,107 @@ public partial class LearnerService(
         return await GetAttemptAsync(attempt.Id, cancellationToken);
     }
 
+    public async Task<object> GetWritingPaperAssetsAsync(string userId, string attemptId, CancellationToken cancellationToken)
+    {
+        _ = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var assets = await LoadWritingPaperAssetResponsesAsync(attemptId, cancellationToken);
+        return new
+        {
+            attemptId,
+            assets,
+            extractionState = SummarizeExtractionState(assets),
+            extractedText = await BuildWritingPaperExtractedTextAsync(attemptId, cancellationToken)
+        };
+    }
+
+    public async Task<object> AttachWritingPaperAssetsAsync(string userId, string attemptId, WritingPaperAssetAttachRequest request, CancellationToken cancellationToken)
+    {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
+        var attempt = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        EnsureWritingDraftEditable(attempt);
+
+        var mediaAssetIds = (request.MediaAssetIds ?? [])
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(12)
+            .ToList();
+        if (mediaAssetIds.Count == 0)
+        {
+            throw ApiException.Validation(
+                "paper_assets_required",
+                "Upload at least one handwritten writing page before continuing.",
+                [new ApiFieldError("mediaAssetIds", "required", "Upload one or more image or PDF pages.")]);
+        }
+
+        if (request.ReplaceExisting == true)
+        {
+            var existingRows = await db.WritingAttemptAssets.Where(asset => asset.AttemptId == attempt.Id).ToListAsync(cancellationToken);
+            db.WritingAttemptAssets.RemoveRange(existingRows);
+        }
+
+        var mediaAssets = await db.MediaAssets
+            .Where(asset => mediaAssetIds.Contains(asset.Id))
+            .ToListAsync(cancellationToken);
+        if (mediaAssets.Count != mediaAssetIds.Count)
+        {
+            throw ApiException.Validation(
+                "paper_asset_not_found",
+                "One or more uploaded files could not be found.",
+                [new ApiFieldError("mediaAssetIds", "not_found", "Re-upload the missing page and try again.")]);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var existingByMediaId = await db.WritingAttemptAssets
+            .Where(asset => asset.AttemptId == attempt.Id && mediaAssetIds.Contains(asset.MediaAssetId))
+            .ToDictionaryAsync(asset => asset.MediaAssetId, cancellationToken);
+        var pageNumber = await db.WritingAttemptAssets
+            .Where(asset => asset.AttemptId == attempt.Id)
+            .Select(asset => (int?)asset.PageNumber)
+            .MaxAsync(cancellationToken) ?? 0;
+
+        foreach (var media in mediaAssets.OrderBy(asset => mediaAssetIds.IndexOf(asset.Id)))
+        {
+            ValidateWritingPaperMediaAsset(userId, media);
+            if (!existingByMediaId.TryGetValue(media.Id, out var writingAsset))
+            {
+                writingAsset = new WritingAttemptAsset
+                {
+                    Id = $"wpa-{Guid.NewGuid():N}",
+                    AttemptId = attempt.Id,
+                    UserId = userId,
+                    MediaAssetId = media.Id,
+                    PageNumber = ++pageNumber,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                db.WritingAttemptAssets.Add(writingAsset);
+            }
+
+            if (!string.Equals(writingAsset.ExtractionState, "completed", StringComparison.OrdinalIgnoreCase)
+                || string.IsNullOrWhiteSpace(writingAsset.ExtractedText))
+            {
+                await ExtractWritingPaperAssetAsync(writingAsset, media, cancellationToken);
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        var assets = await LoadWritingPaperAssetResponsesAsync(attempt.Id, cancellationToken);
+        var extractedText = await BuildWritingPaperExtractedTextAsync(attempt.Id, cancellationToken);
+        MergeWritingAttemptMetadata(attempt, "paper", "pending", assets.Select(asset => asset.MediaAssetId), extractedText.Length);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new
+        {
+            attemptId = attempt.Id,
+            assets,
+            extractionState = SummarizeExtractionState(assets),
+            extractedText,
+            extractedCharCount = extractedText.Length,
+            wordCount = CountWords(extractedText)
+        };
+    }
+
     public async Task<object> UpdateWritingDraftAsync(string userId, string attemptId, DraftUpdateRequest request, CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
@@ -1475,6 +1616,8 @@ public partial class LearnerService(
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var examMode = NormalizeWritingExamMode(request.ExamMode);
+        var assessorType = NormalizeWritingAssessorType(request.AssessorType);
         var idempotencyScope = $"writing-submit:{userId}:{attempt.Id}";
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
@@ -1488,12 +1631,63 @@ public partial class LearnerService(
         if (attempt.State is AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed)
         {
             var existing = await db.Evaluations.FirstOrDefaultAsync(x => x.AttemptId == attemptId, cancellationToken);
-            return new { attemptId = attempt.Id, evaluationId = existing?.Id, state = existing is null ? "queued" : ToAsyncState(existing.State) };
+            var existingReview = await db.ReviewRequests
+                .Where(review => review.AttemptId == attemptId && review.State != ReviewRequestState.Cancelled && review.State != ReviewRequestState.Failed)
+                .OrderByDescending(review => review.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (existingReview is not null && existing is null)
+            {
+                return new
+                {
+                    attemptId = attempt.Id,
+                    reviewRequestId = existingReview.Id,
+                    state = ToReviewRequestState(existingReview.State),
+                    examMode,
+                    assessorType = "instructor"
+                };
+            }
+
+            return new { attemptId = attempt.Id, evaluationId = existing?.Id, state = existing is null ? "queued" : ToAsyncState(existing.State), examMode, assessorType };
         }
 
-        EnsureWritingReadOnlyPhaseAllowsContentMutation(attempt, request.Content ?? attempt.DraftContent);
+        var proposedContent = examMode == "paper" ? request.Content ?? await BuildWritingPaperExtractedTextAsync(attempt.Id, cancellationToken) : request.Content ?? attempt.DraftContent;
+        if (examMode == "computer")
+        {
+            EnsureWritingReadOnlyPhaseAllowsContentMutation(attempt, proposedContent);
+        }
 
-        if (request.Content is not null) attempt.DraftContent = request.Content;
+        if (examMode == "paper")
+        {
+            if (request.PaperAssetIds?.Count > 0)
+            {
+                await AttachWritingPaperAssetsAsync(userId, attempt.Id, new WritingPaperAssetAttachRequest(request.PaperAssetIds, false), cancellationToken);
+            }
+
+            var extractedText = await BuildWritingPaperExtractedTextAsync(attempt.Id, cancellationToken);
+            var incompletePaperAssets = await db.WritingAttemptAssets
+                .CountAsync(asset => asset.AttemptId == attempt.Id && asset.ExtractionState != "completed", cancellationToken);
+            if (incompletePaperAssets > 0)
+            {
+                throw ApiException.Validation(
+                    "paper_ocr_incomplete",
+                    "OCR must finish successfully for every handwritten page before submission.",
+                    [new ApiFieldError("paperAssetIds", "ocr_incomplete", "Re-upload failed pages or wait for extraction before submitting.")]);
+            }
+            if (string.IsNullOrWhiteSpace(extractedText))
+            {
+                throw ApiException.Validation(
+                    "paper_ocr_required",
+                    "We could not extract enough text from the handwritten pages. Re-upload clearer pages before submitting.",
+                    [new ApiFieldError("paperAssetIds", "ocr_required", "Paper-based assessment needs successful OCR before grading or tutor review.")]);
+            }
+
+            attempt.DraftContent = extractedText;
+        }
+        else if (request.Content is not null)
+        {
+            attempt.DraftContent = request.Content;
+        }
+
         if (string.IsNullOrWhiteSpace(attempt.DraftContent))
         {
             throw ApiException.Validation(
@@ -1505,7 +1699,7 @@ public partial class LearnerService(
         // Free-tier / kill-switch entitlement gate. Premium subscribers
         // pass through unconditionally; free tier respects the runtime
         // WritingOptions singleton (default: premium-only).
-        if (writingEntitlement is not null)
+        if (assessorType == "ai" && writingEntitlement is not null)
         {
             var ent = await writingEntitlement.CheckAsync(userId, cancellationToken);
             if (!ent.Allowed)
@@ -1518,6 +1712,56 @@ public partial class LearnerService(
                 };
                 throw ApiException.PaymentRequired("writing_quota_exceeded", msg);
             }
+        }
+
+        List<string> paperAssetIds = examMode == "paper"
+            ? await db.WritingAttemptAssets
+                .Where(asset => asset.AttemptId == attempt.Id)
+                .OrderBy(asset => asset.PageNumber)
+                .Select(asset => asset.MediaAssetId)
+                .ToListAsync(cancellationToken)
+            : new List<string>();
+        MergeWritingAttemptMetadata(attempt, examMode, assessorType, paperAssetIds, attempt.DraftContent.Length);
+
+        if (assessorType == "instructor")
+        {
+            attempt.State = AttemptState.Completed;
+            attempt.SubmittedAt = DateTimeOffset.UtcNow;
+            attempt.CompletedAt = DateTimeOffset.UtcNow;
+            attempt.LastClientSyncAt = DateTimeOffset.UtcNow;
+            await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Completed, cancellationToken);
+
+            var reviewResponse = await CreateReviewRequestCoreAsync(userId, new ReviewRequestCreateRequest(
+                attempt.Id,
+                "writing",
+                string.IsNullOrWhiteSpace(request.TurnaroundOption) ? "standard" : request.TurnaroundOption,
+                request.FocusAreas ?? ["OET writing criteria", "voice-note feedback"],
+                BuildInstructorLearnerNotes(request.LearnerNotes, examMode),
+                "credits",
+                request.IdempotencyKey is null ? null : $"writing-instructor-{request.IdempotencyKey}"), cancellationToken);
+
+            var review = await db.ReviewRequests
+                .Where(existingReview => existingReview.AttemptId == attempt.Id && existingReview.State != ReviewRequestState.Cancelled)
+                .OrderByDescending(existingReview => existingReview.CreatedAt)
+                .FirstAsync(cancellationToken);
+            await TryAssignDrAhmedAsync(review.Id, cancellationToken);
+            await RecordEventAsync(userId, "writing_instructor_review_requested", new { attemptId = attempt.Id, reviewRequestId = review.Id, examMode, contentId = attempt.ContentId }, cancellationToken);
+
+            var response = new
+            {
+                attemptId = attempt.Id,
+                reviewRequestId = review.Id,
+                state = "queued_for_instructor_review",
+                examMode,
+                assessorType,
+                review = reviewResponse
+            };
+            if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+            {
+                await SaveIdempotentResponseAsync(idempotencyScope, request.IdempotencyKey, response, cancellationToken);
+            }
+            await db.SaveChangesAsync(cancellationToken);
+            return response;
         }
 
         attempt.State = AttemptState.Evaluating;
@@ -1547,14 +1791,293 @@ public partial class LearnerService(
         };
         db.Evaluations.Add(evaluation);
         await QueueJobAsync(JobType.WritingEvaluation, attemptId: attempt.Id, resourceId: evaluation.Id, cancellationToken: cancellationToken);
-        var response = new { attemptId = attempt.Id, evaluationId = evaluation.Id, state = "queued", nextPollAfterMs = 2000 };
-        await RecordEventAsync(attempt.UserId, "task_submitted", new { attemptId = attempt.Id, evaluationId = evaluation.Id, subtest = "writing", contentId = attempt.ContentId }, cancellationToken);
+        var aiResponse = new { attemptId = attempt.Id, evaluationId = evaluation.Id, state = "queued", nextPollAfterMs = 2000, examMode, assessorType };
+        await RecordEventAsync(attempt.UserId, "task_submitted", new { attemptId = attempt.Id, evaluationId = evaluation.Id, subtest = "writing", contentId = attempt.ContentId, examMode, assessorType }, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
-            await SaveIdempotentResponseAsync(idempotencyScope, request.IdempotencyKey, response, cancellationToken);
+            await SaveIdempotentResponseAsync(idempotencyScope, request.IdempotencyKey, aiResponse, cancellationToken);
         }
         await db.SaveChangesAsync(cancellationToken);
-        return response;
+        return aiResponse;
+    }
+
+    public async Task<object> GetReviewVoiceNotesAsync(string userId, string reviewRequestId, CancellationToken cancellationToken)
+    {
+        var review = await GetReviewRequestOwnedByUserAsync(userId, reviewRequestId, cancellationToken);
+        if (review.State != ReviewRequestState.Completed)
+        {
+            return new { reviewRequestId, items = Array.Empty<ReviewVoiceNoteResponse>() };
+        }
+
+        var notes = await LoadReviewVoiceNoteResponsesAsync(reviewRequestId, readyOnly: true, cancellationToken);
+        return new { reviewRequestId, items = notes };
+    }
+
+    public async Task<object> GetReviewResultAsync(string userId, string reviewRequestId, CancellationToken cancellationToken)
+    {
+        var review = await GetReviewRequestOwnedByUserAsync(userId, reviewRequestId, cancellationToken);
+        if (review.State != ReviewRequestState.Completed)
+        {
+            throw ApiException.NotFound("review_result_not_ready", "This tutor review result is not ready yet.");
+        }
+
+        var submittedDraft = await db.ExpertReviewDrafts
+            .AsNoTracking()
+            .Where(draft => draft.ReviewRequestId == reviewRequestId && draft.State == "submitted")
+            .OrderByDescending(draft => draft.DraftSavedAt)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw ApiException.NotFound("review_result_not_found", "Tutor review result was not found.");
+
+        var scores = JsonSupport.Deserialize(submittedDraft.RubricEntriesJson, new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase));
+        var comments = JsonSupport.Deserialize(submittedDraft.CriterionCommentsJson, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        var criteria = OrderReviewCriteria(review.SubtestCode, scores.Keys)
+            .Select(code =>
+            {
+                var score = scores.GetValueOrDefault(code);
+                var maxScore = ReviewCriterionMaxScore(review.SubtestCode, code);
+                return new
+                {
+                    code,
+                    name = CriterionLabelFromCode(code),
+                    score,
+                    maxScore,
+                    explanation = comments.GetValueOrDefault(code) ?? string.Empty
+                };
+            })
+            .ToList();
+        var totalScore = criteria.Sum(criterion => criterion.score);
+        var totalMaxScore = criteria.Sum(criterion => criterion.maxScore);
+
+        return new
+        {
+            reviewRequestId = review.Id,
+            attemptId = review.AttemptId,
+            subtest = review.SubtestCode,
+            state = ToReviewRequestState(review.State),
+            completedAt = review.CompletedAt,
+            submittedAt = submittedDraft.DraftSavedAt,
+            finalComment = submittedDraft.FinalCommentDraft,
+            scoreLabel = totalMaxScore > 0 ? $"Dr. Ahmed rubric {totalScore}/{totalMaxScore}" : "Dr. Ahmed reviewed",
+            scores,
+            criterionComments = comments,
+            criteria
+        };
+    }
+
+    private static string NormalizeWritingExamMode(string? examMode)
+    {
+        var normalized = (examMode ?? "computer").Trim().ToLowerInvariant().Replace("_", "-");
+        return normalized switch
+        {
+            "paper" or "paper-based" or "handwritten" => "paper",
+            "computer" or "computer-based" or "typed" => "computer",
+            _ => throw ApiException.Validation(
+                "invalid_writing_exam_mode",
+                "Choose either computer-based or paper-based writing mode.",
+                [new ApiFieldError("examMode", "invalid", "Use computer or paper.")])
+        };
+    }
+
+    private static string NormalizeWritingAssessorType(string? assessorType)
+    {
+        var normalized = (assessorType ?? "ai").Trim().ToLowerInvariant().Replace("_", "-");
+        return normalized switch
+        {
+            "ai" or "ai-assessment" or "automatic" => "ai",
+            "instructor" or "dr-ahmed" or "doctor-ahmed" or "human" or "tutor" => "instructor",
+            _ => throw ApiException.Validation(
+                "invalid_writing_assessor",
+                "Choose either AI assessment or Dr. Ahmed instructor assessment.",
+                [new ApiFieldError("assessorType", "invalid", "Use ai or instructor.")])
+        };
+    }
+
+    private static string BuildInstructorLearnerNotes(string? learnerNotes, string examMode)
+    {
+        var modeLabel = examMode == "paper" ? "Paper-based handwritten submission" : "Computer-based typed submission";
+        return string.IsNullOrWhiteSpace(learnerNotes)
+            ? $"Dr. Ahmed instructor assessment requested. {modeLabel}. Voice-note feedback expected."
+            : $"Dr. Ahmed instructor assessment requested. {modeLabel}. Voice-note feedback expected.\n\nLearner notes: {learnerNotes.Trim()}";
+    }
+
+    private async Task TryAssignDrAhmedAsync(string reviewRequestId, CancellationToken cancellationToken)
+    {
+        var existingAssignment = await db.ExpertReviewAssignments
+            .FirstOrDefaultAsync(assignment => assignment.ReviewRequestId == reviewRequestId
+                && assignment.ClaimState != ExpertAssignmentState.Released, cancellationToken);
+        if (existingAssignment is not null)
+        {
+            return;
+        }
+
+        var drAhmed = await db.ExpertUsers
+            .Where(expert => expert.IsActive
+                && (expert.DisplayName.ToLower().Contains("ahmed")
+                    || expert.Email.ToLower().Contains("ahmed")))
+            .OrderBy(expert => expert.DisplayName)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (drAhmed is null)
+        {
+            return;
+        }
+
+        db.ExpertReviewAssignments.Add(new ExpertReviewAssignment
+        {
+            Id = $"era-{Guid.NewGuid():N}",
+            ReviewRequestId = reviewRequestId,
+            AssignedReviewerId = drAhmed.Id,
+            AssignedBy = "system-dr-ahmed-routing",
+            AssignedAt = DateTimeOffset.UtcNow,
+            ClaimState = ExpertAssignmentState.Assigned,
+            ReasonCode = "dr-ahmed-writing-assessment"
+        });
+    }
+
+    private static void ValidateWritingPaperMediaAsset(string userId, MediaAsset media)
+    {
+        if (!string.Equals(media.UploadedBy, userId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Forbidden("paper_asset_forbidden", "You can only submit paper assets uploaded by your account.");
+        }
+
+        var isDocument = string.Equals(media.MimeType, "application/pdf", StringComparison.OrdinalIgnoreCase);
+        var isImage = media.MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+        if (!isDocument && !isImage)
+        {
+            throw ApiException.Validation(
+                "invalid_paper_asset_type",
+                "Writing paper submissions must be image pages or PDFs.",
+                [new ApiFieldError("mediaAssetIds", "invalid_type", "Upload JPG, PNG, WebP, GIF, or PDF pages.")]);
+        }
+    }
+
+    private async Task ExtractWritingPaperAssetAsync(WritingAttemptAsset writingAsset, MediaAsset media, CancellationToken cancellationToken)
+    {
+        writingAsset.ExtractionState = "processing";
+        writingAsset.UpdatedAt = DateTimeOffset.UtcNow;
+        writingAsset.ExtractionProvider = "auto-docintel-pdfpig";
+        writingAsset.ExtractionReasonCode = null;
+        writingAsset.ExtractionMessage = null;
+
+        try
+        {
+            await using var stream = await fileStorage.OpenReadAsync(media.StoragePath, cancellationToken);
+            var text = (await pdfTextExtractor.ExtractAsync(stream, cancellationToken)).Trim();
+            writingAsset.ExtractedText = text;
+            writingAsset.ExtractedAt = DateTimeOffset.UtcNow;
+            writingAsset.UpdatedAt = writingAsset.ExtractedAt.Value;
+
+            if (text.Length < 20)
+            {
+                writingAsset.ExtractionState = "failed";
+                writingAsset.ExtractionReasonCode = "ocr_no_text";
+                writingAsset.ExtractionMessage = "OCR completed but did not find enough readable text.";
+                return;
+            }
+
+            writingAsset.ExtractionState = "completed";
+            writingAsset.ExtractionMessage = "Text extracted successfully.";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            writingAsset.ExtractionState = "failed";
+            writingAsset.ExtractedText = string.Empty;
+            writingAsset.ExtractionReasonCode = "ocr_failed";
+            writingAsset.ExtractionMessage = "OCR failed for this page. Re-upload a clearer scan or use computer-based entry.";
+            writingAsset.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+    }
+
+    private async Task<IReadOnlyList<WritingPaperAssetResponse>> LoadWritingPaperAssetResponsesAsync(string attemptId, CancellationToken cancellationToken)
+    {
+        var rows = await db.WritingAttemptAssets
+            .AsNoTracking()
+            .Where(asset => asset.AttemptId == attemptId)
+            .OrderBy(asset => asset.PageNumber)
+            .Join(db.MediaAssets.AsNoTracking(), asset => asset.MediaAssetId, media => media.Id, (asset, media) => new { asset, media })
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(row => new WritingPaperAssetResponse(
+            row.asset.Id,
+            row.media.Id,
+            row.media.OriginalFilename,
+            row.media.MimeType,
+            row.media.Format,
+            row.media.SizeBytes,
+            row.asset.PageNumber,
+            row.asset.ExtractionState,
+            row.asset.ExtractedText?.Length ?? 0,
+            row.asset.ExtractionMessage,
+            $"/v1/media/{row.media.Id}/content")).ToList();
+    }
+
+    private async Task<string> BuildWritingPaperExtractedTextAsync(string attemptId, CancellationToken cancellationToken)
+    {
+        var texts = await db.WritingAttemptAssets
+            .AsNoTracking()
+            .Where(asset => asset.AttemptId == attemptId && asset.ExtractionState == "completed")
+            .OrderBy(asset => asset.PageNumber)
+            .Select(asset => asset.ExtractedText)
+            .ToListAsync(cancellationToken);
+        return string.Join("\n\n", texts.Where(text => !string.IsNullOrWhiteSpace(text)).Select(text => text.Trim()));
+    }
+
+    private static string SummarizeExtractionState(IReadOnlyList<WritingPaperAssetResponse> assets)
+    {
+        if (assets.Count == 0) return "empty";
+        if (assets.Any(asset => asset.ExtractionState == "processing" || asset.ExtractionState == "queued")) return "processing";
+        if (assets.All(asset => asset.ExtractionState == "completed")) return "completed";
+        if (assets.Any(asset => asset.ExtractionState == "completed")) return "partial";
+        return "failed";
+    }
+
+    private static int CountWords(string text)
+        => string.IsNullOrWhiteSpace(text) ? 0 : Regex.Matches(text, @"\b[\p{L}\p{N}']+\b").Count;
+
+    private static void MergeWritingAttemptMetadata(Attempt attempt, string examMode, string assessorType, IEnumerable<string> paperAssetIds, int extractedCharCount)
+    {
+        var analysis = JsonSupport.Deserialize<Dictionary<string, object?>>(attempt.AnalysisJson, new Dictionary<string, object?>());
+        analysis["writingSubmission"] = new
+        {
+            examMode,
+            assessorType,
+            submittedVia = examMode == "paper" ? "paper-upload" : "typed-editor",
+            paperAssetIds = paperAssetIds.ToArray(),
+            extractedCharCount,
+            reviewer = assessorType == "instructor" ? "dr-ahmed" : null,
+            updatedAt = DateTimeOffset.UtcNow
+        };
+        attempt.AnalysisJson = JsonSupport.Serialize(analysis);
+    }
+
+    private async Task<IReadOnlyList<ReviewVoiceNoteResponse>> LoadReviewVoiceNoteResponsesAsync(string reviewRequestId, bool readyOnly, CancellationToken cancellationToken)
+    {
+        var query = db.ReviewVoiceNotes
+            .AsNoTracking()
+            .Where(note => note.ReviewRequestId == reviewRequestId);
+        if (readyOnly)
+        {
+            query = query.Where(note => note.Status == "ready");
+        }
+
+        var rows = await query
+            .OrderByDescending(note => note.CreatedAt)
+            .Join(db.MediaAssets.AsNoTracking(), note => note.MediaAssetId, media => media.Id, (note, media) => new { note, media })
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(row => new ReviewVoiceNoteResponse(
+            row.note.Id,
+            row.note.ReviewRequestId,
+            row.media.Id,
+            row.media.OriginalFilename,
+            row.media.MimeType,
+            row.note.DurationSeconds,
+            row.note.TranscriptText,
+            row.note.WrittenNotes,
+            JsonSupport.Deserialize<Dictionary<string, int>>(row.note.RubricJson, new Dictionary<string, int>()),
+            row.note.Status,
+            row.note.CreatedAt,
+            $"/v1/media/{row.media.Id}/content")).ToList();
     }
 
     private static void EnsureWritingReadOnlyPhaseAllowsDraftMutation(Attempt attempt, DraftUpdateRequest request)
@@ -7030,6 +7553,39 @@ public partial class LearnerService(
         "informationGiving" => "Information Giving",
         _ => code ?? "Criterion"
     };
+
+    private static readonly string[] WritingReviewCriteria = ["purpose", "content", "conciseness", "genre", "organization", "language"];
+    private static readonly string[] SpeakingReviewCriteria = ["intelligibility", "fluency", "appropriateness", "grammar_expression", "relationshipBuilding", "patientPerspective", "providingStructure", "informationGathering", "informationGiving"];
+
+    private static IEnumerable<string> OrderReviewCriteria(string subtestCode, IEnumerable<string> availableCodes)
+    {
+        var available = new HashSet<string>(availableCodes, StringComparer.OrdinalIgnoreCase);
+        var canonical = string.Equals(subtestCode, "writing", StringComparison.OrdinalIgnoreCase)
+            ? WritingReviewCriteria
+            : SpeakingReviewCriteria;
+        foreach (var code in canonical)
+        {
+            if (available.Remove(code))
+            {
+                yield return code;
+            }
+        }
+
+        foreach (var code in available.OrderBy(code => code, StringComparer.OrdinalIgnoreCase))
+        {
+            yield return code;
+        }
+    }
+
+    private static int ReviewCriterionMaxScore(string subtestCode, string criterionCode)
+    {
+        if (string.Equals(subtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(criterionCode, "purpose", StringComparison.OrdinalIgnoreCase) ? 3 : 7;
+        }
+
+        return criterionCode is "relationshipBuilding" or "patientPerspective" or "providingStructure" or "informationGathering" or "informationGiving" ? 3 : 6;
+    }
 
     private static int ParseCriterionScore(string? scoreRange)
     {

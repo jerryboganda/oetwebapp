@@ -56,7 +56,7 @@ The author-supplied **letter** (`A`/`B`/`C`/`D`) is preserved alongside the ID a
 
 ### Wave 1.1.3 — Wire `RandomisationHelper.SeededShuffle` into the projection
 
-- `ReadingLearnerService.GetAttemptStructureAsync` / `ListeningLearnerService.GetAttemptStructureAsync` apply `SeededShuffle(options, seed: attemptId, saltKey: "reading.q.{id}.options")` to each question's options array before returning.
+- `ReadingLearnerService.GetAttemptStructureAsync` / `ListeningLearnerService.GetAttemptStructureAsync` apply `SeededShuffle(options, seed: attempt.RandomisationSeed, saltKey: RandomisationHelper.SaltKeyFromString("reading.q.{id}.options"))` to each question's options array before returning.
 - Grading is unaffected because the answer is keyed on option ID, not position.
 
 ### Wave 1.1.4 — Sunset legacy letter writes

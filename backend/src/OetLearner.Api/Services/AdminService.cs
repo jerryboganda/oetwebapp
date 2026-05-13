@@ -5958,12 +5958,25 @@ public partial class AdminService(
         var assignments = await db.ExpertReviewAssignments.AsNoTracking()
             .Where(a => reviews.Select(r => r.Id).Contains(a.ReviewRequestId))
             .ToListAsync(ct);
+        var reviewIds = reviews.Select(r => r.Id).Distinct().ToList();
+        var paperCounts = await db.WritingAttemptAssets.AsNoTracking()
+            .Where(asset => attemptIds.Contains(asset.AttemptId))
+            .GroupBy(asset => asset.AttemptId)
+            .Select(group => new { AttemptId = group.Key, Count = group.Count(), Completed = group.Count(asset => asset.ExtractionState == "completed") })
+            .ToDictionaryAsync(row => row.AttemptId, ct);
+        var voiceNoteCounts = await db.ReviewVoiceNotes.AsNoTracking()
+            .Where(note => reviewIds.Contains(note.ReviewRequestId))
+            .GroupBy(note => note.ReviewRequestId)
+            .Select(group => new { ReviewRequestId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(row => row.ReviewRequestId, row => row.Count, ct);
 
         var items = reviews.Select(r =>
         {
             attempts.TryGetValue(r.AttemptId, out var attempt);
             var assignment = assignments.FirstOrDefault(a => a.ReviewRequestId == r.Id);
             var learnerId = attempt?.UserId ?? "unknown";
+            paperCounts.TryGetValue(r.AttemptId, out var paperCount);
+            voiceNoteCounts.TryGetValue(r.Id, out var voiceNoteCount);
             return new
             {
                 r.Id,
@@ -5976,11 +5989,38 @@ public partial class AdminService(
                        : "pending",
                 assignedAt = assignment?.AssignedAt ?? r.CreatedAt,
                 subtestCode = r.SubtestCode,
-                priority = r.TurnaroundOption == "express" ? "high" : "normal"
+                priority = r.TurnaroundOption == "express" ? "high" : "normal",
+                submissionMode = ExtractWritingSubmissionMetadata(attempt, "examMode", "computer"),
+                assessorType = ExtractWritingSubmissionMetadata(attempt, "assessorType", "instructor"),
+                paperAssetCount = paperCount?.Count ?? 0,
+                paperAssetsExtracted = paperCount?.Completed ?? 0,
+                voiceNoteCount
             };
         }).ToList();
 
         return items;
+    }
+
+    private static string ExtractWritingSubmissionMetadata(Attempt? attempt, string propertyName, string fallback)
+    {
+        if (attempt is null || string.IsNullOrWhiteSpace(attempt.AnalysisJson)) return fallback;
+        try
+        {
+            using var doc = JsonDocument.Parse(attempt.AnalysisJson);
+            if (doc.RootElement.TryGetProperty("writingSubmission", out var submission)
+                && submission.ValueKind == JsonValueKind.Object
+                && submission.TryGetProperty(propertyName, out var value)
+                && value.ValueKind == JsonValueKind.String)
+            {
+                return value.GetString() ?? fallback;
+            }
+        }
+        catch (JsonException)
+        {
+            return fallback;
+        }
+
+        return fallback;
     }
 
     public async Task<object> AssignReviewAsync(string adminId, string adminName,

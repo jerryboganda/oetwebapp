@@ -13,28 +13,30 @@ The helper lives in `backend/src/OetLearner.Api/Services/RandomisationHelper.cs`
 
 ```csharp
 public static IReadOnlyList<T> SeededShuffle<T>(
-    IEnumerable<T> items,
-    string seed,
-    string saltKey);
+    IReadOnlyList<T> items,
+    uint seed,
+    int saltKey);
+
+public static int SaltKeyFromString(string? id);
 ```
 
 | Parameter | Meaning |
 | --------- | ------- |
-| `items` | Source list to shuffle. Never null. Empty list returns `[]` unchanged. |
-| `seed` | The deterministic seed string. Typical value: `attemptId` for learner-side shuffling, or `bundleId` for content-side preview. |
-| `saltKey` | Per-call salt: distinguishes the shuffle within the same seed. Example: `"reading.partA.text-a.options"`, `"listening.partB.q3.choices"`. |
+| `items` | Source list to shuffle. Never null. Empty / single-item lists return unchanged. |
+| `seed` | The deterministic unsigned integer seed. Typical value: `MockAttempt.RandomisationSeed`. |
+| `saltKey` | Per-call integer salt: distinguishes the shuffle within the same seed. Use `SaltKeyFromString("reading.partA.text-a.options")` when the caller starts from a string id. |
 
-The helper hashes `seed + ":" + saltKey` with FNV-1a (64-bit), uses the result as the Fisher-Yates RNG seed, and returns a new list. **Same `(seed, saltKey)` always produces the same permutation.**
+The helper XORs the `uint seed` with the `int saltKey`, uses that as the Fisher-Yates RNG seed, and returns a new list. `SaltKeyFromString(...)` uses deterministic FNV-1a 32-bit hashing for string ids. **Same `(seed, saltKey)` always produces the same permutation.**
 
 ## Threat model
 
 | Goal | How the helper meets it |
 | ---- | ----------------------- |
-| Two learners see different question / option order. | Each learner has a unique `attemptId` so their shuffle differs. |
-| The same learner re-opening the attempt sees the same order. | `attemptId` is stable; salt is stable; FNV-1a is deterministic. |
+| Two learners see different question / option order. | Each learner attempt has a stable `RandomisationSeed`, so their shuffle differs. |
+| The same learner re-opening the attempt sees the same order. | `RandomisationSeed` is stable; salt is stable; the helper is deterministic. |
 | Grading does not depend on display order. | Backend grading uses option **ID**, not position. (Pre-requisite: option-ID migration — see [`MOCKS-OPTION-ID-MIGRATION.md`](./MOCKS-OPTION-ID-MIGRATION.md).) |
 | Cohort analytics still group by item. | Analytics keys on `questionId`, not `displayOrder`. |
-| Authoring preview is deterministic for content review. | Use `bundleId` (not `attemptId`) as the seed to inspect a stable preview shuffle. |
+| Authoring preview is deterministic for content review. | Use a stored preview seed plus a stable salt from `SaltKeyFromString(...)`. |
 
 ## When to use
 

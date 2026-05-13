@@ -11,6 +11,8 @@ export interface MockLiveRoomSnapshot {
 
 export interface MockLiveRoomStateChanged extends MockLiveRoomSnapshot {
   fromState: string;
+  toState: string;
+  actorRole: string;
   reason?: string | null;
   occurredAt: string;
 }

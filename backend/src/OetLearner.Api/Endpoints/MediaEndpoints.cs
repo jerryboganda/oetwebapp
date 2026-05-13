@@ -47,11 +47,11 @@ public static class MediaEndpoints
             return Results.BadRequest(new { code = "file_too_large", message = "File must be 10 MB or smaller." });
 
         if (!MediaStorageService.IsAllowedMediaContentType(file.ContentType))
-            return Results.BadRequest(new { code = "invalid_file_type", message = "Allowed types: jpg, png, gif, webp, pdf." });
+            return Results.BadRequest(new { code = "invalid_file_type", message = "Allowed types: jpg, png, gif, webp, pdf, mp3, m4a, wav, ogg, webm." });
 
         var originalFileName = Path.GetFileName(file.FileName ?? "upload");
         if (!MediaStorageService.IsAllowedMediaExtension(originalFileName))
-            return Results.BadRequest(new { code = "invalid_file_extension", message = "Allowed extensions: .jpg, .jpeg, .png, .gif, .webp, .pdf." });
+            return Results.BadRequest(new { code = "invalid_file_extension", message = "Allowed extensions: .jpg, .jpeg, .png, .gif, .webp, .pdf, .mp3, .m4a, .wav, .ogg, .webm." });
 
         await using var buffer = new MemoryStream((int)Math.Min(file.Length, MaxMediaUploadBytes));
         await file.CopyToAsync(buffer, ct);
@@ -101,6 +101,7 @@ public static class MediaEndpoints
             SizeBytes = sizeBytes,
             StoragePath = storageKey,
             Status = MediaAssetStatus.Ready,
+            MediaKind = DeriveMediaKind(normalizedContentType),
             UploadedBy = userId,
             UploadedAt = DateTimeOffset.UtcNow,
         };
@@ -120,6 +121,14 @@ public static class MediaEndpoints
             asset.UploadedAt,
             Url = $"/v1/media/{asset.Id}/content",
         });
+    }
+
+    private static string DeriveMediaKind(string mimeType)
+    {
+        if (mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return "image";
+        if (mimeType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)) return "audio";
+        if (string.Equals(mimeType, "application/pdf", StringComparison.OrdinalIgnoreCase)) return "document";
+        return "file";
     }
 
     private static async Task<IResult> HandleGetByIdAsync(
@@ -168,6 +177,15 @@ public static class MediaEndpoints
         var isOwner = string.Equals(asset.UploadedBy, userId, StringComparison.OrdinalIgnoreCase);
         if (!isAdmin && !isOwner)
             return Results.Json(new { code = "forbidden", message = "You can only delete your own media." }, statusCode: StatusCodes.Status403Forbidden);
+
+        var isInUse = await db.WritingAttemptAssets.AnyAsync(link => link.MediaAssetId == asset.Id, ct)
+            || await db.ReviewVoiceNotes.AnyAsync(note => note.MediaAssetId == asset.Id, ct);
+        if (isInUse)
+        {
+            return Results.Json(
+                new { code = "media_in_use", message = "This media file is attached to a writing attempt or review and cannot be deleted." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
 
         storage.DeleteFile(asset.StoragePath);
         db.MediaAssets.Remove(asset);

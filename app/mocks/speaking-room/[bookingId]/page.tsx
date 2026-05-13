@@ -44,7 +44,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Timer } from '@/components/ui/timer';
 import {
   appendMockBookingRecordingChunk,
-  fetchMockBookingList,
+  fetchMockBookingDetail,
   finalizeMockBookingRecording,
   transitionMockBookingLiveRoom,
 } from '@/lib/api';
@@ -55,7 +55,7 @@ import { subscribeMockLiveRoomBooking } from '@/lib/mocks/live-room-hub';
 const PREP_SECONDS = 3 * 60;
 const SPEAK_SECONDS = 5 * 60;
 const CHUNK_TIMESLICE_MS = 7000; // ~7s per MediaRecorder chunk
-const ROLEPLAY_COUNT = 2;
+const DEFAULT_ROLEPLAY_COUNT = 2;
 
 type Phase =
   | 'pre'
@@ -76,6 +76,30 @@ function pickMimeType(): string | undefined {
     'audio/mp4',
     'audio/ogg',
   ].find((m) => MediaRecorder.isTypeSupported(m));
+}
+
+function mergeBookingUpdate(current: MockBooking | null, updated: MockBooking): MockBooking {
+  return {
+    ...(current ?? updated),
+    ...updated,
+    speakingPaperId: updated.speakingPaperId ?? current?.speakingPaperId,
+    speakingContent: updated.speakingContent ?? current?.speakingContent ?? null,
+  };
+}
+
+function positiveSeconds(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function boundedRoleplayCount(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(2, Math.max(1, Math.round(value)))
+    : DEFAULT_ROLEPLAY_COUNT;
+}
+
+function durationLabel(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
 }
 
 export default function SpeakingLiveRoomPage() {
@@ -107,17 +131,10 @@ export default function SpeakingLiveRoomPage() {
   useEffect(() => {
     if (!bookingId) return;
     analytics.track('content_view', { page: 'mock-speaking-room', bookingId });
-    fetchMockBookingList()
-      .then((response) => {
-        const matched = response.items.find(
-          (b) => b.bookingId === bookingId || b.id === bookingId,
-        );
-        if (!matched) {
-          setError('Booking not found or no longer accessible from this account.');
-          return;
-        }
-        setBooking(matched);
-        setConsent(Boolean(matched.consentToRecording));
+    fetchMockBookingDetail(bookingId)
+      .then((detail) => {
+        setBooking(detail);
+        setConsent(Boolean(detail.consentToRecording));
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load this booking.'))
       .finally(() => setLoading(false));
@@ -262,7 +279,7 @@ export default function SpeakingLiveRoomPage() {
         booking.bookingId ?? booking.id,
         'in_progress',
       );
-      setBooking(updated);
+      setBooking((current) => mergeBookingUpdate(current, updated));
       analytics.track('mock_started', { bookingId, phase: 'rp1-prep' });
       await enterPhase('rp1-prep');
     } catch (err) {
@@ -284,7 +301,7 @@ export default function SpeakingLiveRoomPage() {
         booking.bookingId ?? booking.id,
         'completed',
       );
-      setBooking(updated);
+      setBooking((current) => mergeBookingUpdate(current, updated));
       setInfo('Recording submitted. Redirecting…');
       analytics.track('mock_completed', { bookingId });
       setPhase('done');
@@ -294,7 +311,7 @@ export default function SpeakingLiveRoomPage() {
       setTimeout(() => router.push(target), 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Submission failed. Please try again.');
-      setPhase('rp2-speak');
+      setPhase(boundedRoleplayCount(booking.speakingContent?.roleplayCount) === 2 ? 'rp2-speak' : 'rp1-speak');
     }
   }, [booking, bookingId, router, stopRecorder]);
 
@@ -309,6 +326,9 @@ export default function SpeakingLiveRoomPage() {
   }, [booking]);
 
   const interlocutorHidden = booking?.interlocutorCardVisible === false;
+  const prepSeconds = positiveSeconds(booking?.speakingContent?.prepTimeSeconds, PREP_SECONDS);
+  const speakSeconds = positiveSeconds(booking?.speakingContent?.roleplayTimeSeconds, SPEAK_SECONDS);
+  const roleplayCount = boundedRoleplayCount(booking?.speakingContent?.roleplayCount);
 
   return (
     <LearnerDashboardShell
@@ -333,7 +353,7 @@ export default function SpeakingLiveRoomPage() {
               icon={Mic}
               accent="navy"
               title={booking.title ?? 'OET Speaking Mock'}
-              description="Audio-only delivery with full OET timing: 3-minute prep, 5-minute role-play, twice. Your audio is captured client-side and uploaded in small chunks while you speak."
+              description={`Audio-only delivery with OET timing: ${Math.round(prepSeconds / 60)}-minute prep, ${Math.round(speakSeconds / 60)}-minute role-play${roleplayCount === 2 ? ', twice' : ''}. Your audio is captured client-side and uploaded in small chunks while you speak.`}
               highlights={[
                 { icon: CalendarClock, label: 'Scheduled', value: scheduledStart ?? '—' },
                 {
@@ -352,7 +372,7 @@ export default function SpeakingLiveRoomPage() {
             {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
             {info ? <InlineAlert variant="success">{info}</InlineAlert> : null}
 
-            <PhaseStepper phase={phase} />
+            <PhaseStepper phase={phase} roleplayCount={roleplayCount} />
 
             {phase === 'pre' ? (
               <PreRoom
@@ -369,18 +389,19 @@ export default function SpeakingLiveRoomPage() {
             {phase === 'rp1-prep' ? (
               <PrepPanel
                 roleplayIndex={1}
-                seconds={PREP_SECONDS}
+                seconds={prepSeconds}
+                booking={booking}
                 onAdvance={() => { void enterPhase('rp1-speak'); }}
               />
             ) : null}
             {phase === 'rp1-speak' ? (
               <SpeakPanel
                 roleplayIndex={1}
-                seconds={SPEAK_SECONDS}
+                seconds={speakSeconds}
                 chunkCount={chunkCount}
                 uploading={uploading}
                 onAdvance={() => {
-                  if (ROLEPLAY_COUNT === 2) {
+                  if (roleplayCount === 2) {
                     void enterPhase('rp2-prep');
                   } else {
                     void handleSubmit();
@@ -392,14 +413,15 @@ export default function SpeakingLiveRoomPage() {
             {phase === 'rp2-prep' ? (
               <PrepPanel
                 roleplayIndex={2}
-                seconds={PREP_SECONDS}
+                seconds={prepSeconds}
+                booking={booking}
                 onAdvance={() => { void enterPhase('rp2-speak'); }}
               />
             ) : null}
             {phase === 'rp2-speak' ? (
               <SpeakPanel
                 roleplayIndex={2}
-                seconds={SPEAK_SECONDS}
+                seconds={speakSeconds}
                 chunkCount={chunkCount}
                 uploading={uploading}
                 onAdvance={() => { void handleSubmit(); }}
@@ -445,13 +467,17 @@ function phaseLabel(phase: Phase): string {
   }
 }
 
-function PhaseStepper({ phase }: { phase: Phase }) {
+function PhaseStepper({ phase, roleplayCount }: { phase: Phase; roleplayCount: number }) {
   const steps: { key: Phase; label: string }[] = [
     { key: 'pre', label: 'Pre-room' },
     { key: 'rp1-prep', label: 'RP1 prep' },
     { key: 'rp1-speak', label: 'RP1 speak' },
-    { key: 'rp2-prep', label: 'RP2 prep' },
-    { key: 'rp2-speak', label: 'RP2 speak' },
+    ...(roleplayCount === 2
+      ? [
+          { key: 'rp2-prep' as Phase, label: 'RP2 prep' },
+          { key: 'rp2-speak' as Phase, label: 'RP2 speak' },
+        ]
+      : []),
     { key: 'done', label: 'Submit' },
   ];
   const activeIndex = steps.findIndex((s) => s.key === phase);
@@ -560,10 +586,12 @@ function PreRoom({
 function PrepPanel({
   roleplayIndex,
   seconds,
+  booking,
   onAdvance,
 }: {
   roleplayIndex: number;
   seconds: number;
+  booking: MockBooking;
   onAdvance: () => void;
 }) {
   return (
@@ -571,11 +599,11 @@ function PrepPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Badge variant="info" size="sm">Role-play {roleplayIndex} — preparation</Badge>
-          <h3 className="mt-2 text-lg font-black text-foreground">3 minutes to read your card</h3>
+          <h3 className="mt-2 text-lg font-black text-foreground">{durationLabel(seconds)} to read your card</h3>
           <p className="mt-1 text-sm leading-6 text-muted">
-            Read the candidate card you have been given (printed or in chat). The interlocutor card
-            is intentionally not shown to candidates. The recorder will start automatically when this
-            timer ends, or click <strong>I&apos;m ready</strong> below.
+            Read the candidate card below. The interlocutor card is intentionally not shown to
+            candidates. The recorder will start automatically when this timer ends, or click
+            <strong> I&apos;m ready</strong> below.
           </p>
         </div>
         <Timer
@@ -586,12 +614,69 @@ function PrepPanel({
           size="lg"
         />
       </div>
+      <CandidateCardPanel booking={booking} />
       <div className="mt-4 flex justify-end">
         <Button variant="secondary" onClick={onAdvance}>
           I&apos;m ready — start speaking
         </Button>
       </div>
     </section>
+  );
+}
+
+function CandidateCardPanel({ booking }: { booking: MockBooking }) {
+  const content = booking.speakingContent;
+  const card = content?.candidateCard;
+  if (!content || !card) {
+    return (
+      <div className="mt-5 border-t border-border pt-5">
+        <InlineAlert variant="warning">
+          Candidate card content is not attached to this booking yet. Please contact support before starting this live room.
+        </InlineAlert>
+      </div>
+    );
+  }
+
+  const role = card.candidateRole ?? card.role ?? content.role ?? 'Candidate';
+  const setting = card.setting ?? content.setting ?? 'Clinical setting';
+  const patient = card.patientRole ?? card.patient ?? content.patient ?? 'Patient';
+  const task = card.task ?? card.brief ?? content.task ?? content.brief ?? '';
+  const background = card.background ?? content.background ?? '';
+  const tasks = card.tasks && card.tasks.length > 0 ? card.tasks : content.tasks ?? [];
+
+  return (
+    <div className="mt-5 space-y-4 border-t border-border pt-5">
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="muted" size="sm">{role}</Badge>
+        <Badge variant="info" size="sm">{setting}</Badge>
+        <Badge variant="muted" size="sm">{patient}</Badge>
+      </div>
+      {task ? (
+        <div>
+          <p className="text-xs font-black uppercase tracking-widest text-muted">Task</p>
+          <p className="mt-1 text-sm leading-6 text-foreground">{task}</p>
+        </div>
+      ) : null}
+      {background ? (
+        <div>
+          <p className="text-xs font-black uppercase tracking-widest text-muted">Background</p>
+          <p className="mt-1 text-sm leading-6 text-muted">{background}</p>
+        </div>
+      ) : null}
+      {tasks.length > 0 ? (
+        <div>
+          <p className="text-xs font-black uppercase tracking-widest text-muted">Objectives</p>
+          <ul className="mt-2 space-y-2 text-sm leading-6 text-foreground">
+            {tasks.map((taskItem, index) => (
+              <li key={`${taskItem}-${index}`} className="flex gap-2">
+                <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-success" />
+                <span>{taskItem}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -620,7 +705,7 @@ function SpeakPanel({
             <CircleDot className="mr-1 inline h-3 w-3 animate-pulse" />
             Recording role-play {roleplayIndex}
           </Badge>
-          <h3 className="mt-2 text-lg font-black text-foreground">5 minutes to deliver</h3>
+          <h3 className="mt-2 text-lg font-black text-foreground">{durationLabel(seconds)} to deliver</h3>
           <p className="mt-1 text-sm leading-6 text-muted">
             Speak naturally with your interlocutor. Audio is uploaded every ~7 seconds; if a chunk
             fails the next chunk will retry automatically.

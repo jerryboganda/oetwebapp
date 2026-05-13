@@ -100,6 +100,33 @@ public sealed record ExpertAiFlagResponse(
     double? TimestampEnd,
     string Severity);
 
+public sealed record WritingPaperAssetResponse(
+    string Id,
+    string MediaAssetId,
+    string FileName,
+    string MimeType,
+    string Format,
+    long SizeBytes,
+    int PageNumber,
+    string ExtractionState,
+    int ExtractedCharCount,
+    string? ExtractionMessage,
+    string Url);
+
+public sealed record ReviewVoiceNoteResponse(
+    string Id,
+    string ReviewRequestId,
+    string MediaAssetId,
+    string FileName,
+    string MimeType,
+    int? DurationSeconds,
+    string TranscriptText,
+    string WrittenNotes,
+    Dictionary<string, int> RubricScores,
+    string Status,
+    DateTimeOffset CreatedAt,
+    string Url);
+
 public sealed record ExpertSpeakingRoleCardResponse(
     string Role,
     string Setting,
@@ -142,7 +169,9 @@ public sealed record ExpertWritingReviewBundleResponse(
     string? ModelAnswer,
     ExpertDraftResponse? ExistingDraft,
     ExpertReviewActionsResponse Permissions,
-    Dictionary<string, ExpertArtifactStateResponse> ArtifactStatus);
+    Dictionary<string, ExpertArtifactStateResponse> ArtifactStatus,
+    IReadOnlyList<WritingPaperAssetResponse> PaperAssets,
+    IReadOnlyList<ReviewVoiceNoteResponse> VoiceNotes);
 
 public sealed record ExpertSpeakingReviewBundleResponse(
     string Id,

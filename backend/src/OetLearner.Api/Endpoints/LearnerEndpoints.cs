@@ -97,6 +97,8 @@ public static class LearnerEndpoints
         writing.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingTaskAsync(contentId, ct)));
         writing.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateWritingAttemptAsync(http.UserId(), request, ct)));
         writing.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingAttemptAsync(http.UserId(), attemptId, ct)));
+        writing.MapGet("/attempts/{attemptId}/paper-assets", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingPaperAssetsAsync(http.UserId(), attemptId, ct)));
+        writing.MapPost("/attempts/{attemptId}/paper-assets", async (HttpContext http, string attemptId, WritingPaperAssetAttachRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.AttachWritingPaperAssetsAsync(http.UserId(), attemptId, request, ct)));
         writing.MapPatch("/attempts/{attemptId}/draft", async (HttpContext http, string attemptId, DraftUpdateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.UpdateWritingDraftAsync(http.UserId(), attemptId, request, ct)));
         writing.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatWritingAttemptAsync(http.UserId(), attemptId, request, ct)));
         writing.MapPost("/attempts/{attemptId}/submit", async (HttpContext http, string attemptId, SubmitAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitWritingAttemptAsync(http.UserId(), attemptId, request, ct)));
@@ -257,6 +259,8 @@ public static class LearnerEndpoints
         reviews.MapGet("/eligibility", async (HttpContext http, [FromQuery] string? attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewEligibilityAsync(http.UserId(), attemptId, ct)));
         reviews.MapPost("/requests", async (HttpContext http, ReviewRequestCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateReviewRequestAsync(http.UserId(), request, ct)));
         reviews.MapGet("/requests/{reviewRequestId}", async (HttpContext http, string reviewRequestId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewRequestAsync(http.UserId(), reviewRequestId, ct)));
+        reviews.MapGet("/requests/{reviewRequestId}/result", async (HttpContext http, string reviewRequestId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewResultAsync(http.UserId(), reviewRequestId, ct)));
+        reviews.MapGet("/requests/{reviewRequestId}/voice-notes", async (HttpContext http, string reviewRequestId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewVoiceNotesAsync(http.UserId(), reviewRequestId, ct)));
 
         var billing = v1.MapGroup("/billing");
         billing.MapGet("/summary", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingSummaryAsync(http.UserId(), ct)));

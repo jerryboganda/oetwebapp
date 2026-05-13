@@ -133,7 +133,7 @@ If two `PaymentTransaction` rows share the same `quote_id` and both are
 
 ```sql
 SELECT id, gateway, gateway_transaction_id, status, opened_at, evidence_due_at
-FROM   "Disputes"          -- table name when slice B lands; see I-docs.md
+FROM   "PaymentDisputes"
 WHERE  status IN ('opened', 'evidence_submitted')
 ORDER BY evidence_due_at ASC NULLS LAST;
 ```
@@ -158,12 +158,12 @@ terminal status.
    (`docker compose restart api`). **Do not** `down -v` the stack.
 4. Once processing resumes, monitor query 2.2 for 15 minutes; backlog
    should drain monotonically.
-5. If a specific event keeps failing, capture its `id` and route to slice B.
+5. If a specific event keeps failing, capture its `id` and route to the billing owner.
    Never delete a `PaymentWebhookEvent` row to "unblock" the queue.
 
 ### 3.2 Refund stuck
 
-**Definition.** A `Refund` row sits in `Processing` for > 1 hour with no
+**Definition.** An `OrderRefund` row sits in `Processing` for > 1 hour with no
 provider webhook callback.
 
 **Procedure.**
@@ -173,7 +173,7 @@ provider webhook callback.
    state. Provider state is authoritative.
 3. If provider says `succeeded` but our row says `Processing`, the
    confirmation webhook was lost: locate it via query 2.2 filtered by
-   `event_type LIKE '%refund%'` and retry (admin UI button — slice B).
+   `event_type LIKE '%refund%'` and retry from the admin webhook backlog.
 4. If provider says `failed`, the admin must explicitly transition our row
    to `Failed` via the admin UI. Do not reverse the wallet ledger entry by
    hand.
@@ -199,7 +199,7 @@ provider webhook callback.
 1. Run query 2.5 with the customer's user id.
 2. If two `completed` `PaymentTransaction` rows share the same `quote_id`,
    confirm via the provider dashboard that both charges actually settled.
-3. Refund the **later** of the two via the admin Refunds UI; cite the
+3. Refund the **later** of the two via the admin payment-transaction refund action; cite the
    duplicate transaction id in the refund reason.
 4. File a defect against slice D: invariant **I10** failed. Capture the
    webhook timeline (`PaymentWebhookEvents.received_at`) to determine
@@ -209,7 +209,7 @@ provider webhook callback.
 
 **Procedure.**
 
-1. Acknowledge in admin Disputes UI within 24 hours of the open event.
+1. Acknowledge in the admin disputes UI within 24 hours of the open event.
 2. Pull the originating `Invoice` and `PaymentTransaction`; export PDF
    receipt + the learner's usage log for the billing period.
 3. Upload evidence in the provider dashboard **and** attach a copy to the
@@ -230,7 +230,7 @@ provider webhook callback.
 3. Determine ground truth: `sum(WalletTransaction.Amount)` is authoritative
    per invariant **I7**. Update `Wallet.CreditBalance` to match the ledger.
 4. Find the missing or duplicate ledger entry by joining
-   `WalletTransactions` to `PaymentTransactions` and `Refunds` on
+   `WalletTransactions` to `PaymentTransactions` and `OrderRefunds` on
    `reference_id`.
 5. File a defect against slice A. Invariant **I7** or **I9** failed.
 
@@ -241,7 +241,7 @@ provider webhook callback.
 | Migration | Reversible? | Notes |
 | --------- | ----------- | ----- |
 | `*_HardenWallet*` (slice A) | Mostly. New columns are additive and nullable; new tables can be dropped. | If a backfill ran, the rollback must restore the old `Wallet.CreditBalance` from the ledger first. |
-| `*_AddRefundDispute*` (slice B) | Yes. Tables are net-new. | Forward-only data: dropping the table loses dispute evidence. Take a backup first. |
+| `*_AddRefundDispute*` | Yes. Tables are net-new. | Forward-only data: dropping the table loses dispute evidence. Take a backup first. |
 | `*_HardenCatalog*` (slice C) | Partially. New version-history tables are additive. | If new uniqueness constraints have been added on `BillingCoupon.Code`, rollback must verify no duplicates were inserted in the meantime. |
 | `*_HardenCheckout*` (slice D) | Partially. New columns on `BillingQuote` / `Invoice` / `PaymentTransaction` are additive. | If a new FK was added (e.g. `Invoice.QuoteId` → `BillingQuotes.Id`), confirm no orphan invoices exist before rolling back. |
 
@@ -265,7 +265,7 @@ docker compose exec api dotnet ef database update <PreviousMigrationName> \
    *(placeholder — confirm rota in `mission-critical-execution-ledger.md`)*.
 2. Slice owner escalation:
    * Wallet → slice A.
-   * Payments / webhooks / refunds → slice B.
+   * Payments / webhooks / refunds → billing owner.
    * Catalog → slice C.
    * Checkout / quote / subscription / invoice → slice D.
    * Entitlement / AI quota → slice E.

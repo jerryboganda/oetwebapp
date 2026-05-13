@@ -91,6 +91,14 @@ public sealed class MagicByteValidator : IUploadContentValidator
                 : new(false, "audio/ogg", "ogg", $"Declared .{ext} but file is OGG.");
         }
 
+        // WebM / Matroska: EBML header. Browser MediaRecorder commonly emits this.
+        if (header[0] == 0x1A && header[1] == 0x45 && header[2] == 0xDF && header[3] == 0xA3)
+        {
+            return ext == "webm"
+                ? new(true, "audio/webm", "webm", null)
+                : new(false, "audio/webm", "webm", $"Declared .{ext} but file is WebM.");
+        }
+
         // PNG
         if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47)
             return ext == "png" ? new(true, "image/png", "png", null) : new(false, "image/png", "png", $"Declared .{ext} but file is PNG.");

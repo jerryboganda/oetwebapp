@@ -73,7 +73,7 @@ public class WritingLearnerVisibilityTests
     }
 
     private static LearnerService CreateService(LearnerDbContext db)
-        => new(db, null!, null!, null!, null!, null!, null!);
+        => new(db, null!, null!, null!, null!, null!, null!, null!);
 
     private static ContentItem BuildWritingContent(string id, ContentStatus status)
     {

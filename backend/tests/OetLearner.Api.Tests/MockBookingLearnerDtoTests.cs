@@ -12,11 +12,11 @@ namespace OetLearner.Api.Tests;
 
 /// <summary>
 /// Mocks V2 Wave 6 — regression guard for the learner-scoped MockBooking
-/// projection. The interlocutor card content (background, cue prompts,
-/// patient profile), the assigned tutor / interlocutor identifiers, the Zoom
-/// start URL and any tutor-only field MUST never be exposed to the learner
-/// via <c>GET /v1/mock-bookings/{id}</c>. The full content is gated behind
-/// the admin and expert routes.
+/// projection. The learner receives only the candidate card and timing; the
+/// interlocutor card content (background, cue prompts, patient profile), the
+/// assigned tutor / interlocutor identifiers, the Zoom start URL and any
+/// tutor-only field MUST never be exposed via <c>GET /v1/mock-bookings/{id}</c>.
+/// The full content is gated behind the admin and expert routes.
 /// </summary>
 public class MockBookingLearnerDtoTests : IClassFixture<TestWebApplicationFactory>
 {
@@ -39,7 +39,7 @@ public class MockBookingLearnerDtoTests : IClassFixture<TestWebApplicationFactor
     }
 
     [Fact]
-    public async Task LearnerBookingDto_DoesNotLeakInterlocutorCardOrTutorFields()
+    public async Task LearnerBookingDto_ExposesCandidateCardWithoutInterlocutorCardOrTutorFields()
     {
         var bookingId = await SeedSpeakingBookingAsync();
 
@@ -57,8 +57,6 @@ public class MockBookingLearnerDtoTests : IClassFixture<TestWebApplicationFactor
         // Mission-critical: tutor-only fields must be absent from learner DTO.
         Assert.False(root.TryGetProperty("interlocutorCard", out _),
             "Learner DTO must not embed the interlocutor card content.");
-        Assert.False(root.TryGetProperty("speakingContent", out _),
-            "Learner DTO must not embed authored speaking content (which contains the interlocutor card).");
         Assert.False(root.TryGetProperty("speakingPaperId", out _),
             "Learner DTO must not expose the bound speaking paper id.");
         Assert.False(root.TryGetProperty("cuePrompts", out _),
@@ -71,6 +69,16 @@ public class MockBookingLearnerDtoTests : IClassFixture<TestWebApplicationFactor
             "Learner DTO must not reveal the assigned interlocutor identity.");
         Assert.False(root.TryGetProperty("zoomStartUrl", out _),
             "Learner DTO must not expose the Zoom start URL (host-only).");
+
+        Assert.True(root.TryGetProperty("speakingContent", out var speaking),
+            "Learner DTO should include candidate-card content for the live room.");
+        Assert.False(speaking.TryGetProperty("interlocutorCard", out _),
+            "Learner speaking content must not include the hidden interlocutor card.");
+        Assert.True(speaking.TryGetProperty("candidateCard", out var candidateCard));
+        Assert.Equal("Practice nurse", candidateCard.GetProperty("candidateRole").GetString());
+        Assert.Equal("Community clinic", candidateCard.GetProperty("setting").GetString());
+        Assert.Equal(180, speaking.GetProperty("prepTimeSeconds").GetInt32());
+        Assert.Equal(300, speaking.GetProperty("roleplayTimeSeconds").GetInt32());
 
         // Belt-and-braces: even raw substring search must miss the interlocutor
         // background paragraph and any cue prompt.

@@ -8,6 +8,7 @@ using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
+[Collection("AuthFlows")]
 public class WritingPdfAuthorizationTests : IClassFixture<FirstPartyAuthTestWebApplicationFactory>
 {
     private readonly FirstPartyAuthTestWebApplicationFactory _factory;

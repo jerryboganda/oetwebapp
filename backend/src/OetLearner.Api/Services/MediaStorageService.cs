@@ -62,12 +62,14 @@ public sealed class MediaStorageService(IWebHostEnvironment environment, IOption
 
     private static readonly HashSet<string> AllowedMediaContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"
+        "image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf",
+        "audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg", "audio/webm"
     };
 
     private static readonly HashSet<string> AllowedMediaExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf",
+        ".mp3", ".m4a", ".mp4", ".wav", ".ogg", ".webm"
     };
 
     public static bool IsAllowedMediaContentType(string? contentType)

@@ -3,11 +3,11 @@
 > Date: 2026-05-12
 > Owner: Mocks Platform team
 > Source: `docs/mocks/PROGRESS.md` § Follow-Up Waves
-> Status: waves 1, 2, 4, and 5 closed in code on 2026-05-13; retained as an implementation ledger.
+> Status: waves 1, 2, 4, and 5 closed in code on 2026-05-13; Wave 3 route and E2E spec are present, with only production smoke execution remaining. Retained as an implementation ledger.
 
 ## Why this doc exists
 
-Track B closure (May 2026) finished every Wave 5 / Wave 6 / Wave 7 / Wave 8 reviewer Medium and dead-code follow-up. The original 5 follow-up waves are kept here for traceability; waves 1, 2, 4, and 5 have since moved from roadmap to implemented code.
+Track B closure (May 2026) finished every Wave 5 / Wave 6 / Wave 7 / Wave 8 reviewer Medium and dead-code follow-up. The original 5 follow-up waves are kept here for traceability; waves 1, 2, 4, and 5 have since moved from roadmap to implemented code, and Wave 3 has an E2E spec registered.
 
 ---
 
@@ -65,16 +65,15 @@ High — touches expert + admin endpoints, learner hub client, SignalR auth, and
 
 ### Current state
 
-**✅ Already shipped in V2 Wave 7.** `/mocks/diagnostic/page.tsx` wires entitlement → chooser → study path → SoR card. Track B added a Suspense boundary fallback for the initial mount.
+**✅ Already shipped in V2 Wave 7.** `/mocks/diagnostic/page.tsx` wires entitlement → chooser → study path → SoR card. Track B added a Suspense boundary fallback for the initial mount, and `tests/e2e/learner/mocks-diagnostic-flow.spec.ts` is registered across the Playwright matrix.
 
 ### Remaining acceptance criteria
 
-1. E2E smoke spec `tests/e2e/learner/mocks-diagnostic-flow.spec.ts` covering the full landing → start → chooser → resume path.
-2. Production smoke validation against the live route once the Listening V2 work is merged (since the diagnostic flow shares `/mocks/setup`).
+1. Production smoke validation against the live route once deployment has the closure build.
 
 ### Effort
 
-Low — just an E2E spec + a production smoke run.
+Low — production smoke run only; the E2E spec is already in the repo.
 
 ---
 
@@ -132,7 +131,7 @@ Medium — new BackgroundService + worker query + tests + notification template 
 
 | Wave | Recommended timing | Rationale |
 | ---- | ------------------ | --------- |
-| 3 (E2E smoke) | First — v1.0.1 patch | Lowest effort; closes the only remaining V2 evidence gap. |
+| 3 (diagnostic smoke) | Spec added; production smoke pending | Route and Playwright spec exist; run against deployed closure build. |
 | 1 (server-resolved adapters) | Done 2026-05-13 | Trust boundary moved into backend adapters. |
 | 5 (booking reminders) | Done 2026-05-13 | Learner and expert reminder fan-out implemented. |
 | 4 (Listening item analysis) | Done 2026-05-13 | Listening endpoint/UI plus discrimination index implemented. |

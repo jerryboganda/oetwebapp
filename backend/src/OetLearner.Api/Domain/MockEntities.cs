@@ -294,7 +294,7 @@ public class MockBooking
 
 [Index(nameof(BookingId), nameof(OccurredAt))]
 [Index(nameof(BookingId), nameof(TransitionVersion), IsUnique = true)]
-[Index(nameof(BookingId), nameof(ClientTransitionId))]
+[Index(nameof(BookingId), nameof(ClientTransitionId), IsUnique = true)]
 public class MockLiveRoomTransition
 {
     [Key]

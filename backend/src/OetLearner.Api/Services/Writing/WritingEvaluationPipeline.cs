@@ -57,6 +57,13 @@ public sealed class WritingEvaluationPipeline(
         var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == attempt.ContentId, cancellationToken);
         var user = await db.Users.FirstOrDefaultAsync(x => x.Id == attempt.UserId, cancellationToken);
 
+        // Profession: prefer content authoring metadata, then learner active
+        // profession. Falls back to medicine for backward compatibility with
+        // legacy seeded attempts that have no profession id.
+        var professionRaw = content?.ProfessionId ?? user?.ActiveProfessionId;
+        var profession = ParseProfession(professionRaw);
+        var letterType = ResolveLetterType(attempt, content);
+
         // Admin kill-switch: if AI grading is disabled, mark Failed with a
         // dedicated reason code and short-circuit before any prompt build
         // / gateway call. Deterministic rule-engine findings are still
@@ -71,15 +78,15 @@ public sealed class WritingEvaluationPipeline(
                 {
                     killSwitchFindings = ruleEngine.Lint(new WritingLintInput(
                         LetterText: attempt.DraftContent ?? string.Empty,
-                        LetterType: ResolveLetterType(attempt, content),
+                        LetterType: letterType,
                         CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(content?.CaseNotes),
-                        Profession: ParseProfession(content?.ProfessionId ?? user?.ActiveProfessionId)));
+                        Profession: profession));
                 }
                 catch
                 {
                     killSwitchFindings = Array.Empty<LintFinding>();
                 }
-                MarkFailed(evaluation, killSwitchFindings, "kill_switch",
+                MarkFailed(db, attempt, evaluation, profession, letterType, killSwitchFindings, "kill_switch",
                     opts.KillSwitchReason ?? "AI Writing grading is temporarily disabled by an administrator.",
                     retryable: false, retryAfterMs: null);
                 attempt.State = AttemptState.Submitted;
@@ -87,12 +94,6 @@ public sealed class WritingEvaluationPipeline(
                 return;
             }
         }
-
-        // Profession: prefer content authoring metadata, then learner active
-        // profession. Falls back to medicine for backward compatibility with
-        // legacy seeded attempts that have no profession id.
-        var professionRaw = content?.ProfessionId ?? user?.ActiveProfessionId;
-        var profession = ParseProfession(professionRaw);
 
         // Candidate target country for the country-aware Writing pass mark
         // (UK/IE/AU/NZ/CA → 350, US/QA → 300). Read the latest LearnerGoal
@@ -106,8 +107,6 @@ public sealed class WritingEvaluationPipeline(
                 .Select(g => g.TargetCountry)
                 .FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
         var candidateCountry = goalCountry;
-
-        var letterType = ResolveLetterType(attempt, content);
 
         // 1. Deterministic rule-engine pre-run.
         IReadOnlyList<LintFinding> ruleFindings;
@@ -141,7 +140,7 @@ public sealed class WritingEvaluationPipeline(
         catch (Exception ex)
         {
             logger.LogError(ex, "Writing grounded prompt build failed for attempt {AttemptId}.", attempt.Id);
-            MarkFailed(evaluation, ruleFindings, "prompt_build_error",
+            MarkFailed(db, attempt, evaluation, profession, letterType, ruleFindings, "prompt_build_error",
                 "Could not assemble the grounded Writing prompt. Please retry.",
                 retryable: true, retryAfterMs: 60_000);
             attempt.State = AttemptState.Submitted;
@@ -165,7 +164,7 @@ public sealed class WritingEvaluationPipeline(
         catch (PromptNotGroundedException ex)
         {
             logger.LogError(ex, "Writing AI call refused (ungrounded) for attempt {AttemptId}.", attempt.Id);
-            MarkFailed(evaluation, ruleFindings, "ai_ungrounded",
+            MarkFailed(db, attempt, evaluation, profession, letterType, ruleFindings, "ai_ungrounded",
                 "We couldn't grade this attempt because the AI grading prompt was not properly grounded. Our team has been notified.",
                 retryable: false, retryAfterMs: null);
             attempt.State = AttemptState.Submitted;
@@ -174,7 +173,7 @@ public sealed class WritingEvaluationPipeline(
         catch (AiQuotaDeniedException ex)
         {
             logger.LogWarning(ex, "Writing AI call denied by quota for attempt {AttemptId} ({Code}).", attempt.Id, ex.Message);
-            MarkFailed(evaluation, ruleFindings, "ai_quota_denied",
+            MarkFailed(db, attempt, evaluation, profession, letterType, ruleFindings, "ai_quota_denied",
                 "AI grading is unavailable for this attempt due to quota limits. Please try again later or upgrade your plan.",
                 retryable: false, retryAfterMs: null);
             attempt.State = AttemptState.Submitted;
@@ -183,7 +182,7 @@ public sealed class WritingEvaluationPipeline(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Writing AI provider error for attempt {AttemptId}; marking Failed (Retryable=true).", attempt.Id);
-            MarkFailed(evaluation, ruleFindings, "ai_provider_error",
+            MarkFailed(db, attempt, evaluation, profession, letterType, ruleFindings, "ai_provider_error",
                 "We couldn't reach the AI grading service. Please retry — your free-tier counter has not been consumed.",
                 retryable: true, retryAfterMs: 60_000);
             attempt.State = AttemptState.Submitted;
@@ -198,7 +197,7 @@ public sealed class WritingEvaluationPipeline(
         if (!TryParse(aiResult.Completion, allowedAiRuleIds, out var aiResponse))
         {
             logger.LogWarning("Writing AI returned malformed JSON for attempt {AttemptId}; falling back to rule-engine-only.", attempt.Id);
-            MarkFailed(evaluation, ruleFindings, "ai_malformed_response",
+            MarkFailed(db, attempt, evaluation, profession, letterType, ruleFindings, "ai_malformed_response",
                 "AI grading returned an unreadable response. Please retry.",
                 retryable: true, retryAfterMs: 60_000);
             attempt.State = AttemptState.Submitted;
@@ -291,24 +290,7 @@ public sealed class WritingEvaluationPipeline(
         // (Profession, GeneratedAt), and AttemptId for the dashboard
         // pivots. Trim long messages / quotes to the column limits to
         // avoid silent truncation surprises.
-        foreach (var finding in mergedFindings)
-        {
-            db.Set<WritingRuleViolation>().Add(new WritingRuleViolation
-            {
-                Id = Guid.NewGuid().ToString("N"),
-                AttemptId = attempt.Id,
-                EvaluationId = evaluation.Id,
-                UserId = attempt.UserId,
-                Profession = profession.ToString().ToLowerInvariant(),
-                LetterType = letterType,
-                RuleId = TruncateAscii(finding.RuleId, 128),
-                Severity = TruncateAscii(finding.Severity, 16),
-                Source = TruncateAscii(finding.Source, 16),
-                Message = TruncateAscii(finding.Message, 1024),
-                Quote = string.IsNullOrEmpty(finding.Quote) ? null : TruncateAscii(finding.Quote!, 1024),
-                GeneratedAt = now,
-            });
-        }
+        PersistWritingRuleViolations(db, attempt, evaluation, profession, letterType, mergedFindings, now);
     }
 
     private static string TruncateAscii(string value, int max)
@@ -319,7 +301,11 @@ public sealed class WritingEvaluationPipeline(
     // -----------------------------------------------------------------
 
     private static void MarkFailed(
+        LearnerDbContext db,
+        Attempt attempt,
         Evaluation evaluation,
+        ExamProfession profession,
+        string letterType,
         IReadOnlyList<LintFinding> ruleFindings,
         string reasonCode,
         string message,
@@ -363,6 +349,37 @@ public sealed class WritingEvaluationPipeline(
         evaluation.Retryable = retryable;
         evaluation.RetryAfterMs = retryAfterMs;
         evaluation.LastTransitionAt = now;
+
+        PersistWritingRuleViolations(db, attempt, evaluation, profession, letterType, unified, now);
+    }
+
+    private static void PersistWritingRuleViolations(
+        LearnerDbContext db,
+        Attempt attempt,
+        Evaluation evaluation,
+        ExamProfession profession,
+        string letterType,
+        IReadOnlyList<UnifiedFinding> findings,
+        DateTimeOffset generatedAt)
+    {
+        foreach (var finding in findings)
+        {
+            db.Set<WritingRuleViolation>().Add(new WritingRuleViolation
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                AttemptId = attempt.Id,
+                EvaluationId = evaluation.Id,
+                UserId = attempt.UserId,
+                Profession = profession.ToString().ToLowerInvariant(),
+                LetterType = letterType,
+                RuleId = TruncateAscii(finding.RuleId, 128),
+                Severity = TruncateAscii(finding.Severity, 16),
+                Source = TruncateAscii(finding.Source, 16),
+                Message = TruncateAscii(finding.Message, 1024),
+                Quote = string.IsNullOrEmpty(finding.Quote) ? null : TruncateAscii(finding.Quote!, 1024),
+                GeneratedAt = generatedAt,
+            });
+        }
     }
 
     // -----------------------------------------------------------------

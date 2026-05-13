@@ -172,9 +172,16 @@ public sealed class MockBookingService
         LiveRoomTransitionRequest request,
         CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(request.TargetState))
+            throw ApiException.Validation("invalid_state", "Unknown live-room state.");
+
         var targetState = request.TargetState.Trim().ToLowerInvariant();
         if (!MockLiveRoomStates.IsValid(targetState))
             throw ApiException.Validation("invalid_state", "Unknown live-room state.");
+
+        var clientTransitionId = string.IsNullOrWhiteSpace(request.ClientTransitionId)
+            ? null
+            : request.ClientTransitionId.Trim();
 
         var booking = await _db.MockBookings.Include(x => x.MockBundle).FirstOrDefaultAsync(x => x.Id == bookingId, ct)
             ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
@@ -184,10 +191,10 @@ public sealed class MockBookingService
         if (!isAdmin && !isOwnerLearner && !isAssignedExpert)
             throw ApiException.Forbidden("forbidden", "You cannot transition this booking.");
 
-        if (!string.IsNullOrWhiteSpace(request.ClientTransitionId))
+        if (clientTransitionId is not null)
         {
             var duplicate = await _db.MockLiveRoomTransitions.AsNoTracking().AnyAsync(x =>
-                x.BookingId == booking.Id && x.ClientTransitionId == request.ClientTransitionId, ct);
+                x.BookingId == booking.Id && x.ClientTransitionId == clientTransitionId, ct);
             if (duplicate)
             {
                 return Project(booking, isAdmin: isAdmin);
@@ -236,7 +243,7 @@ public sealed class MockBookingService
             FromState = current,
             ToState = targetState,
             Reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
-            ClientTransitionId = string.IsNullOrWhiteSpace(request.ClientTransitionId) ? null : request.ClientTransitionId.Trim(),
+            ClientTransitionId = clientTransitionId,
             TransitionVersion = nextVersion,
             OccurredAt = now,
             MetadataJson = JsonSupport.Serialize(new { booking.MockAttemptId, booking.MockBundleId })
@@ -253,7 +260,25 @@ public sealed class MockBookingService
             ResourceId = booking.Id,
             Details = JsonSupport.Serialize(new { current, targetState, actorRole, transitionVersion = nextVersion })
         });
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException) when (clientTransitionId is not null)
+        {
+            _db.ChangeTracker.Clear();
+            var duplicate = await _db.MockLiveRoomTransitions.AsNoTracking().AnyAsync(x =>
+                x.BookingId == bookingId && x.ClientTransitionId == clientTransitionId, ct);
+            if (!duplicate)
+            {
+                throw;
+            }
+
+            var existing = await _db.MockBookings.AsNoTracking().Include(x => x.MockBundle)
+                .FirstOrDefaultAsync(x => x.Id == bookingId, ct)
+                ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
+            return Project(existing, isAdmin: isAdmin);
+        }
 
         await _liveRoomHub.Clients.Group(MockLiveRoomHub.BookingGroup(booking.Id)).SendAsync(
             MockLiveRoomHub.LiveRoomStateChangedEvent,
@@ -271,14 +296,16 @@ public sealed class MockBookingService
     public async Task<object> GetForUserAsync(string userId, string bookingId, CancellationToken ct)
     {
         var booking = await _db.MockBookings.AsNoTracking()
-            .Include(x => x.MockBundle)
+            .Include(x => x.MockBundle!).ThenInclude(b => b.Sections)
             .FirstOrDefaultAsync(x => x.Id == bookingId, ct)
             ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
         if (booking.UserId != userId)
         {
             throw ApiException.Forbidden("forbidden", "You cannot view this booking.");
         }
-        return Project(booking, isAdmin: false);
+        var projection = (Dictionary<string, object?>)Project(booking, isAdmin: false);
+        await AddSpeakingContentAsync(projection, booking, includeInterlocutorCard: false, includeSpeakingPaperId: false, ct);
+        return projection;
     }
 
     /// <summary>
@@ -304,21 +331,46 @@ public sealed class MockBookingService
         // Embed the speaking interlocutor card content from the bound speaking
         // section, if any. This payload is tutor-only — the learner-side
         // projection deliberately omits it.
+        await AddSpeakingContentAsync(projection, booking, includeInterlocutorCard: true, includeSpeakingPaperId: true, ct);
+
+        return projection;
+    }
+
+    private async Task AddSpeakingContentAsync(
+        Dictionary<string, object?> projection,
+        MockBooking booking,
+        bool includeInterlocutorCard,
+        bool includeSpeakingPaperId,
+        CancellationToken ct)
+    {
         var speakingSection = booking.MockBundle?.Sections
             .OrderBy(s => s.SectionOrder)
             .FirstOrDefault(s => string.Equals(s.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase));
-        if (speakingSection is not null)
+        if (speakingSection is null)
         {
-            var paper = await _db.ContentPapers.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == speakingSection.ContentPaperId, ct);
-            if (paper is not null)
-            {
-                projection["speakingPaperId"] = paper.Id;
-                projection["speakingContent"] = SpeakingContentStructure.BuildContentItemDetail(paper);
-            }
+            return;
         }
 
-        return projection;
+        var paper = await _db.ContentPapers.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == speakingSection.ContentPaperId, ct);
+        if (paper is null)
+        {
+            return;
+        }
+
+        var speakingContent = SpeakingContentStructure.BuildContentItemDetail(paper);
+        if (!includeInterlocutorCard)
+        {
+            speakingContent.Remove("interlocutorCard");
+            speakingContent.Remove("complianceNotes");
+            speakingContent.Remove("sourceProvenance");
+        }
+
+        if (includeSpeakingPaperId)
+        {
+            projection["speakingPaperId"] = paper.Id;
+        }
+        projection["speakingContent"] = speakingContent;
     }
 
     private static bool IsTerminal(string status) => status == MockBookingStatuses.Completed

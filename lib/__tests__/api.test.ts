@@ -107,6 +107,76 @@ describe('learner route normalization', () => {
   });
 });
 
+describe('mock booking API helpers', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  it('fetches booking detail and maps learner-safe speaking content', async () => {
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify({
+        id: 'booking-1',
+        bookingId: 'booking-1',
+        mockBundleId: 'bundle-1',
+        scheduledStartAt: '2026-05-13T10:00:00Z',
+        timezoneIana: 'UTC',
+        status: 'scheduled',
+        candidateCardVisible: true,
+        interlocutorCardVisible: false,
+        speakingContent: {
+          candidateCard: {
+            candidateRole: 'Practice nurse',
+            setting: 'Community clinic',
+            patientRole: 'Patient',
+            task: 'Agree a follow-up plan.',
+            background: 'You are a practice nurse.',
+            tasks: ['Acknowledge missed visits'],
+          },
+          interlocutorCard: { hiddenInformation: 'must not map' },
+          prepTimeSeconds: 120,
+          roleplayTimeSeconds: 240,
+          roleplayCount: 1,
+        },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const { fetchMockBookingDetail } = await import('../api');
+    const booking = await fetchMockBookingDetail('booking-1');
+
+    expect(calls[0]).toContain('/v1/mock-bookings/booking-1');
+    expect(booking.speakingContent?.candidateCard?.candidateRole).toBe('Practice nurse');
+    expect(booking.speakingContent?.prepTimeSeconds).toBe(120);
+    expect(booking.speakingContent?.roleplayCount).toBe(1);
+    expect('interlocutorCard' in (booking.speakingContent as Record<string, unknown>)).toBe(false);
+  });
+
+  it('passes bundle and paper filters to admin item analysis', async () => {
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify({ items: [], generatedAt: null }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const { fetchAdminMockItemAnalysis } = await import('../api');
+    await fetchAdminMockItemAnalysis({ bundleId: 'bundle-1', paperId: 'paper-1' });
+
+    expect(calls[0]).toContain('/v1/admin/mocks/item-analysis?');
+    expect(calls[0]).toContain('bundleId=bundle-1');
+    expect(calls[0]).toContain('paperId=paper-1');
+  });
+});
+
 describe('speaking API helpers', () => {
   const originalFetch = globalThis.fetch;
 

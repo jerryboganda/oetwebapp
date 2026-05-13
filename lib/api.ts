@@ -35,6 +35,7 @@ import type {
   MockReport,
   MockSession,
   MockBooking,
+  MockSpeakingContent,
   MockDiagnosticEntitlement,
   ReadinessData,
   ProgressEvidenceSummary,
@@ -86,6 +87,8 @@ import type {
   ReviewQueueResponse,
   ScheduleException,
   SpeakingReviewDetail,
+  ReviewVoiceNote,
+  WritingPaperAsset,
   WritingReviewDetail,
   ExpertOnboardingProfile,
   ExpertOnboardingQualifications,
@@ -1409,31 +1412,77 @@ export async function submitWritingDraft(taskId: string, content: string, mode: 
   return { saved: Boolean(saved.saved) };
 }
 
-export async function submitWritingTask(taskId: string, content: string, mode: 'exam' | 'learning' = 'exam'): Promise<WritingSubmission> {
+export type WritingExamMode = 'computer' | 'paper';
+export type WritingAssessorType = 'ai' | 'instructor';
+
+export interface WritingSubmitOptions {
+  examMode?: WritingExamMode;
+  assessorType?: WritingAssessorType;
+  paperAssetIds?: string[];
+  turnaroundOption?: 'standard' | 'express';
+  focusAreas?: string[];
+  learnerNotes?: string;
+}
+
+export async function submitWritingTask(taskId: string, content: string, mode: 'exam' | 'learning' = 'exam', options: WritingSubmitOptions = {}): Promise<WritingSubmission & { attemptId?: string; reviewRequestId?: string; assessorType?: WritingAssessorType; examMode?: WritingExamMode }> {
   const attempt = await ensureAttempt('writing', taskId, mode);
-  await apiRequest(`/v1/writing/attempts/${attempt.attemptId}/draft`, {
-    method: 'PATCH',
-    body: JSON.stringify({ content, scratchpad: null, checklist: null, draftVersion: attempt.draftVersion ?? 1 }),
-  });
+  const examMode = options.examMode ?? 'computer';
+  const assessorType = options.assessorType ?? 'ai';
+
+  if (examMode === 'computer') {
+    await apiRequest(`/v1/writing/attempts/${attempt.attemptId}/draft`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content, scratchpad: null, checklist: null, draftVersion: attempt.draftVersion ?? 1 }),
+    });
+  }
 
   const submitted = await apiRequest<ApiRecord>(`/v1/writing/attempts/${attempt.attemptId}/submit`, {
     method: 'POST',
-    body: JSON.stringify({ content, idempotencyKey: crypto.randomUUID?.() ?? String(Date.now()) }),
+    body: JSON.stringify({
+      content: examMode === 'computer' ? content : null,
+      idempotencyKey: crypto.randomUUID?.() ?? String(Date.now()),
+      examMode,
+      assessorType,
+      paperAssetIds: options.paperAssetIds ?? [],
+      turnaroundOption: options.turnaroundOption ?? 'standard',
+      focusAreas: options.focusAreas ?? ['OET writing criteria', 'voice-note feedback'],
+      learnerNotes: options.learnerNotes ?? null,
+    }),
   });
 
   cacheRemove(attemptCacheKey('writing', taskId, mode));
-  cacheSet(evaluationCacheKey('writing', taskId), submitted.evaluationId);
+  if (submitted.evaluationId) {
+    cacheSet(evaluationCacheKey('writing', taskId), submitted.evaluationId);
+  }
   const task = await fetchWritingTask(taskId);
+  const id = String(submitted.evaluationId ?? submitted.reviewRequestId ?? attempt.attemptId);
 
   return {
-    id: submitted.evaluationId,
+    id,
+    attemptId: String(submitted.attemptId ?? attempt.attemptId),
+    reviewRequestId: submitted.reviewRequestId ? String(submitted.reviewRequestId) : undefined,
+    assessorType,
+    examMode,
     taskId,
     taskTitle: task.title,
     content,
     submittedAt: new Date().toISOString(),
-    evalStatus: toEvalStatus(submitted.state),
-    reviewStatus: 'not_requested',
+    evalStatus: submitted.evaluationId ? toEvalStatus(submitted.state) : 'queued',
+    reviewStatus: submitted.reviewRequestId ? 'pending' : 'not_requested',
   };
+}
+
+export async function attachWritingPaperAssets(taskId: string, mediaAssetIds: string[], mode: 'exam' | 'learning' = 'exam', replaceExisting = true): Promise<{ attemptId: string; assets: WritingPaperAsset[]; extractionState: string; extractedText: string; extractedCharCount: number; wordCount: number }> {
+  const attempt = await ensureAttempt('writing', taskId, mode);
+  return apiRequest(`/v1/writing/attempts/${encodeURIComponent(attempt.attemptId)}/paper-assets`, {
+    method: 'POST',
+    body: JSON.stringify({ mediaAssetIds, replaceExisting }),
+  });
+}
+
+export async function fetchWritingPaperAssets(taskId: string, mode: 'exam' | 'learning' = 'exam'): Promise<{ attemptId: string; assets: WritingPaperAsset[]; extractionState: string; extractedText: string }> {
+  const attempt = await ensureAttempt('writing', taskId, mode);
+  return apiRequest(`/v1/writing/attempts/${encodeURIComponent(attempt.attemptId)}/paper-assets`);
 }
 
 export interface WritingEntitlement {
@@ -2583,12 +2632,57 @@ function mapMockBooking(item: ApiRecord): MockBooking {
     releasePolicy: item.releasePolicy ? String(item.releasePolicy) : undefined,
     candidateCardVisible: typeof item.candidateCardVisible === 'boolean' ? item.candidateCardVisible : undefined,
     interlocutorCardVisible: typeof item.interlocutorCardVisible === 'boolean' ? item.interlocutorCardVisible : undefined,
+    speakingPaperId: typeof item.speakingPaperId === 'string' ? item.speakingPaperId : undefined,
+    speakingContent: mapMockSpeakingContent(item.speakingContent),
+  };
+}
+
+function mapMockSpeakingContent(value: unknown): MockSpeakingContent | null {
+  if (!value || typeof value !== 'object') return null;
+  const item = asRecord(value);
+  const candidateCard = asRecord(item.candidateCard);
+  const tasks = toStringArray(candidateCard.tasks).length > 0
+    ? toStringArray(candidateCard.tasks)
+    : toStringArray(item.tasks);
+  return {
+    role: typeof item.role === 'string' ? item.role : typeof candidateCard.role === 'string' ? candidateCard.role : undefined,
+    setting: typeof item.setting === 'string' ? item.setting : typeof candidateCard.setting === 'string' ? candidateCard.setting : undefined,
+    patient: typeof item.patient === 'string' ? item.patient : typeof candidateCard.patient === 'string' ? candidateCard.patient : undefined,
+    task: typeof item.task === 'string' ? item.task : typeof candidateCard.task === 'string' ? candidateCard.task : undefined,
+    brief: typeof item.brief === 'string' ? item.brief : typeof candidateCard.brief === 'string' ? candidateCard.brief : undefined,
+    background: typeof item.background === 'string' ? item.background : typeof candidateCard.background === 'string' ? candidateCard.background : undefined,
+    tasks,
+    candidateCard: {
+      role: typeof candidateCard.role === 'string' ? candidateCard.role : undefined,
+      candidateRole: typeof candidateCard.candidateRole === 'string' ? candidateCard.candidateRole : undefined,
+      setting: typeof candidateCard.setting === 'string' ? candidateCard.setting : undefined,
+      patient: typeof candidateCard.patient === 'string' ? candidateCard.patient : undefined,
+      patientRole: typeof candidateCard.patientRole === 'string' ? candidateCard.patientRole : undefined,
+      brief: typeof candidateCard.brief === 'string' ? candidateCard.brief : undefined,
+      task: typeof candidateCard.task === 'string' ? candidateCard.task : undefined,
+      background: typeof candidateCard.background === 'string' ? candidateCard.background : undefined,
+      tasks,
+    },
+    warmUpQuestions: toStringArray(item.warmUpQuestions),
+    prepTimeSeconds: typeof item.prepTimeSeconds === 'number' ? item.prepTimeSeconds : undefined,
+    roleplayTimeSeconds: typeof item.roleplayTimeSeconds === 'number' ? item.roleplayTimeSeconds : undefined,
+    roleplayCount: typeof item.roleplayCount === 'number' ? item.roleplayCount : undefined,
+    patientEmotion: typeof item.patientEmotion === 'string' ? item.patientEmotion : undefined,
+    communicationGoal: typeof item.communicationGoal === 'string' ? item.communicationGoal : undefined,
+    clinicalTopic: typeof item.clinicalTopic === 'string' ? item.clinicalTopic : undefined,
+    criteriaFocus: toStringArray(item.criteriaFocus),
+    disclaimer: typeof item.disclaimer === 'string' ? item.disclaimer : undefined,
   };
 }
 
 export async function fetchMockBookings(): Promise<MockBooking[]> {
   const response = await apiRequest<ApiRecord>('/v1/mock-bookings');
   return asArray(response.items).map(mapMockBooking);
+}
+
+export async function fetchMockBookingDetail(bookingId: string): Promise<MockBooking> {
+  const response = await apiRequest<ApiRecord>(`/v1/mock-bookings/${encodeURIComponent(bookingId)}`);
+  return mapMockBooking(response);
 }
 
 export async function createMockBooking(payload: {
@@ -2954,8 +3048,12 @@ export async function fetchSubmissions(): Promise<Submission[]> {
     attemptDate: item.attemptDate,
     scoreEstimate: scoreRangeDisplay(item.scoreEstimate ?? ''),
     reviewStatus: toReviewStatus(item.reviewStatus),
+    reviewRequestId: item.reviewRequestId ?? null,
     evaluationId: item.evaluationId ?? undefined,
     state: item.state ?? undefined,
+    submissionMode: item.submissionMode ?? undefined,
+    assessorType: item.assessorType ?? undefined,
+    voiceNoteCount: Number(item.voiceNoteCount ?? 0),
     comparisonGroupId: item.comparisonGroupId ?? null,
     canRequestReview: Boolean(item.canRequestReview),
     actions: {
@@ -2985,6 +3083,55 @@ export async function fetchSubmissionDetail(submissionId: string): Promise<Submi
     strengths: [],
     issues: [],
   };
+
+  if (submission.reviewRequestId) {
+    try {
+      const voice = await fetchLearnerReviewVoiceNotes(submission.reviewRequestId);
+      baseDetail.voiceNotes = (voice.items ?? []).map((note) => ({
+        id: note.id,
+        reviewRequestId: note.reviewRequestId,
+        url: note.url,
+        fileName: note.fileName,
+        mimeType: note.mimeType,
+        durationSeconds: note.durationSeconds,
+        transcriptText: note.transcriptText,
+        writtenNotes: note.writtenNotes,
+        createdAt: note.createdAt,
+      }));
+    } catch (error) {
+      console.warn('[API] Failed to load review voice notes:', error);
+    }
+
+    if (submission.reviewStatus === 'reviewed') {
+      try {
+        const result = await fetchLearnerReviewResult(submission.reviewRequestId);
+        const criteria = result.criteria.map((criterion) => ({
+          name: criterion.name,
+          score: criterion.score,
+          maxScore: criterion.maxScore,
+          grade: '',
+          explanation: criterion.explanation || 'Reviewed by Dr. Ahmed.',
+          anchoredComments: [],
+          omissions: [],
+          unnecessaryDetails: [],
+          revisionSuggestions: [],
+          strengths: [],
+          issues: [],
+        } satisfies CriterionFeedback));
+        baseDetail.expertReview = {
+          reviewRequestId: result.reviewRequestId,
+          finalComment: result.finalComment,
+          scoreLabel: result.scoreLabel,
+          completedAt: result.completedAt,
+          criteria,
+        };
+        baseDetail.criteria = criteria;
+        baseDetail.evidenceSummary.scoreLabel = result.scoreLabel || baseDetail.evidenceSummary.scoreLabel;
+      } catch (error) {
+        console.warn('[API] Failed to load review result:', error);
+      }
+    }
+  }
 
   if (!submission.evaluationId) {
     return baseDetail;
@@ -3607,6 +3754,43 @@ export async function fetchExpertLearnerReviewContext(learnerId: string): Promis
 
 export async function fetchWritingReviewDetail(reviewRequestId: string): Promise<WritingReviewDetail> {
   return apiRequest<WritingReviewDetail>(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/writing`);
+}
+
+export async function addWritingReviewVoiceNote(reviewRequestId: string, payload: { mediaAssetId: string; durationSeconds?: number | null; transcriptText?: string; writtenNotes?: string; rubricScores?: Record<string, number>; }): Promise<{ reviewRequestId: string; item: ReviewVoiceNote }> {
+  return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/writing/voice-notes`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchLearnerReviewVoiceNotes(reviewRequestId: string): Promise<{ reviewRequestId: string; items: ReviewVoiceNote[] }> {
+  return apiRequest(`/v1/reviews/requests/${encodeURIComponent(reviewRequestId)}/voice-notes`);
+}
+
+interface LearnerReviewResultCriterion {
+  code: string;
+  name: string;
+  score: number;
+  maxScore: number;
+  explanation: string;
+}
+
+interface LearnerReviewResultResponse {
+  reviewRequestId: string;
+  attemptId: string;
+  subtest: string;
+  state: string;
+  completedAt?: string | null;
+  submittedAt?: string | null;
+  finalComment: string;
+  scoreLabel?: string;
+  scores: Record<string, number>;
+  criterionComments: Record<string, string>;
+  criteria: LearnerReviewResultCriterion[];
+}
+
+export async function fetchLearnerReviewResult(reviewRequestId: string): Promise<LearnerReviewResultResponse> {
+  return apiRequest(`/v1/reviews/requests/${encodeURIComponent(reviewRequestId)}/result`);
 }
 
 export async function fetchSpeakingReviewDetail(reviewRequestId: string): Promise<SpeakingReviewDetail> {
@@ -5234,7 +5418,19 @@ export async function fetchSignedMediaUrl(assetId: string) {
 
 // ── Media Management ──
 
-export async function uploadMedia(file: File) {
+export interface UploadedMediaAsset {
+  id: string;
+  originalFilename: string;
+  mimeType: string;
+  format: string;
+  sizeBytes: number;
+  status: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  url: string;
+}
+
+export async function uploadMedia(file: File): Promise<UploadedMediaAsset> {
   const formData = new FormData();
   formData.append('file', file);
   const response = await fetchWithTimeout(resolveApiUrl('/v1/media/upload'), {
@@ -8075,7 +8271,7 @@ export async function fetchExpertMockBookings() {
  * expose. The caller (expert speaking-room page) needs that raw payload to
  * render the cue prompts and patient background.
  */
-export interface ExpertMockBookingDetail extends MockBooking {
+export interface ExpertMockBookingDetail extends Omit<MockBooking, 'speakingContent' | 'speakingPaperId'> {
   assignedTutorId?: string | null;
   assignedInterlocutorId?: string | null;
   zoomStartUrl?: string | null;

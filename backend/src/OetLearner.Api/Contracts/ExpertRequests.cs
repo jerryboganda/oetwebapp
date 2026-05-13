@@ -72,6 +72,13 @@ public record ExpertReviewSubmitRequest(
     string FinalComment,
     int? Version);
 
+public record ExpertReviewVoiceNoteCreateRequest(
+    string MediaAssetId,
+    int? DurationSeconds,
+    string? TranscriptText,
+    string? WrittenNotes,
+    Dictionary<string, int>? RubricScores);
+
 public record ExpertReworkRequest(string Reason);
 
 public record ExpertCalibrationSubmitRequest(

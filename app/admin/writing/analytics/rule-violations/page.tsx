@@ -21,12 +21,18 @@ const WINDOW_OPTIONS = [
 
 const PROFESSION_OPTIONS = [
   { label: 'All professions', value: '' },
-  { label: 'Doctor', value: 'doctor' },
-  { label: 'Nurse', value: 'nurse' },
-  { label: 'Pharmacist', value: 'pharmacist' },
-  { label: 'Dentist', value: 'dentist' },
-  { label: 'Physiotherapist', value: 'physiotherapist' },
-  { label: 'Veterinarian', value: 'veterinarian' },
+  { label: 'Medicine', value: 'medicine' },
+  { label: 'Nursing', value: 'nursing' },
+  { label: 'Pharmacy', value: 'pharmacy' },
+  { label: 'Physiotherapy', value: 'physiotherapy' },
+  { label: 'Dentistry', value: 'dentistry' },
+  { label: 'Occupational therapy', value: 'occupational_therapy' },
+  { label: 'Radiography', value: 'radiography' },
+  { label: 'Podiatry', value: 'podiatry' },
+  { label: 'Dietetics', value: 'dietetics' },
+  { label: 'Optometry', value: 'optometry' },
+  { label: 'Speech pathology', value: 'speech_pathology' },
+  { label: 'Veterinary', value: 'veterinary' },
 ];
 
 function severityVariant(label: 'critical' | 'major' | 'minor' | 'info'): 'danger' | 'warning' | 'info' | 'muted' {

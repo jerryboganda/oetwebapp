@@ -47,8 +47,13 @@ namespace OetLearner.Api.Data.Migrations
                 """);
 
             migrationBuilder.Sql("""
-                CREATE INDEX IF NOT EXISTS "IX_MockLiveRoomTransitions_BookingId_ClientTransitionId"
-                ON "MockLiveRoomTransitions" ("BookingId", "ClientTransitionId");
+                DROP INDEX IF EXISTS "IX_MockLiveRoomTransitions_BookingId_ClientTransitionId";
+                """);
+
+            migrationBuilder.Sql("""
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_MockLiveRoomTransitions_BookingId_ClientTransitionId"
+                ON "MockLiveRoomTransitions" ("BookingId", "ClientTransitionId")
+                WHERE "ClientTransitionId" IS NOT NULL;
                 """);
         }
 

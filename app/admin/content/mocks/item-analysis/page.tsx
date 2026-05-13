@@ -24,16 +24,20 @@ type ItemAnalysisRow = {
 
 export default function AdminMockItemAnalysisPage() {
   const [bundleId, setBundleId] = useState('');
+  const [paperId, setPaperId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [items, setItems] = useState<ItemAnalysisRow[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
-  const load = useCallback(async (nextBundleId = bundleId) => {
+  const load = useCallback(async (filters?: { bundleId?: string; paperId?: string }) => {
     setLoading(true);
     setError('');
     try {
-      const response = await fetchAdminMockItemAnalysis({ bundleId: nextBundleId || undefined }) as {
+      const response = await fetchAdminMockItemAnalysis({
+        bundleId: filters?.bundleId?.trim() || undefined,
+        paperId: filters?.paperId?.trim() || undefined,
+      }) as {
         items?: ItemAnalysisRow[];
         generatedAt?: string | null;
       };
@@ -44,9 +48,9 @@ export default function AdminMockItemAnalysisPage() {
     } finally {
       setLoading(false);
     }
-  }, [bundleId]);
+  }, []);
 
-  useEffect(() => { void load(''); }, [load]);
+  useEffect(() => { void load({}); }, [load]);
 
   return (
     <AdminRouteWorkspace>
@@ -58,9 +62,10 @@ export default function AdminMockItemAnalysisPage() {
           icon={BarChart3}
         />
 
-        <div className="mb-6 grid gap-3 rounded-2xl border border-border bg-background-light p-4 md:grid-cols-[1fr_auto]">
+        <div className="mb-6 grid gap-3 rounded-2xl border border-border bg-background-light p-4 md:grid-cols-[1fr_1fr_auto]">
           <Input label="Bundle ID filter" value={bundleId} onChange={(event) => setBundleId(event.target.value)} placeholder="mock-bundle-..." />
-          <Button className="self-end" onClick={() => void load()}>
+          <Input label="Paper ID filter" value={paperId} onChange={(event) => setPaperId(event.target.value)} placeholder="content-paper-..." />
+          <Button className="self-end" onClick={() => void load({ bundleId, paperId })}>
             <RefreshCw className="mr-2 h-4 w-4" /> Refresh
           </Button>
         </div>

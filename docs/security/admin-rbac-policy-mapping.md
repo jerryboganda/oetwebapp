@@ -21,6 +21,9 @@ Scope: granular admin authorization policies registered in `backend/src/OetLearn
 - `AdminContentPublishRequestsRead`: requires `content:editor_review`, `content:publisher_approval`, `content:publish`, or `system_admin`.
 - `AdminBillingRead`: requires `billing:read` or `system_admin`.
 - `AdminBillingWrite`: requires `billing:write` or `system_admin`.
+- `AdminBillingRefundWrite`: requires `billing:refund_write`, `billing:write`, or `system_admin`.
+- `AdminBillingCatalogWrite`: requires `billing:catalog_write`, `billing:write`, or `system_admin`.
+- `AdminBillingSubscriptionWrite`: requires `billing:subscription_write`, `billing:write`, or `system_admin`.
 - `AdminFreezeRead`: requires `billing:read` or `system_admin`.
 - `AdminFreezeWrite`: requires `billing:write` or `system_admin`.
 - `AdminUsersRead`: requires `users:read` or `system_admin`.
@@ -49,9 +52,10 @@ Scope: granular admin authorization policies registered in `backend/src/OetLearn
 ### Billing And Freeze Operations
 
 - Read examples: billing diagnostics, provider lifecycle signals, payment transaction ledgers, freeze state reads.
-- Write examples: billing catalog/provider mutations and freeze writes.
+- Write examples: catalog/provider mutations use `AdminBillingCatalogWrite`, refunds/dispute evidence use `AdminBillingRefundWrite`, subscription lifecycle/webhook retry/wallet adjustments use `AdminBillingSubscriptionWrite`, and freeze writes still use `AdminFreezeWrite`.
 - Existing tests: billing/freeze tests use debug admin permission headers in development-mode factories.
-- Remaining launch evidence: add a compact positive/negative matrix for `billing:read`, `billing:write`, and `system_admin`.
+- Existing tests: `BillingGranularPermissionsTests` covers read-only denial, granular refund/catalog/subscription grants, and legacy `billing:write` as a superset.
+- Remaining launch evidence: keep endpoint-policy matrix tests current as billing routes expand.
 
 ### AI Configuration
 

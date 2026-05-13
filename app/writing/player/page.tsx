@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import type { Transition } from 'motion/react';
-import { BookOpen, ChevronLeft, ClipboardCheck, GraduationCap, Maximize, Minimize } from 'lucide-react';
+import { BookOpen, Brain, ChevronLeft, ClipboardCheck, FileCheck2, GraduationCap, Maximize, Minimize, UploadCloud, UserRoundCheck } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -14,9 +14,10 @@ import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-pa
 import { WritingEditor } from '@/components/domain/writing-editor';
 import { RulebookFindingsPanel } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchWritingTask, fetchWritingChecklist, ensureWritingAttempt, submitWritingDraft, submitWritingTask, completeMockSection, fetchWritingEntitlement, lintWritingViaApi, ApiError, type WritingEntitlement } from '@/lib/api';
+import { fetchAuthorizedObjectUrl, fetchWritingTask, fetchWritingChecklist, ensureWritingAttempt, submitWritingDraft, submitWritingTask, completeMockSection, fetchWritingEntitlement, lintWritingViaApi, uploadMedia, attachWritingPaperAssets, fetchWritingPaperAssets, ApiError, type WritingAssessorType, type WritingEntitlement, type WritingExamMode } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingTask } from '@/lib/mock-data';
+import type { WritingPaperAsset } from '@/lib/types/expert';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { inferWritingLetterType, type ExamProfession, type LintFinding } from '@/lib/rulebook';
 import {
@@ -94,6 +95,10 @@ export default function WritingPlayer() {
   const prefersReducedMotion = useReducedMotion();
   const taskId = searchParams?.get('taskId') ?? 'wt-001';
   const practiceMode = normalizeWritingPracticeMode(searchParams?.get('mode'));
+  const examMode: WritingExamMode = searchParams?.get('examMode') === 'paper' ? 'paper' : 'computer';
+  const assessorType: WritingAssessorType = (searchParams?.get('assessorType') ?? searchParams?.get('assessor')) === 'instructor' ? 'instructor' : 'ai';
+  const isPaperMode = examMode === 'paper';
+  const isInstructorReview = assessorType === 'instructor';
   const isExamMode = practiceMode === 'exam';
   // Mocks V2 — BuildLaunchRoute attaches mockAttemptId/mockSectionId when
   // this player is launched as a section of a mock attempt. Writing scores
@@ -115,6 +120,12 @@ export default function WritingPlayer() {
   const [activeTab, setActiveTab] = useState<'notes' | 'scratchpad' | 'checklist'>('notes');
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [paperAssets, setPaperAssets] = useState<WritingPaperAsset[]>([]);
+  const [paperAssetUrls, setPaperAssetUrls] = useState<Record<string, string>>({});
+  const [paperExtractedText, setPaperExtractedText] = useState('');
+  const [paperError, setPaperError] = useState<string | null>(null);
+  const [uploadingPaper, setUploadingPaper] = useState(false);
+  const [learnerNotes, setLearnerNotes] = useState('');
   /**
    * Entitlement gate — server is the source of truth (HTTP 402 with
    * `writing_quota_exceeded` is enforced regardless), but we surface a
@@ -136,7 +147,7 @@ export default function WritingPlayer() {
    */
   const [phase, setPhase] = useState<WritingPhase>(() => (isExamMode ? 'reading' : 'writing'));
   const [examTimerState, setExamTimerState] = useState<ExamTimerState | null>(null);
-  const isReadingPhase = isExamMode && phase === 'reading';
+  const isReadingPhase = isExamMode && !isPaperMode && phase === 'reading';
   const saveTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const examAttemptStartedAtRef = useRef<string | null>(null);
   const hasUnsavedChanges = useRef(false);
@@ -377,6 +388,73 @@ export default function WritingPlayer() {
     triggerAutoSave(val);
   }, [triggerAutoSave]);
 
+  useEffect(() => {
+    if (!isPaperMode) return;
+    let cancelled = false;
+    fetchWritingPaperAssets(taskId, practiceMode)
+      .then((result) => {
+        if (cancelled) return;
+        setPaperAssets(result.assets ?? []);
+        setPaperExtractedText(result.extractedText ?? '');
+        if (result.extractedText && !latestContentRef.current) {
+          latestContentRef.current = result.extractedText;
+          setContent(result.extractedText);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPaperAssets([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isPaperMode, practiceMode, taskId]);
+
+  const handlePaperUpload = useCallback(async (files: FileList | null) => {
+    if (!files?.length || uploadingPaper) return;
+    const selectedFiles = Array.from(files);
+    setUploadingPaper(true);
+    setPaperError(null);
+    try {
+      const uploads = await Promise.all(selectedFiles.map((file) => uploadMedia(file)));
+      const attached = await attachWritingPaperAssets(taskId, uploads.map((asset) => asset.id), practiceMode, true);
+      setPaperAssets(attached.assets ?? []);
+      const extractedText = attached.extractedText ?? '';
+      setPaperExtractedText(extractedText);
+      latestContentRef.current = extractedText;
+      setContent(extractedText);
+      analytics.track('writing_paper_uploaded', { taskId, fileCount: selectedFiles.length, extractionState: attached.extractionState });
+    } catch (err) {
+      setPaperError(err instanceof ApiError ? err.userMessage : err instanceof Error ? err.message : 'Could not read the uploaded pages.');
+    } finally {
+      setUploadingPaper(false);
+    }
+  }, [practiceMode, taskId, uploadingPaper]);
+
+  useEffect(() => {
+    if (!paperAssets.length) {
+      return;
+    }
+
+    let cancelled = false;
+    const createdUrls: string[] = [];
+    Promise.all(paperAssets.map(async (asset) => {
+      const objectUrl = await fetchAuthorizedObjectUrl(asset.url);
+      createdUrls.push(objectUrl);
+      return [asset.id, objectUrl] as const;
+    }))
+      .then((entries) => {
+        if (!cancelled) setPaperAssetUrls(Object.fromEntries(entries));
+      })
+      .catch(() => {
+        if (!cancelled) setPaperAssetUrls({});
+      });
+
+    return () => {
+      cancelled = true;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [paperAssets]);
+
   // Prevent accidental navigation
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -393,16 +471,23 @@ export default function WritingPlayer() {
       return;
     }
 
-    // Pre-flight entitlement check. Server still enforces (HTTP 402); this
-    // just avoids the round-trip when we already know the answer.
-    try {
-      const ent: WritingEntitlement = await fetchWritingEntitlement();
-      if (!ent.allowed && (ent.reason === 'premium_required' || ent.reason === 'quota_exceeded')) {
-        setEntitlementBlock({ reason: ent.reason, resetAt: ent.resetAt });
-        return;
+    if (isPaperMode && paperAssets.length === 0) {
+      setPaperError('Upload the handwritten response before submitting this paper-mode attempt.');
+      return;
+    }
+
+    // Pre-flight entitlement check for instant AI grading. Dr. Ahmed review is
+    // charged through review credits on the review-request path.
+    if (!isInstructorReview) {
+      try {
+        const ent: WritingEntitlement = await fetchWritingEntitlement();
+        if (!ent.allowed && (ent.reason === 'premium_required' || ent.reason === 'quota_exceeded')) {
+          setEntitlementBlock({ reason: ent.reason, resetAt: ent.resetAt });
+          return;
+        }
+      } catch {
+        // Non-fatal: fall through to submit and let the server enforce.
       }
-    } catch {
-      // Non-fatal: fall through to submit and let the server enforce.
     }
 
     isSubmittingRef.current = true;
@@ -412,25 +497,30 @@ export default function WritingPlayer() {
       saveTimerRef.current = undefined;
     }
 
-    const submittedContent = latestContentRef.current;
+    const submittedContent = isPaperMode ? paperExtractedText : latestContentRef.current;
 
     setSubmitting(true);
     setSaveStatus('saving');
     try {
-      const result = await submitWritingTask(taskId, submittedContent, practiceMode);
-      analytics.track('task_submitted', { taskId, subtest: 'writing', mode: practiceMode });
+      const result = await submitWritingTask(taskId, submittedContent, practiceMode, {
+        examMode,
+        assessorType,
+        paperAssetIds: isPaperMode ? paperAssets.map((asset) => asset.mediaAssetId) : [],
+        learnerNotes: learnerNotes.trim() || undefined,
+      });
+      analytics.track('task_submitted', { taskId, subtest: 'writing', mode: practiceMode, examMode, assessorType });
       hasUnsavedChanges.current = false;
       setSaveStatus('saved');
       setTimerRunning(false);
       if (mockAttemptId && mockSectionId) {
         try {
           await completeMockSection(mockAttemptId, mockSectionId, {
-            contentAttemptId: result.id,
+            contentAttemptId: result.attemptId ?? result.id,
             rawScore: null,
             rawScoreMax: null,
             scaledScore: null,
             grade: null,
-            evidence: { source: 'writing_player', submissionId: result.id, awaitingTutorReview: true },
+            evidence: { source: 'writing_player', submissionId: result.attemptId ?? result.id, reviewRequestId: result.reviewRequestId ?? null, awaitingTutorReview: Boolean(result.reviewRequestId) },
           });
         } catch (mockErr) {
           // Do not lose the learner's submission on mock-write failure.
@@ -445,10 +535,13 @@ export default function WritingPlayer() {
         }, 500);
         return;
       }
-      const resultUrl = `/writing/result?id=${encodeURIComponent(result.id)}`;
+      const resultUrl = result.reviewRequestId
+        ? `/submissions/${encodeURIComponent(result.attemptId ?? result.id)}`
+        : `/writing/result?id=${encodeURIComponent(result.id)}`;
       router.replace(resultUrl);
       window.setTimeout(() => {
-        if (window.location.pathname !== '/writing/result') {
+        const expectedPath = result.reviewRequestId ? `/submissions/${encodeURIComponent(result.attemptId ?? result.id)}` : '/writing/result';
+        if (window.location.pathname !== expectedPath) {
           window.location.assign(resultUrl);
         }
       }, 500);
@@ -503,6 +596,7 @@ export default function WritingPlayer() {
   const timerKey = isExamMode
     ? `${examTimerState?.startedAt ?? 'pending'}-${phase}-${timerInitialSeconds}`
     : 'learning';
+  const submitDisabled = isReadingPhase || submitting || uploadingPaper || (isPaperMode && paperAssets.length === 0);
 
   const handleWritingWindowComplete = useCallback(() => {
     // Writing window expired — auto-submit so the learner does not lose work.
@@ -569,6 +663,10 @@ export default function WritingPlayer() {
                       <Badge variant={isExamMode ? 'warning' : 'success'} size="sm">
                         {isExamMode ? 'Exam mode' : 'Learning mode'}
                       </Badge>
+                      <Badge variant="outline" size="sm">{isPaperMode ? 'Paper upload' : 'Computer typed'}</Badge>
+                      <Badge variant={isInstructorReview ? 'warning' : 'success'} size="sm">
+                        {isInstructorReview ? 'Dr. Ahmed' : 'AI assessor'}
+                      </Badge>
                     </div>
                   </div>
                 </div>
@@ -591,7 +689,7 @@ export default function WritingPlayer() {
                   >
                     <Maximize className="h-5 w-5" />
                   </button>
-                  <Button size={isMobile ? 'sm' : 'md'} onClick={handleSubmit} loading={submitting} disabled={isReadingPhase || submitting} className="shrink-0 whitespace-nowrap touch-target">
+                  <Button size={isMobile ? 'sm' : 'md'} onClick={handleSubmit} loading={submitting} disabled={submitDisabled} className="shrink-0 whitespace-nowrap touch-target">
                     Submit
                   </Button>
                 </div>
@@ -685,6 +783,72 @@ export default function WritingPlayer() {
           ) : null}
         </AnimatePresence>
 
+        <AnimatePresence initial={false}>
+          {isPaperMode && !isDistractionFree ? (
+            <motion.section
+              key="writing-paper-upload"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={panelTransition}
+              className="border-b border-border bg-surface/95 px-4 py-3"
+            >
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <div className="rounded-2xl border border-border bg-background-light p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-navy">
+                        <UploadCloud className="h-4 w-4 text-primary" /> Paper response
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-muted">Upload PDF or clear page photos for OCR before submission.</p>
+                    </div>
+                    <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark">
+                      {uploadingPaper ? 'Reading pages...' : 'Upload pages'}
+                      <input
+                        type="file"
+                        accept="application/pdf,image/png,image/jpeg,image/webp"
+                        multiple
+                        className="sr-only"
+                        disabled={uploadingPaper || submitting}
+                        onChange={(event) => void handlePaperUpload(event.currentTarget.files)}
+                      />
+                    </label>
+                  </div>
+                  {paperError ? <p className="mt-3 rounded-xl border border-danger/30 bg-danger/10 p-3 text-sm text-danger">{paperError}</p> : null}
+                  {paperAssets.length ? (
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {paperAssets.map((asset) => (
+                        <a key={asset.id} href={paperAssetUrls[asset.id]} target="_blank" rel="noreferrer" aria-disabled={!paperAssetUrls[asset.id]} className="flex items-center gap-2 rounded-xl border border-border bg-surface p-2 text-sm font-semibold text-navy hover:border-primary/40">
+                          <FileCheck2 className="h-4 w-4 text-success" />
+                          <span className="min-w-0 flex-1 truncate">Page {asset.pageNumber}: {asset.fileName}</span>
+                          <Badge variant={asset.extractionState === 'completed' ? 'success' : 'warning'} size="sm">{asset.extractionState}</Badge>
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-2xl border border-border bg-background-light p-3">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-navy">
+                    {isInstructorReview ? <UserRoundCheck className="h-4 w-4 text-primary" /> : <Brain className="h-4 w-4 text-primary" />}
+                    {isInstructorReview ? 'Dr. Ahmed notes' : 'AI grading notes'}
+                  </div>
+                  <textarea
+                    value={learnerNotes}
+                    onChange={(event) => setLearnerNotes(event.target.value)}
+                    rows={3}
+                    className="w-full resize-none rounded-xl border border-border bg-surface p-3 text-sm text-navy outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    placeholder="Optional context for the assessor"
+                  />
+                  <p className="mt-2 text-xs text-muted">
+                    OCR text available: {paperExtractedText.trim().length ? `${paperExtractedText.trim().length} characters` : 'not yet'}.
+                  </p>
+                </div>
+              </div>
+            </motion.section>
+          ) : null}
+        </AnimatePresence>
+
         {/* Distraction Free Floating Toolbar */}
         <AnimatePresence initial={false}>
           {isDistractionFree && (
@@ -741,7 +905,7 @@ export default function WritingPlayer() {
                     mobileView === 'editor' ? 'bg-surface text-primary shadow-sm' : 'text-muted hover:text-navy',
                   )}
                 >
-                  Editor
+                  {isPaperMode ? 'OCR' : 'Editor'}
                 </button>
               </div>
             </div>
@@ -789,8 +953,8 @@ export default function WritingPlayer() {
                         fontSize={fontSize}
                         onFontSizeChange={setFontSize}
                         showFontSizeControls={false}
-                        placeholder={isReadingPhase ? 'Writing is locked for the 5-minute reading window\u2026' : 'Begin writing your response...'}
-                        disabled={isReadingPhase}
+                        placeholder={isPaperMode ? 'Upload paper pages to preview extracted text...' : isReadingPhase ? 'Writing is locked for the 5-minute reading window\u2026' : 'Begin writing your response...'}
+                        disabled={isReadingPhase || isPaperMode}
                         spellCheck={!isExamMode}
                         className="min-h-0 flex-1"
                       />
@@ -844,8 +1008,8 @@ export default function WritingPlayer() {
                   fontSize={fontSize}
                   onFontSizeChange={setFontSize}
                   showFontSizeControls={!isMobile}
-                  placeholder={isReadingPhase ? 'Writing is locked for the 5-minute reading window\u2026' : 'Begin writing your response...'}
-                  disabled={isReadingPhase}
+                  placeholder={isPaperMode ? 'Upload paper pages to preview extracted text...' : isReadingPhase ? 'Writing is locked for the 5-minute reading window\u2026' : 'Begin writing your response...'}
+                  disabled={isReadingPhase || isPaperMode}
                   spellCheck={!isExamMode}
                   className="min-h-0 flex-1"
                 />

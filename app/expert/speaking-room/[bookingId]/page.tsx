@@ -134,7 +134,14 @@ export default function ExpertSpeakingLiveRoomPage() {
       setSuccess(null);
       try {
         const updated = await transitionExpertMockBookingLiveRoom(booking.bookingId ?? booking.id, target);
-        setBooking((prev) => (prev ? { ...prev, ...updated } : prev));
+        setBooking((prev) => (prev ? {
+          ...prev,
+          status: updated.status,
+          liveRoomState: updated.liveRoomState,
+          liveRoomTransitionVersion: updated.liveRoomTransitionVersion,
+          candidateCardVisible: updated.candidateCardVisible,
+          interlocutorCardVisible: updated.interlocutorCardVisible,
+        } : prev));
         setSuccess(`Live room state updated to ${STATE_LABEL[updated.liveRoomState ?? target] ?? target}.`);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not transition the live room.');

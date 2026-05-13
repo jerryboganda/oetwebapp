@@ -154,6 +154,13 @@ public sealed class WritingEvaluationPipelineTests : IAsyncDisposable
         Assert.True(feedbackDoc.RootElement.GetArrayLength() >= 1,
             "Expected at least one rule-engine finding to survive AI failure path.");
 
+        var violations = await _db.WritingRuleViolations
+            .Where(v => v.AttemptId == attempt.Id && v.EvaluationId == evaluation.Id)
+            .ToListAsync();
+        Assert.NotEmpty(violations);
+        Assert.All(violations, v => Assert.Equal("medicine", v.Profession));
+        Assert.All(violations, v => Assert.Equal("discharge", v.LetterType));
+
         // Attempt must NOT be marked Completed on a failed evaluation.
         var reloadedAttempt = await _db.Attempts.FirstAsync(x => x.Id == attempt.Id);
         Assert.NotEqual(AttemptState.Completed, reloadedAttempt.State);

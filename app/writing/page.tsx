@@ -16,6 +16,10 @@ import {
   Calendar,
   BookOpen,
   RefreshCw,
+  Monitor,
+  UploadCloud,
+  Brain,
+  UserRoundCheck,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -35,6 +39,8 @@ import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/lear
 import { useProfessions } from '@/lib/hooks/use-professions';
 
 type TabType = 'practice' | 'drills' | 'past';
+type WritingExamMode = 'computer' | 'paper';
+type WritingAssessorType = 'ai' | 'instructor';
 
 interface WritingHomeActionDto { label: string; route: string }
 interface WritingHomeLatestEvaluationDto {
@@ -139,6 +145,8 @@ export default function WritingHome() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [selectedExamMode, setSelectedExamMode] = useState<WritingExamMode>('computer');
+  const [selectedAssessor, setSelectedAssessor] = useState<WritingAssessorType>('ai');
   const { professions } = useProfessions();
   const filterGroups = useMemo<FilterGroup[]>(() => [
     {
@@ -217,6 +225,15 @@ export default function WritingHome() {
     'Practice session',
   );
   const recommendedTaskId = recommended?.id ?? recommended?.contentId;
+  const buildPlayerRoute = useCallback((taskIdToOpen: string) => {
+    const params = new URLSearchParams({
+      taskId: taskIdToOpen,
+      mode: 'exam',
+      examMode: selectedExamMode,
+      assessor: selectedAssessor,
+    });
+    return `/writing/player?${params.toString()}`;
+  }, [selectedAssessor, selectedExamMode]);
 
   if (loading) {
     return (
@@ -240,7 +257,7 @@ export default function WritingHome() {
     ],
     primaryAction: {
       label: 'Start Recommended Task',
-      href: recommendedTaskId ? `/writing/player?taskId=${recommendedTaskId}` : '/writing/library',
+      href: recommendedTaskId ? buildPlayerRoute(recommendedTaskId) : '/writing/library',
     },
   } satisfies LearnerSurfaceCardModel) : null;
 
@@ -283,6 +300,63 @@ export default function WritingHome() {
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <WritingEntitlementBanner entitlement={entitlement} />
+
+        <MotionSection>
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <LearnerSurfaceSectionHeader
+              eyebrow="Assessment Setup"
+              title="Choose how this attempt will be assessed"
+              description="Select the delivery mode and assessor before opening any writing task."
+              className="mb-4"
+            />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-2">
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Exam mode</p>
+                <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-background-light p-1">
+                  {([
+                    { id: 'computer' as WritingExamMode, label: 'Computer', icon: Monitor },
+                    { id: 'paper' as WritingExamMode, label: 'Paper', icon: UploadCloud },
+                  ]).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setSelectedExamMode(option.id)}
+                      className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-colors ${selectedExamMode === option.id ? 'bg-surface text-primary shadow-sm' : 'text-muted hover:text-navy'}`}
+                      aria-pressed={selectedExamMode === option.id}
+                    >
+                      <option.icon className="h-4 w-4" /> {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Assessor</p>
+                <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-background-light p-1">
+                  {([
+                    { id: 'ai' as WritingAssessorType, label: 'AI', icon: Brain },
+                    { id: 'instructor' as WritingAssessorType, label: 'Dr. Ahmed', icon: UserRoundCheck },
+                  ]).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setSelectedAssessor(option.id)}
+                      className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-colors ${selectedAssessor === option.id ? 'bg-surface text-primary shadow-sm' : 'text-muted hover:text-navy'}`}
+                      aria-pressed={selectedAssessor === option.id}
+                    >
+                      <option.icon className="h-4 w-4" /> {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted">
+              <Badge variant="info" size="sm">{selectedExamMode === 'paper' ? 'Upload handwritten pages' : 'Typed editor'}</Badge>
+              <Badge variant={selectedAssessor === 'ai' ? 'success' : 'warning'} size="sm">
+                {selectedAssessor === 'ai' ? 'Instant AI result' : 'Queued for Dr. Ahmed voice note'}
+              </Badge>
+            </div>
+          </div>
+        </MotionSection>
 
         {/* Resume Draft — backend tracks an in-progress Writing attempt for this learner */}
         {resumeAction ? (
@@ -417,7 +491,7 @@ export default function WritingHome() {
                     </div>
                   ) : filteredTasks.map((task) => (
                     <div key={task.id} className="p-5 hover:bg-background-light transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
-                      onClick={() => { analytics.track('task_started', { taskId: task.id, subtest: 'writing' }); router.push(`/writing/player?taskId=${task.id}`); }}>
+                      onClick={() => { analytics.track('task_started', { taskId: task.id, subtest: 'writing', examMode: selectedExamMode, assessor: selectedAssessor }); router.push(buildPlayerRoute(task.id)); }}>
                       <div>
                         <h3 className="font-bold text-navy mb-1 group-hover:text-primary transition-colors">{task.title}</h3>
                         <div className="flex flex-wrap items-center gap-2 mt-1">

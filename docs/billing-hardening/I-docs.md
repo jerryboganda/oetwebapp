@@ -2,6 +2,13 @@
 
 > Owner: docs subagent. Read [`README.md`](./README.md) first.
 
+> **Status note (2026-05-13):** this is a historical slice report. The live
+> billing reference is [`docs/BILLING.md`](../BILLING.md) and the operational
+> runbook is [`docs/runbooks/billing-incident.md`](../runbooks/billing-incident.md).
+> Previously planned refund/dispute, granular-permission, and webhook-retention
+> items have now landed; the gap list below is preserved as audit history with
+> updated closure notes.
+
 ## Scope
 
 Per the slice ownership matrix, this slice owns:
@@ -30,23 +37,19 @@ This slice does **not** modify any service, endpoint, or entity file.
 
 ## Behaviour-vs-doc gaps surfaced for owning slices
 
-> **2026-05-12 reconciliation:** Slice J reviewed each of the 9 gaps below
-> against `main` and confirmed 7 are now live. The 2 remaining items
-> (granular billing permissions split, scheduled webhook-payload retention
-> worker) are explicit v1.1 follow-ups, not v1 launch blockers.
+> **2026-05-13 reconciliation:** later closure work reviewed each of the 9 gaps
+> below against `main`; refund/dispute tables, granular billing permissions,
+> subscription statuses, webhook dead-letter handling, and scheduled webhook
+> payload retention are now represented in code and canonical docs.
 > See [`J-final-integration.md`](./J-final-integration.md) for the per-gap
 > resolution table with file/line evidence.
 
-The following claims in `docs/BILLING.md` and the runbook depend on
-behaviours that may not yet exist in code. Each is flagged here for the
-owning slice; doc text already calls them out as planned / pending.
+The following claims were the original Slice I handoff checklist. Current
+status notes are included inline; this section should not be read as the live
+launch blocker list.
 
-1. **`Refunds` / `Disputes` tables** — referenced by RBAC matrix, ER diagram,
-   state machines (§4.4, §4.5), and runbook scenarios 3.2 / 3.5. Owned by
-   slice B (`Services/Billing/RefundService.cs`, `DisputeService.cs`, new
-   migration `*_AddRefundDispute*.cs`). Until those land, the runbook
-   queries against `"Refunds"` / `"Disputes"` will fail; runbook explicitly
-   says "table name when slice B lands; see I-docs.md".
+1. **Refund / dispute tables** — resolved. Code uses `OrderRefunds` and
+   `PaymentDisputes`; the canonical runbook now queries those table names.
 2. **Wallet ledger invariants I7–I9** — assume `Wallet.CreditBalance` is a
    cached projection of `WalletTransaction.Amount`. Slice A must confirm
    the cached column is rebuildable and the write path takes a row-level
@@ -63,26 +66,22 @@ owning slice; doc text already calls them out as planned / pending.
 5. **Webhook payload integrity (I5)** — `PaymentWebhookEvent.PayloadSha256`
    exists, but no test confirms the hash is recomputed on retry and
    diff-rejected. Slice B / H to add the test.
-6. **Webhook dead-letter** — runbook §3.1 references a "5+ failures →
-   `ProcessingStatus = 'failed'`" policy and an admin "webhook backlog"
-   view. Confirm both exist; if the threshold is different in code, update
-   `docs/BILLING.md` §6.2 to match implementation.
+6. **Webhook dead-letter** — resolved. Code promotes exhausted events to
+   `ProcessingStatus = 'dead_letter'`; canonical docs now use that status.
 7. **Granular billing permissions** — resolved 2026-05-13. The RBAC matrix in
    `docs/BILLING.md` §7 now lists `billing:refund_write`,
    `billing:catalog_write`, and `billing:subscription_write`; legacy
    `billing:write` remains a superset.
-8. **`Subscription` lacks paused / past-due states in current enum** —
-   state machine §4.1 lists `Pending / Active / PastDue / Paused / Cancelled / Failed`.
-   Confirm `SubscriptionStatus` enum covers all values; slice D to add any
-   missing ones via additive migration.
+8. **Subscription status drift** — resolved in docs. The canonical enum is
+   `Trial`, `Pending`, `Active`, `PastDue`, `Suspended`, `Cancelled`, `Expired`;
+   `docs/BILLING.md` now mirrors those names instead of historical paused/failed labels.
 9. **PII retention 180-day webhook payload nulling** — resolved 2026-05-13.
    `WebhookPiiRetentionWorker` schedules the aged-payload sweep and focused
    tests cover the retention cutoff behavior.
 
-These gaps are **doc-truth** (what the system should guarantee), and are
-deliberately included so the owning slices have a checklist. Where a
-behaviour is absent, the doc text already labels it as "planned" or names
-the owning slice.
+These gaps were **doc-truth** at the time of Slice I. They are deliberately
+preserved so the closure trail remains auditable; use the inline status notes
+and canonical billing docs for current implementation truth.
 
 ## Observability change rationale
 

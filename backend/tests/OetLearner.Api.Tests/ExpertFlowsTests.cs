@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -560,6 +563,8 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
         Assert.Equal("Check tone against discharge intent.", draftJson.RootElement.GetProperty("scratchpad").GetString());
         Assert.Equal(2, draftJson.RootElement.GetProperty("checklistItems").GetArrayLength());
 
+        await AttachWritingVoiceNoteAsync(factory, client, "review-queue-002");
+
         var submitResponse = await client.PostAsJsonAsync("/v1/expert/reviews/review-queue-002/writing/submit", new
         {
             scores = new Dictionary<string, int> { ["purpose"] = 3, ["content"] = 5, ["conciseness"] = 4, ["genre"] = 4, ["organization"] = 5, ["language"] = 4 },
@@ -568,6 +573,54 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
             version
         });
         submitResponse.EnsureSuccessStatusCode();
+    }
+
+    private static async Task AttachWritingVoiceNoteAsync(
+        FirstPartyAuthTestWebApplicationFactory factory,
+        HttpClient client,
+        string reviewRequestId)
+    {
+        const string mediaAssetId = "media-review-queue-002-voice-note";
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        if (await db.MediaAssets.FindAsync(mediaAssetId) is null)
+        {
+            var now = DateTimeOffset.UtcNow;
+            db.MediaAssets.Add(new MediaAsset
+            {
+                Id = mediaAssetId,
+                OriginalFilename = "review-queue-002-feedback.webm",
+                MimeType = "audio/webm",
+                Format = "webm",
+                SizeBytes = 4096,
+                DurationSeconds = 92,
+                StoragePath = "test/review-queue-002-feedback.webm",
+                Status = MediaAssetStatus.Ready,
+                MediaKind = "audio",
+                UploadedBy = "expert-001",
+                UploadedAt = now.AddMinutes(-5),
+                ProcessedAt = now.AddMinutes(-4)
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync($"/v1/expert/reviews/{reviewRequestId}/writing/voice-notes", new
+        {
+            mediaAssetId,
+            durationSeconds = 92,
+            transcriptText = "Purpose is clear; clinical relevance needs a little tighter prioritisation.",
+            writtenNotes = "Good structure overall. Tighten the action request and remove lower-value history.",
+            rubricScores = new Dictionary<string, int>
+            {
+                ["purpose"] = 3,
+                ["content"] = 5,
+                ["conciseness"] = 4,
+                ["genre"] = 4,
+                ["organization"] = 5,
+                ["language"] = 4
+            }
+        });
+        response.EnsureSuccessStatusCode();
     }
 
     [Fact]

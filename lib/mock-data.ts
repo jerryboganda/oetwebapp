@@ -190,6 +190,26 @@ export interface CandidateCard {
   tasks?: string[];
 }
 
+export interface MockSpeakingContent {
+  role?: string;
+  setting?: string;
+  patient?: string;
+  task?: string;
+  brief?: string;
+  background?: string;
+  tasks?: string[];
+  candidateCard?: CandidateCard;
+  warmUpQuestions?: string[];
+  prepTimeSeconds?: number;
+  roleplayTimeSeconds?: number;
+  roleplayCount?: number;
+  patientEmotion?: string;
+  communicationGoal?: string;
+  clinicalTopic?: string;
+  criteriaFocus?: string[];
+  disclaimer?: string;
+}
+
 export interface RoleCard {
   id: string;
   title: string;
@@ -646,6 +666,8 @@ export interface MockBooking {
   releasePolicy?: string;
   candidateCardVisible?: boolean;
   interlocutorCardVisible?: boolean;
+  speakingPaperId?: string | null;
+  speakingContent?: MockSpeakingContent | null;
 }
 
 export interface MockDiagnosticEntitlement {
@@ -704,8 +726,12 @@ export interface Submission {
   attemptDate: string;
   scoreEstimate: string;
   reviewStatus: ReviewStatus;
+  reviewRequestId?: string | null;
   evaluationId?: string;
   state?: string;
+  submissionMode?: 'computer' | 'paper' | string;
+  assessorType?: 'ai' | 'instructor' | string;
+  voiceNoteCount?: number;
   comparisonGroupId?: string | null;
   canRequestReview: boolean;
   actions: {
@@ -727,6 +753,24 @@ export interface SubmissionDetail {
   strengths: string[];
   issues: string[];
   transcript?: TranscriptLine[];
+  voiceNotes?: Array<{
+    id: string;
+    reviewRequestId: string;
+    url: string;
+    fileName: string;
+    mimeType: string;
+    durationSeconds?: number | null;
+    transcriptText: string;
+    writtenNotes: string;
+    createdAt: string;
+  }>;
+  expertReview?: {
+    reviewRequestId: string;
+    finalComment: string;
+    scoreLabel?: string;
+    completedAt?: string | null;
+    criteria: CriterionFeedback[];
+  };
   criteria?: CriterionFeedback[];
   questionReview?: Array<{
     id: string;

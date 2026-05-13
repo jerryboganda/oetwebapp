@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { MotionConfig, motion, useReducedMotion } from 'motion/react';
 import type { Transition } from 'motion/react';
-import { AlertTriangle, CheckCircle2, Clock, Inbox, UserRoundCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, FileAudio, FileText, Inbox, UserRoundCheck } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -127,6 +127,21 @@ export default function ReviewOpsPage() {
       key: 'subtestCode',
       header: 'Subtest',
       render: (item) => <span className="capitalize text-muted">{item.subtestCode}</span>,
+    },
+    {
+      key: 'submissionMode',
+      header: 'Submission',
+      render: (item) => (
+        <div className="space-y-1 text-xs text-muted">
+          <div className="flex items-center gap-1.5 capitalize"><FileText className="h-3.5 w-3.5" /> {item.submissionMode ?? 'computer'} / {item.assessorType ?? 'instructor'}</div>
+          {item.subtestCode === 'writing' ? (
+            <div className="flex flex-wrap gap-1">
+              <Badge variant={(item.paperAssetCount ?? 0) > 0 ? 'info' : 'muted'} size="sm">Paper {item.paperAssetsExtracted ?? 0}/{item.paperAssetCount ?? 0}</Badge>
+              <Badge variant={(item.voiceNoteCount ?? 0) > 0 ? 'success' : 'warning'} size="sm"><FileAudio className="h-3 w-3" /> {item.voiceNoteCount ?? 0}</Badge>
+            </div>
+          ) : null}
+        </div>
+      ),
     },
     {
       key: 'priority',

@@ -61,10 +61,12 @@ public class ProfileAccessGuardTests
         var storageRoot = Path.Combine(Path.GetTempPath(), $"oet-profile-guards-{Guid.NewGuid():N}");
         var storageOptions = Options.Create(new StorageOptions { LocalRootPath = storageRoot });
         var mediaStorage = new MediaStorageService(new TestHostEnvironment(storageRoot), storageOptions);
+        var fileStorage = new OetLearner.Api.Services.Content.LocalFileStorage(new TestHostEnvironment(storageRoot), storageOptions);
+        var pdfTextExtractor = new OetLearner.Api.Services.Content.NoOpPdfTextExtractor();
         var paymentGateways = CreatePaymentGatewayService(billingOptions);
         var walletService = new WalletService(db, paymentGateways, platformLinks, billingOptions);
 
-        return new LearnerService(db, mediaStorage, platformLinks, null!, walletService, paymentGateways, null!);
+        return new LearnerService(db, mediaStorage, fileStorage, pdfTextExtractor, platformLinks, null!, walletService, paymentGateways, null!);
     }
 
     private static ExpertService CreateExpertService(LearnerDbContext db)
