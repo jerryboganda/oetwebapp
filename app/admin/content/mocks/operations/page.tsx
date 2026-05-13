@@ -11,7 +11,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchAdminMockAnalytics, fetchAdminMockBookings, fetchAdminMockRiskList } from '@/lib/api';
+import {
+  fetchAdminMockAnalytics,
+  fetchAdminMockBookings,
+  fetchAdminMockRiskList,
+  transitionAdminMockBookingLiveRoomState,
+  type MockLiveRoomTargetState,
+} from '@/lib/api';
 
 type Analytics = {
   windowDays?: number;
@@ -88,6 +94,7 @@ export default function AdminMockOperationsPage() {
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [transitioningBookingId, setTransitioningBookingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +116,31 @@ export default function AdminMockOperationsPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  const transitionBooking = useCallback(async (booking: BookingItem, targetState: MockLiveRoomTargetState) => {
+    const bookingId = booking.bookingId ?? booking.id;
+    if (!bookingId) return;
+    setTransitioningBookingId(bookingId);
+    setError('');
+    try {
+      const updated = await transitionAdminMockBookingLiveRoomState(bookingId, targetState, {
+        clientTransitionId: `admin-ops-${bookingId}-${targetState}-${Date.now()}`,
+      });
+      setBookings((current) => current.map((item) => {
+        const itemId = item.bookingId ?? item.id;
+        if (itemId !== bookingId) return item;
+        return {
+          ...item,
+          status: updated.status,
+          liveRoomState: updated.liveRoomState,
+        };
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update live-room state.');
+    } finally {
+      setTransitioningBookingId(null);
+    }
+  }, []);
 
   const delay = analytics?.markingDelayMetrics;
   const bookingCounts = useMemo(() => {
@@ -193,6 +225,27 @@ export default function AdminMockOperationsPage() {
                       </div>
                       <p className="mt-2 text-xs text-muted">{formatDate(booking.scheduledStartAt)} / {booking.timezoneIana ?? 'UTC'}</p>
                       <p className="mt-1 text-xs text-muted">Tutor: {booking.assignedTutorId ?? 'unassigned'} / Interlocutor: {booking.assignedInterlocutorId ?? 'unassigned'} / Release: {booking.releasePolicy ?? 'instant'}</p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">Room: {booking.liveRoomState ?? 'waiting'}</Badge>
+                        {(booking.liveRoomState ?? 'waiting') === 'waiting' ? (
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => void transitionBooking(booking, 'in_progress')} loading={transitioningBookingId === (booking.bookingId ?? booking.id)}>
+                              Start room
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => void transitionBooking(booking, 'tutor_no_show')} loading={transitioningBookingId === (booking.bookingId ?? booking.id)}>
+                              Tutor no-show
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => void transitionBooking(booking, 'learner_no_show')} loading={transitioningBookingId === (booking.bookingId ?? booking.id)}>
+                              Learner no-show
+                            </Button>
+                          </>
+                        ) : null}
+                        {booking.liveRoomState === 'in_progress' ? (
+                          <Button size="sm" variant="outline" onClick={() => void transitionBooking(booking, 'completed')} loading={transitioningBookingId === (booking.bookingId ?? booking.id)}>
+                            Complete room
+                          </Button>
+                        ) : null}
+                      </div>
                     </article>
                   ))}
                   {bookings.length === 0 ? <InlineAlert variant="info">No mock bookings are scheduled yet.</InlineAlert> : null}

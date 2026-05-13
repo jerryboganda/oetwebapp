@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
 import {
   fetchAdminMockBundleItemAnalysis,
+  fetchAdminMockBundleListeningItemAnalysis,
   recomputeAdminMockBundleItemAnalysis,
   type AdminMockItemAnalysisResponse,
 } from '@/lib/api';
@@ -34,20 +35,23 @@ export default function MockBundleItemAnalysisPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [subtestView, setSubtestView] = useState<'all' | 'listening'>('all');
 
   const load = useCallback(async () => {
     if (!bundleId) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchAdminMockBundleItemAnalysis(bundleId);
+      const res = subtestView === 'listening'
+        ? await fetchAdminMockBundleListeningItemAnalysis(bundleId)
+        : await fetchAdminMockBundleItemAnalysis(bundleId);
       setData(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load item analysis.');
     } finally {
       setLoading(false);
     }
-  }, [bundleId]);
+  }, [bundleId, subtestView]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -94,6 +98,15 @@ export default function MockBundleItemAnalysisPage() {
 
         {error ? <InlineAlert variant="error" className="mb-4">{error}</InlineAlert> : null}
 
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant={subtestView === 'all' ? 'primary' : 'outline'} onClick={() => setSubtestView('all')}>
+            All subtests
+          </Button>
+          <Button type="button" size="sm" variant={subtestView === 'listening' ? 'primary' : 'outline'} onClick={() => setSubtestView('listening')}>
+            Listening only
+          </Button>
+        </div>
+
         {loading ? (
           <div className="space-y-3">
             <Skeleton className="h-12 w-full rounded-xl" />
@@ -114,6 +127,7 @@ export default function MockBundleItemAnalysisPage() {
                   <th className="px-3 py-2 font-medium">Subtest</th>
                   <th className="px-3 py-2 font-medium">N</th>
                   <th className="px-3 py-2 font-medium">% correct</th>
+                  <th className="px-3 py-2 font-medium">Discrimination</th>
                   <th className="px-3 py-2 font-medium">Flag</th>
                   <th className="px-3 py-2 font-medium">Top distractors</th>
                 </tr>
@@ -134,6 +148,7 @@ export default function MockBundleItemAnalysisPage() {
                       <td className="px-3 py-2 capitalize">{row.subtest}</td>
                       <td className="px-3 py-2 tabular-nums">{row.totalAttempts}</td>
                       <td className="px-3 py-2 tabular-nums">{pct}%</td>
+                      <td className="px-3 py-2 tabular-nums">{typeof row.discriminationIndex === 'number' ? row.discriminationIndex.toFixed(2) : '—'}</td>
                       <td className="px-3 py-2">
                         {row.flag === 'too_easy' ? <Badge variant="warning">Too easy</Badge>
                           : row.flag === 'too_hard' ? <Badge variant="danger">Too hard</Badge>

@@ -637,6 +637,7 @@ export interface MockBooking {
   status: string;
   deliveryMode?: MockDeliveryMode;
   liveRoomState?: string;
+  liveRoomTransitionVersion?: number;
   consentToRecording?: boolean;
   rescheduleCount?: number;
   joinUrl?: string | null;

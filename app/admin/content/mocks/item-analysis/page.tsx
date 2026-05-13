@@ -18,6 +18,7 @@ type ItemAnalysisRow = {
   totalAttempts: number;
   correctCount: number;
   difficulty: number;
+  discriminationIndex?: number | null;
   flag?: string | null;
 };
 
@@ -78,6 +79,7 @@ export default function AdminMockItemAnalysisPage() {
                   <th className="px-4 py-3">N</th>
                   <th className="px-4 py-3">Correct</th>
                   <th className="px-4 py-3">Difficulty</th>
+                  <th className="px-4 py-3">Discrimination</th>
                   <th className="px-4 py-3">Flag</th>
                 </tr>
               </thead>
@@ -89,11 +91,12 @@ export default function AdminMockItemAnalysisPage() {
                     <td className="px-4 py-3 text-muted">{item.totalAttempts}</td>
                     <td className="px-4 py-3 text-muted">{item.correctCount}</td>
                     <td className="px-4 py-3 text-muted">{Math.round(item.difficulty * 100)}%</td>
+                    <td className="px-4 py-3 text-muted">{typeof item.discriminationIndex === 'number' ? item.discriminationIndex.toFixed(2) : '—'}</td>
                     <td className="px-4 py-3">{item.flag ? <Badge variant="warning">{item.flag}</Badge> : <Badge variant="success">ok</Badge>}</td>
                   </tr>
                 ))}
                 {items.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">No item-analysis rows yet. Recompute from a bundle dashboard after attempts exist.</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">No item-analysis rows yet. Recompute from a bundle dashboard after attempts exist.</td></tr>
                 ) : null}
               </tbody>
             </table>

@@ -50,6 +50,7 @@ import {
 } from '@/lib/api';
 import type { MockBooking } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
+import { subscribeMockLiveRoomBooking } from '@/lib/mocks/live-room-hub';
 
 const PREP_SECONDS = 3 * 60;
 const SPEAK_SECONDS = 5 * 60;
@@ -120,6 +121,33 @@ export default function SpeakingLiveRoomPage() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load this booking.'))
       .finally(() => setLoading(false));
+  }, [bookingId]);
+
+  useEffect(() => {
+    if (!bookingId) return;
+    let cleanup: (() => Promise<void>) | null = null;
+    let cancelled = false;
+    void subscribeMockLiveRoomBooking(bookingId, {
+      onSnapshot: (snapshot) => {
+        setBooking((current) => current ? { ...current, liveRoomState: snapshot.liveRoomState, liveRoomTransitionVersion: snapshot.transitionVersion, status: snapshot.status } : current);
+      },
+      onStateChanged: (event) => {
+        setBooking((current) => current ? { ...current, liveRoomState: event.liveRoomState, liveRoomTransitionVersion: event.transitionVersion, status: event.status } : current);
+      },
+    }).then((unsubscribe) => {
+      if (cancelled) {
+        void unsubscribe();
+        return;
+      }
+      cleanup = unsubscribe;
+    }).catch(() => {
+      // Recording and submission remain REST-backed if realtime is unavailable.
+    });
+
+    return () => {
+      cancelled = true;
+      if (cleanup) void cleanup();
+    };
   }, [bookingId]);
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────

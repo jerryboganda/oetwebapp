@@ -484,7 +484,8 @@ export default function BillingPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const { user } = useAuth();
   const canReadBilling = hasPermission(user?.adminPermissions, AdminPermission.BillingRead, AdminPermission.BillingWrite);
-  const canWriteBilling = hasPermission(user?.adminPermissions, AdminPermission.BillingWrite);
+  const canWriteCatalog = hasPermission(user?.adminPermissions, AdminPermission.BillingWrite, AdminPermission.BillingCatalogWrite);
+  const canWriteSubscriptions = hasPermission(user?.adminPermissions, AdminPermission.BillingWrite, AdminPermission.BillingSubscriptionWrite);
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [planFilters, setPlanFilters] = useState<Record<string, string[]>>({ status: [] });
   const [addOnFilters, setAddOnFilters] = useState<Record<string, string[]>>({ status: [] });
@@ -947,7 +948,7 @@ export default function BillingPage() {
             <HistoryIcon className="h-4 w-4" />
             History
           </Button>
-          <Button variant="outline" size="sm" onClick={() => openPlanEditor(plan)}>
+          <Button variant="outline" size="sm" onClick={() => openPlanEditor(plan)} disabled={!canWriteCatalog}>
             Edit
           </Button>
         </div>
@@ -1006,7 +1007,7 @@ export default function BillingPage() {
             <HistoryIcon className="h-4 w-4" />
             History
           </Button>
-          <Button variant="outline" size="sm" onClick={() => openAddOnEditor(addOn)}>
+          <Button variant="outline" size="sm" onClick={() => openAddOnEditor(addOn)} disabled={!canWriteCatalog}>
             Edit
           </Button>
         </div>
@@ -1064,7 +1065,7 @@ export default function BillingPage() {
             <HistoryIcon className="h-4 w-4" />
             History
           </Button>
-          <Button variant="outline" size="sm" onClick={() => openCouponEditor(coupon)}>
+          <Button variant="outline" size="sm" onClick={() => openCouponEditor(coupon)} disabled={!canWriteCatalog}>
             Edit
           </Button>
         </div>
@@ -1122,6 +1123,7 @@ export default function BillingPage() {
             variant="outline"
             size="sm"
             onClick={() => openSubscriptionAction({ kind: 'change-plan', subscription })}
+            disabled={!canWriteSubscriptions}
             aria-label={`Change plan for ${subscription.userName}`}
           >
             Change plan
@@ -1130,6 +1132,7 @@ export default function BillingPage() {
             variant="outline"
             size="sm"
             onClick={() => openSubscriptionAction({ kind: 'extend', subscription })}
+            disabled={!canWriteSubscriptions}
             aria-label={`Extend renewal for ${subscription.userName}`}
           >
             Extend
@@ -1139,6 +1142,7 @@ export default function BillingPage() {
               variant="outline"
               size="sm"
               onClick={() => openSubscriptionAction({ kind: 'reactivate', subscription })}
+              disabled={!canWriteSubscriptions}
               aria-label={`Reactivate subscription for ${subscription.userName}`}
             >
               Reactivate
@@ -1148,6 +1152,7 @@ export default function BillingPage() {
               variant="outline"
               size="sm"
               onClick={() => openSubscriptionAction({ kind: 'cancel', subscription })}
+              disabled={!canWriteSubscriptions}
               aria-label={`Cancel subscription for ${subscription.userName}`}
             >
               Cancel
@@ -1157,6 +1162,7 @@ export default function BillingPage() {
             variant="outline"
             size="sm"
             onClick={() => openSubscriptionAction({ kind: 'set-status', subscription })}
+            disabled={!canWriteSubscriptions}
             aria-label={`Override status for ${subscription.userName}`}
           >
             Set status
@@ -2202,15 +2208,15 @@ export default function BillingPage() {
         description="Manage subscription plans, add-ons, coupons, subscriptions, and invoices with live backend data."
         actions={
           <>
-            <Button onClick={() => openPlanEditor()} className="gap-2" disabled={!canWriteBilling}>
+            <Button onClick={() => openPlanEditor()} className="gap-2" disabled={!canWriteCatalog}>
               <CreditCard className="h-4 w-4" />
               Create Plan
             </Button>
-            <Button variant="outline" onClick={() => openAddOnEditor()} className="gap-2" disabled={!canWriteBilling}>
+            <Button variant="outline" onClick={() => openAddOnEditor()} className="gap-2" disabled={!canWriteCatalog}>
               <Package className="h-4 w-4" />
               Create Add-on
             </Button>
-            <Button variant="outline" onClick={() => openCouponEditor()} className="gap-2" disabled={!canWriteBilling}>
+            <Button variant="outline" onClick={() => openCouponEditor()} className="gap-2" disabled={!canWriteCatalog}>
               <Ticket className="h-4 w-4" />
               Create Coupon
             </Button>
@@ -2349,7 +2355,7 @@ export default function BillingPage() {
         <AdminRoutePanel
           title="Subscription Plans"
           description="Live plan data from the admin billing plan endpoint."
-          actions={<Button variant="outline" size="sm" onClick={() => openPlanEditor()}>Create Plan</Button>}
+          actions={<Button variant="outline" size="sm" onClick={() => openPlanEditor()} disabled={!canWriteCatalog}>Create Plan</Button>}
         >
           <FilterBar groups={planFilterGroups} selected={planFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setPlanFilters, groupId, optionId)} onClear={() => setPlanFilters({ status: [] })} />
           <DataTable columns={planColumns} data={plans} keyExtractor={(plan) => plan.id} mobileCardRender={planMobileCardRender} />
@@ -2358,7 +2364,7 @@ export default function BillingPage() {
         <AdminRoutePanel
           title="Add-ons"
           description="Manage review-credit packs and other purchasable subscription items."
-          actions={<Button variant="outline" size="sm" onClick={() => openAddOnEditor()}>Create Add-on</Button>}
+          actions={<Button variant="outline" size="sm" onClick={() => openAddOnEditor()} disabled={!canWriteCatalog}>Create Add-on</Button>}
         >
           <FilterBar groups={addOnFilterGroups} selected={addOnFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setAddOnFilters, groupId, optionId)} onClear={() => setAddOnFilters({ status: [] })} />
           <DataTable columns={addOnColumns} data={addOns} keyExtractor={(addOn) => addOn.id} mobileCardRender={addOnMobileCardRender} />
@@ -2367,7 +2373,7 @@ export default function BillingPage() {
         <AdminRoutePanel
           title="Coupons"
           description="Create and edit promo codes, limits, validity windows, and scope rules."
-          actions={<Button variant="outline" size="sm" onClick={() => openCouponEditor()}>Create Coupon</Button>}
+          actions={<Button variant="outline" size="sm" onClick={() => openCouponEditor()} disabled={!canWriteCatalog}>Create Coupon</Button>}
         >
           <FilterBar groups={couponFilterGroups} selected={couponFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setCouponFilters, groupId, optionId)} onClear={() => setCouponFilters({ status: [] })} />
           <DataTable columns={couponColumns} data={coupons} keyExtractor={(coupon) => coupon.id} mobileCardRender={couponMobileCardRender} />
@@ -2376,7 +2382,7 @@ export default function BillingPage() {
         <AdminRoutePanel
           title="Subscriptions"
           description="Manage active learner subscriptions: change plan, extend renewal, cancel, reactivate, or override status. Every action is audited."
-          actions={<Button variant="outline" size="sm" onClick={() => openSubscriptionAction({ kind: 'create' })}>Create Subscription</Button>}
+          actions={<Button variant="outline" size="sm" onClick={() => openSubscriptionAction({ kind: 'create' })} disabled={!canWriteSubscriptions}>Create Subscription</Button>}
         >
           <div className="max-w-md">
             <div className="relative">

@@ -35,18 +35,20 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   fetchExpertMockBookingDetail,
-  transitionMockBookingLiveRoom,
+  transitionExpertMockBookingLiveRoom,
   type ExpertMockBookingDetail,
   type ExpertSpeakingInterlocutorCard,
   type MockLiveRoomTargetState,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { subscribeMockLiveRoomBooking } from '@/lib/mocks/live-room-hub';
 
 const STATE_LABEL: Record<string, string> = {
   waiting: 'Waiting for tutor',
   in_progress: 'Live role-play in progress',
   completed: 'Completed',
   tutor_no_show: 'Marked tutor no-show',
+  learner_no_show: 'Marked learner no-show',
 };
 
 const STATE_VARIANT: Record<string, 'muted' | 'success' | 'warning' | 'info'> = {
@@ -54,6 +56,7 @@ const STATE_VARIANT: Record<string, 'muted' | 'success' | 'warning' | 'info'> = 
   in_progress: 'info',
   completed: 'success',
   tutor_no_show: 'warning',
+  learner_no_show: 'warning',
 };
 
 function pickPromptList(card: ExpertSpeakingInterlocutorCard | undefined): string[] {
@@ -93,6 +96,34 @@ export default function ExpertSpeakingLiveRoomPage() {
       .finally(() => setLoading(false));
   }, [bookingId]);
 
+  useEffect(() => {
+    if (!bookingId) return;
+    let cleanup: (() => Promise<void>) | null = null;
+    let cancelled = false;
+    void subscribeMockLiveRoomBooking(bookingId, {
+      onSnapshot: (snapshot) => {
+        setBooking((current) => current ? { ...current, liveRoomState: snapshot.liveRoomState, liveRoomTransitionVersion: snapshot.transitionVersion, status: snapshot.status } : current);
+      },
+      onStateChanged: (event) => {
+        setBooking((current) => current ? { ...current, liveRoomState: event.liveRoomState, liveRoomTransitionVersion: event.transitionVersion, status: event.status } : current);
+      },
+      onError: (err) => setError(err.message),
+    }).then((unsubscribe) => {
+      if (cancelled) {
+        void unsubscribe();
+        return;
+      }
+      cleanup = unsubscribe;
+    }).catch(() => {
+      // Live-room actions still work over REST if realtime is unavailable.
+    });
+
+    return () => {
+      cancelled = true;
+      if (cleanup) void cleanup();
+    };
+  }, [bookingId]);
+
   const liveState = booking?.liveRoomState ?? 'waiting';
 
   const handleTransition = useCallback(
@@ -102,7 +133,7 @@ export default function ExpertSpeakingLiveRoomPage() {
       setError(null);
       setSuccess(null);
       try {
-        const updated = await transitionMockBookingLiveRoom(booking.bookingId ?? booking.id, target);
+        const updated = await transitionExpertMockBookingLiveRoom(booking.bookingId ?? booking.id, target);
         setBooking((prev) => (prev ? { ...prev, ...updated } : prev));
         setSuccess(`Live room state updated to ${STATE_LABEL[updated.liveRoomState ?? target] ?? target}.`);
       } catch (err) {
@@ -228,11 +259,11 @@ export default function ExpertSpeakingLiveRoomPage() {
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => handleTransition('tutor_no_show')}
+                          onClick={() => handleTransition('learner_no_show')}
                           loading={transitioning}
                           disabled={transitioning}
                         >
-                          Mark tutor no-show
+                          Mark learner no-show
                         </Button>
                       </>
                     ) : null}
@@ -255,6 +286,11 @@ export default function ExpertSpeakingLiveRoomPage() {
                     {liveState === 'tutor_no_show' ? (
                       <Badge variant="warning" size="sm">
                         Recorded as tutor no-show
+                      </Badge>
+                    ) : null}
+                    {liveState === 'learner_no_show' ? (
+                      <Badge variant="warning" size="sm">
+                        Recorded as learner no-show
                       </Badge>
                     ) : null}
                   </div>

@@ -24,7 +24,7 @@ type LoadState = 'loading' | 'success' | 'error';
 export default function AdminWalletTiersPage() {
   const { user } = useAuth();
   const canReadBilling = hasPermission(user?.adminPermissions, AdminPermission.BillingRead, AdminPermission.BillingWrite);
-  const canWriteBilling = hasPermission(user?.adminPermissions, AdminPermission.BillingWrite);
+  const canWriteCatalog = hasPermission(user?.adminPermissions, AdminPermission.BillingWrite, AdminPermission.BillingCatalogWrite);
   const [data, setData] = useState<AdminWalletTiersResponse | null>(null);
   const [status, setStatus] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -137,7 +137,7 @@ export default function AdminWalletTiersPage() {
           defaultCurrency={data.currency || 'AUD'}
           source={data.source}
           onSave={handleSave}
-          canWrite={canWriteBilling}
+          canWrite={canWriteCatalog}
         />
         </>
       ) : null}
