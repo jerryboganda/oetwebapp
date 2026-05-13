@@ -2574,6 +2574,7 @@ function mapMockBooking(item: ApiRecord): MockBooking {
     status: String(item.status ?? 'scheduled'),
     deliveryMode: normalizeMockDeliveryMode(item.deliveryMode),
     liveRoomState: item.liveRoomState ? String(item.liveRoomState) : undefined,
+    liveRoomTransitionVersion: typeof item.liveRoomTransitionVersion === 'number' ? item.liveRoomTransitionVersion : undefined,
     consentToRecording: Boolean(item.consentToRecording),
     rescheduleCount: Number(item.rescheduleCount ?? 0),
     joinUrl: item.joinUrl ? String(item.joinUrl) : null,
@@ -2679,15 +2680,56 @@ export async function cancelMockBooking(bookingId: string): Promise<MockBooking>
   return mapMockBooking(response);
 }
 
-export type MockLiveRoomTargetState = 'in_progress' | 'completed' | 'tutor_no_show';
+export type MockLiveRoomTargetState = 'in_progress' | 'completed' | 'tutor_no_show' | 'learner_no_show';
+
+export interface MockLiveRoomTransitionOptions {
+  reason?: string;
+  clientTransitionId?: string;
+}
+
+function mockLiveRoomTransitionPayload(
+  targetState: MockLiveRoomTargetState,
+  options?: MockLiveRoomTransitionOptions,
+) {
+  return {
+    targetState,
+    ...(options?.reason ? { reason: options.reason } : {}),
+    ...(options?.clientTransitionId ? { clientTransitionId: options.clientTransitionId } : {}),
+  };
+}
 
 export async function transitionMockBookingLiveRoom(
   bookingId: string,
   targetState: MockLiveRoomTargetState,
+  options?: MockLiveRoomTransitionOptions,
 ): Promise<MockBooking> {
   const response = await apiRequest<ApiRecord>(`/v1/mock-bookings/${bookingId}/live-room/transition`, {
     method: 'POST',
-    body: JSON.stringify({ targetState }),
+    body: JSON.stringify(mockLiveRoomTransitionPayload(targetState, options)),
+  });
+  return mapMockBooking(response);
+}
+
+export async function transitionExpertMockBookingLiveRoom(
+  bookingId: string,
+  targetState: MockLiveRoomTargetState,
+  options?: MockLiveRoomTransitionOptions,
+): Promise<MockBooking> {
+  const response = await apiRequest<ApiRecord>(`/v1/expert/mocks/bookings/${encodeURIComponent(bookingId)}/live-room/transition`, {
+    method: 'POST',
+    body: JSON.stringify(mockLiveRoomTransitionPayload(targetState, options)),
+  });
+  return mapMockBooking(response);
+}
+
+export async function transitionAdminMockBookingLiveRoom(
+  bookingId: string,
+  targetState: MockLiveRoomTargetState,
+  options?: MockLiveRoomTransitionOptions,
+): Promise<MockBooking> {
+  const response = await apiRequest<ApiRecord>(`/v1/admin/mock-bookings/${encodeURIComponent(bookingId)}/live-room/transition`, {
+    method: 'POST',
+    body: JSON.stringify(mockLiveRoomTransitionPayload(targetState, options)),
   });
   return mapMockBooking(response);
 }
@@ -7251,6 +7293,90 @@ export async function adminUpdateWritingOptions(
   });
 }
 
+// ── Writing Rule-Violation Analytics (admin: P22 dashboard) ──
+
+export interface AdminWritingRuleViolationSummary {
+  totalViolations: number;
+  distinctRules: number;
+  distinctAttempts: number;
+  distinctLearners: number;
+  ruleEngineCount: number;
+  aiCount: number;
+}
+
+export interface AdminWritingProfessionCount {
+  profession: string;
+  count: number;
+}
+
+export interface AdminWritingLetterTypeCount {
+  letterType: string;
+  count: number;
+}
+
+export interface AdminWritingRuleViolationGroup {
+  ruleId: string;
+  totalCount: number;
+  distinctAttempts: number;
+  distinctLearners: number;
+  criticalCount: number;
+  majorCount: number;
+  minorCount: number;
+  infoCount: number;
+  professions: AdminWritingProfessionCount[];
+}
+
+export interface AdminWritingRuleViolationDashboard {
+  generatedAt: string;
+  windowDays: number;
+  professionFilter: string | null;
+  summary: AdminWritingRuleViolationSummary;
+  topRules: AdminWritingRuleViolationGroup[];
+  professionBreakdown: AdminWritingProfessionCount[];
+  letterTypeBreakdown: AdminWritingLetterTypeCount[];
+}
+
+export interface AdminWritingRuleViolationRow {
+  id: string;
+  ruleId: string;
+  severity: string;
+  source: string;
+  message: string;
+  quote: string | null;
+  generatedAt: string;
+}
+
+export interface AdminWritingAttemptViolations {
+  attemptId: string;
+  evaluationId: string | null;
+  userId: string | null;
+  profession: string | null;
+  letterType: string | null;
+  generatedAt: string | null;
+  items: AdminWritingRuleViolationRow[];
+}
+
+export async function adminGetWritingRuleViolationDashboard(opts?: {
+  days?: number;
+  profession?: string;
+}): Promise<AdminWritingRuleViolationDashboard> {
+  const params = new URLSearchParams();
+  if (opts?.days != null) params.set('days', String(opts.days));
+  if (opts?.profession) params.set('profession', opts.profession);
+  const qs = params.toString();
+  return apiRequest<AdminWritingRuleViolationDashboard>(
+    `/v1/admin/writing/analytics/rule-violations${qs ? `?${qs}` : ''}`,
+  );
+}
+
+export async function adminGetWritingAttemptViolations(
+  attemptId: string,
+): Promise<AdminWritingAttemptViolations> {
+  return apiRequest<AdminWritingAttemptViolations>(
+    `/v1/admin/writing/analytics/rule-violations/${encodeURIComponent(attemptId)}`,
+  );
+}
+
 export async function adminFetchGrammarPublishGate(lessonId: string) {
   return apiRequest<{ canPublish: boolean; errors: string[] }>(`/v1/admin/grammar/lessons/${encodeURIComponent(lessonId)}/publish-gate`);
 }
@@ -7873,6 +7999,14 @@ export async function assignAdminMockBooking(bookingId: string, body: {
   });
 }
 
+export async function transitionAdminMockBookingLiveRoomState(
+  bookingId: string,
+  targetState: MockLiveRoomTargetState,
+  options?: MockLiveRoomTransitionOptions,
+): Promise<MockBooking> {
+  return transitionAdminMockBookingLiveRoom(bookingId, targetState, options);
+}
+
 // Mocks Wave 8 — admin leak-report queue.
 export type AdminMockLeakReportStatus = 'open' | 'investigating' | 'resolved' | 'dismissed';
 
@@ -8025,6 +8159,7 @@ export interface AdminMockItemAnalysisRow {
   totalAttempts: number;
   correctCount: number;
   difficulty: number;
+  discriminationIndex?: number | null;
   distractor: string;
   flag: string | null;
   generatedAt: string;
@@ -8038,6 +8173,12 @@ export interface AdminMockItemAnalysisResponse {
 export async function fetchAdminMockBundleItemAnalysis(bundleId: string): Promise<AdminMockItemAnalysisResponse> {
   return apiRequest<AdminMockItemAnalysisResponse>(
     `/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/item-analysis`,
+  );
+}
+
+export async function fetchAdminMockBundleListeningItemAnalysis(bundleId: string): Promise<AdminMockItemAnalysisResponse> {
+  return apiRequest<AdminMockItemAnalysisResponse>(
+    `/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/listening-item-analysis`,
   );
 }
 
