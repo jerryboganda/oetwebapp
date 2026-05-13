@@ -40,6 +40,8 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
     [InlineData("/v1/admin/listening/attempts/{attemptId}/export")]
     [InlineData("/v1/admin/listening/backfill")]
     [InlineData("/v1/admin/reading/analytics")]
+    [InlineData("/v1/admin/writing/analytics/rule-violations")]
+    [InlineData("/v1/admin/writing/analytics/rule-violations/{attemptId}")]
     [InlineData("/v1/writing/attempts/{attemptId}/pdf")]
     [InlineData("/v1/mocks/attempts/{mockAttemptId}/sections/writing/pdf")]
     public void Program_RegistersFeatureRoutes(string routePattern)

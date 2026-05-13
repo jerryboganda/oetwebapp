@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Listening;
 
@@ -187,6 +188,15 @@ public static class ExpertEndpoints
 
         expert.MapGet("/mocks/bookings/{bookingId}", async (string bookingId, HttpContext http, MockBookingService bookings, CancellationToken ct)
             => Results.Ok(await bookings.GetForExpertAsync(http.ExpertId(), isAdmin: false, bookingId, ct)));
+
+        expert.MapPost("/mocks/bookings/{bookingId}/live-room/transition", async (
+            string bookingId,
+            LiveRoomTransitionRequest request,
+            HttpContext http,
+            MockBookingService bookings,
+            CancellationToken ct) =>
+            Results.Ok(await bookings.TransitionLiveRoomAsync(http.ExpertId(), ApplicationUserRoles.Expert, isAdmin: false, bookingId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
 
         expert.MapPut("/schedule", async (HttpContext http, ExpertAvailabilityUpdateRequest request, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.SaveAvailabilityAsync(http.ExpertId(), request, ct)))

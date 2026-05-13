@@ -283,7 +283,36 @@ public sealed class WritingEvaluationPipeline(
 
         attempt.State = AttemptState.Completed;
         attempt.CompletedAt = now;
+
+        // Audit P2-2 — persist one WritingRuleViolation row per merged
+        // finding for the admin analytics dashboard. The attempt's
+        // AnalysisJson.rulebookFindings remains the learner-facing copy;
+        // this table is admin-only and indexed on (RuleId, GeneratedAt),
+        // (Profession, GeneratedAt), and AttemptId for the dashboard
+        // pivots. Trim long messages / quotes to the column limits to
+        // avoid silent truncation surprises.
+        foreach (var finding in mergedFindings)
+        {
+            db.Set<WritingRuleViolation>().Add(new WritingRuleViolation
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                AttemptId = attempt.Id,
+                EvaluationId = evaluation.Id,
+                UserId = attempt.UserId,
+                Profession = profession.ToString().ToLowerInvariant(),
+                LetterType = letterType,
+                RuleId = TruncateAscii(finding.RuleId, 128),
+                Severity = TruncateAscii(finding.Severity, 16),
+                Source = TruncateAscii(finding.Source, 16),
+                Message = TruncateAscii(finding.Message, 1024),
+                Quote = string.IsNullOrEmpty(finding.Quote) ? null : TruncateAscii(finding.Quote!, 1024),
+                GeneratedAt = now,
+            });
+        }
     }
+
+    private static string TruncateAscii(string value, int max)
+        => string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..max];
 
     // -----------------------------------------------------------------
     // Failure helper

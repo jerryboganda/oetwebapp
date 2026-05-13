@@ -40,9 +40,12 @@ public class MockBookingReminderPlannerTests
         Assert.Equal(TimeSpan.FromHours(2), MockBookingReminderPlanner.Offsets[1].Offset);
         Assert.Equal(TimeSpan.FromMinutes(30), MockBookingReminderPlanner.Offsets[2].Offset);
 
-        Assert.Equal(NotificationEventKey.LearnerMockReminder24h, MockBookingReminderPlanner.Offsets[0].EventKey);
-        Assert.Equal(NotificationEventKey.LearnerMockReminder2h, MockBookingReminderPlanner.Offsets[1].EventKey);
-        Assert.Equal(NotificationEventKey.LearnerMockReminder30m, MockBookingReminderPlanner.Offsets[2].EventKey);
+        Assert.Equal(NotificationEventKey.LearnerMockReminder24h, MockBookingReminderPlanner.Offsets[0].LearnerEventKey);
+        Assert.Equal(NotificationEventKey.LearnerMockReminder2h, MockBookingReminderPlanner.Offsets[1].LearnerEventKey);
+        Assert.Equal(NotificationEventKey.LearnerMockReminder30m, MockBookingReminderPlanner.Offsets[2].LearnerEventKey);
+        Assert.Equal(NotificationEventKey.ExpertMockReminder24h, MockBookingReminderPlanner.Offsets[0].ExpertEventKey);
+        Assert.Equal(NotificationEventKey.ExpertMockReminder2h, MockBookingReminderPlanner.Offsets[1].ExpertEventKey);
+        Assert.Equal(NotificationEventKey.ExpertMockReminder30m, MockBookingReminderPlanner.Offsets[2].ExpertEventKey);
 
         Assert.Equal("reminder-24h", MockBookingReminderPlanner.Offsets[0].Bucket);
         Assert.Equal("reminder-2h", MockBookingReminderPlanner.Offsets[1].Bucket);
@@ -98,6 +101,7 @@ public class MockBookingReminderPlannerTests
         var plan = MockBookingReminderPlanner.Plan(booking, Now).ToArray();
         Assert.Single(plan);
         Assert.Equal(NotificationEventKey.LearnerMockReminder24h, plan[0].EventKey);
+        Assert.Equal(ApplicationUserRoles.Learner, plan[0].AudienceRole);
         Assert.Equal("reminder-24h", plan[0].Bucket);
     }
 
@@ -183,7 +187,44 @@ public class MockBookingReminderPlannerTests
         foreach (var entry in plan)
         {
             Assert.Equal("booking-xyz", entry.BookingId);
-            Assert.Equal("user-xyz", entry.UserId);
+            Assert.Equal("user-xyz", entry.RecipientId);
+            Assert.Equal(ApplicationUserRoles.Learner, entry.AudienceRole);
         }
     }
+
+        [Fact]
+        public void Plan_FansOut_To_AssignedExperts_WithoutDuplicatingSameExpert()
+        {
+            var booking = BookingAt(Now.AddMinutes(20));
+            booking.AssignedTutorId = "expert-1";
+            booking.AssignedInterlocutorId = "expert-1";
+
+            var plan = MockBookingReminderPlanner.Plan(booking, Now).ToArray();
+
+            Assert.Equal(6, plan.Length);
+            Assert.Equal(3, plan.Count(p => p.AudienceRole == ApplicationUserRoles.Learner));
+            Assert.Equal(3, plan.Count(p => p.AudienceRole == ApplicationUserRoles.Expert));
+            Assert.All(plan.Where(p => p.AudienceRole == ApplicationUserRoles.Expert), p =>
+            {
+                Assert.Equal("expert-1", p.RecipientId);
+                Assert.StartsWith("expert-reminder-", p.Bucket, StringComparison.Ordinal);
+            });
+            Assert.Contains(plan, p => p.EventKey == NotificationEventKey.ExpertMockReminder24h);
+            Assert.Contains(plan, p => p.EventKey == NotificationEventKey.ExpertMockReminder2h);
+            Assert.Contains(plan, p => p.EventKey == NotificationEventKey.ExpertMockReminder30m);
+        }
+
+        [Fact]
+        public void Plan_FansOut_To_Tutor_And_Interlocutor_WhenDifferentExpertsAssigned()
+        {
+            var booking = BookingAt(Now.AddMinutes(20));
+            booking.AssignedTutorId = "expert-tutor";
+            booking.AssignedInterlocutorId = "expert-interlocutor";
+
+            var plan = MockBookingReminderPlanner.Plan(booking, Now).ToArray();
+
+            Assert.Equal(9, plan.Length);
+            Assert.Equal(3, plan.Count(p => p.RecipientId == "expert-tutor"));
+            Assert.Equal(3, plan.Count(p => p.RecipientId == "expert-interlocutor"));
+        }
 }

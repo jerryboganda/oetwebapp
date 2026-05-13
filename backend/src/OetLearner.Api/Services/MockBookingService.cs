@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Mocks;
 using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services;
@@ -20,8 +22,13 @@ public sealed class MockBookingService
     public const int MinLeadTimeHours = 12;
 
     private readonly LearnerDbContext _db;
+    private readonly IHubContext<MockLiveRoomHub> _liveRoomHub;
 
-    public MockBookingService(LearnerDbContext db) { _db = db; }
+    public MockBookingService(LearnerDbContext db, IHubContext<MockLiveRoomHub> liveRoomHub)
+    {
+        _db = db;
+        _liveRoomHub = liveRoomHub;
+    }
 
     public async Task<object> ListForUserAsync(string userId, CancellationToken ct)
     {
@@ -157,15 +164,40 @@ public sealed class MockBookingService
     /// Mocks V2 Wave 6 — transition the live-room state for a Speaking mock.
     /// Allowed transitions enforced server-side.
     /// </summary>
-    public async Task<object> TransitionLiveRoomAsync(string actorId, bool isAdmin, string bookingId, string targetState, CancellationToken ct)
+    public async Task<object> TransitionLiveRoomAsync(
+        string actorId,
+        string actorRole,
+        bool isAdmin,
+        string bookingId,
+        LiveRoomTransitionRequest request,
+        CancellationToken ct)
     {
+        var targetState = request.TargetState.Trim().ToLowerInvariant();
         if (!MockLiveRoomStates.IsValid(targetState))
             throw ApiException.Validation("invalid_state", "Unknown live-room state.");
 
-        var booking = await _db.MockBookings.FirstOrDefaultAsync(x => x.Id == bookingId, ct)
+        var booking = await _db.MockBookings.Include(x => x.MockBundle).FirstOrDefaultAsync(x => x.Id == bookingId, ct)
             ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
-        if (!isAdmin && booking.UserId != actorId && booking.AssignedTutorId != actorId && booking.AssignedInterlocutorId != actorId)
+
+        var isAssignedExpert = booking.AssignedTutorId == actorId || booking.AssignedInterlocutorId == actorId;
+        var isOwnerLearner = booking.UserId == actorId;
+        if (!isAdmin && !isOwnerLearner && !isAssignedExpert)
             throw ApiException.Forbidden("forbidden", "You cannot transition this booking.");
+
+        if (!string.IsNullOrWhiteSpace(request.ClientTransitionId))
+        {
+            var duplicate = await _db.MockLiveRoomTransitions.AsNoTracking().AnyAsync(x =>
+                x.BookingId == booking.Id && x.ClientTransitionId == request.ClientTransitionId, ct);
+            if (duplicate)
+            {
+                return Project(booking, isAdmin: isAdmin);
+            }
+        }
+
+        if (string.Equals(booking.LiveRoomState, targetState, StringComparison.OrdinalIgnoreCase))
+        {
+            return Project(booking, isAdmin: isAdmin);
+        }
 
         // Only forward transitions are allowed; tutor_no_show is a terminal admin-only state.
         var current = booking.LiveRoomState;
@@ -175,20 +207,59 @@ public sealed class MockBookingService
             (MockLiveRoomStates.InProgress, MockLiveRoomStates.Completed) => true,
             (MockLiveRoomStates.Waiting, MockLiveRoomStates.TutorNoShow) => isAdmin,
             (MockLiveRoomStates.InProgress, MockLiveRoomStates.TutorNoShow) => isAdmin,
+            (MockLiveRoomStates.Waiting, MockLiveRoomStates.LearnerNoShow) => isAdmin || isAssignedExpert,
+            (MockLiveRoomStates.InProgress, MockLiveRoomStates.LearnerNoShow) => isAdmin || isAssignedExpert,
             _ => false,
         };
         if (!allowed) throw ApiException.Validation("invalid_transition", $"Cannot move from {current} to {targetState}.");
 
+        var now = DateTimeOffset.UtcNow;
+        var nextVersion = booking.LiveRoomTransitionVersion + 1;
         booking.LiveRoomState = targetState;
         if (targetState == MockLiveRoomStates.InProgress) booking.Status = MockBookingStatuses.InProgress;
         if (targetState == MockLiveRoomStates.Completed)
         {
             booking.Status = MockBookingStatuses.Completed;
-            booking.CompletedAt = DateTimeOffset.UtcNow;
+            booking.CompletedAt = now;
         }
         if (targetState == MockLiveRoomStates.TutorNoShow) booking.Status = MockBookingStatuses.TutorNoShow;
-        booking.UpdatedAt = DateTimeOffset.UtcNow;
+        if (targetState == MockLiveRoomStates.LearnerNoShow) booking.Status = MockBookingStatuses.LearnerNoShow;
+        booking.LiveRoomTransitionVersion = nextVersion;
+        booking.UpdatedAt = now;
+
+        var transition = new MockLiveRoomTransition
+        {
+            Id = $"mlrt-{Guid.NewGuid():N}",
+            BookingId = booking.Id,
+            ActorId = actorId,
+            ActorRole = actorRole,
+            FromState = current,
+            ToState = targetState,
+            Reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
+            ClientTransitionId = string.IsNullOrWhiteSpace(request.ClientTransitionId) ? null : request.ClientTransitionId.Trim(),
+            TransitionVersion = nextVersion,
+            OccurredAt = now,
+            MetadataJson = JsonSupport.Serialize(new { booking.MockAttemptId, booking.MockBundleId })
+        };
+        _db.MockLiveRoomTransitions.Add(transition);
+        _db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = now,
+            ActorId = actorId,
+            ActorName = actorId,
+            Action = "mock_live_room_transitioned",
+            ResourceType = "MockBooking",
+            ResourceId = booking.Id,
+            Details = JsonSupport.Serialize(new { current, targetState, actorRole, transitionVersion = nextVersion })
+        });
         await _db.SaveChangesAsync(ct);
+
+        await _liveRoomHub.Clients.Group(MockLiveRoomHub.BookingGroup(booking.Id)).SendAsync(
+            MockLiveRoomHub.LiveRoomStateChangedEvent,
+            MockLiveRoomStateChanged.From(booking, current, actorRole, now),
+            ct);
+
         return Project(booking, isAdmin: isAdmin);
     }
 
@@ -270,6 +341,7 @@ public sealed class MockBookingService
             ["timezoneIana"] = b.TimezoneIana,
             ["status"] = b.Status,
             ["liveRoomState"] = b.LiveRoomState,
+            ["liveRoomTransitionVersion"] = b.LiveRoomTransitionVersion,
             ["deliveryMode"] = b.DeliveryMode,
             ["rescheduleCount"] = b.RescheduleCount,
             ["consentToRecording"] = b.ConsentToRecording,

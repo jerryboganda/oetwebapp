@@ -116,14 +116,23 @@ public sealed class MockBookingReminderWorker(
 
                 try
                 {
-                    var notificationId = await notifications.CreateForLearnerAsync(
-                        planned.EventKey,
-                        planned.UserId,
-                        "mock_booking",
-                        planned.BookingId,
-                        planned.Bucket,
-                        payload,
-                        ct);
+                    var notificationId = string.Equals(planned.AudienceRole, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase)
+                        ? await notifications.CreateForExpertAsync(
+                            planned.EventKey,
+                            planned.RecipientId,
+                            "mock_booking",
+                            planned.BookingId,
+                            planned.Bucket,
+                            payload,
+                            ct)
+                        : await notifications.CreateForLearnerAsync(
+                            planned.EventKey,
+                            planned.RecipientId,
+                            "mock_booking",
+                            planned.BookingId,
+                            planned.Bucket,
+                            payload,
+                            ct);
 
                     if (!string.IsNullOrEmpty(notificationId))
                     {

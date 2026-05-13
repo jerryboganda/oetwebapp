@@ -46,6 +46,7 @@ public sealed class MockItemAnalysisService
                 totalAttempts = r.TotalAttempts,
                 correctCount = r.CorrectCount,
                 difficulty = Math.Round(r.Difficulty, 3),
+                discriminationIndex = r.DiscriminationIndex.HasValue ? Math.Round(r.DiscriminationIndex.Value, 3) : (double?)null,
                 distractor = r.DistractorJson,
                 flag = r.Flag,
                 generatedAt = r.GeneratedAt,
@@ -81,6 +82,7 @@ public sealed class MockItemAnalysisService
                 totalAttempts = r.TotalAttempts,
                 correctCount = r.CorrectCount,
                 difficulty = Math.Round(r.Difficulty, 3),
+                discriminationIndex = r.DiscriminationIndex.HasValue ? Math.Round(r.DiscriminationIndex.Value, 3) : (double?)null,
                 distractor = r.DistractorJson,
                 flag = r.Flag,
                 generatedAt = r.GeneratedAt,
@@ -168,6 +170,7 @@ public sealed class MockItemAnalysisService
                 totalAttempts = r.TotalAttempts,
                 correctCount = r.CorrectCount,
                 difficulty = Math.Round(r.Difficulty, 3),
+                discriminationIndex = r.DiscriminationIndex.HasValue ? Math.Round(r.DiscriminationIndex.Value, 3) : (double?)null,
                 distractor = r.DistractorJson,
                 flag = r.Flag,
                 generatedAt = r.GeneratedAt,
@@ -188,10 +191,10 @@ public sealed class MockItemAnalysisService
         DateTimeOffset now,
         CancellationToken ct)
     {
-        var attemptIds = await _db.Set<ListeningAttempt>().AsNoTracking()
+        var attemptScores = await _db.Set<ListeningAttempt>().AsNoTracking()
             .Where(a => a.PaperId == paperId && a.Status == ListeningAttemptStatus.Submitted)
-            .Select(a => a.Id)
-            .ToListAsync(ct);
+            .Select(a => new { a.Id, Score = a.RawScore ?? 0 })
+            .ToDictionaryAsync(a => a.Id, a => a.Score, ct);
 
         var questions = await (from q in _db.Set<ListeningQuestion>().AsNoTracking()
                                join p in _db.Set<ListeningPart>().AsNoTracking() on q.ListeningPartId equals p.Id
@@ -200,10 +203,11 @@ public sealed class MockItemAnalysisService
                                select new { q.Id, p.PartCode, q.QuestionNumber })
                               .ToListAsync(ct);
 
-        var answers = attemptIds.Count == 0
+            var submittedAttemptIds = attemptScores.Keys.ToArray();
+            var answers = submittedAttemptIds.Length == 0
             ? new List<ListeningAnswer>()
             : await _db.Set<ListeningAnswer>().AsNoTracking()
-                .Where(a => attemptIds.Contains(a.ListeningAttemptId))
+                .Where(a => submittedAttemptIds.Contains(a.ListeningAttemptId))
                 .ToListAsync(ct);
 
         var byQuestion = answers.GroupBy(a => a.ListeningQuestionId)
@@ -246,6 +250,7 @@ public sealed class MockItemAnalysisService
                 TotalAttempts = total,
                 CorrectCount = correct,
                 Difficulty = difficulty,
+                DiscriminationIndex = CalculateDiscrimination(rows?.Select(r => new ItemResponse(r.ListeningAttemptId, r.IsCorrect == true)), attemptScores),
                 DistractorJson = JsonSupport.Serialize(distractors),
                 Flag = flag,
                 GeneratedAt = now,
@@ -262,10 +267,10 @@ public sealed class MockItemAnalysisService
         CancellationToken ct)
     {
         // Pull all submitted reading attempts on this paper, with answers + question metadata.
-        var attempts = await _db.Set<ReadingAttempt>().AsNoTracking()
+        var attemptScores = await _db.Set<ReadingAttempt>().AsNoTracking()
             .Where(a => a.PaperId == paperId && a.Status == ReadingAttemptStatus.Submitted)
-            .Select(a => a.Id)
-            .ToListAsync(ct);
+            .Select(a => new { a.Id, Score = a.RawScore ?? 0 })
+            .ToDictionaryAsync(a => a.Id, a => a.Score, ct);
 
         var questions = await (from q in _db.Set<ReadingQuestion>().AsNoTracking()
                                join p in _db.Set<ReadingPart>().AsNoTracking() on q.ReadingPartId equals p.Id
@@ -273,10 +278,11 @@ public sealed class MockItemAnalysisService
                                select new { q.Id, PartCode = p.PartCode, QuestionNumber = q.DisplayOrder })
                               .ToListAsync(ct);
 
-        var answers = await _db.Set<ReadingAnswer>().AsNoTracking()
-            .Where(a => attempts.Contains(a.ReadingAttemptId))
-            .Select(a => new { a.ReadingQuestionId, a.IsCorrect, a.SelectedDistractorCategory })
-            .ToListAsync(ct);
+            var submittedAttemptIds = attemptScores.Keys.ToArray();
+            var answers = await _db.Set<ReadingAnswer>().AsNoTracking()
+                .Where(a => submittedAttemptIds.Contains(a.ReadingAttemptId))
+                .Select(a => new { a.ReadingAttemptId, a.ReadingQuestionId, a.IsCorrect, a.SelectedDistractorCategory })
+                .ToListAsync(ct);
 
         var byQuestion = answers.GroupBy(a => a.ReadingQuestionId)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -318,6 +324,7 @@ public sealed class MockItemAnalysisService
                 TotalAttempts = total,
                 CorrectCount = correct,
                 Difficulty = difficulty,
+                DiscriminationIndex = CalculateDiscrimination(rows?.Select(r => new ItemResponse(r.ReadingAttemptId, r.IsCorrect == true)), attemptScores),
                 DistractorJson = JsonSupport.Serialize(distractors),
                 Flag = flag,
                 GeneratedAt = now,
@@ -326,4 +333,20 @@ public sealed class MockItemAnalysisService
 
         return result;
     }
+
+    private static double? CalculateDiscrimination(IEnumerable<ItemResponse>? responses, IReadOnlyDictionary<string, int> attemptScores)
+    {
+        var scored = responses?
+            .Where(response => attemptScores.ContainsKey(response.AttemptId))
+            .OrderByDescending(response => attemptScores[response.AttemptId])
+            .ToList() ?? [];
+        if (scored.Count < 10) return null;
+
+        var cohortSize = Math.Max(1, (int)Math.Ceiling(scored.Count * 0.27));
+        var top = scored.Take(cohortSize).Count(response => response.IsCorrect) / (double)cohortSize;
+        var bottom = scored.TakeLast(cohortSize).Count(response => response.IsCorrect) / (double)cohortSize;
+        return top - bottom;
+    }
+
+    private readonly record struct ItemResponse(string AttemptId, bool IsCorrect);
 }

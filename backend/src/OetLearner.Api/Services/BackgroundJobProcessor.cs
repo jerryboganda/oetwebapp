@@ -149,7 +149,8 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 await CompleteStudyPlanRegenerationAsync(db, notifications, job, cancellationToken);
                 break;
             case JobType.MockReportGeneration:
-                await CompleteMockReportGenerationAsync(db, notifications, job, cancellationToken);
+                await services.GetRequiredService<OetLearner.Api.Services.Mocks.Results.IMockReportAggregationService>()
+                    .GenerateAsync(job, cancellationToken);
                 break;
             case JobType.ReviewCompletion:
                 await CompleteReviewRequestAsync(db, notifications, job, cancellationToken);

@@ -549,6 +549,15 @@ builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<MockService>();
 builder.Services.AddScoped<MockBookingService>();
 builder.Services.AddScoped<MockBookingRecordingService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.IMockSectionResultAdapter,
+    OetLearner.Api.Services.Mocks.Results.ReadingMockSectionResultAdapter>();
+builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.IMockSectionResultAdapter,
+    OetLearner.Api.Services.Mocks.Results.ListeningMockSectionResultAdapter>();
+builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.IMockSectionResultAdapter,
+    OetLearner.Api.Services.Mocks.Results.LegacyMockSectionResultAdapter>();
+builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.MockSectionResultResolver>();
+builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.IMockReportAggregationService,
+    OetLearner.Api.Services.Mocks.Results.MockReportAggregationService>();
 // DI hotfix (2026-05-06): these services are consumed directly by minimal-API
 // endpoint handlers but were not registered, causing ASP.NET to fall back to
 // inferring them as Body parameters and aborting host startup with
@@ -1327,6 +1336,7 @@ app.MapMockAdminEndpoints();
 app.MapContentPapersLearnerEndpoints();
 app.MapReadingAuthoringAdminEndpoints();
 app.MapReadingAnalyticsAdminEndpoints();
+app.MapWritingAnalyticsAdminEndpoints();
 app.MapListeningAuthoringAdminEndpoints();
 app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
@@ -1376,6 +1386,7 @@ app.MapDevicePairingEndpoints();
 
 app.MapHub<NotificationHub>("/v1/notifications/hub").RequireAuthorization();
 app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization();
+app.MapHub<OetLearner.Api.Services.Mocks.MockLiveRoomHub>("/v1/mocks/live-room/hub").RequireAuthorization();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

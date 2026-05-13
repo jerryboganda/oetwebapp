@@ -249,6 +249,8 @@ public class MockBooking
     [MaxLength(32)]
     public string LiveRoomState { get; set; } = MockLiveRoomStates.Waiting;
 
+    public int LiveRoomTransitionVersion { get; set; }
+
     [MaxLength(128)]
     public string? ZoomMeetingId { get; set; }
 
@@ -287,6 +289,44 @@ public class MockBooking
 
     public MockBundle? MockBundle { get; set; }
     public MockAttempt? MockAttempt { get; set; }
+    public ICollection<MockLiveRoomTransition> LiveRoomTransitions { get; set; } = new List<MockLiveRoomTransition>();
+}
+
+[Index(nameof(BookingId), nameof(OccurredAt))]
+[Index(nameof(BookingId), nameof(TransitionVersion), IsUnique = true)]
+[Index(nameof(BookingId), nameof(ClientTransitionId))]
+public class MockLiveRoomTransition
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string BookingId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ActorId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string ActorRole { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string FromState { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string ToState { get; set; } = default!;
+
+    [MaxLength(512)]
+    public string? Reason { get; set; }
+
+    [MaxLength(96)]
+    public string? ClientTransitionId { get; set; }
+
+    public int TransitionVersion { get; set; }
+    public DateTimeOffset OccurredAt { get; set; }
+    public string MetadataJson { get; set; } = "{}";
+
+    public MockBooking? Booking { get; set; }
 }
 
 /// <summary>
@@ -486,10 +526,11 @@ public static class MockLiveRoomStates
     public const string InProgress = "in_progress";
     public const string Completed = "completed";
     public const string TutorNoShow = "tutor_no_show";
+    public const string LearnerNoShow = "learner_no_show";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        Waiting, InProgress, Completed, TutorNoShow,
+        Waiting, InProgress, Completed, TutorNoShow, LearnerNoShow,
     };
 
     public static bool IsValid(string? value) => value is not null && All.Contains(value);

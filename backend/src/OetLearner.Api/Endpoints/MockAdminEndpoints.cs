@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Endpoints;
@@ -90,6 +91,16 @@ public static class MockAdminEndpoints
             Results.Ok(await analysis.RecomputeAsync(id, AdminId(http), ct)))
             .RequireAuthorization("AdminContentWrite");
 
+        // Mocks Wave 4 — listening-only filtered view of the item-analysis
+        // dashboard so admins can drill into Listening item difficulty,
+        // distractor pull, and tempting-distractor flags without scrolling
+        // through Reading rows. Recompute is shared (POST .../recompute).
+        group.MapGet("/{id}/listening-item-analysis", async (
+            string id,
+            MockItemAnalysisService analysis,
+            CancellationToken ct) =>
+            Results.Ok(await analysis.GetForBundleListeningAsync(id, ct)));
+
         var adminMocks = app.MapGroup("/v1/admin/mocks")
             .RequireAuthorization("AdminContentRead")
             .WithTags("Admin Mocks");
@@ -154,6 +165,16 @@ public static class MockAdminEndpoints
             CancellationToken ct) =>
             Results.Ok(await service.AssignStaffAsync(AdminId(http), bookingId, request, ct)))
             .RequireAuthorization("AdminContentWrite");
+
+        bookings.MapPost("/{bookingId}/live-room/transition", async (
+            string bookingId,
+            LiveRoomTransitionRequest request,
+            MockBookingService service,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.TransitionLiveRoomAsync(AdminId(http), ApplicationUserRoles.Admin, isAdmin: true, bookingId, request, ct)))
+            .RequireAuthorization("AdminContentWrite")
+            .RequireRateLimiting("PerUserWrite");
 
         adminMocks.MapGet("/bookings", async (
             MockBookingService service,

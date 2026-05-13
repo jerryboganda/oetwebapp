@@ -37,6 +37,9 @@ public class MockItemAnalysisSnapshot
     public int CorrectCount { get; set; }
     public double Difficulty { get; set; } // 0..1, p-value (proportion correct)
 
+    /// <summary>Upper-minus-lower cohort correctness delta. Null until enough scored attempts exist.</summary>
+    public double? DiscriminationIndex { get; set; }
+
     /// <summary>JSON map { distractorCategory: pickCount }.</summary>
     public string DistractorJson { get; set; } = "{}";
 

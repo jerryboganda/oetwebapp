@@ -18,11 +18,11 @@ public static class MockBookingReminderPlanner
     /// dispatched through the dedupe-aware notification service so
     /// re-evaluation of the same offset is a cheap no-op.
     /// </summary>
-    public static readonly (TimeSpan Offset, NotificationEventKey EventKey, string Bucket)[] Offsets =
+    public static readonly ReminderOffset[] Offsets =
     [
-        (TimeSpan.FromHours(24),    NotificationEventKey.LearnerMockReminder24h, "reminder-24h"),
-        (TimeSpan.FromHours(2),     NotificationEventKey.LearnerMockReminder2h,  "reminder-2h"),
-        (TimeSpan.FromMinutes(30),  NotificationEventKey.LearnerMockReminder30m, "reminder-30m"),
+        new(TimeSpan.FromHours(24), NotificationEventKey.LearnerMockReminder24h, NotificationEventKey.ExpertMockReminder24h, "reminder-24h"),
+        new(TimeSpan.FromHours(2), NotificationEventKey.LearnerMockReminder2h, NotificationEventKey.ExpertMockReminder2h, "reminder-2h"),
+        new(TimeSpan.FromMinutes(30), NotificationEventKey.LearnerMockReminder30m, NotificationEventKey.ExpertMockReminder30m, "reminder-30m"),
     ];
 
     /// <summary>
@@ -63,16 +63,37 @@ public static class MockBookingReminderPlanner
         if (!IsInHorizon(booking, now)) yield break;
 
         var until = booking.ScheduledStartAt - now;
-        foreach (var (offset, eventKey, bucket) in Offsets)
+        foreach (var offset in Offsets)
         {
-            if (until > offset) continue;
-            yield return new PlannedReminder(booking.Id, booking.UserId, eventKey, bucket, until);
+            if (until > offset.Offset) continue;
+            yield return new PlannedReminder(booking.Id, booking.UserId, ApplicationUserRoles.Learner, offset.LearnerEventKey, offset.Bucket, until);
+            foreach (var expertId in AssignedExpertIds(booking))
+            {
+                yield return new PlannedReminder(booking.Id, expertId, ApplicationUserRoles.Expert, offset.ExpertEventKey, $"expert-{offset.Bucket}", until);
+            }
         }
     }
 
+    private static IEnumerable<string> AssignedExpertIds(MockBooking booking)
+    {
+        if (!string.IsNullOrWhiteSpace(booking.AssignedTutorId)) yield return booking.AssignedTutorId;
+        if (!string.IsNullOrWhiteSpace(booking.AssignedInterlocutorId)
+            && !string.Equals(booking.AssignedInterlocutorId, booking.AssignedTutorId, StringComparison.Ordinal))
+        {
+            yield return booking.AssignedInterlocutorId;
+        }
+    }
+
+    public readonly record struct ReminderOffset(
+        TimeSpan Offset,
+        NotificationEventKey LearnerEventKey,
+        NotificationEventKey ExpertEventKey,
+        string Bucket);
+
     public readonly record struct PlannedReminder(
         string BookingId,
-        string UserId,
+        string RecipientId,
+        string AudienceRole,
         NotificationEventKey EventKey,
         string Bucket,
         TimeSpan TimeUntilStart);

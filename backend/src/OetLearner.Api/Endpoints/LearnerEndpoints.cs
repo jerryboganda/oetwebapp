@@ -212,7 +212,7 @@ public static class LearnerEndpoints
         v1.MapPatch("/mock-bookings/{bookingId}", async (HttpContext http, string bookingId, MockBookingUpdateRequest request, MockService service, CancellationToken ct) => Results.Ok(await service.UpdateMockBookingAsync(http.UserId(), bookingId, request, ct)));
         v1.MapPost("/mock-bookings/{bookingId}/cancel", async (HttpContext http, string bookingId, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.CancelAsync(http.UserId(), bookingId, ct)));
         // Mocks V2 Wave 6 — live-room state transitions (audio-only Speaking room).
-        v1.MapPost("/mock-bookings/{bookingId}/live-room/transition", async (HttpContext http, string bookingId, LiveRoomTransitionRequest request, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.TransitionLiveRoomAsync(http.UserId(), isAdmin: false, bookingId, request.TargetState, ct)));
+        v1.MapPost("/mock-bookings/{bookingId}/live-room/transition", async (HttpContext http, string bookingId, LiveRoomTransitionRequest request, MockBookingService bookings, CancellationToken ct) => Results.Ok(await bookings.TransitionLiveRoomAsync(http.UserId(), ApplicationUserRoles.Learner, isAdmin: false, bookingId, request, ct)));
         // Mocks V2 Wave 6 — chunked audio capture from the learner browser.
         // Body is the raw audio chunk; Content-Type carries the mime type.
         // ConsentToRecording must be true on the booking; rejected otherwise.

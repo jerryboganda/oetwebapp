@@ -35,6 +35,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<MockSectionAttempt> MockSectionAttempts => Set<MockSectionAttempt>();
     public DbSet<MockReviewReservation> MockReviewReservations => Set<MockReviewReservation>();
     public DbSet<MockBooking> MockBookings => Set<MockBooking>();
+    public DbSet<MockLiveRoomTransition> MockLiveRoomTransitions => Set<MockLiveRoomTransition>();
     public DbSet<MockContentReview> MockContentReviews => Set<MockContentReview>();
     public DbSet<MockProctoringEvent> MockProctoringEvents => Set<MockProctoringEvent>();
     public DbSet<MockItemAnalysisSnapshot> MockItemAnalysisSnapshots => Set<MockItemAnalysisSnapshot>();
@@ -122,6 +123,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ConversationSettingsRow> ConversationSettings => Set<ConversationSettingsRow>();
     public DbSet<WritingCoachSession> WritingCoachSessions => Set<WritingCoachSession>();
     public DbSet<WritingCoachSuggestion> WritingCoachSuggestions => Set<WritingCoachSuggestion>();
+    public DbSet<WritingRuleViolation> WritingRuleViolations => Set<WritingRuleViolation>();
     public DbSet<PronunciationAssessment> PronunciationAssessments => Set<PronunciationAssessment>();
     public DbSet<PronunciationAttempt> PronunciationAttempts => Set<PronunciationAttempt>();
     public DbSet<PronunciationDrill> PronunciationDrills => Set<PronunciationDrill>();
@@ -536,6 +538,11 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             .WithMany()
             .HasForeignKey(x => x.MockAttemptId)
             .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<MockLiveRoomTransition>()
+            .HasOne(x => x.Booking)
+            .WithMany(x => x.LiveRoomTransitions)
+            .HasForeignKey(x => x.BookingId)
+            .OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<MockContentReview>()
             .HasOne(x => x.MockBundle)
             .WithMany()
@@ -713,6 +720,15 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         // Writing coach indexes
         modelBuilder.Entity<WritingCoachSession>().HasIndex(x => x.AttemptId);
         modelBuilder.Entity<WritingCoachSuggestion>().HasIndex(x => new { x.AttemptId, x.Resolution });
+
+        // Audit P2-2 — Writing rule-violation analytics indexes.
+        // Top dashboard queries:
+        //   • "violations in window grouped by ruleId" → (RuleId, GeneratedAt)
+        //   • "profession breakdown for window" → (Profession, GeneratedAt)
+        //   • "attempt drill-down" → (AttemptId)
+        modelBuilder.Entity<WritingRuleViolation>().HasIndex(x => new { x.RuleId, x.GeneratedAt });
+        modelBuilder.Entity<WritingRuleViolation>().HasIndex(x => new { x.Profession, x.GeneratedAt });
+        modelBuilder.Entity<WritingRuleViolation>().HasIndex(x => x.AttemptId);
 
         // Pronunciation indexes (base indexes declared via [Index] attributes on entities)
         // Compound attempt index added below for fast drill-list lookups

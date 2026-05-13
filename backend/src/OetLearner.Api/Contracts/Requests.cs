@@ -149,7 +149,10 @@ public record MockBookingUpdateRequest(
     string? LearnerNotes = null);
 
 // Mocks V2 Wave 6 — Live-room transition (Speaking).
-public record LiveRoomTransitionRequest(string TargetState);
+public record LiveRoomTransitionRequest(
+    string TargetState,
+    string? Reason = null,
+    string? ClientTransitionId = null);
 
 public record MockBookingRecordingFinalizeRequest(long? DurationMs);
 
