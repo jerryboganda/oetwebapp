@@ -1,0 +1,45 @@
+{
+  "id": "writing-drill-dietetics-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "dietetics",
+  "letterType": "discharge",
+  "title": "Abbreviations — Expand or Keep for the Dietetics Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "dt1",
+      "abbreviation": "BMI",
+      "context": "Writing to another dietitian",
+      "expected": "keep",
+      "expansion": "body mass index",
+      "rationale": "Universal between dietetics and clinical professionals."
+    },
+    {
+      "id": "dt2",
+      "abbreviation": "MUST",
+      "context": "Writing to the patient",
+      "expected": "expand",
+      "expansion": "Malnutrition Universal Screening Tool",
+      "rationale": "Patients should see the full screening tool name."
+    },
+    {
+      "id": "dt3",
+      "abbreviation": "TPN",
+      "context": "Writing to a hospital pharmacist",
+      "expected": "keep",
+      "expansion": "total parenteral nutrition",
+      "rationale": "Standard nutrition-support abbreviation between clinicians."
+    },
+    {
+      "id": "dt4",
+      "abbreviation": "RDA",
+      "context": "Writing to a community fitness trainer",
+      "expected": "expand",
+      "expansion": "recommended daily allowance",
+      "rationale": "Lay audience benefits from the explicit phrase."
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "writing-drill-radiography-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "radiography",
+  "letterType": "update",
+  "title": "Abbreviations — Expand or Keep for the Radiography Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "r1",
+      "abbreviation": "MRI",
+      "context": "Writing to a referring physician",
+      "expected": "keep",
+      "expansion": "magnetic resonance imaging",
+      "rationale": "Standard between clinical professionals."
+    },
+    {
+      "id": "r2",
+      "abbreviation": "DICOM",
+      "context": "Writing to a non-clinical IT helpdesk",
+      "expected": "expand",
+      "expansion": "Digital Imaging and Communications in Medicine",
+      "rationale": "Technical standard; expand outside imaging departments."
+    },
+    {
+      "id": "r3",
+      "abbreviation": "CT",
+      "context": "Writing to the patient",
+      "expected": "expand",
+      "expansion": "computed tomography",
+      "rationale": "Patients should see the full modality name."
+    },
+    {
+      "id": "r4",
+      "abbreviation": "ALARA",
+      "context": "Writing to a fellow radiographer",
+      "expected": "keep",
+      "expansion": "as low as reasonably achievable",
+      "rationale": "Universal radiation-protection principle in radiography."
+    }
+  ]
+}

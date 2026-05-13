@@ -1,0 +1,45 @@
+{
+  "id": "writing-drill-physiotherapy-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "physiotherapy",
+  "letterType": "referral",
+  "title": "Abbreviations — Expand or Keep for the Physiotherapy Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "pt1",
+      "abbreviation": "ROM",
+      "context": "Writing to another physiotherapist",
+      "expected": "keep",
+      "expansion": "range of motion",
+      "rationale": "Standard between rehabilitation professionals."
+    },
+    {
+      "id": "pt2",
+      "abbreviation": "ACL",
+      "context": "Writing a return-to-sport letter to the coach",
+      "expected": "expand",
+      "expansion": "anterior cruciate ligament",
+      "rationale": "Coaches and athletes should see the full anatomical term."
+    },
+    {
+      "id": "pt3",
+      "abbreviation": "TENS",
+      "context": "Writing to the patient",
+      "expected": "expand",
+      "expansion": "transcutaneous electrical nerve stimulation",
+      "rationale": "Patients deserve the full modality name."
+    },
+    {
+      "id": "pt4",
+      "abbreviation": "ADLs",
+      "context": "Writing to an occupational therapist",
+      "expected": "keep",
+      "expansion": "activities of daily living",
+      "rationale": "Universal between allied-health professionals."
+    }
+  ]
+}

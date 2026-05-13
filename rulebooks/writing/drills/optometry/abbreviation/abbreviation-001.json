@@ -1,0 +1,45 @@
+{
+  "id": "writing-drill-optometry-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "optometry",
+  "letterType": "referral",
+  "title": "Abbreviations — Expand or Keep for the Optometry Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "o1",
+      "abbreviation": "VA",
+      "context": "Writing to an ophthalmologist",
+      "expected": "keep",
+      "expansion": "visual acuity",
+      "rationale": "Standard between eye-care professionals."
+    },
+    {
+      "id": "o2",
+      "abbreviation": "IOP",
+      "context": "Writing to the patient",
+      "expected": "expand",
+      "expansion": "intraocular pressure",
+      "rationale": "Patients should see the full term."
+    },
+    {
+      "id": "o3",
+      "abbreviation": "OCT",
+      "context": "Writing to a general practitioner",
+      "expected": "expand",
+      "expansion": "optical coherence tomography",
+      "rationale": "Imaging modality is rarely recognised outside ophthalmology."
+    },
+    {
+      "id": "o4",
+      "abbreviation": "RAPD",
+      "context": "Writing to a neuro-ophthalmologist",
+      "expected": "keep",
+      "expansion": "relative afferent pupillary defect",
+      "rationale": "Universal between subspecialty eye-care professionals."
+    }
+  ]
+}

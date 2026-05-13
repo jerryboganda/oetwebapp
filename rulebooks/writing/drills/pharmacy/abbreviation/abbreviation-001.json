@@ -1,0 +1,45 @@
+{
+  "id": "writing-drill-pharmacy-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "pharmacy",
+  "letterType": "discharge",
+  "title": "Abbreviations — Expand or Keep for the Pharmacy Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "p1",
+      "abbreviation": "TDS",
+      "context": "Writing to a community pharmacist",
+      "expected": "keep",
+      "expansion": "three times a day",
+      "rationale": "Standard Latin dose abbreviation between dispensers."
+    },
+    {
+      "id": "p2",
+      "abbreviation": "OTC",
+      "context": "Writing to the patient",
+      "expected": "expand",
+      "expansion": "over the counter",
+      "rationale": "Plain-language guidance is required for patient-facing letters."
+    },
+    {
+      "id": "p3",
+      "abbreviation": "MUR",
+      "context": "Writing to a non-clinical care manager",
+      "expected": "expand",
+      "expansion": "medicines use review",
+      "rationale": "Pharmacy-specific service name; expand for a lay audience."
+    },
+    {
+      "id": "p4",
+      "abbreviation": "PRN",
+      "context": "Writing to a hospital pharmacist",
+      "expected": "keep",
+      "expansion": "as needed",
+      "rationale": "Universally understood between dispensing professionals."
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "writing-drill-speechpathology-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "speech_pathology",
+  "letterType": "update",
+  "title": "Abbreviations — Expand or Keep for the Speech Pathology Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "sp1",
+      "abbreviation": "AAC",
+      "context": "Writing to another speech pathologist",
+      "expected": "keep",
+      "expansion": "augmentative and alternative communication",
+      "rationale": "Standard between speech-language professionals."
+    },
+    {
+      "id": "sp2",
+      "abbreviation": "FEES",
+      "context": "Writing to the patient",
+      "expected": "expand",
+      "expansion": "fibreoptic endoscopic evaluation of swallowing",
+      "rationale": "Procedure name should be unambiguous for patients."
+    },
+    {
+      "id": "sp3",
+      "abbreviation": "PECS",
+      "context": "Writing to a paediatrician",
+      "expected": "expand",
+      "expansion": "Picture Exchange Communication System",
+      "rationale": "Profession-specific tool; expand for medical readers."
+    },
+    {
+      "id": "sp4",
+      "abbreviation": "DLD",
+      "context": "Writing to an occupational therapist",
+      "expected": "expand",
+      "expansion": "developmental language disorder",
+      "rationale": "Diagnostic label; expand for non-SLP allied-health readers."
+    }
+  ]
+}

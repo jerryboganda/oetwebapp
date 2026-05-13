@@ -1,0 +1,45 @@
+{
+  "id": "writing-drill-podiatry-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "podiatry",
+  "letterType": "referral",
+  "title": "Abbreviations — Expand or Keep for the Podiatry Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "pd1",
+      "abbreviation": "DFU",
+      "context": "Writing to another podiatrist",
+      "expected": "keep",
+      "expansion": "diabetic foot ulcer",
+      "rationale": "Standard between podiatry professionals."
+    },
+    {
+      "id": "pd2",
+      "abbreviation": "ABI",
+      "context": "Writing to the patient",
+      "expected": "expand",
+      "expansion": "ankle-brachial index",
+      "rationale": "Patients should see the full vascular test name."
+    },
+    {
+      "id": "pd3",
+      "abbreviation": "ROM",
+      "context": "Writing to a physiotherapist",
+      "expected": "keep",
+      "expansion": "range of motion",
+      "rationale": "Universal between allied-health rehabilitation peers."
+    },
+    {
+      "id": "pd4",
+      "abbreviation": "PVD",
+      "context": "Writing to a vascular surgeon",
+      "expected": "keep",
+      "expansion": "peripheral vascular disease",
+      "rationale": "Standard cardiovascular abbreviation between specialists."
+    }
+  ]
+}

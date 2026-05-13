@@ -1,0 +1,45 @@
+{
+  "id": "writing-drill-veterinary-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "veterinary",
+  "letterType": "referral",
+  "title": "Abbreviations — Expand or Keep for the Veterinary Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "v1",
+      "abbreviation": "FIV",
+      "context": "Writing to another veterinarian",
+      "expected": "keep",
+      "expansion": "feline immunodeficiency virus",
+      "rationale": "Standard between veterinary professionals."
+    },
+    {
+      "id": "v2",
+      "abbreviation": "BAR",
+      "context": "Writing to the pet's owner",
+      "expected": "expand",
+      "expansion": "bright, alert, and responsive",
+      "rationale": "Owners should see the plain-language clinical impression."
+    },
+    {
+      "id": "v3",
+      "abbreviation": "GA",
+      "context": "Writing to a referral surgeon",
+      "expected": "keep",
+      "expansion": "general anaesthetic",
+      "rationale": "Universal between clinical professionals."
+    },
+    {
+      "id": "v4",
+      "abbreviation": "TPLO",
+      "context": "Writing the post-op summary to the owner",
+      "expected": "expand",
+      "expansion": "tibial plateau levelling osteotomy",
+      "rationale": "Specialist procedure; expand for a lay audience."
+    }
+  ]
+}

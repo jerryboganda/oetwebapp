@@ -1,0 +1,45 @@
+{
+  "id": "writing-drill-nursing-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "nursing",
+  "letterType": "transfer",
+  "title": "Abbreviations — Expand or Keep for the Nursing Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "n1",
+      "abbreviation": "BP",
+      "context": "Writing to a community nurse",
+      "expected": "keep",
+      "expansion": "blood pressure",
+      "rationale": "Universally understood by nursing staff."
+    },
+    {
+      "id": "n2",
+      "abbreviation": "DVT",
+      "context": "Writing a discharge letter to the patient",
+      "expected": "expand",
+      "expansion": "deep vein thrombosis",
+      "rationale": "Patients may not recognise the abbreviation."
+    },
+    {
+      "id": "n3",
+      "abbreviation": "IV",
+      "context": "Writing to a hospital pharmacist",
+      "expected": "keep",
+      "expansion": "intravenous",
+      "rationale": "Standard between healthcare professionals."
+    },
+    {
+      "id": "n4",
+      "abbreviation": "PEG",
+      "context": "Writing to the patient's family",
+      "expected": "expand",
+      "expansion": "percutaneous endoscopic gastrostomy",
+      "rationale": "Specialist abbreviation; expand for a lay audience."
+    }
+  ]
+}

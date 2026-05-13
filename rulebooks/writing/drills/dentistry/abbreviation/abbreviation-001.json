@@ -1,0 +1,45 @@
+{
+  "id": "writing-drill-dentistry-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "dentistry",
+  "letterType": "referral",
+  "title": "Abbreviations — Expand or Keep for the Dental Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "d1",
+      "abbreviation": "OPG",
+      "context": "Writing to an oral and maxillofacial surgeon",
+      "expected": "keep",
+      "expansion": "orthopantomogram",
+      "rationale": "Standard radiograph terminology between dental specialists."
+    },
+    {
+      "id": "d2",
+      "abbreviation": "BPE",
+      "context": "Writing a periodontal referral to a general practitioner",
+      "expected": "expand",
+      "expansion": "basic periodontal examination",
+      "rationale": "Outside dentistry the abbreviation is rarely understood."
+    },
+    {
+      "id": "d3",
+      "abbreviation": "RCT",
+      "context": "Writing to the patient",
+      "expected": "expand",
+      "expansion": "root canal treatment",
+      "rationale": "Patients should see the full procedure name."
+    },
+    {
+      "id": "d4",
+      "abbreviation": "GA",
+      "context": "Writing to an anaesthetist",
+      "expected": "keep",
+      "expansion": "general anaesthetic",
+      "rationale": "Universal between clinical professionals."
+    }
+  ]
+}

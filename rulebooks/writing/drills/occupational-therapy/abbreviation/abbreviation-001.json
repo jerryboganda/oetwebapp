@@ -1,0 +1,45 @@
+{
+  "id": "writing-drill-occupationaltherapy-abbreviation-001",
+  "type": "abbreviation",
+  "profession": "occupational_therapy",
+  "letterType": "discharge",
+  "title": "Abbreviations — Expand or Keep for the Occupational Therapy Reader",
+  "brief": "For each abbreviation, decide whether you should KEEP it (the reader will recognise it) or EXPAND it (the reader is non-specialist or lay).",
+  "difficulty": "core",
+  "estimatedMinutes": 5,
+  "rulebookRefs": ["R12.5"],
+  "items": [
+    {
+      "id": "ot1",
+      "abbreviation": "ADLs",
+      "context": "Writing to a fellow occupational therapist",
+      "expected": "keep",
+      "expansion": "activities of daily living",
+      "rationale": "Universal between rehabilitation professionals."
+    },
+    {
+      "id": "ot2",
+      "abbreviation": "COPM",
+      "context": "Writing to a primary-care doctor",
+      "expected": "expand",
+      "expansion": "Canadian Occupational Performance Measure",
+      "rationale": "Profession-specific assessment; expand for non-OT readers."
+    },
+    {
+      "id": "ot3",
+      "abbreviation": "FIM",
+      "context": "Writing to the patient's family",
+      "expected": "expand",
+      "expansion": "Functional Independence Measure",
+      "rationale": "Lay readers need the full assessment name."
+    },
+    {
+      "id": "ot4",
+      "abbreviation": "IADLs",
+      "context": "Writing to a physiotherapist",
+      "expected": "keep",
+      "expansion": "instrumental activities of daily living",
+      "rationale": "Standard between allied-health rehabilitation peers."
+    }
+  ]
+}
