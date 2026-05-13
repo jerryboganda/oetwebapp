@@ -7,7 +7,7 @@ namespace OetLearner.Api.Services.Mocks;
 /// <summary>
 /// Mocks Wave 5 (May 2026 closure addendum).
 ///
-/// Background service that dispatches the three learner-facing
+/// Background service that dispatches the three learner- and expert-facing
 /// pre-booking reminder notifications for upcoming
 /// <see cref="MockBooking"/> rows whose <c>Status</c> is
 /// <c>scheduled</c> or <c>confirmed</c>:
@@ -20,7 +20,8 @@ namespace OetLearner.Api.Services.Mocks;
 /// Tick interval is 5 minutes — small enough that the 30-minute
 /// reminder still lands inside the 30..25 min window. Each reminder is
 /// dispatched through <see cref="NotificationService.CreateForLearnerAsync"/>
-/// with a fixed bucket string per offset (<c>"reminder-24h"</c>, etc.);
+/// or <see cref="NotificationService.CreateForExpertAsync"/> with a fixed
+/// bucket string per offset (<c>"reminder-24h"</c>, etc.);
 /// the notification service's existing dedupe-key contract
 /// (<c>NotificationScheduling.BuildDedupeKey</c>) guarantees that even
 /// across worker restarts each reminder is delivered at most once per
