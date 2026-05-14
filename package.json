@@ -149,6 +149,8 @@
     "@capacitor/cli": "^7.6.2",
     "@capacitor/ios": "^6.2.1",
     "@electron/fuses": "^2.1.1",
+    "@modelcontextprotocol/server-sequential-thinking": "2025.12.18",
+    "@playwright/mcp": "0.0.69",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "4.1.11",
     "@tailwindcss/typography": "^0.5.19",

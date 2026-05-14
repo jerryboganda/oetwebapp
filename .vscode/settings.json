@@ -4,19 +4,27 @@
   },
   "swift.sourcekit-lsp.disable": true,
   "chat.promptFiles": true,
+  "chat.promptFilesRecommendations": true,
   "github.copilot.chat.codeGeneration.useInstructionFiles": true,
   "github.copilot.chat.codeGeneration.instructions": [
     { "file": "AGENTS.md" },
-    { "file": ".github/copilot-instructions.md" }
+    { "file": ".github/copilot-instructions.md" },
+    { "file": ".github/instructions/oet-agentic-workflow.instructions.md" },
+    { "file": ".github/instructions/oet-security-ai.instructions.md" }
   ],
   "github.copilot.chat.testGeneration.instructions": [
     { "file": "AGENTS.md" },
     { "file": ".github/copilot-instructions.md" },
+    { "file": ".github/instructions/oet-agentic-workflow.instructions.md" },
+    { "file": ".github/instructions/oet-testing-qa.instructions.md" },
     { "text": "Always write the test before the implementation (TDD). Use Arrange-Act-Assert structure. Target 80%+ coverage on new code. Test names must describe the behavior under test, not just the function name. For .NET tests use SQLite in-memory (per AGENTS.md), never EF InMemory provider. For React tests use Vitest + React Testing Library, motion/react Proxy mock, and userEvent (not fireEvent)." }
   ],
   "github.copilot.chat.reviewSelection.instructions": [
     { "file": "AGENTS.md" },
     { "file": ".github/copilot-instructions.md" },
+    { "file": ".github/instructions/oet-agentic-workflow.instructions.md" },
+    { "file": ".github/instructions/oet-security-ai.instructions.md" },
+    { "file": ".github/instructions/oet-testing-qa.instructions.md" },
     { "text": "Review across four dimensions: (1) Security CRITICAL — hardcoded secrets, missing input validation, injection, missing server-side authz, sensitive data in logs/errors. (2) Code Quality HIGH — in-place mutation, functions >50 lines, files >800 lines, nesting >4, duplicated logic. (3) Error Handling HIGH — swallowed catches, missing async error handling, leaking internals to users. (4) Test Coverage MEDIUM — missing edge/error cases, always-passing assertions. Output [CRITICAL|HIGH|MEDIUM|LOW] with file:line, issue, fix. Block ship on any CRITICAL." }
   ],
   "github.copilot.chat.commitMessageGeneration.instructions": [

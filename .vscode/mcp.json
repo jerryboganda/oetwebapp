@@ -1,16 +1,14 @@
 {
   "servers": {
-    "jcodemunch": {
-      "command": "C:\\Users\\Dr Faisal Maqsood PC\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\jcodemunch-mcp.exe"
-    },
-    "mempalace": {
+    "playwright": {
       "type": "stdio",
-      "command": "C:\\Users\\Dr Faisal Maqsood PC\\AppData\\Roaming\\uv\\tools\\mempalace\\Scripts\\mempalace-mcp.exe",
-      "args": [],
-      "env": {
-        "PYTHONIOENCODING": "utf-8",
-        "PYTHONUTF8": "1"
-      }
+      "command": "npx",
+      "args": ["--no-install", "playwright-mcp", "--extension"]
+    },
+    "sequential-thinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["--no-install", "mcp-server-sequential-thinking"]
     }
   }
 }
