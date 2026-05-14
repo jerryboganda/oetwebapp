@@ -33,9 +33,7 @@ export default function ForgotPasswordPage() {
 
     try {
       const normalizedEmail = email.trim();
-      void requestPasswordReset(normalizedEmail).catch((error) => {
-        console.error('Password reset OTP request failed.', error);
-      });
+      await requestPasswordReset(normalizedEmail);
       router.push(`${AUTH_ROUTES.passwordResetOtp}?email=${encodeURIComponent(normalizedEmail)}`);
     } catch (error) {
       setErrorMessage(readErrorMessage(error));

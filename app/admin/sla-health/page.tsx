@@ -14,6 +14,7 @@ import {
 } from '@/components/domain/admin-route-surface';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 
 interface SlaAlert { reviewId: string; severity: string; message: string; turnaround: string; subtestCode: string; createdAt: string; hoursOverdue?: number; hoursRemaining?: number }
 interface SlaData {
@@ -31,6 +32,7 @@ const HEALTH_CONFIG: Record<string, { icon: typeof AlertOctagon; tone: 'default'
 };
 
 export default function SlaHealthPage() {
+  useAdminAuth();
   const [data, setData] = useState<SlaData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
