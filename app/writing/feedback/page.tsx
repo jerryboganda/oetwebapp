@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useMemo } from 'react';
 import {
   ChevronLeft,
   MessageSquare,
@@ -18,7 +18,7 @@ import { WritingIssueList, type IssueType } from '@/components/domain/writing-is
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { fetchWritingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingResult, AnchoredComment } from '@/lib/mock-data';
@@ -49,7 +49,7 @@ function writingRulebookHref(ruleId: string, profession: string | null | undefin
   return `/writing/rulebook/${encodeURIComponent(ruleId)}?profession=${encodeURIComponent(writingProfessionSlug(profession))}`;
 }
 
-export default function WritingDetailedFeedback() {
+function WritingDetailedFeedbackContent() {
   const searchParams = useSearchParams();
   const resultId = searchParams?.get('id') ?? '';
   const [result, setResult] = useState<WritingResult | null>(null);
@@ -283,5 +283,13 @@ export default function WritingDetailedFeedback() {
       </main>
       </div>
     </AppShell>
+  );
+}
+
+export default function WritingDetailedFeedback() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <WritingDetailedFeedbackContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { FileText, BookOpen, ArrowLeftRight, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -10,7 +10,7 @@ import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchWritingResult, fetchModelAnswer } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
@@ -18,7 +18,7 @@ import type { WritingResult, ModelAnswer } from '@/lib/mock-data';
 
 type ViewMode = 'side-by-side' | 'overlay';
 
-export default function WritingComparePage() {
+function WritingCompareContent() {
   const searchParams = useSearchParams();
   const resultId = searchParams?.get('id') ?? '';
   const taskId = searchParams?.get('taskId') ?? '';
@@ -178,5 +178,13 @@ export default function WritingComparePage() {
         </MotionSection>
       )}
     </LearnerDashboardShell>
+  );
+}
+
+export default function WritingComparePage() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <WritingCompareContent />
+    </Suspense>
   );
 }
