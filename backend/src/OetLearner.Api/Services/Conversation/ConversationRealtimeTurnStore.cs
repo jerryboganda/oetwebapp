@@ -1,10 +1,12 @@
 using System.Collections.Concurrent;
+using OetLearner.Api.Services.Conversation.Asr;
 
 namespace OetLearner.Api.Services.Conversation;
 
 public sealed class ConversationRealtimeTurnStore
 {
     private readonly ConcurrentDictionary<string, RealtimeTurnBuffer> _buffers = new(StringComparer.Ordinal);
+    private readonly object _beginLock = new();
 
     public bool TryBegin(
         string connectionId,
@@ -19,42 +21,68 @@ public sealed class ConversationRealtimeTurnStore
         out string? errorCode)
     {
         errorCode = null;
-        SweepExpired(idleTimeout, maxStreamAge);
-        if (string.IsNullOrWhiteSpace(streamId) || streamId.Length > 96)
+        lock (_beginLock)
         {
-            errorCode = "INVALID_STREAM";
-            return false;
+            SweepExpired(idleTimeout, maxStreamAge);
+            if (string.IsNullOrWhiteSpace(streamId) || streamId.Length > 96)
+            {
+                errorCode = "INVALID_STREAM";
+                return false;
+            }
+
+            if (_buffers.Count >= ConversationRealtimeTransportLimits.MaximumActiveStreams)
+            {
+                errorCode = "REALTIME_GLOBAL_CONCURRENCY";
+                return false;
+            }
+
+            var bufferedBytes = _buffers.Values.Sum(static buffer => buffer.TotalBytes);
+            if (bufferedBytes >= ConversationRealtimeTransportLimits.MaximumBufferedBytes)
+            {
+                errorCode = "REALTIME_GLOBAL_SIZE";
+                return false;
+            }
+
+            var activeForUser = _buffers.Values.Count(buffer => string.Equals(buffer.UserId, userId, StringComparison.Ordinal));
+            if (activeForUser >= Math.Max(1, maxConcurrentStreamsPerUser))
+            {
+                errorCode = "REALTIME_CONCURRENCY";
+                return false;
+            }
+
+            var key = Key(connectionId, sessionId, streamId);
+            var buffer = new RealtimeTurnBuffer(connectionId, userId, sessionId, streamId, audioMimeType, locale);
+            if (!_buffers.TryAdd(key, buffer))
+            {
+                errorCode = "STREAM_EXISTS";
+                return false;
+            }
+
+            return true;
+        }
+    }
+
+    public IReadOnlyList<IConversationRealtimeAsrSession> DetachExpiredProviderSessions(
+        TimeSpan idleTimeout,
+        TimeSpan maxStreamAge)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sessions = new List<IConversationRealtimeAsrSession>();
+        foreach (var item in _buffers.ToList())
+        {
+            var buffer = item.Value;
+            if (buffer.ProviderSession is null || buffer.IsCommitting) continue;
+
+            if (idleTimeout <= TimeSpan.Zero || maxStreamAge <= TimeSpan.Zero || now - buffer.UpdatedAt > idleTimeout || now - buffer.StartedAt > maxStreamAge)
+            {
+                if (_buffers.TryRemove(item.Key, out var removed) && removed.ProviderSession is not null)
+                {
+                    sessions.Add(removed.ProviderSession);
+                }
+            }
         }
 
-        if (_buffers.Count >= ConversationRealtimeTransportLimits.MaximumActiveStreams)
-        {
-            errorCode = "REALTIME_GLOBAL_CONCURRENCY";
-            return false;
-        }
-
-        var bufferedBytes = _buffers.Values.Sum(static buffer => buffer.TotalBytes);
-        if (bufferedBytes >= ConversationRealtimeTransportLimits.MaximumBufferedBytes)
-        {
-            errorCode = "REALTIME_GLOBAL_SIZE";
-            return false;
-        }
-
-        var activeForUser = _buffers.Values.Count(buffer => string.Equals(buffer.UserId, userId, StringComparison.Ordinal));
-        if (activeForUser >= Math.Max(1, maxConcurrentStreamsPerUser))
-        {
-            errorCode = "REALTIME_CONCURRENCY";
-            return false;
-        }
-
-        var key = Key(connectionId, sessionId, streamId);
-        var buffer = new RealtimeTurnBuffer(connectionId, userId, sessionId, streamId, audioMimeType, locale);
-        if (!_buffers.TryAdd(key, buffer))
-        {
-            errorCode = "STREAM_EXISTS";
-            return false;
-        }
-
-        return true;
+        return sessions;
     }
 
     public bool TryValidateStream(
@@ -75,23 +103,94 @@ public sealed class ConversationRealtimeTurnStore
 
         lock (buffer.SyncRoot)
         {
+            if (buffer.IsCommitting)
+            {
+                errorCode = "STREAM_COMMITTING";
+                return false;
+            }
+
             var now = DateTimeOffset.UtcNow;
             if (idleTimeout <= TimeSpan.Zero || now - buffer.UpdatedAt > idleTimeout)
             {
-                _buffers.TryRemove(key, out _);
                 errorCode = "STREAM_IDLE_TIMEOUT";
                 return false;
             }
 
             if (maxStreamAge <= TimeSpan.Zero || now - buffer.StartedAt > maxStreamAge)
             {
-                _buffers.TryRemove(key, out _);
                 errorCode = "STREAM_DURATION";
                 return false;
             }
         }
 
         return true;
+    }
+
+    public bool TryAttachProviderSession(
+        string connectionId,
+        string sessionId,
+        string streamId,
+        IConversationRealtimeAsrSession providerSession)
+    {
+        var key = Key(connectionId, sessionId, streamId);
+        if (!_buffers.TryGetValue(key, out var buffer)) return false;
+
+        lock (buffer.SyncRoot)
+        {
+            if (buffer.IsCommitting) return false;
+            buffer.ProviderSession = providerSession;
+            return true;
+        }
+    }
+
+    public bool TryGetProviderSession(
+        string connectionId,
+        string sessionId,
+        string streamId,
+        out IConversationRealtimeAsrSession? providerSession)
+    {
+        providerSession = null;
+        var key = Key(connectionId, sessionId, streamId);
+        if (!_buffers.TryGetValue(key, out var buffer)) return false;
+
+        lock (buffer.SyncRoot)
+        {
+            providerSession = buffer.ProviderSession;
+            return providerSession is not null;
+        }
+    }
+
+    public bool TrySetProviderFinal(
+        string connectionId,
+        string sessionId,
+        string streamId,
+        ConversationRealtimeTranscriptFinal final)
+    {
+        var key = Key(connectionId, sessionId, streamId);
+        if (!_buffers.TryGetValue(key, out var buffer)) return false;
+
+        lock (buffer.SyncRoot)
+        {
+            buffer.ProviderFinal = final;
+            return true;
+        }
+    }
+
+    public bool TryGetProviderFinal(
+        string connectionId,
+        string sessionId,
+        string streamId,
+        out ConversationRealtimeTranscriptFinal? final)
+    {
+        final = null;
+        var key = Key(connectionId, sessionId, streamId);
+        if (!_buffers.TryGetValue(key, out var buffer)) return false;
+
+        lock (buffer.SyncRoot)
+        {
+            final = buffer.ProviderFinal;
+            return final is not null;
+        }
     }
 
     public bool TryAppend(
@@ -118,17 +217,21 @@ public sealed class ConversationRealtimeTurnStore
 
         lock (buffer.SyncRoot)
         {
+            if (buffer.IsCommitting)
+            {
+                errorCode = "STREAM_COMMITTING";
+                return false;
+            }
+
             var now = DateTimeOffset.UtcNow;
             if (idleTimeout <= TimeSpan.Zero || now - buffer.UpdatedAt > idleTimeout)
             {
-                _buffers.TryRemove(key, out _);
                 errorCode = "STREAM_IDLE_TIMEOUT";
                 return false;
             }
 
             if (maxStreamAge <= TimeSpan.Zero || now - buffer.StartedAt > maxStreamAge)
             {
-                _buffers.TryRemove(key, out _);
                 errorCode = "STREAM_DURATION";
                 return false;
             }
@@ -142,7 +245,6 @@ public sealed class ConversationRealtimeTurnStore
             var nextTotalBytes = buffer.TotalBytes + audioBytes.LongLength;
             if (maxTotalBytes <= 0 || nextTotalBytes > maxTotalBytes)
             {
-                _buffers.TryRemove(key, out _);
                 errorCode = "STREAM_SIZE";
                 return false;
             }
@@ -164,24 +266,36 @@ public sealed class ConversationRealtimeTurnStore
         string streamId,
         TimeSpan idleTimeout,
         TimeSpan maxStreamAge,
-        out RealtimeTurnSnapshot? snapshot)
+        out RealtimeTurnSnapshot? snapshot,
+        out string? errorCode)
     {
         snapshot = null;
+        errorCode = null;
         var key = Key(connectionId, sessionId, streamId);
-        if (!_buffers.TryGetValue(key, out var buffer)) return false;
+        if (!_buffers.TryGetValue(key, out var buffer))
+        {
+            errorCode = "STREAM_NOT_FOUND";
+            return false;
+        }
 
         lock (buffer.SyncRoot)
         {
+            if (buffer.IsCommitting)
+            {
+                errorCode = "STREAM_COMMITTING";
+                return false;
+            }
+
             var now = DateTimeOffset.UtcNow;
             if (idleTimeout <= TimeSpan.Zero || now - buffer.UpdatedAt > idleTimeout)
             {
-                _buffers.TryRemove(key, out _);
+                errorCode = "STREAM_IDLE_TIMEOUT";
                 return false;
             }
 
             if (maxStreamAge <= TimeSpan.Zero || now - buffer.StartedAt > maxStreamAge)
             {
-                _buffers.TryRemove(key, out _);
+                errorCode = "STREAM_DURATION";
                 return false;
             }
 
@@ -202,6 +316,7 @@ public sealed class ConversationRealtimeTurnStore
                 buffer.StartedAt,
                 DateTimeOffset.UtcNow,
                 buffer.LastSequence);
+            buffer.IsCommitting = true;
             return true;
         }
     }
@@ -212,12 +327,18 @@ public sealed class ConversationRealtimeTurnStore
     public bool TryCancel(string connectionId, string sessionId, string streamId)
         => _buffers.TryRemove(Key(connectionId, sessionId, streamId), out _);
 
-    public void CancelConnection(string connectionId)
+    public IReadOnlyList<IConversationRealtimeAsrSession> CancelConnection(string connectionId)
     {
+        var providerSessions = new List<IConversationRealtimeAsrSession>();
         foreach (var item in _buffers.Where(item => item.Value.ConnectionId == connectionId).ToList())
         {
-            _buffers.TryRemove(item.Key, out _);
+            if (_buffers.TryRemove(item.Key, out var buffer) && buffer.ProviderSession is not null)
+            {
+                providerSessions.Add(buffer.ProviderSession);
+            }
         }
+
+        return providerSessions;
     }
 
     private static string Key(string connectionId, string sessionId, string streamId)
@@ -229,7 +350,9 @@ public sealed class ConversationRealtimeTurnStore
         foreach (var item in _buffers.ToList())
         {
             var buffer = item.Value;
-            if (idleTimeout <= TimeSpan.Zero || maxStreamAge <= TimeSpan.Zero || now - buffer.UpdatedAt > idleTimeout || now - buffer.StartedAt > maxStreamAge)
+            if ((idleTimeout <= TimeSpan.Zero || maxStreamAge <= TimeSpan.Zero || now - buffer.UpdatedAt > idleTimeout || now - buffer.StartedAt > maxStreamAge)
+                && buffer.ProviderSession is null
+                && !buffer.IsCommitting)
             {
                 _buffers.TryRemove(item.Key, out _);
             }
@@ -257,6 +380,9 @@ public sealed class ConversationRealtimeTurnStore
         public DateTimeOffset StartedAt { get; } = DateTimeOffset.UtcNow;
         public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? LastPartialEmittedAt { get; set; }
+        public bool IsCommitting { get; set; }
+        public IConversationRealtimeAsrSession? ProviderSession { get; set; }
+        public ConversationRealtimeTranscriptFinal? ProviderFinal { get; set; }
     }
 }
 

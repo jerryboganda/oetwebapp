@@ -71,6 +71,42 @@ read_env_value() {
   printf '%s' "$value"
 }
 
+read_env_value_ci() {
+  local key="$1"
+  local target value
+  target=$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')
+  value=$(awk -F= -v target="$target" '
+    /^[[:space:]]*($|#)/ { next }
+    /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ {
+      k = $1
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+      if (tolower(k) == target) {
+        v = $0
+        sub(/^[^=]*=/, "", v)
+        last = v
+        found = 1
+      }
+    }
+    END { if (found) print last; else exit 1 }
+  ' "$ENV_FILE") || return 1
+  value=$(printf '%s' "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf '%s' "$value"
+}
+
+read_env_value_any() {
+  local primary_key="$1"
+  local alt_key="${2:-}"
+  read_env_value_ci "$primary_key" && return 0
+  if [ -n "$alt_key" ]; then
+    read_env_value_ci "$alt_key" && return 0
+  fi
+  return 1
+}
+
 failed=0
 duplicate_keys=$(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$ENV_FILE" | cut -d= -f1 | sort | uniq -d || true)
 if [ -n "$duplicate_keys" ]; then
@@ -172,24 +208,49 @@ require_absent_prefix() {
   fi
 }
 
+require_absent_key_regex_ci() {
+  local key_regex="$1"
+  local label="$2"
+  if grep -Ei "^[[:space:]]*${key_regex}[[:space:]]*=" "$ENV_FILE" >/dev/null; then
+    echo "[env] keys matching $label must not be present in production env" >&2
+    failed=1
+  fi
+}
+
 require_boolean_false_unless_acknowledged() {
   local key="$1"
   local alt_key="$2"
   local ack_key="$3"
   local alt_ack_key="${4:-}"
   local value ack_value
-  value=$(read_env_value "$key" || true)
+  value=$(read_env_value_ci "$key" || true)
   if [ -z "$value" ] && [ -n "$alt_key" ]; then
-    value=$(read_env_value "$alt_key" || true)
+    value=$(read_env_value_ci "$alt_key" || true)
   fi
   value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
-  ack_value=$(read_env_value "$ack_key" || true)
+  ack_value=$(read_env_value_ci "$ack_key" || true)
   if [ -z "$ack_value" ] && [ -n "$alt_ack_key" ]; then
-    ack_value=$(read_env_value "$alt_ack_key" || true)
+    ack_value=$(read_env_value_ci "$alt_ack_key" || true)
   fi
   ack_value=$(printf '%s' "$ack_value" | tr '[:upper:]' '[:lower:]')
-  if [ "$value" = "true" ] && [ "$ack_value" != "i-understand-realtime-stt-is-mock-or-beta" ]; then
-    echo "[env] $key may only be true with $ack_key=i-understand-realtime-stt-is-mock-or-beta" >&2
+  if [ "$value" = "true" ] && [ "$ack_value" != "i-understand-realtime-stt-is-gated" ]; then
+    echo "[env] $key may only be true with $ack_key=i-understand-realtime-stt-is-gated" >&2
+    failed=1
+  fi
+}
+
+require_not_value_prefix() {
+  local key="$1"
+  local alt_key="$2"
+  local forbidden_prefix="$3"
+  local value
+  value=$(read_env_value_ci "$key" || true)
+  if [ -z "$value" ] && [ -n "$alt_key" ]; then
+    value=$(read_env_value_ci "$alt_key" || true)
+  fi
+  value=$(printf '%s' "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+  if [[ "$value" == "$forbidden_prefix"* ]]; then
+    echo "[env] $key/$alt_key must not use $forbidden_prefix* in production until the realtime provider adapter and protected smoke are implemented" >&2
     failed=1
   fi
 }
@@ -263,7 +324,46 @@ require_absent NEXT_PUBLIC_ELEVENLABS_API_KEY
 require_absent NEXT_PUBLIC_ELEVENLABS_STT_API_KEY
 require_absent NEXT_PUBLIC_ELEVENLABS_KEY
 require_absent_prefix NEXT_PUBLIC_ELEVENLABS
+require_absent CONVERSATION__ELEVENLABSSTTAPIKEY
+require_absent Conversation__ElevenLabsSttApiKey
+require_absent_key_regex_ci 'conversation__elevenlabsstt[a-z0-9_]*apikey' 'Conversation__ElevenLabsStt*ApiKey'
+require_not_value_prefix CONVERSATION__REALTIMEASRPROVIDER Conversation__RealtimeAsrProvider elevenlabs
 require_boolean_false_unless_acknowledged CONVERSATION__REALTIMESTTENABLED Conversation__RealtimeSttEnabled CONVERSATION__REALTIMESTTROLLOUTACKNOWLEDGEMENT Conversation__RealtimeSttRolloutAcknowledgement
+require_boolean_false_unless_acknowledged CONVERSATION__REALTIMESTTALLOWREALPROVIDER Conversation__RealtimeSttAllowRealProvider CONVERSATION__REALTIMESTTROLLOUTACKNOWLEDGEMENT Conversation__RealtimeSttRolloutAcknowledgement
+require_boolean_false_unless_acknowledged CONVERSATION__REALTIMESTTREALPROVIDERPRODUCTIONAUTHORIZED Conversation__RealtimeSttRealProviderProductionAuthorized CONVERSATION__REALTIMESTTROLLOUTACKNOWLEDGEMENT Conversation__RealtimeSttRolloutAcknowledgement
+
+real_provider_enabled=$(read_env_value_any CONVERSATION__REALTIMESTTALLOWREALPROVIDER Conversation__RealtimeSttAllowRealProvider || true)
+real_provider_enabled=$(printf '%s' "$real_provider_enabled" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+if [[ "$real_provider_enabled" == "true" ]]; then
+  production_authorized=$(read_env_value_any CONVERSATION__REALTIMESTTREALPROVIDERPRODUCTIONAUTHORIZED Conversation__RealtimeSttRealProviderProductionAuthorized || true)
+  production_authorized=$(printf '%s' "$production_authorized" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+  if [[ "$production_authorized" != "true" ]]; then
+    echo "[env] Conversation__RealtimeSttRealProviderProductionAuthorized must be true when real realtime STT is enabled" >&2
+    failed=1
+  fi
+
+  topology=$(read_env_value_any CONVERSATION__REALTIMESTTPROVIDERSESSIONTOPOLOGY Conversation__RealtimeSttProviderSessionTopology || true)
+  topology=$(printf '%s' "$topology" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+  case "$topology" in
+    single-instance|single-region-sticky|distributed) ;;
+    *)
+      echo "[env] Conversation__RealtimeSttProviderSessionTopology must be single-instance, single-region-sticky, or distributed when real realtime STT is enabled" >&2
+      failed=1
+      ;;
+  esac
+
+  region_id=$(read_env_value_any CONVERSATION__REALTIMESTTREGIONID Conversation__RealtimeSttRegionId || true)
+  if [[ -z "$(printf '%s' "$region_id" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')" ]]; then
+    echo "[env] Conversation__RealtimeSttRegionId is required when real realtime STT is enabled" >&2
+    failed=1
+  fi
+
+  pricing=$(read_env_value_any CONVERSATION__REALTIMESTTESTIMATEDCOSTUSDPERMINUTE Conversation__RealtimeSttEstimatedCostUsdPerMinute || true)
+  if ! awk "BEGIN { exit !($pricing > 0) }" 2>/dev/null; then
+    echo "[env] Conversation__RealtimeSttEstimatedCostUsdPerMinute must be greater than 0 when real realtime STT is enabled" >&2
+    failed=1
+  fi
+fi
 
 if [ "$failed" -ne 0 ]; then
   echo "[env] validation failed" >&2

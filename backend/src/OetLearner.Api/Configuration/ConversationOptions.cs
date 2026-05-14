@@ -21,21 +21,33 @@ public class ConversationOptions
     // Realtime STT
     public bool RealtimeSttEnabled { get; set; } = false;
     public string RealtimeAsrProvider { get; set; } = "mock";
+    public bool RealtimeSttAllowRealProvider { get; set; } = false;
+    public bool RealtimeSttRealProviderProductionAuthorized { get; set; } = false;
     public bool RealtimeSttFallbackToBatch { get; set; } = true;
+    public int RealtimeSttProviderConnectTimeoutSeconds { get; set; } = 10;
     public int RealtimeSttMaxChunkBytes { get; set; } = 256 * 1024;
     public int RealtimeSttPartialMinIntervalMs { get; set; } = 350;
     public int RealtimeSttTurnIdleTimeoutSeconds { get; set; } = 15;
     public int RealtimeSttMaxConcurrentStreamsPerUser { get; set; } = 1;
     public int RealtimeSttMaxAudioSecondsPerSession { get; set; } = 360;
     public int RealtimeSttDailyAudioSecondsPerUser { get; set; } = 3600;
-    public decimal RealtimeSttMonthlyBudgetCapUsd { get; set; } = 100m;
+    public decimal RealtimeSttMonthlyBudgetCapUsd { get; set; } = 25m;
+    public decimal RealtimeSttEstimatedCostUsdPerMinute { get; set; } = 0m;
+    public string RealtimeSttProviderSessionTopology { get; set; } = "unconfigured";
+    public string RealtimeSttRegionId { get; set; } = string.Empty;
+    public bool RealtimeSttAssumeLearnersAdult { get; set; } = false;
+    public bool RealtimeSttAllowManagedLearnerRealProvider { get; set; } = false;
     public string RealtimeSttConsentVersion { get; set; } = "realtime-stt-v1-2026-05-14";
     public string RealtimeSttRollbackMode { get; set; } = "disable-conversation-audio";
+    public string[] RealtimeSttAllowedMimeTypes { get; set; } =
+    {
+        "audio/webm", "audio/ogg", "audio/mp4", "audio/pcm", "audio/l16", "audio/raw", "application/octet-stream",
+    };
     public string ElevenLabsSttApiKey { get; set; } = string.Empty;
     public string ElevenLabsSttBaseUrl { get; set; } = "https://api.elevenlabs.io/v1";
     public string ElevenLabsSttModel { get; set; } = "scribe_v2_realtime";
     public string ElevenLabsSttLanguage { get; set; } = "auto";
-    public string ElevenLabsSttAudioFormat { get; set; } = "pcm_s16le_16";
+    public string ElevenLabsSttAudioFormat { get; set; } = "pcm_16000";
     public string ElevenLabsSttCommitStrategy { get; set; } = "manual";
     public string ElevenLabsSttKeytermsCsv { get; set; } = string.Empty;
     public bool ElevenLabsSttEnableProviderLogging { get; set; } = false;

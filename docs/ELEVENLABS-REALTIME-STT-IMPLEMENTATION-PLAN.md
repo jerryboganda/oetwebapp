@@ -1,7 +1,7 @@
 # ElevenLabs Realtime STT Implementation Plan
 
 Date: 2026-05-14
-Status: planning artifact, no code changes
+Status: historical planning artifact; implementation has since advanced. Use `docs/ELEVENLABS-REALTIME-STT-PROGRESS.md` for current code status and open rollout gates.
 Scope: Conversation-first live AI speaking practice, including Speaking self-practice sessions that deep-link into Conversation. Native Speaking task recording/evaluation pages are a follow-on integration surface after the Conversation realtime path is stable.
 
 ## 1. Executive Summary
@@ -103,7 +103,9 @@ The existing AI Conversation module is server-authoritative. Speaking self-pract
 - `hooks/usePronunciationRecorder.ts` has better microphone permission, MIME negotiation, level metering, duration cap, cleanup, and browser API handling than the current conversation page.
 - `lib/mobile/speaking-recorder.ts` is a likely mobile-shell fallback foundation.
 
-### Missing Pieces
+### Missing Pieces At Planning Time
+
+This list records the initial gap analysis. Several items below are now implemented in the mock-first/gated adapter path; consult `docs/ELEVENLABS-REALTIME-STT-PROGRESS.md` before treating an item as still open.
 
 - No ElevenLabs STT provider exists. ElevenLabs is currently documented and implemented as TTS only.
 - The current ASR contract is batch/full-turn only: `TranscribeAsync(Stream)` returns one final result.
@@ -735,16 +737,18 @@ Recommended backend options under `Conversation`:
 
 ```text
 Conversation__RealtimeSttEnabled=false
-Conversation__RealtimeAsrProvider=elevenlabs-scribe
-Conversation__ElevenLabsSttApiKey=<server-only secret, if not using encrypted provider registry>
+Conversation__RealtimeAsrProvider=mock
+# Production STT keys are managed through admin-encrypted settings / provider registry.
+# Do not place ElevenLabs STT API keys in .env.production.
 Conversation__ElevenLabsSttModel=scribe_v2_realtime
 Conversation__ElevenLabsSttTokenTtlSeconds=900
 Conversation__ElevenLabsSttCommitStrategy=manual
-Conversation__ElevenLabsSttAudioFormat=pcm_s16le_16
+Conversation__ElevenLabsSttAudioFormat=pcm_16000
 Conversation__ElevenLabsSttEnableProviderLogging=false
 Conversation__RealtimeSttMaxConcurrentStreamsPerUser=1
 Conversation__RealtimeSttMaxAudioSecondsPerSession=360
 Conversation__RealtimeSttDailyAudioSecondsPerUser=<policy value>
+Conversation__RealtimeSttMonthlyBudgetCapUsd=100
 Conversation__ElevenLabsSttKeytermsCsv=<optional OET/domain terms>
 ```
 

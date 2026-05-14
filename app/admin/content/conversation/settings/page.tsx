@@ -31,7 +31,9 @@ type Settings = {
   deepgramLanguage?: string;
   realtimeSttEnabled?: boolean;
   realtimeAsrProvider?: string;
+  realtimeSttAllowRealProvider?: boolean;
   realtimeSttFallbackToBatch?: boolean;
+  realtimeSttProviderConnectTimeoutSeconds?: number;
   realtimeSttMaxChunkBytes?: number;
   realtimeSttPartialMinIntervalMs?: number;
   realtimeSttTurnIdleTimeoutSeconds?: number;
@@ -39,6 +41,11 @@ type Settings = {
   realtimeSttMaxAudioSecondsPerSession?: number;
   realtimeSttDailyAudioSecondsPerUser?: number;
   realtimeSttMonthlyBudgetCapUsd?: number;
+  realtimeSttEstimatedCostUsdPerMinute?: number;
+  realtimeSttProviderSessionTopology?: string;
+  realtimeSttRegionId?: string;
+  realtimeSttAssumeLearnersAdult?: boolean;
+  realtimeSttAllowManagedLearnerRealProvider?: boolean;
   realtimeSttConsentVersion?: string;
   realtimeSttRollbackMode?: string;
   elevenLabsSttBaseUrl?: string;
@@ -265,7 +272,7 @@ export default function AdminConversationSettingsPage() {
               <Section title="Realtime STT">
                 <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>The learner live path is currently mock-only. Keep fallback enabled; production ElevenLabs realtime STT stays hidden until the verified streaming adapter and protected smoke test are in place.</span>
+                  <span>ElevenLabs realtime STT uses the backend-held encrypted key only. Keep fallback enabled until protected live smoke passes for the selected audio strategy and audience.</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <label className="flex items-center gap-2 text-sm">
@@ -274,7 +281,7 @@ export default function AdminConversationSettingsPage() {
                       checked={Boolean(v('realtimeSttEnabled') ?? false)}
                       onChange={(e) => setField('realtimeSttEnabled', e.target.checked)}
                     />
-                    Enable mock realtime transcript events
+                    Enable realtime transcript events
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <input
@@ -293,9 +300,45 @@ export default function AdminConversationSettingsPage() {
                     className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
                   >
                     <option value="mock">Mock (testing only)</option>
+                    <option value="elevenlabs-stt">ElevenLabs Scribe realtime</option>
                   </select>
                 </label>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(v('realtimeSttAllowRealProvider') ?? false)}
+                      onChange={(e) => setField('realtimeSttAllowRealProvider', e.target.checked)}
+                    />
+                    Allow paid realtime provider
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(v('realtimeSttAssumeLearnersAdult') ?? false)}
+                      onChange={(e) => setField('realtimeSttAssumeLearnersAdult', e.target.checked)}
+                    />
+                    Audience is adult learners only
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(v('realtimeSttAllowManagedLearnerRealProvider') ?? false)}
+                      onChange={(e) => setField('realtimeSttAllowManagedLearnerRealProvider', e.target.checked)}
+                    />
+                    Allow managed learner cohorts
+                  </label>
+                </div>
                 <Grid>
+                  <KeyInput label="ElevenLabs STT API Key" present={settings.elevenLabsSttApiKeyPresent} draftKey="elevenLabsSttApiKey" draft={draft} set={setSecret} />
+                  <Input label="ElevenLabs STT Base URL" value={String(v('elevenLabsSttBaseUrl') ?? '')} onChange={(e) => setField('elevenLabsSttBaseUrl', e.target.value)} placeholder="https://api.elevenlabs.io/v1" />
+                  <Input label="ElevenLabs STT Model" value={String(v('elevenLabsSttModel') ?? '')} onChange={(e) => setField('elevenLabsSttModel', e.target.value)} placeholder="scribe_v2_realtime" />
+                  <Input label="ElevenLabs STT Language" value={String(v('elevenLabsSttLanguage') ?? '')} onChange={(e) => setField('elevenLabsSttLanguage', e.target.value)} placeholder="auto" />
+                  <Input label="ElevenLabs Audio Format" value={String(v('elevenLabsSttAudioFormat') ?? '')} onChange={(e) => setField('elevenLabsSttAudioFormat', e.target.value)} placeholder="pcm_16000" />
+                  <Input label="ElevenLabs Commit Strategy" value={String(v('elevenLabsSttCommitStrategy') ?? '')} onChange={(e) => setField('elevenLabsSttCommitStrategy', e.target.value)} placeholder="manual" />
+                  <Input label="ElevenLabs Keyterms CSV" value={String(v('elevenLabsSttKeytermsCsv') ?? '')} onChange={(e) => setField('elevenLabsSttKeytermsCsv', e.target.value)} />
+                  <Input label="ElevenLabs Token TTL (s)" type="number" value={String(v('elevenLabsSttTokenTtlSeconds') ?? '')} onChange={(e) => setField('elevenLabsSttTokenTtlSeconds', Number(e.target.value))} />
+                  <Input label="Provider Connect Timeout (s)" type="number" value={String(v('realtimeSttProviderConnectTimeoutSeconds') ?? '')} onChange={(e) => setField('realtimeSttProviderConnectTimeoutSeconds', Number(e.target.value))} />
                   <Input label="Max Chunk Bytes" type="number" value={String(v('realtimeSttMaxChunkBytes') ?? '')} onChange={(e) => setField('realtimeSttMaxChunkBytes', Number(e.target.value))} />
                   <Input label="Partial Min Interval (ms)" type="number" value={String(v('realtimeSttPartialMinIntervalMs') ?? '')} onChange={(e) => setField('realtimeSttPartialMinIntervalMs', Number(e.target.value))} />
                   <Input label="Turn Idle Timeout (s)" type="number" value={String(v('realtimeSttTurnIdleTimeoutSeconds') ?? '')} onChange={(e) => setField('realtimeSttTurnIdleTimeoutSeconds', Number(e.target.value))} />
@@ -303,9 +346,20 @@ export default function AdminConversationSettingsPage() {
                   <Input label="Session Audio Limit (s)" type="number" value={String(v('realtimeSttMaxAudioSecondsPerSession') ?? '')} onChange={(e) => setField('realtimeSttMaxAudioSecondsPerSession', Number(e.target.value))} />
                   <Input label="Daily Audio Limit / User (s)" type="number" value={String(v('realtimeSttDailyAudioSecondsPerUser') ?? '')} onChange={(e) => setField('realtimeSttDailyAudioSecondsPerUser', Number(e.target.value))} />
                   <Input label="Monthly Budget Cap (USD)" type="number" step="0.01" value={String(v('realtimeSttMonthlyBudgetCapUsd') ?? '')} onChange={(e) => setField('realtimeSttMonthlyBudgetCapUsd', Number(e.target.value))} />
+                  <Input label="Estimated Cost / Minute (USD)" type="number" step="0.0001" value={String(v('realtimeSttEstimatedCostUsdPerMinute') ?? '')} onChange={(e) => setField('realtimeSttEstimatedCostUsdPerMinute', Number(e.target.value))} />
+                  <Input label="Provider Topology" value={String(v('realtimeSttProviderSessionTopology') ?? '')} onChange={(e) => setField('realtimeSttProviderSessionTopology', e.target.value)} placeholder="single-instance" />
+                  <Input label="Provider Region ID" value={String(v('realtimeSttRegionId') ?? '')} onChange={(e) => setField('realtimeSttRegionId', e.target.value)} placeholder="uk-prod-1" />
                   <Input label="Consent Version" value={String(v('realtimeSttConsentVersion') ?? '')} onChange={(e) => setField('realtimeSttConsentVersion', e.target.value)} placeholder="realtime-stt-v1-2026-05-14" />
                   <Input label="Rollback Mode" value={String(v('realtimeSttRollbackMode') ?? '')} onChange={(e) => setField('realtimeSttRollbackMode', e.target.value)} placeholder="disable-conversation-audio" />
                 </Grid>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(v('elevenLabsSttEnableProviderLogging') ?? false)}
+                    onChange={(e) => setField('elevenLabsSttEnableProviderLogging', e.target.checked)}
+                  />
+                  Enable sanitized provider diagnostics
+                </label>
               </Section>
 
               <Section title="TTS (Text → Speech)">

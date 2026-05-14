@@ -96,7 +96,9 @@ public sealed class ConversationOptionsProvider(
 
         if (r.RealtimeSttEnabled.HasValue) o.RealtimeSttEnabled = r.RealtimeSttEnabled.Value;
         if (!string.IsNullOrWhiteSpace(r.RealtimeAsrProvider)) o.RealtimeAsrProvider = r.RealtimeAsrProvider;
+        if (r.RealtimeSttAllowRealProvider.HasValue) o.RealtimeSttAllowRealProvider = r.RealtimeSttAllowRealProvider.Value;
         if (r.RealtimeSttFallbackToBatch.HasValue) o.RealtimeSttFallbackToBatch = r.RealtimeSttFallbackToBatch.Value;
+        if (r.RealtimeSttProviderConnectTimeoutSeconds.HasValue && r.RealtimeSttProviderConnectTimeoutSeconds.Value > 0) o.RealtimeSttProviderConnectTimeoutSeconds = r.RealtimeSttProviderConnectTimeoutSeconds.Value;
         if (r.RealtimeSttMaxChunkBytes.HasValue && r.RealtimeSttMaxChunkBytes.Value > 0) o.RealtimeSttMaxChunkBytes = r.RealtimeSttMaxChunkBytes.Value;
         if (r.RealtimeSttPartialMinIntervalMs.HasValue && r.RealtimeSttPartialMinIntervalMs.Value > 0) o.RealtimeSttPartialMinIntervalMs = r.RealtimeSttPartialMinIntervalMs.Value;
         if (r.RealtimeSttTurnIdleTimeoutSeconds.HasValue && r.RealtimeSttTurnIdleTimeoutSeconds.Value > 0) o.RealtimeSttTurnIdleTimeoutSeconds = r.RealtimeSttTurnIdleTimeoutSeconds.Value;
@@ -104,6 +106,11 @@ public sealed class ConversationOptionsProvider(
         if (r.RealtimeSttMaxAudioSecondsPerSession.HasValue && r.RealtimeSttMaxAudioSecondsPerSession.Value > 0) o.RealtimeSttMaxAudioSecondsPerSession = r.RealtimeSttMaxAudioSecondsPerSession.Value;
         if (r.RealtimeSttDailyAudioSecondsPerUser.HasValue && r.RealtimeSttDailyAudioSecondsPerUser.Value > 0) o.RealtimeSttDailyAudioSecondsPerUser = r.RealtimeSttDailyAudioSecondsPerUser.Value;
         if (r.RealtimeSttMonthlyBudgetCapUsd.HasValue && r.RealtimeSttMonthlyBudgetCapUsd.Value > 0) o.RealtimeSttMonthlyBudgetCapUsd = r.RealtimeSttMonthlyBudgetCapUsd.Value;
+        if (r.RealtimeSttEstimatedCostUsdPerMinute.HasValue && r.RealtimeSttEstimatedCostUsdPerMinute.Value > 0) o.RealtimeSttEstimatedCostUsdPerMinute = r.RealtimeSttEstimatedCostUsdPerMinute.Value;
+        if (!string.IsNullOrWhiteSpace(r.RealtimeSttProviderSessionTopology)) o.RealtimeSttProviderSessionTopology = r.RealtimeSttProviderSessionTopology;
+        if (!string.IsNullOrWhiteSpace(r.RealtimeSttRegionId)) o.RealtimeSttRegionId = r.RealtimeSttRegionId;
+        if (r.RealtimeSttAssumeLearnersAdult.HasValue) o.RealtimeSttAssumeLearnersAdult = r.RealtimeSttAssumeLearnersAdult.Value;
+        if (r.RealtimeSttAllowManagedLearnerRealProvider.HasValue) o.RealtimeSttAllowManagedLearnerRealProvider = r.RealtimeSttAllowManagedLearnerRealProvider.Value;
         if (!string.IsNullOrWhiteSpace(r.RealtimeSttConsentVersion)) o.RealtimeSttConsentVersion = r.RealtimeSttConsentVersion;
         if (!string.IsNullOrWhiteSpace(r.RealtimeSttRollbackMode)) o.RealtimeSttRollbackMode = r.RealtimeSttRollbackMode;
         var elevenSttKey = Unprotect(r.ElevenLabsSttApiKeyEncrypted);
@@ -269,7 +276,10 @@ public sealed class ConversationOptionsProvider(
         DeepgramLanguage = src.DeepgramLanguage,
         RealtimeSttEnabled = src.RealtimeSttEnabled,
         RealtimeAsrProvider = src.RealtimeAsrProvider,
+        RealtimeSttAllowRealProvider = src.RealtimeSttAllowRealProvider,
+        RealtimeSttRealProviderProductionAuthorized = src.RealtimeSttRealProviderProductionAuthorized,
         RealtimeSttFallbackToBatch = src.RealtimeSttFallbackToBatch,
+        RealtimeSttProviderConnectTimeoutSeconds = src.RealtimeSttProviderConnectTimeoutSeconds,
         RealtimeSttMaxChunkBytes = src.RealtimeSttMaxChunkBytes,
         RealtimeSttPartialMinIntervalMs = src.RealtimeSttPartialMinIntervalMs,
         RealtimeSttTurnIdleTimeoutSeconds = src.RealtimeSttTurnIdleTimeoutSeconds,
@@ -277,8 +287,14 @@ public sealed class ConversationOptionsProvider(
         RealtimeSttMaxAudioSecondsPerSession = src.RealtimeSttMaxAudioSecondsPerSession,
         RealtimeSttDailyAudioSecondsPerUser = src.RealtimeSttDailyAudioSecondsPerUser,
         RealtimeSttMonthlyBudgetCapUsd = src.RealtimeSttMonthlyBudgetCapUsd,
+        RealtimeSttEstimatedCostUsdPerMinute = src.RealtimeSttEstimatedCostUsdPerMinute,
+        RealtimeSttProviderSessionTopology = src.RealtimeSttProviderSessionTopology,
+        RealtimeSttRegionId = src.RealtimeSttRegionId,
+        RealtimeSttAssumeLearnersAdult = src.RealtimeSttAssumeLearnersAdult,
+        RealtimeSttAllowManagedLearnerRealProvider = src.RealtimeSttAllowManagedLearnerRealProvider,
         RealtimeSttConsentVersion = src.RealtimeSttConsentVersion,
         RealtimeSttRollbackMode = src.RealtimeSttRollbackMode,
+        RealtimeSttAllowedMimeTypes = src.RealtimeSttAllowedMimeTypes.ToArray(),
         ElevenLabsSttApiKey = src.ElevenLabsSttApiKey,
         ElevenLabsSttBaseUrl = src.ElevenLabsSttBaseUrl,
         ElevenLabsSttModel = src.ElevenLabsSttModel,

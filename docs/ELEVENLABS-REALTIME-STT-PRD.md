@@ -19,7 +19,7 @@ Add server-mediated ElevenLabs realtime speech-to-text to live OET practice whil
 - Language profile: provider auto-detect with OET keyterms where supported.
 - Device promise: all surfaces eventually, with staged validation.
 - Audience promise: all audiences eventually after testing; sponsor/school/minor gates must pass privacy/legal checks before enablement.
-- Cost guardrail: hard auto-disable at a $100 pilot cap.
+- Cost guardrail: paid beta must hard auto-disable at a $25/month pilot cap; durable reservation/reconciliation work remains a production gate before paid beta.
 - Real provider testing: desired in protected CI smoke, gated by secrets, budget, and opt-in workflow controls.
 - Rollback: disable Conversation audio entirely if cost/security/provider errors spike.
 

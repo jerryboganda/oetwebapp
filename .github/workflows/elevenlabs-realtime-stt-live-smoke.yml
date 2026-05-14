@@ -1,0 +1,78 @@
+name: ElevenLabs Realtime STT Live Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_rotated_key:
+        description: I confirm the ElevenLabs STT key is a rotated protected secret, not a chat-shared key.
+        required: true
+        type: boolean
+      confirm_paid_provider_cost:
+        description: I confirm this live smoke may consume paid ElevenLabs realtime STT quota.
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: elevenlabs-realtime-stt-live-smoke
+  cancel-in-progress: false
+
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    environment: elevenlabs-live-smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Gate optional live smoke
+        id: gate
+        shell: bash
+        env:
+          ENABLED: ${{ vars.ELEVENLABS_REALTIME_STT_LIVE_SMOKE_ENABLED }}
+          ELEVENLABS_STT_API_KEY: ${{ secrets.ELEVENLABS_STT_API_KEY }}
+          CONFIRM_ROTATED_KEY: ${{ inputs.confirm_rotated_key }}
+          CONFIRM_PAID_PROVIDER_COST: ${{ inputs.confirm_paid_provider_cost }}
+        run: |
+          if [ "$CONFIRM_ROTATED_KEY" != "true" ] || [ "$CONFIRM_PAID_PROVIDER_COST" != "true" ]; then
+            echo "Required live-smoke confirmations were not provided." >&2
+            exit 1
+          fi
+          if [ "$ENABLED" != "true" ]; then
+            echo "ELEVENLABS_REALTIME_STT_LIVE_SMOKE_ENABLED must be true in the protected environment." >&2
+            exit 1
+          fi
+          if [ -z "$ELEVENLABS_STT_API_KEY" ]; then
+            echo "ELEVENLABS_STT_API_KEY protected secret is missing." >&2
+            exit 1
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Restore .NET dependencies
+        run: dotnet restore backend/OetLearner.sln
+
+      - name: Run live ElevenLabs realtime STT connectivity smoke
+        if: steps.gate.outputs.enabled == 'true'
+        timeout-minutes: 5
+        env:
+          ELEVENLABS_REALTIME_STT_LIVE_SMOKE: "true"
+          Conversation__RealtimeSttEnabled: "true"
+          Conversation__RealtimeAsrProvider: "elevenlabs-stt"
+          Conversation__RealtimeSttAllowRealProvider: "true"
+          Conversation__RealtimeSttRealProviderProductionAuthorized: "true"
+          Conversation__RealtimeSttFallbackToBatch: "false"
+          Conversation__RealtimeSttProviderSessionTopology: "single-instance"
+          Conversation__RealtimeSttRegionId: "github-actions-live-smoke"
+          Conversation__RealtimeSttAssumeLearnersAdult: "true"
+          Conversation__RealtimeSttEstimatedCostUsdPerMinute: "0.01"
+          Conversation__ElevenLabsSttApiKey: ${{ secrets.ELEVENLABS_STT_API_KEY }}
+          Conversation__ElevenLabsSttBaseUrl: "https://api.elevenlabs.io/v1"
+          Conversation__ElevenLabsSttModel: "scribe_v2_realtime"
+          Conversation__ElevenLabsSttAudioFormat: "pcm_16000"
+          Conversation__ElevenLabsSttEnableProviderLogging: "false"
+        run: dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~ConversationRealtimeElevenLabsLiveSmokeTests"

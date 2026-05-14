@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Conversation.Asr;
 
@@ -62,6 +63,12 @@ public sealed class ConversationAsrProviderSelector(
         if (requested is "mock" or "elevenlabs" or "elevenlabs-stt" or "elevenlabs-scribe")
         {
             var lookup = requested.StartsWith("elevenlabs", StringComparison.Ordinal) ? "elevenlabs-stt" : requested;
+            if (lookup != "mock" && !CanUseRealProvider(options, lookup))
+            {
+                logger.LogWarning("Conversation realtime ASR provider {Provider} is configured but real-provider readiness gates are incomplete.", lookup);
+                return null;
+            }
+
             var provider = Find(lookup);
             if (provider is null) return null;
             return provider.IsConfigured ? provider : null;
@@ -69,10 +76,33 @@ public sealed class ConversationAsrProviderSelector(
 
         foreach (var provider in all.Where(provider => provider.IsConfigured))
         {
+            if (!IsMockProvider(provider.Name) && !CanUseRealProvider(options, provider.Name))
+            {
+                logger.LogWarning("Conversation realtime ASR auto skipped provider {Provider} because real-provider readiness gates are incomplete.", provider.Name);
+                continue;
+            }
+
             logger.LogDebug("Conversation realtime ASR: selected {Provider} (auto)", provider.Name);
             return provider;
         }
 
         return null;
+    }
+
+    private static bool IsMockProvider(string providerName)
+        => string.Equals(providerName, "mock", StringComparison.OrdinalIgnoreCase);
+
+    private static bool CanUseRealProvider(ConversationOptions options, string providerName)
+    {
+        if (!options.RealtimeSttAllowRealProvider) return false;
+        if (!options.RealtimeSttRealProviderProductionAuthorized) return false;
+        if (options.RealtimeSttMonthlyBudgetCapUsd > 0 && options.RealtimeSttEstimatedCostUsdPerMinute <= 0) return false;
+        if (!options.RealtimeSttAssumeLearnersAdult) return false;
+
+        var topology = (options.RealtimeSttProviderSessionTopology ?? string.Empty).Trim().ToLowerInvariant();
+        if (topology is not ("single-instance" or "single-region-sticky" or "distributed")) return false;
+        if (string.IsNullOrWhiteSpace(options.RealtimeSttRegionId)) return false;
+
+        return !string.IsNullOrWhiteSpace(providerName);
     }
 }

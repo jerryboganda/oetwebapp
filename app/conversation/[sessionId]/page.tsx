@@ -36,10 +36,44 @@ const MAX_TURN_MS = 60_000;
 const REALTIME_CHUNK_TIMESLICE_MS = 1000;
 const DEFAULT_REALTIME_MAX_CHUNK_BYTES = 256 * 1024;
 const DEFAULT_AUDIO_CONSENT_VERSION = 'realtime-stt-v1-2026-05-14';
+const PCM_WORKLET_URL = '/audio/conversation-pcm-worklet.js';
 
 type RecorderFormat = { recorderMimeType: string; apiMimeType: string };
 type RealtimeStartResult = 'realtime' | 'fallback' | 'denied';
-type RealtimeCommitResult = { status?: 'committed' | 'already-committed' | 'failed' | 'denied'; streamId?: string };
+type RealtimeCommitResult = { status?: 'committed' | 'already-committed' | 'committing' | 'failed' | 'denied'; streamId?: string };
+
+function ensureAudioCaptureSupported() {
+  if (typeof navigator === 'undefined' || typeof navigator.mediaDevices?.getUserMedia !== 'function') {
+    throw new DOMException('This browser cannot capture microphone audio.', 'NotSupportedError');
+  }
+  if (typeof MediaRecorder === 'undefined') {
+    throw new DOMException('This browser cannot record microphone audio.', 'NotSupportedError');
+  }
+}
+
+function readableMicrophoneError(error: unknown) {
+  if (error instanceof DOMException) {
+    switch (error.name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        return 'Microphone permission was blocked. Allow microphone access and try again.';
+      case 'NotFoundError':
+      case 'DevicesNotFoundError':
+        return 'No microphone was found. Connect a microphone and try again.';
+      case 'NotReadableError':
+      case 'TrackStartError':
+        return 'Your microphone is busy or unavailable. Close other apps using it and try again.';
+      case 'OverconstrainedError':
+      case 'ConstraintNotSatisfiedError':
+        return 'This microphone does not support the requested recording settings. Try another device.';
+      case 'NotSupportedError':
+        return 'This browser does not support the recording mode needed for conversation practice.';
+      default:
+        break;
+    }
+  }
+  return 'Could not start the microphone. Check your browser audio settings and try again.';
+}
 
 function pickRecorderFormat(): RecorderFormat {
   const candidates: RecorderFormat[] = [
@@ -73,10 +107,55 @@ function blobToBase64Payload(blob: Blob): Promise<string> {
   });
 }
 
+function arrayBufferToBase64Payload(buffer: ArrayBuffer): string {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]);
+  return btoa(binary);
+}
+
+function supportsPcmWorkletCapture() {
+  return typeof window !== 'undefined'
+    && typeof AudioContext !== 'undefined'
+    && 'audioWorklet' in AudioContext.prototype
+    && typeof AudioWorkletNode !== 'undefined';
+}
+
+async function startPcmWorkletCapture(
+  stream: MediaStream,
+  onChunk: (buffer: ArrayBuffer, offsetMs: number) => void,
+) {
+  const context = new AudioContext({ sampleRate: 48000 });
+  await context.audioWorklet.addModule(PCM_WORKLET_URL);
+  const source = context.createMediaStreamSource(stream);
+  const node = new AudioWorkletNode(context, 'conversation-pcm-worklet');
+  const sink = context.createGain();
+  sink.gain.value = 0;
+  const startedAt = Date.now();
+  node.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+    if (event.data instanceof ArrayBuffer && event.data.byteLength > 0) {
+      onChunk(event.data, Math.max(0, Date.now() - startedAt));
+    }
+  };
+  source.connect(node);
+  node.connect(sink);
+  sink.connect(context.destination);
+  return async () => {
+    node.port.onmessage = null;
+    try { source.disconnect(); } catch { /* noop */ }
+    try { node.disconnect(); } catch { /* noop */ }
+    try { sink.disconnect(); } catch { /* noop */ }
+    await context.close().catch(() => undefined);
+  };
+}
+
 function readableFallbackReason(reason: string) {
   const normalized = reason.toLowerCase();
   if (normalized.includes('not_configured') || normalized.includes('unavailable')) {
     return 'Live captions are unavailable. Record one answer, then stop to transcribe.';
+  }
+  if (normalized.includes('provider_start') || normalized.includes('provider_error') || normalized.includes('receive_error')) {
+    return 'Live captions stopped. Your answer will still transcribe after you stop recording.';
   }
   if (normalized.includes('disabled') || normalized.includes('gated')) {
     return 'Using normal recording for this practice session.';
@@ -134,6 +213,7 @@ export default function ConversationSessionPage() {
   const prepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hubRef = useRef<import('@microsoft/signalr').HubConnection | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const pcmCaptureCleanupRef = useRef<(() => Promise<void>) | null>(null);
   const activeMediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -148,10 +228,16 @@ export default function ConversationSessionPage() {
   const hasStartedRef = useRef(false);
   const resumeTokenRef = useRef<string | null>(null);
   const prepConsentsAccepted = recordingConsentAccepted && vendorConsentAccepted;
+  const prepConsentsAcceptedRef = useRef(false);
+  const startConversationRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     sttModeRef.current = sttMode;
   }, [sttMode]);
+
+  useEffect(() => {
+    prepConsentsAcceptedRef.current = prepConsentsAccepted;
+  }, [prepConsentsAccepted]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -196,14 +282,13 @@ export default function ConversationSessionPage() {
     prepTimerRef.current = setInterval(() => {
       setPrepCountdown((prev) => {
         if (prev <= 1) {
-          if (prepConsentsAccepted) handleStartConversation();
+          if (prepConsentsAcceptedRef.current) startConversationRef.current?.();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => { if (prepTimerRef.current) clearInterval(prepTimerRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
   useEffect(() => {
@@ -220,6 +305,8 @@ export default function ConversationSessionPage() {
       hubRef.current = null;
       setHubReady(false);
       try { mediaRecorderRef.current?.stream?.getTracks().forEach((t) => t.stop()); } catch { /* noop */ }
+      void pcmCaptureCleanupRef.current?.();
+      pcmCaptureCleanupRef.current = null;
       try { currentAudioRef.current?.pause(); } catch { /* noop */ }
       currentAudioRef.current = null;
     };
@@ -358,6 +445,10 @@ export default function ConversationSessionPage() {
     }
   }, [consentVersion, sessionId, router]);
 
+  useEffect(() => {
+    startConversationRef.current = () => { void handleStartConversation(); };
+  }, [handleStartConversation]);
+
   const handleRecord = useCallback(async () => {
     if (recording) {
       try { mediaRecorderRef.current?.stop(); } catch { /* noop */ }
@@ -377,26 +468,8 @@ export default function ConversationSessionPage() {
     realtimeTurnActiveRef.current = Boolean(hubRef.current);
     realtimeMaxChunkBytesRef.current = DEFAULT_REALTIME_MAX_CHUNK_BYTES;
     try {
+      ensureAudioCaptureSupported();
       const format = pickRecorderFormat();
-      if (hubRef.current && currentStreamIdRef.current) {
-        try {
-          const startResult = await hubRef.current.invoke<RealtimeStartResult>('BeginRealtimeTurn', sessionId, currentStreamIdRef.current, format.apiMimeType, 'en-GB');
-          if (startResult === 'denied') {
-            realtimeTurnActiveRef.current = false;
-            currentStreamIdRef.current = null;
-            setRecording(false);
-            return;
-          }
-          realtimeTurnActiveRef.current = startResult === 'realtime';
-        } catch {
-          realtimeTurnActiveRef.current = false;
-          currentStreamIdRef.current = null;
-          setError('Could not prepare audio capture. Please reconnect before recording.');
-          setRecording(false);
-          setConnectionState('reconnecting');
-          return;
-        }
-      }
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -406,6 +479,31 @@ export default function ConversationSessionPage() {
         },
       });
       activeMediaStreamRef.current = stream;
+      const preferPcmRealtime = supportsPcmWorkletCapture();
+      const realtimeMimeType = preferPcmRealtime ? 'audio/pcm' : format.apiMimeType;
+      if (hubRef.current && currentStreamIdRef.current) {
+        try {
+          const startResult = await hubRef.current.invoke<RealtimeStartResult>('BeginRealtimeTurn', sessionId, currentStreamIdRef.current, realtimeMimeType, 'en-GB');
+          if (startResult === 'denied') {
+            realtimeTurnActiveRef.current = false;
+            currentStreamIdRef.current = null;
+            stopStream(stream);
+            if (activeMediaStreamRef.current === stream) activeMediaStreamRef.current = null;
+            setRecording(false);
+            return;
+          }
+          realtimeTurnActiveRef.current = startResult === 'realtime';
+        } catch {
+          realtimeTurnActiveRef.current = false;
+          currentStreamIdRef.current = null;
+          stopStream(stream);
+          if (activeMediaStreamRef.current === stream) activeMediaStreamRef.current = null;
+          setError('Could not prepare audio capture. Please reconnect before recording.');
+          setRecording(false);
+          setConnectionState('reconnecting');
+          return;
+        }
+      }
       const mediaRecorder = format.recorderMimeType
         ? new MediaRecorder(stream, { mimeType: format.recorderMimeType })
         : new MediaRecorder(stream);
@@ -413,6 +511,7 @@ export default function ConversationSessionPage() {
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size <= 0) return;
         audioChunksRef.current.push(e.data);
+        if (preferPcmRealtime) return;
         if (!realtimeTurnActiveRef.current || !hubRef.current || !currentStreamIdRef.current) return;
         if (e.data.size > realtimeMaxChunkBytesRef.current) {
           realtimeTurnActiveRef.current = false;
@@ -439,6 +538,8 @@ export default function ConversationSessionPage() {
       };
       mediaRecorder.onstop = async () => {
         setConnectionState('transcribing');
+        await pcmCaptureCleanupRef.current?.();
+        pcmCaptureCleanupRef.current = null;
         stopStream(stream);
         if (activeMediaStreamRef.current === stream) activeMediaStreamRef.current = null;
         if (discardCurrentRecordingRef.current) {
@@ -454,7 +555,18 @@ export default function ConversationSessionPage() {
         if (hubRef.current && streamId && realtimeTurnActiveRef.current) {
           try {
             const result = await hubRef.current.invoke<RealtimeCommitResult>('CompleteRealtimeTurn', sessionId, streamId);
+            if (result.status === 'committing') {
+              setConnectionState('transcribing');
+              return;
+            }
             if (result.status !== 'committed' && result.status !== 'already-committed') {
+              const blob = new Blob(audioChunksRef.current, { type: format.apiMimeType });
+              const base64 = await blobToBase64Payload(blob);
+              if (base64) {
+                await hubRef.current.invoke('SendAudio', sessionId, base64, format.apiMimeType);
+                setConnectionState('ai-thinking');
+                return;
+              }
               setError('Live transcription could not be committed. Please try that turn again.');
               setRecording(false); setAiThinking(false); setConnectionState('error');
               return;
@@ -476,8 +588,42 @@ export default function ConversationSessionPage() {
       };
       recordingStartedAtRef.current = Date.now();
       mediaRecorder.start(REALTIME_CHUNK_TIMESLICE_MS);
+      if (preferPcmRealtime && realtimeTurnActiveRef.current && hubRef.current && currentStreamIdRef.current) {
+        const streamId = currentStreamIdRef.current;
+        try {
+          pcmCaptureCleanupRef.current = await startPcmWorkletCapture(stream, (buffer, offsetMs) => {
+            if (!realtimeTurnActiveRef.current || !hubRef.current || streamId !== currentStreamIdRef.current) return;
+            if (buffer.byteLength > realtimeMaxChunkBytesRef.current) {
+              realtimeTurnActiveRef.current = false;
+              setSttMode('batch-fallback');
+              setFallbackReason('Live captions paused because a PCM audio chunk was too large. Your answer will still transcribe normally.');
+              hubRef.current.invoke('CancelRealtimeTurn', sessionId, streamId).catch(() => undefined);
+              return;
+            }
+            const sequence = ++chunkSequenceRef.current;
+            chunkSendQueueRef.current = chunkSendQueueRef.current
+              .then(async () => {
+                if (!realtimeTurnActiveRef.current || !hubRef.current) return;
+                await hubRef.current.invoke('SendRealtimeAudioChunk', sessionId, streamId, sequence, arrayBufferToBase64Payload(buffer), offsetMs);
+              })
+              .catch(async () => {
+                realtimeTurnActiveRef.current = false;
+                setSttMode('batch-fallback');
+                setFallbackReason('Live captions stopped. Your answer will still transcribe after you stop recording.');
+                try { await hubRef.current?.invoke('CancelRealtimeTurn', sessionId, streamId); } catch { /* noop */ }
+              });
+          });
+        } catch {
+          realtimeTurnActiveRef.current = false;
+          setSttMode('batch-fallback');
+          setFallbackReason('Live captions are unavailable in this browser audio mode. Record one answer, then stop to transcribe.');
+          try { await hubRef.current.invoke('CancelRealtimeTurn', sessionId, streamId); } catch { /* noop */ }
+        }
+      }
       setTimeout(() => { if (mediaRecorder.state === 'recording') mediaRecorder.stop(); }, MAX_TURN_MS);
-    } catch {
+    } catch (captureError) {
+      await pcmCaptureCleanupRef.current?.();
+      pcmCaptureCleanupRef.current = null;
       const streamId = currentStreamIdRef.current;
       if (hubRef.current && streamId && realtimeTurnActiveRef.current) {
         try { await hubRef.current.invoke('CancelRealtimeTurn', sessionId, streamId); } catch { /* noop */ }
@@ -488,7 +634,7 @@ export default function ConversationSessionPage() {
       audioChunksRef.current = [];
       stopStream(activeMediaStreamRef.current);
       activeMediaStreamRef.current = null;
-      setError('Microphone access denied. Please enable microphone permissions.'); setRecording(false); setConnectionState('error');
+      setError(readableMicrophoneError(captureError)); setRecording(false); setConnectionState('error');
     }
   }, [hubReady, recording, sessionId]);
 
@@ -501,9 +647,14 @@ export default function ConversationSessionPage() {
     if (timerRef.current) clearInterval(timerRef.current);
     try { mediaRecorderRef.current?.stop(); } catch { /* noop */ }
     try {
-      if (hubRef.current) {
+      if (hubRef.current && hubReady) {
         try { await hubRef.current.invoke('EndSession', sessionId); }
-        finally { await hubRef.current.stop(); hubRef.current = null; }
+        catch { await completeConversation(sessionId); }
+        finally {
+          try { await hubRef.current.stop(); } catch { /* noop */ }
+          hubRef.current = null;
+          setHubReady(false);
+        }
       } else {
         await completeConversation(sessionId);
       }
@@ -512,11 +663,11 @@ export default function ConversationSessionPage() {
     } catch {
       setError('Failed to end session. Please try again.'); setEnding(false);
     }
-  }, [recording, aiThinking, connectionState, sessionId, turns.length, elapsed, router]);
+  }, [recording, aiThinking, connectionState, hubReady, sessionId, turns.length, elapsed, router]);
 
   const timeLimit = scenario?.timeLimitSeconds ?? scenario?.timeLimit ?? DEFAULT_TIME_LIMIT;
-  const micDisabled = !hubReady || aiThinking || ending || aiSpeakingTurn !== null || connectionState === 'connecting' || connectionState === 'reconnecting' || connectionState === 'offline' || connectionState === 'error' || connectionState === 'transcribing';
-  const canEndSession = hubReady && turns.length >= 2 && !recording && !aiThinking && connectionState !== 'transcribing';
+  const micDisabled = !hubReady || aiThinking || ending || aiSpeakingTurn !== null || connectionState === 'connecting' || connectionState === 'reconnecting' || connectionState === 'offline' || connectionState === 'transcribing';
+  const canEndSession = turns.length >= 2 && !recording && !aiThinking && connectionState !== 'transcribing';
   const turnState: ConversationTurnState = recording
     ? 'listening'
     : connectionState === 'transcribing'

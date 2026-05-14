@@ -2,6 +2,11 @@ generated_at: "2026-05-10"
 status: closed-for-v1-launch
 scope: all-platform-commercial-readiness
 canonical_source: docs/STATUS/remaining-work.yaml
+human_readable_current_index: docs/STATUS/REMAINING-WORK.md
+closure_note: >
+  This YAML is the closed v1 launch register. New post-v1 work, including
+  ElevenLabs realtime STT rollout blockers and all-audience readiness, is
+  indexed in docs/STATUS/REMAINING-WORK.md.
 created_from:
   - PRD.md
   - PROGRESS.md
@@ -11,7 +16,7 @@ created_from:
   - subagent_sweep_2026-05-09
 
 user_decisions:
-  source_of_truth: docs/STATUS/remaining-work.yaml
+  source_of_truth: docs/STATUS/remaining-work.yaml (closed v1 launch evidence only; current post-v1 index is docs/STATUS/REMAINING-WORK.md)
   launch_scope: all-platform-commercial-readiness
   selected_priorities:
     - evidence-and-launch-gate-first

@@ -12,17 +12,19 @@ namespace OetLearner.Api.Services;
 public class ConversationService(
     LearnerDbContext db,
     IOptions<ConversationOptions> conversationOptions,
+    Conversation.IConversationOptionsProvider conversationOptionsProvider,
     Conversation.IConversationEntitlementService entitlement)
 {
     private readonly ConversationOptions _options = conversationOptions.Value;
 
     public async Task<object> CreateSessionAsync(string userId, ConversationCreateSessionRequest request, CancellationToken ct)
     {
-        if (!_options.Enabled)
+        var options = await conversationOptionsProvider.GetAsync(ct);
+        if (!options.Enabled)
             throw ApiException.Validation("CONVERSATION_DISABLED", "AI Conversation is currently disabled.");
 
         var taskType = NormaliseTaskType(request.TaskTypeCode);
-        if (!_options.EnabledTaskTypes.Contains(taskType, StringComparer.OrdinalIgnoreCase))
+        if (!options.EnabledTaskTypes.Contains(taskType, StringComparer.OrdinalIgnoreCase))
             throw ApiException.Validation("TASK_TYPE_NOT_ENABLED",
                 $"Task type '{taskType}' is not enabled.");
 
@@ -56,7 +58,7 @@ public class ConversationService(
                 ? BuildScenarioJsonFromSpeakingContent(sourceContent, taskType, profession, difficulty)
                 : template is not null
                 ? BuildScenarioJsonFromTemplate(template)
-                : BuildFallbackScenarioJson(taskType, profession),
+                : BuildFallbackScenarioJson(taskType, profession, options),
             State = "preparing",
             TurnCount = 0,
             DurationSeconds = 0,
@@ -66,7 +68,7 @@ public class ConversationService(
         db.ConversationSessions.Add(session);
         await db.SaveChangesAsync(ct);
 
-        return MapSession(session);
+        return MapSession(session, null, options);
     }
 
     private async Task<ContentItem?> ResolvePublishedSpeakingContentAsync(string? contentId, CancellationToken ct)
@@ -94,7 +96,8 @@ public class ConversationService(
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct)
             ?? throw ApiException.NotFound("SESSION_NOT_FOUND", "Conversation session not found.");
         var turns = await GetTurnsAsync(sessionId, ct);
-        return MapSession(session, turns);
+        var options = await conversationOptionsProvider.GetAsync(ct);
+        return MapSession(session, turns, options);
     }
 
     public async Task<object> ResumeSessionAsync(
@@ -108,13 +111,14 @@ public class ConversationService(
             ?? throw ApiException.NotFound("SESSION_NOT_FOUND", "Conversation session not found.");
 
         var turns = await GetTurnsAsync(sessionId, ct);
+        var options = await conversationOptionsProvider.GetAsync(ct);
         if (session.State is "completed" or "evaluated" or "evaluating" or "failed" or "abandoned")
         {
             return new
             {
                 resumeAllowed = false,
                 redirectTo = $"/conversation/{sessionId}/results",
-                session = MapSession(session, turns),
+                session = MapSession(session, turns, options),
                 turns = MapTurns(turns),
             };
         }
@@ -152,7 +156,7 @@ public class ConversationService(
             resumeAllowed = true,
             resumeToken = token,
             resumeTokenExpiresAt = expiresAt,
-            session = MapSession(session, turns),
+            session = MapSession(session, turns, options),
             turns = MapTurns(turns),
         };
     }
@@ -203,7 +207,8 @@ public class ConversationService(
         });
 
         await db.SaveChangesAsync(ct);
-        return MapSession(session);
+        var options = await conversationOptionsProvider.GetAsync(ct);
+        return MapSession(session, null, options);
     }
 
     public async Task<object> GetEvaluationAsync(string userId, string sessionId, CancellationToken ct)
@@ -311,8 +316,9 @@ public class ConversationService(
         };
     }
 
-    public object GetTaskTypeCatalog()
+    public async Task<object> GetTaskTypeCatalogAsync(CancellationToken ct)
     {
+        var options = await conversationOptionsProvider.GetAsync(ct);
         var labels = new Dictionary<string, (string Label, string Description)>(StringComparer.OrdinalIgnoreCase)
         {
             ["oet-roleplay"] = ("OET Clinical Role Play", "Practise 5-minute patient role plays used in the OET Speaking sub-test."),
@@ -320,15 +326,15 @@ public class ConversationService(
         };
         return new
         {
-            taskTypes = _options.EnabledTaskTypes.Select(code => new
+            taskTypes = options.EnabledTaskTypes.Select(code => new
             {
                 code,
                 label = labels.TryGetValue(code, out var v) ? v.Label : code,
                 description = labels.TryGetValue(code, out var v2) ? v2.Description : "",
             }),
-            prepDurationSeconds = _options.PrepDurationSeconds,
-            maxSessionDurationSeconds = _options.MaxSessionDurationSeconds,
-            maxTurnDurationSeconds = _options.MaxTurnDurationSeconds,
+            prepDurationSeconds = options.PrepDurationSeconds,
+            maxSessionDurationSeconds = options.MaxSessionDurationSeconds,
+            maxTurnDurationSeconds = options.MaxTurnDurationSeconds,
         };
     }
 
@@ -450,7 +456,7 @@ public class ConversationService(
     private static List<string> FirstNonEmptyList(params List<string>[] lists)
         => lists.FirstOrDefault(list => list.Count > 0) ?? [];
 
-    private string BuildFallbackScenarioJson(string taskType, string profession)
+    private static string BuildFallbackScenarioJson(string taskType, string profession, ConversationOptions options)
     {
         var title = taskType == "oet-handover" ? "Shift Handover" : "Clinical Role Play";
         return JsonSupport.Serialize(new
@@ -467,7 +473,7 @@ public class ConversationService(
                 "Explain the plan in plain English.",
                 "Offer safety-netting and close the encounter.",
             },
-            timeLimitSeconds = _options.MaxSessionDurationSeconds,
+            timeLimitSeconds = options.MaxSessionDurationSeconds,
         });
     }
 
@@ -477,7 +483,7 @@ public class ConversationService(
             .OrderBy(t => t.TurnNumber)
             .ToListAsync(ct);
 
-    private object MapSession(ConversationSession s, IEnumerable<ConversationTurn>? turns = null) => new
+    private static object MapSession(ConversationSession s, IEnumerable<ConversationTurn>? turns, ConversationOptions options) => new
     {
         id = s.Id, userId = s.UserId, contentId = s.ContentId, templateId = s.TemplateId,
         examTypeCode = s.ExamTypeCode, subtestCode = s.SubtestCode, taskTypeCode = s.TaskTypeCode,
@@ -487,11 +493,11 @@ public class ConversationService(
         audioConsentVersion = s.AudioConsentVersion,
         recordingConsentAcceptedAt = s.RecordingConsentAcceptedAt,
         vendorConsentAcceptedAt = s.VendorConsentAcceptedAt,
-        requiredAudioConsentVersion = _options.RealtimeSttConsentVersion,
-        audioRetentionDays = _options.AudioRetentionDays,
-        realtimeSttEnabled = _options.RealtimeSttEnabled,
-        realtimeAsrProvider = _options.RealtimeAsrProvider,
-        realtimeSttFallbackToBatch = _options.RealtimeSttFallbackToBatch,
+        requiredAudioConsentVersion = options.RealtimeSttConsentVersion,
+        audioRetentionDays = options.AudioRetentionDays,
+        realtimeSttEnabled = options.RealtimeSttEnabled,
+        realtimeAsrProvider = options.RealtimeAsrProvider,
+        realtimeSttFallbackToBatch = options.RealtimeSttFallbackToBatch,
         createdAt = s.CreatedAt, startedAt = s.StartedAt, completedAt = s.CompletedAt,
         turns = turns is null ? Array.Empty<object>() : MapTurns(turns),
     };

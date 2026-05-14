@@ -1134,7 +1134,9 @@ public static class AdminEndpoints
                     merged.DeepgramLanguage,
                     merged.RealtimeSttEnabled,
                     merged.RealtimeAsrProvider,
+                    merged.RealtimeSttAllowRealProvider,
                     merged.RealtimeSttFallbackToBatch,
+                    merged.RealtimeSttProviderConnectTimeoutSeconds,
                     merged.RealtimeSttMaxChunkBytes,
                     merged.RealtimeSttPartialMinIntervalMs,
                     merged.RealtimeSttTurnIdleTimeoutSeconds,
@@ -1142,6 +1144,11 @@ public static class AdminEndpoints
                     merged.RealtimeSttMaxAudioSecondsPerSession,
                     merged.RealtimeSttDailyAudioSecondsPerUser,
                     merged.RealtimeSttMonthlyBudgetCapUsd,
+                    merged.RealtimeSttEstimatedCostUsdPerMinute,
+                    merged.RealtimeSttProviderSessionTopology,
+                    merged.RealtimeSttRegionId,
+                    merged.RealtimeSttAssumeLearnersAdult,
+                    merged.RealtimeSttAllowManagedLearnerRealProvider,
                     merged.RealtimeSttConsentVersion,
                     merged.RealtimeSttRollbackMode,
                     merged.ElevenLabsSttBaseUrl,
@@ -1193,6 +1200,7 @@ public static class AdminEndpoints
                 OetLearner.Api.Services.Conversation.IConversationOptionsProvider provider,
                 CancellationToken ct) =>
             {
+                ValidateConversationSettingsRequest(request);
                 var row = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
                     .FirstOrDefaultAsync(db.ConversationSettings.Where(r => r.Id == "default"), ct);
                 var now = DateTimeOffset.UtcNow;
@@ -1215,7 +1223,9 @@ public static class AdminEndpoints
                 if (request.DeepgramLanguage is not null) row.DeepgramLanguage = request.DeepgramLanguage;
                 if (request.RealtimeSttEnabled.HasValue) row.RealtimeSttEnabled = request.RealtimeSttEnabled;
                 if (request.RealtimeAsrProvider is not null) row.RealtimeAsrProvider = NormalizeRealtimeAsrProvider(request.RealtimeAsrProvider);
+                if (request.RealtimeSttAllowRealProvider.HasValue) row.RealtimeSttAllowRealProvider = request.RealtimeSttAllowRealProvider;
                 if (request.RealtimeSttFallbackToBatch.HasValue) row.RealtimeSttFallbackToBatch = request.RealtimeSttFallbackToBatch;
+                if (request.RealtimeSttProviderConnectTimeoutSeconds.HasValue) row.RealtimeSttProviderConnectTimeoutSeconds = request.RealtimeSttProviderConnectTimeoutSeconds;
                 if (request.RealtimeSttMaxChunkBytes.HasValue) row.RealtimeSttMaxChunkBytes = request.RealtimeSttMaxChunkBytes;
                 if (request.RealtimeSttPartialMinIntervalMs.HasValue) row.RealtimeSttPartialMinIntervalMs = request.RealtimeSttPartialMinIntervalMs;
                 if (request.RealtimeSttTurnIdleTimeoutSeconds.HasValue) row.RealtimeSttTurnIdleTimeoutSeconds = request.RealtimeSttTurnIdleTimeoutSeconds;
@@ -1223,6 +1233,11 @@ public static class AdminEndpoints
                 if (request.RealtimeSttMaxAudioSecondsPerSession.HasValue) row.RealtimeSttMaxAudioSecondsPerSession = request.RealtimeSttMaxAudioSecondsPerSession;
                 if (request.RealtimeSttDailyAudioSecondsPerUser.HasValue) row.RealtimeSttDailyAudioSecondsPerUser = request.RealtimeSttDailyAudioSecondsPerUser;
                 if (request.RealtimeSttMonthlyBudgetCapUsd.HasValue) row.RealtimeSttMonthlyBudgetCapUsd = request.RealtimeSttMonthlyBudgetCapUsd;
+                if (request.RealtimeSttEstimatedCostUsdPerMinute.HasValue) row.RealtimeSttEstimatedCostUsdPerMinute = request.RealtimeSttEstimatedCostUsdPerMinute;
+                if (request.RealtimeSttProviderSessionTopology is not null) row.RealtimeSttProviderSessionTopology = NormalizeRealtimeTopology(request.RealtimeSttProviderSessionTopology);
+                if (request.RealtimeSttRegionId is not null) row.RealtimeSttRegionId = request.RealtimeSttRegionId;
+                if (request.RealtimeSttAssumeLearnersAdult.HasValue) row.RealtimeSttAssumeLearnersAdult = request.RealtimeSttAssumeLearnersAdult;
+                if (request.RealtimeSttAllowManagedLearnerRealProvider.HasValue) row.RealtimeSttAllowManagedLearnerRealProvider = request.RealtimeSttAllowManagedLearnerRealProvider;
                 if (request.RealtimeSttConsentVersion is not null) row.RealtimeSttConsentVersion = request.RealtimeSttConsentVersion;
                 if (request.RealtimeSttRollbackMode is not null) row.RealtimeSttRollbackMode = request.RealtimeSttRollbackMode;
                 if (request.ElevenLabsSttBaseUrl is not null) row.ElevenLabsSttBaseUrl = request.ElevenLabsSttBaseUrl;
@@ -1268,6 +1283,37 @@ public static class AdminEndpoints
                 row.UpdatedAt = now;
                 row.UpdatedByUserId = http.AdminId();
                 row.UpdatedByUserName = http.AdminName();
+                db.AuditEvents.Add(new AuditEvent
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ActorId = row.UpdatedByUserId ?? "system",
+                    ActorName = row.UpdatedByUserName ?? "system",
+                    Action = "ConversationSettingsUpdated",
+                    ResourceType = "ConversationSettings",
+                    ResourceId = row.Id,
+                    Details = JsonSupport.Serialize(new
+                    {
+                        row.Enabled,
+                        row.RealtimeSttEnabled,
+                        row.RealtimeAsrProvider,
+                        row.RealtimeSttAllowRealProvider,
+                        row.RealtimeSttFallbackToBatch,
+                        row.RealtimeSttProviderConnectTimeoutSeconds,
+                        row.RealtimeSttMaxChunkBytes,
+                        row.RealtimeSttMaxConcurrentStreamsPerUser,
+                        row.RealtimeSttMaxAudioSecondsPerSession,
+                        row.RealtimeSttDailyAudioSecondsPerUser,
+                        row.RealtimeSttMonthlyBudgetCapUsd,
+                        row.RealtimeSttEstimatedCostUsdPerMinute,
+                        row.RealtimeSttProviderSessionTopology,
+                        row.RealtimeSttRegionId,
+                        row.RealtimeSttAssumeLearnersAdult,
+                        row.RealtimeSttAllowManagedLearnerRealProvider,
+                        row.RealtimeSttRollbackMode,
+                        ElevenLabsSttApiKeyChanged = request.ElevenLabsSttApiKey is not null,
+                    }),
+                    OccurredAt = now,
+                });
                 await db.SaveChangesAsync(ct);
                 provider.Invalidate();
 
@@ -1781,7 +1827,100 @@ public static class AdminEndpoints
         => httpContext.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
 
     private static string NormalizeRealtimeAsrProvider(string provider)
-        => string.Equals(provider.Trim(), "mock", StringComparison.OrdinalIgnoreCase) ? "mock" : "mock";
+        => provider.Trim().ToLowerInvariant() switch
+        {
+            "mock" => "mock",
+            "elevenlabs" or "elevenlabs-stt" or "elevenlabs-scribe" => "elevenlabs-stt",
+            _ => throw ApiException.Validation("REALTIME_PROVIDER_UNSUPPORTED", "Realtime STT provider must be mock or elevenlabs-stt."),
+        };
+
+    private static string NormalizeRealtimeTopology(string topology)
+        => topology.Trim().ToLowerInvariant() switch
+        {
+            "unconfigured" => "unconfigured",
+            "single-instance" => "single-instance",
+            "single-region-sticky" => "single-region-sticky",
+            "distributed" => "distributed",
+            _ => throw ApiException.Validation("REALTIME_TOPOLOGY", "Realtime STT provider topology must be unconfigured, single-instance, single-region-sticky, or distributed."),
+        };
+
+    private static void ValidateConversationSettingsRequest(AdminConversationSettingsRequest request)
+    {
+        if (request.RealtimeAsrProvider is not null)
+        {
+            _ = NormalizeRealtimeAsrProvider(request.RealtimeAsrProvider);
+        }
+
+        if (request.RealtimeSttProviderConnectTimeoutSeconds is < 1 or > 60)
+        {
+            throw ApiException.Validation("REALTIME_PROVIDER_CONNECT_TIMEOUT", "Realtime STT provider connect timeout must be between 1 and 60 seconds.");
+        }
+
+        if (request.RealtimeSttMaxChunkBytes is < 1024 or > OetLearner.Api.Services.Conversation.ConversationRealtimeTransportLimits.MaxBinaryChunkBytes)
+        {
+            throw ApiException.Validation("REALTIME_CHUNK_LIMIT", $"Realtime STT chunk size must be between 1024 and {OetLearner.Api.Services.Conversation.ConversationRealtimeTransportLimits.MaxBinaryChunkBytes} bytes.");
+        }
+
+        if (request.RealtimeSttPartialMinIntervalMs is < 100 or > 5000)
+        {
+            throw ApiException.Validation("REALTIME_PARTIAL_INTERVAL", "Realtime STT partial interval must be between 100 and 5000 ms.");
+        }
+
+        if (request.RealtimeSttTurnIdleTimeoutSeconds is < 2 or > 120)
+        {
+            throw ApiException.Validation("REALTIME_IDLE_TIMEOUT", "Realtime STT idle timeout must be between 2 and 120 seconds.");
+        }
+
+        if (request.RealtimeSttMaxConcurrentStreamsPerUser is not null && request.RealtimeSttMaxConcurrentStreamsPerUser != 1)
+        {
+            throw ApiException.Validation("REALTIME_CONCURRENCY", "Realtime STT currently supports exactly one active stream per user.");
+        }
+
+        if (request.RealtimeSttMaxAudioSecondsPerSession is < 5 or > 1800)
+        {
+            throw ApiException.Validation("REALTIME_SESSION_SECONDS", "Realtime STT audio seconds per session must be between 5 and 1800.");
+        }
+
+        if (request.RealtimeSttDailyAudioSecondsPerUser is < 60 or > 86400)
+        {
+            throw ApiException.Validation("REALTIME_DAILY_SECONDS", "Realtime STT daily audio seconds per user must be between 60 and 86400.");
+        }
+
+        if (request.RealtimeSttMonthlyBudgetCapUsd is < 1 or > 10000)
+        {
+            throw ApiException.Validation("REALTIME_BUDGET_CAP", "Realtime STT monthly budget cap must be between 1 and 10000 USD.");
+        }
+
+        if (request.RealtimeSttEstimatedCostUsdPerMinute is < 0.0001m or > 10m)
+        {
+            throw ApiException.Validation("REALTIME_COST_PER_MINUTE", "Realtime STT estimated cost per minute must be between 0.0001 and 10 USD.");
+        }
+
+        if (request.RealtimeSttProviderSessionTopology is not null)
+        {
+            _ = NormalizeRealtimeTopology(request.RealtimeSttProviderSessionTopology);
+        }
+
+        if (request.RealtimeSttRegionId is { Length: > 96 } || request.RealtimeSttRegionId is not null && string.IsNullOrWhiteSpace(request.RealtimeSttRegionId))
+        {
+            throw ApiException.Validation("REALTIME_REGION", "Realtime STT region id must be non-empty and at most 96 characters.");
+        }
+
+        if (request.RealtimeSttConsentVersion is { Length: > 96 } || request.RealtimeSttConsentVersion is not null && string.IsNullOrWhiteSpace(request.RealtimeSttConsentVersion))
+        {
+            throw ApiException.Validation("REALTIME_CONSENT_VERSION", "Realtime STT consent version must be non-empty and at most 96 characters.");
+        }
+
+        if (request.RealtimeSttRollbackMode is not null)
+        {
+            var rollbackMode = request.RealtimeSttRollbackMode.Trim();
+            var allowed = new[] { "disable-conversation-audio", "disable-realtime-stt", "fallback-only" };
+            if (!allowed.Contains(rollbackMode, StringComparer.OrdinalIgnoreCase))
+            {
+                throw ApiException.Validation("REALTIME_ROLLBACK_MODE", "Realtime STT rollback mode must be disable-conversation-audio, disable-realtime-stt, or fallback-only.");
+            }
+        }
+    }
 }
 
 public record AdminCommunityPinRequest(bool IsPinned);

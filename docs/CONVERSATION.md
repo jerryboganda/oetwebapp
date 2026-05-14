@@ -1,6 +1,6 @@
 # AI Conversation Module — MISSION CRITICAL Specification
 
-**Status:** Production-grade.
+**Status:** Production-grade for the existing batch conversation path; realtime STT remains a gated rollout.
 **Authority:** Dr. Ahmed Hesham — OET Preparation Platform.
 **Rulebook:** `rulebooks/conversation/<profession>/rulebook.v1.json`
 **Scoring:** `lib/scoring.ts:conversationProjectedScaled()` / `OetScoring.ConversationProjectedScaled()`
@@ -120,8 +120,7 @@ Partial realtime transcript events are UI-only and server-throttled by `Realtime
 
 Batch and realtime audio are rejected unless the session has the current `RealtimeSttConsentVersion` plus recording/vendor consent timestamps. The learner UI acknowledges consent through `AcknowledgeAudioConsent` before starting the session.
 
-`BeginRealtimeTurn` returns `realtime`, `fallback`, or `denied` so the browser can avoid opening the microphone after a server denial. `CompleteRealtimeTurn` returns `committed`, `already-committed`, `failed`, or `denied`; the server finalizes buffered chunks only after the learner turn is durably committed or identified as a duplicate.
-
+`BeginRealtimeTurn` returns `realtime`, `fallback`, or `denied` so the browser can avoid opening the microphone after a server denial. `CompleteRealtimeTurn` returns `committed`, `already-committed`, `committing`, `failed`, or `denied`; the server finalizes buffered chunks only after the learner turn is durably committed or identified as a duplicate. `committing` means another completion call already claimed the stream and the client should keep showing the submitting state while waiting for transcript/AI events or resume recovery.
 
 Phase-2 resume/export details:
 
@@ -168,18 +167,26 @@ Conversation:
   DeepgramApiKey / DeepgramModel / DeepgramLanguage
   RealtimeSttEnabled: false
   RealtimeAsrProvider: mock # mock | elevenlabs-stt | elevenlabs-scribe
+  RealtimeSttAllowRealProvider: false
+  RealtimeSttRealProviderProductionAuthorized: false
   RealtimeSttFallbackToBatch: true
   RealtimeSttMaxChunkBytes: 262144
   RealtimeSttMaxConcurrentStreamsPerUser: 1
   RealtimeSttMaxAudioSecondsPerSession: 360
-  RealtimeSttDailyAudioSecondsPerUser: 1800
-  RealtimeSttMonthlyBudgetCapUsd: 100
+  RealtimeSttDailyAudioSecondsPerUser: 3600
+  RealtimeSttMonthlyBudgetCapUsd: 25
+  RealtimeSttEstimatedCostUsdPerMinute: 0
+  RealtimeSttProviderSessionTopology: unconfigured # single-instance | single-region-sticky | distributed
+  RealtimeSttRegionId: ""
+  RealtimeSttAssumeLearnersAdult: false
+  RealtimeSttAllowManagedLearnerRealProvider: false
   RealtimeSttConsentVersion: realtime-stt-v1-2026-05-14
-  RealtimeSttRollbackMode: false
+  RealtimeSttRollbackMode: disable-conversation-audio
+  RealtimeSttAllowedMimeTypes: [ audio/webm, audio/ogg, audio/mp4, audio/pcm, audio/l16, audio/raw, application/octet-stream ]
   ElevenLabsSttBaseUrl: https://api.elevenlabs.io/v1
   ElevenLabsSttModel: scribe_v2_realtime
   ElevenLabsSttLanguage: auto
-  ElevenLabsSttAudioFormat: pcm_s16le_16
+  ElevenLabsSttAudioFormat: pcm_16000
   ElevenLabsSttCommitStrategy: manual
   AzureTtsDefaultVoice
   ElevenLabsApiKey / ElevenLabsDefaultVoiceId / ElevenLabsModel
@@ -209,4 +216,5 @@ Conversation:
 - **Never** persist audio via raw `File.*` — always `IConversationAudioService` / `IFileStorage`.
 - **Never** compare a rubric mean to `>= 4.2` inline — use `ConversationProjectedScaled`.
 - **Never** serialise `AudioUrl` without the `/v1/conversations/media/` prefix.
-- **Never** expose ElevenLabs keys to `NEXT_PUBLIC_*`; realtime STT credentials stay server-side and production rollout requires explicit env acknowledgement while the real provider is gated.
+- **Never** expose ElevenLabs keys to `NEXT_PUBLIC_*`; realtime STT credentials stay server-side and production rollout requires explicit env acknowledgement while the real provider is gated. Non-mock realtime providers require `RealtimeSttAllowRealProvider=true`, `RealtimeSttRealProviderProductionAuthorized=true`, declared provider-session topology/region, positive estimated cost-per-minute when a budget cap is active, and explicit adult/managed-learner policy flags in addition to provider/key configuration. The experimental ElevenLabs realtime adapter is pinned to `api.elevenlabs.io` and rejects browser container audio when `pcm_16000` is configured; the learner web route now prefers `AudioWorklet` PCM 16 kHz mono chunks and keeps `MediaRecorder` as the batch fallback recording.
+- **Realtime STT budget fields are enforced conservatively before real-provider start**: `RealtimeSttDailyAudioSecondsPerUser` checks the learner's provider-backed conversation audio seconds for the UTC day, and `RealtimeSttMonthlyBudgetCapUsd` projects monthly provider cost from persisted provider-backed conversation turns plus the reserved turn length. Vendor-reported reconciliation is still a production backlog item before paid beta.

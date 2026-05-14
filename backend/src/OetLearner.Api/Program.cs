@@ -689,6 +689,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversatio
     OetLearner.Api.Services.Conversation.Asr.DeepgramConversationAsrProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationRealtimeAsrProvider,
     OetLearner.Api.Services.Conversation.Asr.MockConversationRealtimeAsrProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationRealtimeAsrProvider,
+    OetLearner.Api.Services.Conversation.Asr.ElevenLabsConversationRealtimeAsrProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationAsrProviderSelector,
     OetLearner.Api.Services.Conversation.Asr.ConversationAsrProviderSelector>();
 

@@ -14,8 +14,8 @@ public static class ConversationEndpoints
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
         var conv = v1.MapGroup("/conversations");
 
-        conv.MapGet("/task-types", (ConversationService svc) =>
-            Results.Ok(svc.GetTaskTypeCatalog()));
+        conv.MapGet("/task-types", async (ConversationService svc, CancellationToken ct) =>
+            Results.Ok(await svc.GetTaskTypeCatalogAsync(ct)));
 
         conv.MapGet("/entitlement", async (HttpContext http, ConversationService svc, CancellationToken ct) =>
             Results.Ok(await svc.GetEntitlementAsync(http.UserId(), ct)));

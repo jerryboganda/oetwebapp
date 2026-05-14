@@ -2,6 +2,15 @@
 
 Updated: 2026-05-12
 
+## Current Remaining Work Reconciliation — 2026-05-14
+
+- Created `docs/STATUS/REMAINING-WORK.md` as the stakeholder-readable current remaining-work index for post-v1/all-audience readiness.
+- Preserved `docs/STATUS/remaining-work.yaml` as the closed v1 launch evidence register for RW-001 through RW-022; new post-v1 work must not reopen those IDs.
+- Recorded owner decisions from the 2026-05-14 clarification pass: production safety first, whole-platform scope, all audiences eventually, ElevenLabs audio strategy must compare browser PCM/backend transcoding/provider-supported container streaming, `$25/month` realtime STT pilot cap, single API instance realtime beta, and mandatory protected ElevenLabs smoke.
+- Reclassified ElevenLabs realtime STT RTSTT-001 through RTSTT-030 as the active post-v1 rollout backlog, with `docs/ELEVENLABS-REALTIME-STT-PRODUCTION-PLAN.md` as the detailed canonical source.
+- Current open work now separates launch blockers, paid-beta blockers, broad-rollout blockers, expansion-surface work, and external operational dependencies.
+- Evidence pass used 8 parallel read-only subagents: research, architecture, adversarial review, DevOps, UX/accessibility, failure modes, canonical planning, and documentation.
+
 ## Backend Solution Test Sweep — 2026-05-10 (closure)
 
 Full `dotnet test backend/OetLearner.sln` (OetLearner.Api.Tests project) — **1356/1356 PASSED in 28.0 minutes**. The duration is driven by MockSampleSeeder + heavy EF in-memory fixtures (`Saved 1209 entities`, `Saved 657 entities`, full bundle ingest from `Project Real Content`) firing in `WebApplicationFactory` setups; no hang, no failures, no flakes. `--blame-hang-timeout 120s` produced no hang report. Trx artifact: `%TEMP%\dnresult.trx`. With this, no Writing-adjacent or sln-wide test is deferred.
@@ -70,10 +79,10 @@ Detailed checklist: see `docs/WRITING-RULEBOOK-PROGRESS.md`.
 
 ## Canonical Remaining Work Register — 2026-05-09
 
-- User selected `docs/STATUS/remaining-work.yaml` as the canonical source of truth for all remaining work.
+- User selected `docs/STATUS/remaining-work.yaml` as the canonical source of truth for the May 2026 v1 launch closure register. As of 2026-05-14, current post-v1/all-audience remaining work is indexed in `docs/STATUS/REMAINING-WORK.md`.
 - Launch scope is all-platform commercial readiness: web/API, desktop, mobile, CI/release, security/privacy, billing, and provider readiness.
 - Provider credentials and operational toggles should be made configurable from admin UI where appropriate, using secure secret references rather than exposing raw secrets in normal app state.
-- Use `PROGRESS.md` as a human summary only; update the YAML register first when status, owner, tracker links, or evidence changes.
+- Use `PROGRESS.md` as a human summary only; update the source artifact first, then `docs/STATUS/REMAINING-WORK.md` for current work, or the closed YAML only for v1 closure errata.
 
 ## Execution Continuation — 2026-05-10
 
