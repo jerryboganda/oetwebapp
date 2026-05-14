@@ -1,7 +1,7 @@
 import { ensureFreshAccessToken } from './auth-client';
 import { env } from './env';
 
-type EventProperties = Record<string, string | number | boolean | null | undefined>;
+export type EventProperties = Record<string, string | number | boolean | null | undefined>;
 
 const TRACKED_EVENTS = [
   'onboarding_started',
