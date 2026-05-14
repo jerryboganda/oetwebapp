@@ -33,7 +33,7 @@ export function ProgressBar({ value, max = 100, label, ariaLabel, showValue, siz
         </div>
       )}
       <div
-        className={cn('w-full bg-gray-100 rounded-full overflow-hidden shadow-inner', size === 'sm' ? 'h-2' : 'h-3')}
+        className={cn('w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden shadow-inner', size === 'sm' ? 'h-2' : 'h-3')}
         role="progressbar"
         aria-valuenow={pct}
         aria-valuemin={0}
@@ -71,7 +71,7 @@ export function CircularProgress({ value, size = 120, strokeWidth = 8, label, su
     <div className={cn('flex flex-col items-center', className)}>
       <div className="relative" style={{ width: size, height: size }}>
         <svg className="w-full h-full transform -rotate-90" viewBox={`0 0 ${size} ${size}`}>
-          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#E5E7EB" strokeWidth={strokeWidth} />
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} className="text-gray-200 dark:text-gray-700" />
           <circle
             cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
             strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"

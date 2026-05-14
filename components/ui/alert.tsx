@@ -11,10 +11,10 @@ import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 type AlertVariant = 'info' | 'success' | 'warning' | 'error';
 
 const alertConfig: Record<AlertVariant, { icon: typeof Info; bgClass: string; textClass: string; borderClass: string }> = {
-  info: { icon: Info, bgClass: 'bg-blue-50', textClass: 'text-blue-800', borderClass: 'border-blue-200' },
-  success: { icon: CheckCircle2, bgClass: 'bg-emerald-50', textClass: 'text-emerald-800', borderClass: 'border-emerald-200' },
-  warning: { icon: AlertTriangle, bgClass: 'bg-amber-50', textClass: 'text-amber-800', borderClass: 'border-amber-200' },
-  error: { icon: AlertCircle, bgClass: 'bg-red-50', textClass: 'text-red-800', borderClass: 'border-red-200' },
+  info: { icon: Info, bgClass: 'bg-blue-50 dark:bg-blue-950', textClass: 'text-blue-800 dark:text-blue-200', borderClass: 'border-blue-200 dark:border-blue-800' },
+  success: { icon: CheckCircle2, bgClass: 'bg-emerald-50 dark:bg-emerald-950', textClass: 'text-emerald-800 dark:text-emerald-200', borderClass: 'border-emerald-200 dark:border-emerald-800' },
+  warning: { icon: AlertTriangle, bgClass: 'bg-amber-50 dark:bg-amber-950', textClass: 'text-amber-800 dark:text-amber-200', borderClass: 'border-amber-200 dark:border-amber-800' },
+  error: { icon: AlertCircle, bgClass: 'bg-red-50 dark:bg-red-950', textClass: 'text-red-800 dark:text-red-200', borderClass: 'border-red-200 dark:border-red-800' },
 };
 
 interface InlineAlertProps {

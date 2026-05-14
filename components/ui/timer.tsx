@@ -63,7 +63,7 @@ export function Timer({ mode = 'countdown', initialSeconds = 0, running = true, 
       className={cn(
         'font-mono font-bold rounded tabular-nums',
         sizeStyles[size],
-        isWarning ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-gray-100 text-navy border border-gray-200',
+        isWarning ? 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800' : 'bg-gray-100 text-navy border border-gray-200 dark:bg-gray-800 dark:text-white dark:border-gray-700',
         className,
       )}
       role="timer"
