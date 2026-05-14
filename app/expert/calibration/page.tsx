@@ -70,7 +70,6 @@ export default function CalibrationCenterPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtered = useMemo(() => cases.filter((entry) => {

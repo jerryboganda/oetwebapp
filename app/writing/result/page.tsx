@@ -19,11 +19,10 @@ export default function WritingResultSummary() {
   const searchParams = useSearchParams();
   const resultId = searchParams?.get('id') ?? '';
   const [result, setResult] = useState<WritingResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!!resultId);
 
   useEffect(() => {
     if (!resultId) {
-      setLoading(false);
       return;
     }
 
