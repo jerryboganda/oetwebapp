@@ -514,12 +514,7 @@ public sealed class MockService(LearnerDbContext db)
 
         if (!string.IsNullOrWhiteSpace(request.ContentAttemptId))
         {
-            var ownsContentAttempt = await db.Attempts.AsNoTracking().AnyAsync(x =>
-                x.Id == request.ContentAttemptId
-                && x.UserId == userId
-                && x.ContentId == bundleSection.ContentPaperId
-                && x.SubtestCode == section.SubtestCode,
-                ct);
+            var ownsContentAttempt = await OwnsSubmittedSectionEvidenceAsync(userId, request.ContentAttemptId, section, bundleSection, ct);
             if (!ownsContentAttempt)
             {
                 throw ApiException.NotFound("content_attempt_not_found", "The submitted section evidence was not found for this learner and paper.");
@@ -543,6 +538,38 @@ public sealed class MockService(LearnerDbContext db)
         RecordEvent(userId, "mock_section_completed", new { mockAttemptId = attempt.Id, sectionId = section.Id, subtest = section.SubtestCode, section.ScaledScore });
         await db.SaveChangesAsync(ct);
         return ProjectSectionAttempt(section, bundleSection, attempt);
+    }
+
+    private async Task<bool> OwnsSubmittedSectionEvidenceAsync(
+        string userId,
+        string contentAttemptId,
+        MockSectionAttempt section,
+        MockBundleSection bundleSection,
+        CancellationToken ct)
+    {
+        var attemptId = contentAttemptId.Trim();
+        return section.SubtestCode.Trim().ToLowerInvariant() switch
+        {
+            "reading" => await db.ReadingAttempts.AsNoTracking().AnyAsync(x =>
+                x.Id == attemptId
+                && x.UserId == userId
+                && x.PaperId == bundleSection.ContentPaperId
+                && x.Status == ReadingAttemptStatus.Submitted,
+                ct),
+            "listening" => await db.ListeningAttempts.AsNoTracking().AnyAsync(x =>
+                x.Id == attemptId
+                && x.UserId == userId
+                && x.PaperId == bundleSection.ContentPaperId
+                && x.Status == ListeningAttemptStatus.Submitted,
+                ct),
+            _ => await db.Attempts.AsNoTracking().AnyAsync(x =>
+                x.Id == attemptId
+                && x.UserId == userId
+                && x.ContentId == bundleSection.ContentPaperId
+                && x.SubtestCode == section.SubtestCode
+                && x.State == AttemptState.Completed,
+                ct),
+        };
     }
 
     public async Task<object> SubmitMockAttemptAsync(string userId, string mockAttemptId, CancellationToken ct)

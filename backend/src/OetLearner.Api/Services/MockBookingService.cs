@@ -206,16 +206,24 @@ public sealed class MockBookingService
             return Project(booking, isAdmin: isAdmin);
         }
 
-        // Only forward transitions are allowed; tutor_no_show is a terminal admin-only state.
+        if (IsTerminal(booking.Status))
+        {
+            throw ApiException.Validation("booking_finalized", "This booking can no longer be transitioned.");
+        }
+
+        var canControlRoom = isAdmin || isAssignedExpert;
+        var learnerCanCompleteSubmittedRecording = isOwnerLearner && booking.RecordingFinalizedAt is not null;
+
+        // Only forward transitions are allowed; terminal adjudication stays with admin or assigned experts.
         var current = booking.LiveRoomState;
         var allowed = (current, targetState) switch
         {
             (MockLiveRoomStates.Waiting, MockLiveRoomStates.InProgress) => true,
-            (MockLiveRoomStates.InProgress, MockLiveRoomStates.Completed) => true,
+            (MockLiveRoomStates.InProgress, MockLiveRoomStates.Completed) => canControlRoom || learnerCanCompleteSubmittedRecording,
             (MockLiveRoomStates.Waiting, MockLiveRoomStates.TutorNoShow) => isAdmin,
             (MockLiveRoomStates.InProgress, MockLiveRoomStates.TutorNoShow) => isAdmin,
-            (MockLiveRoomStates.Waiting, MockLiveRoomStates.LearnerNoShow) => isAdmin || isAssignedExpert,
-            (MockLiveRoomStates.InProgress, MockLiveRoomStates.LearnerNoShow) => isAdmin || isAssignedExpert,
+            (MockLiveRoomStates.Waiting, MockLiveRoomStates.LearnerNoShow) => canControlRoom,
+            (MockLiveRoomStates.InProgress, MockLiveRoomStates.LearnerNoShow) => canControlRoom,
             _ => false,
         };
         if (!allowed) throw ApiException.Validation("invalid_transition", $"Cannot move from {current} to {targetState}.");

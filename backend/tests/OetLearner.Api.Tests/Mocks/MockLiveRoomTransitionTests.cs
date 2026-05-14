@@ -95,6 +95,68 @@ public class MockLiveRoomTransitionTests
     }
 
     [Fact]
+    public async Task Learner_CannotCompleteRoomWithoutFinalizedRecording()
+    {
+        await using var db = NewDb();
+        SeedBooking(db, MockLiveRoomStates.InProgress, MockBookingStatuses.InProgress);
+        await db.SaveChangesAsync();
+        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>());
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.TransitionLiveRoomAsync(
+            "learner-1",
+            ApplicationUserRoles.Learner,
+            isAdmin: false,
+            BookingId,
+            new LiveRoomTransitionRequest(MockLiveRoomStates.Completed),
+            CancellationToken.None));
+
+        Assert.Equal("invalid_transition", ex.ErrorCode);
+        Assert.Empty(db.MockLiveRoomTransitions);
+    }
+
+    [Fact]
+    public async Task Learner_CanCompleteRoomAfterRecordingIsFinalized()
+    {
+        await using var db = NewDb();
+        SeedBooking(db, MockLiveRoomStates.InProgress, MockBookingStatuses.InProgress, recordingFinalizedAt: DateTimeOffset.UtcNow.AddMinutes(-1));
+        await db.SaveChangesAsync();
+        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>());
+
+        await service.TransitionLiveRoomAsync(
+            "learner-1",
+            ApplicationUserRoles.Learner,
+            isAdmin: false,
+            BookingId,
+            new LiveRoomTransitionRequest(MockLiveRoomStates.Completed),
+            CancellationToken.None);
+
+        var booking = await db.MockBookings.SingleAsync(b => b.Id == BookingId);
+        Assert.Equal(MockLiveRoomStates.Completed, booking.LiveRoomState);
+        Assert.Equal(MockBookingStatuses.Completed, booking.Status);
+        Assert.NotNull(booking.CompletedAt);
+    }
+
+    [Fact]
+    public async Task CancelledBooking_RejectsLiveRoomTransition()
+    {
+        await using var db = NewDb();
+        SeedBooking(db, bookingStatus: MockBookingStatuses.Cancelled);
+        await db.SaveChangesAsync();
+        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>());
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.TransitionLiveRoomAsync(
+            "expert-tutor",
+            ApplicationUserRoles.Expert,
+            isAdmin: false,
+            BookingId,
+            new LiveRoomTransitionRequest(MockLiveRoomStates.InProgress),
+            CancellationToken.None));
+
+        Assert.Equal("booking_finalized", ex.ErrorCode);
+        Assert.Empty(db.MockLiveRoomTransitions);
+    }
+
+    [Fact]
     public async Task BlankTargetState_ReturnsValidationInsteadOfNullReference()
     {
         await using var db = NewDb();
@@ -114,7 +176,11 @@ public class MockLiveRoomTransitionTests
         Assert.Empty(db.MockLiveRoomTransitions);
     }
 
-    private static void SeedBooking(LearnerDbContext db)
+    private static void SeedBooking(
+        LearnerDbContext db,
+        string liveRoomState = MockLiveRoomStates.Waiting,
+        string bookingStatus = MockBookingStatuses.Scheduled,
+        DateTimeOffset? recordingFinalizedAt = null)
     {
         var now = DateTimeOffset.UtcNow;
         db.MockBundles.Add(new MockBundle
@@ -139,12 +205,13 @@ public class MockLiveRoomTransitionTests
             UserId = "learner-1",
             MockBundleId = "bundle-live-room-test",
             ScheduledStartAt = now.AddMinutes(30),
-            Status = MockBookingStatuses.Scheduled,
+            Status = bookingStatus,
             TimezoneIana = "UTC",
             DeliveryMode = MockDeliveryModes.Computer,
-            LiveRoomState = MockLiveRoomStates.Waiting,
+            LiveRoomState = liveRoomState,
             AssignedTutorId = "expert-tutor",
             AssignedInterlocutorId = "expert-interlocutor",
+            RecordingFinalizedAt = recordingFinalizedAt,
             CreatedAt = now,
             UpdatedAt = now,
         });
