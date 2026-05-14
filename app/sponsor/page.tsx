@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, DollarSign, UserCheck, Clock, TrendingUp, Award } from 'lucide-react';
+import { Users, DollarSign, UserCheck, Clock } from 'lucide-react';
 import { fetchSponsorDashboard, isApiError, type SponsorDashboardData } from '@/lib/api';
 import { StatCard } from '@/components/ui/stat-card';
 
@@ -67,7 +67,7 @@ export default function SponsorDashboardPage() {
         )}
       </div>
 
-      <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-2 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Learners Sponsored"
           value={data?.learnersSponsored ?? 0}
@@ -91,19 +91,12 @@ export default function SponsorDashboardPage() {
           value={`£${(data?.totalSpend ?? 0).toFixed(0)}`}
           icon={<DollarSign />}
         />
-        {/* Success rate and avg score require backend analytics — show placeholder until API is wired */}
-        <StatCard
-          label="Success Rate"
-          value="—"
-          icon={<TrendingUp />}
-          tone="default"
-        />
-        <StatCard
-          label="Avg Score"
-          value="—"
-          icon={<Award />}
-          tone="default"
-        />
+      </div>
+
+      {/* Success rate and avg score require backend analytics — not yet available */}
+      <div className="rounded-xl border border-dashed border-border p-6 text-center">
+        <p className="text-sm font-medium text-muted">Coming soon</p>
+        <p className="mt-1 text-xs text-muted/70">Success rate and average score analytics are under development.</p>
       </div>
     </div>
   );
