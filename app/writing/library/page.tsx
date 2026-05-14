@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Brain, FileText, Monitor, UserRoundCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { TaskCard } from '@/components/domain/task-card';
@@ -9,7 +9,7 @@ import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { MotionItem } from '@/components/ui/motion-primitives';
-import { fetchWritingTasks } from '@/lib/api';
+import { fetchWritingTasks, type WritingAssessorType, type WritingExamMode } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingTask } from '@/lib/mock-data';
 
@@ -29,6 +29,8 @@ export default function WritingTaskLibrary() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [selectedExamMode, setSelectedExamMode] = useState<WritingExamMode>('computer');
+  const [selectedAssessor, setSelectedAssessor] = useState<WritingAssessorType>('ai');
 
   const loadTasks = useCallback(() => {
     setLoading(true);
@@ -78,6 +80,60 @@ export default function WritingTaskLibrary() {
         <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange}
           onClear={() => setFilters({})} className="mb-6 bg-surface p-4 rounded-xl border border-border shadow-sm" />
 
+        <section className="mb-6 rounded-xl border border-border bg-surface p-4 shadow-sm">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-muted">Exam mode</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {([
+                  { value: 'computer' as const, label: 'Computer', icon: Monitor },
+                  { value: 'paper' as const, label: 'Paper', icon: FileText },
+                ]).map((option) => {
+                  const Icon = option.icon;
+                  const active = selectedExamMode === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setSelectedExamMode(option.value)}
+                      className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors ${active ? 'border-primary bg-primary text-white' : 'border-border bg-background-light text-navy hover:border-primary/50'}`}
+                      aria-pressed={active}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-muted">Assessor</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {([
+                  { value: 'ai' as const, label: 'AI', icon: Brain },
+                  { value: 'instructor' as const, label: 'Dr. Ahmed', icon: UserRoundCheck },
+                ]).map((option) => {
+                  const Icon = option.icon;
+                  const active = selectedAssessor === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setSelectedAssessor(option.value)}
+                      className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors ${active ? 'border-primary bg-primary text-white' : 'border-border bg-background-light text-navy hover:border-primary/50'}`}
+                      aria-pressed={active}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-56 rounded-2xl" />)}
@@ -100,8 +156,8 @@ export default function WritingTaskLibrary() {
                   description={`${task.letterType ?? task.scenarioType} task${task.criteriaFocus ? ` · Focus: ${task.criteriaFocus}` : ''}`}
                   startLabel="Start Exam"
                   onStart={() => {
-                    analytics.track('task_started', { taskId: task.id, subtest: 'writing', mode: 'exam' });
-                    router.push(`/writing/player?taskId=${task.id}&mode=exam`);
+                    analytics.track('task_started', { taskId: task.id, subtest: 'writing', mode: 'exam', examMode: selectedExamMode, assessorType: selectedAssessor });
+                    router.push(`/writing/player?taskId=${encodeURIComponent(task.id)}&mode=exam&examMode=${selectedExamMode}&assessor=${selectedAssessor}`);
                   }}
                   secondaryActionLabel="Learning Mode"
                   onSecondaryAction={() => {

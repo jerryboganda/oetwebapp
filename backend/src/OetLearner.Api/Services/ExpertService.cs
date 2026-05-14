@@ -625,6 +625,13 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
                 "Voice notes must be audio files.",
                 [new ApiFieldError("mediaAssetId", "invalid_type", "Upload mp3, m4a, wav, ogg, or webm audio.")]);
         }
+        if (media.Status != MediaAssetStatus.Ready || string.IsNullOrWhiteSpace(media.StoragePath) || !mediaStorage.Exists(media.StoragePath))
+        {
+            throw ApiException.Validation(
+                "voice_note_media_not_ready",
+                "Voice note upload must finish processing before it can be attached to the review.",
+                [new ApiFieldError("mediaAssetId", "not_ready", "Wait for the audio upload to finish, then attach the voice note again.")]);
+        }
 
         if (request.DurationSeconds is < 0 or > MaxVoiceNoteDurationSeconds)
         {
@@ -818,8 +825,17 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             throw ApiException.Validation("review_type_mismatch", "This review is not a writing review.");
         }
 
-        var hasVoiceNote = await db.ReviewVoiceNotes
-            .AnyAsync(note => note.ReviewRequestId == reviewRequestId && note.Status == "ready", ct);
+        var voiceNoteMedia = await db.ReviewVoiceNotes
+            .Where(note => note.ReviewRequestId == reviewRequestId && note.Status == "ready")
+            .Join(db.MediaAssets,
+                note => note.MediaAssetId,
+                media => media.Id,
+                (note, media) => new { media.Status, media.StoragePath, media.MimeType })
+            .ToListAsync(ct);
+        var hasVoiceNote = voiceNoteMedia.Any(item => item.Status == MediaAssetStatus.Ready
+            && item.MimeType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(item.StoragePath)
+            && mediaStorage.Exists(item.StoragePath));
         if (!hasVoiceNote)
         {
             throw ApiException.Validation(

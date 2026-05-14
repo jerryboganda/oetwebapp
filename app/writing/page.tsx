@@ -442,7 +442,7 @@ export default function WritingHome() {
                 })),
               ],
               primaryAction: latestEvaluation.evaluationId
-                ? { label: 'Open Result', href: `/writing/result/${latestEvaluation.evaluationId}` }
+                ? { label: 'Open Result', href: `/writing/result?id=${encodeURIComponent(latestEvaluation.evaluationId)}` }
                 : { label: 'View Submissions', href: '/writing', variant: 'outline' },
             }} />
           </MotionSection>

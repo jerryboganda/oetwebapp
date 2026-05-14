@@ -20,6 +20,10 @@ const submitWritingDraftMock = vi.fn();
 const submitWritingTaskMock = vi.fn();
 const fetchWritingEntitlementMock = vi.fn();
 const lintWritingViaApiMock = vi.fn();
+const uploadMediaMock = vi.fn();
+const attachWritingPaperAssetsMock = vi.fn();
+const fetchWritingPaperAssetsMock = vi.fn();
+const fetchAuthorizedObjectUrlMock = vi.fn();
 const analyticsTrackMock = vi.fn();
 let latestTimerOnComplete: (() => void) | undefined;
 
@@ -68,6 +72,10 @@ vi.mock('@/lib/api', () => {
     completeMockSection: vi.fn(),
     fetchWritingEntitlement: (...args: unknown[]) => fetchWritingEntitlementMock(...args),
     lintWritingViaApi: (...args: unknown[]) => lintWritingViaApiMock(...args),
+    uploadMedia: (...args: unknown[]) => uploadMediaMock(...args),
+    attachWritingPaperAssets: (...args: unknown[]) => attachWritingPaperAssetsMock(...args),
+    fetchWritingPaperAssets: (...args: unknown[]) => fetchWritingPaperAssetsMock(...args),
+    fetchAuthorizedObjectUrl: (...args: unknown[]) => fetchAuthorizedObjectUrlMock(...args),
     ApiError,
   };
 });
@@ -142,6 +150,10 @@ describe('WritingPlayer', () => {
     submitWritingDraftMock.mockResolvedValue(undefined);
     submitWritingTaskMock.mockResolvedValue({ id: 'result-1' });
     lintWritingViaApiMock.mockResolvedValue({ findings: [] });
+    uploadMediaMock.mockResolvedValue({ id: 'media-paper-1' });
+    attachWritingPaperAssetsMock.mockResolvedValue({ assets: [], extractedText: '', extractionState: 'empty' });
+    fetchWritingPaperAssetsMock.mockResolvedValue({ assets: [], extractedText: '', extractionState: 'empty' });
+    fetchAuthorizedObjectUrlMock.mockResolvedValue('blob:paper-page');
     fetchWritingEntitlementMock.mockResolvedValue({
       allowed: true,
       tier: 'premium',
@@ -236,5 +248,18 @@ describe('WritingPlayer', () => {
     expect(screen.queryByRole('dialog', { name: /submit your response/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/word count/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/likely too short/i)).not.toBeInTheDocument();
+  });
+
+  it('blocks paper-mode submission until uploaded pages have OCR text', async () => {
+    renderWithRouter(<WritingPlayer />, { searchParams: new URLSearchParams('taskId=wt-001&mode=exam&examMode=paper&assessor=ai') });
+
+    await waitFor(() => expect(screen.getByText('Practice Writing Request')).toBeInTheDocument());
+
+    const submit = screen.getByRole('button', { name: /submit/i });
+    expect(submit).toBeDisabled();
+    expect(screen.getByText('Upload the handwritten response before submitting this paper-mode attempt.')).toBeInTheDocument();
+
+    await userEvent.click(submit);
+    expect(submitWritingTaskMock).not.toHaveBeenCalled();
   });
 });

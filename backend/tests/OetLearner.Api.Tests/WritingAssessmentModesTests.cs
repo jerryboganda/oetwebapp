@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -64,6 +65,9 @@ public class WritingAssessmentModesTests : IClassFixture<FirstPartyAuthTestWebAp
         var draftResult = await learner.GetAsync("/v1/reviews/requests/review-voice-flow/result");
         Assert.Equal(HttpStatusCode.NotFound, draftResult.StatusCode);
 
+        var blockedMedia = await learner.GetAsync("/v1/media/media-voice-flow-audio/content");
+        Assert.Equal(HttpStatusCode.NotFound, blockedMedia.StatusCode);
+
         var submitResponse = await expert.PostAsJsonAsync("/v1/expert/reviews/review-voice-flow/writing/submit", new
         {
             scores = new Dictionary<string, int>
@@ -96,6 +100,9 @@ public class WritingAssessmentModesTests : IClassFixture<FirstPartyAuthTestWebAp
             Assert.Equal("media-voice-flow-audio", items[0].GetProperty("mediaAssetId").GetString());
         }
 
+        var readableMedia = await learner.GetAsync("/v1/media/media-voice-flow-audio/content");
+        readableMedia.EnsureSuccessStatusCode();
+
         var resultResponse = await learner.GetAsync("/v1/reviews/requests/review-voice-flow/result");
         var resultPayload = await resultResponse.Content.ReadAsStringAsync();
         resultResponse.EnsureSuccessStatusCode();
@@ -105,6 +112,132 @@ public class WritingAssessmentModesTests : IClassFixture<FirstPartyAuthTestWebAp
         Assert.Equal("completed", result.RootElement.GetProperty("state").GetString());
         Assert.Equal("Dr. Ahmed rubric 27/38", result.RootElement.GetProperty("scoreLabel").GetString());
         Assert.Equal(6, result.RootElement.GetProperty("criteria").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task AttachWritingVoiceNote_WithUnreadyMedia_IsRejected()
+    {
+        await SeedWritingReviewAsync("voice-not-ready", includePaperAsset: false, includeVoiceNote: false);
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var media = await db.MediaAssets.SingleAsync(asset => asset.Id == "media-voice-not-ready-audio");
+            media.Status = MediaAssetStatus.Processing;
+            await db.SaveChangesAsync();
+        }
+
+        using var expert = _factory.CreateAuthenticatedClient(SeedData.ExpertEmail, SeedData.LocalSeedPassword, expectedRole: "expert");
+
+        var response = await expert.PostAsJsonAsync("/v1/expert/reviews/review-voice-not-ready/writing/voice-notes", new
+        {
+            mediaAssetId = "media-voice-not-ready-audio",
+            durationSeconds = 30,
+            transcriptText = "Processing media should not attach yet.",
+            writtenNotes = "Wait for media processing.",
+            rubricScores = new Dictionary<string, int> { ["purpose"] = 2 }
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("voice_note_media_not_ready", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task SubmitWritingReview_WithMissingVoiceNoteFile_IsRejected()
+    {
+        await SeedWritingReviewAsync("missing-voice-file", includePaperAsset: false, includeVoiceNote: true);
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+            Assert.True(storage.Delete("test/voice-missing-voice-file.webm"));
+        }
+
+        using var expert = _factory.CreateAuthenticatedClient(SeedData.ExpertEmail, SeedData.LocalSeedPassword, expectedRole: "expert");
+
+        var response = await expert.PostAsJsonAsync("/v1/expert/reviews/review-missing-voice-file/writing/submit", new
+        {
+            scores = new Dictionary<string, int>
+            {
+                ["purpose"] = 2,
+                ["content"] = 5,
+                ["conciseness"] = 5,
+                ["genre"] = 5,
+                ["organization"] = 5,
+                ["language"] = 5
+            },
+            criterionComments = new Dictionary<string, string>(),
+            finalComment = "This review has a stale voice note row but no streamable media.",
+            version = (int?)null
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("voice_note_required", await response.Content.ReadAsStringAsync());
+
+        await using var verifyScope = _factory.Services.CreateAsyncScope();
+        var db = verifyScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var review = await db.ReviewRequests.SingleAsync(item => item.Id == "review-missing-voice-file");
+        Assert.NotEqual(ReviewRequestState.Completed, review.State);
+    }
+
+    [Fact]
+    public async Task AttachWritingPaperAsset_WithUnsupportedImageType_IsRejected()
+    {
+        await SeedWritingPaperAttemptAsync("webp-reject", paperMimeType: "image/webp", extractionState: null, extractedText: null);
+        using var learner = _factory.CreateAuthenticatedClient(SeedData.LearnerEmail, SeedData.LocalSeedPassword, expectedRole: "learner");
+
+        var response = await learner.PostAsJsonAsync("/v1/writing/attempts/attempt-webp-reject/paper-assets", new
+        {
+            mediaAssetIds = new[] { "media-webp-reject-paper" },
+            replaceExisting = true
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.Contains("invalid_paper_asset_type", payload);
+        Assert.Contains("JPG, PNG, or PDF", payload);
+    }
+
+    [Fact]
+    public async Task SubmitPaperWritingAttempt_WithIncompleteOcr_IsRejected()
+    {
+        await SeedWritingPaperAttemptAsync("ocr-incomplete", paperMimeType: "image/png", extractionState: "processing", extractedText: "");
+        using var learner = _factory.CreateAuthenticatedClient(SeedData.LearnerEmail, SeedData.LocalSeedPassword, expectedRole: "learner");
+
+        var response = await learner.PostAsJsonAsync("/v1/writing/attempts/attempt-ocr-incomplete/submit", new
+        {
+            content = (string?)null,
+            idempotencyKey = (string?)null,
+            examMode = "paper",
+            assessorType = "ai",
+            paperAssetIds = Array.Empty<string>(),
+            turnaroundOption = (string?)null,
+            focusAreas = Array.Empty<string>(),
+            learnerNotes = (string?)null
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("paper_ocr_incomplete", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task SubmitPaperWritingAttempt_WithEmptyOcr_IsRejected()
+    {
+        await SeedWritingPaperAttemptAsync("ocr-empty", paperMimeType: "application/pdf", extractionState: "completed", extractedText: "   ");
+        using var learner = _factory.CreateAuthenticatedClient(SeedData.LearnerEmail, SeedData.LocalSeedPassword, expectedRole: "learner");
+
+        var response = await learner.PostAsJsonAsync("/v1/writing/attempts/attempt-ocr-empty/submit", new
+        {
+            content = (string?)null,
+            idempotencyKey = (string?)null,
+            examMode = "paper",
+            assessorType = "instructor",
+            paperAssetIds = Array.Empty<string>(),
+            turnaroundOption = "standard",
+            focusAreas = Array.Empty<string>(),
+            learnerNotes = "Please review this handwritten attempt."
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("paper_ocr_required", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -160,6 +293,7 @@ public class WritingAssessmentModesTests : IClassFixture<FirstPartyAuthTestWebAp
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
         var attemptId = $"attempt-{suffix}";
         var reviewId = $"review-{suffix}";
         var now = DateTimeOffset.UtcNow;
@@ -230,6 +364,7 @@ public class WritingAssessmentModesTests : IClassFixture<FirstPartyAuthTestWebAp
             UploadedAt = now.AddMinutes(-40),
             ProcessedAt = now.AddMinutes(-39),
         });
+        await storage.WriteAsync($"test/voice-{suffix}.webm", new MemoryStream([1, 2, 3, 4, 5]), CancellationToken.None);
 
         if (includePaperAsset)
         {
@@ -262,6 +397,7 @@ public class WritingAssessmentModesTests : IClassFixture<FirstPartyAuthTestWebAp
                 UpdatedAt = now.AddMinutes(-53),
                 ExtractedAt = now.AddMinutes(-53),
             });
+            await storage.WriteAsync($"test/paper-{suffix}.pdf", new MemoryStream([37, 80, 68, 70, 45]), CancellationToken.None);
         }
 
         if (includeVoiceNote)
@@ -279,6 +415,77 @@ public class WritingAssessmentModesTests : IClassFixture<FirstPartyAuthTestWebAp
                 Status = "ready",
                 CreatedAt = now.AddMinutes(-20),
                 UpdatedAt = now.AddMinutes(-20),
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedWritingPaperAttemptAsync(string suffix, string paperMimeType, string? extractionState, string? extractedText)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var attemptId = $"attempt-{suffix}";
+        var mediaId = $"media-{suffix}-paper";
+        var now = DateTimeOffset.UtcNow;
+
+        if (await db.Attempts.AnyAsync(attempt => attempt.Id == attemptId))
+        {
+            return;
+        }
+
+        var format = paperMimeType switch
+        {
+            "application/pdf" => "pdf",
+            "image/png" => "png",
+            "image/jpeg" => "jpg",
+            "image/webp" => "webp",
+            _ => "bin"
+        };
+
+        db.Attempts.Add(new Attempt
+        {
+            Id = attemptId,
+            UserId = "mock-user-001",
+            ContentId = "wt-001",
+            SubtestCode = "writing",
+            Context = "practice",
+            Mode = "exam",
+            State = AttemptState.InProgress,
+            StartedAt = now.AddMinutes(-10),
+            DraftContent = string.Empty,
+        });
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = mediaId,
+            OriginalFilename = $"paper-{suffix}.{format}",
+            MimeType = paperMimeType,
+            Format = format,
+            SizeBytes = 2048,
+            StoragePath = $"test/paper-{suffix}.{format}",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = paperMimeType == "application/pdf" ? "document" : "image",
+            UploadedBy = "mock-user-001",
+            UploadedAt = now.AddMinutes(-8),
+            ProcessedAt = now.AddMinutes(-7),
+        });
+
+        if (extractionState is not null)
+        {
+            db.WritingAttemptAssets.Add(new WritingAttemptAsset
+            {
+                Id = $"waa-{suffix}",
+                AttemptId = attemptId,
+                UserId = "mock-user-001",
+                MediaAssetId = mediaId,
+                AssetKind = paperMimeType == "application/pdf" ? "document" : "image",
+                PageNumber = 1,
+                ExtractionState = extractionState,
+                ExtractedText = extractedText ?? string.Empty,
+                ExtractionProvider = "test",
+                CreatedAt = now.AddMinutes(-7),
+                UpdatedAt = now.AddMinutes(-6),
+                ExtractedAt = string.Equals(extractionState, "completed", StringComparison.OrdinalIgnoreCase) ? now.AddMinutes(-6) : null,
             });
         }
 

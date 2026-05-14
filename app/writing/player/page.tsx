@@ -464,6 +464,19 @@ export default function WritingPlayer() {
     return () => window.removeEventListener('beforeunload', handler);
   }, []);
 
+  const paperAssetsComplete = !isPaperMode || (paperAssets.length > 0 && paperAssets.every((asset) => asset.extractionState === 'completed'));
+  const paperHasExtractedText = !isPaperMode || paperExtractedText.trim().length > 0;
+  const paperSubmitBlockedReason = !isPaperMode
+    ? null
+    : paperAssets.length === 0
+      ? 'Upload the handwritten response before submitting this paper-mode attempt.'
+      : !paperAssetsComplete
+        ? 'Wait for OCR to complete successfully for every uploaded page before submitting.'
+        : !paperHasExtractedText
+          ? 'OCR did not find enough readable text. Re-upload clearer JPG, PNG, or PDF pages.'
+          : null;
+  const submitDisabled = isReadingPhase || submitting || uploadingPaper || Boolean(paperSubmitBlockedReason);
+
   const handleSubmit = async () => {
     if (submitting) return;
     if (isReadingPhase) {
@@ -471,8 +484,8 @@ export default function WritingPlayer() {
       return;
     }
 
-    if (isPaperMode && paperAssets.length === 0) {
-      setPaperError('Upload the handwritten response before submitting this paper-mode attempt.');
+    if (isPaperMode && paperSubmitBlockedReason) {
+      setPaperError(paperSubmitBlockedReason);
       return;
     }
 
@@ -555,6 +568,8 @@ export default function WritingPlayer() {
         setEntitlementBlock({ reason: 'quota_exceeded', resetAt: null });
       } else if (err instanceof ApiError && err.code === 'writing_reading_window_active') {
         setSaveStatus('idle');
+      } else if (err instanceof ApiError && (err.code === 'paper_ocr_incomplete' || err.code === 'paper_ocr_required')) {
+        setPaperError(err.userMessage);
       }
     }
   };
@@ -596,7 +611,6 @@ export default function WritingPlayer() {
   const timerKey = isExamMode
     ? `${examTimerState?.startedAt ?? 'pending'}-${phase}-${timerInitialSeconds}`
     : 'learning';
-  const submitDisabled = isReadingPhase || submitting || uploadingPaper || (isPaperMode && paperAssets.length === 0);
 
   const handleWritingWindowComplete = useCallback(() => {
     // Writing window expired — auto-submit so the learner does not lose work.
@@ -806,7 +820,7 @@ export default function WritingPlayer() {
                       {uploadingPaper ? 'Reading pages...' : 'Upload pages'}
                       <input
                         type="file"
-                        accept="application/pdf,image/png,image/jpeg,image/webp"
+                        accept="application/pdf,image/png,image/jpeg"
                         multiple
                         className="sr-only"
                         disabled={uploadingPaper || submitting}
@@ -843,6 +857,7 @@ export default function WritingPlayer() {
                   <p className="mt-2 text-xs text-muted">
                     OCR text available: {paperExtractedText.trim().length ? `${paperExtractedText.trim().length} characters` : 'not yet'}.
                   </p>
+                  {paperSubmitBlockedReason ? <p className="mt-2 text-xs font-semibold text-warning">{paperSubmitBlockedReason}</p> : null}
                 </div>
               </div>
             </motion.section>

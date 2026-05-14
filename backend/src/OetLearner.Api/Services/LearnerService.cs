@@ -1365,7 +1365,7 @@ public partial class LearnerService(
                     contentId = attempt.ContentId,
                     state = ToApiState(attempt.State),
                     scoreEstimate = evaluation?.ScoreRange,
-                    route = evaluation?.Id is null ? $"/writing/attempt/{attempt.Id}" : $"/writing/result/{evaluation.Id}"
+                    route = evaluation?.Id is null ? $"/writing/attempt/{attempt.Id}" : $"/writing/result?id={Uri.EscapeDataString(evaluation.Id)}"
                 };
             }),
             reviewCredits = new
@@ -1940,14 +1940,15 @@ public partial class LearnerService(
             throw ApiException.Forbidden("paper_asset_forbidden", "You can only submit paper assets uploaded by your account.");
         }
 
-        var isDocument = string.Equals(media.MimeType, "application/pdf", StringComparison.OrdinalIgnoreCase);
-        var isImage = media.MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
-        if (!isDocument && !isImage)
+        var isSupportedPaperFile = string.Equals(media.MimeType, "application/pdf", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(media.MimeType, "image/jpeg", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(media.MimeType, "image/png", StringComparison.OrdinalIgnoreCase);
+        if (!isSupportedPaperFile)
         {
             throw ApiException.Validation(
                 "invalid_paper_asset_type",
-                "Writing paper submissions must be image pages or PDFs.",
-                [new ApiFieldError("mediaAssetIds", "invalid_type", "Upload JPG, PNG, WebP, GIF, or PDF pages.")]);
+                "Writing paper submissions must be JPG, PNG, or PDF pages.",
+                [new ApiFieldError("mediaAssetIds", "invalid_type", "Upload JPG, PNG, or PDF pages.")]);
         }
     }
 
@@ -7691,7 +7692,7 @@ public partial class LearnerService(
 
     private static string AttemptFeedbackRoute(string subtest, string evaluationId) => subtest switch
     {
-        "writing" => $"/writing/result/{evaluationId}",
+        "writing" => $"/writing/result?id={Uri.EscapeDataString(evaluationId)}",
         "speaking" => $"/speaking/result/{evaluationId}",
         "reading" => "/reading",
         "listening" => $"/listening/task/{evaluationId}",
