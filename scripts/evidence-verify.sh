@@ -58,7 +58,11 @@ verify_detached_signature() {
   local data_file="$2"
   local verify_output
   local validsig_fingerprint
-  verify_output=$(gpg --status-fd=1 --verify "$signature" "$data_file" 2>&1)
+  if ! verify_output=$(gpg --status-fd=1 --verify "$signature" "$data_file" 2>&1); then
+    printf '%s\n' "$verify_output"
+    echo "GPG signature verification failed for $signature." >&2
+    exit 1
+  fi
   printf '%s\n' "$verify_output"
   validsig_fingerprint=$(printf '%s\n' "$verify_output" | awk '$2 == "VALIDSIG" { print $3; exit }' | tr '[:lower:]' '[:upper:]')
   if [ -n "$EVIDENCE_SIGNER_FINGERPRINT" ] && [ "$validsig_fingerprint" != "$EVIDENCE_SIGNER_FINGERPRINT" ]; then

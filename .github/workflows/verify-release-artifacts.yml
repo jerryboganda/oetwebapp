@@ -51,6 +51,13 @@ jobs:
           EVIDENCE_GPG_PASSPHRASE: ${{ secrets.PRODUCTION_EVIDENCE_GPG_PASSPHRASE }}
         run: bash scripts/evidence-sign.sh
 
+      - name: Import production evidence key for verification
+        if: inputs.evidence_env == 'production'
+        shell: bash
+        env:
+          EVIDENCE_GPG_PRIVATE_KEY: ${{ secrets.PRODUCTION_EVIDENCE_GPG_PRIVATE_KEY }}
+        run: printf '%s' "$EVIDENCE_GPG_PRIVATE_KEY" | gpg --batch --import
+
       - name: Verify required evidence files
         shell: bash
         env:
