@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Data;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Conversation;
 
@@ -42,7 +44,7 @@ public static class ConversationEndpoints
         conv.MapGet("/history", async (HttpContext http, [FromQuery] int page, [FromQuery] int pageSize, ConversationService svc, CancellationToken ct) =>
             Results.Ok(await svc.GetHistoryAsync(http.UserId(), page <= 0 ? 1 : page, pageSize <= 0 ? 10 : pageSize, ct)));
 
-        conv.MapGet("/media/{fileName}", async (string fileName, IConversationAudioService audio, CancellationToken ct) =>
+        conv.MapGet("/media/{fileName}", async (string fileName, HttpContext http, LearnerDbContext db, IConversationAudioService audio, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(fileName) || !fileName.Contains('.'))
                 return Results.BadRequest(new { error = "invalid_filename" });
@@ -51,6 +53,17 @@ public static class ConversationEndpoints
             var ext = fileName[(dot + 1)..];
             if (sha.Length < 4 || sha.Any(c => !Uri.IsHexDigit(c)))
                 return Results.BadRequest(new { error = "invalid_filename" });
+            var mediaUrl = $"/v1/conversations/media/{fileName}";
+            var userId = http.UserId();
+            var ownsMedia = await db.ConversationTurns.AsNoTracking()
+                .Where(turn => turn.AudioUrl == mediaUrl)
+                .Join(db.ConversationSessions.AsNoTracking().Where(session => session.UserId == userId),
+                    turn => turn.SessionId,
+                    session => session.Id,
+                    (turn, session) => turn.Id)
+                .AnyAsync(ct);
+            if (!ownsMedia) return Results.NotFound();
+
             var key = $"conversation/audio/{sha[..2]}/{sha.Substring(2, 2)}/{sha}.{ext}";
             var stream = await audio.OpenReadAsync(key, ct);
             if (stream is null) return Results.NotFound();

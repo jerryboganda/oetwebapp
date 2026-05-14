@@ -156,6 +156,44 @@ require_boolean_false() {
   fi
 }
 
+require_absent() {
+  local key="$1"
+  if read_env_value "$key" >/dev/null 2>&1; then
+    echo "[env] $key must not be present in production env" >&2
+    failed=1
+  fi
+}
+
+require_absent_prefix() {
+  local prefix="$1"
+  if grep -Ei "^[[:space:]]*${prefix}[A-Za-z0-9_]*=" "$ENV_FILE" >/dev/null; then
+    echo "[env] keys with prefix $prefix must not be present in production env" >&2
+    failed=1
+  fi
+}
+
+require_boolean_false_unless_acknowledged() {
+  local key="$1"
+  local alt_key="$2"
+  local ack_key="$3"
+  local alt_ack_key="${4:-}"
+  local value ack_value
+  value=$(read_env_value "$key" || true)
+  if [ -z "$value" ] && [ -n "$alt_key" ]; then
+    value=$(read_env_value "$alt_key" || true)
+  fi
+  value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+  ack_value=$(read_env_value "$ack_key" || true)
+  if [ -z "$ack_value" ] && [ -n "$alt_ack_key" ]; then
+    ack_value=$(read_env_value "$alt_ack_key" || true)
+  fi
+  ack_value=$(printf '%s' "$ack_value" | tr '[:upper:]' '[:lower:]')
+  if [ "$value" = "true" ] && [ "$ack_value" != "i-understand-realtime-stt-is-mock-or-beta" ]; then
+    echo "[env] $key may only be true with $ack_key=i-understand-realtime-stt-is-mock-or-beta" >&2
+    failed=1
+  fi
+}
+
 require_s3_url() {
   local key="$1"
   local value
@@ -221,6 +259,11 @@ require_no_wildcard_or_localhost API_ALLOWED_HOSTS
 require_no_wildcard_or_localhost CORS_ALLOWED_ORIGINS
 require_boolean_false BILLING__ALLOWSANDBOXFALLBACKS
 require_hex_fingerprint EVIDENCE_SIGNER_FINGERPRINT
+require_absent NEXT_PUBLIC_ELEVENLABS_API_KEY
+require_absent NEXT_PUBLIC_ELEVENLABS_STT_API_KEY
+require_absent NEXT_PUBLIC_ELEVENLABS_KEY
+require_absent_prefix NEXT_PUBLIC_ELEVENLABS
+require_boolean_false_unless_acknowledged CONVERSATION__REALTIMESTTENABLED Conversation__RealtimeSttEnabled CONVERSATION__REALTIMESTTROLLOUTACKNOWLEDGEMENT Conversation__RealtimeSttRolloutAcknowledgement
 
 if [ "$failed" -ne 0 ]; then
   echo "[env] validation failed" >&2

@@ -5,10 +5,12 @@ namespace OetLearner.Api.Services.Conversation.Asr;
 public interface IConversationAsrProviderSelector
 {
     Task<IConversationAsrProvider> SelectAsync(CancellationToken ct = default);
+    Task<IConversationRealtimeAsrProvider?> TrySelectRealtimeAsync(CancellationToken ct = default);
 }
 
 public sealed class ConversationAsrProviderSelector(
     IEnumerable<IConversationAsrProvider> providers,
+    IEnumerable<IConversationRealtimeAsrProvider> realtimeProviders,
     IConversationOptionsProvider optionsProvider,
     ILogger<ConversationAsrProviderSelector> logger) : IConversationAsrProviderSelector
 {
@@ -45,5 +47,32 @@ public sealed class ConversationAsrProviderSelector(
             return mock;
         }
         throw new InvalidOperationException("No ASR providers registered.");
+    }
+
+    public async Task<IConversationRealtimeAsrProvider?> TrySelectRealtimeAsync(CancellationToken ct = default)
+    {
+        var options = await optionsProvider.GetAsync(ct);
+        if (!options.RealtimeSttEnabled) return null;
+
+        var requested = (options.RealtimeAsrProvider ?? "mock").Trim().ToLowerInvariant();
+        var all = realtimeProviders.ToList();
+        IConversationRealtimeAsrProvider? Find(string name) =>
+            all.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        if (requested is "mock" or "elevenlabs" or "elevenlabs-stt" or "elevenlabs-scribe")
+        {
+            var lookup = requested.StartsWith("elevenlabs", StringComparison.Ordinal) ? "elevenlabs-stt" : requested;
+            var provider = Find(lookup);
+            if (provider is null) return null;
+            return provider.IsConfigured ? provider : null;
+        }
+
+        foreach (var provider in all.Where(provider => provider.IsConfigured))
+        {
+            logger.LogDebug("Conversation realtime ASR: selected {Provider} (auto)", provider.Name);
+            return provider;
+        }
+
+        return null;
     }
 }

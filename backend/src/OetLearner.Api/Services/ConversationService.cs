@@ -477,13 +477,21 @@ public class ConversationService(
             .OrderBy(t => t.TurnNumber)
             .ToListAsync(ct);
 
-    private static object MapSession(ConversationSession s, IEnumerable<ConversationTurn>? turns = null) => new
+    private object MapSession(ConversationSession s, IEnumerable<ConversationTurn>? turns = null) => new
     {
         id = s.Id, userId = s.UserId, contentId = s.ContentId, templateId = s.TemplateId,
         examTypeCode = s.ExamTypeCode, subtestCode = s.SubtestCode, taskTypeCode = s.TaskTypeCode,
         profession = s.Profession, scenarioJson = s.ScenarioJson, state = s.State,
         turnCount = s.TurnCount, durationSeconds = s.DurationSeconds,
         transcriptJson = s.TranscriptJson, evaluationId = s.EvaluationId,
+        audioConsentVersion = s.AudioConsentVersion,
+        recordingConsentAcceptedAt = s.RecordingConsentAcceptedAt,
+        vendorConsentAcceptedAt = s.VendorConsentAcceptedAt,
+        requiredAudioConsentVersion = _options.RealtimeSttConsentVersion,
+        audioRetentionDays = _options.AudioRetentionDays,
+        realtimeSttEnabled = _options.RealtimeSttEnabled,
+        realtimeAsrProvider = _options.RealtimeAsrProvider,
+        realtimeSttFallbackToBatch = _options.RealtimeSttFallbackToBatch,
         createdAt = s.CreatedAt, startedAt = s.StartedAt, completedAt = s.CompletedAt,
         turns = turns is null ? Array.Empty<object>() : MapTurns(turns),
     };

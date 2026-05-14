@@ -162,7 +162,11 @@ builder.Services.Configure<NotificationProofHarnessOptions>(builder.Configuratio
 builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSection("PasswordPolicy"));
 builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize =
+        OetLearner.Api.Services.Conversation.ConversationRealtimeTransportLimits.MaximumReceiveMessageBytes;
+});
 builder.Services.AddSingleton<IWebPushDispatcher, WebPushDispatcher>();
 builder.Services.AddSingleton<IPasswordHasher<ApplicationUserAccount>, PasswordHasher<ApplicationUserAccount>>();
 builder.Services.AddSingleton<AuthTokenService>();
@@ -683,6 +687,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversatio
     OetLearner.Api.Services.Conversation.Asr.WhisperConversationAsrProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationAsrProvider,
     OetLearner.Api.Services.Conversation.Asr.DeepgramConversationAsrProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationRealtimeAsrProvider,
+    OetLearner.Api.Services.Conversation.Asr.MockConversationRealtimeAsrProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationAsrProviderSelector,
     OetLearner.Api.Services.Conversation.Asr.ConversationAsrProviderSelector>();
 
@@ -714,6 +720,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationTra
     OetLearner.Api.Services.Conversation.ConversationTranscriptExportService>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Conversation.IConversationOptionsProvider,
     OetLearner.Api.Services.Conversation.ConversationOptionsProvider>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Conversation.ConversationRealtimeTurnStore>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationEntitlementService,
     OetLearner.Api.Services.Conversation.ConversationEntitlementService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationAiOrchestrator,

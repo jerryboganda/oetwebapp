@@ -178,6 +178,21 @@ public sealed class AiVoiceProviderSeeder(
                 FailoverPriority: 1));
         }
 
+        // Conversation realtime STT — ElevenLabs Scribe.
+        if (!string.IsNullOrWhiteSpace(conversation.ElevenLabsSttApiKey))
+        {
+            seeds.Add(new VoiceProviderSeed(
+                Code: "elevenlabs-stt",
+                Name: "ElevenLabs Scribe (STT)",
+                Category: AiProviderCategory.Asr,
+                Dialect: AiProviderDialect.ElevenLabsStt,
+                BaseUrl: string.IsNullOrWhiteSpace(conversation.ElevenLabsSttBaseUrl)
+                    ? "https://api.elevenlabs.io/v1"
+                    : conversation.ElevenLabsSttBaseUrl,
+                DefaultModel: conversation.ElevenLabsSttModel,
+                FailoverPriority: 2));
+        }
+
         // Pronunciation — Azure phoneme assessment (separate code because
         // it uses Azure SDK pronunciation assessment, not plain ASR).
         if (!string.IsNullOrWhiteSpace(pronunciation.AzureSpeechKey)

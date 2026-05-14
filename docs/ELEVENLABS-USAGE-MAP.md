@@ -2,7 +2,7 @@
 
 This page explains where ElevenLabs is used in this project.
 
-Short answer: ElevenLabs is used to turn text into spoken audio. It is not used to write answers, mark tests, understand speech, or score students.
+Short answer: ElevenLabs is used to turn text into spoken audio today. Realtime speech-to-text support is now being added behind feature flags as a server-mediated Conversation/Speaking/Pronunciation capability. ElevenLabs is not used to write answers, mark tests, or calculate scores.
 
 ## 1. Big Picture
 
@@ -123,9 +123,9 @@ flowchart TD
 
 | Question | Easy answer |
 | --- | --- |
-| What is ElevenLabs used for? | Making spoken audio from text. |
+| What is ElevenLabs used for? | Making spoken audio from text today; realtime speech-to-text is being added behind admin controls. |
 | Is it used for AI answers? | No. The AI answer is made somewhere else. ElevenLabs only reads text out loud. |
-| Is it used for speech-to-text? | No. It does not listen to the learner. |
+| Is it used for speech-to-text? | Planned/behind flags. Realtime STT uses separate `elevenlabs-stt` settings and final transcripts remain backend-authoritative. |
 | Is it used for scoring? | No. It does not mark tests or calculate scores. |
 | Where can users hear it? | In AI Conversation audio, if ElevenLabs is selected and configured. |
 | Where can admins test it? | In the admin TTS Preview button. |
@@ -148,6 +148,8 @@ These are the main code areas, written in plain language.
 | Audio storage | Saves conversation audio files safely. | `backend/src/OetLearner.Api/Services/Conversation/ConversationAudioService.cs` |
 | Provider list | Names ElevenLabs as a text-to-speech provider. | `backend/src/OetLearner.Api/Domain/AiProviderEntities.cs` |
 | Seeder test | Tests that ElevenLabs can be added to the provider list. | `backend/tests/OetLearner.Api.Tests/AiVoiceProviderSeederTests.cs` |
+| Realtime STT plan | Tracks server-mediated ElevenLabs Scribe implementation. | `docs/ELEVENLABS-REALTIME-STT-PRD.md` |
+| Realtime STT progress | Tracks what is complete and what remains. | `docs/ELEVENLABS-REALTIME-STT-PROGRESS.md` |
 
 ## 8. Important Note About The API Key
 
@@ -164,3 +166,5 @@ Conversation__ElevenLabsApiKey
 ```
 
 The docs mention `ELEVENLABS_API_KEY`, but I did not find code that reads that exact name.
+
+Realtime STT uses separate admin/provider settings such as `ElevenLabsSttApiKey`, `ElevenLabsSttModel`, and `RealtimeSttEnabled`. Do not expose any ElevenLabs key through `NEXT_PUBLIC_*` variables or browser responses.

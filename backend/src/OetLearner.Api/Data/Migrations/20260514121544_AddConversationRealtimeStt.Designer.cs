@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OetLearner.Api.Data;
@@ -11,9 +12,11 @@ using OetLearner.Api.Data;
 namespace OetLearner.Api.Data.Migrations
 {
     [DbContext(typeof(LearnerDbContext))]
-    partial class LearnerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260514121544_AddConversationRealtimeStt")]
+    partial class AddConversationRealtimeStt
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3776,10 +3779,6 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
-                    b.Property<string>("AudioConsentVersion")
-                        .HasMaxLength(96)
-                        .HasColumnType("character varying(96)");
-
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -3810,9 +3809,6 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
-
-                    b.Property<DateTimeOffset?>("RecordingConsentAcceptedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ScenarioJson")
                         .IsRequired()
@@ -3851,9 +3847,6 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
-
-                    b.Property<DateTimeOffset?>("VendorConsentAcceptedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 

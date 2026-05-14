@@ -94,6 +94,29 @@ public sealed class ConversationOptionsProvider(
         if (!string.IsNullOrWhiteSpace(r.DeepgramModel)) o.DeepgramModel = r.DeepgramModel;
         if (!string.IsNullOrWhiteSpace(r.DeepgramLanguage)) o.DeepgramLanguage = r.DeepgramLanguage;
 
+        if (r.RealtimeSttEnabled.HasValue) o.RealtimeSttEnabled = r.RealtimeSttEnabled.Value;
+        if (!string.IsNullOrWhiteSpace(r.RealtimeAsrProvider)) o.RealtimeAsrProvider = r.RealtimeAsrProvider;
+        if (r.RealtimeSttFallbackToBatch.HasValue) o.RealtimeSttFallbackToBatch = r.RealtimeSttFallbackToBatch.Value;
+        if (r.RealtimeSttMaxChunkBytes.HasValue && r.RealtimeSttMaxChunkBytes.Value > 0) o.RealtimeSttMaxChunkBytes = r.RealtimeSttMaxChunkBytes.Value;
+        if (r.RealtimeSttPartialMinIntervalMs.HasValue && r.RealtimeSttPartialMinIntervalMs.Value > 0) o.RealtimeSttPartialMinIntervalMs = r.RealtimeSttPartialMinIntervalMs.Value;
+        if (r.RealtimeSttTurnIdleTimeoutSeconds.HasValue && r.RealtimeSttTurnIdleTimeoutSeconds.Value > 0) o.RealtimeSttTurnIdleTimeoutSeconds = r.RealtimeSttTurnIdleTimeoutSeconds.Value;
+        if (r.RealtimeSttMaxConcurrentStreamsPerUser.HasValue && r.RealtimeSttMaxConcurrentStreamsPerUser.Value > 0) o.RealtimeSttMaxConcurrentStreamsPerUser = r.RealtimeSttMaxConcurrentStreamsPerUser.Value;
+        if (r.RealtimeSttMaxAudioSecondsPerSession.HasValue && r.RealtimeSttMaxAudioSecondsPerSession.Value > 0) o.RealtimeSttMaxAudioSecondsPerSession = r.RealtimeSttMaxAudioSecondsPerSession.Value;
+        if (r.RealtimeSttDailyAudioSecondsPerUser.HasValue && r.RealtimeSttDailyAudioSecondsPerUser.Value > 0) o.RealtimeSttDailyAudioSecondsPerUser = r.RealtimeSttDailyAudioSecondsPerUser.Value;
+        if (r.RealtimeSttMonthlyBudgetCapUsd.HasValue && r.RealtimeSttMonthlyBudgetCapUsd.Value > 0) o.RealtimeSttMonthlyBudgetCapUsd = r.RealtimeSttMonthlyBudgetCapUsd.Value;
+        if (!string.IsNullOrWhiteSpace(r.RealtimeSttConsentVersion)) o.RealtimeSttConsentVersion = r.RealtimeSttConsentVersion;
+        if (!string.IsNullOrWhiteSpace(r.RealtimeSttRollbackMode)) o.RealtimeSttRollbackMode = r.RealtimeSttRollbackMode;
+        var elevenSttKey = Unprotect(r.ElevenLabsSttApiKeyEncrypted);
+        if (!string.IsNullOrEmpty(elevenSttKey)) o.ElevenLabsSttApiKey = elevenSttKey;
+        if (!string.IsNullOrWhiteSpace(r.ElevenLabsSttBaseUrl)) o.ElevenLabsSttBaseUrl = r.ElevenLabsSttBaseUrl;
+        if (!string.IsNullOrWhiteSpace(r.ElevenLabsSttModel)) o.ElevenLabsSttModel = r.ElevenLabsSttModel;
+        if (!string.IsNullOrWhiteSpace(r.ElevenLabsSttLanguage)) o.ElevenLabsSttLanguage = r.ElevenLabsSttLanguage;
+        if (!string.IsNullOrWhiteSpace(r.ElevenLabsSttAudioFormat)) o.ElevenLabsSttAudioFormat = r.ElevenLabsSttAudioFormat;
+        if (!string.IsNullOrWhiteSpace(r.ElevenLabsSttCommitStrategy)) o.ElevenLabsSttCommitStrategy = r.ElevenLabsSttCommitStrategy;
+        if (!string.IsNullOrWhiteSpace(r.ElevenLabsSttKeytermsCsv)) o.ElevenLabsSttKeytermsCsv = r.ElevenLabsSttKeytermsCsv;
+        if (r.ElevenLabsSttEnableProviderLogging.HasValue) o.ElevenLabsSttEnableProviderLogging = r.ElevenLabsSttEnableProviderLogging.Value;
+        if (r.ElevenLabsSttTokenTtlSeconds.HasValue && r.ElevenLabsSttTokenTtlSeconds.Value > 0) o.ElevenLabsSttTokenTtlSeconds = r.ElevenLabsSttTokenTtlSeconds.Value;
+
         var elevenKey = Unprotect(r.ElevenLabsApiKeyEncrypted);
         if (!string.IsNullOrEmpty(elevenKey)) o.ElevenLabsApiKey = elevenKey;
         if (!string.IsNullOrWhiteSpace(r.ElevenLabsDefaultVoiceId)) o.ElevenLabsDefaultVoiceId = r.ElevenLabsDefaultVoiceId;
@@ -201,6 +224,18 @@ public sealed class ConversationOptionsProvider(
                 if (!string.IsNullOrWhiteSpace(whisper.DefaultModel)) o.WhisperModel = whisper.DefaultModel;
             }
         }
+
+        var elevenStt = await registry.FindByCodeAsync("elevenlabs-stt", ct);
+        if (elevenStt is { IsActive: true } && !string.IsNullOrEmpty(elevenStt.EncryptedApiKey))
+        {
+            var key = await registry.GetPlatformKeyAsync(elevenStt.Code, ct);
+            if (!string.IsNullOrEmpty(key))
+            {
+                o.ElevenLabsSttApiKey = key;
+                if (!string.IsNullOrWhiteSpace(elevenStt.BaseUrl)) o.ElevenLabsSttBaseUrl = elevenStt.BaseUrl;
+                if (!string.IsNullOrWhiteSpace(elevenStt.DefaultModel)) o.ElevenLabsSttModel = elevenStt.DefaultModel;
+            }
+        }
     }
 
     /// <summary>
@@ -232,6 +267,27 @@ public sealed class ConversationOptionsProvider(
         DeepgramApiKey = src.DeepgramApiKey,
         DeepgramModel = src.DeepgramModel,
         DeepgramLanguage = src.DeepgramLanguage,
+        RealtimeSttEnabled = src.RealtimeSttEnabled,
+        RealtimeAsrProvider = src.RealtimeAsrProvider,
+        RealtimeSttFallbackToBatch = src.RealtimeSttFallbackToBatch,
+        RealtimeSttMaxChunkBytes = src.RealtimeSttMaxChunkBytes,
+        RealtimeSttPartialMinIntervalMs = src.RealtimeSttPartialMinIntervalMs,
+        RealtimeSttTurnIdleTimeoutSeconds = src.RealtimeSttTurnIdleTimeoutSeconds,
+        RealtimeSttMaxConcurrentStreamsPerUser = src.RealtimeSttMaxConcurrentStreamsPerUser,
+        RealtimeSttMaxAudioSecondsPerSession = src.RealtimeSttMaxAudioSecondsPerSession,
+        RealtimeSttDailyAudioSecondsPerUser = src.RealtimeSttDailyAudioSecondsPerUser,
+        RealtimeSttMonthlyBudgetCapUsd = src.RealtimeSttMonthlyBudgetCapUsd,
+        RealtimeSttConsentVersion = src.RealtimeSttConsentVersion,
+        RealtimeSttRollbackMode = src.RealtimeSttRollbackMode,
+        ElevenLabsSttApiKey = src.ElevenLabsSttApiKey,
+        ElevenLabsSttBaseUrl = src.ElevenLabsSttBaseUrl,
+        ElevenLabsSttModel = src.ElevenLabsSttModel,
+        ElevenLabsSttLanguage = src.ElevenLabsSttLanguage,
+        ElevenLabsSttAudioFormat = src.ElevenLabsSttAudioFormat,
+        ElevenLabsSttCommitStrategy = src.ElevenLabsSttCommitStrategy,
+        ElevenLabsSttKeytermsCsv = src.ElevenLabsSttKeytermsCsv,
+        ElevenLabsSttEnableProviderLogging = src.ElevenLabsSttEnableProviderLogging,
+        ElevenLabsSttTokenTtlSeconds = src.ElevenLabsSttTokenTtlSeconds,
         TtsProvider = src.TtsProvider,
         AzureTtsDefaultVoice = src.AzureTtsDefaultVoice,
         ElevenLabsApiKey = src.ElevenLabsApiKey,

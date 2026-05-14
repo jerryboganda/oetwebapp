@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Save, Volume2, Settings as SettingsIcon, ArrowLeft } from 'lucide-react';
+import { AlertTriangle, Save, Volume2, Settings as SettingsIcon, ArrowLeft } from 'lucide-react';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
@@ -29,6 +29,26 @@ type Settings = {
   whisperModel?: string;
   deepgramModel?: string;
   deepgramLanguage?: string;
+  realtimeSttEnabled?: boolean;
+  realtimeAsrProvider?: string;
+  realtimeSttFallbackToBatch?: boolean;
+  realtimeSttMaxChunkBytes?: number;
+  realtimeSttPartialMinIntervalMs?: number;
+  realtimeSttTurnIdleTimeoutSeconds?: number;
+  realtimeSttMaxConcurrentStreamsPerUser?: number;
+  realtimeSttMaxAudioSecondsPerSession?: number;
+  realtimeSttDailyAudioSecondsPerUser?: number;
+  realtimeSttMonthlyBudgetCapUsd?: number;
+  realtimeSttConsentVersion?: string;
+  realtimeSttRollbackMode?: string;
+  elevenLabsSttBaseUrl?: string;
+  elevenLabsSttModel?: string;
+  elevenLabsSttLanguage?: string;
+  elevenLabsSttAudioFormat?: string;
+  elevenLabsSttCommitStrategy?: string;
+  elevenLabsSttKeytermsCsv?: string;
+  elevenLabsSttEnableProviderLogging?: boolean;
+  elevenLabsSttTokenTtlSeconds?: number;
   elevenLabsDefaultVoiceId?: string;
   elevenLabsModel?: string;
   cosyVoiceBaseUrl?: string;
@@ -52,6 +72,7 @@ type Settings = {
   azureSpeechKeyPresent?: boolean;
   whisperApiKeyPresent?: boolean;
   deepgramApiKeyPresent?: boolean;
+  elevenLabsSttApiKeyPresent?: boolean;
   elevenLabsApiKeyPresent?: boolean;
   cosyVoiceApiKeyPresent?: boolean;
   chatTtsApiKeyPresent?: boolean;
@@ -238,6 +259,52 @@ export default function AdminConversationSettingsPage() {
                   <KeyInput label="Deepgram API Key" present={settings.deepgramApiKeyPresent} draftKey="deepgramApiKey" draft={draft} set={setSecret} />
                   <Input label="Deepgram Model" value={String(v('deepgramModel') ?? '')} onChange={(e) => setField('deepgramModel', e.target.value)} placeholder="nova-2-medical" />
                   <Input label="Deepgram Language" value={String(v('deepgramLanguage') ?? '')} onChange={(e) => setField('deepgramLanguage', e.target.value)} placeholder="en-GB" />
+                </Grid>
+              </Section>
+
+              <Section title="Realtime STT">
+                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>The learner live path is currently mock-only. Keep fallback enabled; production ElevenLabs realtime STT stays hidden until the verified streaming adapter and protected smoke test are in place.</span>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(v('realtimeSttEnabled') ?? false)}
+                      onChange={(e) => setField('realtimeSttEnabled', e.target.checked)}
+                    />
+                    Enable mock realtime transcript events
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(v('realtimeSttFallbackToBatch') ?? true)}
+                      onChange={(e) => setField('realtimeSttFallbackToBatch', e.target.checked)}
+                    />
+                    Fallback to full-turn ASR
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">Realtime ASR Provider</span>
+                  <select
+                    value={String(v('realtimeAsrProvider') ?? 'mock')}
+                    onChange={(e) => setField('realtimeAsrProvider', e.target.value)}
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                  >
+                    <option value="mock">Mock (testing only)</option>
+                  </select>
+                </label>
+                <Grid>
+                  <Input label="Max Chunk Bytes" type="number" value={String(v('realtimeSttMaxChunkBytes') ?? '')} onChange={(e) => setField('realtimeSttMaxChunkBytes', Number(e.target.value))} />
+                  <Input label="Partial Min Interval (ms)" type="number" value={String(v('realtimeSttPartialMinIntervalMs') ?? '')} onChange={(e) => setField('realtimeSttPartialMinIntervalMs', Number(e.target.value))} />
+                  <Input label="Turn Idle Timeout (s)" type="number" value={String(v('realtimeSttTurnIdleTimeoutSeconds') ?? '')} onChange={(e) => setField('realtimeSttTurnIdleTimeoutSeconds', Number(e.target.value))} />
+                  <Input label="Concurrent Streams / User" type="number" value={String(v('realtimeSttMaxConcurrentStreamsPerUser') ?? '')} onChange={(e) => setField('realtimeSttMaxConcurrentStreamsPerUser', Number(e.target.value))} />
+                  <Input label="Session Audio Limit (s)" type="number" value={String(v('realtimeSttMaxAudioSecondsPerSession') ?? '')} onChange={(e) => setField('realtimeSttMaxAudioSecondsPerSession', Number(e.target.value))} />
+                  <Input label="Daily Audio Limit / User (s)" type="number" value={String(v('realtimeSttDailyAudioSecondsPerUser') ?? '')} onChange={(e) => setField('realtimeSttDailyAudioSecondsPerUser', Number(e.target.value))} />
+                  <Input label="Monthly Budget Cap (USD)" type="number" step="0.01" value={String(v('realtimeSttMonthlyBudgetCapUsd') ?? '')} onChange={(e) => setField('realtimeSttMonthlyBudgetCapUsd', Number(e.target.value))} />
+                  <Input label="Consent Version" value={String(v('realtimeSttConsentVersion') ?? '')} onChange={(e) => setField('realtimeSttConsentVersion', e.target.value)} placeholder="realtime-stt-v1-2026-05-14" />
+                  <Input label="Rollback Mode" value={String(v('realtimeSttRollbackMode') ?? '')} onChange={(e) => setField('realtimeSttRollbackMode', e.target.value)} placeholder="disable-conversation-audio" />
                 </Grid>
               </Section>
 

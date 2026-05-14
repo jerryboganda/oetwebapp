@@ -40,8 +40,7 @@ public sealed class ElevenLabsConversationTtsProvider(
         using var response = await client.SendAsync(req, ct);
         if (!response.IsSuccessStatusCode)
         {
-            var err = await response.Content.ReadAsStringAsync(ct);
-            logger.LogWarning("ElevenLabs TTS {Status}: {Err}", (int)response.StatusCode, err);
+            logger.LogWarning("ElevenLabs TTS returned status {Status}", (int)response.StatusCode);
             throw new ConversationTtsException("elevenlabs_tts_error", $"ElevenLabs {(int)response.StatusCode}");
         }
         var bytes = await response.Content.ReadAsByteArrayAsync(ct);

@@ -655,6 +655,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             .WithMany()
             .HasForeignKey(x => x.ReadingQuestionId)
             .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReadingPolicy>()
+            .Property(x => x.AllowPaperReadingMode)
+            .HasDefaultValue(true);
         modelBuilder.Entity<NotificationPreference>().HasIndex(x => x.AuthAccountId).IsUnique();
         modelBuilder.Entity<NotificationPolicyOverride>().HasIndex(x => new { x.AudienceRole, x.EventKey }).IsUnique();
         // NOTE: dropped fluent (NotificationEventId, Channel, AttemptedAt) and Endpoint-unique here
@@ -733,6 +736,8 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<ConversationSession>().HasIndex(x => new { x.UserId, x.CreatedAt });
         modelBuilder.Entity<ConversationSession>().HasIndex(x => x.TemplateId);
         modelBuilder.Entity<ConversationTurn>().HasIndex(x => new { x.SessionId, x.TurnNumber });
+        modelBuilder.Entity<ConversationTurn>().HasIndex(x => new { x.SessionId, x.TurnClientId }).IsUnique();
+        modelBuilder.Entity<ConversationTurn>().HasIndex(x => new { x.SessionId, x.ProviderEventId }).IsUnique();
         modelBuilder.Entity<ConversationEvaluation>().HasIndex(x => x.SessionId).IsUnique();
         modelBuilder.Entity<ConversationEvaluation>().HasIndex(x => new { x.UserId, x.CreatedAt });
         modelBuilder.Entity<ConversationTurnAnnotation>().HasIndex(x => new { x.SessionId, x.TurnNumber });

@@ -34,7 +34,7 @@ public sealed class DeepgramConversationAsrProvider(
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Deepgram ASR {Status}: {Body}", (int)response.StatusCode, body);
+            logger.LogWarning("Deepgram ASR returned status {Status}", (int)response.StatusCode);
             throw new ConversationAsrException("deepgram_error", $"Deepgram returned {(int)response.StatusCode}");
         }
 

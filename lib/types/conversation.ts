@@ -3,6 +3,42 @@ export type ConversationState =
   | 'evaluating' | 'evaluated' | 'failed';
 
 export type ConversationTurnRole = 'learner' | 'ai' | 'system';
+
+export type SpeakingSessionConnectionState =
+  | 'idle'
+  | 'connecting'
+  | 'live'
+  | 'listening'
+  | 'transcribing'
+  | 'ai-thinking'
+  | 'ai-speaking'
+  | 'reconnecting'
+  | 'offline'
+  | 'fallback'
+  | 'error';
+
+export type RealtimeSttMode = 'realtime' | 'batch-fallback';
+
+export type ConversationTurnState =
+  | 'ready'
+  | 'listening'
+  | 'paused'
+  | 'sending'
+  | 'ai-thinking'
+  | 'ai-speaking'
+  | 'reconnecting'
+  | 'fallback'
+  | 'error';
+
+export interface PartialTranscriptDraft {
+  turnClientId: string;
+  text: string;
+  stableText?: string;
+  unstableText?: string;
+  confidence?: number | null;
+  receivedAt: number;
+}
+
 export interface ConversationPatientVoice {
   gender?: 'male' | 'female' | 'neutral';
   age?: number;

@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { Loader2, Volume2 } from 'lucide-react';
 import { resolveApiMediaUrl } from '@/lib/media-url';
+import type { ConversationTurnState, PartialTranscriptDraft } from '@/lib/types/conversation';
 
 export interface ChatTurn {
   turnNumber: number;
@@ -17,10 +18,12 @@ interface Props {
   turns: ChatTurn[];
   aiThinking: boolean;
   aiSpeakingTurn?: number | null;
+  partialTranscript?: PartialTranscriptDraft | null;
+  turnState?: ConversationTurnState;
   onReplay?: (turn: ChatTurn) => void;
 }
 
-export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, onReplay }: Props) {
+export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, partialTranscript, turnState, onReplay }: Props) {
   return (
     <div className="flex-1 overflow-y-auto space-y-3 px-1 pb-4" role="log" aria-live="polite" aria-atomic="false">
       <AnimatePresence>
@@ -49,6 +52,7 @@ export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, onRepl
                 <p className="text-sm leading-relaxed">{turn.content}</p>
                 {turn.audioUrl && !isLearner && onReplay && (
                   <button type="button" onClick={() => onReplay(turn)}
+                    aria-label={`Replay AI partner turn ${turn.turnNumber}`}
                     className="mt-2 inline-flex items-center gap-1 rounded-full bg-black/10 px-2 py-0.5 text-xs font-medium hover:bg-black/20 dark:bg-white/10">
                     <Volume2 className="h-3 w-3" /> Replay
                   </button>
@@ -60,6 +64,23 @@ export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, onRepl
             </motion.div>
           );
         })}
+        {partialTranscript && (
+          <motion.div
+            key={`partial-${partialTranscript.turnClientId}`}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex justify-end"
+            aria-live="off">
+            <div className="max-w-[75%] rounded-2xl rounded-br-sm border border-purple-200 bg-purple-50/90 px-4 py-3 text-purple-950 shadow-sm dark:border-purple-800/60 dark:bg-purple-950/30 dark:text-purple-100">
+              <div className="mb-1 flex items-center justify-between gap-2 text-xs font-semibold text-purple-600 dark:text-purple-300">
+                <span>You</span>
+                <span>{turnState === 'listening' ? 'live transcript' : 'not submitted yet'}</span>
+              </div>
+              <p className="text-sm leading-relaxed">{partialTranscript.text}</p>
+              <span className="sr-only" aria-live="polite">Live transcript: {partialTranscript.text}</span>
+            </div>
+          </motion.div>
+        )}
         {aiThinking && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start" aria-hidden="true">
             <div className="rounded-2xl rounded-bl-sm border border-border bg-background-light px-4 py-3 dark:border-gray-700 dark:bg-gray-800">

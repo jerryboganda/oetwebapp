@@ -38,6 +38,12 @@ public class ConversationSession
     public int DurationSeconds { get; set; }
     public string TranscriptJson { get; set; } = "[]";
 
+    [MaxLength(96)]
+    public string? AudioConsentVersion { get; set; }
+
+    public DateTimeOffset? RecordingConsentAcceptedAt { get; set; }
+    public DateTimeOffset? VendorConsentAcceptedAt { get; set; }
+
     [MaxLength(64)]
     public string? EvaluationId { get; set; }
 
@@ -72,6 +78,17 @@ public class ConversationTurn
     public double? ConfidenceScore { get; set; }
 
     public string AnalysisJson { get; set; } = "{}";
+
+    [MaxLength(96)]
+    public string? TurnClientId { get; set; }
+
+    [MaxLength(128)]
+    public string? ProviderEventId { get; set; }
+
+    [MaxLength(64)]
+    public string? ProviderName { get; set; }
+
+    public DateTimeOffset? FinalizedAt { get; set; }
 
     [MaxLength(64)]
     public string? AiFeatureCode { get; set; }

@@ -40,7 +40,7 @@ public sealed class AzureConversationAsrProvider(
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Azure ASR {Status}: {Body}", (int)response.StatusCode, body);
+            logger.LogWarning("Azure ASR returned status {Status}", (int)response.StatusCode);
             throw new ConversationAsrException("azure_error", $"Azure STT returned {(int)response.StatusCode}");
         }
 

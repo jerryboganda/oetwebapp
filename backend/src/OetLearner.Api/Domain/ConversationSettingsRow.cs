@@ -42,6 +42,29 @@ public class ConversationSettingsRow
     [MaxLength(64)] public string? DeepgramModel { get; set; }
     [MaxLength(16)] public string? DeepgramLanguage { get; set; }
 
+    // Realtime STT
+    public bool? RealtimeSttEnabled { get; set; }
+    [MaxLength(64)] public string? RealtimeAsrProvider { get; set; }
+    public bool? RealtimeSttFallbackToBatch { get; set; }
+    public int? RealtimeSttMaxChunkBytes { get; set; }
+    public int? RealtimeSttPartialMinIntervalMs { get; set; }
+    public int? RealtimeSttTurnIdleTimeoutSeconds { get; set; }
+    public int? RealtimeSttMaxConcurrentStreamsPerUser { get; set; }
+    public int? RealtimeSttMaxAudioSecondsPerSession { get; set; }
+    public int? RealtimeSttDailyAudioSecondsPerUser { get; set; }
+    public decimal? RealtimeSttMonthlyBudgetCapUsd { get; set; }
+    [MaxLength(96)] public string? RealtimeSttConsentVersion { get; set; }
+    [MaxLength(64)] public string? RealtimeSttRollbackMode { get; set; }
+    public string? ElevenLabsSttApiKeyEncrypted { get; set; }
+    [MaxLength(256)] public string? ElevenLabsSttBaseUrl { get; set; }
+    [MaxLength(64)] public string? ElevenLabsSttModel { get; set; }
+    [MaxLength(16)] public string? ElevenLabsSttLanguage { get; set; }
+    [MaxLength(64)] public string? ElevenLabsSttAudioFormat { get; set; }
+    [MaxLength(32)] public string? ElevenLabsSttCommitStrategy { get; set; }
+    [MaxLength(1024)] public string? ElevenLabsSttKeytermsCsv { get; set; }
+    public bool? ElevenLabsSttEnableProviderLogging { get; set; }
+    public int? ElevenLabsSttTokenTtlSeconds { get; set; }
+
     // ElevenLabs
     public string? ElevenLabsApiKeyEncrypted { get; set; }
     [MaxLength(64)] public string? ElevenLabsDefaultVoiceId { get; set; }

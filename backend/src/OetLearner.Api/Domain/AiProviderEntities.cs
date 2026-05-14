@@ -34,6 +34,8 @@ public enum AiProviderDialect
     WhisperAsr = 13,
     /// <summary>Azure Pronunciation Assessment (phoneme scoring).</summary>
     AzurePhoneme = 14,
+    /// <summary>ElevenLabs Scribe realtime/batch speech-to-text.</summary>
+    ElevenLabsStt = 15,
     Mock = 99,
 }
 

@@ -1132,6 +1132,26 @@ public static class AdminEndpoints
                     merged.WhisperModel,
                     merged.DeepgramModel,
                     merged.DeepgramLanguage,
+                    merged.RealtimeSttEnabled,
+                    merged.RealtimeAsrProvider,
+                    merged.RealtimeSttFallbackToBatch,
+                    merged.RealtimeSttMaxChunkBytes,
+                    merged.RealtimeSttPartialMinIntervalMs,
+                    merged.RealtimeSttTurnIdleTimeoutSeconds,
+                    merged.RealtimeSttMaxConcurrentStreamsPerUser,
+                    merged.RealtimeSttMaxAudioSecondsPerSession,
+                    merged.RealtimeSttDailyAudioSecondsPerUser,
+                    merged.RealtimeSttMonthlyBudgetCapUsd,
+                    merged.RealtimeSttConsentVersion,
+                    merged.RealtimeSttRollbackMode,
+                    merged.ElevenLabsSttBaseUrl,
+                    merged.ElevenLabsSttModel,
+                    merged.ElevenLabsSttLanguage,
+                    merged.ElevenLabsSttAudioFormat,
+                    merged.ElevenLabsSttCommitStrategy,
+                    merged.ElevenLabsSttKeytermsCsv,
+                    merged.ElevenLabsSttEnableProviderLogging,
+                    merged.ElevenLabsSttTokenTtlSeconds,
                     merged.ElevenLabsDefaultVoiceId,
                     merged.ElevenLabsModel,
                     merged.CosyVoiceBaseUrl,
@@ -1157,6 +1177,7 @@ public static class AdminEndpoints
                     AzureSpeechKeyPresent = !string.IsNullOrEmpty(merged.AzureSpeechKey),
                     WhisperApiKeyPresent = !string.IsNullOrEmpty(merged.WhisperApiKey),
                     DeepgramApiKeyPresent = !string.IsNullOrEmpty(merged.DeepgramApiKey),
+                    ElevenLabsSttApiKeyPresent = !string.IsNullOrEmpty(merged.ElevenLabsSttApiKey),
                     ElevenLabsApiKeyPresent = !string.IsNullOrEmpty(merged.ElevenLabsApiKey),
                     CosyVoiceApiKeyPresent = !string.IsNullOrEmpty(merged.CosyVoiceApiKey),
                     ChatTtsApiKeyPresent = !string.IsNullOrEmpty(merged.ChatTtsApiKey),
@@ -1192,6 +1213,26 @@ public static class AdminEndpoints
                 if (request.WhisperModel is not null) row.WhisperModel = request.WhisperModel;
                 if (request.DeepgramModel is not null) row.DeepgramModel = request.DeepgramModel;
                 if (request.DeepgramLanguage is not null) row.DeepgramLanguage = request.DeepgramLanguage;
+                if (request.RealtimeSttEnabled.HasValue) row.RealtimeSttEnabled = request.RealtimeSttEnabled;
+                if (request.RealtimeAsrProvider is not null) row.RealtimeAsrProvider = NormalizeRealtimeAsrProvider(request.RealtimeAsrProvider);
+                if (request.RealtimeSttFallbackToBatch.HasValue) row.RealtimeSttFallbackToBatch = request.RealtimeSttFallbackToBatch;
+                if (request.RealtimeSttMaxChunkBytes.HasValue) row.RealtimeSttMaxChunkBytes = request.RealtimeSttMaxChunkBytes;
+                if (request.RealtimeSttPartialMinIntervalMs.HasValue) row.RealtimeSttPartialMinIntervalMs = request.RealtimeSttPartialMinIntervalMs;
+                if (request.RealtimeSttTurnIdleTimeoutSeconds.HasValue) row.RealtimeSttTurnIdleTimeoutSeconds = request.RealtimeSttTurnIdleTimeoutSeconds;
+                if (request.RealtimeSttMaxConcurrentStreamsPerUser.HasValue) row.RealtimeSttMaxConcurrentStreamsPerUser = request.RealtimeSttMaxConcurrentStreamsPerUser;
+                if (request.RealtimeSttMaxAudioSecondsPerSession.HasValue) row.RealtimeSttMaxAudioSecondsPerSession = request.RealtimeSttMaxAudioSecondsPerSession;
+                if (request.RealtimeSttDailyAudioSecondsPerUser.HasValue) row.RealtimeSttDailyAudioSecondsPerUser = request.RealtimeSttDailyAudioSecondsPerUser;
+                if (request.RealtimeSttMonthlyBudgetCapUsd.HasValue) row.RealtimeSttMonthlyBudgetCapUsd = request.RealtimeSttMonthlyBudgetCapUsd;
+                if (request.RealtimeSttConsentVersion is not null) row.RealtimeSttConsentVersion = request.RealtimeSttConsentVersion;
+                if (request.RealtimeSttRollbackMode is not null) row.RealtimeSttRollbackMode = request.RealtimeSttRollbackMode;
+                if (request.ElevenLabsSttBaseUrl is not null) row.ElevenLabsSttBaseUrl = request.ElevenLabsSttBaseUrl;
+                if (request.ElevenLabsSttModel is not null) row.ElevenLabsSttModel = request.ElevenLabsSttModel;
+                if (request.ElevenLabsSttLanguage is not null) row.ElevenLabsSttLanguage = request.ElevenLabsSttLanguage;
+                if (request.ElevenLabsSttAudioFormat is not null) row.ElevenLabsSttAudioFormat = request.ElevenLabsSttAudioFormat;
+                if (request.ElevenLabsSttCommitStrategy is not null) row.ElevenLabsSttCommitStrategy = request.ElevenLabsSttCommitStrategy;
+                if (request.ElevenLabsSttKeytermsCsv is not null) row.ElevenLabsSttKeytermsCsv = request.ElevenLabsSttKeytermsCsv;
+                if (request.ElevenLabsSttEnableProviderLogging.HasValue) row.ElevenLabsSttEnableProviderLogging = request.ElevenLabsSttEnableProviderLogging;
+                if (request.ElevenLabsSttTokenTtlSeconds.HasValue) row.ElevenLabsSttTokenTtlSeconds = request.ElevenLabsSttTokenTtlSeconds;
                 if (request.ElevenLabsDefaultVoiceId is not null) row.ElevenLabsDefaultVoiceId = request.ElevenLabsDefaultVoiceId;
                 if (request.ElevenLabsModel is not null) row.ElevenLabsModel = request.ElevenLabsModel;
                 if (request.CosyVoiceBaseUrl is not null) row.CosyVoiceBaseUrl = request.CosyVoiceBaseUrl;
@@ -1218,6 +1259,7 @@ public static class AdminEndpoints
                 if (request.AzureSpeechKey is not null) row.AzureSpeechKeyEncrypted = request.AzureSpeechKey.Length == 0 ? null : optsProvider.Protect(request.AzureSpeechKey);
                 if (request.WhisperApiKey is not null) row.WhisperApiKeyEncrypted = request.WhisperApiKey.Length == 0 ? null : optsProvider.Protect(request.WhisperApiKey);
                 if (request.DeepgramApiKey is not null) row.DeepgramApiKeyEncrypted = request.DeepgramApiKey.Length == 0 ? null : optsProvider.Protect(request.DeepgramApiKey);
+                if (request.ElevenLabsSttApiKey is not null) row.ElevenLabsSttApiKeyEncrypted = request.ElevenLabsSttApiKey.Length == 0 ? null : optsProvider.Protect(request.ElevenLabsSttApiKey);
                 if (request.ElevenLabsApiKey is not null) row.ElevenLabsApiKeyEncrypted = request.ElevenLabsApiKey.Length == 0 ? null : optsProvider.Protect(request.ElevenLabsApiKey);
                 if (request.CosyVoiceApiKey is not null) row.CosyVoiceApiKeyEncrypted = request.CosyVoiceApiKey.Length == 0 ? null : optsProvider.Protect(request.CosyVoiceApiKey);
                 if (request.ChatTtsApiKey is not null) row.ChatTtsApiKeyEncrypted = request.ChatTtsApiKey.Length == 0 ? null : optsProvider.Protect(request.ChatTtsApiKey);
@@ -1737,6 +1779,9 @@ public static class AdminEndpoints
 
     private static string AdminName(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
+
+    private static string NormalizeRealtimeAsrProvider(string provider)
+        => string.Equals(provider.Trim(), "mock", StringComparison.OrdinalIgnoreCase) ? "mock" : "mock";
 }
 
 public record AdminCommunityPinRequest(bool IsPinned);

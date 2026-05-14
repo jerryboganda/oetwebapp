@@ -6,6 +6,12 @@ import type { ConversationScenario } from '@/lib/types/conversation';
 interface Props {
   scenario: ConversationScenario;
   prepCountdown: number;
+  recordingConsentAccepted?: boolean;
+  vendorConsentAccepted?: boolean;
+  consentVersion?: string;
+  audioRetentionDays?: number;
+  startDisabled?: boolean;
+  onConsentChange?: (key: 'recording' | 'vendor', accepted: boolean) => void;
   onStart: () => void;
 }
 
@@ -13,7 +19,17 @@ function formatTime(s: number) {
   return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 }
 
-export function ConversationPrepCard({ scenario, prepCountdown, onStart }: Props) {
+export function ConversationPrepCard({
+  scenario,
+  prepCountdown,
+  recordingConsentAccepted = false,
+  vendorConsentAccepted = false,
+  consentVersion = 'realtime-stt-v1-2026-05-14',
+  audioRetentionDays = 30,
+  startDisabled = false,
+  onConsentChange,
+  onStart,
+}: Props) {
   const objectives = scenario.objectives ?? [];
   return (
     <section className="rounded-3xl border border-purple-200/60 bg-gradient-to-br from-purple-50 to-indigo-50 p-6 shadow-sm dark:border-purple-800/40 dark:from-purple-950/40 dark:to-indigo-950/40">
@@ -67,12 +83,34 @@ export function ConversationPrepCard({ scenario, prepCountdown, onStart }: Props
         </div>
       )}
 
+      <div className="mb-4 rounded-2xl border border-purple-200/70 bg-white/80 p-3 dark:border-purple-800/40 dark:bg-gray-900/70">
+        <div className="mb-2 text-xs font-semibold uppercase text-muted">Recording and transcription consent</div>
+        <label className="flex items-start gap-2 text-sm text-navy/80 dark:text-muted/40">
+          <input
+            type="checkbox"
+            checked={recordingConsentAccepted}
+            onChange={(event) => onConsentChange?.('recording', event.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+          />
+          <span>I consent to microphone capture and {audioRetentionDays}-day retention of final conversation audio for this practice feature.</span>
+        </label>
+        <label className="mt-2 flex items-start gap-2 text-sm text-navy/80 dark:text-muted/40">
+          <input
+            type="checkbox"
+            checked={vendorConsentAccepted}
+            onChange={(event) => onConsentChange?.('vendor', event.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+          />
+          <span>I consent to speech processing by the configured transcription provider under policy {consentVersion}.</span>
+        </label>
+      </div>
+
       <div className="flex items-center justify-between">
         <div className="tabular-nums text-3xl font-bold text-purple-600 dark:text-purple-400">
           {formatTime(prepCountdown)}
         </div>
-        <button onClick={onStart} type="button"
-          className="flex items-center gap-2 rounded-xl bg-purple-600 px-6 py-2.5 font-semibold text-white transition-colors hover:bg-purple-700">
+        <button onClick={onStart} type="button" disabled={startDisabled}
+          className="flex items-center gap-2 rounded-xl bg-purple-600 px-6 py-2.5 font-semibold text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50">
           <Mic className="h-4 w-4" /> Start now
         </button>
       </div>

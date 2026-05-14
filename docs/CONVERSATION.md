@@ -13,7 +13,7 @@
 Learners practise the OET Speaking sub-test with a grounded AI partner that:
 
 1. Stays in the role defined by a CMS-authored scenario (patient for role-plays, colleague for handovers).
-2. Transcribes speech in real time via a pluggable ASR provider (Azure / Whisper / Deepgram).
+2. Transcribes speech through a pluggable ASR provider. The current stable path is whole-turn upload; realtime STT is being added behind `RealtimeSttEnabled` and server-mediated provider controls.
 3. Replies in character with optional TTS (Azure / ElevenLabs / CosyVoice / ChatTTS / GPT-SoVITS).
 4. Evaluates the completed transcript against the 4-criterion OET Speaking rubric, projected to 0–500.
 5. Seeds Review Module items for every rule-cited mistake.
@@ -77,11 +77,12 @@ Learner browser
   /conversation            landing (catalog + entitlement)
   /conversation/{id}       active session (SignalR + mic)
   /conversation/{id}/results  scaled score + rubric + transcript
-        │ SignalR + base64 audio
+        │ SignalR + base64 audio / realtime chunks when enabled
         ▼
 ConversationHub
   StartSession → opening via orchestrator + TTS
   SendAudio    → ASR → grounded reply → TTS
+  BeginRealtimeTurn / SendRealtimeAudioChunk / CompleteRealtimeTurn → partial UI events → final ASR commit → grounded reply → TTS
   EndSession   → enqueue evaluation job
         │
         ▼
@@ -112,8 +113,14 @@ IAiGatewayService.BuildGroundedPrompt (rulebook + scoring + scenario + transcrip
 | GET  | `/v1/conversations/media/{sha}.{ext}` | Stream audio |
 
 ### SignalR hub `/v1/conversations/hub`
-C→S: `StartSession` · `SendAudio(id, base64, mime?)` · `EndSession`
-S→C: `ReceiveTranscript` · `ReceiveAIResponse` · `SessionStateChanged` · `SessionShouldEnd` · `ConversationError`
+C→S: `AcknowledgeAudioConsent(id, consentVersion)` · `StartSession` · `SendAudio(id, base64, mime?)` · `BeginRealtimeTurn(id, streamId, mime?, locale?)` · `SendRealtimeAudioChunk(id, streamId, sequence, base64, offsetMs?)` · `CompleteRealtimeTurn(id, streamId)` · `CancelRealtimeTurn(id, streamId)` · `EndSession`
+S→C: `ReceiveTranscript` · `ReceiveAIResponse` · `RealtimeSttStarted` · `RealtimeTranscriptPartial` · `RealtimeSttFallback` · `RealtimeSttStopped` · `SessionStateChanged` · `SessionShouldEnd` · `ConversationError`
+
+Partial realtime transcript events are UI-only and server-throttled by `RealtimeSttPartialMinIntervalMs`. They are not stored, exported, evaluated, or sent to the AI tutor. `ReceiveTranscript` remains the durable final transcript event.
+
+Batch and realtime audio are rejected unless the session has the current `RealtimeSttConsentVersion` plus recording/vendor consent timestamps. The learner UI acknowledges consent through `AcknowledgeAudioConsent` before starting the session.
+
+`BeginRealtimeTurn` returns `realtime`, `fallback`, or `denied` so the browser can avoid opening the microphone after a server denial. `CompleteRealtimeTurn` returns `committed`, `already-committed`, `failed`, or `denied`; the server finalizes buffered chunks only after the learner turn is durably committed or identified as a duplicate.
 
 
 Phase-2 resume/export details:
@@ -159,6 +166,21 @@ Conversation:
   AzureSpeechKey / AzureSpeechRegion / AzureLocale
   WhisperBaseUrl / WhisperApiKey / WhisperModel
   DeepgramApiKey / DeepgramModel / DeepgramLanguage
+  RealtimeSttEnabled: false
+  RealtimeAsrProvider: mock # mock | elevenlabs-stt | elevenlabs-scribe
+  RealtimeSttFallbackToBatch: true
+  RealtimeSttMaxChunkBytes: 262144
+  RealtimeSttMaxConcurrentStreamsPerUser: 1
+  RealtimeSttMaxAudioSecondsPerSession: 360
+  RealtimeSttDailyAudioSecondsPerUser: 1800
+  RealtimeSttMonthlyBudgetCapUsd: 100
+  RealtimeSttConsentVersion: realtime-stt-v1-2026-05-14
+  RealtimeSttRollbackMode: false
+  ElevenLabsSttBaseUrl: https://api.elevenlabs.io/v1
+  ElevenLabsSttModel: scribe_v2_realtime
+  ElevenLabsSttLanguage: auto
+  ElevenLabsSttAudioFormat: pcm_s16le_16
+  ElevenLabsSttCommitStrategy: manual
   AzureTtsDefaultVoice
   ElevenLabsApiKey / ElevenLabsDefaultVoiceId / ElevenLabsModel
   CosyVoiceBaseUrl / CosyVoiceApiKey / CosyVoiceDefaultVoice
@@ -187,3 +209,4 @@ Conversation:
 - **Never** persist audio via raw `File.*` — always `IConversationAudioService` / `IFileStorage`.
 - **Never** compare a rubric mean to `>= 4.2` inline — use `ConversationProjectedScaled`.
 - **Never** serialise `AudioUrl` without the `/v1/conversations/media/` prefix.
+- **Never** expose ElevenLabs keys to `NEXT_PUBLIC_*`; realtime STT credentials stay server-side and production rollout requires explicit env acknowledgement while the real provider is gated.

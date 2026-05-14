@@ -39,12 +39,13 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
     // ─── BuildSeeds (pure) ────────────────────────────────────────────────
 
     [Fact]
-    public void BuildSeeds_AllConfigured_EmitsFiveRows()
+    public void BuildSeeds_AllConfigured_EmitsSixRows()
     {
         var conv = new ConversationOptions
         {
             AzureSpeechKey = "k", AzureSpeechRegion = "uksouth", AzureLocale = "en-GB",
             ElevenLabsApiKey = "ek",
+            ElevenLabsSttApiKey = "esk",
             WhisperApiKey = "wk", WhisperBaseUrl = "https://api.openai.com/v1",
         };
         var pron = new PronunciationOptions
@@ -54,10 +55,11 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
 
         var seeds = AiVoiceProviderSeeder.BuildSeeds(conv, pron);
 
-        Assert.Equal(5, seeds.Count);
+        Assert.Equal(6, seeds.Count);
         Assert.Contains(seeds, s => s.Code == "azure-tts" && s.Category == AiProviderCategory.Tts);
         Assert.Contains(seeds, s => s.Code == "elevenlabs-tts" && s.Category == AiProviderCategory.Tts);
         Assert.Contains(seeds, s => s.Code == "azure-asr" && s.Category == AiProviderCategory.Asr);
+        Assert.Contains(seeds, s => s.Code == "elevenlabs-stt" && s.Category == AiProviderCategory.Asr && s.Dialect == AiProviderDialect.ElevenLabsStt);
         Assert.Contains(seeds, s => s.Code == "whisper-asr" && s.Category == AiProviderCategory.Asr);
         Assert.Contains(seeds, s => s.Code == "azure-phoneme" && s.Category == AiProviderCategory.Phoneme);
     }
@@ -87,6 +89,24 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
         Assert.Contains(seeds, s => s.Code == "azure-tts");
         Assert.Contains(seeds, s => s.Code == "azure-asr");
         Assert.Contains(seeds, s => s.Code == "azure-phoneme");
+    }
+
+    [Fact]
+    public void BuildSeeds_OnlyElevenLabsStt_EmitsDistinctAsrRow()
+    {
+        var conv = new ConversationOptions
+        {
+            ElevenLabsSttApiKey = "esk",
+            ElevenLabsSttModel = "scribe_v2_realtime",
+        };
+
+        var seeds = AiVoiceProviderSeeder.BuildSeeds(conv, new PronunciationOptions());
+
+        var row = Assert.Single(seeds);
+        Assert.Equal("elevenlabs-stt", row.Code);
+        Assert.Equal(AiProviderCategory.Asr, row.Category);
+        Assert.Equal(AiProviderDialect.ElevenLabsStt, row.Dialect);
+        Assert.Equal("scribe_v2_realtime", row.DefaultModel);
     }
 
     // ─── Seeder hosted service ────────────────────────────────────────────

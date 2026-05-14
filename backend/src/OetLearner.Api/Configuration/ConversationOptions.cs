@@ -18,6 +18,29 @@ public class ConversationOptions
     public string DeepgramModel { get; set; } = "nova-2-medical";
     public string DeepgramLanguage { get; set; } = "en-GB";
 
+    // Realtime STT
+    public bool RealtimeSttEnabled { get; set; } = false;
+    public string RealtimeAsrProvider { get; set; } = "mock";
+    public bool RealtimeSttFallbackToBatch { get; set; } = true;
+    public int RealtimeSttMaxChunkBytes { get; set; } = 256 * 1024;
+    public int RealtimeSttPartialMinIntervalMs { get; set; } = 350;
+    public int RealtimeSttTurnIdleTimeoutSeconds { get; set; } = 15;
+    public int RealtimeSttMaxConcurrentStreamsPerUser { get; set; } = 1;
+    public int RealtimeSttMaxAudioSecondsPerSession { get; set; } = 360;
+    public int RealtimeSttDailyAudioSecondsPerUser { get; set; } = 3600;
+    public decimal RealtimeSttMonthlyBudgetCapUsd { get; set; } = 100m;
+    public string RealtimeSttConsentVersion { get; set; } = "realtime-stt-v1-2026-05-14";
+    public string RealtimeSttRollbackMode { get; set; } = "disable-conversation-audio";
+    public string ElevenLabsSttApiKey { get; set; } = string.Empty;
+    public string ElevenLabsSttBaseUrl { get; set; } = "https://api.elevenlabs.io/v1";
+    public string ElevenLabsSttModel { get; set; } = "scribe_v2_realtime";
+    public string ElevenLabsSttLanguage { get; set; } = "auto";
+    public string ElevenLabsSttAudioFormat { get; set; } = "pcm_s16le_16";
+    public string ElevenLabsSttCommitStrategy { get; set; } = "manual";
+    public string ElevenLabsSttKeytermsCsv { get; set; } = string.Empty;
+    public bool ElevenLabsSttEnableProviderLogging { get; set; } = false;
+    public int ElevenLabsSttTokenTtlSeconds { get; set; } = 900;
+
     // TTS
     public string TtsProvider { get; set; } = "auto";
     public string AzureTtsDefaultVoice { get; set; } = "en-GB-SoniaNeural";

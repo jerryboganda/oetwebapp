@@ -40,7 +40,7 @@ public sealed class WhisperConversationAsrProvider(
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Whisper ASR {Status}: {Body}", (int)response.StatusCode, body);
+            logger.LogWarning("Whisper ASR returned status {Status}", (int)response.StatusCode);
             throw new ConversationAsrException("whisper_error", $"Whisper returned {(int)response.StatusCode}");
         }
 
