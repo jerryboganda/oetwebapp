@@ -1,4 +1,18 @@
-﻿services:
+﻿# =============================================================================
+# docker-compose.staging.yml — OET Staging Stack
+#
+# Usage:
+#   docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --build
+#
+# Requires: .env.staging (copy from .env.staging.example and fill in secrets).
+# See docs/STAGING-LOCAL-GITHUB-PLAN.md for the full setup checklist.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — staging database
+  # Env vars: POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+  # ---------------------------------------------------------------------------
   postgres:
     image: postgres:17-alpine
     container_name: oet-staging-postgres
@@ -25,6 +39,10 @@
     networks:
       - internal
 
+  # ---------------------------------------------------------------------------
+  # ClamAV — upload virus scanner sidecar
+  # No secrets required; uses a persistent volume for signature DB.
+  # ---------------------------------------------------------------------------
   clamav:
     image: clamav/clamav:stable
     container_name: oet-staging-clamav
@@ -40,6 +58,10 @@
     networks:
       - internal
 
+  # ---------------------------------------------------------------------------
+  # Learner API — .NET backend
+  # Most env vars have defaults; see .env.staging.example for REQUIRED ones.
+  # ---------------------------------------------------------------------------
   learner-api:
     build:
       context: .
@@ -105,6 +127,11 @@
       - internal
       - npm_proxy
 
+  # ---------------------------------------------------------------------------
+  # Web — Next.js frontend
+  # Build args: NEXT_PUBLIC_API_BASE_URL, APP_URL
+  # Runtime:    GEMINI_API_KEY (optional)
+  # ---------------------------------------------------------------------------
   web:
     build:
       context: .
@@ -131,11 +158,13 @@
       - internal
       - npm_proxy
 
+# Named volumes — persist across container recreates.
 volumes:
   oetwebsite_staging_postgres_data:
   oetwebsite_staging_learner_storage:
   oetwebsite_staging_clamav_data:
 
+# Networks — internal bridge + external Nginx Proxy Manager network.
 networks:
   internal:
     driver: bridge
