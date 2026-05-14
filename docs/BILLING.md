@@ -332,7 +332,7 @@ working as a superset.
 | `last4`, `brand`, `exp_month`, `exp_year` | Provider-side; surfaced on demand for receipts. | While subscription is active. | Required for receipts and dunning. |
 | Billing address | `PaymentTransaction.MetadataJson` (provider-supplied) | Tax-record retention: **7 years** from invoice issue. | Required for VAT / GST audits. |
 | Invoice line items + amounts | `Invoice`, `PaymentTransaction` | **7 years** from issue. | Tax / financial audit. |
-| Webhook payloads | `PaymentWebhookEvent.PayloadJson` | **180 days** from receipt. | Forensic + reconciliation window. After that the row is retained but the payload column is nulled. |
+| Webhook payloads | `PaymentWebhookEvent.PayloadJson` | Full safe payload for **90 days**; payload replaced with `{}` until **180 days**; row deleted after **180 days**. | Tiered forensic + privacy window: `WebhookPiiRetentionWorker` clears payload content first, then `DataRetentionWorker` removes aged rows. |
 | Wallet ledger | `WalletTransaction` | Lifetime of account, then **7 years** post-deletion. | Required to reconstruct entitlement history. |
 | Refund / dispute notes | `OrderRefund` / `PaymentDispute` rows | **7 years**. | Regulatory + chargeback evidence. |
 | Coupon redemption | `BillingCouponRedemption` | Lifetime of account. | Required to enforce per-user limits. |

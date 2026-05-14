@@ -97,4 +97,56 @@ public class AnalyticsIngestionTests : IClassFixture<TestWebApplicationFactory>
 
         Assert.Equal(beforeCount, afterCount);
     }
+
+    [Fact]
+    public async Task AnalyticsEvents_SanitizeUnsafePropertiesBeforePersisting()
+    {
+        var longValue = new string('x', 400);
+        var response = await _client.PostAsJsonAsync("/v1/analytics/events", new
+        {
+            eventName = "task_completed",
+            properties = new Dictionary<string, object?>
+            {
+                ["email"] = "learner@example.test",
+                ["token"] = "secret-token",
+                ["notes"] = longValue,
+                ["nested"] = new { unsafeText = "do not store" },
+                ["attempts"] = new[] { 1, 2, 3 },
+                ["subtest"] = "reading"
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var eventRecord = await db.AnalyticsEvents.SingleAsync(x => x.UserId == "analytics-user-001" && x.EventName == "task_completed");
+
+        using var payload = JsonDocument.Parse(eventRecord.PayloadJson);
+        Assert.Equal("[redacted]", payload.RootElement.GetProperty("email").GetString());
+        Assert.Equal("[redacted]", payload.RootElement.GetProperty("token").GetString());
+        Assert.Equal(256, payload.RootElement.GetProperty("notes").GetString()!.Length);
+        Assert.False(payload.RootElement.TryGetProperty("nested", out _));
+        Assert.Equal(3, payload.RootElement.GetProperty("attempts").GetArrayLength());
+        Assert.Equal("reading", payload.RootElement.GetProperty("subtest").GetString());
+    }
+
+    [Fact]
+    public async Task AnalyticsEvents_IgnoreOversizedBodies()
+    {
+        await using var beforeScope = _factory.Services.CreateAsyncScope();
+        var beforeDb = beforeScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var beforeCount = await beforeDb.AnalyticsEvents.CountAsync(x => x.UserId == "analytics-user-001");
+
+        using var content = new StringContent($"{{\"eventName\":\"too_big\",\"properties\":{{\"blob\":\"{new string('x', 20_000)}\"}}}}", Encoding.UTF8, "application/json");
+        var response = await _client.PostAsync("/v1/analytics/events", content);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await using var afterScope = _factory.Services.CreateAsyncScope();
+        var afterDb = afterScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var afterCount = await afterDb.AnalyticsEvents.CountAsync(x => x.UserId == "analytics-user-001");
+
+        Assert.Equal(beforeCount, afterCount);
+    }
 }

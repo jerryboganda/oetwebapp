@@ -58,8 +58,6 @@ describe('AuditLogsPage — ?search= deep-link hydration', () => {
     vi.clearAllMocks();
     mockSearchParams.clear();
     mockUseAdminAuth.mockReturnValue({ isAuthenticated: true, role: 'admin' });
-    // Page logic hides the search Input behind the empty-state branch,
-    // so we always seed at least one row to keep the search box mounted.
     mockGetPageData.mockResolvedValue({ items: [sampleRow], total: 1, page: 1, pageSize: 20 });
   });
 
@@ -89,5 +87,22 @@ describe('AuditLogsPage — ?search= deep-link hydration', () => {
 
     const searchInput = screen.getByPlaceholderText(/Search actions, actors, resources, or details/i) as HTMLInputElement;
     expect(searchInput.value).toBe('');
+  });
+
+  it('keeps search and filters mounted when a filtered search has no results', async () => {
+    mockSearchParams.set('search', 'missing');
+    mockGetPageData.mockImplementation(async (arg?: { search?: string }) => (
+      arg?.search === 'missing'
+        ? { items: [], total: 0, page: 1, pageSize: 20 }
+        : { items: [sampleRow], total: 1, page: 1, pageSize: 20 }
+    ));
+
+    render(<AuditLogsPage />);
+
+    expect(await screen.findByText('No audit events found')).toBeInTheDocument();
+    const searchInput = screen.getByPlaceholderText(/Search actions, actors, resources, or details/i) as HTMLInputElement;
+    expect(searchInput.value).toBe('missing');
+    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Actor')).toBeInTheDocument();
   });
 });

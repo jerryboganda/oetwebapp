@@ -145,10 +145,9 @@ function bundlesFromOptions(bundles: MockBundleOption[]): DiagnosticBundleSummar
 }
 
 export default function DiagnosticMockPage() {
-  // V2 Medium #3 (May 2026 audit closure). Wrap in Suspense so the
-  // LearnerDashboardShell paints a skeleton during the initial client
-  // mount + first network round-trip instead of flashing the empty
-  // landing state. Mirrors the pattern used in `/reading/.../results`.
+  // V2 Medium #3 (May 2026 audit closure). Suspense covers any client-side
+  // router suspension; the explicit loading branch in DiagnosticMockPageContent
+  // owns the first network round-trip skeleton.
   return (
     <Suspense
       fallback={(

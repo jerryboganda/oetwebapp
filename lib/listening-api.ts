@@ -363,10 +363,19 @@ export function getListeningSession(
   return api<ListeningSessionDto>(`/v1/listening-papers/papers/${encodeURIComponent(paperId)}/session${suffix}`);
 }
 
-export const startListeningAttempt = (paperId: string, mode: ListeningSessionMode, options: { pathwayStage?: string | null } = {}) =>
+export const startListeningAttempt = (paperId: string, mode: ListeningSessionMode, options: {
+  pathwayStage?: string | null;
+  mockAttemptId?: string | null;
+  mockSectionId?: string | null;
+} = {}) =>
   api<ListeningAttemptDto>(`/v1/listening-papers/papers/${encodeURIComponent(paperId)}/attempts`, {
     method: 'POST',
-    body: JSON.stringify({ mode, pathwayStage: options.pathwayStage ?? undefined }),
+    body: JSON.stringify({
+      mode,
+      pathwayStage: options.pathwayStage ?? undefined,
+      mockAttemptId: options.mockAttemptId ?? undefined,
+      mockSectionId: options.mockSectionId ?? undefined,
+    }),
   });
 
 export const saveListeningAnswer = (attemptId: string, questionId: string, userAnswer: string) =>

@@ -259,25 +259,25 @@ export default function AuditLogsPage() {
         }
       />
 
-      <AsyncStateWrapper
-        status={pageStatus}
-        onRetry={() => window.location.reload()}
-        emptyContent={
-          <EmptyState
-            icon={<FileText className="h-10 w-10 text-muted" />}
-            title="No audit events found"
-            description="Adjust the search or filters, or wait for more operational activity to be recorded."
-          />
-        }
-      >
-        <AdminRoutePanel title="Audit Stream" description="Search, filter, and inspect individual events without leaving the admin console.">
-          <div className="max-w-md">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-              <Input placeholder="Search actions, actors, resources, or details" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
-            </div>
+      <AdminRoutePanel title="Audit Stream" description="Search, filter, and inspect individual events without leaving the admin console.">
+        <div className="max-w-md">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <Input placeholder="Search actions, actors, resources, or details" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
           </div>
-          <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => { setPage(1); handleFilterChange(groupId, optionId); }} onClear={() => { setPage(1); setFilters({ action: [], actor: [] }); setSearchQuery(''); }} />
+        </div>
+        <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => { setPage(1); handleFilterChange(groupId, optionId); }} onClear={() => { setPage(1); setFilters({ action: [], actor: [] }); setSearchQuery(''); }} />
+        <AsyncStateWrapper
+          status={pageStatus}
+          onRetry={() => window.location.reload()}
+          emptyContent={
+            <EmptyState
+              icon={<FileText className="h-10 w-10 text-muted" />}
+              title="No audit events found"
+              description="Adjust the search or filters, or wait for more operational activity to be recorded."
+            />
+          }
+        >
           <Pagination
             page={page}
             pageSize={pageSize}
@@ -289,8 +289,8 @@ export default function AuditLogsPage() {
             itemLabelPlural="events"
           />
           <DataTable columns={columns} data={rows} keyExtractor={(log) => log.id} onRowClick={handleRowClick} mobileCardRender={mobileCardRender} />
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
+        </AsyncStateWrapper>
+      </AdminRoutePanel>
 
       <Drawer open={Boolean(selectedLogId)} onClose={handleDrawerClose} title="Audit Event Detail">
         {isDetailLoading || !selectedLogDetail ? (

@@ -139,9 +139,9 @@ public class ListeningAdminAttemptExportEndpointTests : IClassFixture<TestWebApp
     }
 
     [Fact]
-    public async Task Admin_without_content_read_permission_cannot_export_attempt_json()
+    public async Task Admin_without_quality_analytics_permission_cannot_export_attempt_json()
     {
-        using var client = CreateAdminClient(AdminPermissions.ContentWrite);
+        using var client = CreateAdminClient(AdminPermissions.ContentRead);
 
         var response = await client.GetAsync("/v1/admin/listening/attempts/anything/export");
 
@@ -158,7 +158,7 @@ public class ListeningAdminAttemptExportEndpointTests : IClassFixture<TestWebApp
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    private HttpClient CreateAdminClient(string adminPermissions = AdminPermissions.ContentRead)
+    private HttpClient CreateAdminClient(string adminPermissions = AdminPermissions.QualityAnalytics)
     {
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-export");

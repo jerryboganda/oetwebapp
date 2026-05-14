@@ -7,6 +7,7 @@ namespace OetLearner.Api.Endpoints;
 
 public static class AnalyticsEndpoints
 {
+    private const int MaxAnalyticsBodyBytes = 16 * 1024;
     private static readonly JsonSerializerOptions AnalyticsJsonOptions = new(JsonSerializerDefaults.Web);
 
     public static IEndpointRouteBuilder MapAnalyticsEndpoints(this IEndpointRouteBuilder app)
@@ -20,6 +21,11 @@ public static class AnalyticsEndpoints
             AnalyticsIngestionService service,
             CancellationToken ct) =>
         {
+            if (http.Request.ContentLength > MaxAnalyticsBodyBytes)
+            {
+                return Results.NoContent();
+            }
+
             string body;
             using (var reader = new StreamReader(http.Request.Body))
             {
@@ -27,6 +33,10 @@ public static class AnalyticsEndpoints
             }
 
             if (string.IsNullOrWhiteSpace(body))
+            {
+                return Results.NoContent();
+            }
+            if (System.Text.Encoding.UTF8.GetByteCount(body) > MaxAnalyticsBodyBytes)
             {
                 return Results.NoContent();
             }

@@ -88,7 +88,7 @@ Implemented 2026-05-13. Reading and Listening item analysis now expose difficult
 1. New `GET /v1/admin/mocks/{bundleId}/listening-item-analysis` returns per-item difficulty (% correct), discrimination index (top-third minus bottom-third), and distractor frequency.
 2. Endpoint reuses `MockService.GetItemAnalysisAsync` shape; difference is the entity it pulls from (`ListeningAnswer` vs `ReadingAnswer`).
 3. Admin UI tab on the bundle item-analysis page picks the subtest.
-4. AdminContentRead permission (matches existing analytics gates).
+4. `AdminQualityAnalytics` permission for item-analysis and analytics read routes; content-read remains for ordinary bundle browsing.
 5. SQLite test fixture covering 10 attempts × 42 items × correct/incorrect distribution.
 
 ### Dependencies

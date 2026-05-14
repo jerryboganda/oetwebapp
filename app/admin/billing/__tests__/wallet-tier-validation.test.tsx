@@ -58,7 +58,7 @@ describe('WalletTiersEditor client-side validation', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it('rejects non-positive-integer amounts (e.g. decimals or zero)', async () => {
+  it('rejects non-positive whole-currency amounts (e.g. decimals or zero)', async () => {
     const user = userEvent.setup();
     render(
       <WalletTiersEditor
@@ -72,7 +72,7 @@ describe('WalletTiersEditor client-side validation', () => {
     const amountInput = within(row).getByLabelText(/tier 1 amount/i);
     await user.clear(amountInput);
     await user.type(amountInput, '12.5');
-    expect(within(row).getByText(/positive integer/i)).toBeInTheDocument();
+    expect(within(row).getByText(/positive whole-currency amount/i)).toBeInTheDocument();
     expect(screen.getByTestId('wallet-tiers-save')).toBeDisabled();
   });
 

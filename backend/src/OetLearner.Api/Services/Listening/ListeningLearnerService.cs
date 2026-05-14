@@ -423,6 +423,9 @@ public sealed class ListeningLearnerService(
         => StartAttemptAsync(userId, paperId, mode, pathwayStage: null, ct);
 
     public async Task<object> StartAttemptAsync(string userId, string paperId, string? mode, string? pathwayStage, CancellationToken ct)
+        => await StartAttemptAsync(userId, paperId, mode, pathwayStage, forceNewAttempt: false, ct);
+
+    public async Task<object> StartAttemptAsync(string userId, string paperId, string? mode, string? pathwayStage, bool forceNewAttempt, CancellationToken ct)
     {
         await EnsureLearnerMutationAllowedAsync(userId, ct);
 
@@ -440,20 +443,23 @@ public sealed class ListeningLearnerService(
         var normalizedPathwayStage = NormalizePathwayStage(pathwayStage);
         if (source.UsesRelationalStructure)
         {
-            return await StartRelationalAttemptAsync(userId, source, normalizedMode, normalizedPathwayStage, ct);
+            return await StartRelationalAttemptAsync(userId, source, normalizedMode, normalizedPathwayStage, forceNewAttempt, ct);
         }
 
-        var existing = await db.Attempts
-            .Where(a => a.UserId == userId
-                && a.ContentId == source.Id
-                && a.SubtestCode == Subtest
-                && a.Mode == normalizedMode
-                && a.State == AttemptState.InProgress)
-            .OrderByDescending(a => a.LastClientSyncAt ?? a.StartedAt)
-            .FirstOrDefaultAsync(ct);
-        if (existing is not null)
+        if (!forceNewAttempt)
         {
-            return AttemptDto(existing, DeserializeAnswers(existing.AnswersJson));
+            var existing = await db.Attempts
+                .Where(a => a.UserId == userId
+                    && a.ContentId == source.Id
+                    && a.SubtestCode == Subtest
+                    && a.Mode == normalizedMode
+                    && a.State == AttemptState.InProgress)
+                .OrderByDescending(a => a.LastClientSyncAt ?? a.StartedAt)
+                .FirstOrDefaultAsync(ct);
+            if (existing is not null)
+            {
+                return AttemptDto(existing, DeserializeAnswers(existing.AnswersJson));
+            }
         }
 
         var attempt = new Attempt
@@ -758,20 +764,23 @@ public sealed class ListeningLearnerService(
         await db.SaveChangesAsync(ct);
     }
 
-    private async Task<object> StartRelationalAttemptAsync(string userId, ListeningSource source, string normalizedMode, string? normalizedPathwayStage, CancellationToken ct)
+    private async Task<object> StartRelationalAttemptAsync(string userId, ListeningSource source, string normalizedMode, string? normalizedPathwayStage, bool forceNewAttempt, CancellationToken ct)
     {
         var relationalMode = ToRelationalMode(normalizedMode);
-        var existingCandidates = await db.ListeningAttempts
-            .Where(a => a.UserId == userId
-                && a.PaperId == source.Id
-                && a.Mode == relationalMode
-                && a.Status == ListeningAttemptStatus.InProgress)
-            .OrderByDescending(a => a.LastActivityAt)
-            .ToListAsync(ct);
-        var existing = existingCandidates.FirstOrDefault(a => ListeningAttemptScope.MatchesRequestedPathwayStage(a.ScopeJson, normalizedPathwayStage));
-        if (existing is not null)
+        if (!forceNewAttempt)
         {
-            return RelationalAttemptDto(existing, await LoadRelationalAnswersAsync(existing.Id, ct));
+            var existingCandidates = await db.ListeningAttempts
+                .Where(a => a.UserId == userId
+                    && a.PaperId == source.Id
+                    && a.Mode == relationalMode
+                    && a.Status == ListeningAttemptStatus.InProgress)
+                .OrderByDescending(a => a.LastActivityAt)
+                .ToListAsync(ct);
+            var existing = existingCandidates.FirstOrDefault(a => ListeningAttemptScope.MatchesRequestedPathwayStage(a.ScopeJson, normalizedPathwayStage));
+            if (existing is not null)
+            {
+                return RelationalAttemptDto(existing, await LoadRelationalAnswersAsync(existing.Id, ct));
+            }
         }
 
         var policy = await ResolveListeningPolicyAsync(ct);

@@ -493,8 +493,151 @@ public sealed class MockService(LearnerDbContext db)
             await db.SaveChangesAsync(ct);
         }
 
-        section.LaunchRoute = BuildLaunchRoute(attempt, bundleSection, section.Id);
+        section.LaunchRoute = BuildLaunchRoute(attempt, bundleSection, section.Id, section.ContentAttemptId);
         return ProjectSectionAttempt(section, bundleSection, attempt);
+    }
+
+    public async Task BindSectionContentAttemptIfRequestedAsync(
+        string userId,
+        string? mockAttemptId,
+        string? sectionId,
+        string contentAttemptId,
+        string subtestCode,
+        string paperId,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(mockAttemptId) && string.IsNullOrWhiteSpace(sectionId))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(mockAttemptId) || string.IsNullOrWhiteSpace(sectionId))
+        {
+            throw ApiException.Validation("mock_section_binding_incomplete", "Mock section binding requires both mockAttemptId and mockSectionId.");
+        }
+
+        var attempt = await GetMockAttemptOwnedByUserAsync(userId, mockAttemptId.Trim(), ct);
+        if (attempt.State is AttemptState.Completed or AttemptState.Abandoned)
+        {
+            throw ApiException.Conflict("mock_attempt_closed", "This mock attempt is already closed.");
+        }
+
+        var section = await db.MockSectionAttempts
+            .FirstOrDefaultAsync(x => x.Id == sectionId.Trim() && x.MockAttemptId == attempt.Id, ct)
+            ?? throw ApiException.NotFound("mock_section_not_found", "Mock section not found.");
+        var bundleSection = await db.MockBundleSections.AsNoTracking()
+            .FirstAsync(x => x.Id == section.MockBundleSectionId, ct);
+        var normalizedSubtest = NormalizeSubtest(subtestCode);
+        if (!string.Equals(section.SubtestCode, normalizedSubtest, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(bundleSection.SubtestCode, normalizedSubtest, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation("mock_section_subtest_mismatch", "The content attempt does not match this mock section subtest.");
+        }
+        if (!string.Equals(bundleSection.ContentPaperId, paperId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation("mock_section_paper_mismatch", "The content attempt does not match this mock section paper.");
+        }
+        if (string.Equals(normalizedSubtest, "listening", StringComparison.OrdinalIgnoreCase))
+        {
+            await RequireRelationalListeningStructureForMockAsync(paperId, ct);
+        }
+        if (section.State != AttemptState.InProgress)
+        {
+            throw ApiException.Conflict("mock_section_not_in_progress", "Start the mock section before binding its content attempt.");
+        }
+
+        var trimmedContentAttemptId = contentAttemptId.Trim();
+        var contentAttemptExists = normalizedSubtest switch
+        {
+            "reading" => await db.ReadingAttempts.AsNoTracking().AnyAsync(x =>
+                x.Id == trimmedContentAttemptId && x.UserId == userId && x.PaperId == paperId,
+                ct),
+            "listening" => await db.ListeningAttempts.AsNoTracking().AnyAsync(x =>
+                x.Id == trimmedContentAttemptId && x.UserId == userId && x.PaperId == paperId,
+                ct),
+            _ => false,
+        };
+        if (!contentAttemptExists)
+        {
+            throw ApiException.NotFound("content_attempt_not_found", "The content attempt was not found for this learner and paper.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(section.ContentAttemptId)
+            && !string.Equals(section.ContentAttemptId, trimmedContentAttemptId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Conflict("mock_section_content_attempt_mismatch", "This mock section is already bound to another content attempt.");
+        }
+
+        section.ContentAttemptId = trimmedContentAttemptId;
+        section.LaunchRoute = BuildLaunchRoute(attempt, bundleSection, section.Id, section.ContentAttemptId);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<bool> ValidateSectionContentAttemptBindingTargetIfRequestedAsync(
+        string userId,
+        string? mockAttemptId,
+        string? sectionId,
+        string subtestCode,
+        string paperId,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(mockAttemptId) && string.IsNullOrWhiteSpace(sectionId))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(mockAttemptId) || string.IsNullOrWhiteSpace(sectionId))
+        {
+            throw ApiException.Validation("mock_section_binding_incomplete", "Mock section binding requires both mockAttemptId and mockSectionId.");
+        }
+
+        var attempt = await GetMockAttemptOwnedByUserAsync(userId, mockAttemptId.Trim(), ct);
+        if (attempt.State is AttemptState.Completed or AttemptState.Abandoned)
+        {
+            throw ApiException.Conflict("mock_attempt_closed", "This mock attempt is already closed.");
+        }
+
+        var section = await db.MockSectionAttempts.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == sectionId.Trim() && x.MockAttemptId == attempt.Id, ct)
+            ?? throw ApiException.NotFound("mock_section_not_found", "Mock section not found.");
+        var bundleSection = await db.MockBundleSections.AsNoTracking()
+            .FirstAsync(x => x.Id == section.MockBundleSectionId, ct);
+        var normalizedSubtest = NormalizeSubtest(subtestCode);
+        if (!string.Equals(section.SubtestCode, normalizedSubtest, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(bundleSection.SubtestCode, normalizedSubtest, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation("mock_section_subtest_mismatch", "The content attempt does not match this mock section subtest.");
+        }
+        if (!string.Equals(bundleSection.ContentPaperId, paperId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation("mock_section_paper_mismatch", "The content attempt does not match this mock section paper.");
+        }
+        if (string.Equals(normalizedSubtest, "listening", StringComparison.OrdinalIgnoreCase))
+        {
+            await RequireRelationalListeningStructureForMockAsync(paperId, ct);
+        }
+        if (section.State != AttemptState.InProgress)
+        {
+            throw ApiException.Conflict("mock_section_not_in_progress", "Start the mock section before binding its content attempt.");
+        }
+        if (!string.IsNullOrWhiteSpace(section.ContentAttemptId))
+        {
+            throw ApiException.Conflict("mock_section_content_attempt_already_bound", "This mock section is already bound to a content attempt.");
+        }
+
+        return true;
+    }
+
+    private async Task RequireRelationalListeningStructureForMockAsync(string paperId, CancellationToken ct)
+    {
+        var hasRelationalQuestions = await db.ListeningQuestions.AsNoTracking()
+            .AnyAsync(question => question.PaperId == paperId, ct);
+        if (!hasRelationalQuestions)
+        {
+            throw ApiException.Validation(
+                "mock_listening_structure_required",
+                "Listening mock sections require structured Listening questions before they can start.");
+        }
     }
 
     public async Task<object> CompleteMockSectionAsync(string userId, string mockAttemptId, string sectionId, MockSectionCompleteRequest request, CancellationToken ct)
@@ -512,9 +655,10 @@ public sealed class MockService(LearnerDbContext db)
             .Include(x => x.ContentPaper)
             .FirstAsync(x => x.Id == section.MockBundleSectionId, ct);
 
-        if (!string.IsNullOrWhiteSpace(request.ContentAttemptId))
+        var canonicalEvidence = await ResolveCanonicalSectionEvidenceAsync(userId, request.ContentAttemptId, section, bundleSection, ct);
+        if (canonicalEvidence is null && !string.IsNullOrWhiteSpace(request.ContentAttemptId))
         {
-            var ownsContentAttempt = await OwnsSubmittedSectionEvidenceAsync(userId, request.ContentAttemptId, section, bundleSection, ct);
+            var ownsContentAttempt = await OwnsLegacySectionEvidenceAsync(userId, request.ContentAttemptId, section, bundleSection, ct);
             if (!ownsContentAttempt)
             {
                 throw ApiException.NotFound("content_attempt_not_found", "The submitted section evidence was not found for this learner and paper.");
@@ -525,14 +669,15 @@ public sealed class MockService(LearnerDbContext db)
         section.State = AttemptState.Completed;
         section.SubmittedAt ??= now;
         section.CompletedAt = now;
-        section.ContentAttemptId = string.IsNullOrWhiteSpace(request.ContentAttemptId) ? section.ContentAttemptId : request.ContentAttemptId;
-        section.RawScore = request.RawScore ?? section.RawScore;
-        section.RawScoreMax = request.RawScoreMax ?? section.RawScoreMax;
-        section.ScaledScore = ResolveScaledScore(section.SubtestCode, request.RawScore, request.ScaledScore);
-        section.Grade = string.IsNullOrWhiteSpace(request.Grade)
+        section.ContentAttemptId = canonicalEvidence?.ContentAttemptId
+            ?? (string.IsNullOrWhiteSpace(request.ContentAttemptId) ? section.ContentAttemptId : request.ContentAttemptId.Trim());
+        section.RawScore = canonicalEvidence?.RawScore ?? request.RawScore ?? section.RawScore;
+        section.RawScoreMax = canonicalEvidence?.RawScoreMax ?? request.RawScoreMax ?? section.RawScoreMax;
+        section.ScaledScore = canonicalEvidence?.ScaledScore ?? ResolveScaledScore(section.SubtestCode, request.RawScore, request.ScaledScore);
+        section.Grade = canonicalEvidence?.Grade ?? (string.IsNullOrWhiteSpace(request.Grade)
             ? section.ScaledScore is null ? section.Grade : OetScoring.OetGradeLetterFromScaled(section.ScaledScore.Value)
-            : request.Grade;
-        section.FeedbackJson = JsonSupport.Serialize(request.Evidence ?? new Dictionary<string, object?>());
+            : request.Grade);
+        section.FeedbackJson = JsonSupport.Serialize(BuildSectionEvidencePayload(request.Evidence, canonicalEvidence));
 
         await ConsumeReservationForSectionAsync(userId, attempt, section, request.ReviewTurnaroundOption, now, ct);
         RecordEvent(userId, "mock_section_completed", new { mockAttemptId = attempt.Id, sectionId = section.Id, subtest = section.SubtestCode, section.ScaledScore });
@@ -540,7 +685,52 @@ public sealed class MockService(LearnerDbContext db)
         return ProjectSectionAttempt(section, bundleSection, attempt);
     }
 
-    private async Task<bool> OwnsSubmittedSectionEvidenceAsync(
+    private async Task<CanonicalSectionEvidence?> ResolveCanonicalSectionEvidenceAsync(
+        string userId,
+        string? contentAttemptId,
+        MockSectionAttempt section,
+        MockBundleSection bundleSection,
+        CancellationToken ct)
+    {
+        return section.SubtestCode.Trim().ToLowerInvariant() switch
+        {
+            "reading" => await ResolveReadingEvidenceAsync(userId, contentAttemptId, section, bundleSection.ContentPaperId, ct),
+            "listening" => await ResolveListeningEvidenceAsync(userId, contentAttemptId, section, bundleSection.ContentPaperId, ct),
+            _ => null,
+        };
+    }
+
+    private async Task<CanonicalSectionEvidence> ResolveReadingEvidenceAsync(
+        string userId,
+        string? contentAttemptId,
+        MockSectionAttempt section,
+        string paperId,
+        CancellationToken ct)
+    {
+        var attemptId = RequireCanonicalContentAttemptId(contentAttemptId);
+        RequireBoundContentAttempt(section, attemptId);
+        var attempt = await db.ReadingAttempts.AsNoTracking().FirstOrDefaultAsync(x =>
+            x.Id == attemptId && x.UserId == userId && x.PaperId == paperId && x.Status == ReadingAttemptStatus.Submitted,
+            ct) ?? throw ApiException.NotFound("content_attempt_not_found", "The submitted section evidence was not found for this learner and paper.");
+        return BuildCanonicalEvidence(attempt.Id, attempt.RawScore, attempt.MaxRawScore, attempt.ScaledScore, "reading_attempt");
+    }
+
+    private async Task<CanonicalSectionEvidence> ResolveListeningEvidenceAsync(
+        string userId,
+        string? contentAttemptId,
+        MockSectionAttempt section,
+        string paperId,
+        CancellationToken ct)
+    {
+        var attemptId = RequireCanonicalContentAttemptId(contentAttemptId);
+        RequireBoundContentAttempt(section, attemptId);
+        var attempt = await db.ListeningAttempts.AsNoTracking().FirstOrDefaultAsync(x =>
+            x.Id == attemptId && x.UserId == userId && x.PaperId == paperId && x.Status == ListeningAttemptStatus.Submitted,
+            ct) ?? throw ApiException.NotFound("content_attempt_not_found", "The submitted section evidence was not found for this learner and paper.");
+        return BuildCanonicalEvidence(attempt.Id, attempt.RawScore, attempt.MaxRawScore, attempt.ScaledScore, "listening_attempt");
+    }
+
+    private async Task<bool> OwnsLegacySectionEvidenceAsync(
         string userId,
         string contentAttemptId,
         MockSectionAttempt section,
@@ -548,29 +738,71 @@ public sealed class MockService(LearnerDbContext db)
         CancellationToken ct)
     {
         var attemptId = contentAttemptId.Trim();
-        return section.SubtestCode.Trim().ToLowerInvariant() switch
-        {
-            "reading" => await db.ReadingAttempts.AsNoTracking().AnyAsync(x =>
-                x.Id == attemptId
-                && x.UserId == userId
-                && x.PaperId == bundleSection.ContentPaperId
-                && x.Status == ReadingAttemptStatus.Submitted,
-                ct),
-            "listening" => await db.ListeningAttempts.AsNoTracking().AnyAsync(x =>
-                x.Id == attemptId
-                && x.UserId == userId
-                && x.PaperId == bundleSection.ContentPaperId
-                && x.Status == ListeningAttemptStatus.Submitted,
-                ct),
-            _ => await db.Attempts.AsNoTracking().AnyAsync(x =>
+        return await db.Attempts.AsNoTracking().AnyAsync(x =>
                 x.Id == attemptId
                 && x.UserId == userId
                 && x.ContentId == bundleSection.ContentPaperId
                 && x.SubtestCode == section.SubtestCode
                 && x.State == AttemptState.Completed,
-                ct),
-        };
+                ct);
     }
+
+    private static string RequireCanonicalContentAttemptId(string? contentAttemptId)
+        => string.IsNullOrWhiteSpace(contentAttemptId)
+            ? throw ApiException.Validation("content_attempt_required", "Reading and Listening mock sections require submitted section evidence.")
+            : contentAttemptId.Trim();
+
+    private static void RequireBoundContentAttempt(MockSectionAttempt section, string contentAttemptId)
+    {
+        if (string.IsNullOrWhiteSpace(section.ContentAttemptId))
+        {
+            throw ApiException.Conflict("content_attempt_not_bound", "This mock section has not been bound to a Reading or Listening attempt.");
+        }
+
+        if (!string.Equals(section.ContentAttemptId, contentAttemptId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Conflict("content_attempt_mismatch", "The submitted section evidence does not match the attempt started for this mock section.");
+        }
+    }
+
+    private static CanonicalSectionEvidence BuildCanonicalEvidence(
+        string contentAttemptId,
+        int? rawScore,
+        int rawScoreMax,
+        int? scaledScore,
+        string evidenceSource)
+    {
+        if (!rawScore.HasValue)
+        {
+            throw ApiException.Conflict("content_attempt_not_graded", "The submitted section evidence has not been graded yet.");
+        }
+
+        var scaled = scaledScore ?? OetScoring.OetRawToScaled(rawScore.Value);
+        var max = rawScoreMax > 0 ? rawScoreMax : 42;
+        return new CanonicalSectionEvidence(contentAttemptId, rawScore.Value, max, scaled, OetScoring.OetGradeLetterFromScaled(scaled), evidenceSource);
+    }
+
+    private static Dictionary<string, object?> BuildSectionEvidencePayload(
+        Dictionary<string, object?>? requestEvidence,
+        CanonicalSectionEvidence? canonicalEvidence)
+    {
+        var evidence = requestEvidence is null ? new Dictionary<string, object?>() : new Dictionary<string, object?>(requestEvidence);
+        if (canonicalEvidence is not null)
+        {
+            evidence["evidenceSource"] = canonicalEvidence.EvidenceSource;
+            evidence["contentAttemptId"] = canonicalEvidence.ContentAttemptId;
+        }
+
+        return evidence;
+    }
+
+    private sealed record CanonicalSectionEvidence(
+        string ContentAttemptId,
+        int RawScore,
+        int RawScoreMax,
+        int ScaledScore,
+        string Grade,
+        string EvidenceSource);
 
     public async Task<object> SubmitMockAttemptAsync(string userId, string mockAttemptId, CancellationToken ct)
     {
@@ -2496,13 +2728,17 @@ public sealed class MockService(LearnerDbContext db)
     }
 
 
-    private static string BuildLaunchRoute(MockAttempt attempt, MockBundleSection section, string? sectionAttemptId)
+    private static string BuildLaunchRoute(MockAttempt attempt, MockBundleSection section, string? sectionAttemptId, string? contentAttemptId = null)
     {
         var attemptId = attempt.Id;
         var query = $"mockAttemptId={Uri.EscapeDataString(attemptId)}";
         if (!string.IsNullOrWhiteSpace(sectionAttemptId))
         {
             query += $"&mockSectionId={Uri.EscapeDataString(sectionAttemptId)}";
+        }
+        if (!string.IsNullOrWhiteSpace(contentAttemptId))
+        {
+            query += $"&attemptId={Uri.EscapeDataString(contentAttemptId)}";
         }
         query += $"&paperId={Uri.EscapeDataString(section.ContentPaperId)}";
         query += $"&mockMode={Uri.EscapeDataString(attempt.Mode)}";

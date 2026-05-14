@@ -101,14 +101,15 @@ public class MockV2EndpointTests : IClassFixture<TestWebApplicationFactory>
         var root = attemptJson.RootElement;
         var attemptId = root.GetProperty("mockAttemptId").GetString()!;
         var firstSectionId = root.GetProperty("sectionStates")[0].GetProperty("id").GetString()!;
+        var readingAttemptId = await SeedSubmittedReadingAttemptAsync("mock-v2-incomplete-user", $"{bundleId}-reading-paper", firstSectionId);
 
         var complete = await client.PostAsJsonAsync($"/v1/mock-attempts/{attemptId}/sections/{firstSectionId}/complete", new
         {
-            contentAttemptId = (string?)null,
-            rawScore = 30,
+            contentAttemptId = readingAttemptId,
+            rawScore = 42,
             rawScoreMax = 42,
-            scaledScore = 350,
-            grade = "B",
+            scaledScore = 500,
+            grade = "A",
             evidence = new Dictionary<string, object?> { ["source"] = "test" }
         });
         complete.EnsureSuccessStatusCode();
@@ -141,14 +142,15 @@ public class MockV2EndpointTests : IClassFixture<TestWebApplicationFactory>
         var root = attemptJson.RootElement;
         var attemptId = root.GetProperty("mockAttemptId").GetString()!;
         var firstSectionId = root.GetProperty("sectionStates")[0].GetProperty("id").GetString()!;
+        var readingAttemptId = await SeedSubmittedReadingAttemptAsync("mock-v2-optional-user", $"{bundleId}-reading-paper", firstSectionId);
 
         var complete = await client.PostAsJsonAsync($"/v1/mock-attempts/{attemptId}/sections/{firstSectionId}/complete", new
         {
-            contentAttemptId = (string?)null,
-            rawScore = 30,
+            contentAttemptId = readingAttemptId,
+            rawScore = 42,
             rawScoreMax = 42,
-            scaledScore = 350,
-            grade = "B",
+            scaledScore = 500,
+            grade = "A",
             evidence = new Dictionary<string, object?> { ["source"] = "test" }
         });
         complete.EnsureSuccessStatusCode();
@@ -340,6 +342,36 @@ public class MockV2EndpointTests : IClassFixture<TestWebApplicationFactory>
 
         await db.SaveChangesAsync();
         return id;
+    }
+
+    private async Task<string> SeedSubmittedReadingAttemptAsync(string userId, string paperId, string? mockSectionId = null)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var now = DateTimeOffset.UtcNow;
+        var attemptId = $"reading-attempt-{Guid.NewGuid():N}";
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = attemptId,
+            UserId = userId,
+            PaperId = paperId,
+            Status = ReadingAttemptStatus.Submitted,
+            StartedAt = now.AddMinutes(-60),
+            SubmittedAt = now,
+            LastActivityAt = now,
+            RawScore = 30,
+            ScaledScore = OetScoring.OetRawToScaled(30),
+            MaxRawScore = 42,
+        });
+        if (!string.IsNullOrWhiteSpace(mockSectionId))
+        {
+            var section = await db.MockSectionAttempts.FirstAsync(x => x.Id == mockSectionId);
+            section.ContentAttemptId = attemptId;
+            section.State = AttemptState.InProgress;
+            section.StartedAt ??= now.AddMinutes(-60);
+        }
+        await db.SaveChangesAsync();
+        return attemptId;
     }
 
     private static async Task EnsurePaperAsync(LearnerDbContext db, string id, string subtest, string title, DateTimeOffset now)

@@ -284,22 +284,28 @@ public static class ContentPapersAdminEndpoints
             string uploadId, int partNumber, HttpContext http,
             IChunkedUploadService svc, CancellationToken ct) =>
         {
-            var session = await svc.UploadPartAsync(uploadId, partNumber, http.Request.Body, ct);
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("admin id required");
+            var session = await svc.UploadPartAsync(adminId, uploadId, partNumber, http.Request.Body, ct);
             return Results.Ok(new { session.PartsReceived, session.ReceivedBytes, session.State });
         })
         .DisableAntiforgery();
 
         uploads.MapPost("/{uploadId}/complete", async (
-            string uploadId, IChunkedUploadService svc, CancellationToken ct) =>
+            string uploadId, HttpContext http, IChunkedUploadService svc, CancellationToken ct) =>
         {
-            var result = await svc.CompleteAsync(uploadId, ct);
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("admin id required");
+            var result = await svc.CompleteAsync(adminId, uploadId, ct);
             return Results.Ok(result);
         });
 
         uploads.MapDelete("/{uploadId}", async (
-            string uploadId, IChunkedUploadService svc, CancellationToken ct) =>
+            string uploadId, HttpContext http, IChunkedUploadService svc, CancellationToken ct) =>
         {
-            await svc.AbortAsync(uploadId, ct);
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("admin id required");
+            await svc.AbortAsync(adminId, uploadId, ct);
             return Results.NoContent();
         });
 

@@ -24,9 +24,9 @@ namespace OetLearner.Api.Services.Content;
 public interface IChunkedUploadService
 {
     Task<AdminUploadSession> StartAsync(ChunkedUploadStart args, CancellationToken ct);
-    Task<AdminUploadSession> UploadPartAsync(string sessionId, int partNumber, Stream body, CancellationToken ct);
-    Task<ChunkedUploadCommitResult> CompleteAsync(string sessionId, CancellationToken ct);
-    Task AbortAsync(string sessionId, CancellationToken ct);
+    Task<AdminUploadSession> UploadPartAsync(string adminUserId, string sessionId, int partNumber, Stream body, CancellationToken ct);
+    Task<ChunkedUploadCommitResult> CompleteAsync(string adminUserId, string sessionId, CancellationToken ct);
+    Task AbortAsync(string adminUserId, string sessionId, CancellationToken ct);
 }
 
 public sealed record ChunkedUploadStart(
@@ -91,10 +91,10 @@ public sealed class ChunkedUploadService(
         return session;
     }
 
-    public async Task<AdminUploadSession> UploadPartAsync(string sessionId, int partNumber, Stream body, CancellationToken ct)
+    public async Task<AdminUploadSession> UploadPartAsync(string adminUserId, string sessionId, int partNumber, Stream body, CancellationToken ct)
     {
         if (partNumber < 1) throw new ArgumentOutOfRangeException(nameof(partNumber));
-        var session = await db.AdminUploadSessions.FirstOrDefaultAsync(x => x.Id == sessionId, ct)
+        var session = await db.AdminUploadSessions.FirstOrDefaultAsync(x => x.Id == sessionId && x.AdminUserId == adminUserId, ct)
             ?? throw new InvalidOperationException("Upload session not found.");
         if (session.State is AdminUploadState.Completed or AdminUploadState.Aborted or AdminUploadState.Expired)
             throw new InvalidOperationException($"Upload session is {session.State} and cannot accept parts.");
@@ -137,9 +137,9 @@ public sealed class ChunkedUploadService(
         return session;
     }
 
-    public async Task<ChunkedUploadCommitResult> CompleteAsync(string sessionId, CancellationToken ct)
+    public async Task<ChunkedUploadCommitResult> CompleteAsync(string adminUserId, string sessionId, CancellationToken ct)
     {
-        var session = await db.AdminUploadSessions.FirstOrDefaultAsync(x => x.Id == sessionId, ct)
+        var session = await db.AdminUploadSessions.FirstOrDefaultAsync(x => x.Id == sessionId && x.AdminUserId == adminUserId, ct)
             ?? throw new InvalidOperationException("Upload session not found.");
         if (session.State == AdminUploadState.Completed && !string.IsNullOrEmpty(session.MediaAssetId))
         {
@@ -278,9 +278,9 @@ public sealed class ChunkedUploadService(
         return new ChunkedUploadCommitResult(mediaId, sha, total, Deduplicated: false);
     }
 
-    public async Task AbortAsync(string sessionId, CancellationToken ct)
+    public async Task AbortAsync(string adminUserId, string sessionId, CancellationToken ct)
     {
-        var session = await db.AdminUploadSessions.FirstOrDefaultAsync(x => x.Id == sessionId, ct);
+        var session = await db.AdminUploadSessions.FirstOrDefaultAsync(x => x.Id == sessionId && x.AdminUserId == adminUserId, ct);
         if (session is null) return;
         storage.DeletePrefix(ContentAddressed.StagingSessionPrefix(
             _opts.StagingSubpath, session.AdminUserId, session.Id));

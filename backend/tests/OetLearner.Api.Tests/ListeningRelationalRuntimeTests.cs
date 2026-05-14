@@ -333,6 +333,37 @@ public class ListeningRelationalRuntimeTests
     }
 
     [Fact]
+    public async Task StartAttemptAsync_WhenForcedCreatesFreshAttemptInsteadOfReusingPrefilledAttempt()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, questionId) = await SeedRelationalPaperAsync(db);
+
+        await svc.StartAttemptAsync(userId, paperId, "practice", "foundation_partA", default);
+        var prefilledAttemptId = await db.ListeningAttempts
+            .Where(a => a.UserId == userId && a.PaperId == paperId)
+            .Select(a => a.Id)
+            .SingleAsync();
+        await svc.SaveAnswerAsync(userId, prefilledAttemptId, questionId, new ListeningAnswerSaveRequest("five"), default);
+
+        await svc.StartAttemptAsync(
+            userId,
+            paperId,
+            "practice",
+            "foundation_partA",
+            forceNewAttempt: true,
+            ct: CancellationToken.None);
+
+        var attempts = await db.ListeningAttempts
+            .Where(a => a.UserId == userId && a.PaperId == paperId)
+            .ToListAsync();
+        var freshAttempt = attempts.Single(a => a.Id != prefilledAttemptId);
+        var freshAnswerCount = await db.ListeningAnswers.CountAsync(a => a.ListeningAttemptId == freshAttempt.Id);
+
+        Assert.Equal(2, attempts.Count);
+        Assert.Equal(0, freshAnswerCount);
+    }
+
+    [Fact]
     public async Task StartAttemptAsync_ReusesLegacyStageCodeScopeKey()
     {
         var (db, svc) = Build();

@@ -707,8 +707,16 @@ export const getReadingPathway = () =>
 export const getReadingStructureLearner = (paperId: string) =>
   api<ReadingLearnerStructureDto>(`/v1/reading-papers/papers/${paperId}/structure`);
 
-export const startReadingAttempt = (paperId: string) =>
-  api<ReadingAttemptStarted>(`/v1/reading-papers/papers/${paperId}/attempts`, { method: 'POST' });
+export const startReadingAttempt = (
+  paperId: string,
+  options: { mockAttemptId?: string | null; mockSectionId?: string | null } = {},
+) => {
+  const params = new URLSearchParams();
+  if (options.mockAttemptId) params.set('mockAttemptId', options.mockAttemptId);
+  if (options.mockSectionId) params.set('mockSectionId', options.mockSectionId);
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return api<ReadingAttemptStarted>(`/v1/reading-papers/papers/${paperId}/attempts${suffix}`, { method: 'POST' });
+};
 
 export const saveReadingAnswer = (attemptId: string, questionId: string, userAnswerJson: string) =>
   api<void>(`/v1/reading-papers/attempts/${attemptId}/answers/${questionId}`, {

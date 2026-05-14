@@ -84,10 +84,10 @@ public class ChunkedUploadServiceTests
             "admin-1", "Listening Sample 1 Audio.mp3", "audio/mpeg", 6,
             "Audio"), default);
 
-        await svc.UploadPartAsync(session.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("hel")), default);
-        await svc.UploadPartAsync(session.Id, 2, new MemoryStream(Encoding.ASCII.GetBytes("lo!")), default);
+        await svc.UploadPartAsync("admin-1", session.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("hel")), default);
+        await svc.UploadPartAsync("admin-1", session.Id, 2, new MemoryStream(Encoding.ASCII.GetBytes("lo!")), default);
 
-        var result = await svc.CompleteAsync(session.Id, default);
+        var result = await svc.CompleteAsync("admin-1", session.Id, default);
 
         Assert.False(result.Deduplicated);
         Assert.Equal(6, result.SizeBytes);
@@ -108,12 +108,12 @@ public class ChunkedUploadServiceTests
     {
         var (db, _, svc) = Build();
         var s1 = await svc.StartAsync(new ChunkedUploadStart("admin-1", "a.pdf", "application/pdf", 5, "QuestionPaper"), default);
-        await svc.UploadPartAsync(s1.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("hello")), default);
-        var r1 = await svc.CompleteAsync(s1.Id, default);
+        await svc.UploadPartAsync("admin-1", s1.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("hello")), default);
+        var r1 = await svc.CompleteAsync("admin-1", s1.Id, default);
 
         var s2 = await svc.StartAsync(new ChunkedUploadStart("admin-1", "b.pdf", "application/pdf", 5, "QuestionPaper"), default);
-        await svc.UploadPartAsync(s2.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("hello")), default);
-        var r2 = await svc.CompleteAsync(s2.Id, default);
+        await svc.UploadPartAsync("admin-1", s2.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("hello")), default);
+        var r2 = await svc.CompleteAsync("admin-1", s2.Id, default);
 
         Assert.False(r1.Deduplicated);
         Assert.True(r2.Deduplicated);
@@ -132,7 +132,7 @@ public class ChunkedUploadServiceTests
         var session = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 3, "QuestionPaper"), default);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.UploadPartAsync(session.Id, 2, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default));
+            svc.UploadPartAsync("admin-1", session.Id, 2, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default));
 
         Assert.False(storage.Exists($"uploads/staging/admin-1/{session.Id}/00002.bin"));
         await db.DisposeAsync();
@@ -145,7 +145,7 @@ public class ChunkedUploadServiceTests
         var session = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 5, "QuestionPaper"), default);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.UploadPartAsync(session.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("toolong")), default));
+            svc.UploadPartAsync("admin-1", session.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("toolong")), default));
 
         Assert.False(storage.Exists($"uploads/staging/admin-1/{session.Id}/00001.bin"));
         await db.DisposeAsync();
@@ -156,9 +156,9 @@ public class ChunkedUploadServiceTests
     {
         var (db, _, svc) = Build(new ContentUploadOptions { ChunkSizeBytes = 3 });
         var session = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 6, "QuestionPaper"), default);
-        await svc.UploadPartAsync(session.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default);
+        await svc.UploadPartAsync("admin-1", session.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CompleteAsync(session.Id, default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CompleteAsync("admin-1", session.Id, default));
 
         await db.DisposeAsync();
     }
@@ -180,8 +180,8 @@ public class ChunkedUploadServiceTests
     {
         var (db, storage, svc) = Build();
         var s = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 3, "QuestionPaper"), default);
-        await svc.UploadPartAsync(s.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default);
-        await svc.AbortAsync(s.Id, default);
+        await svc.UploadPartAsync("admin-1", s.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default);
+        await svc.AbortAsync("admin-1", s.Id, default);
         var reload = await db.AdminUploadSessions.FirstAsync();
         Assert.Equal(AdminUploadState.Aborted, reload.State);
         Assert.False(storage.Exists($"uploads/staging/admin-1/{s.Id}/00001.bin"));
@@ -193,12 +193,35 @@ public class ChunkedUploadServiceTests
     {
         var (db, _, svc) = Build();
         var s = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 3, "QuestionPaper"), default);
-        await svc.UploadPartAsync(s.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("xyz")), default);
-        var first = await svc.CompleteAsync(s.Id, default);
-        var second = await svc.CompleteAsync(s.Id, default);
+        await svc.UploadPartAsync("admin-1", s.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("xyz")), default);
+        var first = await svc.CompleteAsync("admin-1", s.Id, default);
+        var second = await svc.CompleteAsync("admin-1", s.Id, default);
         Assert.Equal(first.MediaAssetId, second.MediaAssetId);
         Assert.Equal(first.Sha256, second.Sha256);
         Assert.True(second.Deduplicated);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Other_admin_cannot_mutate_upload_session()
+    {
+        var (db, storage, svc) = Build();
+        var s = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 3, "QuestionPaper"), default);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.UploadPartAsync("admin-2", s.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CompleteAsync("admin-2", s.Id, default));
+        await svc.AbortAsync("admin-2", s.Id, default);
+
+        var afterForeignAbort = await db.AdminUploadSessions.SingleAsync(x => x.Id == s.Id);
+        Assert.Equal(AdminUploadState.Started, afterForeignAbort.State);
+        Assert.False(storage.AnyKeyStartsWith($"uploads/staging/admin-1/{s.Id}"));
+
+        await svc.UploadPartAsync("admin-1", s.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default);
+        await svc.AbortAsync("admin-1", s.Id, default);
+
+        var afterOwnerAbort = await db.AdminUploadSessions.SingleAsync(x => x.Id == s.Id);
+        Assert.Equal(AdminUploadState.Aborted, afterOwnerAbort.State);
         await db.DisposeAsync();
     }
 }

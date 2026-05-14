@@ -567,7 +567,7 @@ public static class AdminEndpoints
 
         admin.MapGet("/quality-analytics", async (AdminService service, CancellationToken ct, string? timeRange, string? subtest, string? profession)
             => Results.Ok(await service.GetQualityAnalyticsAsync(timeRange, subtest, profession, ct)))
-            .WithAdminRead("AdminContentRead");
+            .WithAdminRead("AdminQualityAnalytics");
 
         // ── Admin Permissions (RBAC) ────────────────────────
 

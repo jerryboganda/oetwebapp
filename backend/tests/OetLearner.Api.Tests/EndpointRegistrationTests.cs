@@ -56,6 +56,34 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
         Assert.Contains(NormalizeRoutePattern(routePattern), registeredRoutes);
     }
 
+    [Theory]
+    [InlineData("/v1/admin/quality-analytics")]
+    [InlineData("/v1/admin/reading/analytics")]
+    [InlineData("/v1/admin/writing/analytics/rule-violations")]
+    [InlineData("/v1/admin/writing/analytics/rule-violations/{attemptId}")]
+    [InlineData("/v1/admin/listening/analytics")]
+    [InlineData("/v1/admin/listening/attempts/{attemptId}/export")]
+    [InlineData("/v1/admin/mock-bundles/{id}/item-analysis")]
+    [InlineData("/v1/admin/mock-bundles/{id}/listening-item-analysis")]
+    [InlineData("/v1/admin/mocks/item-analysis")]
+    [InlineData("/v1/admin/mocks/analytics")]
+    [InlineData("/v1/admin/mocks/risk-list")]
+    public void AnalyticsRoutes_RequireQualityAnalyticsPolicy(string routePattern)
+    {
+        using var client = _factory.CreateClient();
+        var endpoint = _factory.Services.GetRequiredService<IEnumerable<EndpointDataSource>>()
+            .SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Single(endpoint => NormalizeRoutePattern(endpoint.RoutePattern.RawText) == NormalizeRoutePattern(routePattern));
+
+        var policies = endpoint.Metadata.OfType<IAuthorizeData>()
+            .Select(metadata => metadata.Policy)
+            .Where(policy => !string.IsNullOrWhiteSpace(policy))
+            .ToArray();
+
+        Assert.Contains("AdminQualityAnalytics", policies);
+    }
+
     [Fact]
     public void Program_DisableAntiforgeryExceptions_AreExplicitlyControlled()
     {

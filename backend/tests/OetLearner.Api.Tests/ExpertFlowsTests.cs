@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -583,6 +584,7 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
         var mediaAssetId = $"media-{reviewRequestId}-voice-note";
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
         if (await db.MediaAssets.FindAsync(mediaAssetId) is null)
         {
             var now = DateTimeOffset.UtcNow;
@@ -603,6 +605,8 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
             });
             await db.SaveChangesAsync();
         }
+
+        await storage.WriteAsync($"test/{reviewRequestId}-feedback.webm", new MemoryStream([1, 2, 3, 4, 5]), CancellationToken.None);
 
         var response = await client.PostAsJsonAsync($"/v1/expert/reviews/{reviewRequestId}/writing/voice-notes", new
         {

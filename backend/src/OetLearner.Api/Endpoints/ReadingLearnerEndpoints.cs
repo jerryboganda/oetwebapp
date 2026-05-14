@@ -132,13 +132,34 @@ public static class ReadingLearnerEndpoints
 
         // ── Start attempt ──────────────────────────────────────────────────
         group.MapPost("/papers/{paperId}/attempts", async (
-            string paperId, IReadingAttemptService svc, HttpContext http, CancellationToken ct) =>
+            string paperId,
+            string? mockAttemptId,
+            string? mockSectionId,
+            IReadingAttemptService svc,
+            MockService mockService,
+            HttpContext http,
+            CancellationToken ct) =>
         {
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new InvalidOperationException("auth required");
             try
             {
+                await mockService.ValidateSectionContentAttemptBindingTargetIfRequestedAsync(
+                    userId,
+                    mockAttemptId,
+                    mockSectionId,
+                    "reading",
+                    paperId,
+                    ct);
                 var started = await svc.StartAsync(userId, paperId, ct);
+                await mockService.BindSectionContentAttemptIfRequestedAsync(
+                    userId,
+                    mockAttemptId,
+                    mockSectionId,
+                    started.AttemptId,
+                    "reading",
+                    paperId,
+                    ct);
                 return Results.Ok(started);
             }
             catch (ReadingAttemptException ex)
@@ -1126,6 +1147,7 @@ public static class ReadingLearnerEndpoints
         int MaxPoints,
         object? CorrectAnswer,
         string? ExplanationMarkdown);
+
 }
 
 public sealed record AnswerSaveDto(string UserAnswerJson);

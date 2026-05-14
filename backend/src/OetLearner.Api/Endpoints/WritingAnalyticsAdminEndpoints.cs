@@ -44,7 +44,7 @@ public static class WritingAnalyticsAdminEndpoints
         {
             var dto = await BuildRuleViolationDashboardAsync(db, days, profession, ct);
             return Results.Ok(dto);
-        }).WithAdminRead("AdminContentRead");
+        }).WithAdminRead("AdminQualityAnalytics");
 
         admin.MapGet("/rule-violations/{attemptId}", async (
             string attemptId,
@@ -53,7 +53,7 @@ public static class WritingAnalyticsAdminEndpoints
         {
             var dto = await BuildAttemptDrillDownAsync(db, attemptId, ct);
             return Results.Ok(dto);
-        }).WithAdminRead("AdminContentRead");
+        }).WithAdminRead("AdminQualityAnalytics");
 
         return app;
     }

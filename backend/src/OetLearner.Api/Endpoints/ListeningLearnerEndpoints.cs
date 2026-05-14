@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Listening;
 
 namespace OetLearner.Api.Endpoints;
@@ -61,9 +62,35 @@ public static class ListeningLearnerEndpoints
             string paperId,
             ListeningAttemptStartRequest request,
             HttpContext http,
+            MockService mockService,
             ListeningLearnerService service,
             CancellationToken ct) =>
-            Results.Ok(await service.StartAttemptAsync(http.UserId(), paperId, request.Mode, request.PathwayStage, ct)))
+        {
+            var userId = http.UserId();
+            var hasMockBinding = await mockService.ValidateSectionContentAttemptBindingTargetIfRequestedAsync(
+                userId,
+                request.MockAttemptId,
+                request.MockSectionId,
+                "listening",
+                paperId,
+                ct);
+            var started = await service.StartAttemptAsync(
+                userId,
+                paperId,
+                request.Mode,
+                request.PathwayStage,
+                forceNewAttempt: hasMockBinding,
+                ct: ct);
+            await mockService.BindSectionContentAttemptIfRequestedAsync(
+                userId,
+                request.MockAttemptId,
+                request.MockSectionId,
+                ExtractAttemptId(started),
+                "listening",
+                paperId,
+                ct);
+            return Results.Ok(started);
+        })
             .RequireRateLimiting("PerUserWrite")
             .WithName("StartListeningPaperAttempt")
             .WithSummary("Start or resume a Listening paper attempt");
@@ -153,6 +180,17 @@ public static class ListeningLearnerEndpoints
     private static string UserId(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
+
+    private static string ExtractAttemptId(object started)
+    {
+        var value = started.GetType().GetProperty("attemptId")?.GetValue(started) as string;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException("Listening attempt start response did not include an attempt id.");
+        }
+
+        return value;
+    }
 }
 
-public sealed record ListeningAttemptStartRequest(string? Mode, string? PathwayStage);
+public sealed record ListeningAttemptStartRequest(string? Mode, string? PathwayStage, string? MockAttemptId, string? MockSectionId);

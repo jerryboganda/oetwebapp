@@ -85,7 +85,7 @@ Slice I surfaced 9 cross-slice gaps. Slice J updates the status here so the doc 
 | 6. Webhook dead-letter (I3) | "confirm threshold" | ✅ Live — `BillingOptions.WebhookMaxAttempts = 5` → `ResolveWebhookFailureStatus` → `dead_letter`. |
 | 7. Granular billing permissions | "billing:read / billing:write only" | ✅ **Live 2026-05-13** — backend policies and frontend gates now split `billing:refund_write`, `billing:catalog_write`, and `billing:subscription_write`; legacy `billing:write` remains a superset. |
 | 8. SubscriptionStatus enum coverage | "verify enum has paused / past-due" | ✅ Live — `Subscription.SubscriptionStatus` enum covers `Trial`, `Pending`, `Active`, `PastDue`, `Suspended`, `Cancelled`, `Expired`. The dispute path is modelled on `PaymentDispute` rather than a dedicated `Disputed` status; `SubscriptionStateMachine` flips `Active → Suspended` on dispute open via the audited transition path. |
-| 9. PII retention 180-day webhook payload nulling | "no retention worker" | ✅ **Live 2026-05-13** — `WebhookPiiRetentionWorker` sweeps aged webhook payloads under the configured retention window; `WebhookPiiRetentionWorkerTests` cover the nulling behavior. |
+| 9. Tiered webhook payload retention | "no retention worker" | ✅ **Live 2026-05-13** — `WebhookPiiRetentionWorker` replaces payload content with `{}` after the configured PII null-out window (default 90 days), while `DataRetentionWorker` deletes the row at the longer webhook-retention cutoff (default 180 days). `WebhookPiiRetentionWorkerTests` cover the nulling behavior. |
 
 Net: 9 of 9 gaps are live on `main`.
 

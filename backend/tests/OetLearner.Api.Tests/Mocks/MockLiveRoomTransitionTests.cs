@@ -26,13 +26,17 @@ public class MockLiveRoomTransitionTests
         var hub = new RecordingHubContext<MockLiveRoomHub>();
         var service = new MockBookingService(db, hub);
 
-        await service.TransitionLiveRoomAsync(
+        var result = await service.TransitionLiveRoomAsync(
             "expert-tutor",
             ApplicationUserRoles.Expert,
             isAdmin: false,
             BookingId,
             new LiveRoomTransitionRequest(MockLiveRoomStates.LearnerNoShow, "Learner did not join", "expert-no-show-1"),
             CancellationToken.None);
+
+        var projected = Assert.IsType<Dictionary<string, object?>>(result);
+        Assert.True(Assert.IsType<bool>(projected["interlocutorCardVisible"]));
+        Assert.Equal("expert-tutor", projected["assignedTutorId"]);
 
         var booking = await db.MockBookings.SingleAsync(b => b.Id == BookingId);
         Assert.Equal(MockLiveRoomStates.LearnerNoShow, booking.LiveRoomState);
@@ -173,6 +177,26 @@ public class MockLiveRoomTransitionTests
             CancellationToken.None));
 
         Assert.Equal("invalid_state", ex.ErrorCode);
+        Assert.Empty(db.MockLiveRoomTransitions);
+    }
+
+    [Fact]
+    public async Task OverlongTransitionMetadata_ReturnsValidationBeforeSaving()
+    {
+        await using var db = NewDb();
+        SeedBooking(db);
+        await db.SaveChangesAsync();
+        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>());
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.TransitionLiveRoomAsync(
+            "learner-1",
+            ApplicationUserRoles.Learner,
+            isAdmin: false,
+            BookingId,
+            new LiveRoomTransitionRequest(MockLiveRoomStates.InProgress, ClientTransitionId: new string('x', 97)),
+            CancellationToken.None));
+
+        Assert.Equal("client_transition_id_too_long", ex.ErrorCode);
         Assert.Empty(db.MockLiveRoomTransitions);
     }
 

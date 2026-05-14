@@ -75,9 +75,11 @@ launch blocker list.
 8. **Subscription status drift** — resolved in docs. The canonical enum is
    `Trial`, `Pending`, `Active`, `PastDue`, `Suspended`, `Cancelled`, `Expired`;
    `docs/BILLING.md` now mirrors those names instead of historical paused/failed labels.
-9. **PII retention 180-day webhook payload nulling** — resolved 2026-05-13.
-   `WebhookPiiRetentionWorker` schedules the aged-payload sweep and focused
-   tests cover the retention cutoff behavior.
+9. **Tiered webhook payload retention** — resolved 2026-05-13.
+   `WebhookPiiRetentionWorker` replaces payload content with `{}` after the
+   configured PII null-out window (default 90 days). `DataRetentionWorker`
+   deletes the webhook row at the longer retention cutoff (default 180 days),
+   and focused tests cover the nulling behavior.
 
 These gaps were **doc-truth** at the time of Slice I. They are deliberately
 preserved so the closure trail remains auditable; use the inline status notes

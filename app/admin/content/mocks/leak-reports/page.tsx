@@ -161,20 +161,23 @@ export default function AdminMockLeakReportsPage() {
           >
             {STATUS_FILTERS.map((option) => {
               const isActive = filter === option.value;
-              const count =
-                option.value === '' ? rows.length : counts[option.value] ?? 0;
+              const count = isActive
+                ? option.value === '' ? rows.length : counts[option.value] ?? 0
+                : null;
               return (
                 <Button
                   key={option.value || 'all'}
                   variant={isActive ? 'primary' : 'secondary'}
                   onClick={() => setFilter(option.value)}
                   aria-pressed={isActive}
-                  aria-label={`${option.label} reports (${count})`}
+                  aria-label={count === null ? `${option.label} reports` : `${option.label} reports (${count} loaded)`}
                 >
                   {option.label}
-                  <span className="ml-2 rounded-full bg-white/30 px-2 py-0.5 text-xs">
-                    {count}
-                  </span>
+                  {count === null ? null : (
+                    <span className="ml-2 rounded-full bg-white/30 px-2 py-0.5 text-xs">
+                      {count}
+                    </span>
+                  )}
                 </Button>
               );
             })}

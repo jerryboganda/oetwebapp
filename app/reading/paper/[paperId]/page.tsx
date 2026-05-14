@@ -298,8 +298,13 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     setError(null);
     setContentLockedMessage(null);
     try {
-      const started = await startReadingAttempt(paperId);
+      const started = await startReadingAttempt(paperId, { mockAttemptId, mockSectionId });
       setAttempt(fromStartedAttempt(started));
+      if (mockAttemptId && mockSectionId && !resumeAttemptId) {
+        const nextParams = new URLSearchParams(search?.toString());
+        nextParams.set('attemptId', started.attemptId);
+        router.replace(`/reading/paper/${encodeURIComponent(paperId)}?${nextParams.toString()}`);
+      }
       setAnswers({});
       setFlagged(new Set());
       setEliminatedChoices(new Set());

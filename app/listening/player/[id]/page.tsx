@@ -431,8 +431,13 @@ function PlayerContent() {
   const ensureAttempt = async () => {
     if (!session) throw new Error('Listening session is not ready.');
     if (attempt) return attempt;
-    const started = await startListeningAttempt(session.paper.id, mode, { pathwayStage });
+    const started = await startListeningAttempt(session.paper.id, mode, { pathwayStage, mockAttemptId, mockSectionId });
     setAttempt(started);
+    if (id && mockAttemptId && mockSectionId && !attemptIdFromRoute) {
+      const nextParams = new URLSearchParams(searchParams?.toString());
+      nextParams.set('attemptId', started.attemptId);
+      router.replace(`/listening/player/${encodeURIComponent(id)}?${nextParams.toString()}`);
+    }
     return started;
   };
 

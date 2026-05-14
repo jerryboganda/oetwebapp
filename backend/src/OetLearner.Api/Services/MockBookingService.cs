@@ -182,6 +182,16 @@ public sealed class MockBookingService
         var clientTransitionId = string.IsNullOrWhiteSpace(request.ClientTransitionId)
             ? null
             : request.ClientTransitionId.Trim();
+        if (clientTransitionId?.Length > 96)
+        {
+            throw ApiException.Validation("client_transition_id_too_long", "clientTransitionId must be 96 characters or fewer.");
+        }
+
+        var reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim();
+        if (reason?.Length > 512)
+        {
+            throw ApiException.Validation("transition_reason_too_long", "reason must be 512 characters or fewer.");
+        }
 
         var booking = await _db.MockBookings.Include(x => x.MockBundle).FirstOrDefaultAsync(x => x.Id == bookingId, ct)
             ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
@@ -190,6 +200,7 @@ public sealed class MockBookingService
         var isOwnerLearner = booking.UserId == actorId;
         if (!isAdmin && !isOwnerLearner && !isAssignedExpert)
             throw ApiException.Forbidden("forbidden", "You cannot transition this booking.");
+        var canViewStaffProjection = isAdmin || isAssignedExpert;
 
         if (clientTransitionId is not null)
         {
@@ -197,13 +208,13 @@ public sealed class MockBookingService
                 x.BookingId == booking.Id && x.ClientTransitionId == clientTransitionId, ct);
             if (duplicate)
             {
-                return Project(booking, isAdmin: isAdmin);
+                return Project(booking, isAdmin: canViewStaffProjection);
             }
         }
 
         if (string.Equals(booking.LiveRoomState, targetState, StringComparison.OrdinalIgnoreCase))
         {
-            return Project(booking, isAdmin: isAdmin);
+            return Project(booking, isAdmin: canViewStaffProjection);
         }
 
         if (IsTerminal(booking.Status))
@@ -250,7 +261,7 @@ public sealed class MockBookingService
             ActorRole = actorRole,
             FromState = current,
             ToState = targetState,
-            Reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
+            Reason = reason,
             ClientTransitionId = clientTransitionId,
             TransitionVersion = nextVersion,
             OccurredAt = now,
@@ -285,7 +296,7 @@ public sealed class MockBookingService
             var existing = await _db.MockBookings.AsNoTracking().Include(x => x.MockBundle)
                 .FirstOrDefaultAsync(x => x.Id == bookingId, ct)
                 ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
-            return Project(existing, isAdmin: isAdmin);
+            return Project(existing, isAdmin: canViewStaffProjection);
         }
 
         await _liveRoomHub.Clients.Group(MockLiveRoomHub.BookingGroup(booking.Id)).SendAsync(
@@ -293,7 +304,7 @@ public sealed class MockBookingService
             MockLiveRoomStateChanged.From(booking, current, actorRole, transition.Reason, now),
             ct);
 
-        return Project(booking, isAdmin: isAdmin);
+        return Project(booking, isAdmin: canViewStaffProjection);
     }
 
     /// <summary>

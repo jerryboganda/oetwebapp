@@ -27,7 +27,7 @@ public static class ReadingAnalyticsAdminEndpoints
         {
             var analytics = await BuildAnalyticsAsync(db, days, ct);
             return Results.Ok(analytics);
-        }).WithAdminRead("AdminContentRead");
+        }).WithAdminRead("AdminQualityAnalytics");
 
         return app;
     }

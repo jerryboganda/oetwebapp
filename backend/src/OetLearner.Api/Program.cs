@@ -538,6 +538,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminReviewOps", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "review_ops", "system_admin")));
+    options.AddPolicy("AdminQualityAnalytics", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "quality_analytics", "system_admin")));
     options.AddPolicy("AdminAiConfig", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "ai_config", "system_admin")));

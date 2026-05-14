@@ -81,7 +81,8 @@ public static class MockAdminEndpoints
             string id,
             MockItemAnalysisService analysis,
             CancellationToken ct) =>
-            Results.Ok(await analysis.GetForBundleAsync(id, ct)));
+            Results.Ok(await analysis.GetForBundleAsync(id, ct)))
+            .RequireAuthorization("AdminQualityAnalytics");
 
         group.MapPost("/{id}/item-analysis/recompute", async (
             string id,
@@ -99,7 +100,8 @@ public static class MockAdminEndpoints
             string id,
             MockItemAnalysisService analysis,
             CancellationToken ct) =>
-            Results.Ok(await analysis.GetForBundleListeningAsync(id, ct)));
+            Results.Ok(await analysis.GetForBundleListeningAsync(id, ct)))
+            .RequireAuthorization("AdminQualityAnalytics");
 
         var adminMocks = app.MapGroup("/v1/admin/mocks")
             .RequireAuthorization("AdminContentRead")
@@ -110,13 +112,16 @@ public static class MockAdminEndpoints
             CancellationToken ct,
             [FromQuery] string? bundleId,
             [FromQuery] string? paperId) =>
-            Results.Ok(await analysis.GetDashboardAsync(bundleId, paperId, ct)));
+            Results.Ok(await analysis.GetDashboardAsync(bundleId, paperId, ct)))
+            .RequireAuthorization("AdminQualityAnalytics");
 
         adminMocks.MapGet("/analytics", async (MockService service, CancellationToken ct) =>
-            Results.Ok(await service.GetAdminMockAnalyticsAsync(ct)));
+            Results.Ok(await service.GetAdminMockAnalyticsAsync(ct)))
+            .RequireAuthorization("AdminQualityAnalytics");
 
         adminMocks.MapGet("/risk-list", async (MockService service, CancellationToken ct) =>
-            Results.Ok(await service.GetAdminMockRiskListAsync(ct)));
+            Results.Ok(await service.GetAdminMockRiskListAsync(ct)))
+            .RequireAuthorization("AdminQualityAnalytics");
 
         // Mocks Wave 8 — admin leak-report queue.
         adminMocks.MapGet("/leak-reports", async (
