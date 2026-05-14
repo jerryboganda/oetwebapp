@@ -90,21 +90,19 @@ export default function SponsorDashboardPage() {
           label="Total Spend"
           value={`£${(data?.totalSpend ?? 0).toFixed(0)}`}
           icon={<DollarSign />}
-          trend={{ direction: 'up', value: '4%', label: 'vs last mo' }}
         />
+        {/* Success rate and avg score require backend analytics — show placeholder until API is wired */}
         <StatCard
           label="Success Rate"
-          value="84%"
+          value="—"
           icon={<TrendingUp />}
-          tone="success"
-          trend={{ direction: 'up', value: '2%', label: 'pass rate' }}
+          tone="default"
         />
         <StatCard
           label="Avg Score"
-          value="390"
+          value="—"
           icon={<Award />}
           tone="default"
-          sparklineData={[350, 360, 360, 380, 390]}
         />
       </div>
     </div>

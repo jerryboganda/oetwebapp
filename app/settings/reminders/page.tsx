@@ -53,7 +53,7 @@ export default function SmartRemindersPage() {
 
   async function handleSave() {
     setIsSaving(true);
-    // In production, this would call a backend API
+    // TODO(backend): wire to POST /v1/settings/reminders when backend endpoint exists
     await new Promise((resolve) => setTimeout(resolve, 500));
     setToast({ variant: 'success', message: 'Reminder preferences saved!' });
     analytics.track('reminders_preferences_saved', {

@@ -158,7 +158,6 @@ const TRACKED_EVENTS = [
   // docs/SPEAKING-MODULE-PLAN.md). Two role-plays attempted as one mock.
   'speaking_mock_set_card_opened',
   'speaking_mock_set_started_orchestrator',
-  'speaking_mock_set_card_opened',
   // Marketplace events
   'marketplace_page_viewed',
   'marketplace_submission_created',
