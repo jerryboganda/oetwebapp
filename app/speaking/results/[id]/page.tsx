@@ -44,7 +44,8 @@ export default function SpeakingResultSummary() {
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const recordingPulseTransition = getRecordingPulseTransition(reducedMotion);
   const params = useParams();
-  const id = params?.id as string;
+  const rawId = params?.id;
+  const id = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
   const [analysing, setAnalysing] = useState(true);
   const [result, setResult] = useState<SpeakingResult | null>(null);
   const [pronunciationInsight, setPronunciationInsight] = useState<PronunciationLinkedAssessment | null>(null);

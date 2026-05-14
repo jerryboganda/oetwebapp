@@ -12,7 +12,8 @@ import { ArrowLeft, Send } from 'lucide-react';
 export default function MessageThreadPage() {
   const params = useParams();
   const router = useRouter();
-  const threadId = (params as Record<string, string>)?.threadId || '';
+  const rawThreadId = params?.threadId;
+  const threadId = Array.isArray(rawThreadId) ? rawThreadId[0] ?? '' : rawThreadId ?? '';
   const { thread, loading, error, refresh } = useExpertMessageThread(threadId);
   const { reply, sending } = usePostExpertReply();
   const [body, setBody] = useState('');

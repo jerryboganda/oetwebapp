@@ -23,7 +23,8 @@ type AsyncStatus = 'loading' | 'error' | 'success';
 
 export default function AssignedLearnerPage() {
   const params = useParams();
-  const learnerId = params?.learnerId as string | undefined;
+  const rawLearnerId = params?.learnerId;
+  const learnerId = Array.isArray(rawLearnerId) ? rawLearnerId[0] ?? '' : rawLearnerId ?? '';
   const router = useRouter();
 
   const [learner, setLearner] = useState<LearnerProfileExpanded | null>(null);
