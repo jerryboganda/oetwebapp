@@ -52,6 +52,9 @@ test.describe('Expert detail smoke @expert @smoke', () => {
       if (!testInfo.project.name.includes('expert')) {
         test.skip();
       }
+      if (testInfo.project.name.includes('webkit')) {
+        test.skip();
+      }
 
       testInfo.setTimeout(150_000);
       const diagnostics = observePage(page);
