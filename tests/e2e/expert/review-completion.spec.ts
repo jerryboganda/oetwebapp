@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 import { createDisposableSpeakingReviewRequest, createDisposableWritingReviewRequest } from '../fixtures/api-auth';
 import { waitForSessionGuardToClear } from '../fixtures/auth';
+import { installFakeRecordingMedia } from '../fixtures/media';
 
 const keyboardModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
@@ -52,6 +53,7 @@ test.describe('Tutor review completion workflows @expert', () => {
     const diagnostics = observePage(page);
     const finalComment = `QA final writing review ${Date.now()}`;
     const { reviewRequestId } = await createDisposableWritingReviewRequest(request);
+    await installFakeRecordingMedia(page);
 
     await page.goto(`/expert/review/writing/${reviewRequestId}`);
     await waitForSessionGuardToClear(page);
@@ -73,6 +75,16 @@ test.describe('Tutor review completion workflows @expert', () => {
     // assert the durable indicators instead — "Unsaved" badge clearing and the persisted comment value.
     await expect(page.getByText(/^Unsaved$/i)).toHaveCount(0, { timeout: 30_000 });
     await expect(page.getByLabel('Final overall comment')).toHaveValue(finalComment);
+
+    await page.getByRole('tab', { name: /voice notes/i }).click();
+    await page.getByRole('button', { name: /^record$/i }).click();
+    await expect(page.getByRole('button', { name: /^stop$/i })).toBeVisible();
+    await page.getByRole('button', { name: /^stop$/i }).click();
+    await expect(page.getByText(/dr-ahmed-writing-review-.*\.webm/i)).toBeVisible({ timeout: 30_000 });
+    await page.getByLabel('Written voice-note summary').fill('Voice note confirms rubric strengths and priority corrections.');
+    await page.getByLabel('Transcript').fill('This voice note summarises the final written feedback for the learner.');
+    await page.getByRole('button', { name: /save voice note/i }).click();
+    await expect(page.getByText(/voice note attached to this review\./i)).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole('button', { name: /submit review/i }).click();
 
