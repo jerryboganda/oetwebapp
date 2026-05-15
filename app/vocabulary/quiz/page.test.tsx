@@ -40,6 +40,7 @@ vi.mock('@/components/ui/card', () => ({
 
 vi.mock('@/components/ui/skeleton', () => ({
   Skeleton: () => <div data-testid="skeleton" />,
+  PageSkeleton: () => <div data-testid="page-skeleton" />,
 }));
 
 vi.mock('@/components/ui/alert', () => ({
