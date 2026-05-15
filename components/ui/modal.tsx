@@ -5,7 +5,7 @@ import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, type ReactNode } from 'react';
 
 interface ModalProps {
   open: boolean;
@@ -152,6 +152,7 @@ function OverlayCloseButton({ onClose }: { onClose: () => void }) {
 }
 
 export function Modal({ open, onClose, title, children, className, size = 'md' }: ModalProps) {
+  const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const restoreFocusDescriptorRef = useRef<FocusRestoreDescriptor | null>(null);
@@ -238,7 +239,7 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
           className="fixed inset-0 z-50 flex items-start justify-center p-2 sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
-          aria-labelledby={title ? 'modal-title' : undefined}
+          aria-labelledby={title ? titleId : undefined}
           aria-label={title ? undefined : 'Dialog'}
         >
           <motion.div
@@ -261,7 +262,7 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
           >
             {title && (
               <div className="flex items-center justify-between border-b border-gray-200 px-4 py-4 sm:px-6 sm:py-5">
-                <h2 id="modal-title" className="text-lg font-bold text-navy">
+                <h2 id={titleId} className="text-lg font-bold text-navy">
                   {title}
                 </h2>
                 <OverlayCloseButton onClose={onClose} />
@@ -292,6 +293,7 @@ interface DrawerProps {
 }
 
 export function Drawer({ open, onClose, title, children, side = 'right', className, restoreFocusOnClose = true }: DrawerProps) {
+  const drawerTitleId = useId();
   const drawerRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const restoreFocusDescriptorRef = useRef<FocusRestoreDescriptor | null>(null);
@@ -340,12 +342,17 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
     [],
   );
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
     restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     restoreFocusDescriptorRef.current = describeFocusTarget(restoreFocusRef.current);
     const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
       trapFocus(event);
     };
     document.addEventListener('keydown', handler);
@@ -360,7 +367,7 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
       document.removeEventListener('keydown', handler);
       document.body.style.overflow = '';
     };
-  }, [open, onClose, trapFocus]);
+  }, [open, trapFocus]);
 
   useEffect(() => {
     if (!open && wasOpenRef.current) {
@@ -388,7 +395,7 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
           className="fixed inset-0 z-50"
           role="dialog"
           aria-modal="true"
-          aria-labelledby={title ? 'drawer-title' : undefined}
+          aria-labelledby={title ? drawerTitleId : undefined}
           aria-label={title ? undefined : 'Drawer'}
         >
           <motion.div
@@ -411,7 +418,7 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
           >
             {title && (
               <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-4 sm:px-6 sm:py-5">
-                <h2 id="drawer-title" className="text-lg font-bold text-navy">
+                <h2 id={drawerTitleId} className="text-lg font-bold text-navy">
                   {title}
                 </h2>
                 <OverlayCloseButton onClose={onClose} />

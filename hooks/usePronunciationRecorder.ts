@@ -81,6 +81,13 @@ export function usePronunciationRecorder(options: UsePronunciationRecorderOption
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mimeTypeRef = useRef<string>('audio/webm');
   const resolveStopRef = useRef<((r: PronunciationRecorderResult) => void) | null>(null);
+  const resultRef = useRef<PronunciationRecorderResult | null>(null);
+
+  const onLevelRef = useRef(onLevel);
+  useEffect(() => { onLevelRef.current = onLevel; }, [onLevel]);
+
+  const onMaxDurationReachedRef = useRef(onMaxDurationReached);
+  useEffect(() => { onMaxDurationReachedRef.current = onMaxDurationReached; }, [onMaxDurationReached]);
 
   const cleanup = useCallback(() => {
     if (rafRef.current !== null) {
@@ -104,6 +111,9 @@ export function usePronunciationRecorder(options: UsePronunciationRecorderOption
       audioContextRef.current = null;
     }
     analyserRef.current = null;
+    if (resultRef.current?.url) {
+      URL.revokeObjectURL(resultRef.current.url);
+    }
   }, []);
 
   useEffect(() => cleanup, [cleanup]);
@@ -171,6 +181,7 @@ export function usePronunciationRecorder(options: UsePronunciationRecorderOption
         const url = URL.createObjectURL(blob);
         const durationMs = Date.now() - startTimeRef.current;
         const res: PronunciationRecorderResult = { blob, url, mimeType: mimeTypeRef.current, durationMs };
+        resultRef.current = res;
         setResult(res);
         setElapsedMs(durationMs);
         setStatus('stopped');
@@ -207,7 +218,7 @@ export function usePronunciationRecorder(options: UsePronunciationRecorderOption
         const rms = Math.sqrt(sum / dataArray.length);
         const normalised = Math.min(1, rms * 3);
         setLevel(normalised);
-        onLevel?.(normalised);
+        onLevelRef.current?.(normalised);
         setElapsedMs(Date.now() - startTimeRef.current);
         rafRef.current = requestAnimationFrame(tick);
       };
@@ -216,11 +227,12 @@ export function usePronunciationRecorder(options: UsePronunciationRecorderOption
       recorder.start(200);
       setStatus('recording');
       setResult(null);
+      resultRef.current = null;
       rafRef.current = requestAnimationFrame(tick);
 
       if (maxDurationMs > 0) {
         stopTimerRef.current = setTimeout(() => {
-          onMaxDurationReached?.();
+          onMaxDurationReachedRef.current?.();
           if (recorderRef.current && recorderRef.current.state === 'recording') {
             recorderRef.current.stop();
           }
@@ -232,7 +244,7 @@ export function usePronunciationRecorder(options: UsePronunciationRecorderOption
       setErrorMessage(err instanceof Error ? err.message : 'Failed to start recording.');
       return false;
     }
-  }, [maxDurationMs, onLevel, onMaxDurationReached, requestPermission, status]);
+  }, [maxDurationMs, requestPermission, status]);
 
   const stop = useCallback(async (): Promise<PronunciationRecorderResult | null> => {
     if (!recorderRef.current) return null;
@@ -253,7 +265,7 @@ export function usePronunciationRecorder(options: UsePronunciationRecorderOption
       URL.revokeObjectURL(result.url);
     }
     setResult(null);
-    setElapsedMs(0);
+    resultRef.current = null;
     setLevel(0);
     setErrorMessage(null);
     if (status === 'stopped' || status === 'error') {

@@ -256,7 +256,7 @@ export function Sidebar({
           <li>
             <Link
               href="/settings"
-              onClick={() => { void triggerImpactHaptic('LIGHT'); window.open('mailto:support@oetwithdrhesham.co.uk', '_blank'); }}
+              onClick={() => { void triggerImpactHaptic('LIGHT'); }}
               className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5"
             >
               <Settings className="h-4 w-4" />
@@ -264,14 +264,14 @@ export function Sidebar({
             </Link>
           </li>
           <li>
-            <button
-              type="button"
+            <a
+              href="mailto:support@edu80.app?subject=Need%20help%20with%20my%20OET%20account&body=Hello%20Support%20Team%2C%0AI%20need%20assistance%20with%20my%20OET%20account."
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
               className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5"
             >
               <HelpCircle className="h-4 w-4" />
               Help & Support
-            </button>
+            </a>
           </li>
         </ul>
 
@@ -310,7 +310,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
       layout={!reducedMotion}
       {...bottomNavMotion}
     >
-      <ul className="grid grid-cols-5 gap-1">
+      <ul className="grid grid-cols-7 gap-1">
         {items.map((item, index) => {
           const active = isActive(pathname, item);
           return (

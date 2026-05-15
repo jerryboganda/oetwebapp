@@ -13,6 +13,7 @@ import {
 } from '@/components/domain/admin-route-surface';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 
 interface CreditPolicy {
   policy: { expiryDays: number; expiryEnabled: boolean; rolloverEnabled: boolean; rolloverPercentage: number; refundOnFailedReview: boolean; refundOnCancelledReview: boolean; proRataOnDowngrade: boolean; minimumCreditPurchase: number; maximumCreditBalance: number };
@@ -23,12 +24,14 @@ interface CreditPolicy {
 const apiRequest = apiClient.request;
 
 export default function CreditLifecyclePage() {
+  useAdminAuth();
   const [data, setData] = useState<CreditPolicy | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('admin_credit_lifecycle_viewed');
-    apiRequest<CreditPolicy>('/v1/admin/credit-lifecycle').then(setData).catch(() => {}).finally(() => setLoading(false));
+    apiRequest<CreditPolicy>('/v1/admin/credit-lifecycle').then(setData).catch((e) => setError(e instanceof Error ? e.message : 'Failed to load credit lifecycle data')).finally(() => setLoading(false));
   }, []);
 
   return (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { AdminRouteWorkspace, AdminRouteHero } from '@/components/domain/admin-route-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/empty-error';
@@ -27,6 +28,7 @@ interface AlertSummary {
 }
 
 export default function AdminAlertsPage() {
+  useAdminAuth();
   const router = useRouter();
   const [data, setData] = useState<AlertSummary | null>(null);
   const [loading, setLoading] = useState(true);

@@ -63,7 +63,8 @@ function scoresFromDetail(response: CalibrationCaseDetail) {
 
 export default function CalibrationCaseWorkspacePage() {
   const params = useParams();
-  const caseId = params?.caseId as string | undefined;
+  const rawCaseId = params?.caseId;
+  const caseId = Array.isArray(rawCaseId) ? rawCaseId[0] ?? '' : rawCaseId ?? '';
   const router = useRouter();
   const [detail, setDetail] = useState<CalibrationCaseDetail | null>(null);
   const [status, setStatus] = useState<AsyncStatus>('loading');

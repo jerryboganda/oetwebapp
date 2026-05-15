@@ -113,13 +113,16 @@ export default function SponsorBillingPage() {
         </dl>
       </div>
 
-      {/* Invoices placeholder */}
+      {/* Invoices */}
       <div className="page-surface rounded-2xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-navy mb-4">Invoices</h2>
         {(data?.invoices?.length ?? 0) === 0 ? (
-          <p className="text-sm text-muted">No invoices yet.</p>
+          <p className="text-sm text-muted">No invoices yet. Invoices will appear here once billing is active.</p>
         ) : (
-          <p className="text-sm text-muted">Invoice list will appear here.</p>
+          <div className="rounded-xl border border-dashed border-border p-6 text-center">
+            <p className="text-sm font-medium text-muted">Coming soon</p>
+            <p className="mt-1 text-xs text-muted/70">Invoice display is under development. {data?.invoices?.length} invoice{(data?.invoices?.length ?? 0) !== 1 ? 's' : ''} on file.</p>
+          </div>
         )}
       </div>
     </div>

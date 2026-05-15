@@ -25,7 +25,8 @@ function BetterPhrasingContent() {
   const celebrateMotion = getCelebrateMotion(reducedMotion);
   const params = useParams();
   const router = useRouter();
-  const id = params?.id as string;
+  const rawId = params?.id;
+  const id = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
 
   // --- Data State ---
   const [, setTitle] = useState('');

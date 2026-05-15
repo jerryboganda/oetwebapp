@@ -19,7 +19,8 @@ import type { TurnaroundOption } from '@/lib/mock-data';
 
 function ExpertReviewRequestContent() {
   const params = useParams();
-  const id = params?.id as string;
+  const rawId = params?.id;
+  const id = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
 
   // --- Data State ---
   const [focusAreas, setFocusAreas] = useState<{ id: string; label: string; description: string }[]>([]);

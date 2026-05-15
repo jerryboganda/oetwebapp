@@ -119,7 +119,8 @@ function getSelectionOffsets(container: HTMLElement, range: Range) {
 
 export default function WritingReviewWorkspace() {
   const params = useParams();
-  const reviewRequestId = params?.reviewRequestId as string | undefined;
+  const rawReviewRequestId = params?.reviewRequestId;
+  const reviewRequestId = Array.isArray(rawReviewRequestId) ? rawReviewRequestId[0] ?? '' : rawReviewRequestId ?? '';
   const router = useRouter();
   const { getReviewDraft, upsertReviewDraft, clearReviewDraft } = useExpertStore();
 

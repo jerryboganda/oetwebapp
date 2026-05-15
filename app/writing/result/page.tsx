@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { FileText, BarChart3, ShieldAlert, ThumbsUp, AlertTriangle, Edit3, Star, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -8,18 +8,18 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { fetchWritingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingResult } from '@/lib/mock-data';
 import ProfessionRemediationCallout from '@/components/domain/profession-remediation-callout';
 
-export default function WritingResultSummary() {
+function WritingResultContent() {
   const searchParams = useSearchParams();
   const resultId = searchParams?.get('id') ?? '';
   const [result, setResult] = useState<WritingResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!!resultId);
 
   useEffect(() => {
     if (!resultId) {
@@ -262,5 +262,13 @@ export default function WritingResultSummary() {
         </MotionSection>
       </main>
     </LearnerDashboardShell>
+  );
+}
+
+export default function WritingResultSummary() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <WritingResultContent />
+    </Suspense>
   );
 }
