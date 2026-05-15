@@ -52,6 +52,7 @@ export async function waitForSessionGuardToClear(
   page: Page,
   options: {
     recover?: () => Promise<unknown>;
+    role?: SeededRole;
     initialTimeoutMs?: number;
     timeoutMs?: number;
   } = {},
@@ -83,9 +84,11 @@ export async function waitForSessionGuardToClear(
       .catch(() => false);
 
     if (!clearedAfterSecondRecovery) {
-      // Last resort: hard reload clears all client-side state that may keep
-      // the session guard stuck (common in WebKit under CI matrix load).
-      await page.reload({ waitUntil: 'domcontentloaded' });
+      // Last resort for WebKit: full sign-in through UI clears all stale
+      // cookies/storage that reload alone cannot fix.
+      const role = options.role ?? 'learner';
+      await signInThroughUi(page, role);
+      return; // signInThroughUi navigates away; caller should re-navigate
     }
   }
 
