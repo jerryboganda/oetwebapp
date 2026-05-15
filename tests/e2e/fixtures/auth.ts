@@ -77,6 +77,16 @@ export async function waitForSessionGuardToClear(
 
   if (!clearedAfterRecovery && options.recover) {
     await options.recover();
+    const clearedAfterSecondRecovery = await sessionBanner
+      .waitFor({ state: 'hidden', timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!clearedAfterSecondRecovery) {
+      // Last resort: hard reload clears all client-side state that may keep
+      // the session guard stuck (common in WebKit under CI matrix load).
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    }
   }
 
   await expect(sessionBanner).toBeHidden({ timeout: timeoutMs });
