@@ -1297,6 +1297,13 @@ app.MapGet("/health/ready", async (LearnerDbContext db, IOptions<StorageOptions>
         checks["database"] = dbOk ? "ok" : "unavailable";
         if (!dbOk) healthy = false;
 
+        if (dbOk && !db.Database.IsInMemory())
+        {
+            var pendingMigrations = (await db.Database.GetPendingMigrationsAsync(ct)).Take(1).ToArray();
+            checks["migrations"] = pendingMigrations.Length == 0 ? "ok" : "pending";
+            if (pendingMigrations.Length > 0) healthy = false;
+        }
+
         // Stuck jobs detection (processing for > 10 minutes)
         if (dbOk && !db.Database.IsInMemory())
         {
