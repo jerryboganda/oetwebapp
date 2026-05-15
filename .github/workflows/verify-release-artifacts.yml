@@ -23,17 +23,104 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   verify-release-artifacts:
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.evidence_env }}
-    timeout-minutes: 10
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Set image names
+        id: images
+        shell: bash
+        run: |
+          repo_lc=$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          echo "web=ghcr.io/${repo_lc}/web" >> "$GITHUB_OUTPUT"
+          echo "api=ghcr.io/${repo_lc}/api" >> "$GITHUB_OUTPUT"
+          echo "db_backup=ghcr.io/${repo_lc}/db-backup" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push web image
+        id: web_image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.images.outputs.web }}:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+            APP_URL=${{ vars.APP_URL }}
+
+      - name: Build and push API image
+        id: api_image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ steps.images.outputs.api }}:${{ github.sha }}
+
+      - name: Build and push backup image
+        id: db_backup_image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: scripts/backup/Dockerfile
+          push: true
+          tags: ${{ steps.images.outputs.db_backup }}:${{ github.sha }}
+
+      - name: Write immutable image digest evidence
+        shell: bash
+        env:
+          EVIDENCE_DIR: ${{ inputs.evidence_dir }}
+          WEB_IMAGE_NAME: ${{ steps.images.outputs.web }}
+          WEB_IMAGE_DIGEST: ${{ steps.web_image.outputs.digest }}
+          API_IMAGE_NAME: ${{ steps.images.outputs.api }}
+          API_IMAGE_DIGEST: ${{ steps.api_image.outputs.digest }}
+          DB_BACKUP_IMAGE_NAME: ${{ steps.images.outputs.db_backup }}
+          DB_BACKUP_IMAGE_DIGEST: ${{ steps.db_backup_image.outputs.digest }}
+          ROUTER_IMAGE: ${{ vars.ROUTER_IMAGE }}
+          EVIDENCE_ENV: ${{ inputs.evidence_env }}
+        run: |
+          if [ "$EVIDENCE_ENV" = "production" ] && [ -z "$ROUTER_IMAGE" ]; then
+            echo "Production evidence requires protected environment variable ROUTER_IMAGE pinned to an immutable digest." >&2
+            exit 1
+          fi
+          if [ -n "$ROUTER_IMAGE" ]; then
+            case "$ROUTER_IMAGE" in
+              *@sha256:*) ;;
+              *)
+                echo "ROUTER_IMAGE must be pinned to an immutable @sha256 digest when set." >&2
+                exit 1
+                ;;
+            esac
+          fi
+          mkdir -p "$EVIDENCE_DIR"
+          {
+            echo "WEB_IMAGE=${WEB_IMAGE_NAME}@${WEB_IMAGE_DIGEST}"
+            echo "API_IMAGE=${API_IMAGE_NAME}@${API_IMAGE_DIGEST}"
+            echo "DB_BACKUP_IMAGE=${DB_BACKUP_IMAGE_NAME}@${DB_BACKUP_IMAGE_DIGEST}"
+            if [ -n "$ROUTER_IMAGE" ]; then
+              echo "ROUTER_IMAGE=${ROUTER_IMAGE}"
+            fi
+          } > "$EVIDENCE_DIR/image-digests.env"
 
       - name: Collect evidence bundle
         shell: bash
@@ -69,6 +156,6 @@ jobs:
       - name: Upload verified evidence bundle
         uses: actions/upload-artifact@v4
         with:
-          name: release-evidence-${{ github.sha }}
+          name: release-evidence-${{ inputs.evidence_env }}-${{ github.sha }}
           path: ${{ inputs.evidence_dir }}/
           if-no-files-found: error

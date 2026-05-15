@@ -55,11 +55,34 @@ jobs:
 
       - run: npm ci
 
+      - name: Validate Android release inputs
+        run: node scripts/qa/validate-mobile-release-inputs.mjs --platform=android --version="$MOBILE_VERSION" --version-code="$MOBILE_VERSION_CODE"
+        env:
+          MOBILE_VERSION: ${{ inputs.version }}
+          MOBILE_VERSION_CODE: ${{ inputs.version_code }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
       - name: Set version
         working-directory: android/app
+        env:
+          MOBILE_VERSION: ${{ inputs.version }}
+          MOBILE_VERSION_CODE: ${{ inputs.version_code }}
         run: |
-          sed -i "s/versionCode 1/versionCode ${{ inputs.version_code }}/" build.gradle
-          sed -i "s/versionName \"1.0\"/versionName \"${{ inputs.version }}\"/" build.gradle
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const file = 'build.gradle';
+           const version = process.env.MOBILE_VERSION;
+           const versionCode = process.env.MOBILE_VERSION_CODE;
+           let content = fs.readFileSync(file, 'utf8');
+           if (!/versionCode\s+\d+/.test(content)) throw new Error('build.gradle is missing versionCode');
+           if (!/versionName\s+"[^"]+"/.test(content)) throw new Error('build.gradle is missing versionName');
+           content = content.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`);
+           content = content.replace(/versionName\s+"[^"]+"/, `versionName "${version}"`);
+           fs.writeFileSync(file, content);
+          NODE
 
       - name: Build Next.js
         run: npm run build
@@ -70,16 +93,30 @@ jobs:
         run: npx cap sync android
 
       - name: Decode keystore
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release-keystore.jks
+        run: printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release-keystore.jks
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
 
       - name: Create keystore.properties
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          cat > android/keystore.properties << EOF
-          storeFile=release-keystore.jks
-          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          EOF
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const required = ['ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD'];
+          for (const name of required) {
+            if (!process.env[name]) throw new Error(`${name} is required`);
+          }
+          fs.writeFileSync('android/keystore.properties', [
+            'storeFile=release-keystore.jks',
+            `storePassword=${process.env.ANDROID_KEYSTORE_PASSWORD}`,
+            `keyAlias=${process.env.ANDROID_KEY_ALIAS}`,
+            `keyPassword=${process.env.ANDROID_KEY_PASSWORD}`,
+            '',
+          ].join('\n'));
+          NODE
 
       - name: Build release AAB
         working-directory: android
@@ -119,6 +156,16 @@ jobs:
 
       - run: npm ci
 
+      - name: Validate iOS release inputs
+        run: node scripts/qa/validate-mobile-release-inputs.mjs --platform=ios --version="$MOBILE_VERSION" --version-code="$MOBILE_VERSION_CODE"
+        env:
+          MOBILE_VERSION: ${{ inputs.version }}
+          MOBILE_VERSION_CODE: ${{ inputs.version_code }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
+          IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+
       - name: Build Next.js
         run: npm run build
         env:
@@ -132,10 +179,13 @@ jobs:
         run: pod install
 
       - name: Set version
+        env:
+          MOBILE_VERSION: ${{ inputs.version }}
+          MOBILE_VERSION_CODE: ${{ inputs.version_code }}
         run: |
           cd ios/App
-          agvtool new-marketing-version ${{ inputs.version }}
-          agvtool new-version -all ${{ inputs.version_code }}
+          agvtool new-marketing-version "$MOBILE_VERSION"
+          agvtool new-version -all "$MOBILE_VERSION_CODE"
 
       - name: Import signing certificate
         uses: apple-actions/import-codesign-certs@v3
@@ -144,9 +194,11 @@ jobs:
           p12-password: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
 
       - name: Install provisioning profile
+        env:
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/oetprep.mobileprovision
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/oetprep.mobileprovision
 
       - name: Build archive
         working-directory: ios/App
@@ -159,19 +211,32 @@ jobs:
             -configuration Release
 
       - name: Export IPA
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          cat > $RUNNER_TEMP/ExportOptions.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const teamId = process.env.APPLE_TEAM_ID;
+          if (!teamId) throw new Error('APPLE_TEAM_ID is required');
+          const escapedTeamId = teamId
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&apos;');
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'ExportOptions.plist'), `<?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>method</key>
             <string>app-store</string>
             <key>teamID</key>
-            <string>${{ secrets.APPLE_TEAM_ID }}</string>
+            <string>${escapedTeamId}</string>
           </dict>
           </plist>
-          EOF
+          `);
+          NODE
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/App.xcarchive \
             -exportPath $RUNNER_TEMP/ipa \

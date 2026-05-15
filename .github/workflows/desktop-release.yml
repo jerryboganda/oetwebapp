@@ -60,7 +60,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   NODE_VERSION: '22'
@@ -151,8 +151,39 @@ jobs:
           ELECTRON_UPDATES_URL: ${{ vars.ELECTRON_UPDATES_URL }}
           ELECTRON_CERT_PINS: ${{ secrets.ELECTRON_CERT_PINS }}
           # electron-builder GitHub publish credentials (used only when publish_mode != never).
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: npm run desktop:dist
+
+      - name: Verify Authenticode signature
+        if: github.event_name == 'push' || inputs.allow_unsigned != true
+        shell: pwsh
+        run: |
+          $installers = Get-ChildItem dist/desktop -Filter *.exe -File
+          if ($installers.Count -eq 0) {
+            throw "No Windows installer was produced for signature verification."
+          }
+          foreach ($installer in $installers) {
+            $signature = Get-AuthenticodeSignature $installer.FullName
+            if ($signature.Status -ne 'Valid') {
+              throw "Invalid Authenticode signature for $($installer.Name): $($signature.Status) $($signature.StatusMessage)"
+            }
+            Write-Host "Valid Authenticode signature: $($installer.Name) signed by $($signature.SignerCertificate.Subject)"
+          }
+
+      - name: Generate desktop checksums
+        shell: pwsh
+        run: |
+          $artifacts = Get-ChildItem dist/desktop -File | Where-Object {
+            $_.Name -match '\.(exe|blockmap)$' -or $_.Name -like 'latest*.yml'
+          }
+          if ($artifacts.Count -eq 0) {
+            throw "No desktop artifacts found for checksum generation."
+          }
+          $lines = foreach ($artifact in $artifacts) {
+            $hash = Get-FileHash -Algorithm SHA256 $artifact.FullName
+            "$($hash.Hash.ToLowerInvariant())  $($artifact.Name)"
+          }
+          $lines | Set-Content -Path dist/desktop/SHA256SUMS.txt -Encoding ascii
 
       - name: Inspect outputs
         if: always()
@@ -164,6 +195,10 @@ jobs:
             Write-Host '::warning::dist/desktop not produced; packaging failed before copy stage.'
           }
 
+      - name: Packaged desktop smoke
+        shell: pwsh
+        run: npm run test:e2e:desktop:packaged
+
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
@@ -172,5 +207,6 @@ jobs:
             dist/desktop/*.exe
             dist/desktop/*.blockmap
             dist/desktop/latest*.yml
+            dist/desktop/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 90
