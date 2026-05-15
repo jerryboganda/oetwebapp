@@ -74,7 +74,7 @@ test.describe('Tutor review completion workflows @expert', () => {
     await expect(page.getByText(/^Unsaved$/i)).toHaveCount(0, { timeout: 30_000 });
     await expect(page.getByLabel('Final overall comment')).toHaveValue(finalComment);
 
-    await page.keyboard.press(`${keyboardModifier}+Enter`);
+    await page.getByRole('button', { name: /submit review/i }).click();
 
     await expect(page).toHaveURL(/\/expert\/queue$/);
     await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
