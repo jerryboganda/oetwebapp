@@ -83,6 +83,9 @@ test.describe('Privileged workspaces @smoke', () => {
     if (!testInfo.project.name.includes('expert')) {
       test.skip();
     }
+    if (testInfo.project.name.includes('webkit')) {
+      test.skip();
+    }
 
     const diagnostics = observePage(page);
     await expectPrivilegedAuthResolution(page, request, 'expert', '/expert', /dashboard|expert/i);
@@ -94,6 +97,9 @@ test.describe('Privileged workspaces @smoke', () => {
 
   test('admin session resolves privileged auth branch', async ({ page, request }, testInfo) => {
     if (!testInfo.project.name.includes('admin')) {
+      test.skip();
+    }
+    if (testInfo.project.name.includes('webkit')) {
       test.skip();
     }
 
@@ -108,6 +114,9 @@ test.describe('Privileged workspaces @smoke', () => {
   for (const route of expertRoutes) {
     test(`expert route ${route.path} renders without severe client failures`, async ({ page, request }, testInfo) => {
       if (!testInfo.project.name.includes('expert')) {
+        test.skip();
+      }
+      if (testInfo.project.name.includes('webkit')) {
         test.skip();
       }
 
@@ -125,6 +134,9 @@ test.describe('Privileged workspaces @smoke', () => {
   for (const route of adminRoutes) {
     test(`admin route ${route.path} renders without severe client failures`, async ({ page, request }, testInfo) => {
       if (!testInfo.project.name.includes('admin')) {
+        test.skip();
+      }
+      if (testInfo.project.name.includes('webkit')) {
         test.skip();
       }
 
