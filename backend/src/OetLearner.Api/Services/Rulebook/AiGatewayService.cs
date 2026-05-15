@@ -154,6 +154,7 @@ public sealed class AiGatewayService(
             {
                 var topRow = (await providerRegistry.ListByCategoryAsync(AiProviderCategory.TextChat, ct))
                     .Where(row => row.IsActive && row.Category == AiProviderCategory.TextChat)
+                    .Where(row => !string.IsNullOrWhiteSpace(row.EncryptedApiKey))
                     .OrderBy(row => row.FailoverPriority)
                     .FirstOrDefault();
                 if (topRow is not null)
@@ -177,9 +178,16 @@ public sealed class AiGatewayService(
             }
         }
 
-        // If the caller did not pin a provider, prefer the first real provider
-        // over the mock fallback so configured production deployments use the
-        // actual model path by default.
+        // If no credentialed registry row exists (local dev / smoke tests),
+        // fall back to the deterministic mock instead of selecting the
+        // registry-backed provider and failing later on an empty platform key.
+        // Production startup validation rejects missing provider credentials
+        // before learner-visible traffic can reach this path.
+        if (provider is null && string.IsNullOrWhiteSpace(request.Provider) && selectedProviderCode is null)
+            provider = providers.FirstOrDefault(p => string.Equals(p.Name, "mock", StringComparison.OrdinalIgnoreCase));
+
+        // Otherwise prefer the first real provider over the mock fallback so
+        // configured production deployments use the actual model path by default.
         provider ??= providers.FirstOrDefault(p => !string.Equals(p.Name, "mock", StringComparison.OrdinalIgnoreCase));
         provider ??= providers.FirstOrDefault();
         if (provider is null)

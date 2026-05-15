@@ -122,6 +122,32 @@ public class AiGatewayRoutingTests
         Assert.Equal("text-default-model", registryProvider.LastRequest.Model);
     }
 
+    [Fact]
+    public async Task CompleteAsync_FallbackRegistrySelection_UsesMock_WhenTextProviderHasNoPlatformKey()
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var mockProvider = new CapturingProvider("mock");
+        var uncredentialedTextProvider = ProviderRow(
+            "openai-platform",
+            AiProviderDialect.OpenAiCompatible,
+            AiProviderCategory.TextChat,
+            encryptedApiKey: string.Empty);
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { mockProvider, registryProvider },
+            providerRegistry: new FakeProviderRegistry(uncredentialedTextProvider));
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        });
+
+        Assert.Equal("completion from mock", result.Completion);
+        Assert.NotNull(mockProvider.LastRequest);
+        Assert.Null(registryProvider.LastRequest);
+    }
+
     private static AiGroundedPrompt BuildWritingPrompt(IAiGatewayService gateway)
         => gateway.BuildGroundedPrompt(new AiGroundingContext
         {
@@ -189,7 +215,8 @@ public class AiGatewayRoutingTests
         AiProviderDialect dialect,
         AiProviderCategory category = AiProviderCategory.TextChat,
         int failoverPriority = 0,
-        string defaultModel = "provider-default-model")
+        string defaultModel = "provider-default-model",
+        string encryptedApiKey = "encrypted-test-key")
         => new()
         {
             Id = providerCode,
@@ -201,6 +228,7 @@ public class AiGatewayRoutingTests
             IsActive = true,
             FailoverPriority = failoverPriority,
             DefaultModel = defaultModel,
+            EncryptedApiKey = encryptedApiKey,
         };
 
     private sealed class FakeProviderRegistry : IAiProviderRegistry
