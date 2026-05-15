@@ -1429,7 +1429,30 @@ public sealed class MockAiProvider : IAiModelProvider
         // through the registry-backed provider (DigitalOcean Serverless
         // Claude Opus 4.7) — the gateway prefers non-mock providers by name
         // whenever more than one is registered.
-        var text = "{\"findings\":[],\"advisory\":\"mock AI provider — no external model call was made\"}";
+        var text = request.SystemPrompt.Contains("**This call concerns WRITING**", StringComparison.OrdinalIgnoreCase)
+            ? """
+              {
+                "findings": [],
+                "criteriaScores": {
+                  "purpose": 2,
+                  "content": 5,
+                  "conciseness_clarity": 5,
+                  "genre_style": 5,
+                  "organisation_layout": 5,
+                  "language": 5
+                },
+                "estimatedScaledScore": 350,
+                "estimatedGrade": "B",
+                "passed": true,
+                "passRequires": { "scaled": 350, "grade": "B" },
+                "advisory": "Mock AI provider generated a deterministic Writing scoring contract; no external model call was made.",
+                "strengths": [
+                  "The response is ready for deterministic practice feedback.",
+                  "The evaluation uses the grounded Writing contract shape."
+                ]
+              }
+              """
+            : "{\"findings\":[],\"advisory\":\"mock AI provider — no external model call was made\"}";
         return Task.FromResult(new AiProviderCompletion { Text = text, Usage = new AiUsage() });
     }
 }
