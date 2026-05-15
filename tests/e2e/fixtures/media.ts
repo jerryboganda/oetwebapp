@@ -2,6 +2,12 @@ import type { Page } from '@playwright/test';
 
 export async function installFakeRecordingMedia(page: Page) {
   await page.addInitScript(() => {
+    const fakeWebmBytes = new Uint8Array([
+      0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86, 0x81,
+      0x01, 0x42, 0xF7, 0x81, 0x01, 0x42, 0xF2, 0x81,
+      0x04, 0x42, 0xF3, 0x81, 0x08,
+    ]);
+
     class FakeMediaStreamTrack {
       kind = 'audio';
 
@@ -75,7 +81,7 @@ export async function installFakeRecordingMedia(page: Page) {
           Object.defineProperty(event, 'data', {
             configurable: true,
             enumerable: true,
-            value: new Blob(['qa-audio'], { type: this.mimeType }),
+            value: new Blob([fakeWebmBytes], { type: this.mimeType }),
           });
           this.dispatchEvent(event);
           this.ondataavailable?.(event);
@@ -105,7 +111,7 @@ export async function installFakeRecordingMedia(page: Page) {
         Object.defineProperty(dataEvent, 'data', {
           configurable: true,
           enumerable: true,
-          value: new Blob(['qa-audio-final'], { type: this.mimeType }),
+          value: new Blob([fakeWebmBytes], { type: this.mimeType }),
         });
         this.dispatchEvent(dataEvent);
         this.ondataavailable?.(dataEvent);
