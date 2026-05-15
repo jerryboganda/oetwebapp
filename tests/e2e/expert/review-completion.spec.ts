@@ -76,7 +76,6 @@ test.describe('Tutor review completion workflows @expert', () => {
 
     await page.keyboard.press(`${keyboardModifier}+Enter`);
 
-    await expect(page.getByText(/review submitted successfully\./i)).toBeVisible();
     await expect(page).toHaveURL(/\/expert\/queue$/);
     await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
 

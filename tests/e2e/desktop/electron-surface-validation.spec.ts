@@ -297,9 +297,9 @@ test.describe('Electron desktop surface validation', () => {
       await expect(page.getByRole('heading', { name: /ready to start\?/i })).toBeVisible();
       await page.getByRole('button', { name: /start audio & task/i }).click();
       await expect(page.getByRole('button', { name: /submit answers/i })).toBeVisible();
-      await page.getByRole('button', { name: /^Increasing breathlessness at night$/i }).click();
+      await page.getByRole('radio', { name: /^A Increasing breathlessness at night$/i }).click();
       await page.getByLabel('Answer for question 2').fill('3-4 times per week');
-      await page.getByRole('button', { name: /^Combination inhaler$/i }).click();
+      await page.getByRole('radio', { name: /^B Combination inhaler$/i }).click();
       await page.getByRole('button', { name: /submit answers/i }).click();
       await expect(page).toHaveURL(/\/listening\/results\/lt-001$/);
       await expect(page.getByText(/detailed review/i)).toBeVisible();
