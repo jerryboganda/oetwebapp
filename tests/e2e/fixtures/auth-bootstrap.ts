@@ -658,6 +658,7 @@ export async function hydrateSessionStorage(page: Page, session: AuthSessionResp
   await page.evaluate(
     ({ sessionRecord, localKey, sessionKey, challengeKey }) => {
       window.localStorage.setItem(localKey, JSON.stringify(sessionRecord));
+      window.localStorage.setItem('oet.e2e.keep-tokens', '1');
       window.sessionStorage.removeItem(sessionKey);
       window.sessionStorage.removeItem(challengeKey);
     },
@@ -680,7 +681,10 @@ export async function recoverBrowserSession(
     useDiskCache: false,
     isolateSession: true,
   });
-  await page.context().addCookies([buildAuthIndicatorCookie(session)]);
+  const frontendCookies = await captureFrontendAuthCookies(request, role);
+  const cookies = [buildAuthIndicatorCookie(session), ...frontendCookies];
+  await page.context().clearCookies({ name: /^(oet_auth|oet_rt|oet_csrf)$/ });
+  await page.context().addCookies(cookies);
   await hydrateSessionStorage(page, session);
   await page.goto(targetPath, { waitUntil: 'domcontentloaded' });
 }

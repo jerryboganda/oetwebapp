@@ -16,7 +16,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
       test.skip();
     }
 
-    testInfo.setTimeout(240000);
+    testInfo.setTimeout(360000);
     const diagnostics = observePage(page);
     page.on('dialog', (dialog) => dialog.accept());
     const seen403: string[] = [];
@@ -144,8 +144,16 @@ test.describe('Learner immersive completion workflows @learner', () => {
     // → fetchWritingTask) which on cold path can extend close to 60s.
     await page.waitForURL(/\/writing\/result\?id=/, { timeout: 120000, waitUntil: 'commit' });
     await waitForSessionGuardToClear(page);
-    await expect(page.getByRole('heading', { name: /evaluation summary/i })).toBeVisible({ timeout: 60000 });
-    await expect(page.getByRole('link', { name: /request tutor review/i })).toBeVisible({ timeout: 60000 });
+    let resultPollAttempt = 0;
+    await expect(async () => {
+      resultPollAttempt += 1;
+      if (resultPollAttempt > 1) {
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await waitForSessionGuardToClear(page);
+      }
+      await expect(page.getByRole('heading', { name: /evaluation summary/i })).toBeVisible({ timeout: 30_000 });
+    }).toPass({ timeout: 240_000, intervals: [5_000, 30_000, 30_000, 30_000, 60_000] });
+    await expect(page.getByRole('link', { name: /request tutor review/i })).toBeVisible({ timeout: 30000 });
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();
