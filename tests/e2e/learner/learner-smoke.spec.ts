@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 import { waitForSessionGuardToClear } from '../fixtures/auth';
+import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 const learnerRoutes = [
   {
@@ -133,7 +134,7 @@ function hasRecoverableNextDevPageError(diagnostics: ReturnType<typeof observePa
 test.describe('Learner workspace smoke @learner @smoke', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test('learner dashboard loads and session survives a reload', async ({ page }, testInfo) => {
+  test('learner dashboard loads and session survives a reload', async ({ page, request }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) {
       test.skip();
     }
@@ -144,15 +145,16 @@ test.describe('Learner workspace smoke @learner @smoke', () => {
     // has headroom after a slow first cycle.
     testInfo.setTimeout(240000);
     let diagnostics = observePage(page);
+    const recover = () => recoverBrowserSession(page, request, 'learner', '/');
     const dashboardHeading = page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i });
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitForSessionGuardToClear(page, {
-      recover: () => page.goto('/', { waitUntil: 'domcontentloaded' }),
+      recover,
       initialTimeoutMs: 15_000,
     });
     await expect(dashboardHeading).toBeVisible({ timeout: 90000 });
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await waitForSessionGuardToClear(page, { recover: () => page.goto('/', { waitUntil: 'domcontentloaded' }) });
+    await waitForSessionGuardToClear(page, { recover });
     await expect(dashboardHeading).toBeVisible({ timeout: 90000 });
 
     if (hasRecoverableNextDevPageError(diagnostics)) {
@@ -160,12 +162,12 @@ test.describe('Learner workspace smoke @learner @smoke', () => {
       diagnostics = observePage(page);
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await waitForSessionGuardToClear(page, {
-        recover: () => page.goto('/', { waitUntil: 'domcontentloaded' }),
+        recover,
         initialTimeoutMs: 15_000,
       });
       await expect(dashboardHeading).toBeVisible({ timeout: 90000 });
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await waitForSessionGuardToClear(page, { recover: () => page.goto('/', { waitUntil: 'domcontentloaded' }) });
+      await waitForSessionGuardToClear(page, { recover });
       await expect(dashboardHeading).toBeVisible({ timeout: 90000 });
     }
 

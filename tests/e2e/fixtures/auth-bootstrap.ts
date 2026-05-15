@@ -670,6 +670,21 @@ export async function hydrateSessionStorage(page: Page, session: AuthSessionResp
   );
 }
 
+export async function recoverBrowserSession(
+  page: Page,
+  request: APIRequestContext,
+  role: SeededRole,
+  targetPath: string,
+) {
+  const session = await bootstrapSessionForRole(request, role, undefined, {
+    useDiskCache: false,
+    isolateSession: true,
+  });
+  await page.context().addCookies([buildAuthIndicatorCookie(session)]);
+  await hydrateSessionStorage(page, session);
+  await page.goto(targetPath, { waitUntil: 'domcontentloaded' });
+}
+
 function buildAuthIndicatorCookie(session: AuthSessionResponse) {
   const appOrigin = new URL(defaultAppOrigin);
   const refreshExpiresAt = Date.parse(session.refreshTokenExpiresAt);

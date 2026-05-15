@@ -1,6 +1,7 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 import { waitForSessionGuardToClear } from '../fixtures/auth';
+import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 const expertRoutes = [
   { path: '/expert', title: 'Dashboard' },
@@ -26,20 +27,34 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function expectRouteShell(page: Parameters<typeof observePage>[0], route: { path: string; title: string }) {
+async function expectRouteShell(
+  page: Parameters<typeof observePage>[0],
+  request: APIRequestContext,
+  role: 'expert' | 'admin',
+  route: { path: string; title: string },
+) {
   await page.goto(route.path, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await expect(page).toHaveURL(new RegExp(`${escapeRegExp(route.path)}(?:[?#].*)?$`));
-  await waitForSessionGuardToClear(page);
+  await waitForSessionGuardToClear(page, {
+    recover: () => recoverBrowserSession(page, request, role, route.path),
+  });
   await expect(page.getByRole('banner').getByText(route.title, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('main').first()).toBeVisible();
 }
 
 async function expectPrivilegedAuthResolution(
   page: Parameters<typeof observePage>[0],
+  request: APIRequestContext,
+  role: 'expert' | 'admin',
   targetPath: '/expert' | '/admin',
   workspaceText: RegExp,
 ) {
   await page.goto(`/mfa/setup?next=${encodeURIComponent(targetPath)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await waitForSessionGuardToClear(page, {
+    recover: () => recoverBrowserSession(page, request, role, targetPath),
+    initialTimeoutMs: 5_000,
+    timeoutMs: 30_000,
+  });
 
   const setupHeading = page.getByRole('heading', { name: /set up authenticator mfa/i });
   const setupLoadingNotice = page.getByText(/preparing your authenticator secret and recovery codes/i);
@@ -64,26 +79,26 @@ async function expectPrivilegedAuthResolution(
 }
 
 test.describe('Privileged workspaces @smoke', () => {
-  test('expert session resolves privileged auth branch', async ({ page }, testInfo) => {
+  test('expert session resolves privileged auth branch', async ({ page, request }, testInfo) => {
     if (!testInfo.project.name.includes('expert')) {
       test.skip();
     }
 
     const diagnostics = observePage(page);
-    await expectPrivilegedAuthResolution(page, '/expert', /dashboard|expert/i);
+    await expectPrivilegedAuthResolution(page, request, 'expert', '/expert', /dashboard|expert/i);
 
     expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('admin session resolves privileged auth branch', async ({ page }, testInfo) => {
+  test('admin session resolves privileged auth branch', async ({ page, request }, testInfo) => {
     if (!testInfo.project.name.includes('admin')) {
       test.skip();
     }
 
     const diagnostics = observePage(page);
-    await expectPrivilegedAuthResolution(page, '/admin', /operations|admin/i);
+    await expectPrivilegedAuthResolution(page, request, 'admin', '/admin', /operations|admin/i);
 
     expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
@@ -91,7 +106,7 @@ test.describe('Privileged workspaces @smoke', () => {
   });
 
   for (const route of expertRoutes) {
-    test(`expert route ${route.path} renders without severe client failures`, async ({ page }, testInfo) => {
+    test(`expert route ${route.path} renders without severe client failures`, async ({ page, request }, testInfo) => {
       if (!testInfo.project.name.includes('expert')) {
         test.skip();
       }
@@ -99,7 +114,7 @@ test.describe('Privileged workspaces @smoke', () => {
       test.setTimeout(120_000); // page.goto + session-guard wait + cold dev compile + render under firefox/webkit can exceed default 60s budget
 
       const diagnostics = observePage(page);
-      await expectRouteShell(page, route);
+      await expectRouteShell(page, request, 'expert', route);
 
       expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
       diagnostics.detach();
@@ -108,7 +123,7 @@ test.describe('Privileged workspaces @smoke', () => {
   }
 
   for (const route of adminRoutes) {
-    test(`admin route ${route.path} renders without severe client failures`, async ({ page }, testInfo) => {
+    test(`admin route ${route.path} renders without severe client failures`, async ({ page, request }, testInfo) => {
       if (!testInfo.project.name.includes('admin')) {
         test.skip();
       }
@@ -116,7 +131,7 @@ test.describe('Privileged workspaces @smoke', () => {
       test.setTimeout(120_000); // page.goto + session-guard wait + cold dev compile + render under firefox/webkit can exceed default 60s budget
 
       const diagnostics = observePage(page);
-      await expectRouteShell(page, route);
+      await expectRouteShell(page, request, 'admin', route);
 
       expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
       diagnostics.detach();

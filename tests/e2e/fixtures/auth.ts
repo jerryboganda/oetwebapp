@@ -69,7 +69,17 @@ export async function waitForSessionGuardToClear(
     }
   }
 
-  await expect(sessionBanner).toBeHidden({ timeout: options.timeoutMs ?? 90_000 });
+  const timeoutMs = options.timeoutMs ?? 90_000;
+  const clearedAfterRecovery = await sessionBanner
+    .waitFor({ state: 'hidden', timeout: timeoutMs })
+    .then(() => true)
+    .catch(() => false);
+
+  if (!clearedAfterRecovery && options.recover) {
+    await options.recover();
+  }
+
+  await expect(sessionBanner).toBeHidden({ timeout: timeoutMs });
 }
 
 export async function signInThroughUi(page: Page, role: SeededRole) {

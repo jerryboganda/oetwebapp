@@ -47,7 +47,7 @@ export default function WritingResultSummary() {
         if (!cancelled) {
           failedAttempts += 1;
           const shouldRetry =
-            failedAttempts < 30 &&
+            failedAttempts < 60 &&
             (!isApiError(error) || error.retryable || error.status === 404 || error.status === 409 || error.status === 425);
 
           if (shouldRetry) {
