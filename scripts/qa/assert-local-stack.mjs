@@ -33,8 +33,8 @@ async function check(url, expectation, options = {}) {
 }
 
 async function verifyStack() {
-  await check(`${frontendBaseUrl}/sign-in`, () => true, { readBody: false });
   await check(`${apiBaseUrl}/health/ready`, (body) => /"status":"ok"/i.test(body));
+  await check(`${frontendBaseUrl}/sign-in`, () => true, { readBody: false });
 }
 
 async function waitForStack() {

@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260515120000_AddLaunchReadinessSettings")]
     public partial class AddLaunchReadinessSettings : Migration
     {
         /// <inheritdoc />
