@@ -147,7 +147,7 @@ test.describe('Learner workspace smoke @learner @smoke', () => {
     let diagnostics = observePage(page);
     const recover = () => recoverBrowserSession(page, request, 'learner', '/');
     const dashboardHeading = page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i });
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await recover();
     await waitForSessionGuardToClear(page, {
       recover,
       initialTimeoutMs: 15_000,

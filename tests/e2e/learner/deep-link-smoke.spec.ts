@@ -22,7 +22,7 @@ const learnerDeepLinks = [
 ];
 
 async function openDeepLink(page: Page, path: string, recover: () => Promise<unknown>) {
-  await page.goto(path, { waitUntil: 'domcontentloaded' });
+  await recover();
   await waitForSessionGuardToClear(page, {
     recover,
     initialTimeoutMs: 15_000,

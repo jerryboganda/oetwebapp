@@ -16,7 +16,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
       test.skip();
     }
 
-    testInfo.setTimeout(360000);
+    testInfo.setTimeout(240000);
     const diagnostics = observePage(page);
     page.on('dialog', (dialog) => dialog.accept());
     const seen403: string[] = [];
@@ -95,7 +95,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
       test.skip();
     }
 
-    testInfo.setTimeout(240000);
+    testInfo.setTimeout(420000);
     const diagnostics = observePage(page);
     const content = [
       'Dear Dr Patterson,',

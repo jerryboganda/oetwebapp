@@ -685,6 +685,16 @@ export async function recoverBrowserSession(
   const cookies = [buildAuthIndicatorCookie(session), ...frontendCookies];
   await page.context().clearCookies({ name: /^(oet_auth|oet_rt|oet_csrf)$/ });
   await page.context().addCookies(cookies);
+  const currentOrigin = (() => {
+    try {
+      return new URL(page.url()).origin;
+    } catch {
+      return null;
+    }
+  })();
+  if (currentOrigin !== defaultAppOrigin) {
+    await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
+  }
   await hydrateSessionStorage(page, session);
   await page.goto(targetPath, { waitUntil: 'domcontentloaded' });
 }
