@@ -77,7 +77,7 @@ public sealed class OpenAiCompatibleProvider(
 
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"AI provider call failed: {(int)response.StatusCode} {response.ReasonPhrase}. Body: {body}");
+            throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure("AI provider", (int)response.StatusCode, response.ReasonPhrase));
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;

@@ -19,7 +19,7 @@ export default function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [myPos, setMyPos] = useState<MyPosition | null>(null);
   const [period, setPeriod] = useState<'weekly' | 'monthly' | 'alltime'>('weekly');
-  const [examType, setExamType] = useState<string>('');
+  const [examType, setExamType] = useState<string>('oet');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
@@ -87,10 +87,7 @@ export default function LeaderboardPage() {
           onChange={e => setExamType(e.target.value)}
           className="px-3 py-2 text-sm border border-border rounded-lg bg-surface text-navy"
         >
-          <option value="">All Exams</option>
           <option value="oet">OET</option>
-          <option value="ielts">IELTS</option>
-          <option value="pte">PTE</option>
         </select>
       </div>
 

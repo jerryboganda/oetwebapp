@@ -1,5 +1,10 @@
 services:
-  web:
+  web-blue:
+    build:
+      context: .
+      dockerfile: Dockerfile.prebuilt
+
+  web-green:
     build:
       context: .
       dockerfile: Dockerfile.prebuilt

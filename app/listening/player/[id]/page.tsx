@@ -17,9 +17,7 @@ import {
   getListeningSession,
   heartbeatListeningAttempt,
   recordListeningIntegrityEvent,
-  saveListeningAnswer,
   startListeningAttempt,
-  submitListeningAttempt,
   type ListeningAttemptDto,
   type ListeningSessionDto,
 } from '@/lib/listening-api';
@@ -79,6 +77,10 @@ function formatMilliseconds(value: number | null | undefined) {
   if (value == null) return null;
   const seconds = Math.floor(value / 1000);
   return formatTime(seconds);
+}
+
+function formatQuestionNumberList(numbers: number[]) {
+  return numbers.map((number) => `Q${number}`).join(', ');
 }
 
 function derivePlayerMode({
@@ -521,7 +523,7 @@ function PlayerContent() {
     clearTimeout(saveTimers.current[questionId]);
     setSaveState('saving');
     saveTimers.current[questionId] = setTimeout(() => {
-      saveListeningAnswer(currentAttempt.attemptId, questionId, value)
+      listeningV2Api.saveAnswer(currentAttempt.attemptId, questionId, value)
         .then(() => setSaveState('saved'))
         .catch(() => setSaveState('error'));
     }, 500);
@@ -544,9 +546,9 @@ function PlayerContent() {
     try {
       const activeAttempt = await ensureAttempt();
       if (!skipFinalSave) {
-        await Promise.all(Object.entries(answers).map(([questionId, answer]) => saveListeningAnswer(activeAttempt.attemptId, questionId, answer)));
+        await Promise.all(Object.entries(answers).map(([questionId, answer]) => listeningV2Api.saveAnswer(activeAttempt.attemptId, questionId, answer)));
       }
-      const result = await submitListeningAttempt(activeAttempt.attemptId, answers);
+      const result = await listeningV2Api.submit(activeAttempt.attemptId, answers);
       analytics.track('task_submitted', { subtest: 'listening', taskId: session.paper.id, attemptId: activeAttempt.attemptId });
       if (mockAttemptId && mockSectionId) {
         try {
@@ -585,11 +587,24 @@ function PlayerContent() {
     return LISTENING_SECTION_SEQUENCE.filter((code) => sectionGroups[code].length > 0);
   }, [sectionGroups]);
   const currentSection: ListeningSectionCode | null = sectionsInPaper[currentSectionIndex] ?? null;
+  const freeNavigationEnabled = session?.modePolicy.freeNavigation === true;
+  const allPartsReviewEnabled = freeNavigationEnabled && session?.modePolicy.printableBooklet === true;
+  const paperFinalReviewSeconds = session?.modePolicy.finalReviewAllPartsSeconds ?? null;
+  const paperFinalReviewActive = allPartsReviewEnabled
+    && paperFinalReviewSeconds !== null
+    && attemptSecondsRemaining !== null
+    && attemptSecondsRemaining <= paperFinalReviewSeconds;
   const currentExtracts = currentSection
     ? extracts.filter((extract) => extract.partCode === currentSection || (currentSection === 'B' && extract.partCode === 'B'))
     : [];
-  const activeExtract = currentExtracts[0] ?? null;
+  const visibleExtracts = allPartsReviewEnabled ? extracts : currentExtracts;
+  const activeExtract = visibleExtracts[0] ?? null;
   const currentExtractWindows = currentExtracts.filter((extract) => (
+    extract.audioStartMs != null
+    && extract.audioEndMs != null
+    && extract.audioEndMs > extract.audioStartMs
+  ));
+  const allExtractWindows = extracts.filter((extract) => (
     extract.audioStartMs != null
     && extract.audioEndMs != null
     && extract.audioEndMs > extract.audioStartMs
@@ -600,6 +615,14 @@ function PlayerContent() {
   const currentSectionAudioEndMs = currentExtractWindows.length > 0
     ? Math.max(...currentExtractWindows.map((extract) => extract.audioEndMs!))
     : null;
+  const paperAudioStartMs = allExtractWindows.length > 0
+    ? Math.min(...allExtractWindows.map((extract) => extract.audioStartMs!))
+    : null;
+  const paperAudioEndMs = allExtractWindows.length > 0
+    ? Math.max(...allExtractWindows.map((extract) => extract.audioEndMs!))
+    : null;
+  const activeAudioStartMs = allPartsReviewEnabled ? paperAudioStartMs : currentSectionAudioStartMs;
+  const activeAudioEndMs = allPartsReviewEnabled ? paperAudioEndMs : currentSectionAudioEndMs;
   const isLastSection = currentSection !== null && currentSectionIndex >= sectionsInPaper.length - 1;
   const currentSectionReviewSeconds = currentSection ? LISTENING_REVIEW_SECONDS[currentSection] : 0;
   const currentSectionPreviewSeconds = currentSection ? LISTENING_PREVIEW_SECONDS[currentSection] : 0;
@@ -610,7 +633,7 @@ function PlayerContent() {
   });
   const canOpenReviewWindow = Boolean(
     currentSection
-    && (session?.modePolicy.canScrub !== false || allCurrentExtractsCompleted || currentSectionAudioEndMs == null),
+    && (allPartsReviewEnabled || session?.modePolicy.canScrub !== false || allCurrentExtractsCompleted || currentSectionAudioEndMs == null),
   );
   const strictServerNavigationActive = strictReadinessRequired && Boolean(attempt?.attemptId ?? attemptIdFromRoute);
 
@@ -717,6 +740,7 @@ function PlayerContent() {
   // when the section has no preview seconds authored (e.g. legacy data).
   useEffect(() => {
     if (!hasStarted || !currentSection) return;
+    if (allPartsReviewEnabled) return;
     if (strictReadinessRequired && strictServerState) return;
     if (phase === 'review') return;
     // Reset per-section forward-only end-of-extract latch.
@@ -836,11 +860,11 @@ function PlayerContent() {
     if (phase !== 'audio' && phase !== 'preview') return;
     const audio = audioRef.current;
     if (!audio) return;
-    const startMs = currentSectionAudioStartMs;
-    const endMs = currentSectionAudioEndMs;
+    const startMs = activeAudioStartMs;
+    const endMs = activeAudioEndMs;
     if (startMs == null || endMs == null || endMs <= startMs) return;
     seekAudioTo(startMs / 1000);
-  }, [currentSectionAudioStartMs, currentSectionAudioEndMs, phase, seekAudioTo]);
+  }, [activeAudioStartMs, activeAudioEndMs, phase, seekAudioTo]);
 
   const confirmNextFromAudio = async () => {
     if (!currentSection) return;
@@ -925,6 +949,25 @@ function PlayerContent() {
 
   const isExam = session.modePolicy.onePlayOnly;
   const answeredCount = Object.values(answers).filter((value) => value.trim().length > 0).length;
+  const unansweredQuestions = session.questions.filter((question) => (answers[question.id] ?? '').trim().length === 0);
+  const unansweredQuestionNumbers = unansweredQuestions.map((question) => question.number).sort((a, b) => a - b);
+  const unansweredQuestionList = formatQuestionNumberList(unansweredQuestionNumbers);
+  const currentSectionUnansweredNumbers = currentSection
+    ? (sectionGroups?.[currentSection] ?? [])
+      .filter((question) => (answers[question.id] ?? '').trim().length === 0)
+      .map((question) => question.number)
+      .sort((a, b) => a - b)
+    : [];
+  const currentSectionUnansweredList = formatQuestionNumberList(currentSectionUnansweredNumbers);
+  const navigationQuestions = allPartsReviewEnabled
+    ? session.questions
+    : currentSection ? sectionGroups?.[currentSection] ?? [] : [];
+  const visibleQuestionSections = allPartsReviewEnabled
+    ? sectionsInPaper.map((section) => ({
+      section,
+      questions: sectionGroups?.[section] ?? [],
+    })).filter((entry) => entry.questions.length > 0)
+    : currentSection ? [{ section: currentSection, questions: sectionGroups?.[currentSection] ?? [] }] : [];
   const shouldMountAudio = session.paper.audioAvailable && (!strictReadinessRequired || hasStarted);
 
   return (
@@ -947,8 +990,8 @@ function PlayerContent() {
             // audioEndMs in exam mode. Practice mode keeps full scrub
             // freedom. We pause and latch hasReachedEnd; subsequent
             // play() invocations are immediately re-paused.
-            const startMs = currentSectionAudioStartMs;
-            const endMs = currentSectionAudioEndMs;
+            const startMs = activeAudioStartMs;
+            const endMs = activeAudioEndMs;
             if (
               session?.modePolicy.canScrub === false
               && startMs != null
@@ -964,7 +1007,7 @@ function PlayerContent() {
             // C8c — mark this extract as completed once its audioEndMs is
             // crossed (regardless of mode), so the section panel renders a
             // checkmark next to the row.
-            const completedNow = currentExtracts.filter((extract) => (
+            const completedNow = visibleExtracts.filter((extract) => (
               extract.audioEndMs != null
               && now * 1000 >= extract.audioEndMs
             ));
@@ -1006,8 +1049,8 @@ function PlayerContent() {
           onLoadedMetadata={() => {
             if (!audioRef.current) return;
             setDuration(audioRef.current.duration);
-            const startMs = currentSectionAudioStartMs;
-            const endMs = currentSectionAudioEndMs;
+            const startMs = activeAudioStartMs;
+            const endMs = activeAudioEndMs;
             if ((phase === 'audio' || phase === 'preview') && startMs != null && endMs != null && endMs > startMs) {
               seekAudioTo(startMs / 1000);
             }
@@ -1126,10 +1169,10 @@ function PlayerContent() {
             {integrityWarning ? <InlineAlert variant="warning">{integrityWarning}</InlineAlert> : null}
             {audioResumeWarning ? <InlineAlert variant="warning">{audioResumeWarning}</InlineAlert> : null}
 
-            {currentExtracts.length > 0 ? (
+            {visibleExtracts.length > 0 ? (
               <div className="rounded-2xl border border-border bg-surface p-4">
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
-                  {currentExtracts.map((extract) => {
+                  {visibleExtracts.map((extract) => {
                     const extractKey = `${extract.partCode}-${extract.displayOrder}`;
                     const completed = completedExtractIds.has(extractKey);
                     return (
@@ -1156,6 +1199,14 @@ function PlayerContent() {
               sections={sectionsInPaper}
               currentIndex={currentSectionIndex}
               isReviewing={phase === 'review'}
+              freeNavigation={allPartsReviewEnabled}
+              onSelectSection={(index) => {
+                if (!allPartsReviewEnabled) return;
+                setCurrentSectionIndex(index);
+                setPhase('audio');
+                setPreviewSecondsRemaining(0);
+                setReviewSecondsRemaining(0);
+              }}
             />
 
             {/* C8f — pre-audio reading window. Audio stays paused; answer
@@ -1180,19 +1231,31 @@ function PlayerContent() {
             ) : null}
 
             <div className="space-y-6">
-              {currentSection === null ? (
+              {visibleQuestionSections.length === 0 ? (
                 <InlineAlert variant="warning">
                   This Listening paper does not contain any authored sections yet.
                 </InlineAlert>
               ) : (
                 <>
-                  {/* Intra-section question jumper — free navigation between this section's questions only. */}
-                  {(sectionGroups?.[currentSection]?.length ?? 0) > 1 ? (
+                  {allPartsReviewEnabled ? (
+                    <InlineAlert variant="info" data-testid="listening-paper-final-review-banner">
+                      {paperFinalReviewActive
+                        ? `Final ${formatTime(paperFinalReviewSeconds ?? 0)} all-parts review: every part remains editable. Use the section buttons to check any answer before the timer ends.`
+                        : 'Paper simulation keeps all parts editable for all-parts review.'}
+                      {' '}
+                      {unansweredQuestionNumbers.length > 0
+                        ? `Still unanswered: ${unansweredQuestionList}.`
+                        : 'All questions currently have an answer.'}
+                    </InlineAlert>
+                  ) : null}
+
+                  {/* Question jumper — intra-section in CBT, all-parts in paper mode. */}
+                  {navigationQuestions.length > 1 ? (
                     <div className="sticky top-40 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface/95 p-3 backdrop-blur">
                       <span className="mr-1 text-[10px] font-black uppercase tracking-widest text-muted">
-                        Jump to
+                        {allPartsReviewEnabled ? 'All-parts jump' : 'Jump to'}
                       </span>
-                      {(sectionGroups?.[currentSection] ?? []).map((question) => {
+                      {navigationQuestions.map((question) => {
                         const isAnswered = (answers[question.id] ?? '').trim().length > 0;
                         return (
                           <button
@@ -1221,42 +1284,47 @@ function PlayerContent() {
                   <ZoomControls value={questionZoomPercent} onChange={setQuestionZoomPercent} />
 
                   <div data-testid="listening-question-surface" className="space-y-6" style={{ fontSize: `${questionZoomPercent}%` }}>
-                    {(sectionGroups?.[currentSection] ?? []).map((question) => {
-                      // Answer editing is allowed during both audio phase and the
-                      // current section's review window. Locked sections (earlier
-                      // indices) are never shown here, so their inputs are
-                      // physically unreachable — that's the forward-only lock.
-                      const canEdit = true;
-                      if (question.options.length === 0) {
-                        return (
-                          <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
-                            <PartARenderer
-                              questionNumber={question.number}
-                              partLabel={LISTENING_SECTION_LABEL[currentSection]}
-                              prompt={question.text}
-                              inputId={`listening-answer-${question.id}`}
-                              value={answers[question.id] ?? ''}
-                              onChange={(value) => handleAnswerChange(question.id, value)}
-                              locked={!canEdit}
-                            />
-                          </div>
-                        );
-                      }
+                    {visibleQuestionSections.map(({ section, questions }) => (
+                      <section key={section} className="space-y-4" aria-label={LISTENING_SECTION_LABEL[section]}>
+                        {allPartsReviewEnabled ? (
+                          <h2 className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-black uppercase tracking-widest text-muted">
+                            {LISTENING_SECTION_LABEL[section]}
+                          </h2>
+                        ) : null}
+                        {questions.map((question) => {
+                          const canEdit = true;
+                          if (question.options.length === 0) {
+                            return (
+                              <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
+                                <PartARenderer
+                                  questionNumber={question.number}
+                                  partLabel={LISTENING_SECTION_LABEL[section]}
+                                  prompt={question.text}
+                                  inputId={`listening-answer-${question.id}`}
+                                  value={answers[question.id] ?? ''}
+                                  onChange={(value) => handleAnswerChange(question.id, value)}
+                                  locked={!canEdit}
+                                />
+                              </div>
+                            );
+                          }
 
-                      return (
-                        <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
-                          <BCQuestionRenderer
-                            questionNumber={question.number}
-                            partLabel={LISTENING_SECTION_LABEL[currentSection]}
-                            prompt={question.text}
-                            options={question.options}
-                            value={answers[question.id] ?? ''}
-                            onChange={(value) => handleAnswerChange(question.id, value)}
-                            locked={!canEdit}
-                          />
-                        </div>
-                      );
-                    })}
+                          return (
+                            <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
+                              <BCQuestionRenderer
+                                questionNumber={question.number}
+                                partLabel={LISTENING_SECTION_LABEL[section]}
+                                prompt={question.text}
+                                options={question.options}
+                                value={answers[question.id] ?? ''}
+                                onChange={(value) => handleAnswerChange(question.id, value)}
+                                locked={!canEdit}
+                              />
+                            </div>
+                          );
+                        })}
+                      </section>
+                    ))}
                   </div>
                 </>
               )}
@@ -1264,7 +1332,9 @@ function PlayerContent() {
 
             <div className="flex items-center justify-between gap-3 pt-4">
               <p className="text-xs text-muted">
-                {phase === 'review'
+                {allPartsReviewEnabled
+                  ? 'Paper simulation — all parts stay editable for final all-parts review.'
+                  : phase === 'review'
                   ? 'Edit freely until the countdown ends. This section will lock permanently.'
                   : isLastSection
                     ? 'Final section — the 2-minute review window opens when you press Next.'
@@ -1273,11 +1343,11 @@ function PlayerContent() {
               {phase === 'audio' ? (
                 <Button
                   size="lg"
-                  onClick={() => setShowNextConfirm(true)}
-                  disabled={!canOpenReviewWindow || isAdvancingPhase}
+                  onClick={() => (allPartsReviewEnabled ? setShowSubmitConfirm(true) : setShowNextConfirm(true))}
+                  disabled={!allPartsReviewEnabled && (!canOpenReviewWindow || isAdvancingPhase)}
                   className="gap-2"
                 >
-                  Next <ChevronRight className="h-5 w-5" />
+                  {allPartsReviewEnabled ? 'Finish & Submit' : 'Next'} <ChevronRight className="h-5 w-5" />
                 </Button>
               ) : null}
             </div>
@@ -1297,6 +1367,11 @@ function PlayerContent() {
                       ? `Starts the ${currentSectionReviewSeconds}-second review window for ${currentSection ? LISTENING_SECTION_LABEL[currentSection] : 'this section'}. Answer boxes stay editable for this section only during the window.`
                       : `${currentSection ? LISTENING_SECTION_LABEL[currentSection] : 'This section'} has no review window. Continuing will lock it permanently and open the next section.`}
                 </p>
+                {currentSectionUnansweredNumbers.length > 0 ? (
+                  <InlineAlert variant="warning">
+                    This section still has {currentSectionUnansweredNumbers.length} unanswered question{currentSectionUnansweredNumbers.length === 1 ? '' : 's'}: {currentSectionUnansweredList}. Locked unanswered items will score zero.
+                  </InlineAlert>
+                ) : null}
                 <div className="flex justify-end gap-3">
                   <Button variant="outline" onClick={() => setShowNextConfirm(false)}>Keep listening</Button>
                   <Button
@@ -1321,6 +1396,11 @@ function PlayerContent() {
                 <p className="text-sm text-muted">
                   Submit your answers now? This locks the attempt and opens server-graded OET score plus transcript-backed review.
                 </p>
+                {unansweredQuestionNumbers.length > 0 ? (
+                  <InlineAlert variant="warning">
+                    {unansweredQuestionNumbers.length} unanswered question{unansweredQuestionNumbers.length === 1 ? '' : 's'} will score zero if you submit now: {unansweredQuestionList}.
+                  </InlineAlert>
+                ) : null}
                 <div className="flex justify-end gap-3">
                   <Button variant="outline" onClick={() => setShowSubmitConfirm(false)}>
                     Keep reviewing

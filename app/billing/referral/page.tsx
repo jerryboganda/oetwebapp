@@ -100,7 +100,7 @@ export default function ReferralPage() {
 
   const shareCode = useCallback(async () => {
     if (!info?.referralCode) return;
-    const shareText = `Use my referral code ${info.referralCode} to get ${info.referredDiscountPercent}% off your first OET prep subscription.`;
+    const shareText = `Use my referral code ${info.referralCode} for any referral benefit currently published by OET Prep.`;
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({ title: 'Join OET Prep', text: shareText });
@@ -147,7 +147,7 @@ export default function ReferralPage() {
           icon={Gift}
           accent="purple"
           title="Referral program"
-          description="Invite colleagues and classmates to OET Prep. They unlock a launch discount, you earn wallet credits — applied automatically once their first paid subscription clears."
+          description="Invite colleagues and classmates to OET Prep. Referral benefits are applied only when the backend confirms the current terms and a qualifying paid subscription clears."
           highlights={heroHighlights}
         />
 
@@ -183,12 +183,16 @@ export default function ReferralPage() {
               {
                 step: '2',
                 title: 'They subscribe',
-                desc: `They get ${info?.referredDiscountPercent ?? 10}% off their first paid plan.`,
+                desc: info
+                  ? `They get the backend-published ${info.referredDiscountPercent}% referral discount on their first paid plan.`
+                  : 'Any friend discount is shown only after referral terms load from the backend.',
               },
               {
                 step: '3',
                 title: 'You earn credits',
-                desc: `You receive ${info?.referrerCreditAmount ?? 10} review credits per successful referral.`,
+                desc: info
+                  ? `You receive ${info.referrerCreditAmount} backend-published credits per successful referral.`
+                  : 'Credit amounts are shown only after referral terms load from the backend.',
               },
             ].map((s) => (
               <li
@@ -250,6 +254,7 @@ export default function ReferralPage() {
               ) : null}
               <div className="flex flex-wrap gap-3">
                 <Button
+                  variant="primary"
                   onClick={shareCode}
                   className="flex-1"
                   aria-label="Share referral code"
@@ -275,6 +280,7 @@ export default function ReferralPage() {
                 Generate your unique referral code to start inviting friends.
               </p>
               <Button
+                variant="primary"
                 onClick={generateCode}
                 disabled={generating || mutationsBlocked}
                 aria-label={
@@ -352,11 +358,12 @@ export default function ReferralPage() {
               Credits are awarded after the referred user completes their first paid subscription.
             </li>
             <li>
-              The referred user receives a {info?.referredDiscountPercent ?? 10}% discount on their
-              first plan.
+               Any referred-user discount must match the terms returned by the backend for your account.
             </li>
             <li>Self-referrals are not permitted and will be voided.</li>
-            <li>Credits do not expire and can be used toward any plan or add-on.</li>
+            <li>Referral abuse, duplicate accounts, payment reversals, or suspicious attribution can pause credits pending support review.</li>
+            <li>Credits are wallet credits only; expert-review credits remain separate and are not interchangeable.</li>
+            <li>Contact support if a referral attribution needs manual investigation or privacy deletion handling.</li>
           </ul>
         </section>
       </div>

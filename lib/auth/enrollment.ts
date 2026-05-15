@@ -22,12 +22,6 @@ export const examTypes: ExamType[] = [
     code: "OET",
     description: "Occupational English Test preparation and enrollment.",
   },
-  {
-    id: "ielts",
-    label: "IELTS",
-    code: "IELTS",
-    description: "IELTS preparation and session enrollment.",
-  },
 ];
 
 export const professions: Profession[] = [
@@ -72,12 +66,5 @@ export const professions: Profession[] = [
     countryTargets: [...TARGET_COUNTRY_OPTIONS],
     examTypeIds: ["oet"],
     description: "Other allied health professionals (occupational therapy, dietetics, speech pathology, podiatry, optometry, radiography, etc.).",
-  },
-  {
-    id: "academic-english",
-    label: "Academic / General English",
-    countryTargets: [...TARGET_COUNTRY_OPTIONS],
-    examTypeIds: ["ielts"],
-    description: "General academic and migration IELTS candidates.",
   },
 ];

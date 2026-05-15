@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 # --------------------------------------
-# deploy-production.sh - bullet-proof version
-# Aggressive cleanup BEFORE build to prevent disk-space failures.
-# Logs every step; only exits 1 on critical failure.
+# deploy-production.sh - emergency/local source-build fallback.
+# Normal production deploys must use scripts/deploy/deploy-prod.sh, which verifies
+# exact-SHA evidence and rolls out immutable image digests.
 # --------------------------------------
 set -Eeuo pipefail
 
@@ -17,6 +17,7 @@ echo "============================================"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 echo "[deploy] working directory: $(pwd)"
+echo "[deploy] WARNING: source-build deploy fallback bypasses immutable release images."
 
 # -- Pre-flight checks --
 echo "[deploy] docker version:"
@@ -37,6 +38,19 @@ fi
 echo "[deploy] .env.production exists"
 bash scripts/deploy/validate-production-env.sh .env.production
 bash scripts/deploy/mock-stub-scan.sh .env.production
+if [ -s .deploy/active-slot.env ]; then
+  ACTIVE_SLOT="$(awk -F= '$1 == "ACTIVE_SLOT" { print $2 }' .deploy/active-slot.env | tail -n 1)"
+  case "$ACTIVE_SLOT" in
+    blue|green) export ACTIVE_SLOT ;;
+    *)
+      echo "[deploy] FATAL: invalid ACTIVE_SLOT in .deploy/active-slot.env: $ACTIVE_SLOT"
+      exit 1
+      ;;
+  esac
+else
+  export ACTIVE_SLOT="${ACTIVE_SLOT:-blue}"
+fi
+echo "[deploy] active router slot for source-build fallback: $ACTIVE_SLOT"
 
 # -- Step 1: Pre-build cleanup (free disk space without destroying layer cache) --
 echo ""
@@ -58,9 +72,9 @@ echo "[deploy] STEP 2/5: building images..."
 echo "[deploy] build started at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 build_images() {
   local service
-  for service in db-backup learner-api web; do
+  for service in db-backup learner-api-blue learner-api-green web-blue web-green; do
     echo "[deploy] building $service"
-    docker compose --env-file .env.production -f docker-compose.production.yml build --pull "$service" 2>&1 || return $?
+    docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.production.build.yml build --pull "$service" 2>&1 || return $?
   done
 }
 
@@ -85,7 +99,7 @@ fi
 # -- Step 3: Start containers --
 echo ""
 echo "[deploy] STEP 3/5: starting containers..."
-if docker compose --env-file .env.production -f docker-compose.production.yml up -d --force-recreate --remove-orphans 2>&1; then
+if docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.production.build.yml up -d --force-recreate --remove-orphans 2>&1; then
   echo "[deploy] STEP 3 OK: containers started"
 else
   UP_EXIT=$?
@@ -97,14 +111,14 @@ fi
 # -- Step 4: Post-build cleanup --
 echo ""
 echo "[deploy] STEP 4/5: post-build cleanup..."
-docker builder prune -af 2>&1 || true
-docker image prune -af 2>&1 || true
+docker builder prune -f --filter "until=24h" 2>&1 || true
+docker image prune -f 2>&1 || true
 echo "[deploy] STEP 4 done"
 
 # -- Step 5: Status --
 echo ""
 echo "[deploy] STEP 5/5: container status:"
-docker compose --env-file .env.production -f docker-compose.production.yml ps 2>&1 || true
+docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.production.build.yml ps 2>&1 || true
 
 echo ""
 echo "[deploy] disk space FINAL:"
@@ -114,4 +128,3 @@ echo "============================================"
 echo "[deploy] DEPLOY COMPLETE at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "[deploy] log saved to $LOGFILE"
 echo "============================================"
-

@@ -122,6 +122,31 @@ describe('AiProvidersPage — GitHub Copilot integration', () => {
     expect(payload.apiKey).toBe('github_pat_TESTKEYabcdefgh1234');
   });
 
+  it('exposes an ElevenLabs realtime STT preset with ASR category', async () => {
+    mockFetch.mockResolvedValue([]);
+    mockCreate.mockResolvedValue({
+      id: 'elevenlabs-stt-1',
+      code: 'elevenlabs-stt',
+      apiKeyHint: '…1234',
+    });
+
+    render(<AiProvidersPage />);
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+
+    await userEvent.click(screen.getByRole('button', { name: /Register provider/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'ElevenLabs Scribe Realtime STT' }));
+    fireEvent.change(screen.getByLabelText(/API key/i), { target: { value: 'elevenlabs_secret_key_1234' } });
+    await userEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
+    const payload = mockCreate.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.code).toBe('elevenlabs-stt');
+    expect(payload.dialect).toBe('ElevenLabsStt');
+    expect(payload.category).toBe('Asr');
+    expect(payload.baseUrl).toBe('https://api.elevenlabs.io/v1');
+    expect(payload.defaultModel).toBe('scribe_v2_realtime');
+  });
+
   it('blocks non-admin viewers', () => {
     authState.role = 'learner';
     render(<AiProvidersPage />);

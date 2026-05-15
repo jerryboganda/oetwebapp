@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -240,12 +241,56 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
             await client.PostAsJsonAsync(
                 $"/v1/listening/v2/attempts/{attemptId}/audio-resume",
                 new { cuePointMs = 1000 }),
+            await client.PutAsJsonAsync(
+                $"/v1/listening/v2/attempts/{attemptId}/answers/question-1",
+                new { userAnswer = "five" }),
+            await client.PostAsync(
+                $"/v1/listening/v2/attempts/{attemptId}/submit",
+                null),
         };
 
         foreach (var response in responses)
         {
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         }
+    }
+
+    [Fact]
+    public async Task Save_and_submit_facade_persists_answer_and_returns_full_review()
+    {
+        var userId = $"listener-{Guid.NewGuid():N}";
+        var attemptId = $"att-{Guid.NewGuid():N}";
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        var questionId = await SeedRelationalAttemptAsync(userId, attemptId);
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+
+        var saveResponse = await client.PutAsJsonAsync(
+            $"/v1/listening/v2/attempts/{attemptId}/answers/{questionId}",
+            new { userAnswer = "five" });
+        saveResponse.EnsureSuccessStatusCode();
+
+        var submitResponse = await client.PostAsync(
+            $"/v1/listening/v2/attempts/{attemptId}/submit",
+            null);
+        submitResponse.EnsureSuccessStatusCode();
+        var review = await submitResponse.Content.ReadAsStringAsync();
+
+        Assert.Contains("\"rawScore\":1", review, StringComparison.Ordinal);
+        Assert.Contains("\"correctCount\":1", review, StringComparison.Ordinal);
+        Assert.Contains("\"itemReview\"", review, StringComparison.Ordinal);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var answer = await db.ListeningAnswers.SingleOrDefaultAsync(
+            item => item.ListeningAttemptId == attemptId && item.ListeningQuestionId == questionId);
+        var attempt = await db.ListeningAttempts.FindAsync([attemptId], CancellationToken.None);
+        Assert.NotNull(answer);
+        Assert.True(answer.IsCorrect);
+        Assert.NotNull(attempt);
+        Assert.Equal(ListeningAttemptStatus.Submitted, attempt.Status);
     }
 
     private async Task SeedStrictAttemptAsync(
@@ -278,5 +323,95 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
         });
 
         await db.SaveChangesAsync();
+    }
+
+    private async Task<string> SeedRelationalAttemptAsync(string userId, string attemptId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var paperId = $"paper-{Guid.NewGuid():N}";
+        var partId = $"part-{Guid.NewGuid():N}";
+        var extractId = $"extract-{Guid.NewGuid():N}";
+        var questionId = $"question-{Guid.NewGuid():N}";
+
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = paperId,
+            SubtestCode = "listening",
+            Title = "V2 Facade Listening Paper",
+            Slug = $"v2-facade-{Guid.NewGuid():N}",
+            Status = ContentStatus.Published,
+            Difficulty = "standard",
+            AppliesToAllProfessions = true,
+            EstimatedDurationMinutes = 45,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+            ExtractedTextJson = "{}",
+        });
+        db.ListeningParts.Add(new ListeningPart
+        {
+            Id = partId,
+            PaperId = paperId,
+            PartCode = ListeningPartCode.A1,
+            MaxRawScore = 1,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.ListeningExtracts.Add(new ListeningExtract
+        {
+            Id = extractId,
+            ListeningPartId = partId,
+            DisplayOrder = 0,
+            Kind = ListeningExtractKind.Consultation,
+            Title = "Consultation",
+            AccentCode = "en-GB",
+            SpeakersJson = "[{\"id\":\"s1\",\"role\":\"nurse\",\"gender\":\"f\"}]",
+            TranscriptSegmentsJson = "[{\"startMs\":1000,\"endMs\":3000,\"speakerId\":\"s1\",\"text\":\"The dose is five milligrams.\"}]",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.ListeningQuestions.Add(new OetLearner.Api.Domain.ListeningQuestion
+        {
+            Id = questionId,
+            PaperId = paperId,
+            ListeningPartId = partId,
+            ListeningExtractId = extractId,
+            QuestionNumber = 1,
+            DisplayOrder = 1,
+            Points = 1,
+            QuestionType = ListeningQuestionType.ShortAnswer,
+            Stem = "Dose: ____ milligrams",
+            CorrectAnswerJson = "\"five\"",
+            AcceptedSynonymsJson = "[\"5\"]",
+            CaseSensitive = false,
+            ExplanationMarkdown = "The speaker says five milligrams.",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.ListeningAttempts.Add(new ListeningAttempt
+        {
+            Id = attemptId,
+            UserId = userId,
+            PaperId = paperId,
+            StartedAt = now,
+            LastActivityAt = now,
+            Status = ListeningAttemptStatus.InProgress,
+            Mode = ListeningAttemptMode.Paper,
+            MaxRawScore = 1,
+            PolicySnapshotJson = "{}",
+            LastQuestionVersionMapJson = "{}",
+        });
+
+        if (!db.ListeningPolicies.Any(policy => policy.Id == "global"))
+        {
+            db.ListeningPolicies.Add(new ListeningPolicy { Id = "global", FullPaperTimerMinutes = 45, GracePeriodSeconds = 10 });
+        }
+
+        await db.SaveChangesAsync();
+        return questionId;
     }
 }

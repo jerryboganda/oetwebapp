@@ -145,7 +145,7 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
         var trace = string.Join(" → ", trail);
         throw new AiProviderFailoverException(
             $"GitHub Copilot multi-account failover exhausted [{trace}]. " +
-            (last?.Message ?? "no further detail"),
+            (last is null ? "No provider account was available." : "Last provider account returned an error."),
             failoverTrace: trace,
             lastAccountId: lastAccountId);
     }
@@ -257,7 +257,7 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
             // (e.g. "unauthorized", "rate_limited") when present.
             var code = string.IsNullOrEmpty(ex.ErrorCode) ? "" : $" {ex.ErrorCode}";
             throw new InvalidOperationException(
-                $"GitHub Copilot AI provider call failed: {ex.Status}{code}. {ex.Message}",
+                $"GitHub Copilot AI provider call failed: {ex.Status}{code}.",
                 ex);
         }
     }

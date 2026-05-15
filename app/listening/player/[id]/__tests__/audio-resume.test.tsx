@@ -43,8 +43,6 @@ vi.mock('@/lib/listening-api', () => ({
   getListeningSession: mockGetListeningSession,
   startListeningAttempt: mockStartListeningAttempt,
   heartbeatListeningAttempt: mockHeartbeat,
-  submitListeningAttempt: mockSubmit,
-  saveListeningAnswer: mockSaveAnswer,
   recordListeningIntegrityEvent: mockRecordIntegrity,
 }));
 
@@ -54,6 +52,8 @@ vi.mock('@/lib/listening/v2-api', () => ({
     advance: mockV2Advance,
     recordTechReadiness: mockRecordTechReadiness,
     audioResume: mockAudioResume,
+    saveAnswer: mockSaveAnswer,
+    submit: mockSubmit,
   },
 }));
 

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.AiTools;
@@ -431,7 +432,7 @@ public sealed class AiGatewayService(
                     keySource: prospectiveKeySource,
                     outcome: AiCallOutcome.ProviderError,
                     errorCode: errorCode,
-                    errorMessage: ex.Message,
+                    errorMessage: SanitiseProviderErrorMessage(ex, errorCode),
                     latencyMs: (int)stopwatch.ElapsedMilliseconds,
                     retryCount: 0,
                     policyTrace: resolution?.PolicyTrace,
@@ -614,6 +615,27 @@ public sealed class AiGatewayService(
             return "provider_5xx";
         return "provider_error";
     }
+
+    private static string SanitiseProviderErrorMessage(Exception ex, string errorCode)
+    {
+        var message = ex.Message ?? string.Empty;
+        var status = HttpStatusPattern.Match(message);
+        if (status.Success)
+            return $"Provider request failed with HTTP {status.Value}.";
+
+        return errorCode switch
+        {
+            "provider_auth" => "Provider authentication failed.",
+            "provider_429" => "Provider rate limit reached.",
+            "provider_5xx" => "Provider service failed.",
+            _ => "Provider request failed.",
+        };
+    }
+
+    private static readonly Regex HttpStatusPattern = new(
+        @"(?<!\d)(?:401|403|408|409|422|429|500|502|503|504)(?!\d)",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(50));
 
     private static string BuildUserMessage(AiGatewayRequest request)
     {

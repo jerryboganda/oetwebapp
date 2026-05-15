@@ -1,111 +1,24 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import { Users, DollarSign, UserCheck, Clock, TrendingUp, Award } from 'lucide-react';
-import { fetchSponsorDashboard, isApiError, type SponsorDashboardData } from '@/lib/api';
-import { StatCard } from '@/components/ui/stat-card';
+import { LockKeyhole, Mail } from 'lucide-react';
+import Link from 'next/link';
 
 export default function SponsorDashboardPage() {
-  const [data, setData] = useState<SponsorDashboardData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const result = await fetchSponsorDashboard();
-        if (!cancelled) {
-          setData(result);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(isApiError(err) ? err.userMessage : 'Failed to load dashboard.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-    return () => { cancelled = true; };
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-navy">Sponsor Dashboard</h1>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="page-surface h-28 animate-pulse rounded-2xl" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-navy">Sponsor Dashboard</h1>
-        <div className="page-surface rounded-2xl p-6 text-center">
-          <p className="text-sm text-red-600">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-navy">Sponsor Dashboard</h1>
-        {data?.organizationName && (
-          <p className="mt-1 text-sm text-muted">{data.organizationName}</p>
-        )}
+    <div className="mx-auto max-w-3xl rounded-[2rem] border border-border bg-surface p-6 shadow-sm sm:p-8">
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <LockKeyhole className="h-7 w-7" />
       </div>
-
-      <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard
-          label="Learners Sponsored"
-          value={data?.learnersSponsored ?? 0}
-          icon={<Users />}
-          tone="info"
-        />
-        <StatCard
-          label="Active Sponsorships"
-          value={data?.activeSponsorships ?? 0}
-          icon={<UserCheck />}
-          tone="success"
-        />
-        <StatCard
-          label="Pending Invites"
-          value={data?.pendingSponsorships ?? 0}
-          icon={<Clock />}
-          tone="warning"
-        />
-        <StatCard
-          label="Total Spend"
-          value={`£${(data?.totalSpend ?? 0).toFixed(0)}`}
-          icon={<DollarSign />}
-          trend={{ direction: 'up', value: '4%', label: 'vs last mo' }}
-        />
-        <StatCard
-          label="Success Rate"
-          value="84%"
-          icon={<TrendingUp />}
-          tone="success"
-          trend={{ direction: 'up', value: '2%', label: 'pass rate' }}
-        />
-        <StatCard
-          label="Avg Score"
-          value="390"
-          icon={<Award />}
-          tone="default"
-          sparklineData={[350, 360, 360, 380, 390]}
-        />
+      <p className="text-xs font-bold uppercase tracking-[0.25em] text-primary">Sponsor portal</p>
+      <h1 className="mt-2 text-3xl font-black text-navy">Sponsor access is held for a later launch gate</h1>
+      <p className="mt-3 text-sm leading-6 text-muted">
+        Sponsor finance, learner management, and reporting remain hidden until legal, privacy, support, and data-quality gates are complete.
+      </p>
+      <div className="mt-6 flex flex-wrap gap-3">
+        <Link className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90" href="/support">
+          <Mail className="h-4 w-4" /> Contact support
+        </Link>
+        <Link className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-navy hover:bg-background-light" href="/dashboard">
+          Return to dashboard
+        </Link>
       </div>
     </div>
   );

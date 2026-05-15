@@ -13,7 +13,6 @@ import { getScoreGuaranteeData } from '@/lib/learner-data';
 import {
   activateScoreGuarantee,
   fetchFreezeStatus,
-  submitScoreGuaranteeClaim,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { ScoreGuaranteePledge } from '@/lib/types/learner';
@@ -48,9 +47,6 @@ export default function ScoreGuaranteePage() {
   const [isMutating, setIsMutating] = useState(false);
 
   const [baselineScore, setBaselineScore] = useState('');
-  const [actualScore, setActualScore] = useState('');
-  const [claimNote, setClaimNote] = useState('');
-
   // Belt-and-braces double-submit guard. Complements the `isMutating`
   // disabled state for cases where rapid clicks fire before React has
   // flushed the disabled prop to the DOM.
@@ -83,8 +79,8 @@ export default function ScoreGuaranteePage() {
   const heroHighlights = useMemo(() => {
     if (!pledge) {
       return [
-        { icon: Target, label: 'Improvement', value: '+50 points' },
-        { icon: Calendar, label: 'Validity', value: '180 days' },
+        { icon: Target, label: 'Eligibility', value: 'Backend checked' },
+        { icon: Calendar, label: 'Claims', value: 'Support reviewed' },
       ];
     }
     const badge = STATUS_BADGE[pledge.status];
@@ -131,33 +127,6 @@ export default function ScoreGuaranteePage() {
     }
   }
 
-  async function handleClaim() {
-    if (mutationsBlocked) {
-      setToast({ variant: 'error', message: blockedMessage });
-      return;
-    }
-    if (submittingRef.current) return;
-    const score = parseInt(actualScore, 10);
-    if (Number.isNaN(score) || score < 0 || score > 500) {
-      setToast({ variant: 'error', message: 'Enter your actual OET score (0–500).' });
-      return;
-    }
-    submittingRef.current = true;
-    setIsMutating(true);
-    try {
-      await submitScoreGuaranteeClaim(score, undefined, claimNote || undefined);
-      const refreshed = await getScoreGuaranteeData();
-      setPledge(refreshed);
-      setToast({ variant: 'success', message: 'Claim submitted for review.' });
-      analytics.track('score_guarantee_claim_submitted', { actualScore: score });
-    } catch {
-      setToast({ variant: 'error', message: 'Failed to submit claim.' });
-    } finally {
-      setIsMutating(false);
-      submittingRef.current = false;
-    }
-  }
-
   if (loading) {
     return (
       <LearnerDashboardShell pageTitle="Score guarantee" backHref="/billing">
@@ -184,7 +153,7 @@ export default function ScoreGuaranteePage() {
           icon={Shield}
           accent="emerald"
           title="Score guarantee"
-          description="Improve by 50 OET points within 180 days or claim a platform credit. Activate the pledge with your current score, then submit your official result if you fall short."
+          description="Score-guarantee eligibility and outcomes are support-reviewed. Claims require official OET result evidence from the eligible pledge window."
           highlights={heroHighlights}
         />
 
@@ -202,6 +171,27 @@ export default function ScoreGuaranteePage() {
           </InlineAlert>
         ) : null}
 
+        <section
+          aria-labelledby="sg-terms-heading"
+          className="rounded-2xl border border-border bg-surface p-6 shadow-sm"
+        >
+          <LearnerSurfaceSectionHeader
+            eyebrow="Eligibility"
+            icon={Shield}
+            title="Guarantee terms and review workflow"
+            description="The pledge is intentionally strict so the program can launch without manual exceptions or abuse-prone loopholes."
+          />
+          <h2 id="sg-terms-heading" className="sr-only">
+            Score guarantee eligibility terms
+          </h2>
+          <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-muted">
+            <li>Available only to learners with an active paid OET subscription when the pledge is activated.</li>
+              <li>The baseline score must be a real recent OET result; claims require official OET result proof from the pledge window.</li>
+            <li>Claims are reviewed by support before wallet credit is issued, and duplicate or manipulated evidence may be rejected.</li>
+            <li>Contact support from the public support page if your result evidence needs manual review or deletion handling.</li>
+          </ul>
+        </section>
+
         {!pledge && !error ? (
           <section
             aria-labelledby="sg-activate-heading"
@@ -210,11 +200,11 @@ export default function ScoreGuaranteePage() {
             <LearnerSurfaceSectionHeader
               eyebrow="Activate"
               icon={Shield}
-              title="Activate your score guarantee"
-              description="Enter your current OET score to lock in the 50-point improvement pledge."
+              title="Request score-guarantee eligibility"
+              description="Enter your current OET score so the backend can record the pledge terms available to your subscription."
             />
             <h2 id="sg-activate-heading" className="sr-only">
-              Activate your score guarantee
+              Request score-guarantee eligibility
             </h2>
             <div className="mt-5 flex max-w-md flex-col items-stretch gap-3 sm:flex-row sm:items-end">
               <div className="flex-1">
@@ -235,6 +225,7 @@ export default function ScoreGuaranteePage() {
                 />
               </div>
               <Button
+                variant="primary"
                 onClick={handleActivate}
                 disabled={isMutating || mutationsBlocked}
                 aria-label={
@@ -247,7 +238,7 @@ export default function ScoreGuaranteePage() {
               </Button>
             </div>
             <p className="mt-3 text-xs text-muted">
-              Requires an active subscription. Guarantee is valid for 180 days from activation.
+              Requires an active subscription. Exact pledge terms are confirmed by the backend after activation.
             </p>
           </section>
         ) : null}
@@ -313,51 +304,18 @@ export default function ScoreGuaranteePage() {
                 <LearnerSurfaceSectionHeader
                   eyebrow="Submit a claim"
                   icon={Upload}
-                  title="Submit a claim"
-                  description="If you took the OET and didn't improve by 50 points, submit your actual score for review."
+                  title="Claim submission requires official result proof"
+                  description="Direct claim submission is disabled until an evidence-upload workflow is available. Contact support with your official OET result from the pledge window."
                 />
                 <h2 id="sg-claim-heading" className="sr-only">
                   Submit a score guarantee claim
                 </h2>
-                <div className="mt-5 max-w-md space-y-3">
-                  <div>
-                    <label
-                      htmlFor="sg-actual-score"
-                      className="mb-1 block text-sm font-medium text-navy"
-                    >
-                      Actual OET score
-                    </label>
-                    <Input
-                      id="sg-actual-score"
-                      type="number"
-                      min={0}
-                      max={500}
-                      value={actualScore}
-                      onChange={(e) => setActualScore(e.target.value)}
-                      placeholder="Your official OET score"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="sg-claim-note" className="mb-1 block text-sm font-medium text-navy">
-                      Note (optional)
-                    </label>
-                    <Input
-                      id="sg-claim-note"
-                      value={claimNote}
-                      onChange={(e) => setClaimNote(e.target.value)}
-                      placeholder="Any additional details"
-                    />
-                  </div>
-                  <Button
-                    onClick={handleClaim}
-                    disabled={isMutating || mutationsBlocked}
-                    aria-label={
-                      mutationsBlocked
-                        ? `Submit claim (unavailable: ${blockedMessage})`
-                        : 'Submit score guarantee claim'
-                    }
-                  >
-                    {isMutating ? 'Submitting…' : 'Submit claim'}
+                <div className="mt-5 max-w-2xl space-y-3">
+                  <InlineAlert variant="info">
+                    Email support with your pledge ID, official OET result, and the result date. Claims are not approved without verifiable evidence.
+                  </InlineAlert>
+                  <Button variant="outline" disabled>
+                    Direct claim submission unavailable
                   </Button>
                 </div>
               </section>

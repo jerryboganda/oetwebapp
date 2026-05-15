@@ -22,6 +22,7 @@ export const AdminPermission = {
   FeatureFlags: 'feature_flags',
   AuditLogs: 'audit_logs',
   SystemAdmin: 'system_admin',
+  ManagePermissions: 'manage_permissions',
 } as const;
 
 /**
@@ -42,6 +43,7 @@ export function hasPermission(
  * Items not listed here are always visible (e.g. the dashboard).
  */
 export const sidebarPermissionMap: Record<string, string[]> = {
+  '/admin/alerts': [AdminPermission.SystemAdmin],
   '/admin/content': [
     AdminPermission.ContentRead,
     AdminPermission.ContentWrite,
@@ -72,6 +74,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/ai-config': [AdminPermission.AiConfig],
   '/admin/ai-providers': [AdminPermission.AiConfig],
   '/admin/ai-usage': [AdminPermission.AiConfig],
+  '/admin/launch-readiness': [AdminPermission.SystemAdmin],
   '/admin/review-ops': [AdminPermission.ReviewOps],
   '/admin/notifications': [AdminPermission.SystemAdmin],
   '/admin/analytics/quality': [AdminPermission.QualityAnalytics],
@@ -90,7 +93,8 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/marketplace-review': [AdminPermission.ContentPublish],
   '/admin/freeze': [AdminPermission.BillingRead, AdminPermission.BillingWrite, AdminPermission.UsersRead, AdminPermission.UsersWrite],
   '/admin/content/hierarchy': [AdminPermission.ContentRead],
-  '/admin/permissions': [AdminPermission.SystemAdmin],
+  '/admin/permissions': [AdminPermission.ManagePermissions],
+  '/admin/roles': [AdminPermission.ManagePermissions],
   '/admin/content/publish-requests': [AdminPermission.ContentEditorReview, AdminPermission.ContentPublisherApproval, AdminPermission.ContentPublish],
   '/admin/pending-review': [AdminPermission.ContentEditorReview, AdminPermission.ContentPublisherApproval, AdminPermission.ContentPublish],
   '/admin/webhooks': [AdminPermission.SystemAdmin],
@@ -98,3 +102,112 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/private-speaking': [AdminPermission.ReviewOps],
   '/admin/recalls/bulk-upload': [AdminPermission.ContentWrite],
 };
+
+export const adminRoutePermissionMap: Record<string, string[]> = {
+  '/admin': [],
+  '/admin/alerts': [AdminPermission.SystemAdmin],
+  '/admin/analytics': [AdminPermission.QualityAnalytics],
+  '/admin/ai-config': [AdminPermission.AiConfig],
+  '/admin/ai-providers': [AdminPermission.AiConfig],
+  '/admin/ai-usage': [AdminPermission.AiConfig],
+  '/admin/audit-logs': [AdminPermission.AuditLogs],
+  '/admin/billing': [AdminPermission.BillingRead],
+  '/admin/business-intelligence': [AdminPermission.QualityAnalytics],
+  '/admin/bulk-operations': [AdminPermission.SystemAdmin],
+  '/admin/community': [AdminPermission.SystemAdmin],
+  '/admin/content': [AdminPermission.ContentRead],
+  '/admin/content/dedup': [AdminPermission.ContentWrite],
+  '/admin/content/generation': [AdminPermission.ContentWrite],
+  '/admin/content/grammar/ai-draft': [AdminPermission.ContentWrite],
+  '/admin/content/grammar/lessons/new': [AdminPermission.ContentWrite],
+  '/admin/content/grammar/topics': [AdminPermission.ContentWrite],
+  '/admin/content/import': [AdminPermission.ContentWrite],
+  '/admin/content/media': [AdminPermission.ContentRead],
+  '/admin/content/mocks': [AdminPermission.ContentRead],
+  '/admin/content/new': [AdminPermission.ContentWrite],
+  '/admin/content/papers/import': [AdminPermission.ContentWrite],
+  '/admin/content/pronunciation/ai-draft': [AdminPermission.ContentWrite],
+  '/admin/content/pronunciation/new': [AdminPermission.ContentWrite],
+  '/admin/content/publish-requests': [
+    AdminPermission.ContentEditorReview,
+    AdminPermission.ContentPublisherApproval,
+    AdminPermission.ContentPublish,
+  ],
+  '/admin/content/quality': [AdminPermission.ContentRead],
+  '/admin/content/strategies/new': [AdminPermission.ContentWrite],
+  '/admin/content/vocabulary/import': [AdminPermission.ContentWrite],
+  '/admin/content/vocabulary/new': [AdminPermission.ContentWrite],
+  '/admin/content/writing/ai-draft': [AdminPermission.ContentWrite],
+  '/admin/credit-lifecycle': [AdminPermission.BillingRead],
+  '/admin/criteria': [AdminPermission.ContentRead],
+  '/admin/enterprise': [AdminPermission.SystemAdmin],
+  '/admin/escalations': [AdminPermission.SystemAdmin],
+  '/admin/experts': [AdminPermission.UsersRead],
+  '/admin/flags': [AdminPermission.FeatureFlags],
+  '/admin/freeze': [
+    AdminPermission.BillingRead,
+    AdminPermission.BillingWrite,
+    AdminPermission.UsersRead,
+    AdminPermission.UsersWrite,
+  ],
+  '/admin/free-tier': [AdminPermission.BillingRead],
+  '/admin/institutions': [AdminPermission.UsersRead],
+  '/admin/launch-readiness': [AdminPermission.SystemAdmin],
+  '/admin/marketplace-review': [AdminPermission.ContentPublish],
+  '/admin/notifications': [AdminPermission.SystemAdmin],
+  '/admin/pending-review': [
+    AdminPermission.ContentEditorReview,
+    AdminPermission.ContentPublisherApproval,
+    AdminPermission.ContentPublish,
+  ],
+  '/admin/permissions': [AdminPermission.ManagePermissions],
+  '/admin/playbook': [AdminPermission.SystemAdmin],
+  '/admin/private-speaking': [AdminPermission.ReviewOps],
+  '/admin/recalls/bulk-upload': [AdminPermission.ContentWrite],
+  '/admin/review-ops': [AdminPermission.ReviewOps],
+  '/admin/roles': [AdminPermission.ManagePermissions],
+  '/admin/rulebooks': [AdminPermission.ContentRead],
+  '/admin/score-guarantee-claims': [AdminPermission.BillingRead],
+  '/admin/signup-catalog': [AdminPermission.ContentRead],
+  '/admin/sla-health': [AdminPermission.SystemAdmin],
+  '/admin/taxonomy': [AdminPermission.ContentRead],
+  '/admin/users/import': [AdminPermission.UsersWrite],
+  '/admin/users': [AdminPermission.UsersRead],
+  '/admin/webhooks': [AdminPermission.SystemAdmin],
+  '/admin/writing/ai-draft': [AdminPermission.ContentWrite],
+  '/admin/writing/analytics': [AdminPermission.QualityAnalytics],
+  '/admin/writing/options': [AdminPermission.AiConfig],
+};
+
+function normalizeAdminPath(pathname: string | null | undefined): string {
+  if (!pathname) return '/admin';
+  const withoutQuery = pathname.split('?')[0]?.split('#')[0] ?? pathname;
+  return withoutQuery.length > 1 ? withoutQuery.replace(/\/+$/, '') : withoutQuery;
+}
+
+export function getAdminRoutePermissions(pathname: string | null | undefined): string[] {
+  const normalized = normalizeAdminPath(pathname);
+  const exact = adminRoutePermissionMap[normalized];
+  if (exact) return exact;
+
+  const bestPrefix = Object.keys(adminRoutePermissionMap)
+    .filter((route) => route !== '/admin' && normalized.startsWith(`${route}/`))
+    .sort((a, b) => b.length - a.length)[0];
+
+  if (bestPrefix) return adminRoutePermissionMap[bestPrefix];
+  return [AdminPermission.SystemAdmin];
+}
+
+export function hasExplicitAdminRoutePermission(pathname: string | null | undefined): boolean {
+  const normalized = normalizeAdminPath(pathname);
+  return Boolean(adminRoutePermissionMap[normalized])
+    || Object.keys(adminRoutePermissionMap).some((route) => route !== '/admin' && normalized.startsWith(`${route}/`));
+}
+
+export function canAccessAdminRoute(
+  userPermissions: string[] | null | undefined,
+  pathname: string | null | undefined,
+): boolean {
+  const required = getAdminRoutePermissions(pathname);
+  return required.length === 0 || hasPermission(userPermissions, ...required);
+}

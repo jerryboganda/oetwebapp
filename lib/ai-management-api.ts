@@ -39,6 +39,7 @@ export type AiProviderDialect =
   | 'AzureAsr'
   | 'WhisperAsr'
   | 'AzurePhoneme'
+  | 'ElevenLabsStt'
   | 'Mock';
 export type AiProviderCategory = 'TextChat' | 'Tts' | 'Asr' | 'Phoneme' | 'Ocr' | 'PdfExtraction';
 export type AiCredentialStatus = 'Active' | 'Invalid' | 'Revoked';

@@ -473,7 +473,9 @@ public static class AiUsageAdminEndpoints
             row.Dialect = dto.Dialect;
             row.Category = dto.Category;
             if (!string.IsNullOrWhiteSpace(dto.BaseUrl)) row.BaseUrl = dto.BaseUrl.Trim();
-            if (!string.IsNullOrWhiteSpace(dto.ApiKey) && dto.ApiKey.Length >= 16)
+            if (!string.IsNullOrWhiteSpace(dto.ApiKey) && dto.ApiKey.Length < 16)
+                return Results.BadRequest(new { error = "ApiKey must be at least 16 chars." });
+            if (!string.IsNullOrWhiteSpace(dto.ApiKey))
             {
                 var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
                 row.EncryptedApiKey = protector.Protect(dto.ApiKey);

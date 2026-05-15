@@ -197,6 +197,12 @@ export interface ListeningSessionDto {
     integrityLockRequired?: boolean;
     /** Paper-simulation: render a printable booklet alongside the player. */
     printableBooklet?: boolean;
+    /** R07/R06 policy hint: paper/diagnostic modes may navigate across sections. */
+    freeNavigation?: boolean;
+    /** R06.11 policy hint: show exact unanswered numbers before lock/submit. */
+    unansweredWarningRequired?: boolean;
+    /** Paper mode final all-parts review window in seconds, when configured. */
+    finalReviewAllPartsSeconds?: number | null;
   };
   scoring: {
     maxRawScore: number;

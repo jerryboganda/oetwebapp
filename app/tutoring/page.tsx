@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { GraduationCap, Calendar, Star, Plus } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchTutoringSessions, bookTutoringSession, rateTutoringSession } from '@/lib/api';
+import { fetchTutoringSessions, rateTutoringSession } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 type TutoringSession = {
@@ -30,19 +30,8 @@ export default function TutoringPage() {
   const [sessions, setSessions] = useState<TutoringSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showBook, setShowBook] = useState(false);
-  const [booking, setBooking] = useState(false);
   const [ratingSession, setRatingSession] = useState<string | null>(null);
   const [ratingValue, setRatingValue] = useState(5);
-  const [bookForm, setBookForm] = useState({
-    expertUserId: '',
-    examTypeCode: 'oet',
-    subtestFocus: '',
-    scheduledAt: '',
-    durationMinutes: 60,
-    learnerNotes: '',
-    price: 50,
-  });
 
   useEffect(() => {
     analytics.track('tutoring_page_viewed');
@@ -54,22 +43,6 @@ export default function TutoringPage() {
       setLoading(false);
     });
   }, []);
-
-  async function handleBook(e: React.FormEvent) {
-    e.preventDefault();
-    if (!bookForm.expertUserId || !bookForm.scheduledAt || booking) return;
-    setBooking(true);
-    try {
-      await bookTutoringSession({ expertUserId: bookForm.expertUserId, examTypeCode: bookForm.examTypeCode, subtestFocus: bookForm.subtestFocus || undefined, scheduledAt: bookForm.scheduledAt, durationMinutes: bookForm.durationMinutes, learnerNotes: bookForm.learnerNotes || undefined, price: bookForm.price });
-      const data = await fetchTutoringSessions() as TutoringSession[];
-      setSessions(data);
-      setShowBook(false);
-    } catch {
-      setError('Could not book session.');
-    } finally {
-      setBooking(false);
-    }
-  }
 
   async function handleRate(sessionId: string) {
     try {
@@ -90,81 +63,18 @@ export default function TutoringPage() {
           icon={GraduationCap}
         />
         <button
-          onClick={() => setShowBook(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-medium transition-colors"
+          disabled
+          title="Booking reopens after tutor discovery and canonical pricing are configured."
+          className="flex items-center gap-2 px-4 py-2 bg-muted text-muted-foreground rounded-xl text-sm font-medium opacity-70"
         >
-          <Plus className="w-4 h-4" /> Book Session
+          <Plus className="w-4 h-4" /> Booking paused
         </button>
       </div>
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
-
-      {/* Book form */}
-      {showBook && (
-        <MotionSection className="bg-surface rounded-xl border border-primary/30 p-5 mb-6">
-          <h3 className="font-semibold text-navy mb-4">Book a Tutoring Session</h3>
-          <form onSubmit={handleBook} className="space-y-3">
-            <input
-              type="text"
-              placeholder="Expert User ID or username"
-              value={bookForm.expertUserId}
-              onChange={e => setBookForm(p => ({ ...p, expertUserId: e.target.value }))}
-              required
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <select value={bookForm.examTypeCode} onChange={e => setBookForm(p => ({ ...p, examTypeCode: e.target.value }))} className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
-                <option value="oet">OET</option>
-                <option value="ielts">IELTS</option>
-                <option value="pte">PTE</option>
-              </select>
-              <select value={bookForm.subtestFocus} onChange={e => setBookForm(p => ({ ...p, subtestFocus: e.target.value }))} className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
-                <option value="">Any subtest</option>
-                <option value="writing">Writing</option>
-                <option value="speaking">Speaking</option>
-                <option value="reading">Reading</option>
-                <option value="listening">Listening</option>
-              </select>
-            </div>
-            <input
-              type="datetime-local"
-              value={bookForm.scheduledAt}
-              onChange={e => setBookForm(p => ({ ...p, scheduledAt: e.target.value }))}
-              required
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted mb-1 block">Duration (minutes)</label>
-                <select value={bookForm.durationMinutes} onChange={e => setBookForm(p => ({ ...p, durationMinutes: Number(e.target.value) }))} className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
-                  <option value={30}>30 min</option>
-                  <option value={60}>60 min</option>
-                  <option value={90}>90 min</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Price (credits)</label>
-                <input type="number" min={0} value={bookForm.price} onChange={e => setBookForm(p => ({ ...p, price: Number(e.target.value) }))} className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy" />
-              </div>
-            </div>
-            <textarea
-              placeholder="Notes for the tutor (optional)"
-              value={bookForm.learnerNotes}
-              onChange={e => setBookForm(p => ({ ...p, learnerNotes: e.target.value }))}
-              rows={2}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy resize-none focus:outline-none"
-            />
-            <div className="flex gap-2 pt-1">
-              <button type="submit" disabled={booking} className="px-5 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium disabled:opacity-50">
-                {booking ? 'Booking...' : 'Confirm Booking'}
-              </button>
-              <button type="button" onClick={() => setShowBook(false)} className="px-5 py-2 border border-border rounded-lg text-sm text-muted">
-                Cancel
-              </button>
-            </div>
-          </form>
-        </MotionSection>
-      )}
+      <InlineAlert variant="info" title="Booking temporarily paused" className="mb-4">
+        Tutor booking will reopen after tutor discovery, fixed launch pricing, and expert payout rules are configured. Existing booked sessions and ratings remain available.
+      </InlineAlert>
 
       <LearnerSurfaceSectionHeader title="Your Sessions" />
       {loading ? (

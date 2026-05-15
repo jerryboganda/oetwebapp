@@ -398,6 +398,7 @@ remaining_work:
       - "lib/mobile/web-checkout.ts (new): openCheckoutUrl(url) launches via @capacitor/browser on Capacitor.isNativePlatform() (Safari View Controller / Chrome Custom Tabs) and falls back to window.open + window.location.assign on the web. Returns a typed OpenCheckoutResult so callers can be tested."
       - "app/billing/page.tsx: both checkout call sites (plan/add-on checkout via createBillingCheckoutSession, wallet top-up via createWalletTopUp) now route through openCheckoutUrl. npx tsc --noEmit clean on 2026-05-10."
       - "Already shipped earlier: lib/mobile/push-notifications.ts, lib/mobile/deep-link-handler.ts (App Links / Universal Links), lib/mobile/secure-storage.ts (Keychain/Keystore), lib/mobile/biometric-auth.ts, lib/mobile/forced-update.ts."
+      - "Post-v1 local hardening: scripts/qa/validate-mobile-release-inputs.mjs now rejects placeholder/malformed Apple association files, Android assetlinks fingerprints, and invalid app versions/version codes; .github/workflows/mobile-release.yml passes those inputs and uses structured Node version stamping. Current external store/signing/device blockers remain tracked in docs/STATUS/REMAINING-WORK.md."
       - "Outstanding (out of scope of code work): provision real Apple Developer + Google Play credentials, run physical-device audio validation against real provider keys, fill store listings + privacy/data-disclosure approval. All pure operations + external-credential supply."
 
   - id: RW-015
@@ -419,7 +420,7 @@ remaining_work:
       - Signing credentials/update host can be configured later via secure CI/admin-managed settings.
     evidence_links:
       - "Decision recorded 2026-05-10 (RW-015): ship unsigned builds for early testers; CI is already wired to consume future code-signing secrets without code change."
-      - ".github/workflows/desktop-release.yml: 161-line workflow already accepts WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD / Azure Trusted Signing (AZURE_*) / CSC_LINK / CSC_KEY_PASSWORD secret groups; allow_unsigned input gates unsigned builds. scripts/desktop-dist.cjs refuses signed-mode builds without one of those secret groups present."
+      - ".github/workflows/desktop-release.yml accepts WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD / Azure Trusted Signing (AZURE_*) / CSC_LINK / CSC_KEY_PASSWORD secret groups; allow_unsigned input gates unsigned builds. scripts/desktop-dist.cjs refuses signed-mode builds without one of those secret groups present. Post-v1 hardening added workflow release write permission, explicit workflow-token GH_TOKEN usage, Authenticode verification for signed Windows builds, and SHA256SUMS.txt artifact upload."
       - electron/main.cjs (validateSenderFrame), electron-builder.config.cjs (Fuses RunAsNode=false, NodeCLI=false) already shipped per RW-001 plan reconciliation.
       - Outstanding (out of scope of code work): provision real signing certs, configure update host, run install/start smoke on a signed artifact — all pure operations, no further code changes required.
 

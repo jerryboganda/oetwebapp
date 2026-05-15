@@ -42,8 +42,6 @@ vi.mock('@/lib/listening-api', () => ({
   getListeningSession: mockGetListeningSession,
   startListeningAttempt: mockStartListeningAttempt,
   heartbeatListeningAttempt: mockHeartbeat,
-  submitListeningAttempt: mockSubmit,
-  saveListeningAnswer: mockSaveAnswer,
   recordListeningIntegrityEvent: mockRecordIntegrity,
 }));
 
@@ -52,6 +50,8 @@ vi.mock('@/lib/listening/v2-api', () => ({
     getState: mockV2GetState,
     advance: mockV2Advance,
     recordTechReadiness: mockRecordTechReadiness,
+    saveAnswer: mockSaveAnswer,
+    submit: mockSubmit,
   },
 }));
 
@@ -200,6 +200,68 @@ function makeTwoSectionSession(overrides: SessionOverrides = {}) {
       { id: 'q-a1', number: 1, partCode: 'A1', text: 'A1 first blank?', type: 'short_answer', options: [], points: 1 },
       { id: 'q-a2', number: 13, partCode: 'A2', text: 'A2 resumed blank?', type: 'short_answer', options: [], points: 1 },
     ],
+  };
+}
+
+function makeFinalReviewSession(overrides: SessionOverrides = {}) {
+  const session = makeSession(overrides);
+  return {
+    ...session,
+    paper: {
+      ...session.paper,
+      extracts: [
+        {
+          partCode: 'C2', displayOrder: 1, kind: 'presentation', title: 'Final extract',
+          accentCode: 'en-GB', speakers: [],
+          audioStartMs: 12_000, audioEndMs: 240_000,
+        },
+      ],
+    },
+    questions: [
+      { id: 'q-c2-38', number: 38, partCode: 'C2', text: 'C2 first blank?', type: 'short_answer', options: [], points: 1 },
+      { id: 'q-c2-39', number: 39, partCode: 'C2', text: 'C2 answered blank?', type: 'short_answer', options: [], points: 1 },
+      { id: 'q-c2-40', number: 40, partCode: 'C2', text: 'C2 final blank?', type: 'short_answer', options: [], points: 1 },
+    ],
+  };
+}
+
+function makePaperAllPartsSession(overrides: SessionOverrides = {}) {
+  const session = makeSession({ mode: 'paper', canScrub: false, onePlayOnly: true, ...overrides });
+  return {
+    ...session,
+    paper: {
+      ...session.paper,
+      extracts: [
+        { partCode: 'A1', displayOrder: 1, kind: 'consultation', title: 'A1 extract', accentCode: 'en-GB', speakers: [], audioStartMs: 0, audioEndMs: 60_000 },
+        { partCode: 'A2', displayOrder: 2, kind: 'consultation', title: 'A2 extract', accentCode: 'en-GB', speakers: [], audioStartMs: 70_000, audioEndMs: 130_000 },
+        { partCode: 'B', displayOrder: 3, kind: 'workplace', title: 'B extract', accentCode: 'en-GB', speakers: [], audioStartMs: 140_000, audioEndMs: 200_000 },
+        { partCode: 'C1', displayOrder: 4, kind: 'presentation', title: 'C1 extract', accentCode: 'en-GB', speakers: [], audioStartMs: 210_000, audioEndMs: 270_000 },
+        { partCode: 'C2', displayOrder: 5, kind: 'presentation', title: 'C2 extract', accentCode: 'en-GB', speakers: [], audioStartMs: 280_000, audioEndMs: 340_000 },
+      ],
+    },
+    attempt: {
+      ...session.attempt,
+      mode: 'paper',
+      expiresAt: overrides.expiresAt ?? new Date(Date.now() + 90_000).toISOString(),
+    },
+    questions: [
+      { id: 'q-a1', number: 1, partCode: 'A1', text: 'A1 paper blank?', type: 'short_answer', options: [], points: 1 },
+      { id: 'q-a2', number: 13, partCode: 'A2', text: 'A2 paper blank?', type: 'short_answer', options: [], points: 1 },
+      { id: 'q-b', number: 25, partCode: 'B', text: 'B paper decision?', type: 'single_choice', options: ['Continue monitoring', 'Discharge now', 'Cancel referral'], points: 1 },
+      { id: 'q-c1', number: 31, partCode: 'C1', text: 'C1 paper blank?', type: 'short_answer', options: [], points: 1 },
+      { id: 'q-c2', number: 39, partCode: 'C2', text: 'C2 paper blank?', type: 'short_answer', options: [], points: 1 },
+    ],
+    modePolicy: {
+      ...session.modePolicy,
+      mode: 'paper',
+      canPause: false,
+      canScrub: false,
+      onePlayOnly: true,
+      printableBooklet: true,
+      freeNavigation: true,
+      unansweredWarningRequired: true,
+      finalReviewAllPartsSeconds: 120,
+    },
   };
 }
 
@@ -751,6 +813,64 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('lists exact unanswered question numbers before final submit', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeFinalReviewSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+    mockV2GetState.mockResolvedValueOnce({
+      ...makeV2State('c2_review'),
+      windowDurationMs: 120_000,
+      windowRemainingMs: 120_000,
+    });
+
+    render(<ListeningPlayer />);
+
+    expect(await screen.findByTestId('listening-review-banner')).toHaveTextContent('02:00');
+    fireEvent.change(screen.getByLabelText(/answer for question 39/i), {
+      target: { value: 'answered item' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /finish & submit/i }));
+
+    const warning = await screen.findByText(/2 unanswered questions will score zero if you submit now: Q38, Q40\./i);
+    expect(warning).toBeInTheDocument();
+    expect(warning).not.toHaveTextContent('Q39');
+  });
+
+  it('renders every paper section during all-parts final review without strict V2 advance', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'paper';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(makePaperAllPartsSession());
+
+    render(<ListeningPlayer />);
+
+    expect(await screen.findByText(/final 02:00 all-parts review/i)).toBeInTheDocument();
+    expect(screen.getByText('A1 paper blank?')).toBeInTheDocument();
+    expect(screen.getByText('A2 paper blank?')).toBeInTheDocument();
+    expect(screen.getByText('B paper decision?')).toBeInTheDocument();
+    expect(screen.getByText('C1 paper blank?')).toBeInTheDocument();
+    expect(screen.getByText('C2 paper blank?')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Part A — Extract 1' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Part C — Extract 2' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /A2, available/i }));
+
+    expect(mockV2GetState).not.toHaveBeenCalled();
+    expect(mockV2Advance).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /finish & submit/i })).not.toBeDisabled();
   });
 
   it('includes the final in-memory answer when the timer expires before debounce save completes', async () => {

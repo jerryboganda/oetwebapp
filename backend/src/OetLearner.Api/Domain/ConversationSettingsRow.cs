@@ -46,6 +46,7 @@ public class ConversationSettingsRow
     public bool? RealtimeSttEnabled { get; set; }
     [MaxLength(64)] public string? RealtimeAsrProvider { get; set; }
     public bool? RealtimeSttAllowRealProvider { get; set; }
+    public bool? RealtimeSttRealProviderProductionAuthorized { get; set; }
     public bool? RealtimeSttFallbackToBatch { get; set; }
     public int? RealtimeSttProviderConnectTimeoutSeconds { get; set; }
     public int? RealtimeSttMaxChunkBytes { get; set; }
@@ -62,6 +63,7 @@ public class ConversationSettingsRow
     public bool? RealtimeSttAllowManagedLearnerRealProvider { get; set; }
     [MaxLength(96)] public string? RealtimeSttConsentVersion { get; set; }
     [MaxLength(64)] public string? RealtimeSttRollbackMode { get; set; }
+    [MaxLength(512)] public string? RealtimeSttAllowedMimeTypesCsv { get; set; }
     public string? ElevenLabsSttApiKeyEncrypted { get; set; }
     [MaxLength(256)] public string? ElevenLabsSttBaseUrl { get; set; }
     [MaxLength(64)] public string? ElevenLabsSttModel { get; set; }

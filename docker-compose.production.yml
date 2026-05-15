@@ -5,6 +5,139 @@
 # DB) and fails STEP 4 with container-name conflict against the live stack.
 name: oetwebsite
 
+x-learner-api-slot: &learner-api-slot
+  image: ${API_IMAGE:-oetwebsite-learner-api:local}
+  pull_policy: ${PRODUCTION_IMAGE_PULL_POLICY:-always}
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    clamav:
+      condition: service_healthy
+  environment: &api-env
+    ASPNETCORE_ENVIRONMENT: Production
+    ASPNETCORE_URLS: http://+:8080
+    # Always include loopback, the stable router service, and both slot names
+    # so Docker healthchecks, web proxy calls, and blue/green traffic switches
+    # are not rejected by ASP.NET's HostFilteringMiddleware.
+    AllowedHosts: ${API_ALLOWED_HOSTS:?Set API_ALLOWED_HOSTS to the public API host name};127.0.0.1;localhost;learner-api;learner-api-blue;learner-api-green
+    ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+    AUTHTOKENS__ISSUER: ${AUTHTOKENS__ISSUER}
+    AUTHTOKENS__AUDIENCE: ${AUTHTOKENS__AUDIENCE}
+    AUTHTOKENS__ACCESSTOKENSIGNINGKEY: ${AUTHTOKENS__ACCESSTOKENSIGNINGKEY}
+    AUTHTOKENS__REFRESHTOKENSIGNINGKEY: ${AUTHTOKENS__REFRESHTOKENSIGNINGKEY}
+    AUTHTOKENS__ACCESSTOKENLIFETIME: ${AUTHTOKENS__ACCESSTOKENLIFETIME}
+    AUTHTOKENS__REFRESHTOKENLIFETIME: ${AUTHTOKENS__REFRESHTOKENLIFETIME}
+    AUTHTOKENS__OTPLIFETIME: ${AUTHTOKENS__OTPLIFETIME}
+    AUTHTOKENS__AUTHENTICATORISSUER: ${AUTHTOKENS__AUTHENTICATORISSUER}
+    BREVO__ENABLED: ${BREVO__ENABLED:-true}
+    BREVO__APIKEY: ${BREVO__APIKEY}
+    BREVO__BASEURL: ${BREVO__BASEURL:-https://api.brevo.com/v3}
+    BREVO__FROMEMAIL: ${BREVO__FROMEMAIL}
+    BREVO__FROMNAME: ${BREVO__FROMNAME:-OET Learner}
+    BREVO__EMAILVERIFICATIONTEMPLATEID: ${BREVO__EMAILVERIFICATIONTEMPLATEID}
+    BREVO__PASSWORDRESETTEMPLATEID: ${BREVO__PASSWORDRESETTEMPLATEID}
+    BREVO__WEBHOOKSECRET: ${BREVO__WEBHOOKSECRET:-}
+    SMTP__ENABLED: ${SMTP__ENABLED:-true}
+    SMTP__HOST: ${SMTP__HOST}
+    SMTP__PORT: ${SMTP__PORT}
+    SMTP__USERNAME: ${SMTP__USERNAME:-}
+    SMTP__PASSWORD: ${SMTP__PASSWORD:-}
+    SMTP__ENABLESSL: ${SMTP__ENABLESSL:-true}
+    SMTP__FROMEMAIL: ${SMTP__FROMEMAIL}
+    SMTP__FROMNAME: ${SMTP__FROMNAME:-OET Learner}
+    Billing__AllowSandboxFallbacks: ${BILLING__ALLOWSANDBOXFALLBACKS:-false}
+    Billing__Stripe__SecretKey: ${BILLING__STRIPE__SECRETKEY}
+    Billing__Stripe__SuccessUrl: ${BILLING__STRIPE__SUCCESSURL}
+    Billing__Stripe__CancelUrl: ${BILLING__STRIPE__CANCELURL}
+    Billing__Stripe__WebhookSecret: ${BILLING__STRIPE__WEBHOOKSECRET}
+    Platform__PublicApiBaseUrl: ${PUBLIC_API_BASE_URL}
+    Platform__FallbackEmailDomain: ${FALLBACK_EMAIL_DOMAIN:-example.invalid}
+    Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL}
+    Storage__LocalRootPath: /var/opt/oet-learner/storage
+    Storage__MaxUploadBytes: ${MAX_UPLOAD_BYTES:-26214400}
+    Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-true}
+    Bootstrap__SeedDemoData: ${SEED_DEMO_DATA:-false}
+    # Writing-sample seeder (Data/Seeds/writing-samples.v1.json). Idempotent
+    # — once papers exist they are not re-seeded. Keep enabled to allow
+    # safe re-runs after schema changes; disable only for destructive resets.
+    Content__WritingSeed__Enabled: ${CONTENT__WRITINGSEED__ENABLED:-true}
+    Proxy__TrustForwardHeaders: true
+    Proxy__EnforceHttps: true
+    Cors__AllowedOriginsCsv: ${CORS_ALLOWED_ORIGINS}
+    Sentry__Dsn: ${SENTRY_DSN}
+    Features__EnableSwagger: ${ENABLE_SWAGGER:-false}
+    # Grounded AI and server-authoritative speech providers. These map the
+    # uppercase .env.production keys validated by validate-production-env.sh
+    # into the .NET configuration shape consumed by startup fail-fast checks.
+    AI__ProviderId: ${AI__PROVIDERID:?Set AI__PROVIDERID}
+    AI__BaseUrl: ${AI__BASEURL:?Set AI__BASEURL}
+    AI__ApiKey: ${AI__APIKEY:?Set AI__APIKEY}
+    AI__DefaultModel: ${AI__DEFAULTMODEL:?Set AI__DEFAULTMODEL}
+    AI__ReasoningEffort: ${AI__REASONINGEFFORT:-}
+    AI__DefaultMaxTokens: ${AI__DEFAULTMAXTOKENS:-4096}
+    AI__DefaultTemperature: ${AI__DEFAULTTEMPERATURE:-0.2}
+    Pronunciation__Provider: ${PRONUNCIATION__PROVIDER:?Set PRONUNCIATION__PROVIDER}
+    Pronunciation__AzureSpeechKey: ${PRONUNCIATION__AZURESPEECHKEY:?Set PRONUNCIATION__AZURESPEECHKEY}
+    Pronunciation__AzureSpeechRegion: ${PRONUNCIATION__AZURESPEECHREGION:?Set PRONUNCIATION__AZURESPEECHREGION}
+    Conversation__Enabled: ${CONVERSATION__ENABLED:?Set CONVERSATION__ENABLED}
+    Conversation__AsrProvider: ${CONVERSATION__ASRPROVIDER:?Set CONVERSATION__ASRPROVIDER}
+    Conversation__DeepgramApiKey: ${CONVERSATION__DEEPGRAMAPIKEY:?Set CONVERSATION__DEEPGRAMAPIKEY}
+    Conversation__TtsProvider: ${CONVERSATION__TTSPROVIDER:?Set CONVERSATION__TTSPROVIDER}
+    Conversation__ElevenLabsApiKey: ${CONVERSATION__ELEVENLABSAPIKEY:?Set CONVERSATION__ELEVENLABSAPIKEY}
+    Conversation__RealtimeSttEnabled: ${CONVERSATION__REALTIMESTTENABLED:-false}
+    Conversation__RealtimeAsrProvider: ${CONVERSATION__REALTIMEASRPROVIDER:-mock}
+    Conversation__RealtimeSttAllowRealProvider: ${CONVERSATION__REALTIMESTTALLOWREALPROVIDER:-false}
+    Conversation__RealtimeSttRealProviderProductionAuthorized: ${CONVERSATION__REALTIMESTTREALPROVIDERPRODUCTIONAUTHORIZED:-false}
+    Conversation__RealtimeSttProviderSessionTopology: ${CONVERSATION__REALTIMESTTPROVIDERSESSIONTOPOLOGY:-unconfigured}
+    Conversation__RealtimeSttRegionId: ${CONVERSATION__REALTIMESTTREGIONID:-}
+    Conversation__RealtimeSttEstimatedCostUsdPerMinute: ${CONVERSATION__REALTIMESTTESTIMATEDCOSTUSDPERMINUTE:-0}
+    Conversation__RealtimeSttAssumeLearnersAdult: ${CONVERSATION__REALTIMESTTASSUMELEARNERSADULT:-false}
+    Conversation__RealtimeSttAllowManagedLearnerRealProvider: ${CONVERSATION__REALTIMESTTALLOWMANAGEDLEARNERREALPROVIDER:-false}
+    # Upload virus-scanning. Production MUST NOT run with Provider=noop — the
+    # API refuses to start in that case. 'clamav' is the compose service name
+    # of the sidecar above; port 3310 is clamd's default.
+    UploadScanner__Provider: ${UPLOAD_SCANNER__PROVIDER:-clamav}
+    UploadScanner__Host: ${UPLOAD_SCANNER__HOST:-clamav}
+    UploadScanner__Port: ${UPLOAD_SCANNER__PORT:-3310}
+    UploadScanner__FailClosedOnError: ${UPLOAD_SCANNER__FAILCLOSEDONERROR:-true}
+  volumes:
+    - oet_learner_storage:/var/opt/oet-learner/storage
+  expose:
+    - "8080"
+  networks:
+    - internal
+  healthcheck:
+    test: ["CMD-SHELL", "curl --fail http://127.0.0.1:8080/health/ready || exit 1"]
+    interval: 30s
+    timeout: 5s
+    start_period: 20s
+    retries: 5
+
+x-web-slot: &web-slot
+  image: ${WEB_IMAGE:-oetwebsite-web:local}
+  pull_policy: ${PRODUCTION_IMAGE_PULL_POLICY:-always}
+  restart: unless-stopped
+  environment: &web-env
+    NODE_ENV: production
+    PORT: 3000
+    HOSTNAME: 0.0.0.0
+    NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+    NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
+    SENTRY_DSN: ${SENTRY_DSN}
+    APP_URL: ${APP_URL}
+    GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  expose:
+    - "3000"
+  networks:
+    - internal
+  healthcheck:
+    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+    interval: 30s
+    timeout: 5s
+    start_period: 20s
+    retries: 5
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -53,122 +186,74 @@ services:
       - internal
 
   learner-api:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    image: ${ROUTER_IMAGE:-nginx:1.27-alpine}
     container_name: oet-api
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      clamav:
-        condition: service_healthy
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ASPNETCORE_URLS: http://+:8080
-      # Always include 127.0.0.1, localhost, and the Docker service name
-      # (`learner-api`) so the in-container Docker healthcheck
-      # (curl http://127.0.0.1:8080/health/ready) and the web → API proxy
-      # (fetch http://learner-api:8080/...) are not rejected by ASP.NET's
-      # HostFilteringMiddleware with HTTP 400 "Invalid Hostname".
-      AllowedHosts: ${API_ALLOWED_HOSTS:?Set API_ALLOWED_HOSTS to the public API host name};127.0.0.1;localhost;learner-api
-      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
-      AUTHTOKENS__ISSUER: ${AUTHTOKENS__ISSUER}
-      AUTHTOKENS__AUDIENCE: ${AUTHTOKENS__AUDIENCE}
-      AUTHTOKENS__ACCESSTOKENSIGNINGKEY: ${AUTHTOKENS__ACCESSTOKENSIGNINGKEY}
-      AUTHTOKENS__REFRESHTOKENSIGNINGKEY: ${AUTHTOKENS__REFRESHTOKENSIGNINGKEY}
-      AUTHTOKENS__ACCESSTOKENLIFETIME: ${AUTHTOKENS__ACCESSTOKENLIFETIME}
-      AUTHTOKENS__REFRESHTOKENLIFETIME: ${AUTHTOKENS__REFRESHTOKENLIFETIME}
-      AUTHTOKENS__OTPLIFETIME: ${AUTHTOKENS__OTPLIFETIME}
-      AUTHTOKENS__AUTHENTICATORISSUER: ${AUTHTOKENS__AUTHENTICATORISSUER}
-      BREVO__ENABLED: ${BREVO__ENABLED:-true}
-      BREVO__APIKEY: ${BREVO__APIKEY}
-      BREVO__BASEURL: ${BREVO__BASEURL:-https://api.brevo.com/v3}
-      BREVO__FROMEMAIL: ${BREVO__FROMEMAIL}
-      BREVO__FROMNAME: ${BREVO__FROMNAME:-OET Learner}
-      BREVO__EMAILVERIFICATIONTEMPLATEID: ${BREVO__EMAILVERIFICATIONTEMPLATEID}
-      BREVO__PASSWORDRESETTEMPLATEID: ${BREVO__PASSWORDRESETTEMPLATEID}
-      BREVO__WEBHOOKSECRET: ${BREVO__WEBHOOKSECRET:-}
-      SMTP__ENABLED: ${SMTP__ENABLED:-true}
-      SMTP__HOST: ${SMTP__HOST}
-      SMTP__PORT: ${SMTP__PORT}
-      SMTP__USERNAME: ${SMTP__USERNAME:-}
-      SMTP__PASSWORD: ${SMTP__PASSWORD:-}
-      SMTP__ENABLESSL: ${SMTP__ENABLESSL:-true}
-      SMTP__FROMEMAIL: ${SMTP__FROMEMAIL}
-      SMTP__FROMNAME: ${SMTP__FROMNAME:-OET Learner}
-      Billing__AllowSandboxFallbacks: ${BILLING__ALLOWSANDBOXFALLBACKS:-false}
-      Billing__Stripe__SecretKey: ${BILLING__STRIPE__SECRETKEY}
-      Billing__Stripe__SuccessUrl: ${BILLING__STRIPE__SUCCESSURL}
-      Billing__Stripe__CancelUrl: ${BILLING__STRIPE__CANCELURL}
-      Billing__Stripe__WebhookSecret: ${BILLING__STRIPE__WEBHOOKSECRET}
-      Platform__PublicApiBaseUrl: ${PUBLIC_API_BASE_URL}
-      Platform__FallbackEmailDomain: ${FALLBACK_EMAIL_DOMAIN:-example.invalid}
-      Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL}
-      Storage__LocalRootPath: /var/opt/oet-learner/storage
-      Storage__MaxUploadBytes: ${MAX_UPLOAD_BYTES:-26214400}
-      Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-true}
-      Bootstrap__SeedDemoData: ${SEED_DEMO_DATA:-false}
-      # Writing-sample seeder (Data/Seeds/writing-samples.v1.json). Idempotent
-      # — once papers exist they are not re-seeded. Keep enabled to allow
-      # safe re-runs after schema changes; disable only for destructive resets.
-      Content__WritingSeed__Enabled: ${CONTENT__WRITINGSEED__ENABLED:-true}
-      Proxy__TrustForwardHeaders: true
-      Proxy__EnforceHttps: true
-      Cors__AllowedOriginsCsv: ${CORS_ALLOWED_ORIGINS}
-      Sentry__Dsn: ${SENTRY_DSN}
-      Features__EnableSwagger: ${ENABLE_SWAGGER:-false}
-      # AI — DigitalOcean Serverless Inference + Anthropic Claude Opus 4.7
-      AI__ProviderId: ${AI__ProviderId:-digitalocean-serverless}
-      AI__BaseUrl: ${AI__BaseUrl:-https://inference.do-ai.run/v1}
-      AI__ApiKey: ${AI__ApiKey:-}
-      AI__DefaultModel: ${AI__DefaultModel:-anthropic-claude-opus-4.7}
-      AI__ReasoningEffort: ${AI__ReasoningEffort:-high}
-      AI__DefaultMaxTokens: ${AI__DefaultMaxTokens:-4096}
-      AI__DefaultTemperature: ${AI__DefaultTemperature:-0.2}
-      # Upload virus-scanning. Production MUST NOT run with Provider=noop — the
-      # API refuses to start in that case. 'clamav' is the compose service name
-      # of the sidecar above; port 3310 is clamd's default.
-      UploadScanner__Provider: ${UPLOAD_SCANNER__PROVIDER:-clamav}
-      UploadScanner__Host: ${UPLOAD_SCANNER__HOST:-clamav}
-      UploadScanner__Port: ${UPLOAD_SCANNER__PORT:-3310}
-      UploadScanner__FailClosedOnError: ${UPLOAD_SCANNER__FAILCLOSEDONERROR:-true}
+      ACTIVE_SLOT: ${ACTIVE_SLOT:-blue}
+      NGINX_ENVSUBST_FILTER: "^ACTIVE_SLOT$"
     volumes:
-      - oet_learner_storage:/var/opt/oet-learner/storage
+      - ./scripts/deploy/nginx/api-bluegreen.conf.template:/etc/nginx/templates/default.conf.template:ro
     expose:
       - "8080"
     networks:
       - internal
       - npm_proxy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  learner-api-blue:
+    <<: *learner-api-slot
+    container_name: oet-api-blue
+
+  learner-api-green:
+    <<: *learner-api-slot
+    container_name: oet-api-green
 
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
-        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
-        APP_URL: ${APP_URL}
+    image: ${ROUTER_IMAGE:-nginx:1.27-alpine}
     container_name: oet-web
     restart: unless-stopped
-    depends_on:
-      learner-api:
-        condition: service_started
     environment:
-      NODE_ENV: production
-      PORT: 3000
-      HOSTNAME: 0.0.0.0
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
-      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
-      SENTRY_DSN: ${SENTRY_DSN}
-      API_PROXY_TARGET_URL: http://learner-api:8080
-      APP_URL: ${APP_URL}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ACTIVE_SLOT: ${ACTIVE_SLOT:-blue}
+      NGINX_ENVSUBST_FILTER: "^ACTIVE_SLOT$"
+    volumes:
+      - ./scripts/deploy/nginx/web-bluegreen.conf.template:/etc/nginx/templates/default.conf.template:ro
     expose:
       - "3000"
     networks:
       - internal
       - npm_proxy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  web-blue:
+    <<: *web-slot
+    container_name: oet-web-blue
+    depends_on:
+      learner-api-blue:
+        condition: service_started
+    environment:
+      <<: *web-env
+      API_PROXY_TARGET_URL: http://learner-api-blue:8080
+
+  web-green:
+    <<: *web-slot
+    container_name: oet-web-green
+    depends_on:
+      learner-api-green:
+        condition: service_started
+    environment:
+      <<: *web-env
+      API_PROXY_TARGET_URL: http://learner-api-green:8080
 
   # Nightly encrypted Postgres backup sidecar. Runs pg_dump on BACKUP_SCHEDULE,
   # GPG-encrypts the dump, and optionally pushes to S3/R2. See
@@ -176,9 +261,8 @@ services:
   # At minimum BACKUP_GPG_PASSPHRASE and BACKUP_S3_URL should be set in
   # .env.production for any production deployment that cares about its data.
   db-backup:
-    build:
-      context: .
-      dockerfile: scripts/backup/Dockerfile
+    image: ${DB_BACKUP_IMAGE:-oetwebsite-db-backup:local}
+    pull_policy: ${PRODUCTION_IMAGE_PULL_POLICY:-always}
     container_name: oet-db-backup
     restart: unless-stopped
     # Alpine's dcron (crond -f) calls setpgid(0,0) for every scheduled job.

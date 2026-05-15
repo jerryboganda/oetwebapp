@@ -31,13 +31,17 @@ For each item, record status, owner, evidence file or link, and notes.
 - SCA report: `release-evidence/sca.json`.
 - Tool versions: `release-evidence/tool-versions.txt` with local scanner versions or version-tagged fallback images.
 - Evidence checksums: `release-evidence/checksums.sha256` covering metadata, tool versions, SBOM, SCA, and accepted-risk files when applicable.
+- Immutable image digests: `release-evidence/image-digests.env` with `WEB_IMAGE`, `API_IMAGE`, `DB_BACKUP_IMAGE`, and `ROUTER_IMAGE` pinned to `@sha256:<digest>`.
 - Production evidence signature: detached GPG signature for `release-evidence/checksums.sha256` plus expected signer fingerprint from the protected environment when `EVIDENCE_ENV=production`.
 - Production deploy provenance: `scripts/evidence-verify.sh` output with `EXPECTED_GIT_SHA` set to the deployed `HEAD`.
 - Build artifacts: artifact names and SHA256 checksums.
 - Deployment pre-flight: `scripts/deploy/pre-flight.sh` output.
+- Previous-good release record: `.deploy/previous-good.env` from the host after successful deploy.
+- Active blue/green slot record: `.deploy/active-slot.env` from the host after successful deploy.
 - Post-deploy smoke: `scripts/deploy/post-deploy-verify.sh` output.
 - Observability smoke: `scripts/observability-smoke.sh` output.
 - Rollback checkpoint: backup ID and rollback owner.
+- Destructive migration approval package when applicable: maintenance window, verified backup ID, non-live restore drill ID, and owner approval.
 
 ## Secret Safety Checks
 

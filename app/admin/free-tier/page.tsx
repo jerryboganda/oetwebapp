@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Shield, ToggleLeft, ToggleRight, Search, Save, AlertTriangle, CheckCircle2, Percent, Tag, Layers } from 'lucide-react';
+import { Shield, ToggleLeft, ToggleRight, Search, AlertTriangle, CheckCircle2, Percent, Tag, Layers } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -60,7 +60,6 @@ export default function FreeTierStrategyPage() {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   /* tier limits (local editable state) */
   const [tierLimits, setTierLimits] = useState<Record<string, { freeLimit: number; premiumLimit: number }>>({});
@@ -109,15 +108,6 @@ export default function FreeTierStrategyPage() {
     } catch { /* */ }
   };
 
-  /* save tier config (would persist to backend when endpoint available) */
-  const saveTierConfig = async () => {
-    setSaving(true);
-    analytics.track('admin_free_tier_saved');
-    // In production this would POST to /v1/admin/billing/tier-config
-    await new Promise(r => setTimeout(r, 600));
-    setSaving(false);
-  };
-
   /* filter + search */
   const filtered = flags
     .filter(f => !filterType || normalizeFlagType(f.flagType) === filterType)
@@ -155,6 +145,10 @@ export default function FreeTierStrategyPage() {
         <AdminRouteSummaryCard label="Active" value={enabledCount} icon={<CheckCircle2 className="h-5 w-5" />} tone="success" />
         <AdminRouteSummaryCard label="Blocked for Free Tier" value={freeTierBlockedCount} icon={<AlertTriangle className="h-5 w-5" />} tone="warning" />
       </div>
+
+      <Card className="border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        Tier-limit editing is read-only until a backend persistence endpoint is available. Feature flag toggles and rollout percentages still save through the existing admin flag API.
+      </Card>
 
       {/* search + filters */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -248,11 +242,9 @@ export default function FreeTierStrategyPage() {
                       <p className="text-[10px] text-muted mb-1">Free Tier Limit</p>
                       <select
                         value={limits.freeLimit}
-                        onChange={e => setTierLimits(prev => ({
-                          ...prev,
-                          [flag.id]: { ...prev[flag.id], freeLimit: Number(e.target.value) },
-                        }))}
-                        className="w-full text-xs border rounded px-2 py-1.5 bg-muted/30"
+                        disabled
+                        onChange={() => undefined}
+                        className="w-full text-xs border rounded px-2 py-1.5 bg-muted/30 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <option value={-1}>Unlimited</option>
                         <option value={0}>Blocked</option>
@@ -270,11 +262,9 @@ export default function FreeTierStrategyPage() {
                       <p className="text-[10px] text-muted mb-1">Premium Limit</p>
                       <select
                         value={limits.premiumLimit}
-                        onChange={e => setTierLimits(prev => ({
-                          ...prev,
-                          [flag.id]: { ...prev[flag.id], premiumLimit: Number(e.target.value) },
-                        }))}
-                        className="w-full text-xs border rounded px-2 py-1.5 bg-muted/30"
+                        disabled
+                        onChange={() => undefined}
+                        className="w-full text-xs border rounded px-2 py-1.5 bg-muted/30 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <option value={-1}>Unlimited</option>
                         <option value={10}>10/month</option>
@@ -301,9 +291,9 @@ export default function FreeTierStrategyPage() {
       {/* save bar */}
       <div className="sticky bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-0 bg-background/95 backdrop-blur border-t py-4 -mx-4 px-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <p className="text-xs text-muted">Changes are applied in real-time for toggles and rollout. Tier limits save separately.</p>
-          <Button onClick={saveTierConfig} disabled={saving}>
-            {saving ? 'Saving…' : <><Save className="h-4 w-4 mr-1.5" />Save Tier Config</>}
+          <p className="text-xs text-muted">Changes are applied in real-time for toggles and rollout. Tier limits are read-only until backend support ships.</p>
+          <Button disabled>
+            Backend endpoint required
           </Button>
         </div>
       </div>

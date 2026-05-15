@@ -227,8 +227,15 @@ tests/e2e/                    # Playwright E2E tests
 ```bash
 ssh root@185.252.233.186
 cd /opt/oetwebapp
-bash ./scripts/deploy/deploy-prod.sh
+DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
 ```
+
+Production deploys are exact-SHA only. The target SHA must have a signed
+`release-evidence-<sha>` artifact with immutable image digests. The deploy rolls
+the inactive blue/green app slot forward, switches stable router containers only
+after health checks pass, and preserves at least one previous-good release for
+rollback. Destructive migrations require a maintenance window, verified backup,
+non-live restore drill, and owner approval.
 
 ### Staging / GitHub-only flow
 
@@ -240,14 +247,19 @@ bash ./scripts/deploy/deploy-prod.sh
 ### Docker Architecture
 
 ```text
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   web:3000  │───▶│ api:8080    │───▶│ postgres:5432│
-│  (Next.js)  │    │(.NET Core)  │    │ (PG 17)     │
-└──────┬──────┘    └──────┬──────┘    └─────────────┘
-       │                  │
-       └──────────────────┘
-              │
-        npm_proxy network ──▶ Nginx Proxy Manager
+┌──────────────┐    ┌──────────────────┐    ┌──────────────┐
+│ web router   │───▶│ web-blue/green   │───▶│ API slot     │
+│ oet-web:3000 │    │ Next.js slots    │    │ same color   │
+└──────┬───────┘    └──────────────────┘    └──────┬───────┘
+       │                                           │
+       │           ┌──────────────────┐            │
+       └──────────▶│ api router       │────────────┘
+                   │ oet-api:8080     │
+                   └────────┬─────────┘
+                            ▼
+                     postgres:5432
+
+npm_proxy network ──▶ Nginx Proxy Manager targets oet-web/oet-api
 ```
 
 ### IMPORTANT

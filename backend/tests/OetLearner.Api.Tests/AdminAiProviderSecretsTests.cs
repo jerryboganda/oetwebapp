@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -139,6 +140,26 @@ public sealed class AdminAiProviderSecretsTests
         Assert.DoesNotContain(rotatedKey, row.EncryptedApiKey, StringComparison.Ordinal);
         Assert.DoesNotContain(SyntheticProviderKey, row.EncryptedApiKey, StringComparison.Ordinal);
         Assert.Equal("…" + rotatedKey[^4..], row.ApiKeyHint);
+    }
+
+    [Fact]
+    public async Task PutProvider_WithShortApiKey_ReturnsBadRequest()
+    {
+        using var env = DevAuthEnv.Enable();
+        using var factory = new TestWebApplicationFactory();
+        using var client = CreateAiConfigAdminClient(factory);
+
+        var create = await client.PostAsJsonAsync("/v1/admin/ai/providers", BuildProviderUpsert(SyntheticProviderKey));
+        create.EnsureSuccessStatusCode();
+        using var createDoc = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
+        var providerId = createDoc.RootElement.GetProperty("id").GetString()!;
+
+        var update = await client.PutAsJsonAsync(
+            $"/v1/admin/ai/providers/{providerId}",
+            BuildProviderUpsert("short"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, update.StatusCode);
+        Assert.Contains("ApiKey", await update.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Save, ArrowRight, CalendarDays, Stethoscope, Target } from 'lucide-react';
 import { Button, Card, Checkbox, Input, Select } from '@/components/ui';
+import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader, ProfessionSelector } from '@/components/domain';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
@@ -19,8 +20,6 @@ const SUB_TESTS: SubTest[] = ['Writing', 'Speaking', 'Reading', 'Listening'];
 const SCORE_FIELD_KEYS = ['targetWriting', 'targetSpeaking', 'targetReading', 'targetListening'] as const;
 const EXAM_FAMILY_OPTIONS: Array<{ value: ExamFamilyCode; label: string }> = [
   { value: 'oet', label: 'OET' },
-  { value: 'ielts', label: 'IELTS' },
-  { value: 'pte', label: 'PTE' },
 ];
 
 const EXAM_FAMILY_COPY: Record<ExamFamilyCode, { label: string; scoreHint: string; scorePlaceholder: string; attemptsLabel: string; studyLabel: string; helperText: string }> = {
@@ -38,7 +37,7 @@ const EXAM_FAMILY_COPY: Record<ExamFamilyCode, { label: string; scoreHint: strin
     scorePlaceholder: 'e.g. 7',
     attemptsLabel: 'Previous IELTS Attempts',
     studyLabel: 'Hours per week for IELTS prep',
-    helperText: 'IELTS uses the shared four-skill core while exam-specific surfaces continue to expand.',
+    helperText: 'IELTS foundations are beta-gated and cannot be selected for public launch study plans yet.',
   },
   pte: {
     label: 'PTE',
@@ -46,7 +45,7 @@ const EXAM_FAMILY_COPY: Record<ExamFamilyCode, { label: string; scoreHint: strin
     scorePlaceholder: 'e.g. 65',
     attemptsLabel: 'Previous PTE Attempts',
     studyLabel: 'Hours per week for PTE prep',
-    helperText: 'PTE support is still limited while the distinct simulation and remediation engine is being planned.',
+    helperText: 'PTE foundations are beta-gated until a dedicated simulation and remediation engine is ready.',
   },
 };
 
@@ -190,7 +189,7 @@ export default function GoalSetupPage() {
 
                 return { value: value as ExamFamilyCode, label };
               })
-              .filter((item): item is { value: ExamFamilyCode; label: string } => item !== null))
+              .filter((item): item is { value: ExamFamilyCode; label: string } => item !== null && item.value === 'oet'))
           : [];
 
         if (remoteOptions.length > 0) {
@@ -198,7 +197,7 @@ export default function GoalSetupPage() {
         }
 
         reset({
-          examFamilyCode: profile.examFamilyCode ?? 'oet',
+          examFamilyCode: 'oet',
           ieltsPathway: profile.ieltsPathway ?? undefined,
           profession: profile.profession || '',
           examDate: profile.examDate || '',
@@ -290,6 +289,9 @@ export default function GoalSetupPage() {
               {...register('examFamilyCode')}
               error={errors.examFamilyCode?.message}
             />
+            <InlineAlert variant="info">
+              IELTS and PTE remain beta-gated foundations. OET is the only public-launch study-plan exam family.
+            </InlineAlert>
             {selectedExamFamily === 'ielts' && (
               <Select
                 label="IELTS Pathway"

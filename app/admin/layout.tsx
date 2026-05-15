@@ -3,7 +3,12 @@
 import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
 import { AdminDashboardShell, type MobileMenuSection } from '@/components/layout';
 import type { NavGroup, NavItem } from '@/components/layout/sidebar';
-import { hasPermission, sidebarPermissionMap } from '@/lib/admin-permissions';
+import {
+  canAccessAdminRoute,
+  getAdminRoutePermissions,
+  hasPermission,
+  sidebarPermissionMap,
+} from '@/lib/admin-permissions';
 import { useAuth } from '@/contexts/auth-context';
 import { Children, isValidElement, cloneElement, useMemo } from 'react';
 import { 
@@ -33,6 +38,7 @@ import {
   Mic,
   MessageSquareText,
   BookOpenText,
+  Rocket,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -43,6 +49,7 @@ const adminNavGroups: NavGroup[] = [
     label: 'Overview',
     items: [
       { href: '/admin', label: 'Operations', icon: <LayoutDashboard className="w-5 h-5" />, exact: true },
+      { href: '/admin/launch-readiness', label: 'Launch Readiness', icon: <Rocket className="w-5 h-5" />, matchPrefix: '/admin/launch-readiness' },
       { href: '/admin/alerts', label: 'Alerts', icon: <Bell className="w-5 h-5" />, matchPrefix: '/admin/alerts' },
       { href: '/admin/analytics/quality', label: 'Quality Analytics', icon: <PieChart className="w-5 h-5" />, matchPrefix: '/admin/analytics' },
       { href: '/admin/audit-logs', label: 'Audit Logs', icon: <ShieldCheck className="w-5 h-5" />, matchPrefix: '/admin/audit-logs' },
@@ -257,6 +264,10 @@ function getAdminPageTitle(pathname: string | null) {
     return 'AI Usage & Budget';
   }
 
+  if (pathname.startsWith('/admin/launch-readiness')) {
+    return 'Launch Readiness';
+  }
+
   if (pathname.startsWith('/admin/review-ops')) {
     return 'Review Ops';
   }
@@ -391,9 +402,39 @@ function filterGroupsByPermissions(
     .filter((g) => g.items.length > 0);
 }
 
+function AdminPermissionDenied({ required }: { required: string[] }) {
+  return (
+    <section className="mx-auto flex min-h-[50vh] w-full max-w-2xl items-center justify-center px-4 py-12">
+      <div className="rounded-[2rem] border border-red-100 bg-white p-8 text-center shadow-sm">
+        <ShieldCheck className="mx-auto h-10 w-10 text-red-500" aria-hidden="true" />
+        <h1 className="mt-4 text-xl font-semibold text-navy">Admin permission required</h1>
+        <p className="mt-2 text-sm text-muted">
+          Your admin role does not include the permission needed to view this workspace.
+        </p>
+        {required.length > 0 ? (
+          <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-xs font-medium text-red-700">
+            Required: {required.join(' or ')}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function AdminPermissionChecking() {
+  return (
+    <section className="mx-auto flex min-h-[50vh] w-full max-w-sm items-center justify-center px-4 py-12">
+      <div className="rounded-[2rem] border border-slate-100 bg-white p-8 text-center shadow-sm">
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-hidden="true" />
+        <p className="mt-4 text-sm font-semibold text-navy">Checking admin permissions</p>
+      </div>
+    </section>
+  );
+}
+
 function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { loading, user } = useAuth();
   const perms = user?.adminPermissions;
 
   const filteredNavItems = useMemo(() => filterNavByPermissions(adminNavItems, perms), [perms]);
@@ -402,6 +443,8 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const filteredMobileMenuSections = useMemo(() => filterSectionsByPermissions(adminMobileMenuSections, perms), [perms]);
 
   const pageTitle = getAdminPageTitle(pathname);
+  const requiredRoutePermissions = useMemo(() => getAdminRoutePermissions(pathname), [pathname]);
+  const canAccessRoute = useMemo(() => canAccessAdminRoute(perms, pathname), [perms, pathname]);
 
   return (
     <AdminDashboardShell
@@ -413,8 +456,14 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       requiredRole="admin"
     >
       <PrivilegedMfaBanner key="privileged-mfa-banner" />
-      {Children.map(children, (child, index) =>
-        isValidElement(child) ? cloneElement(child, { key: child.key ?? `admin-children-${index}` }) : child,
+      {loading ? (
+        <AdminPermissionChecking />
+      ) : canAccessRoute ? (
+        Children.map(children, (child, index) =>
+          isValidElement(child) ? cloneElement(child, { key: child.key ?? `admin-children-${index}` }) : child,
+        )
+      ) : (
+        <AdminPermissionDenied required={requiredRoutePermissions} />
       )}
     </AdminDashboardShell>
   );

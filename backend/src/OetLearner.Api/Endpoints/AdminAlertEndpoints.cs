@@ -12,7 +12,8 @@ public static class AdminAlertEndpoints
             .RequireRateLimiting("PerUser");
 
         alerts.MapGet("/", async (AdminAlertService service, CancellationToken ct)
-            => Results.Ok(await service.GetAlertsAsync(ct)));
+            => Results.Ok(await service.GetAlertsAsync(ct)))
+            .WithAdminRead("AdminSystemAdmin");
 
         return app;
     }

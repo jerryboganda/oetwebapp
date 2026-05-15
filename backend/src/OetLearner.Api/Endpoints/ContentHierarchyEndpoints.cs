@@ -16,137 +16,150 @@ public static class ContentHierarchyEndpoints
 
         admin.MapGet("/programs", async (ContentHierarchyService service, CancellationToken ct,
             string? type, string? language, string? status, int? page, int? pageSize)
-            => Results.Ok(await service.GetProgramsAsync(type, language, status, page ?? 1, pageSize ?? 20, ct)));
+            => Results.Ok(await service.GetProgramsAsync(type, language, status, page ?? 1, pageSize ?? 20, ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapGet("/programs/{programId}", async (string programId, ContentHierarchyService service, CancellationToken ct)
-            => await service.GetProgramAsync(programId, ct) is { } p ? Results.Ok(p) : Results.NotFound());
+            => await service.GetProgramAsync(programId, ct) is { } p ? Results.Ok(p) : Results.NotFound())
+            .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/programs", async (HttpContext http, ContentProgram program, ContentHierarchyService service, CancellationToken ct)
             => Results.Ok(await service.CreateProgramAsync(AdminId(http), program, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapPut("/programs/{programId}", async (string programId, ContentProgram update, ContentHierarchyService service, CancellationToken ct)
             => await service.UpdateProgramAsync(programId, update, ct) is { } p ? Results.Ok(p) : Results.NotFound())
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapGet("/programs/{programId}/tracks", async (string programId, ContentHierarchyService service, CancellationToken ct)
-            => Results.Ok(await service.GetTracksAsync(programId, ct)));
+            => Results.Ok(await service.GetTracksAsync(programId, ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/tracks", async (ContentTrack track, ContentHierarchyService service, CancellationToken ct)
             => Results.Ok(await service.CreateTrackAsync(track, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapPut("/tracks/{trackId}", async (string trackId, ContentTrack update, ContentHierarchyService service, CancellationToken ct)
             => await service.UpdateTrackAsync(trackId, update, ct) is { } t ? Results.Ok(t) : Results.NotFound())
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapGet("/tracks/{trackId}/modules", async (string trackId, ContentHierarchyService service, CancellationToken ct)
-            => Results.Ok(await service.GetModulesAsync(trackId, ct)));
+            => Results.Ok(await service.GetModulesAsync(trackId, ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/modules", async (ContentModule module, ContentHierarchyService service, CancellationToken ct)
             => Results.Ok(await service.CreateModuleAsync(module, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapPut("/modules/{moduleId}", async (string moduleId, ContentModule update, ContentHierarchyService service, CancellationToken ct)
             => await service.UpdateModuleAsync(moduleId, update, ct) is { } m ? Results.Ok(m) : Results.NotFound())
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapGet("/modules/{moduleId}/lessons", async (string moduleId, ContentHierarchyService service, CancellationToken ct)
-            => Results.Ok(await service.GetLessonsAsync(moduleId, ct)));
+            => Results.Ok(await service.GetLessonsAsync(moduleId, ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/lessons", async (ContentLesson lesson, ContentHierarchyService service, CancellationToken ct)
             => Results.Ok(await service.CreateLessonAsync(lesson, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         // ── Packages ──
 
         admin.MapPut("/lessons/{lessonId}", async (string lessonId, ContentLesson update, ContentHierarchyService service, CancellationToken ct)
             => await service.UpdateLessonAsync(lessonId, update, ct) is { } lesson ? Results.Ok(lesson) : Results.NotFound())
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapGet("/packages", async (ContentHierarchyService service, CancellationToken ct,
             string? type, string? status, int? page, int? pageSize)
-            => Results.Ok(await service.GetPackagesAsync(type, status, page ?? 1, pageSize ?? 20, ct)));
+            => Results.Ok(await service.GetPackagesAsync(type, status, page ?? 1, pageSize ?? 20, ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapGet("/packages/{packageId}", async (string packageId, ContentHierarchyService service, CancellationToken ct)
-            => await service.GetPackageAsync(packageId, ct) is { } p ? Results.Ok(p) : Results.NotFound());
+            => await service.GetPackageAsync(packageId, ct) is { } p ? Results.Ok(p) : Results.NotFound())
+            .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/packages", async (ContentPackage package, ContentHierarchyService service, CancellationToken ct)
             => Results.Ok(await service.CreatePackageAsync(package, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapPut("/packages/{packageId}", async (string packageId, ContentPackage update, ContentHierarchyService service, CancellationToken ct)
             => await service.UpdatePackageAsync(packageId, update, ct) is { } p ? Results.Ok(p) : Results.NotFound())
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapGet("/packages/{packageId}/rules", async (string packageId, ContentHierarchyService service, CancellationToken ct)
-            => Results.Ok(await service.GetPackageRulesAsync(packageId, ct)));
+            => Results.Ok(await service.GetPackageRulesAsync(packageId, ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/packages/{packageId}/rules", async (string packageId, PackageContentRule rule, ContentHierarchyService service, CancellationToken ct) =>
         {
             rule.PackageId = packageId;
             return Results.Ok(await service.AddPackageRuleAsync(rule, ct));
-        }).RequireRateLimiting("PerUserWrite");
+        }).WithAdminWrite("AdminContentWrite");
 
         admin.MapDelete("/packages/rules/{ruleId}", async (string ruleId, ContentHierarchyService service, CancellationToken ct)
             => await service.RemovePackageRuleAsync(ruleId, ct) ? Results.Ok() : Results.NotFound())
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         // ── Import Batches ──
 
         admin.MapGet("/import-batches", async (ContentHierarchyService service, CancellationToken ct, int? page, int? pageSize)
-            => Results.Ok(await service.GetImportBatchesAsync(page ?? 1, pageSize ?? 20, ct)));
+            => Results.Ok(await service.GetImportBatchesAsync(page ?? 1, pageSize ?? 20, ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/import-batches", async (HttpContext http, ImportBatchCreateRequest request, ContentHierarchyService service, CancellationToken ct)
             => Results.Ok(await service.CreateImportBatchAsync(AdminId(http), request.Title, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/import-batches/{batchId}/rollback", async (string batchId, ContentHierarchyService service, CancellationToken ct)
             => await service.RollbackImportBatchAsync(batchId, ct) ? Results.Ok() : Results.NotFound())
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         // ── Testimonials ──
 
         admin.MapGet("/testimonials", async (ContentHierarchyService service, CancellationToken ct, int? page, int? pageSize)
-            => Results.Ok(await service.GetTestimonialsAsync(page ?? 1, pageSize ?? 20, ct)));
+            => Results.Ok(await service.GetTestimonialsAsync(page ?? 1, pageSize ?? 20, ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/testimonials", async (TestimonialAsset testimonial, ContentHierarchyService service, CancellationToken ct)
             => Results.Ok(await service.CreateTestimonialAsync(testimonial, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         // ── Foundation Resources ──
 
         admin.MapGet("/foundation-resources", async (ContentHierarchyService service, CancellationToken ct, string? type)
-            => Results.Ok(await service.GetFoundationResourcesAsync(type, ct)));
+            => Results.Ok(await service.GetFoundationResourcesAsync(type, ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/foundation-resources", async (FoundationResource resource, ContentHierarchyService service, CancellationToken ct)
             => Results.Ok(await service.CreateFoundationResourceAsync(resource, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         // ── Dedup Review Queue ──
 
         admin.MapPost("/dedup/scan", async (ContentDeduplicationService dedupService, CancellationToken ct)
             => Results.Ok(await dedupService.ScanForDuplicatesAsync(ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapGet("/dedup/groups", async (ContentDeduplicationService dedupService, CancellationToken ct,
             int? page, int? pageSize)
-            => Results.Ok(await dedupService.GetDuplicateGroupsAsync(page ?? 1, pageSize ?? 20, ct)));
+            => Results.Ok(await dedupService.GetDuplicateGroupsAsync(page ?? 1, pageSize ?? 20, ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapGet("/dedup/groups/{groupId}", async (string groupId, ContentDeduplicationService dedupService, CancellationToken ct)
-            => await dedupService.GetDuplicateGroupAsync(groupId, ct) is { } g ? Results.Ok(g) : Results.NotFound());
+            => await dedupService.GetDuplicateGroupAsync(groupId, ct) is { } g ? Results.Ok(g) : Results.NotFound())
+            .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/dedup/groups/{groupId}/designate-canonical", async (string groupId, DesignateCanonicalRequest request,
             ContentDeduplicationService dedupService, CancellationToken ct)
             => await dedupService.DesignateCanonicalAsync(groupId, request.CanonicalItemId, ct)
                 ? Results.Ok() : Results.NotFound())
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/dedup/items/{itemId}/remove-from-group", async (string itemId,
             ContentDeduplicationService dedupService, CancellationToken ct)
             => await dedupService.RemoveFromGroupAsync(itemId, ct)
                 ? Results.Ok() : Results.NotFound())
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         // ── Content Validation ──
 
@@ -162,7 +175,7 @@ public static class ContentHierarchyEndpoints
                 modelAnswerErrors = modelResult.Errors,
                 isValid = detailResult.IsValid && modelResult.IsValid
             });
-        });
+        }).WithAdminWrite("AdminContentWrite");
 
         // ── Learner: Program Browser (public, auth required) ──
 
@@ -217,17 +230,17 @@ public static class ContentHierarchyEndpoints
 
         admin.MapPost("/mock/assemble", async (MockAssembleRequest req, MockDiagnosticService service, CancellationToken ct)
             => Results.Ok(await service.AssembleMockExamAsync(req.ProfessionId, req.Language ?? "en", ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/diagnostic/generate", async (DiagnosticGenerateRequest req, MockDiagnosticService service, CancellationToken ct)
             => Results.Ok(await service.GenerateDiagnosticAsync(req.ProfessionId, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapPatch("/content/{contentId}/eligibility", async (string contentId, EligibilityPatchRequest req,
             MockDiagnosticService service, CancellationToken ct)
             => await service.UpdateEligibilityAsync(contentId, req.IsMockEligible, req.IsDiagnosticEligible, ct)
                 ? Results.Ok() : Results.NotFound())
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         // readiness is already mapped in LearnerEndpoints — removed duplicate
 
@@ -240,7 +253,7 @@ public static class ContentHierarchyEndpoints
         admin.MapPost("/content/bulk-import", async (HttpContext http, BulkImportRequest request,
             ContentImportService importService, CancellationToken ct)
             => Results.Ok(await importService.BulkImportAsync(AdminId(http), request.BatchTitle ?? "Import", request.Rows, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapGet("/content/inventory", async (ContentImportService importService, CancellationToken ct,
             string? subtest, string? profession, string? language, string? provenance,
@@ -252,15 +265,17 @@ public static class ContentHierarchyEndpoints
                     SubtestCode = subtest, ProfessionId = profession, Language = language, Provenance = provenance,
                     Freshness = freshness, QaStatus = qaStatus, Status = status, PackageId = packageId,
                     ImportBatchId = importBatchId, Search = search, Page = page ?? 1, PageSize = pageSize ?? 20
-                }, ct)));
+                }, ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/media-assets", async (MediaAsset asset, ContentImportService importService, CancellationToken ct)
             => Results.Ok(await importService.UpsertMediaAssetAsync(asset, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapGet("/media-assets", async (ContentImportService importService, CancellationToken ct,
             string? mimeType, string? status, int? page, int? pageSize)
-            => Results.Ok(await importService.GetMediaAssetsAsync(mimeType, status, page ?? 1, pageSize ?? 20, ct)));
+            => Results.Ok(await importService.GetMediaAssetsAsync(mimeType, status, page ?? 1, pageSize ?? 20, ct)))
+            .WithAdminRead("AdminContentRead");
 
         // ── Phase 9: Search & Recommendations ──
 
@@ -297,19 +312,21 @@ public static class ContentHierarchyEndpoints
 
         admin.MapPost("/media/{assetId}/process", async (string assetId, MediaNormalizationService mediaService, CancellationToken ct)
             => Results.Ok(await mediaService.EnqueueForProcessingAsync(assetId, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/media/{assetId}/complete-processing", async (string assetId, CompleteProcessingRequest req,
             MediaNormalizationService mediaService, CancellationToken ct)
             => (await mediaService.CompleteProcessingAsync(assetId, req.ThumbnailPath, req.CaptionPath, req.TranscriptPath, ct)) is not null
                 ? Results.Ok() : Results.NotFound())
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         admin.MapGet("/media/audit", async (MediaNormalizationService mediaService, CancellationToken ct)
-            => Results.Ok(await mediaService.AuditMediaAssetsAsync(ct)));
+            => Results.Ok(await mediaService.AuditMediaAssetsAsync(ct)))
+            .WithAdminRead("AdminContentRead");
 
         admin.MapGet("/media/normalization-plan", (string mimeType)
-            => Results.Ok(MediaNormalizationService.GetNormalizationPlan(mimeType)));
+            => Results.Ok(MediaNormalizationService.GetNormalizationPlan(mimeType)))
+            .WithAdminRead("AdminContentRead");
 
         return app;
     }

@@ -288,14 +288,16 @@ public static class PrivateSpeakingEndpoints
         });
 
         // ── Admin Routes ────────────────────────────────────────────────
-        var admin = app.MapGroup("/v1/admin/private-speaking").RequireAuthorization("AdminOnly");
+        var admin = app.MapGroup("/v1/admin/private-speaking")
+            .RequireAuthorization("AdminOnly")
+            .RequireRateLimiting("PerUser");
 
         // Config management
         admin.MapGet("/config", async (PrivateSpeakingService svc, CancellationToken ct) =>
         {
             var config = await svc.GetConfigAsync(ct);
             return Results.Ok(config);
-        });
+        }).WithAdminRead("AdminReviewOps");
 
         admin.MapPut("/config", async (
             HttpContext http,
@@ -318,14 +320,14 @@ public static class PrivateSpeakingEndpoints
                 if (req.ReminderOffsetsHoursJson is not null) c.ReminderOffsetsHoursJson = req.ReminderOffsetsHoursJson;
             }, http.UserId(), ct);
             return Results.Ok(config);
-        });
+        }).WithAdminWrite("AdminReviewOps");
 
         // Dashboard stats
         admin.MapGet("/stats", async (PrivateSpeakingService svc, CancellationToken ct) =>
         {
             var stats = await svc.GetDashboardStatsAsync(ct);
             return Results.Ok(stats);
-        });
+        }).WithAdminRead("AdminReviewOps");
 
         // Tutor profile management
         admin.MapGet("/tutors", async (
@@ -334,7 +336,7 @@ public static class PrivateSpeakingEndpoints
         {
             var profiles = await svc.ListTutorProfilesAsync(activeOnly, ct);
             return Results.Ok(profiles);
-        });
+        }).WithAdminRead("AdminReviewOps");
 
         admin.MapGet("/tutors/{profileId}", async (
             string profileId, PrivateSpeakingService svc, CancellationToken ct) =>
@@ -343,7 +345,7 @@ public static class PrivateSpeakingEndpoints
             return profile is null
                 ? Results.NotFound(new { error = "NOT_FOUND" })
                 : Results.Ok(profile);
-        });
+        }).WithAdminRead("AdminReviewOps");
 
         admin.MapPost("/tutors", async (
             HttpContext http,
@@ -363,7 +365,7 @@ public static class PrivateSpeakingEndpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        });
+        }).WithAdminWrite("AdminReviewOps");
 
         admin.MapPut("/tutors/{profileId}", async (
             HttpContext http,
@@ -390,7 +392,7 @@ public static class PrivateSpeakingEndpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        });
+        }).WithAdminWrite("AdminReviewOps");
 
         admin.MapPost("/tutors/{profileId}/calibration-override", async (
             HttpContext http,
@@ -406,7 +408,7 @@ public static class PrivateSpeakingEndpoints
                 req.ExpiresAt,
                 ct);
             return Results.Ok(result);
-        });
+        }).WithAdminWrite("AdminReviewOps");
 
         // Availability rule management
         admin.MapGet("/tutors/{profileId}/availability", async (
@@ -414,7 +416,7 @@ public static class PrivateSpeakingEndpoints
         {
             var rules = await svc.GetAvailabilityRulesAsync(profileId, ct);
             return Results.Ok(rules);
-        });
+        }).WithAdminRead("AdminReviewOps");
 
         admin.MapPost("/tutors/{profileId}/availability", async (
             HttpContext http,
@@ -427,7 +429,7 @@ public static class PrivateSpeakingEndpoints
                 profileId, req.DayOfWeek, req.StartTime, req.EndTime,
                 req.EffectiveFrom, req.EffectiveTo, http.UserId(), ct);
             return Results.Ok(rule);
-        });
+        }).WithAdminWrite("AdminReviewOps");
 
         admin.MapDelete("/tutors/{profileId}/availability/{ruleId}", async (
             HttpContext http,
@@ -444,7 +446,7 @@ public static class PrivateSpeakingEndpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        });
+        }).WithAdminWrite("AdminReviewOps");
 
         // Overrides management
         admin.MapGet("/tutors/{profileId}/overrides", async (
@@ -458,7 +460,7 @@ public static class PrivateSpeakingEndpoints
             DateOnly? toDate = to is not null ? DateOnly.Parse(to) : null;
             var overrides = await svc.GetOverridesAsync(profileId, fromDate, toDate, ct);
             return Results.Ok(overrides);
-        });
+        }).WithAdminRead("AdminReviewOps");
 
         admin.MapPost("/tutors/{profileId}/overrides", async (
             HttpContext http,
@@ -472,7 +474,7 @@ public static class PrivateSpeakingEndpoints
                 req.StartTime, req.EndTime, req.Reason,
                 http.UserId(), ct);
             return Results.Ok(over);
-        });
+        }).WithAdminWrite("AdminReviewOps");
 
         admin.MapDelete("/tutors/{profileId}/overrides/{overrideId}", async (
             HttpContext http,
@@ -489,7 +491,7 @@ public static class PrivateSpeakingEndpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        });
+        }).WithAdminWrite("AdminReviewOps");
 
         // Booking management
         admin.MapGet("/bookings", async (
@@ -520,7 +522,7 @@ public static class PrivateSpeakingEndpoints
                 pageSize,
                 totalPages = (int)Math.Ceiling((double)total / pageSize)
             });
-        });
+        }).WithAdminRead("AdminReviewOps");
 
         admin.MapGet("/bookings/{bookingId}", async (
             string bookingId, PrivateSpeakingService svc, CancellationToken ct) =>
@@ -529,7 +531,7 @@ public static class PrivateSpeakingEndpoints
             return booking is null
                 ? Results.NotFound(new { error = "NOT_FOUND" })
                 : Results.Ok(MapBookingDetailResponse(booking));
-        });
+        }).WithAdminRead("AdminReviewOps");
 
         admin.MapPost("/bookings/{bookingId}/cancel", async (
             HttpContext http,
@@ -543,7 +545,7 @@ public static class PrivateSpeakingEndpoints
             return success
                 ? Results.Ok(new { cancelled = true })
                 : Results.BadRequest(new { error });
-        });
+        }).WithAdminWrite("AdminReviewOps");
 
         admin.MapPost("/bookings/{bookingId}/complete", async (
             HttpContext http,
@@ -553,7 +555,7 @@ public static class PrivateSpeakingEndpoints
         {
             await svc.MarkSessionCompletedAsync(bookingId, http.UserId(), ct);
             return Results.Ok(new { completed = true });
-        });
+        }).WithAdminWrite("AdminReviewOps");
 
         admin.MapPost("/bookings/{bookingId}/retry-zoom", async (
             string bookingId, PrivateSpeakingService svc, CancellationToken ct) =>
@@ -567,7 +569,7 @@ public static class PrivateSpeakingEndpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        });
+        }).WithAdminWrite("AdminReviewOps");
 
         // Audit logs
         admin.MapGet("/audit-logs", async (
@@ -581,7 +583,7 @@ public static class PrivateSpeakingEndpoints
             if (pageSize is < 1 or > 100) pageSize = 50;
             var logs = await svc.GetAuditLogsAsync(bookingId, page, pageSize, ct);
             return Results.Ok(logs);
-        });
+        }).WithAdminRead("AdminReviewOps");
 
         return app;
     }

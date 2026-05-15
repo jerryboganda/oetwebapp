@@ -54,7 +54,7 @@ public class ContentBulkImportE2ETests
             {
                 var e = zip.CreateEntry(path.Replace('\\', '/'), CompressionLevel.Fastest);
                 using var s = e.Open();
-                var bytes = Encoding.UTF8.GetBytes(content);
+                var bytes = BuildSignedPayload(path, content);
                 s.Write(bytes, 0, bytes.Length);
             }
 
@@ -85,6 +85,18 @@ public class ContentBulkImportE2ETests
         }
         ms.Position = 0;
         return ms;
+    }
+
+    private static byte[] BuildSignedPayload(string path, string content)
+    {
+        var body = Encoding.UTF8.GetBytes(content);
+        var prefix = Path.GetExtension(path).ToLowerInvariant() switch
+        {
+            ".pdf" => Encoding.ASCII.GetBytes("%PDF-1.4\n"),
+            ".mp3" => Encoding.ASCII.GetBytes("ID3"),
+            _ => Array.Empty<byte>(),
+        };
+        return prefix.Concat(body).ToArray();
     }
 
     private static Stream BuildTinyZip(params (string Path, string Content)[] entries)
@@ -224,6 +236,19 @@ public class ContentBulkImportE2ETests
         Assert.Single(papers);
         Assert.Contains("Listening Sample 1", papers[0].Title);
         await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Stage_rejects_zip_entry_with_mismatched_file_signature()
+    {
+        var (_, _, svc, _, _) = Build();
+        await using var zip = BuildTinyZip(
+            ("Listening/Listening Sample 1/Listening Sample 1 Question-Paper.pdf", "not a pdf"));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.StagePayloadAsync("admin-1", zip, "bad.zip", default));
+
+        Assert.Contains("failed file signature validation", ex.Message);
     }
 
     [Fact]

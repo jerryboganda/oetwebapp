@@ -2,6 +2,88 @@
 
 > Ralph-style progress log. Newest entries on top. Each wave concludes with a checkpoint.
 
+## Wave 29 — Postgres-backed live smoke closure (complete, 2026-05-15)
+
+Wave 29 closes the live Listening/Reading smoke blocker without waiting for
+Docker by starting an isolated local PostgreSQL runtime in the session artifact
+area, running the backend and frontend against it, refreshing Playwright auth,
+and executing the focused Chromium learner smoke. The pass covers Reading
+deep-link stability, mock report deep-link stability, Listening answer-key
+isolation, exam strict-lock intro gating, paper-mode no-FSM mount, practice-mode
+Part A entry, and the R10 readiness gate.
+
+### Wave 29 Checkpoint
+
+- Fixed stale Listening E2E assumptions so the answer-key test uses the same
+  `/api/backend/*` proxy path as the browser client and the practice smoke
+  targets the accessible radio control actually rendered by the player.
+- Fixed a Postgres-only `WebhookPiiRetentionWorker` query bug found during live
+  runtime validation by removing the invalid `jsonb <> ''` predicate.
+- Validation: Playwright auth setup 12/12 passed; focused live Chromium learner
+  smoke 7/7 passed; `npx tsc --noEmit` passed; focused backend worker tests 5/5
+  passed.
+
+## Wave 28 — Launch-gate evidence hardening (complete, 2026-05-14)
+
+Wave 28 closes the local documentation and no-stack coverage gaps discovered
+after Wave 27. The active player now has explicit regression coverage that
+paper-mode final review renders all sections at once without calling the strict
+V2 advance/state endpoints, and the Playwright matrix runner exposes Listening
+smoke/full buckets for seeded runtime validation.
+
+### Wave 28 Checkpoint
+
+- Added no-stack route coverage for all-parts paper final review and local
+  free-navigation behavior.
+- Updated `docs/LISTENING.md` and
+  `docs/LISTENING-RULEBOOK-CITATIONS.md` so R06.11/R07.3 cite the shipped
+  implementation instead of stale pending language.
+- Added `listening-smoke` and `listening-full` matrix buckets plus `--list`
+  support to `scripts/qa/run-playwright-matrix.mjs`.
+- Seeded live Playwright execution is now covered by Wave 29's isolated
+  Postgres-backed smoke. Complete real-content multi-part publication remains a
+  content/evidence concern, not a local route-code blocker.
+
+## Wave 27 — V2 submit handoff and paper-mode final review closure (complete, 2026-05-14)
+
+The active Listening learner route now closes the remaining local V2 player
+deferrals from Wave 26. Answer persistence and final submit use the V2 endpoint
+namespace while preserving the full learner review DTO, paper mode exposes
+all-parts review/free navigation from the backend-authored mode policy, and the
+strict unanswered warning names the exact question numbers before section lock or
+final submission.
+
+### Wave 27 Implementation Slice
+
+1. Add V2 facade endpoints for `PUT /v1/listening/v2/attempts/{attemptId}/answers/{questionId}` and `POST /v1/listening/v2/attempts/{attemptId}/submit`, backed by `ListeningLearnerService.SaveAnswerAsync()` and `SubmitAsync()` so the active route keeps the canonical full review payload.
+2. Extend the frontend V2 client with `saveAnswer()` and `submit()` helpers and migrate the active player route away from the legacy save/submit imports.
+3. Project paper-mode policy hints (`freeNavigation`, `unansweredWarningRequired`, `finalReviewAllPartsSeconds`) from the legacy learner session DTO so the active player can honor R07 without waiting for a route rewrite.
+4. Render paper-mode all-parts question groups during the final review window, keep section jumps available through the stepper/jump list, and avoid seeking section audio when a paper-mode learner jumps between all-parts review groups.
+5. Show exact unanswered question numbers before strict section lock and final submit.
+6. Cover the V2 client contract, free-navigation stepper, active-route unanswered warning, audio-resume import shape, and backend V2 save/submit facade.
+
+### Wave 27 Checkpoint
+
+Complete for local V2 save/submit DTO handoff, paper-mode all-parts/free-navigation behavior, and unanswered-number warning.
+
+- V2 save/submit routes reuse the canonical learner service, including ownership checks and relational Listening grading/review behavior.
+- Paper mode now receives free-navigation/final-review policy fields from the session projection and renders all section question groups during the paper final review window.
+- Strict and final-submit warning copy now identifies missing question numbers instead of only reporting a count.
+- Seeded live Playwright evidence is covered by Wave 29's isolated
+  Postgres-backed smoke; complete real-content multi-part publication remains a
+  content/evidence concern, not a local route-code blocker.
+
+Validation:
+
+- `cmd /c npx tsc --noEmit` — clean.
+- `cmd /c npm run lint` — clean.
+- `cmd /c npx vitest run lib/listening/v2-api.test.ts components/domain/listening/player/__tests__/listening-player-components.test.tsx app/listening/player/[id]/__tests__/cbla-fidelity.test.tsx app/listening/player/[id]/__tests__/audio-resume.test.tsx` — 44/44 passing.
+- `cmd /c dotnet test backend\OetLearner.sln --filter FullyQualifiedName~ListeningV2AdvanceEndpointTests -tl:off -m:1 /p:UseSharedCompilation=false /p:BuildInParallel=false /p:RunAnalyzers=false` — 9/9 passing.
+- `cmd /c npx vitest run app/admin/admin-route-permissions.test.ts app/admin/layout.test.tsx lib/__tests__/api.test.ts lib/listening/v2-api.test.ts components/domain/listening/player/__tests__/listening-player-components.test.tsx app/listening/player/[id]/__tests__/cbla-fidelity.test.tsx app/listening/player/[id]/__tests__/audio-resume.test.tsx` — 81/81 passing.
+- `dotnet test backend\OetLearner.sln --filter 'FullyQualifiedName~CookieBackedAuthCsrfGuardTests|FullyQualifiedName~DevicePairingCodeServiceTests|FullyQualifiedName~SafeHtmlSanitizerTests|FullyQualifiedName~ContentBulkImportE2ETests|FullyQualifiedName~AiUsageRecorderTests|FullyQualifiedName~ProductionProviderSafetyValidatorTests|FullyQualifiedName~PronunciationAiGroundingTests|FullyQualifiedName~AdminEndpointAuthorizationInventoryTests|FullyQualifiedName~ListeningV2AdvanceEndpointTests' -tl:off -m:1 /p:UseSharedCompilation=false /p:BuildInParallel=false /p:RunAnalyzers=false` — 75/75 passing.
+- `cmd /c dotnet build backend\OetLearner.sln -tl:off -m:1 /p:UseSharedCompilation=false /p:BuildInParallel=false /p:RunAnalyzers=false` — clean.
+- `cmd /c npm test` and `cmd /c npm run build` were attempted but stopped after extended no-progress waits in this local shell. Focused suites above passed; seeded E2E/full build evidence should run in CI or a healthy local runtime.
+
 ## Wave 26 — Phase 9 learner surface closure and review hardening (complete, 2026-05-13)
 
 Phase 9's active learner/admin surface is now closed as an implemented route

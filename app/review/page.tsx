@@ -34,6 +34,25 @@ const QUALITY_COLORS = [
   'bg-success/15 text-success hover:bg-success/25 border border-success/25',
 ];
 
+function parseReviewText(payload: string): string | null {
+  try {
+    const parsed = JSON.parse(payload) as unknown;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'text' in parsed &&
+      typeof (parsed as { text?: unknown }).text === 'string' &&
+      (parsed as { text: string }).text.trim().length > 0
+    ) {
+      return (parsed as { text: string }).text;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 export default function ReviewPage() {
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
   const [items, setItems] = useState<ReviewItem[]>([]);
@@ -65,6 +84,8 @@ export default function ReviewPage() {
   }, []);
 
   const currentItem = items[current];
+  const currentQuestionText = currentItem ? parseReviewText(currentItem.questionJson) : null;
+  const currentAnswerText = currentItem ? parseReviewText(currentItem.answerJson) : null;
 
   async function handleRate(quality: number) {
     if (!currentItem || submitting) return;
@@ -183,7 +204,7 @@ export default function ReviewPage() {
             >
               <div className="mb-3 text-xs font-medium uppercase text-primary">{currentItem.examTypeCode} · {currentItem.subtestCode || 'General'}</div>
               <div className="mb-4 text-lg font-medium text-navy">
-                {(() => { try { const q = JSON.parse(currentItem.questionJson); return q.text ?? currentItem.questionJson; } catch { return currentItem.questionJson; } })()}
+                {currentQuestionText ?? 'Review item unavailable.'}
               </div>
 
               {!revealed ? (
@@ -196,7 +217,7 @@ export default function ReviewPage() {
               ) : (
                 <MotionItem>
                   <div className="mb-5 rounded-2xl border border-border bg-background-light p-4 text-navy/80">
-                    {(() => { try { const a = JSON.parse(currentItem.answerJson); return a.text ?? currentItem.answerJson; } catch { return currentItem.answerJson; } })()}
+                    {currentAnswerText ?? 'Review item unavailable.'}
                   </div>
                   <div className="mb-3 text-center text-sm text-muted">How well did you recall this?</div>
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">

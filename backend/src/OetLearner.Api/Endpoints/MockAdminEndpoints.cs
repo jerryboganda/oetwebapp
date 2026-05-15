@@ -12,6 +12,7 @@ public static class MockAdminEndpoints
     {
         var group = app.MapGroup("/v1/admin/mock-bundles")
             .RequireAuthorization("AdminContentRead")
+            .RequireRateLimiting("PerUser")
             .WithTags("Admin Mock Bundles");
 
         group.MapGet("", async (
@@ -31,7 +32,7 @@ public static class MockAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
             Results.Ok(await service.CreateBundleAsync(request, AdminId(http), ct)))
-            .RequireAuthorization("AdminContentWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         group.MapPut("/{id}", async (
             string id,
@@ -40,7 +41,7 @@ public static class MockAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
             Results.Ok(await service.UpdateBundleAsync(id, request, AdminId(http), ct)))
-            .RequireAuthorization("AdminContentWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         group.MapDelete("/{id}", async (
             string id,
@@ -48,7 +49,7 @@ public static class MockAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
             Results.Ok(await service.ArchiveBundleAsync(id, AdminId(http), ct)))
-            .RequireAuthorization("AdminContentWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         group.MapPost("/{id}/sections", async (
             string id,
@@ -57,7 +58,7 @@ public static class MockAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
             Results.Ok(await service.AddSectionAsync(id, request, AdminId(http), ct)))
-            .RequireAuthorization("AdminContentWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         group.MapPut("/{id}/sections/reorder", async (
             string id,
@@ -66,7 +67,7 @@ public static class MockAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
             Results.Ok(await service.ReorderSectionsAsync(id, request, AdminId(http), ct)))
-            .RequireAuthorization("AdminContentWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         group.MapPost("/{id}/publish", async (
             string id,
@@ -74,7 +75,7 @@ public static class MockAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
             Results.Ok(await service.PublishBundleAsync(id, AdminId(http), ct)))
-            .RequireAuthorization("AdminContentPublish");
+            .WithAdminWrite("AdminContentPublish");
 
         // Mocks V2 Wave 3 — item analysis dashboard.
         group.MapGet("/{id}/item-analysis", async (
@@ -90,7 +91,7 @@ public static class MockAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
             Results.Ok(await analysis.RecomputeAsync(id, AdminId(http), ct)))
-            .RequireAuthorization("AdminContentWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         // Mocks Wave 4 — listening-only filtered view of the item-analysis
         // dashboard so admins can drill into Listening item difficulty,
@@ -105,6 +106,7 @@ public static class MockAdminEndpoints
 
         var adminMocks = app.MapGroup("/v1/admin/mocks")
             .RequireAuthorization("AdminContentRead")
+            .RequireRateLimiting("PerUser")
             .WithTags("Admin Mocks");
 
         adminMocks.MapGet("/item-analysis", async (
@@ -132,7 +134,8 @@ public static class MockAdminEndpoints
             Results.Ok(new
             {
                 items = await service.ListLeakReportsAsync(status, limit ?? 50, ct)
-            }));
+            }))
+            .WithAdminRead("AdminContentRead");
 
         adminMocks.MapPatch("/leak-reports/{id}", async (
             string id,
@@ -141,11 +144,12 @@ public static class MockAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
             Results.Ok(await service.UpdateLeakReportAsync(AdminId(http), id, request, ct)))
-            .RequireAuthorization("AdminContentWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         // Mocks V2 Wave 4 — admin booking management.
         var bookings = app.MapGroup("/v1/admin/mock-bookings")
             .RequireAuthorization("AdminContentRead")
+            .RequireRateLimiting("PerUser")
             .WithTags("Admin Mock Bookings");
 
         bookings.MapGet("", async (
@@ -169,7 +173,7 @@ public static class MockAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
             Results.Ok(await service.AssignStaffAsync(AdminId(http), bookingId, request, ct)))
-            .RequireAuthorization("AdminContentWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         bookings.MapPost("/{bookingId}/live-room/transition", async (
             string bookingId,
@@ -178,8 +182,7 @@ public static class MockAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
             Results.Ok(await service.TransitionLiveRoomAsync(AdminId(http), ApplicationUserRoles.Admin, isAdmin: true, bookingId, request, ct)))
-            .RequireAuthorization("AdminContentWrite")
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
         adminMocks.MapGet("/bookings", async (
             MockBookingService service,

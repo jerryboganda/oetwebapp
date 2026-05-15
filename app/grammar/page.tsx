@@ -31,8 +31,6 @@ import type {
 // ── constants ─────────────────────────────────────────────────────────────
 const EXAM_TYPES = [
   { value: 'oet',   label: 'OET'   },
-  { value: 'ielts', label: 'IELTS' },
-  { value: 'pte',   label: 'PTE'   },
 ];
 
 const LEVELS = [
@@ -125,7 +123,7 @@ export default function GrammarPage() {
         <LearnerPageHero
           eyebrow="Grammar Foundations"
           title="Fix the grammar mistakes that cost you marks"
-          description="Targeted lessons on the patterns OET examiners flag most — every completed lesson is graded and feeds into your readiness score."
+          description="Targeted OET grammar lessons for healthcare communication. IELTS and PTE grammar foundations remain beta-only and are not exposed during public launch."
           icon={BookMarked}
           highlights={heroHighlights}
         />
@@ -230,7 +228,7 @@ export default function GrammarPage() {
             ) : lessons.length === 0 ? (
               <EmptyState
                 heading="No lessons match your filter"
-                body="Try a different exam family or level."
+                body="Try a different level, or check back when more OET lessons are published."
                 action={<Button variant="outline" size="sm" onClick={resetFilters}>Show all lessons</Button>}
               />
             ) : (

@@ -296,7 +296,7 @@ public sealed class ListeningLearnerService(
             },
             emptyStates = new
             {
-                papers = paperDtos.Count == 0 ? "No published Listening papers are ready yet. The demo task remains available until real papers are published." : null,
+                papers = paperDtos.Count == 0 ? "No published Listening papers are ready yet. Use mocks or your study plan until curated Listening papers are published." : null,
                 activeAttempts = activeAttempts.Count == 0 ? "No in-progress Listening attempt." : null,
                 recentResults = recentResults.Count == 0 ? "Complete a Listening task to unlock transcript-backed review and canonical OET score display." : null
             }
@@ -399,7 +399,10 @@ public sealed class ListeningLearnerService(
                     _ => "practice"
                 },
                 integrityLockRequired = effectiveMode == "home",
-                printableBooklet = effectiveMode == "paper"
+                printableBooklet = effectiveMode == "paper",
+                freeNavigation = effectiveMode is "paper" or "diagnostic",
+                unansweredWarningRequired = IsExamMode(effectiveMode),
+                finalReviewAllPartsSeconds = effectiveMode == "paper" ? 120 : (int?)null
             },
             scoring = new
             {

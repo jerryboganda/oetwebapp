@@ -1,0 +1,40 @@
+# Emergency/local source-build override for docker-compose.production.yml.
+# Normal production deploys must use immutable digest images from release evidence.
+services:
+  learner-api-blue:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    pull_policy: build
+
+  learner-api-green:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    pull_policy: build
+
+  web-blue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
+        APP_URL: ${APP_URL}
+    pull_policy: build
+
+  web-green:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
+        APP_URL: ${APP_URL}
+    pull_policy: build
+
+  db-backup:
+    build:
+      context: .
+      dockerfile: scripts/backup/Dockerfile
+    pull_policy: build

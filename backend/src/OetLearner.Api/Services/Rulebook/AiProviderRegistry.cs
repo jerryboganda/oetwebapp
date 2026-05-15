@@ -165,7 +165,7 @@ public sealed class RegistryBackedProvider(
 
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"AI provider call failed: {(int)response.StatusCode} {response.ReasonPhrase}. Body: {body}");
+            throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure("AI provider", (int)response.StatusCode, response.ReasonPhrase));
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
@@ -246,7 +246,7 @@ public sealed class AnthropicProvider(
 
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Anthropic call failed: {(int)response.StatusCode} {response.ReasonPhrase}. Body: {body}");
+            throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure("Anthropic", (int)response.StatusCode, response.ReasonPhrase));
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
@@ -326,7 +326,7 @@ public sealed class CloudflareWorkersAiProvider(
 
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Cloudflare Workers AI call failed: {(int)response.StatusCode} {response.ReasonPhrase}. Body: {body}");
+            throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure("Cloudflare Workers AI", (int)response.StatusCode, response.ReasonPhrase));
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
@@ -336,12 +336,11 @@ public sealed class CloudflareWorkersAiProvider(
         //   "success": true, "errors": [], "messages": [] }
         if (root.TryGetProperty("success", out var successEl) && !successEl.GetBoolean())
         {
-            var errMsg = root.TryGetProperty("errors", out var errs) ? errs.GetRawText() : body;
-            throw new InvalidOperationException($"Cloudflare Workers AI returned success=false: {errMsg}");
+            throw new InvalidOperationException(AiProviderErrorMessages.InvalidResponse("Cloudflare Workers AI", "success=false"));
         }
 
         if (!root.TryGetProperty("result", out var result))
-            throw new InvalidOperationException($"Cloudflare Workers AI response missing 'result'. Body: {body}");
+            throw new InvalidOperationException(AiProviderErrorMessages.InvalidResponse("Cloudflare Workers AI", "missing result"));
 
         // Most chat models return { response: "..." }; some streaming-style
         // models also return choices[]. Handle both shapes defensively.

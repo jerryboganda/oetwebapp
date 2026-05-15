@@ -380,6 +380,39 @@ public class AiGatewayRecorderIntegrationTests
     }
 
     [Fact]
+    public async Task Gateway_RedactsRawProviderError_WhenRecordingFailure()
+    {
+        var rawBody = "{\"error\":\"bad key sk-proj-secret12345678901234567890\",\"detail\":\"<script>alert(1)</script>\"}";
+        var throwingProvider = new ThrowingProvider(new InvalidOperationException($"AI provider call failed: 500 Internal Server Error. Body: {rawBody}"));
+        var (gateway, db) = BuildGateway(throwingProvider);
+
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = prompt,
+                Provider = "throwing",
+                UserId = "user-501",
+                FeatureCode = AiFeatureCodes.WritingGrade,
+            }));
+
+        var row = Assert.Single(await db.AiUsageRecords.ToListAsync());
+        Assert.Equal(AiCallOutcome.ProviderError, row.Outcome);
+        Assert.Equal("provider_5xx", row.ErrorCode);
+        Assert.Equal("Provider request failed with HTTP 500.", row.ErrorMessage);
+        Assert.DoesNotContain("sk-proj", row.ErrorMessage);
+        Assert.DoesNotContain("<script", row.ErrorMessage);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Gateway_DoesNotBreak_WhenRecorderIsNotWired()
     {
         // Backward compatibility: older code paths can build a gateway

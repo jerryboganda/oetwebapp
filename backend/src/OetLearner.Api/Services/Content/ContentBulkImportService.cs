@@ -129,7 +129,7 @@ public sealed class ContentBulkImportService(
 
                     var stagingKey = $"{stagingPrefix}/{relativePath}";
                     using var entryStream = entry.Open();
-                    await WriteLimitedAsync(stagingKey, entryStream, entry.Length, $"ZIP entry {relativePath} exceeded its declared size.", ct);
+                    await WriteValidatedZipEntryAsync(stagingKey, relativePath, entryStream, entry.Length, ct);
                     relativeToStaging[relativePath] = stagingKey;
                     relatives.Add(relativePath);
                 }
@@ -302,6 +302,79 @@ public sealed class ContentBulkImportService(
         "png" => "image/png",
         _ => "application/octet-stream",
     };
+
+    private async Task<long> WriteValidatedZipEntryAsync(
+        string key,
+        string relativePath,
+        Stream source,
+        long maxBytes,
+        CancellationToken ct)
+    {
+        await using var destination = await storage.OpenWriteAsync(key, ct);
+        var buffer = new byte[81920];
+        var header = new byte[16];
+        var headerLength = 0;
+        long total = 0;
+
+        while (true)
+        {
+            var read = await source.ReadAsync(buffer, ct);
+            if (read == 0) break;
+
+            if (headerLength < header.Length)
+            {
+                var toCopy = Math.Min(read, header.Length - headerLength);
+                Array.Copy(buffer, 0, header, headerLength, toCopy);
+                headerLength += toCopy;
+            }
+
+            total += read;
+            if (total > maxBytes)
+                throw new InvalidOperationException($"ZIP entry {relativePath} exceeded its declared size.");
+
+            await destination.WriteAsync(buffer.AsMemory(0, read), ct);
+        }
+
+        ValidateZipEntryMagic(relativePath, header.AsSpan(0, headerLength), total);
+        return total;
+    }
+
+    private static void ValidateZipEntryMagic(string relativePath, ReadOnlySpan<byte> header, long length)
+    {
+        if (length <= 0)
+            throw new InvalidOperationException($"ZIP entry {relativePath} is empty.");
+
+        var ext = Path.GetExtension(relativePath).TrimStart('.').ToLowerInvariant();
+        var valid = ext switch
+        {
+            "pdf" => StartsWithAscii(header, "%PDF-"),
+            "mp3" => StartsWithAscii(header, "ID3") || HasMp3FrameSync(header),
+            "m4a" or "mp4" => header.Length >= 8 && StartsWithAscii(header[4..], "ftyp"),
+            "wav" => header.Length >= 12 && StartsWithAscii(header, "RIFF") && StartsWithAscii(header[8..], "WAVE"),
+            "ogg" => StartsWithAscii(header, "OggS"),
+            "png" => header.Length >= 8
+                && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47
+                && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A,
+            "jpg" or "jpeg" => header.Length >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+            _ => false,
+        };
+
+        if (!valid)
+            throw new InvalidOperationException($"ZIP entry {relativePath} failed file signature validation.");
+    }
+
+    private static bool StartsWithAscii(ReadOnlySpan<byte> bytes, string value)
+    {
+        if (bytes.Length < value.Length) return false;
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (bytes[i] != value[i]) return false;
+        }
+        return true;
+    }
+
+    private static bool HasMp3FrameSync(ReadOnlySpan<byte> bytes)
+        => bytes.Length >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0;
 
     private async Task<long> WriteLimitedAsync(
         string key,

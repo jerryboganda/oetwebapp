@@ -12,6 +12,7 @@ const projectFilter = (() => {
   return flag ? flag.slice('--project='.length).trim() : null;
 })();
 const skipReadiness = rawArgs.includes('--skip-readiness');
+const listOnly = rawArgs.includes('--list');
 
 const learnerDesktopProjects = ['chromium-learner', 'firefox-learner', 'webkit-learner', 'sydney-learner'];
 const learnerProjects = [...learnerDesktopProjects, 'mobile-chromium-learner', 'mobile-webkit-learner'];
@@ -113,6 +114,18 @@ const smokeRuns = [
     }),
   },
   ...learnerProjectSmokeRuns('chromium-learner'),
+  {
+    label: 'learner: Listening V2 smoke on chromium',
+    args: playwrightArgs({
+      files: [
+        'tests/e2e/listening/listening-practice-happy-path.spec.ts',
+        'tests/e2e/listening/listening-r10-readiness-gate.spec.ts',
+        'tests/e2e/listening/listening-paper-mode-free-nav.spec.ts',
+      ],
+      projects: ['chromium-learner'],
+      workers: 1,
+    }),
+  },
   ...learnerProjectSmokeRuns('firefox-learner'),
   ...learnerProjectSmokeRuns('webkit-learner'),
   ...learnerProjectSmokeRuns('sydney-learner'),
@@ -214,6 +227,17 @@ const smokeRuns = [
 
 const fullRuns = [
   ...smokeRuns,
+  {
+    label: 'learner: Listening V2 full contract on chromium',
+    args: playwrightArgs({
+      files: [
+        'tests/e2e/listening/listening-answer-key-not-exposed.spec.ts',
+        'tests/e2e/listening/listening-exam-mode-strict-locks.spec.ts',
+      ],
+      projects: ['chromium-learner'],
+      workers: 1,
+    }),
+  },
   {
     label: 'accessibility: unauthenticated sign-in screen',
     args: playwrightArgs({
@@ -322,6 +346,15 @@ if (projectFilter && runs.length === 0) {
   console.log(
     `No ${mode} buckets target project '${projectFilter}'. Nothing to run.`,
   );
+  process.exit(0);
+}
+
+if (listOnly) {
+  console.log(`Playwright ${mode} matrix selected ${runs.length} bucket(s):`);
+  for (const { label, args } of runs) {
+    const finalArgs = projectFilter ? restrictArgsToProject(args, projectFilter) : args;
+    console.log(`  - ${label}: ${[playwrightBin, ...finalArgs].map(quoteCmdArg).join(' ')}`);
+  }
   process.exit(0);
 }
 
