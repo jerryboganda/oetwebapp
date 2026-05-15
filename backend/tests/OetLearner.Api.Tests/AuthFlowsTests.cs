@@ -136,6 +136,7 @@ public class AuthFlowsTests
         Assert.NotNull(signInSession);
         Assert.True(signInSession!.CurrentUser.RequiresEmailVerification);
         Assert.Null(signInSession.RefreshToken);
+        var csrfToken = ReadCsrfCookie(signInResponse);
 
         using var meRequest = new HttpRequestMessage(HttpMethod.Get, "/v1/auth/me");
         meRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", signInSession.AccessToken);
@@ -149,18 +150,16 @@ public class AuthFlowsTests
         Assert.NotNull(currentUser);
         Assert.Equal(signInSession.CurrentUser.UserId, currentUser!.UserId);
 
-        var refreshResponse = await harness.Client.PostAsJsonAsync("/v1/auth/refresh",
-            new RefreshTokenRequest(null));
+        using var refreshRequest = CreateBrowserAuthMutation(HttpMethod.Post, "/v1/auth/refresh", csrfToken, new RefreshTokenRequest(null));
+        var refreshResponse = await harness.Client.SendAsync(refreshRequest);
         refreshResponse.EnsureSuccessStatusCode();
         var refreshedSession = await refreshResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
         Assert.NotNull(refreshedSession);
         Assert.NotEqual(signInSession.AccessToken, refreshedSession!.AccessToken);
         Assert.Null(refreshedSession.RefreshToken);
+        csrfToken = ReadCsrfCookie(refreshResponse);
 
-        using var signOutRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/sign-out")
-        {
-            Content = JsonContent.Create(new SignOutRequest(null))
-        };
+        using var signOutRequest = CreateBrowserAuthMutation(HttpMethod.Post, "/v1/auth/sign-out", csrfToken, new SignOutRequest(null));
         signOutRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", refreshedSession.AccessToken);
         var signOutResponse = await harness.Client.SendAsync(signOutRequest);
         Assert.Equal(HttpStatusCode.NoContent, signOutResponse.StatusCode);
@@ -189,6 +188,7 @@ public class AuthFlowsTests
         initialSignInResponse.EnsureSuccessStatusCode();
         var initialSession = await initialSignInResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
         Assert.NotNull(initialSession);
+        var csrfToken = ReadCsrfCookie(initialSignInResponse);
 
         var forgotPasswordResponse = await harness.Client.PostAsJsonAsync("/v1/auth/forgot-password",
             new ForgotPasswordRequest("learner@example.com"));
@@ -207,8 +207,8 @@ public class AuthFlowsTests
 
         Assert.Equal(HttpStatusCode.NoContent, resetPasswordResponse.StatusCode);
 
-        var revokedRefreshResponse = await harness.Client.PostAsJsonAsync("/v1/auth/refresh",
-            new RefreshTokenRequest(null));
+        using var revokedRefreshRequest = CreateBrowserAuthMutation(HttpMethod.Post, "/v1/auth/refresh", csrfToken, new RefreshTokenRequest(null));
+        var revokedRefreshResponse = await harness.Client.SendAsync(revokedRefreshRequest);
         Assert.Equal(HttpStatusCode.Forbidden, revokedRefreshResponse.StatusCode);
         Assert.Equal("invalid_refresh_token", await ReadErrorCodeAsync(revokedRefreshResponse));
 
@@ -299,6 +299,7 @@ public class AuthFlowsTests
 
         var session = await signInResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
         Assert.NotNull(session);
+        var csrfToken = ReadCsrfCookie(signInResponse);
 
         await SuspendLearnerAsync(harness, "learner@example.com");
 
@@ -347,12 +348,12 @@ public class AuthFlowsTests
 
         var session = await signInResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
         Assert.NotNull(session);
+        var csrfToken = ReadCsrfCookie(signInResponse);
 
         await SuspendLearnerAsync(harness, "learner@example.com");
 
-        var refreshResponse = await harness.Client.PostAsJsonAsync(
-            "/v1/auth/refresh",
-            new RefreshTokenRequest(null));
+        using var refreshRequest = CreateBrowserAuthMutation(HttpMethod.Post, "/v1/auth/refresh", csrfToken, new RefreshTokenRequest(null));
+        var refreshResponse = await harness.Client.SendAsync(refreshRequest);
 
         Assert.Equal(HttpStatusCode.Forbidden, refreshResponse.StatusCode);
         Assert.Equal("account_suspended", await ReadErrorCodeAsync(refreshResponse));
@@ -1802,6 +1803,16 @@ public class AuthFlowsTests
                 ["UploadScanner:Provider"] = "clamav",
                 ["UploadScanner:Host"] = "localhost",
                 ["UploadScanner:Port"] = "3310",
+                ["AI:ProviderId"] = "digitalocean-serverless",
+                ["AI:DefaultModel"] = "glm-5",
+                ["AI:ApiKey"] = "real-ai-provider-key",
+                ["AI:BaseUrl"] = "https://inference.do-ai.run/v1",
+                ["Pronunciation:Provider"] = "azure",
+                ["Pronunciation:AzureSpeechKey"] = "azure-pronunciation-key",
+                ["Pronunciation:AzureSpeechRegion"] = "uksouth",
+                ["Conversation:AsrProvider"] = "deepgram",
+                ["Conversation:DeepgramApiKey"] = "deepgram-conversation-key",
+                ["Conversation:TtsProvider"] = "off",
                 // Disable HIBP breach check in tests (C7 password policy). Fixture passwords
                 // like "Password123!" are in the breach corpus; tests assert success paths
                 // that would otherwise fail with 400. Length + complexity remain enforced.
@@ -2001,6 +2012,31 @@ public class AuthFlowsTests
         return document.RootElement.TryGetProperty("code", out var codeElement)
             ? codeElement.GetString()
             : null;
+    }
+
+    private static HttpRequestMessage CreateBrowserAuthMutation<TPayload>(
+        HttpMethod method,
+        string requestUri,
+        string csrfToken,
+        TPayload payload)
+    {
+        var request = new HttpRequestMessage(method, requestUri)
+        {
+            Content = JsonContent.Create(payload)
+        };
+        request.Headers.TryAddWithoutValidation("Origin", "https://localhost");
+        request.Headers.TryAddWithoutValidation("x-csrf-token", csrfToken);
+        return request;
+    }
+
+    private static string ReadCsrfCookie(HttpResponseMessage response)
+    {
+        Assert.True(response.Headers.TryGetValues("Set-Cookie", out var setCookies));
+        var csrfCookie = setCookies
+            .Select(cookie => cookie.Split(';', 2)[0])
+            .SingleOrDefault(cookie => cookie.StartsWith("oet_csrf=", StringComparison.Ordinal));
+        Assert.False(string.IsNullOrWhiteSpace(csrfCookie));
+        return csrfCookie["oet_csrf=".Length..];
     }
 
     private static async Task<string?> ReadStringPropertyAsync(HttpResponseMessage response, string propertyName)

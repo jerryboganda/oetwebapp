@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
@@ -841,6 +842,7 @@ public sealed class AuthService(
     //                  to carry the cookie across deployment topologies.
     // ═══════════════════════════════════════════════════════════════════════
     private const string RefreshCookieName = "oet_rt";
+    private const string CsrfCookieName = "oet_csrf";
     private const string ClientPlatformHeader = "X-OET-Client-Platform";
     private const string RefreshCookiePath = "/";
 
@@ -880,6 +882,15 @@ public sealed class AuthService(
             Expires = expires,
             IsEssential = true,
         });
+        httpContext.Response.Cookies.Append(CsrfCookieName, WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32)), new CookieOptions
+        {
+            HttpOnly = false,
+            Secure = !isLocalDev,
+            SameSite = isLocalDev ? SameSiteMode.Lax : SameSiteMode.None,
+            Path = RefreshCookiePath,
+            Expires = expires,
+            IsEssential = true,
+        });
     }
 
     private void ClearRefreshCookie()
@@ -890,6 +901,13 @@ public sealed class AuthService(
         httpContext.Response.Cookies.Delete(RefreshCookieName, new CookieOptions
         {
             HttpOnly = true,
+            Secure = !isLocalDev,
+            SameSite = isLocalDev ? SameSiteMode.Lax : SameSiteMode.None,
+            Path = RefreshCookiePath,
+        });
+        httpContext.Response.Cookies.Delete(CsrfCookieName, new CookieOptions
+        {
+            HttpOnly = false,
             Secure = !isLocalDev,
             SameSite = isLocalDev ? SameSiteMode.Lax : SameSiteMode.None,
             Path = RefreshCookiePath,

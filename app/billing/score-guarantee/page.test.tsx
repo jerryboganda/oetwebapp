@@ -1,16 +1,13 @@
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen } from '@testing-library/react';
 
 const {
   mockGetScoreGuaranteeData,
   mockActivateScoreGuarantee,
-  mockSubmitScoreGuaranteeClaim,
   mockFetchFreezeStatus,
   mockTrack,
 } = vi.hoisted(() => ({
   mockGetScoreGuaranteeData: vi.fn(),
   mockActivateScoreGuarantee: vi.fn(),
-  mockSubmitScoreGuaranteeClaim: vi.fn(),
   mockFetchFreezeStatus: vi.fn(),
   mockTrack: vi.fn(),
 }));
@@ -45,7 +42,6 @@ vi.mock('@/lib/learner-data', () => ({
 
 vi.mock('@/lib/api', () => ({
   activateScoreGuarantee: mockActivateScoreGuarantee,
-  submitScoreGuaranteeClaim: mockSubmitScoreGuaranteeClaim,
   fetchFreezeStatus: mockFetchFreezeStatus,
 }));
 
@@ -72,7 +68,6 @@ describe('Score guarantee page', () => {
     vi.clearAllMocks();
     mockFetchFreezeStatus.mockResolvedValue(null);
     mockActivateScoreGuarantee.mockResolvedValue({});
-    mockSubmitScoreGuaranteeClaim.mockResolvedValue({});
   });
 
   it('shows the activation form inside the shared shell when no pledge exists', async () => {
@@ -100,26 +95,23 @@ describe('Score guarantee page', () => {
     expect(screen.getAllByText('300').length).toBeGreaterThanOrEqual(1);
     // Target = baseline + improvement (also rendered in both places)
     expect(screen.getAllByText('350').length).toBeGreaterThanOrEqual(1);
-    // Claim form available for active status
-    expect(screen.getByLabelText(/actual oet score/i)).toBeInTheDocument();
+    // Direct claim submission stays closed until verifiable evidence upload is available.
+    expect(screen.getByText(/claim submission requires official result proof/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /direct claim submission unavailable/i }),
+    ).toBeDisabled();
   });
 
-  it('blocks claim submission when freeze status cannot be verified', async () => {
+  it('surfaces unverifiable freeze status while direct claim submission remains disabled', async () => {
     mockGetScoreGuaranteeData.mockResolvedValue(activePledge);
     mockFetchFreezeStatus.mockRejectedValueOnce(new Error('freeze unavailable'));
 
     renderWithRouter(<ScoreGuaranteePage />);
-    const user = userEvent.setup();
 
     expect(await screen.findByText('Your score guarantee')).toBeInTheDocument();
     expect(screen.getByText(/freeze status could not be verified/i)).toBeInTheDocument();
 
-    const submit = screen.getByRole('button', { name: /submit claim.*unavailable/i });
+    const submit = screen.getByRole('button', { name: /direct claim submission unavailable/i });
     expect(submit).toBeDisabled();
-
-    await user.click(submit);
-    await waitFor(() => {
-      expect(mockSubmitScoreGuaranteeClaim).not.toHaveBeenCalled();
-    });
   });
 });
