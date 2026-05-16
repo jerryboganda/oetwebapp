@@ -51,19 +51,24 @@ public static class ProductionProviderSafetyValidator
                 $"Production cannot use the mock AI provider or mock AI model. Configure {AiProviderOptions.SectionName}:ProviderId/{AiProviderOptions.SectionName}:DefaultModel with a real provider, or set {AllowMockProvidersKey}=true only for an approved emergency.");
         }
 
+        // ApiKey + BaseUrl are admin-configurable post-boot via /admin/settings (Phase 2 Runtime Settings).
+        // Empty/missing values are tolerated at startup so admins can fill them through the UI; the
+        // grounded AI gateway itself refuses calls until a valid key/URL is provided.
         if (string.IsNullOrWhiteSpace(aiProvider.ApiKey))
         {
-            throw new InvalidOperationException(
-                $"Production requires {AiProviderOptions.SectionName}:ApiKey so the grounded AI provider can be synchronized into the registry.");
+            Console.Error.WriteLine($"[ProductionProviderSafetyValidator] WARN: {AiProviderOptions.SectionName}:ApiKey is empty. Configure via /admin/settings before AI features will function.");
         }
 
-        if (!Uri.TryCreate(aiProvider.BaseUrl, UriKind.Absolute, out var baseUri)
-            || baseUri.Scheme != Uri.UriSchemeHttps
-            || baseUri.IsLoopback
-            || string.Equals(baseUri.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(aiProvider.BaseUrl))
         {
-            throw new InvalidOperationException(
-                $"Production requires {AiProviderOptions.SectionName}:BaseUrl to be an external https:// endpoint.");
+            if (!Uri.TryCreate(aiProvider.BaseUrl, UriKind.Absolute, out var baseUri)
+                || baseUri.Scheme != Uri.UriSchemeHttps
+                || baseUri.IsLoopback
+                || string.Equals(baseUri.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Production requires {AiProviderOptions.SectionName}:BaseUrl to be an external https:// endpoint when set.");
+            }
         }
     }
 
@@ -84,7 +89,9 @@ public static class ProductionProviderSafetyValidator
         };
 
         if (!configured)
-            throw new InvalidOperationException("Production requires a real Pronunciation ASR provider. Configure Pronunciation:AzureSpeechKey plus Pronunciation:AzureSpeechRegion, or Pronunciation:WhisperBaseUrl plus Pronunciation:WhisperApiKey.");
+        {
+            Console.Error.WriteLine("[ProductionProviderSafetyValidator] WARN: Pronunciation ASR provider credentials missing. Configure via /admin/settings before pronunciation grading will function.");
+        }
     }
 
     private static void ValidateConversationAsr(ConversationOptions options)
@@ -106,7 +113,9 @@ public static class ProductionProviderSafetyValidator
         };
 
         if (!configured)
-            throw new InvalidOperationException("Production requires a real Conversation ASR provider. Configure Conversation Azure Speech, Whisper, or Deepgram credentials.");
+        {
+            Console.Error.WriteLine("[ProductionProviderSafetyValidator] WARN: Conversation ASR provider credentials missing. Configure via /admin/settings before conversation ASR will function.");
+        }
     }
 
     private static void ValidateConversationTts(ConversationOptions options)
@@ -133,7 +142,9 @@ public static class ProductionProviderSafetyValidator
         };
 
         if (!configured)
-            throw new InvalidOperationException("Production requires a real Conversation TTS provider or Conversation:TtsProvider=off. Configure Azure Speech, ElevenLabs, CosyVoice, ChatTTS, or GPT-SoVITS credentials.");
+        {
+            Console.Error.WriteLine("[ProductionProviderSafetyValidator] WARN: Conversation TTS provider credentials missing. Configure via /admin/settings or set Conversation:TtsProvider=off.");
+        }
     }
 
     private static void ValidateRealtimeConversationAsr(ConversationOptions options)

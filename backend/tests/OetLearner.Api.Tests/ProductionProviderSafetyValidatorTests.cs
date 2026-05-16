@@ -128,19 +128,17 @@ public sealed class ProductionProviderSafetyValidatorTests
     }
 
     [Fact]
-    public void ValidateOptions_RejectsProductionAiProviderWithoutApiKey()
+    public void ValidateOptions_AllowsProductionAiProviderWithoutApiKey()
     {
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            ProductionProviderSafetyValidator.ValidateOptions(
-                ValidPronunciation(),
-                ValidConversation(),
-                ValidAiProvider(apiKey: "")));
-
-        Assert.Contains("AI:ApiKey", ex.Message);
+        // ApiKey is admin-configurable post-boot via /admin/settings (Phase 2 Runtime Settings).
+        // Empty value should NOT prevent startup; the AI gateway refuses calls until configured.
+        ProductionProviderSafetyValidator.ValidateOptions(
+            ValidPronunciation(),
+            ValidConversation(),
+            ValidAiProvider(apiKey: ""));
     }
 
     [Theory]
-    [InlineData("")]
     [InlineData("http://inference.example.com/v1")]
     [InlineData("https://localhost:1234/v1")]
     public void ValidateOptions_RejectsProductionAiProviderWithoutExternalHttpsBaseUrl(string baseUrl)
@@ -152,6 +150,16 @@ public sealed class ProductionProviderSafetyValidatorTests
                 ValidAiProvider(baseUrl: baseUrl)));
 
         Assert.Contains("AI:BaseUrl", ex.Message);
+    }
+
+    [Fact]
+    public void ValidateOptions_AllowsProductionAiProviderWithEmptyBaseUrl()
+    {
+        // BaseUrl is admin-configurable post-boot.
+        ProductionProviderSafetyValidator.ValidateOptions(
+            ValidPronunciation(),
+            ValidConversation(),
+            ValidAiProvider(baseUrl: ""));
     }
 
     [Fact]
