@@ -49,7 +49,7 @@ export function ContentLockedNotice({
     <div
       role="alert"
       className={
-        'mx-auto flex max-w-md flex-col items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-5 text-center text-sm text-amber-900 ' +
+        'mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-5 text-center text-sm text-amber-900 ' +
         (className ?? '')
       }
     >

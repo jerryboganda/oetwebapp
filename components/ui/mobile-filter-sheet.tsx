@@ -33,14 +33,14 @@ function FilterOptionButton({
       aria-checked={selected}
       className={cn(
         'flex w-full items-center justify-between rounded-2xl px-4 py-3 text-sm transition-colors',
-        selected ? 'bg-primary/6 text-primary font-semibold' : 'text-navy hover:bg-gray-50',
+        selected ? 'bg-primary/6 text-primary font-semibold' : 'text-navy hover:bg-background-light',
       )}
     >
       <span className="flex items-center gap-3 text-left">
         <span
           className={cn(
             'flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors',
-            selected ? 'border-primary bg-primary text-white' : 'border-gray-300 bg-white',
+            selected ? 'border-primary bg-primary text-white' : 'border-border bg-surface',
           )}
         >
           {selected ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
@@ -59,7 +59,7 @@ export function MobileFilterSheet({ groups, selected, onChange, onClear, classNa
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-[20px] border border-gray-200 bg-background-light px-4 py-3 shadow-sm',
+        'flex items-center gap-3 rounded-[20px] border border-border bg-background-light px-4 py-3 shadow-sm',
         className,
       )}
       role="toolbar"
@@ -72,7 +72,7 @@ export function MobileFilterSheet({ groups, selected, onChange, onClear, classNa
           'pressable flex flex-1 items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-sm transition-colors',
           totalSelected > 0
             ? 'border-primary/25 bg-primary/6 text-primary'
-            : 'border-gray-200 bg-surface text-navy hover:border-gray-300 hover:bg-white',
+            : 'border-border bg-surface text-navy hover:border-border-hover hover:bg-surface',
         )}
         aria-label={`Open filters${totalSelected > 0 ? `, ${totalSelected} selected` : ''}`}
       >

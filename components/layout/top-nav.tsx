@@ -203,7 +203,7 @@ export function TopNav({
           <div className="lg:hidden fixed inset-0 z-40" role="dialog" aria-modal="true">
             <motion.button
               type="button"
-              className="absolute inset-0 bg-slate-950/42 backdrop-blur-[2px]"
+              className="absolute inset-0 bg-navy/25 backdrop-blur-[2px]"
               onClick={() => {
                 void triggerImpactHaptic('LIGHT');
                 closeMobileMenu();

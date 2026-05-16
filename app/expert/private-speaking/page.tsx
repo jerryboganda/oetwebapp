@@ -40,11 +40,11 @@ function StatusBadge({ status }: { status: string }) {
     Confirmed: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
     ZoomCreated: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
     InProgress: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
-    Completed: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-    Cancelled: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300',
+    Completed: 'bg-background-light text-muted',
+    Cancelled: 'bg-red-100 text-red-600',
   };
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[status] ?? 'bg-gray-100 text-gray-600'}`}>
+    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[status] ?? 'bg-background-light text-muted'}`}>
       {status}
     </span>
   );
@@ -161,7 +161,7 @@ export default function ExpertPrivateSpeakingPage() {
         />
         <div
           role="status"
-          className="rounded-2xl border border-dashed border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 text-sm text-gray-600 dark:text-gray-400"
+          className="rounded-2xl border border-dashed border-border bg-surface p-5 text-sm text-muted"
         >
           You are not currently available for private speaking sessions.
         </div>
@@ -185,24 +185,24 @@ export default function ExpertPrivateSpeakingPage() {
       )}
 
       {/* Profile summary */}
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+      <div className="rounded-2xl border border-border bg-surface p-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-medium text-gray-900 dark:text-white">{profile.displayName}</h3>
-            <p className="text-xs text-gray-400">{profile.timezone} · {profile.totalSessions} sessions · {profile.averageRating.toFixed(1)} avg rating</p>
+            <h3 className="font-bold text-navy">{profile.displayName}</h3>
+            <p className="text-xs text-muted">{profile.timezone} · {profile.totalSessions} sessions · {profile.averageRating.toFixed(1)} avg rating</p>
           </div>
-          <span className={`text-xs px-2.5 py-1 rounded-full ${profile.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-500'}`}>
+          <span className={`text-xs px-2.5 py-1 rounded-full ${profile.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-background-light text-muted'}`}>
             {profile.isActive ? 'Active' : 'Inactive'}
           </span>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex gap-1 border-b border-border">
         {(['sessions', 'availability'] as ExpertTab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${
-              tab === t ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700'
+              tab === t ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-navy'
             }`}>
             {t === 'sessions' ? 'My Sessions' : 'Availability'}
           </button>
@@ -214,25 +214,25 @@ export default function ExpertPrivateSpeakingPage() {
         <div className="space-y-6">
           <ExpertRouteSectionHeader title="Upcoming Sessions" icon={Calendar} />
           {upcomingSessions.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">No upcoming sessions.</p>
+            <p className="text-sm text-muted text-center py-6">No upcoming sessions.</p>
           ) : (
             <div className="space-y-3">
               {upcomingSessions.map(session => {
                 const start = new Date(session.sessionStartUtc);
                 const isStartingSoon = start.getTime() - Date.now() < 15 * 60 * 1000;
                 return (
-                  <div key={session.id} className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+                  <div key={session.id} className="rounded-2xl border border-border bg-surface p-5">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <StatusBadge status={session.status} />
                           {isStartingSoon && <span className="text-xs text-amber-600 font-medium animate-pulse">Starting soon</span>}
                         </div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        <p className="text-sm font-medium text-navy">
                           {start.toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric' })}
                           {' '}at {start.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
                         </p>
-                        <p className="text-xs text-gray-400 mt-0.5">
+                        <p className="text-xs text-muted mt-0.5">
                           <Clock className="w-3 h-3 inline mr-1" />{session.durationMinutes} min
                           · Learner: {session.learnerUserId.slice(0, 10)}…
                         </p>
@@ -240,13 +240,13 @@ export default function ExpertPrivateSpeakingPage() {
                       <div className="flex items-center gap-2">
                         {session.zoomStartUrl && (
                           <a href={session.zoomStartUrl} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
+                            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium">
                             <Video className="w-4 h-4" /> Start Zoom
                           </a>
                         )}
                         <button
                           onClick={() => setCancelTarget(session)}
-                          className="flex items-center gap-1.5 px-3 py-2 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium transition-colors"
+                          className="flex items-center gap-1.5 px-3 py-2 border border-danger/30 text-danger hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
                         >
                           <X className="w-4 h-4" /> Cancel
                         </button>
@@ -260,13 +260,13 @@ export default function ExpertPrivateSpeakingPage() {
 
           <ExpertRouteSectionHeader title="Past Sessions" icon={Star} />
           {pastSessions.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">No past sessions yet.</p>
+            <p className="text-sm text-muted text-center py-6">No past sessions yet.</p>
           ) : (
             <div className="space-y-3">
               {pastSessions.map(session => {
                 const start = new Date(session.sessionStartUtc);
                 return (
-                  <div key={session.id} className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+                  <div key={session.id} className="rounded-2xl border border-border bg-surface p-5">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
@@ -277,12 +277,12 @@ export default function ExpertPrivateSpeakingPage() {
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-700 dark:text-gray-300">
+                        <p className="text-sm text-navy">
                           {start.toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                           {' '}at {start.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
                         </p>
                         {session.learnerFeedback && (
-                          <p className="text-xs text-gray-500 mt-1 italic">&ldquo;{session.learnerFeedback}&rdquo;</p>
+                          <p className="text-xs text-muted mt-1 italic">&ldquo;{session.learnerFeedback}&rdquo;</p>
                         )}
                       </div>
                     </div>
@@ -300,17 +300,17 @@ export default function ExpertPrivateSpeakingPage() {
           <ExpertRouteSectionHeader title="Weekly Availability Rules" icon={Clock} />
 
           {availability.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-4">No availability rules configured yet.</p>
+            <p className="text-sm text-muted text-center py-4">No availability rules configured yet.</p>
           )}
 
           <div className="space-y-2">
             {availability.map(rule => (
-              <div key={rule.id} className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+              <div key={rule.id} className="rounded-2xl border border-border bg-surface p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">{DAY_NAMES[rule.dayOfWeek]}</span>
-                    <span className="text-sm text-gray-500 ml-2">{rule.startTime} – {rule.endTime}</span>
-                    {rule.effectiveFrom && <span className="text-xs text-gray-400 ml-2">from {rule.effectiveFrom}</span>}
+                    <span className="text-sm font-medium text-navy">{DAY_NAMES[rule.dayOfWeek]}</span>
+                    <span className="text-sm text-muted ml-2">{rule.startTime} – {rule.endTime}</span>
+                    {rule.effectiveFrom && <span className="text-xs text-muted ml-2">from {rule.effectiveFrom}</span>}
                   </div>
                   <button onClick={() => handleDeleteRule(rule.id)} className="text-red-400 hover:text-red-600 p-2.5 -m-1">
                     <Trash2 className="w-4 h-4" />
@@ -320,18 +320,18 @@ export default function ExpertPrivateSpeakingPage() {
             ))}
           </div>
 
-          <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
-            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Add New Rule</h4>
+          <div className="rounded-2xl border border-border bg-surface p-5">
+            <h4 className="text-sm font-bold text-navy mb-3">Add New Rule</h4>
             <div className="flex items-center gap-3 flex-wrap">
               <select value={newRule.dayOfWeek} onChange={e => setNewRule(r => ({ ...r, dayOfWeek: Number(e.target.value) }))}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900">
+                className="px-3 py-2 border border-border rounded-lg text-sm bg-surface">
                 {DAY_NAMES.map((name, i) => <option key={i} value={i}>{name}</option>)}
               </select>
               <input type="time" value={newRule.startTime} onChange={e => setNewRule(r => ({ ...r, startTime: e.target.value }))}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900" />
-              <span className="text-sm text-gray-400">to</span>
+                className="px-3 py-2 border border-border rounded-lg text-sm bg-surface" />
+              <span className="text-sm text-muted">to</span>
               <input type="time" value={newRule.endTime} onChange={e => setNewRule(r => ({ ...r, endTime: e.target.value }))}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900" />
+                className="px-3 py-2 border border-border rounded-lg text-sm bg-surface" />
               <Button onClick={handleAddRule} size="sm">
                 <Plus className="w-4 h-4 mr-1" /> Add Rule
               </Button>
@@ -343,17 +343,17 @@ export default function ExpertPrivateSpeakingPage() {
       {/* ── Cancel Confirmation Dialog ────────────── */}
       {cancelTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Cancel Session</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-navy mb-2">Cancel Session</h3>
+            <p className="text-sm text-muted mb-4">
               Are you sure you want to cancel the session on{' '}
-              <span className="font-medium text-gray-700 dark:text-gray-300">
+              <span className="font-medium text-navy">
                 {new Date(cancelTarget.sessionStartUtc).toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric' })}
                 {' '}at {new Date(cancelTarget.sessionStartUtc).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
               </span>?
               This action cannot be undone.
             </p>
-            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label className="block text-sm font-medium text-muted mb-1">
               Reason (optional)
             </label>
             <textarea
@@ -361,21 +361,21 @@ export default function ExpertPrivateSpeakingPage() {
               onChange={e => setCancelReason(e.target.value)}
               rows={2}
               maxLength={500}
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white mb-4 resize-none"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy mb-4 resize-none"
               placeholder="e.g. Schedule conflict"
             />
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => { setCancelTarget(null); setCancelReason(''); }}
                 disabled={cancelling}
-                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-muted hover:text-navy transition-colors"
               >
                 Keep Session
               </button>
               <button
                 onClick={handleCancelSession}
                 disabled={cancelling}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm font-medium text-white bg-danger hover:bg-danger/90 disabled:opacity-50 rounded-lg transition-colors"
               >
                 {cancelling ? 'Cancelling…' : 'Confirm Cancel'}
               </button>

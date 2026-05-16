@@ -24,8 +24,8 @@ export function WeakestLinkCard({ criterion, subtest, description, score, classN
           <AlertTriangle className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-black uppercase tracking-wide text-amber-100">{subtest} · Weakest Area</p>
-          <p className="mt-0.5 text-sm font-black text-white">{criterion}</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-100">{subtest} · Weakest Area</p>
+          <p className="mt-0.5 text-sm font-bold text-white">{criterion}</p>
           {description && <p className="mt-1 text-xs font-semibold text-violet-50/95">{description}</p>}
           {score && <p className="mt-1 text-xs font-bold text-amber-100">Current: {score}</p>}
         </div>

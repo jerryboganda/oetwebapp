@@ -18,7 +18,7 @@ export function Skeleton({ className, variant = 'rectangle', width, height, line
         {Array.from({ length: lines }).map((_, i) => (
           <div
             key={i}
-            className={cn('rounded-xl bg-border/80 dark:bg-gray-700/50', pulseClassName, i === lines - 1 && 'w-3/4')}
+            className={cn('rounded-xl bg-border/80 dark:bg-border/50', pulseClassName, i === lines - 1 && 'w-3/4')}
             style={{ height: height ?? 16 }}
           />
         ))}
@@ -34,7 +34,7 @@ export function Skeleton({ className, variant = 'rectangle', width, height, line
 
   return (
     <div
-      className={cn('bg-border/80 dark:bg-gray-700/50', pulseClassName, variantStyles[variant], className)}
+      className={cn('bg-border/80 dark:bg-border/50', pulseClassName, variantStyles[variant], className)}
       style={{ width, height }}
       role="status"
       aria-busy="true"

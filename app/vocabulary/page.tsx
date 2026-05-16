@@ -139,7 +139,7 @@ export default function VocabularyPage() {
                 {link.icon}
               </div>
               <div>
-                <div className="font-semibold text-sm text-navy">{link.label}</div>
+                <div className="font-bold text-sm text-navy">{link.label}</div>
                 {link.badge && <div className="text-xs text-muted">{link.badge}</div>}
               </div>
             </motion.div>

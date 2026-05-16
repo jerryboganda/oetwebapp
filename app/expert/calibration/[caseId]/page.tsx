@@ -178,7 +178,7 @@ export default function CalibrationCaseWorkspacePage() {
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
       <div className="space-y-4">
-        <Button variant="ghost" className="w-fit pl-0 text-slate-500" onClick={() => router.push('/expert/calibration')}>
+        <Button variant="ghost" className="w-fit pl-0 text-muted" onClick={() => router.push('/expert/calibration')}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to calibration
         </Button>
 
@@ -247,13 +247,13 @@ export default function CalibrationCaseWorkspacePage() {
                     title="Benchmark evidence"
                     description={`${detail.subTest} benchmark - ${detail.profession.replace(/_/g, ' ')} - ${detail.benchmarkLabel}`}
                   />
-                  <Card className="border-slate-200 shadow-sm">
+                  <Card className="border-border shadow-sm">
                     <CardContent className="space-y-4 p-5">
                       {detail.artifacts.map((artifact) => (
-                        <Card key={`${artifact.kind}-${artifact.title}`} className="border-slate-200 shadow-none">
+                        <Card key={`${artifact.kind}-${artifact.title}`} className="border-border shadow-none">
                           <CardContent className="space-y-2 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">{artifact.title}</p>
-                            <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{artifact.content}</p>
+                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">{artifact.title}</p>
+                            <p className="whitespace-pre-wrap text-sm leading-6 text-navy">{artifact.content}</p>
                           </CardContent>
                         </Card>
                       ))}
@@ -266,18 +266,18 @@ export default function CalibrationCaseWorkspacePage() {
                     eyebrow="Benchmark Rubric"
                     title="Reference scoring"
                     description="Use the reference benchmark scores and rationale for each criterion."
-                    action={<span className="text-xs text-slate-400">Overall benchmark: {detail.benchmarkScore}</span>}
+                    action={<span className="text-xs text-muted">Overall benchmark: {detail.benchmarkScore}</span>}
                   />
-                  <Card className="border-slate-200 shadow-sm">
+                  <Card className="border-border shadow-sm">
                     <CardContent className="space-y-3 p-5">
                       {detail.benchmarkRubric.map((entry) => (
-                        <div key={entry.criterion} className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div key={entry.criterion} className="rounded-2xl border border-border bg-surface p-4">
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold text-slate-900">{toCriterionLabel(entry.criterion)}</p>
-                              <p className="mt-1 text-sm text-slate-500">{entry.rationale}</p>
+                              <p className="text-sm font-semibold text-navy">{toCriterionLabel(entry.criterion)}</p>
+                              <p className="mt-1 text-sm text-muted">{entry.rationale}</p>
                             </div>
-                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                            <span className="rounded-full bg-background-light px-2.5 py-1 text-xs font-medium text-navy">
                               Benchmark {entry.benchmarkScore}
                             </span>
                           </div>
@@ -286,15 +286,15 @@ export default function CalibrationCaseWorkspacePage() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-slate-200 shadow-sm">
+                  <Card className="border-border shadow-sm">
                     <CardContent className="p-5">
                       <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-slate-400" />
-                        <h3 className="text-sm font-semibold text-slate-900">Reference Notes</h3>
+                        <FileText className="h-4 w-4 text-muted" />
+                        <h3 className="text-sm font-semibold text-navy">Reference Notes</h3>
                       </div>
                       <ul className="mt-3 space-y-2">
                         {detail.referenceNotes.map((note) => (
-                          <li key={note} className="text-sm text-slate-600">
+                          <li key={note} className="text-sm text-muted">
                             - {note}
                           </li>
                         ))}
@@ -310,15 +310,15 @@ export default function CalibrationCaseWorkspacePage() {
                     eyebrow="Submission"
                     title="Your calibration"
                     description={isReadOnly ? 'Submitted scores and notes from your completed benchmark attempt.' : 'Enter criterion-level scores using the benchmark rubric as your comparison anchor.'}
-                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <GraduationCap className="h-5 w-5 text-slate-400" />}
+                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <GraduationCap className="h-5 w-5 text-muted" />}
                   />
-                  <Card className="border-slate-200 shadow-sm">
+                  <Card className="border-border shadow-sm">
                     <CardContent className="space-y-4 p-5">
                       {detail.benchmarkRubric.map((entry) => (
-                        <div key={entry.criterion} className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-[1fr_180px] md:items-start">
+                        <div key={entry.criterion} className="grid grid-cols-1 gap-3 rounded-2xl border border-border bg-surface p-4 md:grid-cols-[1fr_180px] md:items-start">
                           <div>
-                            <p className="text-sm font-semibold text-slate-900">{toCriterionLabel(entry.criterion)}</p>
-                            <p className="mt-1 text-xs text-slate-500">
+                            <p className="text-sm font-semibold text-navy">{toCriterionLabel(entry.criterion)}</p>
+                            <p className="mt-1 text-xs text-muted">
                               Benchmark {entry.benchmarkScore} - Submit a 0-{maxScoreForCriterion(detail.subTest, entry.criterion)} score for this criterion.
                             </p>
                           </div>
@@ -360,30 +360,30 @@ export default function CalibrationCaseWorkspacePage() {
                     eyebrow="Alignment Evidence"
                     title="How you compare"
                     description="Use the benchmark workspace to inspect how your criterion judgments compare with the reference position."
-                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <MessageSquare className="h-5 w-5 text-slate-400" />}
+                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <MessageSquare className="h-5 w-5 text-muted" />}
                   />
-                  <Card className="border-slate-200 shadow-sm">
+                  <Card className="border-border shadow-sm">
                     <CardContent className="space-y-4 p-5">
                       {isReadOnly && detail.existingSubmission ? (
                         <>
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                            <div className="rounded-2xl bg-slate-50 p-4">
-                              <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Reviewer Score</p>
-                              <p className="mt-2 text-lg font-semibold text-slate-900">{detail.existingSubmission.reviewerScore}</p>
+                            <div className="rounded-2xl bg-background-light p-4">
+                              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted">Reviewer Score</p>
+                              <p className="mt-2 text-lg font-semibold text-navy">{detail.existingSubmission.reviewerScore}</p>
                             </div>
-                            <div className="rounded-2xl bg-slate-50 p-4">
-                              <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Alignment</p>
-                              <p className="mt-2 text-lg font-semibold text-slate-900">{alignmentDisplay}</p>
+                            <div className="rounded-2xl bg-background-light p-4">
+                              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted">Alignment</p>
+                              <p className="mt-2 text-lg font-semibold text-navy">{alignmentDisplay}</p>
                             </div>
-                            <div className="rounded-2xl bg-slate-50 p-4">
-                              <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Submitted</p>
-                              <p className="mt-2 text-lg font-semibold text-slate-900">{new Date(detail.existingSubmission.submittedAt).toLocaleDateString()}</p>
+                            <div className="rounded-2xl bg-background-light p-4">
+                              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted">Submitted</p>
+                              <p className="mt-2 text-lg font-semibold text-navy">{new Date(detail.existingSubmission.submittedAt).toLocaleDateString()}</p>
                             </div>
                           </div>
 
-                          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                            <p className="text-sm font-semibold text-slate-900">Disagreement summary</p>
-                            <p className="mt-2 text-sm text-slate-600">{detail.existingSubmission.disagreementSummary}</p>
+                          <div className="rounded-2xl border border-border bg-surface p-4">
+                            <p className="text-sm font-semibold text-navy">Disagreement summary</p>
+                            <p className="mt-2 text-sm text-muted">{detail.existingSubmission.disagreementSummary}</p>
                           </div>
 
                           <div className="space-y-3">
@@ -391,11 +391,11 @@ export default function CalibrationCaseWorkspacePage() {
                               const submitted = detail.existingSubmission?.submittedScores?.[entry.criterion];
                               const gap = submitted === undefined ? null : Math.abs(submitted - entry.benchmarkScore);
                               return (
-                                <div key={entry.criterion} className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div key={entry.criterion} className="rounded-2xl border border-border bg-surface p-4">
                                   <div className="flex items-center justify-between gap-3">
-                                    <p className="text-sm font-semibold text-slate-900">{toCriterionLabel(entry.criterion)}</p>
+                                    <p className="text-sm font-semibold text-navy">{toCriterionLabel(entry.criterion)}</p>
                                     <div className="flex items-center gap-2 text-xs">
-                                      <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">Benchmark {entry.benchmarkScore}</span>
+                                      <span className="rounded-full bg-background-light px-2 py-1 text-muted">Benchmark {entry.benchmarkScore}</span>
                                       <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">You {submitted ?? '-'}</span>
                                       {gap !== null ? <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">Gap {gap}</span> : null}
                                     </div>
@@ -410,7 +410,7 @@ export default function CalibrationCaseWorkspacePage() {
                           Draft saved. Submit the completed rubric to unlock alignment evidence, benchmark delta summaries, and your recorded final notes for this case.
                         </div>
                       ) : (
-                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                        <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-sm text-muted">
                           Submit your criterion scores to unlock alignment evidence, benchmark delta summaries, and your recorded notes for this case.
                         </div>
                       )}

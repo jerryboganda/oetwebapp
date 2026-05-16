@@ -158,7 +158,7 @@ export default function CalibrationCenterPage() {
           void loadData();
         }}
         errorMessage={errorMessage ?? undefined}
-        emptyContent={<EmptyState icon={<Inbox className="h-12 w-12 text-slate-400" />} title="No calibration cases" description="There are no benchmark cases available right now." />}
+        emptyContent={<EmptyState icon={<Inbox className="h-12 w-12 text-muted" />} title="No calibration cases" description="There are no benchmark cases available right now." />}
       >
         <div className="space-y-6">
           <ExpertRouteHero

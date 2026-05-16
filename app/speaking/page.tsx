@@ -221,7 +221,7 @@ export default function SpeakingHome() {
                   {(home?.commonIssuesToImprove ?? ['Build smoother openings for role plays.', 'Keep the professional tone consistent.']).slice(0, 3).map((issue) => (
                     <div
                       key={issue}
-                      className="rounded-xl border !border-amber-300 !bg-white px-3 py-2 text-sm font-black !text-slate-950 shadow-sm shadow-amber-950/5 dark:!border-amber-300/30 dark:!bg-slate-950 dark:!text-amber-50 dark:shadow-none"
+                      className="rounded-xl border !border-amber-300 !bg-white px-3 py-2 text-sm font-bold !text-slate-950 shadow-sm shadow-amber-950/5 dark:!border-amber-300/30 dark:!bg-slate-950 dark:!text-amber-50 dark:shadow-none"
                     >
                       {issue}
                     </div>
@@ -312,7 +312,7 @@ export default function SpeakingHome() {
                                     </Badge>
                                   ) : null}
                                 </div>
-                                <h3 className="mt-2 text-base font-semibold text-navy">{task.title}</h3>
+                                <h3 className="mt-2 text-base font-bold text-navy">{task.title}</h3>
                                 <p className="mt-1 text-sm text-muted">Focus: {focusLabel}</p>
                                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-muted">
                                   <span>{scenarioLabel}</span>
@@ -433,7 +433,7 @@ export default function SpeakingHome() {
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <h3 className="truncate text-sm font-semibold text-navy">{sub.taskName}</h3>
+                              <h3 className="truncate text-sm font-bold text-navy">{sub.taskName}</h3>
                               <p className="mt-1 text-xs text-muted">{attemptDateLabel}</p>
                             </div>
                             <Badge variant="muted" size="sm" className="shrink-0">

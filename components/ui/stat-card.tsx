@@ -177,7 +177,7 @@ export function StatCard({
                 {trend.value}
               </span>
               {trend.label && (
-                <span className={cn('ml-0.5 text-[10px] uppercase truncate', activeTone.label)}>
+                <span className={cn('ml-0.5 text-[11px] uppercase truncate', activeTone.label)}>
                   {trend.label}
                 </span>
               )}
@@ -195,7 +195,7 @@ export function StatCard({
 
       {/* Hint Text */}
       {hint && (
-        <div className={cn('mt-1.5 text-[10px] font-medium leading-tight line-clamp-2', activeTone.label)}>
+        <div className={cn('mt-1.5 text-[11px] font-medium leading-tight line-clamp-2', activeTone.label)}>
           {hint}
         </div>
       )}

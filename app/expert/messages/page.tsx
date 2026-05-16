@@ -59,10 +59,10 @@ export default function MessagesPage() {
       </div>
 
       {threads.length === 0 ? (
-        <div className="text-center py-12 rounded-lg border border-dashed">
-          <MessageSquare className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-          <p className="text-muted-foreground">No messages yet.</p>
-          <p className="text-xs text-muted-foreground mt-1">Start a new thread to contact the admin team.</p>
+        <div className="text-center py-12 rounded-2xl border border-dashed">
+          <MessageSquare className="w-8 h-8 mx-auto text-muted mb-2" />
+          <p className="text-muted">No messages yet.</p>
+          <p className="text-xs text-muted mt-1">Start a new thread to contact the admin team.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -70,15 +70,15 @@ export default function MessagesPage() {
             <button
               key={thread.id}
               onClick={() => router.push(`/expert/messages/${thread.id}`)}
-              className="w-full text-left rounded-lg border p-4 hover:bg-accent transition-colors"
+              className="w-full text-left rounded-2xl border border-border p-4 hover:bg-accent transition-colors"
             >
               <div className="flex items-center justify-between">
                 <p className="font-medium">{thread.title}</p>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${thread.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground'}`}>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${thread.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-background-light text-muted'}`}>
                   {thread.status}
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">{thread.replyCount} replies · {new Date(thread.updatedAt).toLocaleDateString()}</p>
+              <p className="text-xs text-muted mt-1">{thread.replyCount} replies · {new Date(thread.updatedAt).toLocaleDateString()}</p>
             </button>
           ))}
         </div>

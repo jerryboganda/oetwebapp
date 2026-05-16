@@ -53,14 +53,14 @@ export function SpeakingRoleCard({
         )}
         <div className="grid gap-6 md:grid-cols-2">
           <div>
-            <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+            <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
               <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
               Your Role
             </p>
             <p className="text-base font-bold text-navy leading-snug">{role}</p>
           </div>
           <div>
-            <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+            <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
               <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
               Setting
             </p>
@@ -72,14 +72,14 @@ export function SpeakingRoleCard({
 
         <div className="grid gap-6 md:grid-cols-2">
           <div>
-            <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+            <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
               <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
               Patient / Client
             </p>
             <p className="text-sm font-medium text-navy/90 leading-relaxed">{patient}</p>
           </div>
           <div>
-            <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+            <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
               <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
               Task
             </p>
@@ -91,7 +91,7 @@ export function SpeakingRoleCard({
           <>
             <div className="h-px w-full bg-gradient-to-r from-border/80 via-border to-transparent" />
             <div className="bg-white/60 p-4 rounded-xl border border-primary/10">
-              <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+              <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                 <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
                 Background
               </p>
@@ -102,14 +102,14 @@ export function SpeakingRoleCard({
 
         {tasks.length > 0 && (
           <div className="pt-2">
-            <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+            <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-3 flex items-center gap-1.5">
               <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
               Role Objectives
             </p>
             <ul className="grid gap-3">
               {tasks.map((item, index) => (
                 <li key={`${item}-${index}`} className="flex items-start gap-3 bg-white/50 p-3 rounded-xl border border-primary/10">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-black shrink-0 mt-0.5 shadow-sm">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-bold shrink-0 mt-0.5 shadow-sm">
                     {index + 1}
                   </span>
                   <span className="text-sm font-medium text-navy/90 leading-relaxed">{item}</span>

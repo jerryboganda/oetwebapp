@@ -35,7 +35,7 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
 
       <div
         className={cn(
-          'hidden flex-wrap items-center gap-3 rounded-[20px] border border-border bg-background-light px-4 py-3 shadow-sm md:flex',
+          'hidden flex-wrap items-center gap-3 rounded-2xl border border-border bg-background-light px-4 py-3 shadow-sm md:flex',
           className,
         )}
         role="toolbar"

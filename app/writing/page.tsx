@@ -311,7 +311,7 @@ export default function WritingHome() {
             />
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-2">
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Exam mode</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted">Exam mode</p>
                 <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-background-light p-1">
                   {([
                     { id: 'computer' as WritingExamMode, label: 'Computer', icon: Monitor },
@@ -330,7 +330,7 @@ export default function WritingHome() {
                 </div>
               </div>
               <div className="space-y-2">
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Assessor</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted">Assessor</p>
                 <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-background-light p-1">
                   {([
                     { id: 'ai' as WritingAssessorType, label: 'AI', icon: Brain },

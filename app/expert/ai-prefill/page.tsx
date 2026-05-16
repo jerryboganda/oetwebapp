@@ -45,17 +45,17 @@ export default function AiPreFillPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-surface">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold">AI Pre-Fill Assistant</h1>
-          <p className="text-muted-foreground mt-1">Use AI-suggested scores as a starting point for your tutor review.</p>
+          <p className="text-muted mt-1">Use AI-suggested scores as a starting point for your tutor review.</p>
         </div>
 
         <MotionSection className="space-y-6">
           <div className="flex gap-3 items-end">
             <div className="flex-1">
-              <label className="text-sm font-medium text-muted-foreground mb-1 block">Review Request ID</label>
+              <label className="text-sm font-medium text-muted mb-1 block">Review Request ID</label>
               <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Enter review request ID..." value={reviewId} onChange={e => setReviewId(e.target.value)} />
             </div>
             <button onClick={load} disabled={loading} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50">{loading ? 'Loading...' : 'Load AI Suggestions'}</button>
@@ -64,7 +64,7 @@ export default function AiPreFillPage() {
           {loading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>}
 
           {data && !data.hasAiPreFill && (
-            <Card className="p-6 text-center text-muted-foreground"><Bot className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>{data.message}</p></Card>
+            <Card className="p-6 text-center text-muted"><Bot className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>{data.message}</p></Card>
           )}
 
           {data?.hasAiPreFill && (
@@ -75,12 +75,12 @@ export default function AiPreFillPage() {
                     <Bot className="w-6 h-6 text-blue-600 flex-shrink-0" />
                     <div>
                       <h3 className="font-semibold">AI Evaluation Available</h3>
-                      <div className="flex gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
+                      <div className="flex gap-3 mt-1 text-sm text-muted flex-wrap">
                         <span>Score range: <strong>{data.aiScoreRange}</strong></span>
                         <Badge className={CONFIDENCE_COLOR[data.aiConfidence ?? 'medium']}>{data.aiConfidence} confidence</Badge>
                         <span className="capitalize">{data.subtestCode}</span>
                       </div>
-                      {data.instructions && <p className="text-sm mt-2 text-muted-foreground">{data.instructions.guidance}</p>}
+                      {data.instructions && <p className="text-sm mt-2 text-muted">{data.instructions.guidance}</p>}
                     </div>
                   </div>
                 </Card>

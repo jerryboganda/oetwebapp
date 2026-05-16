@@ -154,12 +154,12 @@ export default function ReadinessCenter() {
                       <circle cx={needleX ?? 0} cy={needleY ?? 0} r="6" fill="var(--color-navy)" stroke="var(--color-surface)" strokeWidth="2" />
                     </>
                   )}
-                  <text x="100" y="95" textAnchor="middle" className="fill-navy text-xl font-black">{riskPercent == null ? 'Unavailable' : `${riskPercent}%`}</text>
+                  <text x="100" y="95" textAnchor="middle" className="fill-navy text-xl font-bold">{riskPercent == null ? 'Unavailable' : `${riskPercent}%`}</text>
                   <text x="100" y="112" textAnchor="middle" className="fill-muted text-[10px] font-bold uppercase tracking-widest">probability</text>
                 </svg>
               </div>
 
-              <h2 className="text-3xl font-black mb-2 text-center text-navy">{data.overallRisk} Risk</h2>
+              <h2 className="text-3xl font-bold mb-2 text-center text-navy">{data.overallRisk} Risk</h2>
               <p className="text-muted text-sm leading-relaxed text-center max-w-sm mx-auto">
                 {riskPercent == null
                   ? 'Target-date probability is unavailable until the readiness risk service returns an estimate.'
@@ -176,10 +176,10 @@ export default function ReadinessCenter() {
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="w-6 h-6 text-primary" />
-                <span className="text-sm font-black uppercase tracking-widest text-violet-200">Recommended Study</span>
+                <span className="text-sm font-bold uppercase tracking-widest text-violet-200">Recommended Study</span>
               </div>
               <div className="flex items-baseline gap-2 mb-2">
-                <h2 className="text-5xl font-black">{data.recommendedStudyHours}</h2>
+                <h2 className="text-5xl font-bold">{data.recommendedStudyHours}</h2>
                 <span className="text-xl font-bold text-slate-200">hours</span>
               </div>
               <p className="text-slate-200 text-sm leading-relaxed">
@@ -197,7 +197,7 @@ export default function ReadinessCenter() {
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-warning/10 text-warning">
                 <AlertTriangle className="w-4 h-4" />
               </span>
-              <span className="text-xs font-black uppercase tracking-widest text-muted">Risk Factors</span>
+              <span className="text-xs font-bold uppercase tracking-widest text-muted">Risk Factors</span>
             </div>
               <div className="space-y-4">
                 {riskFactors.length === 0 ? (
@@ -213,7 +213,7 @@ export default function ReadinessCenter() {
                 <div key={factor.label}>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm font-semibold text-navy">{factor.label}</span>
-                    <span className={`text-xs font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${sevToken.chip}`}>{factor.severity}</span>
+                    <span className={`text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${sevToken.chip}`}>{factor.severity}</span>
                   </div>
                   <div className="h-2 w-full bg-background-light rounded-full overflow-hidden">
                     <motion.div
@@ -263,7 +263,7 @@ export default function ReadinessCenter() {
                             <h3 className="text-base font-bold text-navy flex items-center gap-2">
                               {test.name}
                               {test.isWeakest && (
-                                <span className="bg-danger/10 text-danger text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-md font-black flex items-center gap-1">
+                                <span className="bg-danger/10 text-danger text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
                                   <AlertTriangle className="w-3 h-3" /> Weakest Link
                                 </span>
                               )}
@@ -272,7 +272,7 @@ export default function ReadinessCenter() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <span className="text-lg font-black text-navy">{test.readiness}%</span>
+                          <span className="text-lg font-bold text-navy">{test.readiness}%</span>
                           <span className="text-xs text-muted ml-1">/ {test.target}% target</span>
                         </div>
                       </div>
@@ -342,22 +342,22 @@ export default function ReadinessCenter() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between py-3 border-b border-border">
                   <span className="text-sm font-medium text-muted">Full Mocks</span>
-                  <span className="text-base font-black text-navy">{data.evidence.mocksCompleted}</span>
+                  <span className="text-base font-bold text-navy">{data.evidence.mocksCompleted}</span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-border">
                   <span className="text-sm font-medium text-muted">Practice Questions</span>
-                  <span className="text-base font-black text-navy">{data.evidence.practiceQuestions}</span>
+                  <span className="text-base font-bold text-navy">{data.evidence.practiceQuestions}</span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-border">
                   <span className="text-sm font-medium text-muted">Tutor Reviews</span>
-                  <span className="text-base font-black text-navy">{data.evidence.expertReviews}</span>
+                  <span className="text-base font-bold text-navy">{data.evidence.expertReviews}</span>
                 </div>
               </div>
               <div className="mt-6 bg-background-light rounded-xl p-4 border border-border">
                 <div className="flex items-start gap-3">
                   <TrendingUp className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-xs font-black text-navy uppercase tracking-widest mb-1">Recent Trend</h4>
+                    <h4 className="text-xs font-bold text-navy uppercase tracking-widest mb-1">Recent Trend</h4>
                     <p className="text-xs text-muted leading-relaxed">{data.evidence.recentTrend}</p>
                   </div>
                 </div>

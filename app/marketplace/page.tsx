@@ -204,7 +204,7 @@ export default function MarketplacePage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-sm font-semibold text-navy truncate">{item.title}</h3>
+                            <h3 className="text-sm font-bold text-navy truncate">{item.title}</h3>
                             <ExamTypeBadge examType={item.examFamilyCode} size="sm" />
                           </div>
                           {item.description && <p className="text-xs text-muted line-clamp-2 mb-2">{item.description}</p>}

@@ -93,7 +93,7 @@ export default function LeaderboardPage() {
 
       {/* My position */}
       {myPos && (
-        <div className="bg-primary/10 border border-primary/30 rounded-xl p-4 mb-6 flex items-center justify-between">
+        <div className="bg-primary/10 border border-primary/30 rounded-2xl p-4 mb-6 flex items-center justify-between">
           <div>
             <div className="text-sm font-medium text-primary">Your Position</div>
             <div className="text-2xl font-bold text-primary">

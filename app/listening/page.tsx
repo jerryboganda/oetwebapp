@@ -232,13 +232,13 @@ export default function ListeningHome() {
                       }`}
                     >
                       <span
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                           m.achieved ? '!bg-emerald-600 !text-white' : '!bg-primary/10 !text-primary ring-1 ring-primary/20 dark:!bg-white/10 dark:!text-primary'
                         }`}
                       >
                         {m.achieved ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : milestoneIndex + 1}
                       </span>
-                      <span className="min-w-0 text-xs font-black leading-snug">{m.label}</span>
+                      <span className="min-w-0 text-xs font-bold leading-snug">{m.label}</span>
                     </div>
                   ))}
                 </div>

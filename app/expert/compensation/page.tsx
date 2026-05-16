@@ -36,7 +36,7 @@ export default function CompensationPage() {
     <ExpertRouteWorkspace>
       <ExpertRouteHero title="Compensation" description="Track your earnings and payouts." />
 
-      <section className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+      <section className="rounded-2xl border bg-surface p-4 text-sm text-muted">
         <ExpertRouteSectionHeader title="Launch payout model" />
         <p className="mt-2">
           Public launch uses fixed, tiered payouts by review type and promised turnaround SLA.
@@ -72,14 +72,14 @@ export default function CompensationPage() {
 
       <ExpertRouteSectionHeader title="Recent Earnings" />
       {earnings.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No earnings recorded yet.</p>
+        <p className="text-muted text-sm">No earnings recorded yet.</p>
       ) : (
         <div className="space-y-2">
           {earnings.map((item) => (
-            <div key={item.id} className="flex items-center justify-between rounded-lg border p-3">
+            <div key={item.id} className="flex items-center justify-between rounded-2xl border p-3">
               <div>
-                <p className="font-medium text-sm">{item.subtestCode} Review</p>
-                <p className="text-xs text-muted-foreground">{new Date(item.earnedAt).toLocaleDateString()}</p>
+                <p className="font-bold text-sm">{item.subtestCode} Review</p>
+                <p className="text-xs text-muted">{new Date(item.earnedAt).toLocaleDateString()}</p>
               </div>
               <div className="text-right">
                 <p className="font-semibold">{formatCurrency(item.amountMinorUnits, item.currency)}</p>
@@ -102,14 +102,14 @@ export default function CompensationPage() {
 
       <ExpertRouteSectionHeader title="Payout History" />
       {payouts.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No payouts yet.</p>
+        <p className="text-muted text-sm">No payouts yet.</p>
       ) : (
         <div className="space-y-2">
           {payouts.map((payout) => (
-            <div key={payout.id} className="flex items-center justify-between rounded-lg border p-3">
+            <div key={payout.id} className="flex items-center justify-between rounded-2xl border p-3">
               <div>
-                <p className="font-medium text-sm">Payout</p>
-                <p className="text-xs text-muted-foreground">{new Date(payout.createdAt).toLocaleDateString()}</p>
+                <p className="font-bold text-sm">Payout</p>
+                <p className="text-xs text-muted">{new Date(payout.createdAt).toLocaleDateString()}</p>
               </div>
               <div className="text-right">
                 <p className="font-semibold">{formatCurrency(payout.totalAmountMinorUnits, payout.currency)}</p>

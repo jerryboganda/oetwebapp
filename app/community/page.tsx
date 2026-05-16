@@ -201,7 +201,7 @@ export default function CommunityPage() {
                           <Badge variant="outline">{categoryMap.get(thread.categoryId)}</Badge>
                         )}
                       </div>
-                      <h3 className="font-semibold text-navy truncate">{thread.title}</h3>
+                      <h3 className="font-bold text-navy truncate">{thread.title}</h3>
                       <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted">
                         <span className="font-medium">{thread.authorDisplayName}</span>
                         <span className="flex items-center gap-1">

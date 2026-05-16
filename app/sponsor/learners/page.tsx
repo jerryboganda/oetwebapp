@@ -9,16 +9,17 @@ import {
   isApiError,
   type SponsoredLearner,
 } from '@/lib/api';
+import { Card } from '@/components/ui/card';
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    Active: 'bg-emerald-100 text-emerald-800',
-    Pending: 'bg-amber-100 text-amber-800',
-    Revoked: 'bg-red-100 text-red-800',
+    Active: 'bg-success/10 text-success',
+    Pending: 'bg-warning/10 text-warning',
+    Revoked: 'bg-danger/10 text-danger',
   };
 
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colors[status] ?? 'bg-gray-100 text-gray-800'}`}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colors[status] ?? 'bg-background-light text-navy'}`}>
       {status}
     </span>
   );
@@ -87,8 +88,8 @@ export default function SponsorLearnersPage() {
       <h1 className="text-2xl font-bold text-navy">Sponsored Learners</h1>
 
       {/* Invite form */}
-      <div className="page-surface rounded-2xl p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-navy mb-4">Invite a Learner</h2>
+      <Card padding="lg">
+        <h2 className="text-lg font-bold text-navy mb-4">Invite a Learner</h2>
         <form onSubmit={handleInvite} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
             <label htmlFor="invite-email" className="block text-sm font-medium text-muted mb-1">
@@ -120,28 +121,28 @@ export default function SponsorLearnersPage() {
             Invite
           </button>
         </form>
-        {inviteError && <p className="mt-2 text-sm text-red-600">{inviteError}</p>}
-        {inviteSuccess && <p className="mt-2 text-sm text-emerald-600">{inviteSuccess}</p>}
-      </div>
+        {inviteError && <p className="mt-2 text-sm text-danger">{inviteError}</p>}
+        {inviteSuccess && <p className="mt-2 text-sm text-success">{inviteSuccess}</p>}
+      </Card>
 
       {/* Learners list */}
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="page-surface h-16 animate-pulse rounded-2xl" />
+            <div key={i} className="h-16 animate-pulse rounded-2xl border border-border bg-surface shadow-sm" />
           ))}
         </div>
       ) : error ? (
-        <div className="page-surface rounded-2xl p-6 text-center">
-          <p className="text-sm text-red-600">{error}</p>
-        </div>
+        <Card padding="lg" className="text-center">
+          <p className="text-sm text-danger">{error}</p>
+        </Card>
       ) : learners.length === 0 ? (
-        <div className="page-surface rounded-2xl p-8 text-center">
+        <Card padding="lg" className="text-center">
           <Users className="mx-auto h-10 w-10 text-muted mb-3" />
           <p className="text-sm text-muted">No sponsored learners yet. Use the form above to invite your first learner.</p>
-        </div>
+        </Card>
       ) : (
-        <div className="page-surface rounded-2xl shadow-sm overflow-hidden">
+        <Card padding="none" className="overflow-hidden">
           <div className="px-6 py-4 border-b border-border">
             <p className="text-sm text-muted">{total} learner{total !== 1 ? 's' : ''}</p>
           </div>
@@ -159,7 +160,7 @@ export default function SponsorLearnersPage() {
                   {learner.status !== 'Revoked' && (
                     <button
                       onClick={() => handleRemove(learner.id)}
-                      className="rounded-lg p-2.5 -m-1 text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                      className="rounded-lg p-2.5 -m-1 text-muted hover:text-danger hover:bg-danger/10 transition-colors"
                       title="Remove sponsorship"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -169,7 +170,7 @@ export default function SponsorLearnersPage() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

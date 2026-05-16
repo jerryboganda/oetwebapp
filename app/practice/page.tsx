@@ -90,7 +90,7 @@ export default function PracticePage() {
                       <mode.icon className="h-5 w-5" />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-sm font-semibold text-navy transition-colors group-hover:text-primary-dark">{mode.title}</h3>
+                      <h3 className="text-sm font-bold text-navy transition-colors group-hover:text-primary-dark">{mode.title}</h3>
                       <p className="mt-1 text-xs text-muted">{mode.description}</p>
                     </div>
                   </Card>

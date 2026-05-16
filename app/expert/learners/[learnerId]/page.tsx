@@ -127,8 +127,8 @@ export default function AssignedLearnerPage() {
                   description="Goal, review scope, and platform history shown in the same surface rhythm as the learner dashboard."
                 />
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                  <Card className="border-slate-200 shadow-sm">
-                    <div className="flex items-center gap-2 border-b border-gray-100 p-4 font-semibold text-navy">
+                  <Card className="border-border shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-border p-4 font-bold text-navy">
                       <Target className="h-4 w-4" /> Goal & Context
                     </div>
                     <CardContent className="space-y-4 p-4">
@@ -147,8 +147,8 @@ export default function AssignedLearnerPage() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-slate-200 shadow-sm">
-                    <div className="flex items-center gap-2 border-b border-gray-100 p-4 font-semibold text-navy">
+                  <Card className="border-border shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-border p-4 font-bold text-navy">
                       <History className="h-4 w-4" /> Platform History
                     </div>
                     <CardContent className="space-y-4 p-4">
@@ -175,10 +175,10 @@ export default function AssignedLearnerPage() {
                   title="Sub-test performance"
                   description="The table below keeps the learner's latest outcomes visible while preserving the original review evidence."
                 />
-                <Card className="overflow-hidden border-slate-200 shadow-sm">
+                <Card className="overflow-hidden border-border shadow-sm">
                   <CardContent className="p-0">
                     <table className="w-full text-sm" aria-label="Sub-test performance scores">
-                      <thead className="border-b border-gray-200 bg-gray-50">
+                      <thead className="border-b border-border bg-background-light">
                         <tr>
                           <th scope="col" className="p-3 text-left font-semibold text-muted">Sub-Test</th>
                           <th scope="col" className="p-3 text-left font-semibold text-muted">Latest Score</th>
@@ -188,7 +188,7 @@ export default function AssignedLearnerPage() {
                       </thead>
                       <tbody>
                         {learner.subTestScores.map((subTestScore) => (
-                          <tr key={subTestScore.subTest} className="border-b border-gray-100 last:border-0">
+                          <tr key={subTestScore.subTest} className="border-b border-border last:border-0">
                             <td className="p-3 font-medium capitalize text-navy">{subTestScore.subTest}</td>
                             <td className="p-3">{subTestScore.latestScore ?? '-'}</td>
                             <td className="p-3">
@@ -216,14 +216,14 @@ export default function AssignedLearnerPage() {
                 />
                 <div className="grid grid-cols-1 gap-4">
                   {learner.priorReviews.length === 0 ? (
-                    <Card className="border-slate-200 shadow-sm">
+                    <Card className="border-border shadow-sm">
                       <CardContent className="p-4">
                         <p className="text-sm italic text-muted">No prior tutor feedback is available for this learner.</p>
                       </CardContent>
                     </Card>
                   ) : (
                     learner.priorReviews.map((review) => (
-                      <Card key={review.id} className="border-slate-200 shadow-sm">
+                      <Card key={review.id} className="border-border shadow-sm">
                         <CardContent className="space-y-3 p-4">
                           <div className="flex items-center justify-between gap-3 flex-wrap">
                             <span className="text-sm font-semibold capitalize text-navy">{review.type} Review</span>
