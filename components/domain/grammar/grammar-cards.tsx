@@ -59,7 +59,7 @@ export function GrammarTopicCard({ topic }: { topic: GrammarTopicLearner }) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-black uppercase tracking-[0.18em] text-muted">{titleCase(topic.levelHint || 'OET')}</p>
-              <h3 className="mt-1 text-lg font-black leading-tight text-navy">{topic.name}</h3>
+              <h3 className="mt-1 text-lg font-bold leading-tight text-navy">{topic.name}</h3>
             </div>
             <Badge variant="info">{topic.lessonCount} lessons</Badge>
           </div>
@@ -186,7 +186,7 @@ export function GrammarRecommendationStrip({
           </div>
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-muted">Recommended next</p>
-            <h3 className="text-lg font-black text-navy">Pick up where you left off</h3>
+            <h3 className="text-lg font-bold text-navy">Pick up where you left off</h3>
           </div>
         </div>
         <Badge variant="info">{recommendations.length} ready</Badge>
@@ -209,7 +209,7 @@ export function GrammarRecommendationStrip({
                     <p className="truncate text-[11px] font-black uppercase tracking-[0.16em] text-muted">
                       {rec.topicName ?? (rec.topicSlug ? titleCase(rec.topicSlug) : 'Grammar')}
                     </p>
-                    <h4 className="mt-1 line-clamp-2 text-sm font-black leading-snug text-navy">{rec.title}</h4>
+                    <h4 className="mt-1 line-clamp-2 text-sm font-bold leading-snug text-navy">{rec.title}</h4>
                   </div>
                   <Badge variant="info">{titleCase(rec.level)}</Badge>
                 </div>

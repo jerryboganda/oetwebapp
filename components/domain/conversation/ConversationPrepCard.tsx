@@ -32,7 +32,7 @@ export function ConversationPrepCard({
 }: Props) {
   const objectives = scenario.objectives ?? [];
   return (
-    <section className="rounded-3xl border border-purple-200/60 bg-gradient-to-br from-purple-50 to-indigo-50 p-6 shadow-sm dark:border-purple-800/40 dark:from-purple-950/40 dark:to-indigo-950/40">
+    <section className="rounded-2xl border border-purple-200/60 bg-gradient-to-br from-purple-50 to-indigo-50 p-6 shadow-sm dark:border-purple-800/40 dark:from-purple-950/40 dark:to-indigo-950/40">
       <div className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-purple-600 dark:text-purple-400">
         Preparation phase
       </div>
@@ -110,7 +110,7 @@ export function ConversationPrepCard({
           {formatTime(prepCountdown)}
         </div>
         <button onClick={onStart} type="button" disabled={startDisabled}
-          className="flex items-center gap-2 rounded-xl bg-purple-600 px-6 py-2.5 font-semibold text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50">
+          className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
           <Mic className="h-4 w-4" /> Start now
         </button>
       </div>

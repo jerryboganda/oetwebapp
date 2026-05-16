@@ -20,7 +20,7 @@ type AdminRouteIcon = ElementType | ReactNode;
 
 const accentClassMap: Record<LearnerSurfaceAccent, { icon: string; chip: string }> = {
   primary: { icon: 'bg-violet-500/20 text-violet-400', chip: 'bg-violet-500/10 text-violet-300 border-violet-500/20' },
-  navy: { icon: 'bg-violet-500/20 text-violet-400', chip: 'bg-zinc-800/80 text-zinc-300 border-zinc-700' },
+  navy: { icon: 'bg-violet-500/20 text-violet-400', chip: 'bg-admin-border/80 text-admin-text-muted border-admin-border' },
   amber: { icon: 'bg-amber-500/15 text-amber-400', chip: 'bg-amber-500/10 text-amber-300 border-amber-500/20' },
   blue: { icon: 'bg-blue-500/15 text-blue-400', chip: 'bg-blue-500/10 text-blue-300 border-blue-500/20' },
   indigo: { icon: 'bg-indigo-500/15 text-indigo-400', chip: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20' },
@@ -60,10 +60,10 @@ function renderAdminAction(action: LearnerSurfaceAction | undefined) {
         className={cn(
           'inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400',
           action.variant === 'outline' || action.variant === 'secondary'
-            ? 'border border-zinc-700 text-zinc-100 hover:bg-zinc-900'
+            ? 'border border-admin-border text-admin-text hover:bg-admin-surface-raised'
             : action.variant === 'ghost'
-              ? 'text-zinc-300 hover:bg-zinc-900'
-              : 'bg-violet-500 text-white hover:bg-violet-400',
+              ? 'text-admin-text-muted hover:bg-admin-surface-raised'
+              : 'bg-primary text-white hover:bg-primary/90',
         )}
       >
         {action.label}
@@ -97,7 +97,7 @@ export function AdminRouteHero({
   const hasActions = Boolean(primaryAction) || Boolean(secondaryAction);
 
   return (
-    <section className="rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-4 shadow-sm">
+    <section className="rounded-xl border border-admin-border bg-admin-surface px-5 py-4 shadow-sm">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-3">
@@ -107,7 +107,7 @@ export function AdminRouteHero({
             <div className="min-w-0">
               {eyebrow && <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-500">{eyebrow}</p>}
               <h1 className="mt-1 text-xl font-bold leading-tight tracking-tight text-white">{title}</h1>
-              <p className="mt-1.5 max-w-4xl text-sm leading-6 text-zinc-400">{description}</p>
+              <p className="mt-1.5 max-w-4xl text-sm leading-6 text-admin-text-muted">{description}</p>
             </div>
           </div>
           {highlights.length > 0 && (
@@ -115,12 +115,12 @@ export function AdminRouteHero({
               {highlights.map((item) => {
                 const HighlightIcon = item.icon;
                 return (
-                  <div key={`${item.label}-${item.value}`} className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+                  <div key={`${item.label}-${item.value}`} className="min-w-0 rounded-lg border border-admin-border bg-admin-surface-raised/60 px-3 py-2">
                     <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-zinc-500">
                       {HighlightIcon && <HighlightIcon className="h-3.5 w-3.5" />}
                       {item.label}
                     </div>
-                    <p className="mt-1 text-sm font-bold text-zinc-100">{item.value}</p>
+                    <p className="mt-1 text-sm font-bold text-admin-text">{item.value}</p>
                   </div>
                 );
               })}
@@ -161,7 +161,7 @@ export function AdminRouteSectionHeader({
   const palette = accentClassMap[accent];
   const safeHighlights = sanitizeLearnerPageHeroHighlights(highlights);
   return (
-    <div className={cn('flex flex-col gap-4 rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between', className)}>
+    <div className={cn('flex flex-col gap-4 rounded-xl border border-admin-border bg-admin-surface px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between', className)}>
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <div className={cn('shrink-0 rounded-lg p-2', palette.icon)}>
           {renderAdminRouteIcon(Icon, 'h-5 w-5')}
@@ -170,14 +170,14 @@ export function AdminRouteSectionHeader({
           <div className="flex flex-wrap items-center gap-2">
             {eyebrow && <span className={cn('rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest', palette.chip)}>{eyebrow}</span>}
             {title && <h1 className="text-xl font-bold tracking-tight text-white leading-none">{title}</h1>}
-            {meta && <span className="rounded bg-zinc-800/80 px-2 py-0.5 text-[10px] uppercase tracking-widest text-zinc-400 font-bold">{meta}</span>}
+            {meta && <span className="rounded bg-admin-border/80 px-2 py-0.5 text-[10px] uppercase tracking-widest text-admin-text-muted font-bold">{meta}</span>}
           </div>
-          {description && <p className="mt-1.5 max-w-4xl text-xs leading-snug text-zinc-400">{description}</p>}
+          {description && <p className="mt-1.5 max-w-4xl text-xs leading-snug text-admin-text-muted">{description}</p>}
           {safeHighlights.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {safeHighlights.map((item) => (
-                <span key={`${item.label}-${item.value}`} className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                  {item.label}: <span className="text-zinc-100">{item.value}</span>
+                <span key={`${item.label}-${item.value}`} className="rounded border border-admin-border bg-admin-surface-raised px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-admin-text-muted">
+                  {item.label}: <span className="text-admin-text">{item.value}</span>
                 </span>
               ))}
             </div>
@@ -217,13 +217,13 @@ export function AdminRouteSummaryCard({
   className?: string;
 }) {
   const bg: Record<string, string> = {
-    default: 'bg-white border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800',
+    default: 'bg-white border-border dark:bg-admin-surface dark:border-admin-border',
     success: 'bg-emerald-50 border-emerald-200/60 dark:bg-emerald-950/40 dark:border-emerald-800/40',
     warning: 'bg-amber-50 border-amber-200/60 dark:bg-amber-950/40 dark:border-amber-800/40',
     danger: 'bg-rose-50 border-rose-200/60 dark:bg-rose-950/40 dark:border-rose-800/40',
   };
   const valMap: Record<string, string> = {
-    default: 'text-zinc-900 dark:text-zinc-100', success: 'text-emerald-700 dark:text-emerald-400', warning: 'text-amber-700 dark:text-amber-400', danger: 'text-rose-700 dark:text-rose-400',
+    default: 'text-zinc-900 dark:text-admin-text', success: 'text-emerald-700 dark:text-emerald-400', warning: 'text-amber-700 dark:text-amber-400', danger: 'text-rose-700 dark:text-rose-400',
   };
   const icoMap: Record<string, string> = {
     default: 'text-zinc-400', success: 'text-emerald-500', warning: 'text-amber-500', danger: 'text-rose-500',
@@ -233,9 +233,9 @@ export function AdminRouteSummaryCard({
     <div data-slot="summary-card" className={cn('flex items-center gap-3 rounded-xl border px-4 py-3 flex-1 min-w-0 shadow-sm', bg[tone], className)}>
       {renderAdminRouteIcon(icon, cn('h-5 w-5 shrink-0', icoMap[tone]))}
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400 truncate leading-none mb-1">{label}</p>
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-500 dark:text-admin-text-muted truncate leading-none mb-1">{label}</p>
         <p className={cn('text-xl font-black leading-none tabular-nums tracking-tight', valMap[tone])}>{value}</p>
-        {hint && <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 leading-none">{hint}</p>}
+        {hint && <p className="mt-1 text-xs text-zinc-500 dark:text-admin-text-muted leading-none">{hint}</p>}
       </div>
     </div>
   );
@@ -257,12 +257,12 @@ export function AdminRoutePanel({
   contentClassName?: string;
 }) {
   return (
-    <div className={cn('rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden dark:border-zinc-800 dark:bg-zinc-950 flex flex-col', className)}>
+    <div className={cn('rounded-xl border border-border bg-white shadow-sm overflow-hidden dark:border-admin-border dark:bg-admin-surface flex flex-col', className)}>
       {(title || description || actions) && (
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-4 py-2.5 border-b border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/60 dark:bg-zinc-900/40 shrink-0">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-4 py-2.5 border-b border-zinc-100 dark:border-admin-border/60 bg-zinc-50/60 dark:bg-admin-surface-raised/40 shrink-0">
           <div className="flex flex-col">
-            {title && <h2 className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-zinc-600 dark:text-zinc-300 leading-none">{title}</h2>}
-            {description && <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{description}</p>}
+            {title && <h2 className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-zinc-600 dark:text-admin-text-muted leading-none">{title}</h2>}
+            {description && <p className="mt-1 text-xs text-zinc-500 dark:text-admin-text-muted">{description}</p>}
           </div>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
@@ -289,8 +289,8 @@ export function AdminRouteRedirectNotice({
             <Sparkles className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{title}</p>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{description}</p>
+            <p className="text-sm font-bold text-zinc-900 dark:text-admin-text">{title}</p>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-admin-text-muted">{description}</p>
           </div>
         </div>
       </AdminRoutePanel>

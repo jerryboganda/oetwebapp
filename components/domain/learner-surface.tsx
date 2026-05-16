@@ -102,7 +102,7 @@ function renderAction(action: LearnerSurfaceCardModel['primaryAction'] | Learner
   );
 }
 
-export function LearnerSurfaceMetaRow({ items, className }: { items?: LearnerSurfaceMetaItem[]; className?: string }) {
+export function LearnerSurfaceMetaRow({ items, size = 'normal', className }: { items?: LearnerSurfaceMetaItem[]; size?: 'normal' | 'compact'; className?: string }) {
   const safeItems = sanitizeLearnerSurfaceMetaItems(items);
 
   if (safeItems.length === 0) {
@@ -110,19 +110,23 @@ export function LearnerSurfaceMetaRow({ items, className }: { items?: LearnerSur
   }
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-semibold text-muted', className)}>
+    <div className={cn(
+      'flex flex-wrap items-center gap-x-4 gap-y-2',
+      size === 'compact' ? 'text-xs text-muted' : 'text-sm font-semibold text-muted',
+      className,
+    )}>
       {safeItems.map((item) => {
         const Icon = item.icon;
         return (
           <span key={item.label} className="flex items-center gap-1.5">
             {Icon ? (
-              <Icon className="w-4 h-4" />
+              <Icon className={size === 'compact' ? 'w-3 h-3' : 'w-4 h-4'} />
             ) : (
               // Visual-parity fallback: callers that omit `icon` would otherwise
               // render a bare label and look mis-aligned next to sibling cards
               // whose meta items have icons. A small filled bullet keeps the
               // icon-column footprint identical without inventing semantics.
-              <span aria-hidden="true" className="flex h-4 w-4 items-center justify-center">
+              <span aria-hidden="true" className={cn('flex items-center justify-center', size === 'compact' ? 'h-3 w-3' : 'h-4 w-4')}>
                 <span className="block h-1.5 w-1.5 rounded-full bg-current opacity-60" />
               </span>
             )}
@@ -153,7 +157,7 @@ export function LearnerSurfaceSectionHeader({
     <div className={cn('flex flex-col sm:flex-row sm:items-end justify-between gap-4', className)}>
       <div>
         {eyebrow ? (
-          <p className="text-sm font-black text-muted uppercase tracking-widest mb-1.5">{eyebrow}</p>
+          <p className="text-xs font-bold text-muted uppercase tracking-wider mb-1.5">{eyebrow}</p>
         ) : null}
         <div className="flex items-center gap-2">
           {icon ? <span className="text-primary">{renderIcon(icon, 'h-4 w-4')}</span> : null}
@@ -200,7 +204,7 @@ export function LearnerPageHero({
   };
 
   return (
-    <section className="rounded-[20px] border border-border bg-surface px-4 py-4 shadow-sm sm:rounded-[24px] sm:px-6 sm:py-6">
+    <section className="rounded-2xl border border-border bg-surface px-4 py-4 shadow-sm sm:px-6 sm:py-6">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-3 sm:gap-4">
@@ -211,7 +215,7 @@ export function LearnerPageHero({
           ) : null}
             <div className="min-w-0">
               {eyebrow ? <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">{eyebrow}</p> : null}
-              <h1 className="text-xl font-semibold tracking-tight text-navy sm:text-[1.75rem]">{title}</h1>
+              <h1 className="text-xl font-bold tracking-tight text-navy sm:text-[1.75rem]">{title}</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{description}</p>
             </div>
           </div>
@@ -249,7 +253,7 @@ export function LearnerSurfaceCard({
           <div className="flex items-start justify-between gap-3">
             <div>
               {card.eyebrow ? (
-                <div className={cn('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-bold uppercase tracking-wider', palette.eyebrow)}>
+                <div className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-wider', palette.eyebrow)}>
                   {EyebrowIcon ? <EyebrowIcon className="w-3.5 h-3.5" /> : null}
                   {card.eyebrow}
                 </div>

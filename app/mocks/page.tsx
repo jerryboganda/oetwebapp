@@ -342,7 +342,7 @@ export default function MockCenter() {
     primaryAction: {
       label: availableCredits > 0 ? 'Reserve a review' : 'Purchase New Review',
       href: reviewSummary.route ?? '/billing',
-      variant: 'outline',
+      variant: 'primary',
     },
   };
 
@@ -386,7 +386,7 @@ export default function MockCenter() {
         primaryAction: {
           label: 'Open billing',
           href: scoreGuarantee.route ?? '/billing/score-guarantee',
-          variant: 'outline',
+          variant: 'primary',
         },
       }
     : null;
@@ -520,7 +520,7 @@ export default function MockCenter() {
                             href: attempt.resumeRoute,
                           },
                           secondaryAction: attempt.reportRoute
-                            ? { label: 'View report so far', href: attempt.reportRoute, variant: 'outline' }
+                            ? { label: 'View report so far', href: attempt.reportRoute, variant: 'secondary' as const }
                             : undefined,
                         }}
                       />

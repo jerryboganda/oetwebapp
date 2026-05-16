@@ -28,7 +28,7 @@ type LearnerEmptyStateProps = {
 function EmptyStateActionLink({ action, fullWidth = false }: { action: LearnerEmptyStateAction; fullWidth?: boolean }) {
   const variant = action.variant ?? 'primary';
   const sharedClassName = cn(
-    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-[background-color,border-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-[background-color,border-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
     variant === 'primary' && 'bg-primary text-white shadow-sm hover:bg-primary/90',
     variant === 'secondary' && 'bg-navy text-white shadow-sm hover:bg-navy/90',
     variant === 'outline' && 'border border-border text-navy hover:border-border-hover hover:bg-surface',
