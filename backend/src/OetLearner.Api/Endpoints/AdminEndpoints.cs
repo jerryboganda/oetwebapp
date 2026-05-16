@@ -17,6 +17,9 @@ public static class AdminEndpoints
             .RequireAuthorization("AdminOnly")
             .RequireRateLimiting("PerUser");
 
+        // ── Runtime infrastructure settings (Email/Stripe/Sentry/Backup/OAuth/Push) ──
+        admin.MapAdminRuntimeSettings();
+
         // ── Dashboard (any admin) ──────────────────────────────
         admin.MapGet("/dashboard", async (AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetDashboardSummaryAsync(ct)));
