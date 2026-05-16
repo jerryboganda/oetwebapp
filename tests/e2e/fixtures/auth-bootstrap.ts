@@ -658,6 +658,7 @@ export async function hydrateSessionStorage(page: Page, session: AuthSessionResp
   await page.evaluate(
     ({ sessionRecord, localKey, sessionKey, challengeKey }) => {
       window.localStorage.setItem(localKey, JSON.stringify(sessionRecord));
+      window.localStorage.setItem('oet.e2e.keep-tokens', '1');
       window.sessionStorage.removeItem(sessionKey);
       window.sessionStorage.removeItem(challengeKey);
     },
@@ -668,6 +669,34 @@ export async function hydrateSessionStorage(page: Page, session: AuthSessionResp
       challengeKey: mfaChallengeKey,
     },
   );
+}
+
+export async function recoverBrowserSession(
+  page: Page,
+  request: APIRequestContext,
+  role: SeededRole,
+  targetPath: string,
+) {
+  const session = await bootstrapSessionForRole(request, role, undefined, {
+    useDiskCache: false,
+    isolateSession: true,
+  });
+  const frontendCookies = await captureFrontendAuthCookies(request, role);
+  const cookies = [buildAuthIndicatorCookie(session), ...frontendCookies];
+  await page.context().clearCookies({ name: /^(oet_auth|oet_rt|oet_csrf)$/ });
+  await page.context().addCookies(cookies);
+  const currentOrigin = (() => {
+    try {
+      return new URL(page.url()).origin;
+    } catch {
+      return null;
+    }
+  })();
+  if (currentOrigin !== defaultAppOrigin) {
+    await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
+  }
+  await hydrateSessionStorage(page, session);
+  await page.goto(targetPath, { waitUntil: 'domcontentloaded' });
 }
 
 function buildAuthIndicatorCookie(session: AuthSessionResponse) {

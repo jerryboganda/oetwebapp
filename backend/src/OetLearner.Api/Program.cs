@@ -67,6 +67,8 @@ if (!useDevelopmentAuth)
 
 if (!builder.Environment.IsDevelopment())
 {
+    ProductionProviderSafetyValidator.Validate(builder.Configuration, builder.Environment.IsDevelopment());
+
     if (brevoOptions.Enabled)
     {
         if (string.IsNullOrWhiteSpace(brevoOptions.ApiKey)
@@ -209,6 +211,7 @@ builder.Services.AddHttpClient(PasswordPolicyService.HibpHttpClientName, client 
 });
 builder.Services.AddScoped<PasswordPolicyService>();
 builder.Services.AddScoped<ExternalAuthService>();
+builder.Services.AddSingleton<CookieBackedAuthCsrfGuard>();
 
 if (corsOrigins.Length > 0)
 {
@@ -313,6 +316,17 @@ builder.Services.AddRateLimiter(options =>
         return RateLimitPartition.GetFixedWindowLimiter($"auth-refresh-{key}", _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = authRefreshPermit,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
+    });
+    var devicePairingRedeemPermit = builder.Environment.IsDevelopment() ? 100 : 5;
+    options.AddPolicy("DevicePairingRedeem", httpContext =>
+    {
+        var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"device-pair-{key}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = devicePairingRedeemPermit,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         });
@@ -548,6 +562,15 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminAiConfig", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "ai_config", "system_admin")));
+    options.AddPolicy("AdminFeatureFlags", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "feature_flags", "system_admin")));
+    options.AddPolicy("AdminAuditLogs", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "audit_logs", "system_admin")));
+    options.AddPolicy("AdminManagePermissions", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "manage_permissions", "system_admin")));
     options.AddPolicy("AdminSystemAdmin", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "system_admin")));
@@ -630,6 +653,7 @@ builder.Services.AddScoped<ExpertCompensationService>();
 builder.Services.AddScoped<AdminAlertService>();
 builder.Services.AddScoped<LearnerActionsService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<ILaunchReadinessService, LaunchReadinessService>();
 builder.Services.AddScoped<SponsorService>();
 builder.Services.AddScoped<ContentHierarchyService>();
 builder.Services.AddScoped<ContentDeduplicationService>();
@@ -1261,7 +1285,7 @@ app.UseAuthorization();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "OET Learner API", timestamp = DateTimeOffset.UtcNow, check = "live" }))
     .AllowAnonymous();
-app.MapGet("/health/ready", async (LearnerDbContext db, IOptions<StorageOptions> storageOptions, CancellationToken ct) =>
+app.MapGet("/health/ready", async (LearnerDbContext db, IOptions<StorageOptions> storageOptions, ILoggerFactory loggerFactory, CancellationToken ct) =>
 {
     try
     {
@@ -1272,6 +1296,13 @@ app.MapGet("/health/ready", async (LearnerDbContext db, IOptions<StorageOptions>
         var dbOk = db.Database.IsInMemory() || await db.Database.CanConnectAsync(ct);
         checks["database"] = dbOk ? "ok" : "unavailable";
         if (!dbOk) healthy = false;
+
+        if (dbOk && !db.Database.IsInMemory())
+        {
+            var pendingMigrations = (await db.Database.GetPendingMigrationsAsync(ct)).Take(1).ToArray();
+            checks["migrations"] = pendingMigrations.Length == 0 ? "ok" : "pending";
+            if (pendingMigrations.Length > 0) healthy = false;
+        }
 
         // Stuck jobs detection (processing for > 10 minutes)
         if (dbOk && !db.Database.IsInMemory())
@@ -1325,7 +1356,15 @@ app.MapGet("/health/ready", async (LearnerDbContext db, IOptions<StorageOptions>
     }
     catch (Exception ex)
     {
-        return Results.Json(new { status = "failed", service = "OET Learner API", database = "error", message = ex.Message, timestamp = DateTimeOffset.UtcNow }, statusCode: StatusCodes.Status503ServiceUnavailable);
+        loggerFactory.CreateLogger("Health.Ready").LogWarning(ex, "Readiness health check failed.");
+        return Results.Json(new
+        {
+            status = "failed",
+            service = "OET Learner API",
+            checks = new { readiness = "unavailable" },
+            timestamp = DateTimeOffset.UtcNow,
+            check = "ready"
+        }, statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 }).AllowAnonymous();
 app.MapGet("/health", async (LearnerDbContext db, CancellationToken ct) =>
@@ -1346,6 +1385,7 @@ app.MapExpertMessagingEndpoints();
 app.MapExpertCompensationEndpoints();
 app.MapAdminEndpoints();
 app.MapAdminAlertEndpoints();
+app.MapAdminLaunchReadinessEndpoints();
 app.MapAiUsageAdminEndpoints();
 app.MapAiEscalationAdminEndpoints();
 app.MapAiToolsAdminEndpoints();

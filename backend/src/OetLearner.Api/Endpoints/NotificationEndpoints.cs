@@ -106,10 +106,12 @@ public static class NotificationEndpoints
             .RequireRateLimiting("PerUser");
 
         admin.MapGet("/catalog", async (NotificationService service, CancellationToken ct)
-            => Results.Ok(await service.GetAdminCatalogAsync(ct)));
+            => Results.Ok(await service.GetAdminCatalogAsync(ct)))
+            .WithAdminRead("AdminSystemAdmin");
 
         admin.MapGet("/policies", async (NotificationService service, CancellationToken ct)
-            => Results.Ok(await service.GetAdminPoliciesAsync(ct)));
+            => Results.Ok(await service.GetAdminPoliciesAsync(ct)))
+            .WithAdminRead("AdminSystemAdmin");
 
         admin.MapPut("/policies/{audienceRole}/{eventKey}", async (
             HttpContext http,
@@ -119,7 +121,7 @@ public static class NotificationEndpoints
             NotificationService service,
             CancellationToken ct) =>
             Results.Ok(await service.UpdateAdminPolicyAsync(http.AdminId(), http.AdminName(), audienceRole, eventKey, request, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminSystemAdmin");
 
         admin.MapDelete("/policies/{audienceRole}/{eventKey}", async (
             HttpContext http,
@@ -128,10 +130,11 @@ public static class NotificationEndpoints
             NotificationService service,
             CancellationToken ct) =>
             Results.Ok(await service.ResetAdminPolicyOverrideAsync(http.AdminId(), http.AdminName(), audienceRole, eventKey, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminSystemAdmin");
 
         admin.MapGet("/health", async (NotificationService service, CancellationToken ct)
-            => Results.Ok(await service.GetAdminHealthAsync(ct)));
+            => Results.Ok(await service.GetAdminHealthAsync(ct)))
+            .WithAdminRead("AdminSystemAdmin");
 
         admin.MapGet("/deliveries", async (
             NotificationService service,
@@ -142,7 +145,8 @@ public static class NotificationEndpoints
             [FromQuery] string? channel = null,
             [FromQuery] string? audienceRole = null,
             [FromQuery] string? eventKey = null) =>
-            Results.Ok(await service.GetAdminDeliveriesAsync(page, pageSize, status, channel, audienceRole, eventKey, ct)));
+            Results.Ok(await service.GetAdminDeliveriesAsync(page, pageSize, status, channel, audienceRole, eventKey, ct)))
+            .WithAdminRead("AdminSystemAdmin");
 
         admin.MapGet("/consents", async (
             NotificationService service,
@@ -151,7 +155,8 @@ public static class NotificationEndpoints
             [FromQuery] int pageSize = 20,
             [FromQuery] string? authAccountId = null,
             [FromQuery] string? channel = null) =>
-            Results.Ok(await service.GetAdminConsentsAsync(page, pageSize, authAccountId, channel, ct)));
+            Results.Ok(await service.GetAdminConsentsAsync(page, pageSize, authAccountId, channel, ct)))
+            .WithAdminRead("AdminSystemAdmin");
 
         admin.MapPut("/consents/{authAccountId}/{channel}", async (
             HttpContext http,
@@ -161,7 +166,7 @@ public static class NotificationEndpoints
             NotificationService service,
             CancellationToken ct) =>
             Results.Ok(await service.SetAdminConsentAsync(http.AdminId(), http.AdminName(), authAccountId, channel, request, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminSystemAdmin");
 
         admin.MapGet("/suppressions", async (
             NotificationService service,
@@ -171,7 +176,8 @@ public static class NotificationEndpoints
             [FromQuery] string? authAccountId = null,
             [FromQuery] string? channel = null,
             [FromQuery] bool activeOnly = true) =>
-            Results.Ok(await service.GetAdminSuppressionsAsync(page, pageSize, authAccountId, channel, activeOnly, ct)));
+            Results.Ok(await service.GetAdminSuppressionsAsync(page, pageSize, authAccountId, channel, activeOnly, ct)))
+            .WithAdminRead("AdminSystemAdmin");
 
         admin.MapPost("/suppressions", async (
             HttpContext http,
@@ -179,7 +185,7 @@ public static class NotificationEndpoints
             NotificationService service,
             CancellationToken ct) =>
             Results.Ok(await service.CreateAdminSuppressionAsync(http.AdminId(), http.AdminName(), request, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminSystemAdmin");
 
         admin.MapDelete("/suppressions/{suppressionId:guid}", async (
             HttpContext http,
@@ -187,7 +193,7 @@ public static class NotificationEndpoints
             NotificationService service,
             CancellationToken ct) =>
             Results.Ok(await service.ReleaseAdminSuppressionAsync(http.AdminId(), http.AdminName(), suppressionId, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminSystemAdmin");
 
         admin.MapPost("/test-email", async (
             HttpContext http,
@@ -197,7 +203,7 @@ public static class NotificationEndpoints
         {
             await service.SendTestEmailAsync(http.AdminId(), http.AdminName(), request, ct);
             return Results.Ok(new { ok = true });
-        }).RequireRateLimiting("PerUserWrite");
+        }).WithAdminWrite("AdminSystemAdmin");
 
         admin.MapPost("/proof/trigger", async (
             HttpContext http,
@@ -205,7 +211,7 @@ public static class NotificationEndpoints
             NotificationService service,
             CancellationToken ct) =>
             Results.Ok(await service.TriggerProofNotificationAsync(http.AdminId(), http.AdminName(), request, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminSystemAdmin");
 
         return app;
     }

@@ -14,12 +14,16 @@ export interface ListeningSectionStepperProps {
   sections: ListeningSectionCode[];
   currentIndex: number;
   isReviewing: boolean;
+  freeNavigation?: boolean;
+  onSelectSection?: (index: number) => void;
 }
 
 export function ListeningSectionStepper({
   sections,
   currentIndex,
   isReviewing,
+  freeNavigation = false,
+  onSelectSection,
 }: ListeningSectionStepperProps) {
   return (
     <div
@@ -29,7 +33,9 @@ export function ListeningSectionStepper({
     >
       {sections.map((code, idx) => {
         const state =
-          idx < currentIndex
+          freeNavigation && idx !== currentIndex
+            ? 'available'
+            : idx < currentIndex
             ? 'locked'
             : idx === currentIndex
               ? isReviewing
@@ -38,40 +44,65 @@ export function ListeningSectionStepper({
               : 'pending';
         const stateLabel = state === 'locked'
           ? 'locked'
+          : state === 'available'
+            ? 'available'
           : state === 'active'
             ? 'active section'
             : state === 'reviewing'
               ? 'review window'
               : 'pending';
         const label = LISTENING_SECTION_SHORT_LABEL[code];
-        return (
-          <span
-            key={code}
-            role="listitem"
-            data-state={state}
-            aria-current={idx === currentIndex ? 'step' : undefined}
-            aria-label={`${label}, ${stateLabel}`}
-            className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 ${
-              state === 'locked'
-                ? 'bg-background-light text-muted/60'
-                : state === 'active'
-                  ? 'bg-primary text-white'
-                  : state === 'reviewing'
-                    ? 'bg-warning/10 text-warning'
-                    : 'bg-background-light text-muted'
-            }`}
-          >
+        const className = `inline-flex items-center gap-1 rounded-full px-3 py-1.5 ${
+          state === 'locked'
+            ? 'bg-background-light text-muted/60'
+            : state === 'active'
+              ? 'bg-primary text-white'
+              : state === 'reviewing'
+                ? 'bg-warning/10 text-warning'
+                : state === 'available'
+                  ? 'bg-info/10 text-info hover:bg-info/20'
+                  : 'bg-background-light text-muted'
+        }`;
+        const content = (
+          <>
             {state === 'locked' ? (
               <Lock className="h-3 w-3" aria-hidden="true" />
             ) : state === 'reviewing' ? (
               <Timer className="h-3 w-3" aria-hidden="true" />
             ) : null}
             {label}
+          </>
+        );
+        return (
+          <span key={code} role="listitem">
+            {freeNavigation ? (
+              <button
+                type="button"
+                data-state={state}
+                aria-current={idx === currentIndex ? 'step' : undefined}
+                aria-label={`${label}, ${stateLabel}`}
+                className={className}
+                onClick={() => onSelectSection?.(idx)}
+              >
+                {content}
+              </button>
+            ) : (
+              <span
+                data-state={state}
+                aria-current={idx === currentIndex ? 'step' : undefined}
+                aria-label={`${label}, ${stateLabel}`}
+                className={className}
+              >
+                {content}
+              </span>
+            )}
           </span>
         );
       })}
       <span className="ml-auto hidden text-[10px] normal-case tracking-normal text-muted sm:inline">
-        Forward-only — completed sections cannot be revisited.
+        {freeNavigation
+          ? 'Paper simulation — jump between available sections.'
+          : 'Forward-only — completed sections cannot be revisited.'}
       </span>
     </div>
   );

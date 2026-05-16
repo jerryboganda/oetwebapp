@@ -23,15 +23,39 @@ import { analytics } from '@/lib/analytics';
 import type { CriteriaDelta } from '@/lib/mock-data';
 import { computeImprovementScore } from '@/lib/writing-revision/improvement-score';
 
+type RevisionState = {
+  resultId: string;
+  deltas: CriteriaDelta[];
+  originalText: string;
+  revisedText: string;
+  unresolvedIssues: string[];
+  loading: boolean;
+  error: string | null;
+};
+
+const EMPTY_DELTAS: CriteriaDelta[] = [];
+const EMPTY_UNRESOLVED_ISSUES: string[] = [];
+
 export default function WritingRevisionMode() {
   const searchParams = useSearchParams();
-  const resultId = searchParams?.get('id') ?? 'we-001';
-  const [deltas, setDeltas] = useState<CriteriaDelta[]>([]);
-  const [originalText, setOriginalText] = useState('');
-  const [revisedText, setRevisedText] = useState('');
-  const [unresolvedIssues, setUnresolvedIssues] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const resultId = searchParams?.get('id') ?? '';
+  const missingRevisionMessage = 'Revision unavailable. Open a completed Writing result first.';
+  const [revisionState, setRevisionState] = useState<RevisionState>({
+    resultId,
+    deltas: [],
+    originalText: '',
+    revisedText: '',
+    unresolvedIssues: [],
+    loading: resultId.length > 0,
+    error: null,
+  });
+  const isCurrentResult = revisionState.resultId === resultId;
+  const deltas = isCurrentResult ? revisionState.deltas : EMPTY_DELTAS;
+  const originalText = isCurrentResult ? revisionState.originalText : '';
+  const revisedText = isCurrentResult ? revisionState.revisedText : '';
+  const unresolvedIssues = isCurrentResult ? revisionState.unresolvedIssues : EMPTY_UNRESOLVED_ISSUES;
+  const loading = resultId.length > 0 && (!isCurrentResult || revisionState.loading);
+  const error = !resultId ? missingRevisionMessage : isCurrentResult ? revisionState.error : null;
 
   const improvement = useMemo(
     () => computeImprovementScore({ deltas, unresolvedIssuesCount: unresolvedIssues.length }),
@@ -39,16 +63,39 @@ export default function WritingRevisionMode() {
   );
 
   useEffect(() => {
+    if (!resultId) {
+      return;
+    }
+    let active = true;
     analytics.track('content_view', { content: 'revision', resultId, subtest: 'writing' });
     fetchWritingRevisionData(resultId)
       .then((data) => {
-        setDeltas(data.deltas);
-        setOriginalText(data.originalText);
-        setRevisedText(data.revisedText);
-        setUnresolvedIssues(data.unresolvedIssues);
+        if (!active) return;
+        setRevisionState({
+          resultId,
+          deltas: data.deltas,
+          originalText: data.originalText,
+          revisedText: data.revisedText,
+          unresolvedIssues: data.unresolvedIssues,
+          loading: false,
+          error: null,
+        });
       })
-      .catch(() => setError('Failed to load revision data. Please try again.'))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!active) return;
+        setRevisionState({
+          resultId,
+          deltas: [],
+          originalText: '',
+          revisedText: '',
+          unresolvedIssues: [],
+          loading: false,
+          error: 'Failed to load revision data. Please try again.',
+        });
+      });
+    return () => {
+      active = false;
+    };
   }, [resultId]);
 
   useEffect(() => {

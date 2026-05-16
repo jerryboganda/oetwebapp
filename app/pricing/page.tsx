@@ -14,31 +14,11 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-
-interface Plan {
-  planId: string;
-  code: string;
-  label: string;
-  tier: string;
-  description: string;
-  price: { amount: number; currency: string; interval: string };
-  reviewCredits: number;
-  mockReportsIncluded: boolean;
-  includedSubtests: string[];
-  trialDays: number;
-  isRenewable: boolean;
-  changeDirection: string;
-}
-
-async function fetchPublicPlans(): Promise<{ items: Plan[] }> {
-  const res = await fetch('/v1/public/plans', { cache: 'no-store' });
-  if (!res.ok) throw new Error('Failed to load plans');
-  return res.json();
-}
+import { fetchPublicPlans, type PublicBillingPlan } from '@/lib/api';
 
 export default function PricingPage() {
   const reducedMotion = useReducedMotion();
-  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plans, setPlans] = useState<PublicBillingPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,11 +39,11 @@ export default function PricingPage() {
           transition={{ duration: 0.5 }}
         >
           <h1 className="mx-auto max-w-3xl text-4xl font-black tracking-tight text-navy sm:text-5xl">
-            Prepare for OET, IELTS & PTE with confidence
+            Prepare for OET with confidence
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-muted">
-            AI-powered practice, expert tutor reviews, and personalised study plans
-            — all in one place.
+            OET practice, expert tutor reviews, and personalised study planning
+            with plan details loaded from the billing backend.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-sm text-muted">
             <span className="inline-flex items-center gap-1.5">
@@ -97,6 +77,10 @@ export default function PricingPage() {
           ) : error ? (
             <div className="rounded-2xl border border-border bg-surface p-8 text-center text-muted">
               {error}
+            </div>
+          ) : plans.length === 0 ? (
+            <div className="rounded-2xl border border-border bg-surface p-8 text-center text-muted">
+              OET plan details are not available right now. Please register or contact support for current launch access.
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-3">
@@ -200,14 +184,14 @@ export default function PricingPage() {
       <section className="border-t border-border bg-surface px-4 py-20">
         <div className="mx-auto max-w-6xl">
           <h2 className="text-center text-2xl font-black text-navy">
-            Everything you need to pass
+            OET preparation tools in one place
           </h2>
           <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {[
               {
                 icon: FilePenLine,
                 title: 'Writing practice',
-                desc: 'Letter & essay tasks with AI scoring against official rubrics.',
+                desc: 'Letter tasks with criteria-aware feedback and revision guidance.',
               },
               {
                 icon: Mic,
@@ -226,8 +210,8 @@ export default function PricingPage() {
               },
               {
                 icon: ShieldCheck,
-                title: 'Score guarantee',
-                desc: 'Conditional score-back pledge for qualifying subscribers.',
+                title: 'Billing support',
+                desc: 'Subscription and wallet questions are handled through support-backed billing workflows.',
               },
               {
                 icon: Star,
@@ -265,15 +249,15 @@ export default function PricingPage() {
       <section className="px-4 py-20 text-center">
         <div className="mx-auto max-w-2xl">
           <h2 className="text-3xl font-black text-navy">
-            Start your free trial today
+            Start preparing for OET
           </h2>
           <p className="mt-3 text-muted">
-            No credit card required. Cancel anytime.
+            Create an account to see available OET practice and any server-published billing options.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Link href="/register">
               <Button variant="primary" size="lg">
-                Create free account
+                Create account
                 <ArrowRight className="ml-1.5 h-4 w-4" />
               </Button>
             </Link>

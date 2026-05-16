@@ -87,24 +87,12 @@ export default function ReadinessCenter() {
 
   // ── Risk Gauge Data ──
   const apiRiskPercent = riskData?.riskProbability;
-  const riskPercent =
-    typeof apiRiskPercent === 'number' ? apiRiskPercent :
-    data.overallRisk === 'High' ? 82 :
-    data.overallRisk === 'Moderate' ? 52 :
-    22;
-  const needleAngle = Math.PI * (1 - riskPercent / 100);
-  const needleX = 100 + 80 * Math.cos(needleAngle);
-  const needleY = 100 - 80 * Math.sin(needleAngle);
+  const riskPercent = typeof apiRiskPercent === 'number' ? apiRiskPercent : null;
+  const needleAngle = riskPercent == null ? null : Math.PI * (1 - riskPercent / 100);
+  const needleX = needleAngle == null ? null : 100 + 80 * Math.cos(needleAngle);
+  const needleY = needleAngle == null ? null : 100 - 80 * Math.sin(needleAngle);
 
   interface RiskFactor { label: string; severity: 'high' | 'medium' | 'low'; impact: number; description: string }
-  const weakest = data.subTests.find((t) => t.isWeakest);
-
-  const localRiskFactors: RiskFactor[] = [
-    { label: 'Practice Consistency', severity: data.overallRisk === 'High' ? 'high' : data.overallRisk === 'Moderate' ? 'medium' : 'low', impact: data.overallRisk === 'High' ? 85 : data.overallRisk === 'Moderate' ? 55 : 25, description: 'Steady daily practice reduces overall risk substantially.' },
-    { label: weakest ? `${weakest.name} Gap` : 'Sub-test Balance', severity: weakest && weakest.readiness < 50 ? 'high' : 'medium', impact: weakest ? Math.max(0, 100 - weakest.readiness) : 30, description: weakest ? `${weakest.name} readiness is ${weakest.readiness}% against a ${weakest.target}% target.` : 'Sub-tests are relatively balanced.' },
-    { label: 'Mock Test Frequency', severity: data.evidence.mocksCompleted < 2 ? 'high' : data.evidence.mocksCompleted < 5 ? 'medium' : 'low', impact: data.evidence.mocksCompleted < 2 ? 75 : data.evidence.mocksCompleted < 5 ? 45 : 15, description: `${data.evidence.mocksCompleted} mock tests completed; full mocks are the strongest readiness signal.` },
-    { label: 'Time Remaining', severity: data.weeksRemaining <= 3 ? 'high' : data.weeksRemaining <= 6 ? 'medium' : 'low', impact: data.weeksRemaining <= 3 ? 90 : data.weeksRemaining <= 6 ? 50 : 20, description: `${data.weeksRemaining} weeks until exam date.` },
-  ];
   const riskFactors: RiskFactor[] = riskData?.factors?.length
     ? riskData.factors.map((f) => ({
         label: f.label,
@@ -112,7 +100,7 @@ export default function ReadinessCenter() {
         impact: f.impact,
         description: f.description,
       }))
-    : localRiskFactors;
+    : [];
 
   return (
     <LearnerDashboardShell
@@ -160,16 +148,22 @@ export default function ReadinessCenter() {
                     </linearGradient>
                   </defs>
                   <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="var(--color-border)" strokeWidth="14" strokeLinecap="round" />
-                  <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#gaugeGrad)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${251 * (riskPercent / 100)} 251`} />
-                  <circle cx={needleX} cy={needleY} r="6" fill="var(--color-navy)" stroke="var(--color-surface)" strokeWidth="2" />
-                  <text x="100" y="95" textAnchor="middle" className="fill-navy text-2xl font-black">{riskPercent}%</text>
+                  {riskPercent == null ? null : (
+                    <>
+                      <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#gaugeGrad)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${251 * (riskPercent / 100)} 251`} />
+                      <circle cx={needleX ?? 0} cy={needleY ?? 0} r="6" fill="var(--color-navy)" stroke="var(--color-surface)" strokeWidth="2" />
+                    </>
+                  )}
+                  <text x="100" y="95" textAnchor="middle" className="fill-navy text-xl font-black">{riskPercent == null ? 'Unavailable' : `${riskPercent}%`}</text>
                   <text x="100" y="112" textAnchor="middle" className="fill-muted text-[10px] font-bold uppercase tracking-widest">probability</text>
                 </svg>
               </div>
 
               <h2 className="text-3xl font-black mb-2 text-center text-navy">{data.overallRisk} Risk</h2>
               <p className="text-muted text-sm leading-relaxed text-center max-w-sm mx-auto">
-                With {data.weeksRemaining} weeks remaining until your exam, you are at a {data.overallRisk.toLowerCase()} risk of not meeting your target scores.
+                {riskPercent == null
+                  ? 'Target-date probability is unavailable until the readiness risk service returns an estimate.'
+                  : `With ${data.weeksRemaining} weeks remaining until your exam, the backend estimate is ${riskPercent}%.`}
               </p>
             </div>
           </MotionSection>
@@ -205,8 +199,12 @@ export default function ReadinessCenter() {
               </span>
               <span className="text-xs font-black uppercase tracking-widest text-muted">Risk Factors</span>
             </div>
-            <div className="space-y-4">
-              {riskFactors.map((factor) => {
+              <div className="space-y-4">
+                {riskFactors.length === 0 ? (
+                  <p className="text-sm leading-6 text-muted">
+                    Risk factors are unavailable until the backend returns an evidence-backed breakdown.
+                  </p>
+                ) : riskFactors.map((factor) => {
                 const sevToken =
                   factor.severity === 'high'   ? { chip: 'bg-danger/10 text-danger',   bar: 'bg-danger' } :
                   factor.severity === 'medium' ? { chip: 'bg-warning/10 text-warning', bar: 'bg-warning' } :

@@ -7,10 +7,9 @@ on:
         description: "Named deploy approver"
         required: true
         type: string
-      evidence_bundle_dir:
-        description: "Evidence bundle directory already present in the production checkout"
+      target_sha:
+        description: "Full 40-character Git SHA to deploy. A release-evidence-<sha> artifact must already exist."
         required: true
-        default: "release-evidence"
         type: string
       reading_media_smoke_ack:
         description: "I confirm the deploy-gate Reading/media smoke checklist is ready to run after deploy"
@@ -22,7 +21,9 @@ concurrency:
   group: production-deploy
   cancel-in-progress: true
 
-permissions: {}
+permissions:
+  actions: read
+  contents: read
 
 jobs:
   deploy:
@@ -36,7 +37,7 @@ jobs:
         env:
           APPROVER: ${{ inputs.approver }}
           READING_MEDIA_SMOKE_ACK: ${{ inputs.reading_media_smoke_ack }}
-          EVIDENCE_BUNDLE_DIR: ${{ inputs.evidence_bundle_dir }}
+          TARGET_SHA: ${{ inputs.target_sha }}
         run: |
           if [ "$APPROVER" != "Dr Faisal Maqsood" ]; then
             echo "Production deploy approver must be Dr Faisal Maqsood." >&2
@@ -46,12 +47,16 @@ jobs:
             echo "Reading/media smoke checklist acknowledgement is required." >&2
             exit 1
           fi
-          case "$EVIDENCE_BUNDLE_DIR" in
-            ""|.*|*/*|*\\*|*..*|*[!A-Za-z0-9._-]*)
-              echo "Evidence bundle directory must be a simple relative directory name." >&2
+          case "$TARGET_SHA" in
+            *[!0-9a-fA-F]*)
+              echo "target_sha must be hexadecimal." >&2
               exit 1
               ;;
           esac
+          if [ "${#TARGET_SHA}" -ne 40 ]; then
+            echo "target_sha must be a full 40-character SHA." >&2
+            exit 1
+          fi
 
       - name: Check deployment secrets
         id: secrets
@@ -72,18 +77,80 @@ jobs:
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Download exact-SHA release evidence
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          run_ids=$(gh run list \
+            --workflow verify-release-artifacts.yml \
+            --commit "$TARGET_SHA" \
+            --status success \
+            --limit 20 \
+            --json databaseId \
+            --jq '.[].databaseId')
+          if [ -z "$run_ids" ]; then
+            echo "No successful verify-release-artifacts.yml run found for $TARGET_SHA." >&2
+            exit 1
+          fi
+          found=false
+          for run_id in $run_ids; do
+            rm -rf "release-evidence-${TARGET_SHA}"
+            if gh run download "$run_id" \
+              --name "release-evidence-production-${TARGET_SHA}" \
+              --dir "release-evidence-${TARGET_SHA}"; then
+              found=true
+              break
+            fi
+          done
+          if [ "$found" != "true" ]; then
+            echo "No production release evidence artifact found for $TARGET_SHA." >&2
+            exit 1
+          fi
+          tar -czf "release-evidence-${TARGET_SHA}.tar.gz" "release-evidence-${TARGET_SHA}"
+
       - name: Fail deploy when secrets are missing
         if: steps.secrets.outputs.enabled != 'true'
         run: |
           echo "Production deploy secrets are not configured; refusing to produce a green no-op deploy." >&2
           exit 1
 
+      - name: Copy release evidence to VPS
+        if: steps.secrets.outputs.enabled == 'true'
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          VPS_PORT: ${{ steps.secrets.outputs.port }}
+          VPS_SSH_FINGERPRINT: ${{ vars.VPS_SSH_FINGERPRINT }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/oet-production
+          chmod 600 ~/.ssh/oet-production
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" > ~/.ssh/known_hosts 2>/dev/null
+          if ! ssh-keygen -E sha256 -lf ~/.ssh/known_hosts | grep -F "$VPS_SSH_FINGERPRINT" >/dev/null; then
+            echo "VPS SSH fingerprint mismatch; refusing deploy." >&2
+            exit 1
+          fi
+          ssh -i ~/.ssh/oet-production -p "$VPS_PORT" -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            "set -euo pipefail; cd '$VPS_APP_DIR'; rm -rf 'release-evidence-${TARGET_SHA}' 'release-evidence-${TARGET_SHA}.tar.gz'"
+          scp -i ~/.ssh/oet-production -P "$VPS_PORT" -o StrictHostKeyChecking=yes \
+            "release-evidence-${TARGET_SHA}.tar.gz" \
+            "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/release-evidence-${TARGET_SHA}.tar.gz"
+          ssh -i ~/.ssh/oet-production -p "$VPS_PORT" -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            "set -euo pipefail; cd '$VPS_APP_DIR'; tar -xzf 'release-evidence-${TARGET_SHA}.tar.gz'; rm -f 'release-evidence-${TARGET_SHA}.tar.gz'"
+
       - name: Deploy over SSH
         if: steps.secrets.outputs.enabled == 'true'
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
         env:
           VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
-          EVIDENCE_BUNDLE_DIR: ${{ inputs.evidence_bundle_dir }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          EVIDENCE_BUNDLE_DIR: release-evidence-${{ inputs.target_sha }}
           EVIDENCE_SIGNER_FINGERPRINT: ${{ vars.EVIDENCE_SIGNER_FINGERPRINT }}
           APP_PUBLIC_URL: https://app.oetwithdrhesham.co.uk
           API_PUBLIC_URL: https://api.oetwithdrhesham.co.uk
@@ -96,7 +163,7 @@ jobs:
           fingerprint: ${{ vars.VPS_SSH_FINGERPRINT }}
           command_timeout: 30m
           script_stop: true
-          envs: VPS_APP_DIR,EVIDENCE_BUNDLE_DIR,EVIDENCE_SIGNER_FINGERPRINT,APP_PUBLIC_URL,API_PUBLIC_URL,READING_MEDIA_SMOKE_ACK
+          envs: VPS_APP_DIR,TARGET_SHA,EVIDENCE_BUNDLE_DIR,EVIDENCE_SIGNER_FINGERPRINT,APP_PUBLIC_URL,API_PUBLIC_URL,READING_MEDIA_SMOKE_ACK
           script: |
             set -eo pipefail
             echo "[ci] SSH connected at $(date -u)"
@@ -106,6 +173,6 @@ jobs:
               exit 1
             fi
             echo "[ci] running gated deploy wrapper..."
-            VPS_APP_DIR="$VPS_APP_DIR" EVIDENCE_DIR="$EVIDENCE_BUNDLE_DIR" EVIDENCE_SIGNER_FINGERPRINT="$EVIDENCE_SIGNER_FINGERPRINT" APP_PUBLIC_URL="$APP_PUBLIC_URL" API_PUBLIC_URL="$API_PUBLIC_URL" bash ./scripts/deploy/deploy-prod.sh
+            VPS_APP_DIR="$VPS_APP_DIR" DEPLOY_REF="$TARGET_SHA" EVIDENCE_DIR="$EVIDENCE_BUNDLE_DIR" EVIDENCE_SIGNER_FINGERPRINT="$EVIDENCE_SIGNER_FINGERPRINT" APP_PUBLIC_URL="$APP_PUBLIC_URL" API_PUBLIC_URL="$API_PUBLIC_URL" bash ./scripts/deploy/deploy-prod.sh
             echo "[ci] deploy-gate Reading/media smoke acknowledgement: $READING_MEDIA_SMOKE_ACK"
             echo "[ci] SSH session complete at $(date -u)"

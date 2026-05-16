@@ -1663,7 +1663,10 @@ export async function fetchWritingSubmissions(): Promise<WritingSubmission[]> {
 
 export async function fetchCriteriaDeltas(): Promise<CriteriaDelta[]> {
   const writingSubmissions = await fetchWritingSubmissions();
-  const latest = writingSubmissions[0]?.id ?? 'we-001';
+  const latest = writingSubmissions[0]?.id;
+  if (!latest) {
+    return [];
+  }
   const result = await fetchWritingResult(latest);
   return result.criteria.map((criterion) => ({
     name: criterion.name,
@@ -3339,6 +3342,25 @@ export async function fetchSubmissionComparison(leftId?: string, rightId?: strin
   };
 }
 
+export interface PublicBillingPlan {
+  planId: string;
+  code: string;
+  label: string;
+  tier: string;
+  description: string;
+  price: { amount: number; currency: string; interval: string };
+  reviewCredits: number;
+  mockReportsIncluded: boolean;
+  includedSubtests: string[];
+  trialDays: number;
+  isRenewable: boolean;
+  changeDirection: string;
+}
+
+export async function fetchPublicPlans(): Promise<{ items: PublicBillingPlan[] }> {
+  return apiRequest('/v1/public/plans');
+}
+
 export async function fetchBilling(): Promise<BillingData> {
   const [summary, invoices, plans, extras] = await Promise.all([
     apiRequest<ApiRecord>('/v1/billing/summary'),
@@ -3655,19 +3677,9 @@ export async function startDiagnostic(): Promise<DiagnosticSession> {
   };
 }
 
-const LEGACY_DIAGNOSTIC_TASK_IDS: Record<SubTest, string> = {
-  Writing: 'wt-001',
-  Speaking: 'st-001',
-  Reading: 'rt-001',
-  Listening: 'lt-001',
-};
-
 /**
  * Fetches the diagnostic task ID for a given sub-test.
- * Tries the backend diagnostic content endpoint first; falls back to legacy
- * hardcoded IDs if the endpoint is unavailable or returns no task.
- *
- * TODO: Remove legacy fallback once /v1/diagnostic/tasks is fully deployed.
+ * Fails closed if the backend has not published a real diagnostic task.
  */
 export async function fetchDiagnosticTaskId(subTest: SubTest): Promise<string> {
   try {
@@ -3675,12 +3687,10 @@ export async function fetchDiagnosticTaskId(subTest: SubTest): Promise<string> {
     const taskId = response.taskId ?? response.contentId ?? null;
     if (taskId) return String(taskId);
   } catch {
-    // Backend endpoint may lag behind static diagnostic fixtures during deploy.
+    // Fail closed below; learner-facing diagnostics must not use demo IDs.
   }
 
-  const fallback = LEGACY_DIAGNOSTIC_TASK_IDS[subTest];
-  console.warn(`[Diagnostic] Dynamic task endpoint unavailable for ${subTest}. Using legacy fallback ${fallback}.`);
-  return fallback;
+  throw new Error(`Diagnostic ${subTest} task is unavailable.`);
 }
 
 export async function fetchDiagnosticResults(): Promise<DiagnosticResult[]> {
@@ -8211,6 +8221,61 @@ export async function fetchAdminConversationSettings() {
 
 export async function updateAdminConversationSettings(body: Record<string, unknown>) {
   return apiRequest('/v1/admin/conversation/settings', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export interface AdminLaunchReadinessSettings {
+  mobileMinSupportedVersion: string;
+  mobileLatestVersion: string;
+  mobileForceUpdate: boolean;
+  iosAppStoreUrl: string | null;
+  androidPlayStoreUrl: string | null;
+  iosBundleId: string | null;
+  appleTeamId: string | null;
+  appleAssociatedDomainStatus: string | null;
+  appleUniversalLinksStatus: string | null;
+  iosSigningProfileReference: string | null;
+  iosIapStatus: string | null;
+  iosPushStatus: string | null;
+  androidPackageName: string | null;
+  androidSha256Fingerprints: string | null;
+  androidSigningKeyReference: string | null;
+  androidAssetLinksStatus: string | null;
+  androidIapStatus: string | null;
+  androidPushStatus: string | null;
+  desktopMinSupportedVersion: string;
+  desktopLatestVersion: string;
+  desktopForceUpdate: boolean;
+  desktopUpdateFeedUrl: string | null;
+  desktopUpdateChannel: string | null;
+  windowsSigningStatus: string | null;
+  macSigningStatus: string | null;
+  linuxSigningStatus: string | null;
+  deviceValidationEvidenceUrl: string | null;
+  deviceValidationNotes: string | null;
+  realtimeLegalApprovalStatus: string | null;
+  realtimePrivacyApprovalStatus: string | null;
+  realtimeProtectedSmokeStatus: string | null;
+  realtimeEvidenceUrl: string | null;
+  realtimeSpendCapApproved: boolean;
+  realtimeTopologyApproved: boolean;
+  releaseOwnerApprovalStatus: string | null;
+  launchNotes: string | null;
+  updatedAt: string;
+  updatedByAdminId: string | null;
+  updatedByAdminName: string | null;
+}
+
+export async function fetchAdminLaunchReadinessSettings(): Promise<AdminLaunchReadinessSettings> {
+  return apiRequest<AdminLaunchReadinessSettings>('/v1/admin/launch-readiness/settings');
+}
+
+export async function updateAdminLaunchReadinessSettings(
+  body: Partial<AdminLaunchReadinessSettings>,
+): Promise<AdminLaunchReadinessSettings> {
+  return apiRequest<AdminLaunchReadinessSettings>('/v1/admin/launch-readiness/settings', {
     method: 'PUT',
     body: JSON.stringify(body),
   });

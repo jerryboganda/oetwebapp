@@ -4,10 +4,20 @@
 set -euo pipefail
 
 APP_DIR="${VPS_APP_DIR:-/opt/oetwebapp}"
-EVIDENCE_DIR="${EVIDENCE_DIR:-release-evidence}"
 APP_PUBLIC_URL="${APP_PUBLIC_URL:-https://app.oetwithdrhesham.co.uk}"
 API_PUBLIC_URL="${API_PUBLIC_URL:-https://api.oetwithdrhesham.co.uk}"
-DEPLOY_REF="${DEPLOY_REF:-origin/main}"
+DEPLOY_REF="${DEPLOY_REF:?Set DEPLOY_REF to the exact 40-character Git SHA to deploy.}"
+case "$DEPLOY_REF" in
+	*[!0-9a-fA-F]*)
+		echo "DEPLOY_REF must be a full 40-character hexadecimal SHA; found: $DEPLOY_REF" >&2
+		exit 1
+		;;
+esac
+if [ "${#DEPLOY_REF}" -ne 40 ]; then
+	echo "DEPLOY_REF must be a full 40-character SHA; found length ${#DEPLOY_REF}" >&2
+	exit 1
+fi
+EVIDENCE_DIR="${EVIDENCE_DIR:-release-evidence-$DEPLOY_REF}"
 cd "$APP_DIR"
 if [ "$(pwd)" != "/opt/oetwebapp" ]; then
 	echo "Refusing production deploy from stale/noncanonical checkout: $(pwd)" >&2
@@ -31,8 +41,12 @@ read_env_value() {
 
 echo "=== DEPLOY_START: $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 
-echo "--- git fetch origin main ---"
+echo "--- git fetch origin main/tags ---"
 git fetch origin main --tags
+if ! git cat-file -e "$DEPLOY_REF^{commit}" 2>/dev/null; then
+	echo "--- git fetch exact deploy SHA ---"
+	git fetch origin "$DEPLOY_REF"
+fi
 
 DEPLOY_SHA="$(git rev-parse --verify "$DEPLOY_REF^{commit}")"
 echo "Target deploy ref: $DEPLOY_REF -> $DEPLOY_SHA"
@@ -53,21 +67,12 @@ echo "HEAD now at: $DEPLOY_SHA"
 git log --oneline -1
 
 echo "--- Preserving evidence bundle while cleaning untracked files ---"
-git clean -fd -e "$EVIDENCE_DIR/"
+git clean -fd -e "$EVIDENCE_DIR/" -e .deploy/
 
 echo "--- Running pre-flight snapshot ---"
-VPS_APP_DIR="$APP_DIR" bash ./scripts/deploy/pre-flight.sh
+VPS_APP_DIR="$APP_DIR" DEPLOY_REF="$DEPLOY_SHA" bash ./scripts/deploy/pre-flight.sh
 
-echo "--- Running production deploy driver (sequential build + no volume destruction) ---"
-bash ./scripts/deploy-production.sh
-
-echo "--- Running post-deploy verification ---"
-APP_PUBLIC_URL="$APP_PUBLIC_URL" API_PUBLIC_URL="$API_PUBLIC_URL" bash ./scripts/deploy/post-deploy-verify.sh
-
-echo "--- Running observability smoke ---"
-BASE_URL="$APP_PUBLIC_URL" API_BASE_URL="$API_PUBLIC_URL" OBSERVABILITY_SMOKE_OUTPUT="/tmp/observability-smoke-production.json" bash ./scripts/observability-smoke.sh
-
-echo "--- Running Reading/media smoke gate ---"
-API_PUBLIC_URL="$API_PUBLIC_URL" bash ./scripts/deploy/reading-media-smoke.sh
+echo "--- Running immutable-image rollout driver ---"
+VPS_APP_DIR="$APP_DIR" EVIDENCE_DIR="$EVIDENCE_DIR" APP_PUBLIC_URL="$APP_PUBLIC_URL" API_PUBLIC_URL="$API_PUBLIC_URL" bash ./scripts/deploy/rollout-release.sh
 
 echo "=== DEPLOY_DONE: $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="

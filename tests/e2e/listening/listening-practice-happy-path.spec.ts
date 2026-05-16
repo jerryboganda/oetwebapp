@@ -43,7 +43,7 @@ test.describe('Listening practice happy path @learner @listening', () => {
     // Part A renders: the first MCQ stem of lt-001 ("Increasing
     // breathlessness at night") becomes visible. This is the
     // immersive-completion spec's anchor for "Part A is on screen".
-    await expect(page.getByRole('button', { name: /^Increasing breathlessness at night$/i }))
+    await expect(page.getByRole('radio', { name: /^A Increasing breathlessness at night$/i }))
       .toBeVisible({ timeout: 60_000 });
 
     // Practice mode must NOT hit the strict V2 advance endpoint at all.

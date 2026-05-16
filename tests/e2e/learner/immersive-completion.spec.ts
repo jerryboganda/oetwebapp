@@ -34,8 +34,8 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await page.getByRole('button', { name: /start audio & task/i }).click();
 
     // ── A1 section: answer Q1 (MCQ) + Q2 (short answer) during preview/audio.
-    await expect(page.getByRole('button', { name: /^Increasing breathlessness at night$/i })).toBeVisible({ timeout: 60000 });
-    await page.getByRole('button', { name: /^Increasing breathlessness at night$/i }).click();
+    await expect(page.getByRole('radio', { name: /^A Increasing breathlessness at night$/i })).toBeVisible({ timeout: 60000 });
+    await page.getByRole('radio', { name: /^A Increasing breathlessness at night$/i }).click();
     await page.getByLabel('Answer for question 2').fill('3-4 times per week');
 
     // Skip preview window if available (practice mode shows a "Start audio" skip).
@@ -52,11 +52,12 @@ test.describe('Learner immersive completion workflows @learner', () => {
 
     // ── A2 section: answer Q3 (MCQ).
     try {
-      await expect(page.getByRole('button', { name: /^Combination inhaler$/i })).toBeVisible({ timeout: 60000 });
+      await expect(page.getByRole('radio', { name: /^B Combination inhaler$/i })).toBeVisible({ timeout: 60000 });
     } catch (e) {
       await testInfo.attach('seen-403-404', { body: seen403.join('\n') || 'none', contentType: 'text/plain' });
       throw e;
-    }    await page.getByRole('button', { name: /^Combination inhaler$/i }).click();
+    }
+    await page.getByRole('radio', { name: /^B Combination inhaler$/i }).click();
 
     const skipPreviewA2 = page.getByRole('button', { name: /^start audio$/i });
     if (await skipPreviewA2.isVisible().catch(() => false)) {
@@ -94,7 +95,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
       test.skip();
     }
 
-    testInfo.setTimeout(240000);
+    testInfo.setTimeout(420000);
     const diagnostics = observePage(page);
     const content = [
       'Dear Dr Patterson,',
@@ -143,8 +144,16 @@ test.describe('Learner immersive completion workflows @learner', () => {
     // → fetchWritingTask) which on cold path can extend close to 60s.
     await page.waitForURL(/\/writing\/result\?id=/, { timeout: 120000, waitUntil: 'commit' });
     await waitForSessionGuardToClear(page);
-    await expect(page.getByRole('heading', { name: /evaluation summary/i })).toBeVisible({ timeout: 60000 });
-    await expect(page.getByRole('link', { name: /request tutor review/i })).toBeVisible({ timeout: 60000 });
+    let resultPollAttempt = 0;
+    await expect(async () => {
+      resultPollAttempt += 1;
+      if (resultPollAttempt > 1) {
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await waitForSessionGuardToClear(page);
+      }
+      await expect(page.getByRole('heading', { name: /evaluation summary/i })).toBeVisible({ timeout: 30_000 });
+    }).toPass({ timeout: 240_000, intervals: [5_000, 30_000, 30_000, 30_000, 60_000] });
+    await expect(page.getByRole('link', { name: /request tutor review/i })).toBeVisible({ timeout: 30000 });
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();

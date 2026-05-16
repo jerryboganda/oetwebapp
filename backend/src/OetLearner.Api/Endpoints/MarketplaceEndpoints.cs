@@ -39,11 +39,12 @@ public static class MarketplaceEndpoints
             .RequireRateLimiting("PerUser");
 
         admin.MapGet("/pending", async ([FromQuery] int? page, [FromQuery] int? pageSize, MarketplaceService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetPendingSubmissionsAsync(page ?? 1, pageSize ?? 20, ct)));
+            Results.Ok(await svc.GetPendingSubmissionsAsync(page ?? 1, pageSize ?? 20, ct)))
+            .WithAdminRead("AdminContentPublish");
 
         admin.MapPost("/submissions/{submissionId}/review", async (string submissionId, HttpContext http, MarketplaceReviewRequest request, MarketplaceService svc, CancellationToken ct) =>
             Results.Ok(await svc.ReviewSubmissionAsync(http.AdminId(), submissionId, request, ct)))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentPublish");
 
         return app;
     }

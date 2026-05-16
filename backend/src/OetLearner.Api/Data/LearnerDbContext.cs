@@ -180,6 +180,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ContentRevision> ContentRevisions => Set<ContentRevision>();
     public DbSet<AIConfigVersion> AIConfigVersions => Set<AIConfigVersion>();
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
+    public DbSet<LaunchReadinessSettings> LaunchReadinessSettings => Set<LaunchReadinessSettings>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     // AI usage accounting. See docs/AI-USAGE-POLICY.md. Every AI call made

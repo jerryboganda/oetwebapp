@@ -17,7 +17,7 @@ right pair for the scenario:
 | --- | --- |
 | `Dockerfile` | Primary multi-stage image — builds Next.js (`output: 'standalone'`) + .NET API from source. Used by every `docker-compose.production*.yml`. |
 | `Dockerfile.prebuilt` | Thin image that copies an already-built `.next/standalone` tree. Pair with `docker-compose.production.prebuilt-web.yml` when CI builds the web app and the VPS only needs to run it. |
-| `docker-compose.production.yml` | Default VPS stack (web + learner-api + postgres) joined to the external `npm_proxy` network for Nginx Proxy Manager. This is the one deployed at `app.oetwithdrhesham.co.uk`. |
+| `docker-compose.production.yml` | Default VPS stack: stable `web`/`learner-api` router containers plus blue/green app slots, Postgres, ClamAV, and backup sidecar joined to the external `npm_proxy` network for Nginx Proxy Manager. This is the one deployed at `app.oetwithdrhesham.co.uk`. |
 | `docker-compose.production.hostports.yml` | Same as above but exposes ports on the host (no reverse proxy) — use for bare-metal / single-host installs without NPM. |
 | `docker-compose.production.prebuilt-web.yml` | Production variant that pulls the prebuilt web image instead of building on the VPS. Use when VPS CPU/RAM is too small to build. |
 | `docker-compose.backend.yml` | Backend API + postgres only — for running the .NET API in Docker while developing the frontend locally via `npm run dev`. |
@@ -97,6 +97,8 @@ Minimum values you must set correctly:
 - `EVIDENCE_SIGNER_FINGERPRINT`
 - `READING_SMOKE_LEARNER_EMAIL` / `READING_SMOKE_LEARNER_PASSWORD` for a least-privilege smoke learner
 - `READING_SMOKE_*_ID` fixture values for the deploy-gate media smoke
+- `ROUTER_IMAGE` pinned to an immutable `nginx`-compatible `@sha256:` digest
+  for the stable blue/green router containers
 
 Notes:
 
@@ -115,25 +117,41 @@ Notes:
 
 ## 3. Build and start the stack
 
-Production rollout is gated through the deploy helper so evidence, pre-flight,
-post-deploy, observability, and Reading/media smoke checks run before the deploy
-is considered complete:
+Production rollout is exact-SHA only. First set the protected GitHub production
+environment variable `ROUTER_IMAGE` to the same immutable digest configured in
+`.env.production`, then run the protected GitHub workflow
+`Verify Release Artifacts` for the target commit in `production` mode. It builds
+and pushes immutable GHCR image digests, writes `image-digests.env`, signs the
+evidence manifest, and uploads an artifact named `release-evidence-<sha>`.
+
+Then run the protected `Deploy Production` workflow with the same 40-character
+`target_sha`. The workflow downloads only `release-evidence-<sha>`, copies it to
+the VPS, and runs the deploy helper with `DEPLOY_REF=<sha>`.
 
 ```bash
-bash ./scripts/deploy/deploy-prod.sh
+DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
 ```
+
+The helper refuses branch names and short SHAs, verifies signed evidence before
+checkout reset, starts the inactive blue/green slot from digest-pinned images,
+health-checks it internally, switches the stable `web`/`learner-api` router
+containers to the new slot, and runs post-deploy verification, observability
+smoke, and Reading/media smoke before a release is recorded as previous-good.
 
 The API runs database migrations automatically on startup when `AUTO_MIGRATE=true`.
 
-If the first frontend image build is slow because `npm ci` is downloading packages inside Docker, you can use the faster prebuilt-web path:
+Production normally uses immutable image digests from release evidence. Local
+rehearsal or emergency source-build fallback must opt in to the build override:
 
 ```bash
-npm ci
-npm run build
-docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.production.prebuilt-web.yml up -d --build
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  -f docker-compose.production.build.yml \
+  up -d --build
 ```
 
-That override keeps the same production runtime image but copies the already-built Next.js standalone output instead of rebuilding it inside Docker.
+That override bypasses immutable release images and is not the normal production
+path.
 
 ## 4. Configure Nginx Proxy Manager
 
@@ -183,17 +201,29 @@ Back up both named volumes before upgrades or VPS maintenance.
 
 ## 7. Updating the deployment
 
-For a clean redeploy that rebuilds all containers and prunes stale Docker build/image cache, run:
+For a clean production deploy, use the exact SHA that already has signed release
+evidence:
 
 ```bash
-bash ./scripts/deploy/deploy-prod.sh
+DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
 ```
 
-That script preserves named volumes, verifies signed release evidence for the deployed SHA, runs pre-flight/post-deploy/observability/Reading-media gates, and then rebuilds the application containers. Its cleanup is intentionally limited to stopped containers, dangling/unused images, and BuildKit/build cache.
+That script preserves named volumes, verifies signed release evidence and image
+digests for the deployed SHA, runs pre-flight, rolls out digest-pinned images
+into the inactive blue/green slot, and only records `.deploy/previous-good.env`
+and `.deploy/active-slot.env` after the health and smoke gates pass. By default
+the previous slot remains running for fast router rollback; set
+`KEEP_PREVIOUS_SLOT_RUNNING=false` only after confirming VPS capacity and a
+separate rollback image path. Keep at least one previous-good evidence bundle and
+digest set available for rollback.
 
 Do **not** run `docker compose down -v`, `docker volume prune`, `docker system prune --volumes`, or manually delete `oetwebsite_*` named volumes as part of a normal redeploy. Volume cleanup is a separate destructive maintenance task and requires an explicit backup, restore plan, and approval naming the exact volume.
 
 Direct `docker compose up -d --build` is reserved for local rehearsal and emergency use after explicit approval; it bypasses the production evidence gate.
+
+Destructive or irreversible EF migrations require a maintenance window, fresh
+verified backup ID, non-live restore drill evidence, and owner approval before
+`scripts/deploy/pre-flight.sh` will proceed.
 
 ## Troubleshooting
 
@@ -284,4 +314,3 @@ docker compose --env-file .env.production -f docker-compose.production.yml logs 
 ```
 
 A successful run ends with `[backup] ok: /backups/oet-...dump.gpg`. If you see nothing for 48 hours, the sidecar is not running; check `BACKUP_SCHEDULE` and `docker compose --env-file .env.production -f docker-compose.production.yml ps db-backup`.
-

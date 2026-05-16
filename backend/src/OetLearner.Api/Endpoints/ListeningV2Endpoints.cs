@@ -16,6 +16,7 @@ public static class ListeningV2Endpoints
     public sealed record AdvanceRequest(string ToState, string? ConfirmToken);
     public sealed record TechReadinessRequest(bool AudioOk, int DurationMs);
     public sealed record AudioResumeRequest(int CuePointMs);
+    public sealed record SubmitRequest(Dictionary<string, string?>? Answers);
     public sealed record GradeRequest();
     public sealed record CreateClassRequest(string Name, string? Description);
     public sealed record AddMemberRequest(string MemberUserId);
@@ -119,6 +120,44 @@ public static class ListeningV2Endpoints
         .RequireRateLimiting("PerUserWrite")
         .WithName("AudioResumeListeningV2")
         .WithSummary("Listening V2 — resume audio after a transient disconnection");
+
+        group.MapPut("/attempts/{attemptId}/answers/{questionId}", async (
+            string attemptId,
+            string questionId,
+            ListeningAnswerSaveRequest req,
+            HttpContext http,
+            ListeningLearnerService learner,
+            CancellationToken ct) =>
+        {
+            await learner.SaveAnswerAsync(http.UserId(), attemptId, questionId, req, ct);
+            return Results.NoContent();
+        })
+        .RequireRateLimiting("PerUserWrite")
+        .WithName("SaveListeningV2Answer")
+        .WithSummary("Listening V2 — save one answer through the relational attempt facade")
+        .Produces(StatusCodes.Status204NoContent)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPost("/attempts/{attemptId}/submit", async (
+            string attemptId,
+            SubmitRequest? req,
+            HttpContext http,
+            ListeningLearnerService learner,
+            ListeningPathwayProgressService pathway,
+            CancellationToken ct) =>
+        {
+            var userId = http.UserId();
+            var review = await learner.SubmitAsync(userId, attemptId, req?.Answers, ct);
+            await pathway.RecomputeAsync(userId, ct);
+            return Results.Ok(review);
+        })
+        .RequireRateLimiting("PerUserWrite")
+        .WithName("SubmitListeningV2Attempt")
+        .WithSummary("Listening V2 — submit final answers and return the full learner review DTO")
+        .Produces(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound);
 
         // ─── Grading ───
         group.MapPost("/attempts/{attemptId}/grade", async (

@@ -44,4 +44,57 @@ echo "--- Current HEAD ---"
 git rev-parse HEAD
 git log --oneline -1
 
+detect_destructive_migration() {
+  local previous_sha="$1"
+  local target_sha="$2"
+  if [ -z "$previous_sha" ] || ! git cat-file -e "$previous_sha^{commit}" 2>/dev/null; then
+    echo "--- Destructive migration check skipped: no previous-good SHA is recorded yet ---"
+    return 0
+  fi
+  if [ "$previous_sha" = "$target_sha" ]; then
+    echo "--- Destructive migration check: unchanged SHA ---"
+    return 0
+  fi
+  changed_migrations=$(git diff --name-only "$previous_sha" "$target_sha" -- backend/src/OetLearner.Api/Data/Migrations || true)
+  if [ -z "$changed_migrations" ]; then
+    echo "--- Destructive migration check: no migration files changed ---"
+    return 0
+  fi
+  if git diff "$previous_sha" "$target_sha" -- backend/src/OetLearner.Api/Data/Migrations \
+      | grep -Ei 'Drop(Column|Table|Index|ForeignKey|PrimaryKey)|migrationBuilder\.Sql\("[[:space:]]*(DROP|TRUNCATE|DELETE)[[:space:]]' >/dev/null; then
+    return 1
+  fi
+  echo "--- Destructive migration check: migration files changed, no destructive pattern detected ---"
+  return 0
+}
+
+require_destructive_migration_approval() {
+  local missing=0
+  if [ "${DESTRUCTIVE_MIGRATION_APPROVAL:-}" != "approved-by-dr-faisal-maqsood" ]; then
+    echo "[migration] DESTRUCTIVE_MIGRATION_APPROVAL=approved-by-dr-faisal-maqsood is required." >&2
+    missing=1
+  fi
+  for key in DESTRUCTIVE_MIGRATION_MAINTENANCE_WINDOW DESTRUCTIVE_MIGRATION_BACKUP_ID DESTRUCTIVE_MIGRATION_RESTORE_DRILL_ID; do
+    if [ -z "${!key:-}" ]; then
+      echo "[migration] $key is required for destructive migrations." >&2
+      missing=1
+    fi
+  done
+  if [ "$missing" -ne 0 ]; then
+    exit 1
+  fi
+}
+
+TARGET_SHA=$(git rev-parse HEAD)
+PREVIOUS_GOOD_SHA=""
+if [ -s .deploy/previous-good.env ]; then
+  PREVIOUS_GOOD_SHA=$(awk -F= '$1 == "PREVIOUS_GOOD_SHA" { print $2 }' .deploy/previous-good.env | tail -n 1)
+fi
+
+if ! detect_destructive_migration "$PREVIOUS_GOOD_SHA" "$TARGET_SHA"; then
+  echo "--- Destructive migration risk detected between ${PREVIOUS_GOOD_SHA:-unknown} and $TARGET_SHA ---" >&2
+  require_destructive_migration_approval
+  echo "--- Destructive migration approval package accepted ---"
+fi
+
 echo "=== PRE_FLIGHT_DONE ==="

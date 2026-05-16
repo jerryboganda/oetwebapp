@@ -49,6 +49,21 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   hard: 'text-danger bg-danger/10',
 };
 
+function learningPathHref(subtestCode: string, itemId?: string): string {
+  switch (subtestCode.toLowerCase()) {
+    case 'listening':
+      return itemId ? `/listening/drills/${encodeURIComponent(itemId)}` : '/listening';
+    case 'reading':
+      return '/reading/practice';
+    case 'writing':
+      return '/writing/drills';
+    case 'speaking':
+      return '/speaking/drills';
+    default:
+      return '/practice';
+  }
+}
+
 export default function LearningPathsPage() {
   const [data, setData] = useState<LearningPathData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,11 +123,13 @@ export default function LearningPathsPage() {
           <div className="grid gap-3 sm:grid-cols-3 mt-3">
             {data.nextRecommended.map((rec) => (
               <MotionItem key={rec.id}>
-                <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer">
-                  <Badge className={DIFFICULTY_COLORS[rec.difficulty] ?? ''}>{rec.difficulty}</Badge>
-                  <p className="font-medium mt-2 text-sm text-navy">{rec.title}</p>
-                  <p className="text-xs text-muted capitalize">{rec.subtestCode}</p>
-                </Card>
+                <Link href={learningPathHref(rec.subtestCode, rec.id)} className="block">
+                  <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer">
+                    <Badge className={DIFFICULTY_COLORS[rec.difficulty] ?? ''}>{rec.difficulty}</Badge>
+                    <p className="font-medium mt-2 text-sm text-navy">{rec.title}</p>
+                    <p className="text-xs text-muted capitalize">{rec.subtestCode}</p>
+                  </Card>
+                </Link>
               </MotionItem>
             ))}
           </div>
@@ -172,7 +189,9 @@ export default function LearningPathsPage() {
                     <p className="text-xs text-muted">{item.durationMinutes}min · {item.difficulty}</p>
                   </div>
                   {!item.completed && (
-                    <Button size="sm" variant="outline">Start</Button>
+                    <Link href={learningPathHref(sp.subtestCode, item.id)}>
+                      <Button size="sm" variant="outline">Start</Button>
+                    </Link>
                   )}
                 </Card>
               </MotionItem>

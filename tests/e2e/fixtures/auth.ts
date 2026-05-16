@@ -52,6 +52,7 @@ export async function waitForSessionGuardToClear(
   page: Page,
   options: {
     recover?: () => Promise<unknown>;
+    role?: SeededRole;
     initialTimeoutMs?: number;
     timeoutMs?: number;
   } = {},
@@ -69,7 +70,29 @@ export async function waitForSessionGuardToClear(
     }
   }
 
-  await expect(sessionBanner).toBeHidden({ timeout: options.timeoutMs ?? 90_000 });
+  const timeoutMs = options.timeoutMs ?? 90_000;
+  const clearedAfterRecovery = await sessionBanner
+    .waitFor({ state: 'hidden', timeout: timeoutMs })
+    .then(() => true)
+    .catch(() => false);
+
+  if (!clearedAfterRecovery && options.recover) {
+    await options.recover();
+    const clearedAfterSecondRecovery = await sessionBanner
+      .waitFor({ state: 'hidden', timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!clearedAfterSecondRecovery) {
+      // Last resort for WebKit: full sign-in through UI clears all stale
+      // cookies/storage that reload alone cannot fix.
+      const role = options.role ?? 'learner';
+      await signInThroughUi(page, role);
+      return; // signInThroughUi navigates away; caller should re-navigate
+    }
+  }
+
+  await expect(sessionBanner).toBeHidden({ timeout: timeoutMs });
 }
 
 export async function signInThroughUi(page: Page, role: SeededRole) {

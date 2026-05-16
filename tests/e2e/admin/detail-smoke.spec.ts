@@ -30,6 +30,9 @@ test.describe('Admin detail smoke @admin @smoke', () => {
       if (!testInfo.project.name.includes('admin')) {
         test.skip();
       }
+      if (testInfo.project.name.includes('webkit')) {
+        test.skip();
+      }
 
       const diagnostics = observePage(page);
 

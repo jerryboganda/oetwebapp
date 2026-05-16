@@ -234,6 +234,21 @@ const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
     // models:read) and verify before flipping live.
     isActive: false,
   },
+  'elevenlabs-stt': {
+    code: 'elevenlabs-stt',
+    name: 'ElevenLabs Scribe Realtime STT',
+    dialect: 'ElevenLabsStt',
+    category: 'Asr',
+    baseUrl: 'https://api.elevenlabs.io/v1',
+    defaultModel: 'scribe_v2_realtime',
+    pricePer1kPromptTokens: 0,
+    pricePer1kCompletionTokens: 0,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 130,
+    isActive: false,
+  },
 };
 
 export default function AiProvidersPage() {
@@ -295,6 +310,7 @@ export default function AiProvidersPage() {
             code: preset.code ?? prev.code,
             name: preset.name ?? prev.name,
             dialect: (preset.dialect as AiProviderRow['dialect']) ?? prev.dialect,
+            category: (preset.category as AiProviderRow['category']) ?? prev.category,
             baseUrl: preset.baseUrl ?? prev.baseUrl,
             defaultModel: preset.defaultModel ?? prev.defaultModel,
             pricePer1kPromptTokens: preset.pricePer1kPromptTokens ?? prev.pricePer1kPromptTokens,
@@ -436,6 +452,7 @@ export default function AiProvidersPage() {
                   { value: 'AzureAsr', label: 'Azure Speech — ASR' },
                   { value: 'WhisperAsr', label: 'Whisper — ASR' },
                   { value: 'AzurePhoneme', label: 'Azure Pronunciation Assessment' },
+                  { value: 'ElevenLabsStt', label: 'ElevenLabs Scribe — realtime STT' },
                   { value: 'Mock', label: 'Mock (dev only)' },
                 ]} />
               <Select label="Category" value={editing.category}

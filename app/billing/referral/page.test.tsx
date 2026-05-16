@@ -94,7 +94,7 @@ describe('Referral page', () => {
     expect(screen.getAllByText('4').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('40').length).toBeGreaterThanOrEqual(1);
     // Friend discount surfaces inside the "How it works" copy.
-    expect(screen.getByText(/15% off their first paid plan/i)).toBeInTheDocument();
+    expect(screen.getByText(/15% referral discount on their first paid plan/i)).toBeInTheDocument();
   });
 
   it('disables code generation when freeze status cannot be verified', async () => {

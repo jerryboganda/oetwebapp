@@ -9,9 +9,10 @@ import { expect, test } from '@playwright/test';
 // surface) — this spec enforces the equivalent for Listening.
 //
 // Endpoint under test: `GET /v1/listening-papers/papers/{id}/session?
-// mode=practice` (see `lib/listening-api.ts` → `getListeningSession`).
-// We use `page.request` so the authenticated `learner` storageState
-// is automatically attached.
+// mode=practice` via the same `/api/backend/*` proxy path used by the
+// browser client (see `lib/listening-api.ts` -> `getListeningSession`).
+// We use `page.request` so the authenticated `learner` storageState is
+// automatically attached.
 const FORBIDDEN_FIELDS = [
   'isCorrect',
   'correctAnswer',
@@ -37,7 +38,7 @@ test.describe('Listening answer-key not exposed @learner @listening @security', 
     await page.goto('/listening', { waitUntil: 'domcontentloaded' });
 
     const response = await page.request.get(
-      '/v1/listening-papers/papers/lt-001/session?mode=practice',
+      '/api/backend/v1/listening-papers/papers/lt-001/session?mode=practice',
     );
     expect(response.status(), `unexpected status from session endpoint: ${response.status()}`)
       .toBeGreaterThanOrEqual(200);

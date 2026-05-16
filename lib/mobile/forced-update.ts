@@ -116,10 +116,12 @@ export async function checkForUpdate(
       minVersion?: string;
       latestVersion?: string;
       forceUpdate?: boolean;
+      storeUrl?: string | null;
     };
 
     const minVersion = data.minVersion;
     const latestVersion = data.latestVersion ?? null;
+    const effectiveStoreUrl = data.storeUrl ?? storeUrl;
 
     const updateRequired =
       (data.forceUpdate === true) ||
@@ -129,7 +131,7 @@ export async function checkForUpdate(
       updateRequired,
       currentVersion: appVersion.currentVersion,
       latestVersion,
-      storeUrl,
+      storeUrl: effectiveStoreUrl,
     };
   } catch {
     // Network error — don't block the user.

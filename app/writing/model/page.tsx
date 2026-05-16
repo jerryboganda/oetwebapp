@@ -31,19 +31,23 @@ type ModelAnswerState = {
 
 export default function ModelAnswerExplainer() {
   const searchParams = useSearchParams();
-  const taskId = searchParams?.get('taskId') ?? 'wt-001';
+  const taskId = searchParams?.get('taskId') ?? '';
+  const missingModelAnswerMessage = 'Model answer unavailable. Open a published Writing task first.';
   const [modelState, setModelState] = useState<ModelAnswerState>({
     taskId,
     model: null,
-    loading: true,
+    loading: taskId.length > 0,
     error: null,
   });
   const isCurrentTask = modelState.taskId === taskId;
-  const model = isCurrentTask ? modelState.model : null;
-  const loading = !isCurrentTask || modelState.loading;
-  const error = isCurrentTask ? modelState.error : null;
+  const model = taskId && isCurrentTask ? modelState.model : null;
+  const loading = taskId.length > 0 && (!isCurrentTask || modelState.loading);
+  const error = !taskId ? missingModelAnswerMessage : isCurrentTask ? modelState.error : null;
 
   useEffect(() => {
+    if (!taskId) {
+      return;
+    }
     let active = true;
     analytics.track('content_view', { content: 'model_answer', taskId, subtest: 'writing' });
     fetchModelAnswer(taskId)

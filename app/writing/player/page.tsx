@@ -14,6 +14,7 @@ import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-pa
 import { WritingEditor } from '@/components/domain/writing-editor';
 import { RulebookFindingsPanel } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
+import { InlineAlert } from '@/components/ui/alert';
 import { fetchAuthorizedObjectUrl, fetchWritingTask, fetchWritingChecklist, ensureWritingAttempt, submitWritingDraft, submitWritingTask, completeMockSection, fetchWritingEntitlement, lintWritingViaApi, uploadMedia, attachWritingPaperAssets, fetchWritingPaperAssets, ApiError, type WritingAssessorType, type WritingEntitlement, type WritingExamMode } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingTask } from '@/lib/mock-data';
@@ -93,7 +94,7 @@ export default function WritingPlayer() {
   const router = useRouter();
   const isMobile = useIsMobile();
   const prefersReducedMotion = useReducedMotion();
-  const taskId = searchParams?.get('taskId') ?? 'wt-001';
+  const taskId = searchParams?.get('taskId') ?? '';
   const practiceMode = normalizeWritingPracticeMode(searchParams?.get('mode'));
   const examMode: WritingExamMode = searchParams?.get('examMode') === 'paper' ? 'paper' : 'computer';
   const assessorType: WritingAssessorType = (searchParams?.get('assessorType') ?? searchParams?.get('assessor')) === 'instructor' ? 'instructor' : 'ai';
@@ -109,7 +110,7 @@ export default function WritingPlayer() {
 
   const [task, setTask] = useState<WritingTask | null>(null);
   const [checklist, setChecklist] = useState<{ id: string; label: string; checked: boolean }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => taskId.length > 0);
   const [content, setContent] = useState('');
   const [scratchpad, setScratchpad] = useState('');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -250,6 +251,10 @@ export default function WritingPlayer() {
   );
 
   useEffect(() => {
+    if (!taskId) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
 
     if (!task || !lintReady) {
@@ -290,7 +295,7 @@ export default function WritingPlayer() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [task, lintReady, content, inferredLetterType]);
+  }, [taskId, task, lintReady, content, inferredLetterType]);
 
   const lintInactiveMessage = lintError
     ? 'The live rulebook checker could not refresh. Your draft is still saved normally.'
@@ -346,6 +351,7 @@ export default function WritingPlayer() {
 
   // Auto-save with 3s debounce
   const triggerAutoSave = useCallback((nextContent = latestContentRef.current) => {
+    if (!taskId) return;
     hasUnsavedChanges.current = true;
 
     if (isSubmittingRef.current) {
@@ -389,7 +395,7 @@ export default function WritingPlayer() {
   }, [triggerAutoSave]);
 
   useEffect(() => {
-    if (!isPaperMode) return;
+    if (!isPaperMode || !taskId) return;
     let cancelled = false;
     fetchWritingPaperAssets(taskId, practiceMode)
       .then((result) => {
@@ -410,7 +416,7 @@ export default function WritingPlayer() {
   }, [isPaperMode, practiceMode, taskId]);
 
   const handlePaperUpload = useCallback(async (files: FileList | null) => {
-    if (!files?.length || uploadingPaper) return;
+    if (!taskId || !files?.length || uploadingPaper) return;
     const selectedFiles = Array.from(files);
     setUploadingPaper(true);
     setPaperError(null);
@@ -478,6 +484,7 @@ export default function WritingPlayer() {
   const submitDisabled = isReadingPhase || submitting || uploadingPaper || Boolean(paperSubmitBlockedReason);
 
   const handleSubmit = async () => {
+    if (!taskId) return;
     if (submitting) return;
     if (isReadingPhase) {
       setSaveStatus('idle');
@@ -585,7 +592,7 @@ export default function WritingPlayer() {
    * Idempotent so rapid duplicate fires from the Timer cannot reset progress.
    */
   const handleReadingWindowComplete = useCallback(() => {
-    if (!isExamMode) return;
+    if (!isExamMode || !taskId) return;
     const startedAt = examAttemptStartedAtRef.current;
     if (startedAt) {
       const nextTimerState = deriveExamTimerState(startedAt);
@@ -631,6 +638,21 @@ export default function WritingPlayer() {
       { label: 'Task date', value: task.taskDate },
     ].filter((item): item is { label: string; value: string } => typeof item.value === 'string' && item.value.length > 0);
   }, [task]);
+
+  if (!taskId) {
+    return (
+      <div className="flex min-h-[var(--app-viewport-height,100dvh)] items-center justify-center bg-background-light p-6">
+        <div className="w-full max-w-xl space-y-4 rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          <InlineAlert variant="warning">
+            This writing task is unavailable. Please open a published task from the Writing library.
+          </InlineAlert>
+          <Button variant="primary" onClick={() => router.push('/writing/library')}>
+            Open Writing library
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || !task) {
     return (
@@ -703,7 +725,7 @@ export default function WritingPlayer() {
                   >
                     <Maximize className="h-5 w-5" />
                   </button>
-                  <Button size={isMobile ? 'sm' : 'md'} onClick={handleSubmit} loading={submitting} disabled={submitDisabled} className="shrink-0 whitespace-nowrap touch-target">
+                  <Button variant="primary" size={isMobile ? 'sm' : 'md'} onClick={handleSubmit} loading={submitting} disabled={submitDisabled} className="shrink-0 whitespace-nowrap touch-target">
                     Submit
                   </Button>
                 </div>

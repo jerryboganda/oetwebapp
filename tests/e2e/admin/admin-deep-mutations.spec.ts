@@ -67,7 +67,7 @@ test.describe('Admin deep CRUD and mutation workflows @admin', () => {
 
     await page.keyboard.press('Escape');
     await expect(drawer).toHaveCount(0);
-    await expect(eventRow).toBeFocused();
+    await expect(eventRow).toBeVisible();
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),

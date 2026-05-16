@@ -36,6 +36,20 @@ export default function CompensationPage() {
     <ExpertRouteWorkspace>
       <ExpertRouteHero title="Compensation" description="Track your earnings and payouts." />
 
+      <section className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+        <ExpertRouteSectionHeader title="Launch payout model" />
+        <p className="mt-2">
+          Public launch uses fixed, tiered payouts by review type and promised turnaround SLA.
+          Earnings are created only after a completed review is accepted by the platform workflow,
+          then batched into payout runs for finance approval.
+        </p>
+        <ul className="mt-3 list-disc space-y-1 pl-5">
+          <li>Writing and Speaking review payouts remain separate from learner wallet credits.</li>
+          <li>Urgent-turnaround work is tracked through queue/SLA metadata before payout approval.</li>
+          <li>Disputed, rework, or quality-held reviews stay pending until operations resolves them.</li>
+        </ul>
+      </section>
+
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <ExpertRouteSummaryCard

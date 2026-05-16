@@ -33,7 +33,7 @@ Current active work is tracked here by workstream and points to the authoritativ
 | UX audit inventory | `docs/ux/UX-AUDIT-ROUTE-INVENTORY.md` | Active route-readiness input. |
 | Mobile plan | `docs/capacitor-mobile-app-plan.md` | External credential/store/device readiness input. |
 | Desktop plan | `docs/electron-desktop-conversion-plan.md` | Signed artifact/update-flow readiness input. |
-| Listening V2 deferrals | `docs/LISTENING.md`, `PRD-LISTENING-V2.md`, `docs/LISTENING-RULEBOOK-CITATIONS.md` | Post-launch module backlog. |
+| Listening V2 deferrals | `docs/LISTENING.md`, `PRD-LISTENING-V2.md`, `docs/LISTENING-RULEBOOK-CITATIONS.md` | Local deferrals closed; content evidence remains separate. |
 | Grammar GA | `docs/GRAMMAR-MODULE.md` | GA signoff status needs owner decision. |
 
 ## Closed V1 Launch Register
@@ -59,7 +59,8 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 ### P0-003 - ElevenLabs Realtime STT Production Authorization
 
 - Canonical source: `docs/ELEVENLABS-REALTIME-STT-PRODUCTION-PLAN.md`.
-- Remaining work: complete RTSTT-001 through RTSTT-008 before any real-provider exposure outside protected smoke: audio/device compatibility, protected smoke, spend reservations, circuit breaker, transcript authority, single-instance topology proof, sponsor/school/minor gates, and consent model.
+- Local hardening complete: production startup now fails closed unless the grounded AI provider has an external HTTPS base URL plus API key, and realtime STT has a real provider key, adult-learner authorization, legal/privacy approval, spend/pricing controls, approved region, and an approved topology value (`single-instance`, `single-region-sticky`, or `distributed`).
+- Remaining work: complete RTSTT-001 through RTSTT-008 before any real-provider exposure outside protected smoke: audio/device compatibility, protected smoke, spend reservations, circuit breaker, transcript authority, topology evidence, sponsor/school/minor gates, and consent model.
 - User defaults: `$25/month` pilot cap, single API instance beta, protected smoke mandatory, compare all audio strategies.
 - Input required: rotated ElevenLabs STT key through protected secret channel, vendor/privacy approval, target beta users, region/topology confirmation.
 - No-go if missing: no admin real-provider exposure, no paid WSS streams, and no sponsor/school/minor rollout.
@@ -67,14 +68,16 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 ### P0-004 - External Launch Readiness Gate
 
 - Evidence: mobile store credentials/assets/privacy approval, signed desktop artifacts, manual assistive-tech signoff, and GitHub-hosted QA observation are still external-evidence items.
-- Remaining work: track these as explicit `pending-external` gates instead of hiding them behind closed v1 status.
+- Local hardening complete: mobile release validation rejects placeholder association files, invalid app versions/version codes, and malformed Android certificate fingerprints; desktop release workflow now verifies signed Windows artifacts and publishes SHA-256 checksums.
+- Remaining work: attach real external evidence for these explicit `pending-external` gates instead of hiding them behind closed v1 status.
 - Input required: Apple/Google accounts and signing assets, desktop signing method, release channel decisions, manual QA availability.
 - Recommendation: launch web/API first if desired; keep mobile stores and signed desktop as beta until evidence is attached.
 
 ### P0-005 - Mobile Association Files And Support Surface
 
 - Evidence: `public/.well-known/apple-app-site-association` contains `TEAM_ID.com.oetprep.learner`; `public/.well-known/assetlinks.json` contains `REPLACE_WITH_YOUR_SHA256_CERT_FINGERPRINT`.
-- Remaining work: replace placeholders with production Team ID, bundle ID, and SHA-256 cert fingerprints; add static/CI check for placeholder values; create or redirect `/support` because store listing docs reference it.
+- Local hardening complete: `/support` exists; `scripts/qa/validate-mobile-release-inputs.mjs` blocks placeholder or malformed association files and checks release version inputs before store packaging.
+- Remaining work: replace placeholders with production Team ID, bundle ID, and SHA-256 cert fingerprints.
 - Input required: Apple Team ID, final bundle ID, Android signing certificate fingerprint, support contact path.
 - Recommendation: create a simple public support page with contact, privacy, delete-account, and response-time expectations.
 
@@ -116,11 +119,13 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P1-005 - Mobile Release Readiness
 
+- Local hardening complete: mobile release CI passes app version/version-code inputs into the validator and stamps Capacitor/iOS versions with structured Node updates instead of fragile shell substitutions.
 - Remaining work: validate signing secrets, store metadata, privacy manifest, deep links, push config, real-device microphone/keyboard/safe-area/background tests, and signed artifact verification.
 - Input required: Apple Developer account, Google Play account, signing certs, provisioning profile, store billing stance.
 
 ### P1-006 - Desktop Release Readiness
 
+- Local hardening complete: desktop release CI has write permission for GitHub Releases, uses the workflow token explicitly, verifies Windows Authenticode signatures when signing is required, and uploads `SHA256SUMS.txt` with the packaged artifacts.
 - Remaining work: prove signed Windows release, update server behavior, OAuth callback, packaged desktop smoke, backend version pinning, and macOS/Linux signing/notarization decisions.
 - Input required: Windows signing method, update server URL, macOS/Linux launch scope.
 
@@ -191,7 +196,9 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P2-008 - Listening V2 Deferred Work
 
-- Remaining work: track full save/submit DTO handoff, all-parts paper final-review parity, unanswered-number banner coverage, and seeded multi-part free-navigation E2E.
+- Local hardening complete: V2 save/submit facades, active-player answer handoff, exact unanswered-number warnings, paper all-parts final review, and free-navigation unit coverage are implemented.
+- Local live evidence complete: an isolated Postgres-backed frontend/API runtime passed focused Chromium learner smoke for Reading deep-link, mock report deep-link, Listening answer-key isolation, exam strict-lock intro, paper no-FSM mount, practice happy path, and R10 readiness.
+- Remaining work: publish/operator-approve complete real-content multi-part Listening papers as content evidence; this is not a local route-code blocker.
 
 ### P2-009 - Grammar GA Signoff
 
@@ -222,6 +229,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 ## No-Go Criteria
 
 - No real ElevenLabs provider exposure without mandatory protected smoke, `$25/month` cap enforcement, audio/device proof, and rollback path.
+- No production AI/provider-backed feature exposure without `AI__BASEURL`, `AI__APIKEY`, `AI__PROVIDERID`, and `AI__DEFAULTMODEL` configured for a real external provider.
 - No all-audience speech processing until sponsor/school/minor privacy gates are approved and tested.
 - No mobile store submission with placeholder app association files or missing support surface.
 - No signed desktop public release without signed artifact validation and update-flow proof.
@@ -230,4 +238,6 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ## Change Log
 
+- 2026-05-15: Closed the local Listening/Reading live-smoke blocker with an isolated Postgres-backed runtime and focused Chromium learner Playwright pass; fixed stale Listening E2E proxy/locator assumptions and a Postgres-only webhook-retention query bug discovered during runtime validation.
+- 2026-05-14: Closed local launch-gate hardening for Listening V2 no-stack coverage, mobile/desktop release guards, realtime STT topology validation, grounded AI provider credential fail-fast, and status-doc synchronization. Remaining P0/P1 items are external evidence/credential gates.
 - 2026-05-14: Created current remaining-work index from user decisions, code/doc audit, and 8-subagent sweep covering research, architecture, adversarial review, DevOps, UX/accessibility, failure modes, canonical planning, and documentation. Preserved `docs/STATUS/remaining-work.yaml` as the closed v1 launch register.

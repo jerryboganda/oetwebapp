@@ -16,10 +16,12 @@ Every production deploy must, at minimum, attach:
 1. Green CI run from the deploying SHA (lint, type-check, unit, backend
    tests, production build) — see `.github/workflows`.
 2. Latest SBOM + SCA bundle from `scripts/evidence-collect.sh` with
-   `scripts/evidence-verify.sh` exit 0. Production mode requires
-   `checksums.sha256`, detached `checksums.sha256.asc`, the expected signer
-   fingerprint from the protected GitHub `production` environment, a `git_sha`
-   matching the deployed `HEAD`, and checksum-covered accepted-risk notes.
+    `scripts/evidence-verify.sh` exit 0. Production mode requires
+    `checksums.sha256`, detached `checksums.sha256.asc`, the expected signer
+    fingerprint from the protected GitHub `production` environment, a `git_sha`
+    matching the deployed `HEAD`, immutable image digests in
+    `image-digests.env` including the stable router image digest, and
+    checksum-covered accepted-risk notes.
 3. Pre-flight script success: `scripts/deploy/pre-flight.sh` against the
    target host.
 4. `.env.production` validation — no missing keys, no `__placeholder__`
@@ -33,19 +35,24 @@ Every production deploy must, at minimum, attach:
 
 ## Deploy Command (current)
 
+Production deploys are exact-SHA only. The protected GitHub deploy workflow must
+download artifact `release-evidence-<sha>` from the successful
+`verify-release-artifacts.yml` run for the same SHA, then run:
+
 ```bash
 ssh root@185.252.233.186
 cd /opt/oetwebapp
-bash ./scripts/deploy/deploy-prod.sh
+DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
 ```
 
 The active GitHub deploy checkout is `/opt/oetwebapp`. `/root/oetwebsite` is
 stale and must not be used for builds. The deploy gate preserves the signed
-evidence bundle, verifies that evidence against the deployed SHA, runs
-pre-flight, deploy, post-deploy verification, observability smoke, and the
-Reading/media smoke gate. The deploy driver builds services sequentially
-(`COMPOSE_PARALLEL_LIMIT=1` by default) to avoid OOM on the 8 GB VPS and never
-runs volume-destructive commands.
+evidence bundle, verifies that evidence and immutable image digests against the
+deployed SHA, runs pre-flight, starts digest-pinned images in the inactive
+blue/green slot, switches the stable `web` and `learner-api` router containers
+only after internal slot health passes, then runs post-deploy verification,
+observability smoke, and the Reading/media smoke gate. It never runs
+volume-destructive commands.
 
 ## Post-Deploy Smoke Gate
 
@@ -81,10 +88,9 @@ windows above at the approver's discretion.
 ```bash
 ssh root@185.252.233.186
 cd /opt/oetwebapp
-# Identify last good tag/sha
-git log --oneline -10
-# Roll back through the gated wrapper. The evidence bundle must be signed for
-# the selected SHA.
+# Identify the previous-good SHA/evidence/slot from .deploy/previous-good.env,
+# .deploy/active-slot.env, or the release record. The evidence bundle must be
+# signed for the selected SHA and include immutable image digests.
 DEPLOY_REF=<previous-good-sha> bash ./scripts/deploy/deploy-prod.sh
 # Verify
 scripts/deploy/post-deploy-verify.sh
@@ -106,6 +112,10 @@ If rollback itself fails, page the incident commander
 - A manual restore drill from a recent `pg_dump` snapshot must be performed
   at least once per quarter; record the timestamp and the operator in
   `docs/release/evidence-checklist.md`.
+- Destructive migrations require `DESTRUCTIVE_MIGRATION_APPROVAL`,
+  `DESTRUCTIVE_MIGRATION_MAINTENANCE_WINDOW`,
+  `DESTRUCTIVE_MIGRATION_BACKUP_ID`, and
+  `DESTRUCTIVE_MIGRATION_RESTORE_DRILL_ID` before pre-flight proceeds.
 
 ## Production Mock / Stub Enforcement
 

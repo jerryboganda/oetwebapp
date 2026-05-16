@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Endpoints;
@@ -112,14 +113,30 @@ public static class AuthEndpoints
                 => Results.Ok(await service.GetCurrentUserAsync(user, ct)))
             .RequireAuthorization();
 
-        auth.MapPost("/refresh", async ([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, AuthService service, CancellationToken ct)
-            => Results.Ok(await service.RefreshAsync(request ?? new RefreshTokenRequest(null), ct)))
+        auth.MapPost("/refresh", async (
+                [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request,
+                HttpContext httpContext,
+                CookieBackedAuthCsrfGuard csrfGuard,
+                AuthService service,
+                CancellationToken ct) =>
+            {
+                var safeRequest = request ?? new RefreshTokenRequest(null);
+                csrfGuard.ValidateCookieBackedAuthMutation(httpContext, safeRequest.RefreshToken);
+                return Results.Ok(await service.RefreshAsync(safeRequest, ct));
+            })
             .AllowAnonymous()
             .RequireRateLimiting("AuthRefresh");
 
-        auth.MapPost("/sign-out", async ([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] SignOutRequest? request, AuthService service, CancellationToken ct) =>
+        auth.MapPost("/sign-out", async (
+                [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] SignOutRequest? request,
+                HttpContext httpContext,
+                CookieBackedAuthCsrfGuard csrfGuard,
+                AuthService service,
+                CancellationToken ct) =>
             {
-            await service.SignOutAsync(request ?? new SignOutRequest(null), ct);
+                var safeRequest = request ?? new SignOutRequest(null);
+                csrfGuard.ValidateCookieBackedAuthMutation(httpContext, safeRequest.RefreshToken);
+                await service.SignOutAsync(safeRequest, ct);
                 return Results.NoContent();
             })
             .AllowAnonymous()

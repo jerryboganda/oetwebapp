@@ -1,7 +1,8 @@
-const { mockGet, mockPost, mockPostWithAcceptedStatuses, mockDelete } = vi.hoisted(() => ({
+const { mockGet, mockPost, mockPostWithAcceptedStatuses, mockPut, mockDelete } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockPost: vi.fn(),
   mockPostWithAcceptedStatuses: vi.fn(),
+  mockPut: vi.fn(),
   mockDelete: vi.fn(),
 }));
 
@@ -10,6 +11,7 @@ vi.mock('@/lib/api', () => ({
     get: mockGet,
     post: mockPost,
     postWithAcceptedStatuses: mockPostWithAcceptedStatuses,
+    put: mockPut,
     delete: mockDelete,
   },
 }));
@@ -82,6 +84,36 @@ describe('listeningV2Api', () => {
       { audioOk: true, durationMs: 1500 },
     );
     expect(result.ttlMs).toBe(900000);
+  });
+
+  it('saves one answer through the V2 facade with encoded ids', async () => {
+    mockPut.mockResolvedValueOnce(undefined);
+
+    await listeningV2Api.saveAnswer('attempt 1', 'question/1', 'seventy five');
+
+    expect(mockPut).toHaveBeenCalledWith(
+      '/v1/listening/v2/attempts/attempt%201/answers/question%2F1',
+      { userAnswer: 'seventy five' },
+    );
+  });
+
+  it('submits final answers through the V2 facade and keeps the review DTO contract', async () => {
+    mockPost.mockResolvedValueOnce({
+      attemptId: 'attempt-1',
+      rawScore: 30,
+      maxRawScore: 42,
+      scaledScore: 350,
+      grade: 'B',
+      evaluationId: 'eval-1',
+    });
+
+    const result = await listeningV2Api.submit('attempt 1', { 'question/1': 'seventy five' });
+
+    expect(mockPost).toHaveBeenCalledWith(
+      '/v1/listening/v2/attempts/attempt%201/submit',
+      { answers: { 'question/1': 'seventy five' } },
+    );
+    expect(result).toMatchObject({ attemptId: 'attempt-1', grade: 'B' });
   });
 
   it('fetches my pathway and preserves backend-authored launch targets', async () => {

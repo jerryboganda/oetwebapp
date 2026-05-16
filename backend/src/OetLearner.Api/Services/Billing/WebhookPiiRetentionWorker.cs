@@ -96,7 +96,7 @@ public sealed class WebhookPiiRetentionWorker(
         if (string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal))
         {
             var stale = await db.PaymentWebhookEvents
-                .Where(e => e.ReceivedAt < cutoff && e.PayloadJson != "{}" && e.PayloadJson != string.Empty)
+                .Where(e => e.ReceivedAt < cutoff && e.PayloadJson != "{}")
                 .OrderBy(e => e.ReceivedAt)
                 .Take(batch)
                 .ToListAsync(ct);
@@ -117,7 +117,7 @@ public sealed class WebhookPiiRetentionWorker(
 
         // Relational set-based update.
         return await db.PaymentWebhookEvents
-            .Where(e => e.ReceivedAt < cutoff && e.PayloadJson != "{}" && e.PayloadJson != string.Empty)
+            .Where(e => e.ReceivedAt < cutoff && e.PayloadJson != "{}")
             .OrderBy(e => e.ReceivedAt)
             .Take(batch)
             .ExecuteUpdateAsync(s => s

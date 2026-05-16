@@ -79,8 +79,12 @@ describe('sidebarPermissionMap', () => {
     ]);
   });
 
-  it('requires system_admin for permissions page', () => {
-    expect(sidebarPermissionMap['/admin/permissions']).toEqual([AdminPermission.SystemAdmin]);
+  it('requires manage_permissions for permissions page', () => {
+    expect(sidebarPermissionMap['/admin/permissions']).toEqual([AdminPermission.ManagePermissions]);
+  });
+
+  it('requires system_admin for launch readiness', () => {
+    expect(sidebarPermissionMap['/admin/launch-readiness']).toEqual([AdminPermission.SystemAdmin]);
   });
 
   it('maps every sidebar entry to a known permission value', () => {

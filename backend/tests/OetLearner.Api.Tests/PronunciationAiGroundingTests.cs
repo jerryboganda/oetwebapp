@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Pronunciation;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Tests;
@@ -187,5 +190,37 @@ public class PronunciationAiGroundingTests
         Assert.Equal("pronunciation.feedback", AiFeatureCodes.PronunciationFeedback);
         Assert.Equal("pronunciation.tip", AiFeatureCodes.PronunciationTip);
         Assert.Equal("admin.pronunciation_draft", AiFeatureCodes.AdminPronunciationDraft);
+    }
+
+    [Fact]
+    public async Task AdminDraft_FallbackWarning_DoesNotExposeRawProviderError()
+    {
+        const string rawProviderError = "provider failed with secret body <script>alert(1)</script>";
+        var loader = new RulebookLoader();
+        var gateway = new AiGatewayService(loader, new IAiModelProvider[] { new ThrowingProvider(rawProviderError) });
+        var service = new PronunciationAdminDraftService(
+            gateway,
+            loader,
+            NullLogger<PronunciationAdminDraftService>.Instance);
+
+        var result = await service.GenerateDraftAsync(new AdminPronunciationDrillAiDraftRequest(
+            Phoneme: "theta",
+            Focus: "phoneme",
+            Profession: "medicine",
+            Difficulty: "medium",
+            Prompt: null,
+            PrimaryRuleId: null), "admin-1", default);
+
+        Assert.Contains("draft generation failed", result.Warning);
+        Assert.DoesNotContain("secret body", result.Warning);
+        Assert.DoesNotContain("<script", result.Warning);
+    }
+
+    private sealed class ThrowingProvider(string message) : IAiModelProvider
+    {
+        public string Name => "throwing";
+
+        public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
+            => throw new InvalidOperationException(message);
     }
 }

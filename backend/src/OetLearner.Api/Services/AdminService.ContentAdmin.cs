@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -1772,7 +1773,7 @@ public partial class AdminService
             ExampleWordsJson = request.ExampleWordsJson ?? "[]",
             MinimalPairsJson = request.MinimalPairsJson ?? "[]",
             SentencesJson = request.SentencesJson ?? "[]",
-            TipsHtml = request.TipsHtml ?? "",
+            TipsHtml = SafeHtmlSanitizer.SanitizeLimitedHtml(request.TipsHtml),
             Difficulty = request.Difficulty ?? "medium",
             Status = string.IsNullOrWhiteSpace(request.Status) ? "draft" : request.Status!,
             OrderIndex = request.OrderIndex ?? 0,
@@ -1803,7 +1804,7 @@ public partial class AdminService
         if (request.ExampleWordsJson is not null) entity.ExampleWordsJson = request.ExampleWordsJson;
         if (request.MinimalPairsJson is not null) entity.MinimalPairsJson = request.MinimalPairsJson;
         if (request.SentencesJson is not null) entity.SentencesJson = request.SentencesJson;
-        if (request.TipsHtml is not null) entity.TipsHtml = request.TipsHtml;
+        if (request.TipsHtml is not null) entity.TipsHtml = SafeHtmlSanitizer.SanitizeLimitedHtml(request.TipsHtml);
         if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
         if (request.Status is not null)
         {

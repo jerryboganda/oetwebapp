@@ -4,23 +4,10 @@ import { AdminPermission } from '@/lib/admin-permissions';
 const state = vi.hoisted(() => ({
   pathname: '/admin',
 }));
+const mockUseAuth = vi.hoisted(() => vi.fn());
 
 vi.mock('@/contexts/auth-context', () => ({
-  useAuth: () => ({
-    user: {
-      userId: 'admin-1',
-      email: 'admin@test.com',
-      role: 'admin' as const,
-      displayName: 'Admin',
-      isEmailVerified: true,
-      isAuthenticatorEnabled: false,
-      requiresEmailVerification: false,
-      requiresMfa: false,
-      emailVerifiedAt: null,
-      authenticatorEnabledAt: null,
-      adminPermissions: Object.values(AdminPermission),
-    },
-  }),
+  useAuth: mockUseAuth,
 }));
 
 vi.mock('@/components/auth/privileged-mfa-banner', () => ({
@@ -67,6 +54,22 @@ import { renderWithRouter } from '@/tests/test-utils';
 describe('AdminLayout', () => {
   beforeEach(() => {
     state.pathname = '/admin';
+    mockUseAuth.mockReturnValue({
+      loading: false,
+      user: {
+        userId: 'admin-1',
+        email: 'admin@test.com',
+        role: 'admin' as const,
+        displayName: 'Admin',
+        isEmailVerified: true,
+        isAuthenticatorEnabled: false,
+        requiresEmailVerification: false,
+        requiresMfa: false,
+        emailVerifiedAt: null,
+        authenticatorEnabledAt: null,
+        adminPermissions: Object.values(AdminPermission),
+      },
+    });
   });
 
   it('routes standard admin pages through the learner-style admin shell', () => {
@@ -118,5 +121,34 @@ describe('AdminLayout', () => {
 
     expect(screen.getByTestId('admin-dashboard-shell')).toHaveAttribute('data-page-title', 'Revision History');
     expect(screen.queryByTestId('app-shell')).not.toBeInTheDocument();
+  });
+
+  it('blocks deep-linked pages when the admin lacks the page permission', async () => {
+    mockUseAuth.mockReturnValue({
+      loading: false,
+      user: {
+        userId: 'admin-2',
+        email: 'limited@test.com',
+        role: 'admin',
+        displayName: 'Limited Admin',
+        isEmailVerified: true,
+        isAuthenticatorEnabled: false,
+        requiresEmailVerification: false,
+        requiresMfa: false,
+        emailVerifiedAt: null,
+        authenticatorEnabledAt: null,
+        adminPermissions: [AdminPermission.UsersRead],
+      },
+    });
+
+    renderWithRouter(
+      <AdminLayout>
+        <div>Billing workspace</div>
+      </AdminLayout>,
+      { pathname: '/admin/billing' },
+    );
+
+    expect(screen.getByText('Admin permission required')).toBeInTheDocument();
+    expect(screen.queryByText('Billing workspace')).not.toBeInTheDocument();
   });
 });

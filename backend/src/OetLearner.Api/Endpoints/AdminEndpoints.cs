@@ -201,34 +201,34 @@ public static class AdminEndpoints
 
         admin.MapGet("/flags", async (AdminService service, CancellationToken ct, string? type)
             => Results.Ok(await service.GetFlagListAsync(type, ct)))
-            .WithAdminRead("AdminContentRead");
+            .WithAdminRead("AdminFeatureFlags");
 
         admin.MapPost("/flags", async (HttpContext http, AdminFlagCreateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.CreateFlagAsync(http.AdminId(), http.AdminName(), request, ct)))
-            .WithAdminWrite("AdminSystemAdmin");
+            .WithAdminWrite("AdminFeatureFlags");
 
         admin.MapPut("/flags/{flagId}", async (string flagId, HttpContext http, AdminFlagUpdateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.UpdateFlagAsync(http.AdminId(), http.AdminName(), flagId, request, ct)))
-            .WithAdminWrite("AdminSystemAdmin");
+            .WithAdminWrite("AdminFeatureFlags");
 
         admin.MapPost("/flags/{flagId}/activate", async (string flagId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ActivateFlagAsync(http.AdminId(), http.AdminName(), flagId, ct)))
-            .WithAdminWrite("AdminSystemAdmin");
+            .WithAdminWrite("AdminFeatureFlags");
 
         admin.MapPost("/flags/{flagId}/deactivate", async (string flagId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.DeactivateFlagAsync(http.AdminId(), http.AdminName(), flagId, ct)))
-            .WithAdminWrite("AdminSystemAdmin");
+            .WithAdminWrite("AdminFeatureFlags");
 
         // ── Audit Logs ──────────────────────────────────────
 
         admin.MapGet("/audit-logs", async (AdminService service, CancellationToken ct,
             string? action, string? actor, string? search, int? page, int? pageSize)
             => Results.Ok(await service.GetAuditEventsAsync(action, actor, search, page ?? 1, pageSize ?? 20, ct)))
-            .WithAdminRead("AdminSystemAdmin");
+            .WithAdminRead("AdminAuditLogs");
 
         admin.MapGet("/audit-logs/{eventId}", async (string eventId, AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetAuditEventDetailAsync(eventId, ct)))
-            .WithAdminRead("AdminSystemAdmin");
+            .WithAdminRead("AdminAuditLogs");
 
         admin.MapGet("/audit-logs/export", async (AdminService service, CancellationToken ct,
             string? action, string? actor, string? search)
@@ -237,7 +237,7 @@ public static class AdminEndpoints
                 var export = await service.ExportAuditEventsCsvAsync(action, actor, search, ct);
                 return Results.File(export.Bytes, "text/csv; charset=utf-8", export.FileName);
             })
-            .WithAdminRead("AdminSystemAdmin");
+            .WithAdminRead("AdminAuditLogs");
 
         // ── User Ops ────────────────────────────────────────
 
@@ -1135,6 +1135,7 @@ public static class AdminEndpoints
                     merged.RealtimeSttEnabled,
                     merged.RealtimeAsrProvider,
                     merged.RealtimeSttAllowRealProvider,
+                    merged.RealtimeSttRealProviderProductionAuthorized,
                     merged.RealtimeSttFallbackToBatch,
                     merged.RealtimeSttProviderConnectTimeoutSeconds,
                     merged.RealtimeSttMaxChunkBytes,
@@ -1151,6 +1152,7 @@ public static class AdminEndpoints
                     merged.RealtimeSttAllowManagedLearnerRealProvider,
                     merged.RealtimeSttConsentVersion,
                     merged.RealtimeSttRollbackMode,
+                    merged.RealtimeSttAllowedMimeTypes,
                     merged.ElevenLabsSttBaseUrl,
                     merged.ElevenLabsSttModel,
                     merged.ElevenLabsSttLanguage,
@@ -1191,7 +1193,7 @@ public static class AdminEndpoints
                     GptSoVitsApiKeyPresent = !string.IsNullOrEmpty(merged.GptSoVitsApiKey),
                 });
             })
-            .WithAdminRead("AdminContentRead");
+            .WithAdminRead("AdminAiConfig");
 
         admin.MapPut("/conversation/settings", async (
                 HttpContext http,
@@ -1224,6 +1226,7 @@ public static class AdminEndpoints
                 if (request.RealtimeSttEnabled.HasValue) row.RealtimeSttEnabled = request.RealtimeSttEnabled;
                 if (request.RealtimeAsrProvider is not null) row.RealtimeAsrProvider = NormalizeRealtimeAsrProvider(request.RealtimeAsrProvider);
                 if (request.RealtimeSttAllowRealProvider.HasValue) row.RealtimeSttAllowRealProvider = request.RealtimeSttAllowRealProvider;
+                if (request.RealtimeSttRealProviderProductionAuthorized.HasValue) row.RealtimeSttRealProviderProductionAuthorized = request.RealtimeSttRealProviderProductionAuthorized;
                 if (request.RealtimeSttFallbackToBatch.HasValue) row.RealtimeSttFallbackToBatch = request.RealtimeSttFallbackToBatch;
                 if (request.RealtimeSttProviderConnectTimeoutSeconds.HasValue) row.RealtimeSttProviderConnectTimeoutSeconds = request.RealtimeSttProviderConnectTimeoutSeconds;
                 if (request.RealtimeSttMaxChunkBytes.HasValue) row.RealtimeSttMaxChunkBytes = request.RealtimeSttMaxChunkBytes;
@@ -1240,6 +1243,7 @@ public static class AdminEndpoints
                 if (request.RealtimeSttAllowManagedLearnerRealProvider.HasValue) row.RealtimeSttAllowManagedLearnerRealProvider = request.RealtimeSttAllowManagedLearnerRealProvider;
                 if (request.RealtimeSttConsentVersion is not null) row.RealtimeSttConsentVersion = request.RealtimeSttConsentVersion;
                 if (request.RealtimeSttRollbackMode is not null) row.RealtimeSttRollbackMode = request.RealtimeSttRollbackMode;
+                if (request.RealtimeSttAllowedMimeTypes is not null) row.RealtimeSttAllowedMimeTypesCsv = string.Join(",", request.RealtimeSttAllowedMimeTypes.Select(x => x.Trim()).Where(x => x.Length > 0));
                 if (request.ElevenLabsSttBaseUrl is not null) row.ElevenLabsSttBaseUrl = request.ElevenLabsSttBaseUrl;
                 if (request.ElevenLabsSttModel is not null) row.ElevenLabsSttModel = request.ElevenLabsSttModel;
                 if (request.ElevenLabsSttLanguage is not null) row.ElevenLabsSttLanguage = request.ElevenLabsSttLanguage;
@@ -1297,6 +1301,7 @@ public static class AdminEndpoints
                         row.RealtimeSttEnabled,
                         row.RealtimeAsrProvider,
                         row.RealtimeSttAllowRealProvider,
+                        row.RealtimeSttRealProviderProductionAuthorized,
                         row.RealtimeSttFallbackToBatch,
                         row.RealtimeSttProviderConnectTimeoutSeconds,
                         row.RealtimeSttMaxChunkBytes,
@@ -1310,6 +1315,7 @@ public static class AdminEndpoints
                         row.RealtimeSttAssumeLearnersAdult,
                         row.RealtimeSttAllowManagedLearnerRealProvider,
                         row.RealtimeSttRollbackMode,
+                        row.RealtimeSttAllowedMimeTypesCsv,
                         ElevenLabsSttApiKeyChanged = request.ElevenLabsSttApiKey is not null,
                     }),
                     OccurredAt = now,
@@ -1319,8 +1325,7 @@ public static class AdminEndpoints
 
                 return Results.Ok(new { ok = true, updatedAt = now });
             })
-            .RequireRateLimiting("PerUserWrite")
-            .WithAdminRead("AdminContentWrite");
+            .WithAdminWrite("AdminAiConfig");
 
         // Admin sessions / evaluations operational viewer
         admin.MapGet("/conversation/sessions", async (
@@ -1918,6 +1923,22 @@ public static class AdminEndpoints
             if (!allowed.Contains(rollbackMode, StringComparer.OrdinalIgnoreCase))
             {
                 throw ApiException.Validation("REALTIME_ROLLBACK_MODE", "Realtime STT rollback mode must be disable-conversation-audio, disable-realtime-stt, or fallback-only.");
+            }
+        }
+
+        if (request.RealtimeSttAllowedMimeTypes is { Length: 0 })
+        {
+            throw ApiException.Validation("REALTIME_MIME_TYPES", "Realtime STT allowed MIME types cannot be empty.");
+        }
+
+        if (request.RealtimeSttAllowedMimeTypes is not null)
+        {
+            foreach (var mime in request.RealtimeSttAllowedMimeTypes)
+            {
+                if (string.IsNullOrWhiteSpace(mime) || mime.Length > 96 || !mime.Contains('/', StringComparison.Ordinal))
+                {
+                    throw ApiException.Validation("REALTIME_MIME_TYPES", "Realtime STT MIME types must be non-empty media types such as audio/pcm.");
+                }
             }
         }
     }

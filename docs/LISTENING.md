@@ -28,9 +28,9 @@ For the granular rulebook → file:line → test mapping see
   by [`tests/unit/listening/transitions.parity.test.ts`](../tests/unit/listening/transitions.parity.test.ts).
   The active player now uses this V2 FSM for strict start, strict resume
   hydration, strict preview/audio/review forward advances, and audio-resume
-  enforcement. Answer autosave, submit/review DTO handoff, and paper-mode
-  free navigation still run through the legacy active-player runtime until
-  their explicit migration waves land.
+  enforcement. Answer autosave and final submit use the V2 facade endpoints
+  while preserving the canonical full learner review DTO from
+  `ListeningLearnerService`.
 3. **Two-step confirm-token (R06.10).** Strict modes (CBT, OET-Home)
    require a second POST to `/v1/listening/v2/attempts/{id}/advance`
    echoing the HMAC token returned by the first call. TTL is 30 s by
@@ -139,6 +139,8 @@ alongside the legacy `/v1/listening-papers` group.
 |GET|`/attempts/{id}/state`|Current FSM snapshot (lazy-seeds Intro).|
 |POST|`/attempts/{id}/advance`|Two-step advance. Returns 412 with confirm-token on first call in strict modes.|
 |POST|`/attempts/{id}/audio-resume`|5-second grace window for cue-point resume.|
+|PUT|`/attempts/{attemptId}/answers/{questionId}`|V2 facade for canonical relational answer save.|
+|POST|`/attempts/{attemptId}/submit`|V2 facade for final answer handoff and full learner review DTO.|
 |POST|`/attempts/{id}/grade`|Version-pinned grade + auto-recompute pathway.|
 |GET|`/me/pathway`|12-stage snapshot.|
 |GET/POST/DELETE|`/teacher/classes`|CRUD with owner-only filtering.|
@@ -171,10 +173,10 @@ mapping in `LearnerDbContext.OnModelCreating`) and **never LINQ-queried**
   while the server verdict is pending, resumes only after approval, and fails
   closed with a paused player warning on validation failure. Section cue
   enforcement uses the full authored extract window for multi-extract sections
-  such as Part B. The route
-  has lock/submit confirmation copy, but the full R06.11 unanswered-number
-  banner and R07.3 all-parts paper final-review parity remain later player
-  migration work. R08 Part B/C annotation behavior is delegated to
+  such as Part B. The route lists exact unanswered question numbers before
+  strict section locks and final submit, and paper mode keeps all sections
+  editable with free navigation during all-parts review. R08 Part B/C
+  annotation behavior is delegated to
   [`BCQuestionRenderer.tsx`](../components/domain/listening/BCQuestionRenderer.tsx)
   and in-app zoom is delegated to
   [`ZoomControls.tsx`](../components/domain/listening/ZoomControls.tsx).

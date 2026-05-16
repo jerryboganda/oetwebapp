@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Pronunciation;
@@ -95,7 +96,7 @@ public sealed class PronunciationAdminDraftService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Pronunciation AI draft failed — using deterministic fallback.");
-            warning = $"AI provider error: {ex.Message}";
+            warning = "AI provider error: draft generation failed; using deterministic fallback template.";
         }
 
         if (parsed is null)
@@ -162,7 +163,7 @@ public sealed class PronunciationAdminDraftService(
             string label = S(root, "label") ?? $"Drill — /{target}/";
             string difficulty = S(root, "difficulty") ?? req.Difficulty ?? "medium";
             string focus = S(root, "focus") ?? req.Focus ?? "phoneme";
-            string tips = S(root, "tipsHtml") ?? "";
+            string tips = SafeHtmlSanitizer.SanitizeLimitedHtml(S(root, "tipsHtml"));
             string? selfCheck = S(root, "selfCheckNotes");
 
             var words = ReadStringList(root, "exampleWords");

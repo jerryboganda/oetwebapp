@@ -20,6 +20,26 @@ describe('ListeningSectionStepper', () => {
     const pills = screen.getByTestId('listening-section-stepper').querySelectorAll('[data-state]');
     expect(pills[0].getAttribute('data-state')).toBe('reviewing');
   });
+
+  it('renders clickable available sections when free navigation is enabled', async () => {
+    const onSelectSection = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ListeningSectionStepper
+        sections={['A1', 'B', 'C1']}
+        currentIndex={0}
+        isReviewing={false}
+        freeNavigation
+        onSelectSection={onSelectSection}
+      />,
+    );
+
+    const pills = screen.getByTestId('listening-section-stepper').querySelectorAll('[data-state]');
+    expect(pills[1].getAttribute('data-state')).toBe('available');
+    expect(screen.queryByLabelText(/locked/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'C1, available' }));
+    expect(onSelectSection).toHaveBeenCalledWith(2);
+  });
 });
 
 describe('ListeningPreviewBanner', () => {

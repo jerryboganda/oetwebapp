@@ -20,7 +20,7 @@ ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 ENV APP_URL=${APP_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_BUILD_WORKERS=1
-ENV NODE_OPTIONS="--max-old-space-size=1536"
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 RUN --mount=type=cache,target=/app/.next/cache npm run build
 

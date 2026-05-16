@@ -109,16 +109,24 @@ public sealed class LocalFileStorage(IWebHostEnvironment environment, IOptions<S
 
     private string ResolvePath(string key)
     {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new InvalidOperationException("Storage key is required.");
+
         var rootPath = Path.GetFullPath(
             Path.IsPathRooted(_options.LocalRootPath)
                 ? _options.LocalRootPath
                 : Path.Combine(environment.ContentRootPath, _options.LocalRootPath));
-        var normalized = key
-            .Replace('\\', Path.DirectorySeparatorChar)
-            .Replace('/', Path.DirectorySeparatorChar)
-            .TrimStart(Path.DirectorySeparatorChar);
+
+        var segments = key.Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length == 0
+            || segments.Any(segment => segment == "." || segment == ".." || segment.Contains(':', StringComparison.Ordinal)))
+            throw new InvalidOperationException("Storage key contains an invalid path segment.");
+
+        var normalized = Path.Combine(segments);
         var fullPath = Path.GetFullPath(Path.Combine(rootPath, normalized));
-        if (!fullPath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
+        var relative = Path.GetRelativePath(rootPath, fullPath);
+        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
             throw new InvalidOperationException("Storage key resolved outside the configured storage root.");
         return fullPath;
     }

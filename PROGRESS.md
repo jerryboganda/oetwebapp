@@ -11,6 +11,13 @@ Updated: 2026-05-12
 - Current open work now separates launch blockers, paid-beta blockers, broad-rollout blockers, expansion-surface work, and external operational dependencies.
 - Evidence pass used 8 parallel read-only subagents: research, architecture, adversarial review, DevOps, UX/accessibility, failure modes, canonical planning, and documentation.
 
+## Launch Gate Continuation — 2026-05-14
+
+- Closed additional local hardening found inside externally blocked launch gates: grounded AI provider startup safety now requires a real API key plus external HTTPS base URL, realtime STT startup safety validates an approved topology, production env validation no longer depends on `/tmp`, mobile release validation rejects malformed app versions and association files, and desktop release CI verifies signed Windows artifacts plus publishes SHA-256 checksums.
+- Added Listening matrix-runner buckets for `tests/e2e/listening/*` and a `--list` dry-run mode so CI/operators can confirm selected Playwright coverage without requiring the full runtime.
+- Refreshed Listening docs/status maps so V2 save/submit, exact unanswered-question warnings, and all-parts paper final review are no longer listed as local code deferrals.
+- Remaining gates are now external-evidence blockers: Apple/Android signing and device/store validation, signed desktop/update-host proof, protected live STT secret/legal/spend/topology evidence, and manual assistive-tech signoff. The local Listening/Reading smoke gate has Postgres-backed evidence.
+
 ## Backend Solution Test Sweep — 2026-05-10 (closure)
 
 Full `dotnet test backend/OetLearner.sln` (OetLearner.Api.Tests project) — **1356/1356 PASSED in 28.0 minutes**. The duration is driven by MockSampleSeeder + heavy EF in-memory fixtures (`Saved 1209 entities`, `Saved 657 entities`, full bundle ingest from `Project Real Content`) firing in `WebApplicationFactory` setups; no hang, no failures, no flakes. `--blame-hang-timeout 120s` produced no hang report. Trx artifact: `%TEMP%\dnresult.trx`. With this, no Writing-adjacent or sln-wide test is deferred.

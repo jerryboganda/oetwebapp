@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import { fetchWritingResult } from '@/lib/api';
+import { fetchWritingResult, isApiError } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingResult } from '@/lib/mock-data';
 import ProfessionRemediationCallout from '@/components/domain/profession-remediation-callout';
@@ -28,10 +28,13 @@ function WritingResultContent() {
 
     let cancelled = false;
 
+    let failedAttempts = 0;
+
     const poll = async () => {
       try {
         const response = await fetchWritingResult(resultId);
         if (cancelled) return;
+        failedAttempts = 0;
         if (response.evalStatus === 'completed') {
           analytics.track('evaluation_viewed', { resultId, subtest: 'writing' });
           setResult(response);
@@ -40,8 +43,18 @@ function WritingResultContent() {
         }
 
         setTimeout(() => { void poll(); }, 2000);
-      } catch {
+      } catch (error) {
         if (!cancelled) {
+          failedAttempts += 1;
+          const shouldRetry =
+            failedAttempts < 120 &&
+            (!isApiError(error) || error.retryable || error.status === 404 || error.status === 409 || error.status === 425);
+
+          if (shouldRetry) {
+            setTimeout(() => { void poll(); }, 2000);
+            return;
+          }
+
           setLoading(false);
         }
       }

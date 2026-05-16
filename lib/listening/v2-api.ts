@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api';
 import type { ListeningFsmState } from '@/lib/listening/transitions';
+import type { ListeningReviewDto } from '@/lib/listening-api';
 
 /**
  * Listening V2 API client. Targets the backend `/v1/listening/v2/...`
@@ -77,6 +78,18 @@ export const listeningV2Api = {
     return apiClient.post<AudioResumeResult>(
       `/v1/listening/v2/attempts/${encodeURIComponent(attemptId)}/audio-resume`,
       { cuePointMs },
+    );
+  },
+  saveAnswer(attemptId: string, questionId: string, userAnswer: string | null) {
+    return apiClient.put<void>(
+      `/v1/listening/v2/attempts/${encodeURIComponent(attemptId)}/answers/${encodeURIComponent(questionId)}`,
+      { userAnswer },
+    );
+  },
+  submit(attemptId: string, answers?: Record<string, string | null>) {
+    return apiClient.post<ListeningReviewDto>(
+      `/v1/listening/v2/attempts/${encodeURIComponent(attemptId)}/submit`,
+      { answers: answers ?? {} },
     );
   },
   recordTechReadiness(attemptId: string, result: { audioOk: boolean; durationMs: number }) {

@@ -75,6 +75,47 @@ for file in "${payload_required[@]}"; do
   require_manifest_entry "$file"
 done
 
+validate_digest_ref() {
+  local key="$1"
+  local value="$2"
+  case "$value" in
+    *@sha256:*) ;;
+    *)
+      echo "$key must be pinned to an immutable sha256 digest; found: $value" >&2
+      exit 1
+      ;;
+  esac
+  digest="${value##*@sha256:}"
+  case "$digest" in
+    *[!0-9a-fA-F]*)
+      echo "$key digest must be hexadecimal; found: $digest" >&2
+      exit 1
+      ;;
+  esac
+  if [ "${#digest}" -ne 64 ]; then
+    echo "$key digest must be 64 hex characters; found length ${#digest}" >&2
+    exit 1
+  fi
+}
+
+if [ "$EVIDENCE_ENV" = "production" ]; then
+  image_digest_file="$EVIDENCE_DIR/image-digests.env"
+  if [ ! -s "$image_digest_file" ]; then
+    echo "Production evidence requires image-digests.env with immutable image refs." >&2
+    exit 1
+  fi
+  require_manifest_entry "image-digests.env"
+  for key in WEB_IMAGE API_IMAGE DB_BACKUP_IMAGE ROUTER_IMAGE; do
+    value=$(awk -F= -v key="$key" '$1 == key { print $2 }' "$image_digest_file" | tail -n 1)
+    value=$(printf '%s' "$value" | awk '{$1=$1; print}')
+    if [ -z "$value" ]; then
+      echo "image-digests.env must include $key." >&2
+      exit 1
+    fi
+    validate_digest_ref "$key" "$value"
+  done
+fi
+
 sca_exit_code=$(awk -F= '$1 == "sca_exit_code" { print $2 }' "$EVIDENCE_DIR/release-metadata.env" | tail -n 1)
 sca_exit_code=$(printf '%s' "$sca_exit_code" | awk '{$1=$1; print}')
 if [ -z "$sca_exit_code" ]; then

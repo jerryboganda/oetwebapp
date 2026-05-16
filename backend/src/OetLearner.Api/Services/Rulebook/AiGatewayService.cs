@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.AiTools;
@@ -153,6 +154,7 @@ public sealed class AiGatewayService(
             {
                 var topRow = (await providerRegistry.ListByCategoryAsync(AiProviderCategory.TextChat, ct))
                     .Where(row => row.IsActive && row.Category == AiProviderCategory.TextChat)
+                    .Where(row => !string.IsNullOrWhiteSpace(row.EncryptedApiKey))
                     .OrderBy(row => row.FailoverPriority)
                     .FirstOrDefault();
                 if (topRow is not null)
@@ -176,9 +178,16 @@ public sealed class AiGatewayService(
             }
         }
 
-        // If the caller did not pin a provider, prefer the first real provider
-        // over the mock fallback so configured production deployments use the
-        // actual model path by default.
+        // If no credentialed registry row exists (local dev / smoke tests),
+        // fall back to the deterministic mock instead of selecting the
+        // registry-backed provider and failing later on an empty platform key.
+        // Production startup validation rejects missing provider credentials
+        // before learner-visible traffic can reach this path.
+        if (provider is null && string.IsNullOrWhiteSpace(request.Provider) && selectedProviderCode is null)
+            provider = providers.FirstOrDefault(p => string.Equals(p.Name, "mock", StringComparison.OrdinalIgnoreCase));
+
+        // Otherwise prefer the first real provider over the mock fallback so
+        // configured production deployments use the actual model path by default.
         provider ??= providers.FirstOrDefault(p => !string.Equals(p.Name, "mock", StringComparison.OrdinalIgnoreCase));
         provider ??= providers.FirstOrDefault();
         if (provider is null)
@@ -431,7 +440,7 @@ public sealed class AiGatewayService(
                     keySource: prospectiveKeySource,
                     outcome: AiCallOutcome.ProviderError,
                     errorCode: errorCode,
-                    errorMessage: ex.Message,
+                    errorMessage: SanitiseProviderErrorMessage(ex, errorCode),
                     latencyMs: (int)stopwatch.ElapsedMilliseconds,
                     retryCount: 0,
                     policyTrace: resolution?.PolicyTrace,
@@ -614,6 +623,27 @@ public sealed class AiGatewayService(
             return "provider_5xx";
         return "provider_error";
     }
+
+    private static string SanitiseProviderErrorMessage(Exception ex, string errorCode)
+    {
+        var message = ex.Message ?? string.Empty;
+        var status = HttpStatusPattern.Match(message);
+        if (status.Success)
+            return $"Provider request failed with HTTP {status.Value}.";
+
+        return errorCode switch
+        {
+            "provider_auth" => "Provider authentication failed.",
+            "provider_429" => "Provider rate limit reached.",
+            "provider_5xx" => "Provider service failed.",
+            _ => "Provider request failed.",
+        };
+    }
+
+    private static readonly Regex HttpStatusPattern = new(
+        @"(?<!\d)(?:401|403|408|409|422|429|500|502|503|504)(?!\d)",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(50));
 
     private static string BuildUserMessage(AiGatewayRequest request)
     {
@@ -1399,7 +1429,30 @@ public sealed class MockAiProvider : IAiModelProvider
         // through the registry-backed provider (DigitalOcean Serverless
         // Claude Opus 4.7) — the gateway prefers non-mock providers by name
         // whenever more than one is registered.
-        var text = "{\"findings\":[],\"advisory\":\"mock AI provider — no external model call was made\"}";
+        var text = request.SystemPrompt.Contains("**This call concerns WRITING**", StringComparison.OrdinalIgnoreCase)
+            ? """
+              {
+                "findings": [],
+                "criteriaScores": {
+                  "purpose": 2,
+                  "content": 5,
+                  "conciseness_clarity": 5,
+                  "genre_style": 5,
+                  "organisation_layout": 5,
+                  "language": 5
+                },
+                "estimatedScaledScore": 350,
+                "estimatedGrade": "B",
+                "passed": true,
+                "passRequires": { "scaled": 350, "grade": "B" },
+                "advisory": "Mock AI provider generated a deterministic Writing scoring contract; no external model call was made.",
+                "strengths": [
+                  "The response is ready for deterministic practice feedback.",
+                  "The evaluation uses the grounded Writing contract shape."
+                ]
+              }
+              """
+            : "{\"findings\":[],\"advisory\":\"mock AI provider — no external model call was made\"}";
         return Task.FromResult(new AiProviderCompletion { Text = text, Usage = new AiUsage() });
     }
 }

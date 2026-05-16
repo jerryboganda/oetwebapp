@@ -16,6 +16,7 @@ import {
   adminPronunciationAiDraft,
   createAdminPronunciationDrill,
 } from '@/lib/api';
+import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 
 type DraftResult = {
   targetPhoneme: string;
@@ -69,6 +70,7 @@ export default function PronunciationAiDraftPage() {
     if (!draft) return;
     setSaving(true);
     try {
+      const safeTipsHtml = sanitizeBodyHtml(draft.tipsHtml);
       const saved = (await createAdminPronunciationDrill({
         word: draft.label,
         phoneticTranscription: draft.targetPhoneme,
@@ -76,7 +78,7 @@ export default function PronunciationAiDraftPage() {
         focus: draft.focus,
         primaryRuleId: draft.primaryRuleId,
         difficulty: draft.difficulty,
-        tipsHtml: draft.tipsHtml,
+        tipsHtml: safeTipsHtml,
         exampleWordsJson: JSON.stringify(draft.exampleWords),
         minimalPairsJson: JSON.stringify(draft.minimalPairs),
         sentencesJson: JSON.stringify(draft.sentences),
@@ -231,7 +233,7 @@ export default function PronunciationAiDraftPage() {
           {draft.tipsHtml && (
             <div>
               <span className="text-xs uppercase tracking-[0.15em] text-muted">Tips</span>
-              <div className="prose prose-sm mt-1 max-w-none" dangerouslySetInnerHTML={{ __html: draft.tipsHtml }} />
+              <div className="prose prose-sm mt-1 max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(draft.tipsHtml) }} />
             </div>
           )}
         </AdminRoutePanel>

@@ -11,7 +11,9 @@ Production deploys must leave enough evidence for a reviewer to understand exact
 - Reading/media smoke output from `scripts/deploy/reading-media-smoke.sh`.
 - SBOM JSON and SCA JSON.
 - Signed release evidence manifest (`checksums.sha256` + `checksums.sha256.asc`) and verification output proving `release-metadata.env git_sha` matches deployed `HEAD`.
-- Docker image IDs and tags.
+- Immutable Docker image digest refs from `image-digests.env`.
+- Active/previous-good release record from `.deploy/previous-good.env` and the
+  active blue/green slot record from `.deploy/active-slot.env`.
 - Desktop/mobile artifact checksums when those platforms are included.
 - Deployment pre-flight backup ID and post-deploy verification output.
 
@@ -25,7 +27,8 @@ Production deploys must leave enough evidence for a reviewer to understand exact
 
 A production smoke failure after deploy must produce one of these outcomes:
 
-- Roll back using the recorded pre-flight backup and previous image/tag.
+- Roll back using the recorded previous-good SHA, slot, evidence bundle, image
+  digests, and pre-flight backup.
 - Hold release and document an accepted risk with owner, mitigation, and expiry.
 - Mark the release failed and keep artifacts for incident review.
 

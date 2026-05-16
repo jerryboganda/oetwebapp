@@ -35,6 +35,18 @@ required_keys=(
   BILLING__STRIPE__CANCELURL
   BILLING__STRIPE__WEBHOOKSECRET
   BILLING__ALLOWSANDBOXFALLBACKS
+  AI__BASEURL
+  AI__APIKEY
+  AI__PROVIDERID
+  AI__DEFAULTMODEL
+  PRONUNCIATION__PROVIDER
+  PRONUNCIATION__AZURESPEECHKEY
+  PRONUNCIATION__AZURESPEECHREGION
+  CONVERSATION__ENABLED
+  CONVERSATION__ASRPROVIDER
+  CONVERSATION__DEEPGRAMAPIKEY
+  CONVERSATION__TTSPROVIDER
+  CONVERSATION__ELEVENLABSAPIKEY
   PUBLIC_API_BASE_URL
   CHECKOUT_BASE_URL
   CORS_ALLOWED_ORIGINS
@@ -54,6 +66,7 @@ required_keys=(
   READING_SMOKE_ENABLED_PAPER_ID
   READING_SMOKE_PROTECTED_MEDIA_ID
   READING_SMOKE_ENTITLED_MEDIA_ID
+  ROUTER_IMAGE
 )
 
 read_env_value() {
@@ -131,13 +144,12 @@ for key in "${required_keys[@]}"; do
   esac
 done
 
-if grep -niE '^[[:space:]]*[^#].*(__placeholder__|placeholder|todo|changeme|replace-with|replace_with|example\.invalid|examplepublickey|exampleprivatekey|0123456789abcdef)' "$ENV_FILE" >/tmp/oet-env-placeholder-lines.txt; then
+placeholder_lines=$(grep -niE '^[[:space:]]*[^#].*(__placeholder__|placeholder|todo|changeme|replace-with|replace_with|example\.invalid|examplepublickey|exampleprivatekey|0123456789abcdef)' "$ENV_FILE" || true)
+if [ -n "$placeholder_lines" ]; then
   echo "[env] placeholder markers found in $ENV_FILE:" >&2
-  cut -d: -f1 /tmp/oet-env-placeholder-lines.txt | sed 's/^/[env]   line /' >&2
-  rm -f /tmp/oet-env-placeholder-lines.txt
+  printf '%s\n' "$placeholder_lines" | cut -d: -f1 | sed 's/^/[env]   line /' >&2
   failed=1
 fi
-rm -f /tmp/oet-env-placeholder-lines.txt
 
 require_min_length() {
   local key="$1"
@@ -179,6 +191,32 @@ require_no_wildcard_or_localhost() {
       failed=1
       ;;
   esac
+}
+
+require_digest_image() {
+  local key="$1"
+  local value digest
+  value=$(read_env_value "$key" || true)
+  case "$value" in
+    *@sha256:*) ;;
+    *)
+      echo "[env] $key must be pinned to an immutable @sha256 digest" >&2
+      failed=1
+      return
+      ;;
+  esac
+  digest="${value##*@sha256:}"
+  case "$digest" in
+    *[!0-9a-fA-F]*)
+      echo "[env] $key digest must be hexadecimal" >&2
+      failed=1
+      return
+      ;;
+  esac
+  if [ "${#digest}" -ne 64 ]; then
+    echo "[env] $key digest must be 64 hex characters" >&2
+    failed=1
+  fi
 }
 
 require_boolean_false() {
@@ -255,6 +293,22 @@ require_not_value_prefix() {
   fi
 }
 
+require_not_value() {
+  local key="$1"
+  local alt_key="$2"
+  local forbidden="$3"
+  local value
+  value=$(read_env_value_ci "$key" || true)
+  if [ -z "$value" ] && [ -n "$alt_key" ]; then
+    value=$(read_env_value_ci "$alt_key" || true)
+  fi
+  value=$(printf '%s' "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+  if [ "$value" = "$forbidden" ]; then
+    echo "[env] $key/$alt_key must not be $forbidden in production" >&2
+    failed=1
+  fi
+}
+
 require_s3_url() {
   local key="$1"
   local value
@@ -303,6 +357,10 @@ require_min_length AUTHTOKENS__ACCESSTOKENSIGNINGKEY 32
 require_min_length AUTHTOKENS__REFRESHTOKENSIGNINGKEY 32
 require_min_length POSTGRES_PASSWORD 16
 require_min_length BILLING__STRIPE__WEBHOOKSECRET 16
+require_min_length AI__APIKEY 16
+require_min_length PRONUNCIATION__AZURESPEECHKEY 16
+require_min_length CONVERSATION__DEEPGRAMAPIKEY 16
+require_min_length CONVERSATION__ELEVENLABSAPIKEY 16
 require_min_length BACKUP_GPG_PASSPHRASE 16
 require_min_length BACKUP_AWS_ACCESS_KEY_ID 8
 require_min_length BACKUP_AWS_SECRET_ACCESS_KEY 16
@@ -310,6 +368,7 @@ require_min_length READING_SMOKE_LEARNER_PASSWORD 12
 require_email READING_SMOKE_LEARNER_EMAIL
 require_https_url PUBLIC_API_BASE_URL
 require_https_url CHECKOUT_BASE_URL
+require_https_url AI__BASEURL
 require_https_url NEXT_PUBLIC_API_BASE_URL
 require_https_url APP_URL
 require_https_url SENTRY_DSN
@@ -318,6 +377,7 @@ require_https_url BACKUP_ALERT_WEBHOOK
 require_s3_url BACKUP_S3_URL
 require_no_wildcard_or_localhost API_ALLOWED_HOSTS
 require_no_wildcard_or_localhost CORS_ALLOWED_ORIGINS
+require_digest_image ROUTER_IMAGE
 require_boolean_false BILLING__ALLOWSANDBOXFALLBACKS
 require_hex_fingerprint EVIDENCE_SIGNER_FINGERPRINT
 require_absent NEXT_PUBLIC_ELEVENLABS_API_KEY
@@ -327,10 +387,17 @@ require_absent_prefix NEXT_PUBLIC_ELEVENLABS
 require_absent CONVERSATION__ELEVENLABSSTTAPIKEY
 require_absent Conversation__ElevenLabsSttApiKey
 require_absent_key_regex_ci 'conversation__elevenlabsstt[a-z0-9_]*apikey' 'Conversation__ElevenLabsStt*ApiKey'
+require_not_value PRONUNCIATION__PROVIDER Pronunciation__Provider mock
+require_not_value CONVERSATION__ASRPROVIDER Conversation__AsrProvider mock
+require_not_value CONVERSATION__TTSPROVIDER Conversation__TtsProvider mock
+require_not_value CONVERSATION__REALTIMEASRPROVIDER Conversation__RealtimeAsrProvider mock
+require_not_value AI__PROVIDERID Ai__ProviderId mock
+require_not_value AI__DEFAULTMODEL Ai__DefaultModel mock
 require_not_value_prefix CONVERSATION__REALTIMEASRPROVIDER Conversation__RealtimeAsrProvider elevenlabs
 require_boolean_false_unless_acknowledged CONVERSATION__REALTIMESTTENABLED Conversation__RealtimeSttEnabled CONVERSATION__REALTIMESTTROLLOUTACKNOWLEDGEMENT Conversation__RealtimeSttRolloutAcknowledgement
 require_boolean_false_unless_acknowledged CONVERSATION__REALTIMESTTALLOWREALPROVIDER Conversation__RealtimeSttAllowRealProvider CONVERSATION__REALTIMESTTROLLOUTACKNOWLEDGEMENT Conversation__RealtimeSttRolloutAcknowledgement
 require_boolean_false_unless_acknowledged CONVERSATION__REALTIMESTTREALPROVIDERPRODUCTIONAUTHORIZED Conversation__RealtimeSttRealProviderProductionAuthorized CONVERSATION__REALTIMESTTROLLOUTACKNOWLEDGEMENT Conversation__RealtimeSttRolloutAcknowledgement
+require_not_value CONVERSATION__REALTIMESTTALLOWMANAGEDLEARNERREALPROVIDER Conversation__RealtimeSttAllowManagedLearnerRealProvider true
 
 real_provider_enabled=$(read_env_value_any CONVERSATION__REALTIMESTTALLOWREALPROVIDER Conversation__RealtimeSttAllowRealProvider || true)
 real_provider_enabled=$(printf '%s' "$real_provider_enabled" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
@@ -359,7 +426,7 @@ if [[ "$real_provider_enabled" == "true" ]]; then
   fi
 
   pricing=$(read_env_value_any CONVERSATION__REALTIMESTTESTIMATEDCOSTUSDPERMINUTE Conversation__RealtimeSttEstimatedCostUsdPerMinute || true)
-  if ! awk "BEGIN { exit !($pricing > 0) }" 2>/dev/null; then
+  if ! awk -v pricing="$pricing" 'BEGIN { exit !(pricing ~ /^[0-9]+([.][0-9]+)?$/ && pricing + 0 > 0) }' 2>/dev/null; then
     echo "[env] Conversation__RealtimeSttEstimatedCostUsdPerMinute must be greater than 0 when real realtime STT is enabled" >&2
     failed=1
   fi

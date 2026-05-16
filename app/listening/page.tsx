@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, Lock, MonitorCheck, Printer, Sparkles, Target, TrendingUp, Users, Volume2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, Lock, MonitorCheck, Printer, Sparkles, Target, TrendingUp, Volume2 } from 'lucide-react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { fetchMockReports } from '@/lib/api';
-import { getListeningHome, type ListeningHomeDto, type ListeningHomePaperDto, type ListeningHomeTaskDto } from '@/lib/listening-api';
+import { getListeningHome, type ListeningHomeDto, type ListeningHomePaperDto } from '@/lib/listening-api';
 import { getListeningPathway, type ListeningPathwaySnapshot } from '@/lib/listening-authoring-api';
 import type { MockReport } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -36,38 +36,6 @@ function paperMeta(paper: ListeningHomePaperDto) {
   if (missing.length > 0) return `Missing ${missing.join(', ')}`;
   if (!paper.objectiveReady) return 'Question map pending';
   return `${paper.questionCount || 42} authored items`;
-}
-
-function taskToCard(task: ListeningHomeTaskDto, index: number) {
-  const card: LearnerSurfaceCardModel = {
-    kind: 'task',
-    sourceType: 'backend_task',
-    accent: 'indigo',
-    eyebrow: task.scenarioType ? titleCase(task.scenarioType) : 'Demo Listening Task',
-    eyebrowIcon: Volume2,
-    title: task.title,
-    description: 'Use the compatibility task while published Listening papers are being prepared.',
-    metaItems: [
-      { icon: Clock, label: `${task.estimatedDurationMinutes} mins` },
-      { icon: Target, label: titleCase(task.difficulty) },
-      { icon: FileText, label: `${task.questionCount} items` },
-    ],
-    primaryAction: {
-      label: 'Start Task',
-      href: `/listening/player/${task.contentId}?mode=practice`,
-    },
-    secondaryAction: {
-      label: 'Exam Mode',
-      href: `/listening/player/${task.contentId}?mode=exam`,
-      variant: 'outline',
-    },
-  };
-
-  return (
-    <MotionItem key={task.contentId} delayIndex={index}>
-      <LearnerSurfaceCard card={card} />
-    </MotionItem>
-  );
 }
 
 function modeLabel(mode: string) {
@@ -140,7 +108,6 @@ export default function ListeningHome() {
   );
 
   const papers = home?.papers ?? [];
-  const tasks = home?.featuredTasks ?? [];
   const activeAttempts = home?.activeAttempts ?? [];
   const recentResults = home?.recentResults ?? [];
   const safeDrills = useMemo(() => {
@@ -152,13 +119,13 @@ export default function ListeningHome() {
   const partCollections = Array.isArray(home?.partCollections) ? home!.partCollections : [];
   const mockSets = Array.isArray(home?.mockSets) ? home!.mockSets : [];
   const transcriptRoute = home?.transcriptBackedReview?.route ?? null;
-  const hasPractice = papers.length + tasks.length > 0;
+  const hasPractice = papers.length > 0;
 
   const heroHighlights = useMemo(() => [
     {
       icon: Volume2,
       label: 'Published papers',
-      value: loading ? 'Loading...' : papers.length ? `${papers.length} ready` : tasks.length ? 'Demo fallback' : 'None yet',
+      value: loading ? 'Loading...' : papers.length ? `${papers.length} ready` : 'None yet',
     },
     {
       icon: History,
@@ -170,7 +137,7 @@ export default function ListeningHome() {
       label: 'Transcript review',
       value: loading ? 'Loading...' : transcriptRoute ? 'Latest result ready' : 'Available after submit',
     },
-  ], [activeAttempts.length, loading, papers.length, tasks.length, transcriptRoute]);
+  ], [activeAttempts.length, loading, papers.length, transcriptRoute]);
 
   const transcriptCard: LearnerSurfaceCardModel = {
     kind: 'navigation',
@@ -186,7 +153,7 @@ export default function ListeningHome() {
     ],
     primaryAction: transcriptRoute
       ? { label: 'Open Review', href: transcriptRoute }
-      : { label: 'Start Listening', href: hasPractice ? (papers[0]?.route ?? `/listening/player/${tasks[0]?.contentId}`) : '/listening' },
+      : { label: 'Start Listening', href: hasPractice ? papers[0]!.route : '/mocks' },
     secondaryAction: {
       label: 'Open Mock Center',
       href: '/mocks',
@@ -291,26 +258,6 @@ export default function ListeningHome() {
             </LearnerSurfaceCard>
           </section>
         ) : null}
-
-        <section aria-label="Listening teacher tools">
-          <LearnerSurfaceCard
-            card={{
-              kind: 'navigation',
-              sourceType: 'frontend_navigation',
-              accent: 'blue',
-              eyebrow: 'Teacher Classes',
-              eyebrowIcon: Users,
-              title: 'Review class Listening analytics',
-              description: 'Open roster-scoped score signals, part accuracy, hardest questions, and distractor heat for your own classes.',
-              metaItems: [
-                { icon: Users, label: 'Owner-scoped classes' },
-                { icon: Target, label: 'A/B/C breakdown' },
-                { icon: TrendingUp, label: 'Class readiness signals' },
-              ],
-              primaryAction: { label: 'Open Class Analytics', href: '/listening/classes', variant: 'outline' },
-            }}
-          />
-        </section>
 
         {loading ? (
           <LearnerSkeleton variant="dashboard" />
@@ -434,15 +381,11 @@ export default function ListeningHome() {
                     );
                   })}
                 </div>
-              ) : tasks.length > 0 ? (
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                  {tasks.map(taskToCard)}
-                </div>
               ) : (
                 <LearnerEmptyState
                   icon={Headphones}
                   title="No published Listening papers are ready yet"
-                  description={home?.emptyStates.papers ?? 'Use mocks or your study plan while Listening papers are being prepared.'}
+                  description={home?.emptyStates.papers ?? 'Published Listening papers are required for public launch practice. Use mocks or your study plan while real papers are being prepared.'}
                   primaryAction={{ label: 'Run a Full Mock', href: '/mocks' }}
                   secondaryAction={{ label: 'Review Study Plan', href: '/study-plan' }}
                 />

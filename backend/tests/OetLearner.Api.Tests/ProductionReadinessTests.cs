@@ -440,6 +440,16 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
             ["UploadScanner:Provider"] = "clamav",
             ["UploadScanner:Host"] = "localhost",
             ["UploadScanner:Port"] = "3310",
+            ["AI:ProviderId"] = "digitalocean-serverless",
+            ["AI:DefaultModel"] = "glm-5",
+            ["AI:ApiKey"] = "real-ai-provider-key",
+            ["AI:BaseUrl"] = "https://inference.do-ai.run/v1",
+            ["Pronunciation:Provider"] = "azure",
+            ["Pronunciation:AzureSpeechKey"] = "azure-pronunciation-key",
+            ["Pronunciation:AzureSpeechRegion"] = "uksouth",
+            ["Conversation:AsrProvider"] = "deepgram",
+            ["Conversation:DeepgramApiKey"] = "deepgram-conversation-key",
+            ["Conversation:TtsProvider"] = "off",
             // C7 PasswordPolicy HIBP check hits real network from tests; disable it here.
             ["PasswordPolicy:BreachCheckEnabled"] = "false"
         };

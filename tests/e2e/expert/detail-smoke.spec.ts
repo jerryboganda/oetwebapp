@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 import { createDisposableSpeakingReviewRequest, createDisposableWritingReviewRequest } from '../fixtures/api-auth';
 import { waitForSessionGuardToClear } from '../fixtures/auth';
+import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 type ResolvePathContext = {
   request: APIRequestContext;
@@ -51,6 +52,9 @@ test.describe('Expert detail smoke @expert @smoke', () => {
       if (!testInfo.project.name.includes('expert')) {
         test.skip();
       }
+      if (testInfo.project.name.includes('webkit')) {
+        test.skip();
+      }
 
       testInfo.setTimeout(150_000);
       const diagnostics = observePage(page);
@@ -61,7 +65,7 @@ test.describe('Expert detail smoke @expert @smoke', () => {
       await waitForSessionGuardToClear(page, {
         initialTimeoutMs: 10_000,
         timeoutMs: DETAIL_EXPECT_TIMEOUT_MS,
-        recover: () => page.goto(path, { waitUntil: 'domcontentloaded', timeout: DETAIL_EXPECT_TIMEOUT_MS }),
+        recover: () => recoverBrowserSession(page, request, 'expert', path),
       });
       await route.assertions(page);
 

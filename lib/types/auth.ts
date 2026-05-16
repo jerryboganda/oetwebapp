@@ -64,6 +64,7 @@ export interface SignupCatalog {
   examTypes: SignupExamType[];
   professions: SignupProfession[];
   externalAuthProviders: ExternalAuthProvider[];
+  nonOetBetaEnabled?: boolean;
 }
 
 export interface RegisterLearnerInput {

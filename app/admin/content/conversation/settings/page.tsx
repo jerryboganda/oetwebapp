@@ -32,6 +32,7 @@ type Settings = {
   realtimeSttEnabled?: boolean;
   realtimeAsrProvider?: string;
   realtimeSttAllowRealProvider?: boolean;
+  realtimeSttRealProviderProductionAuthorized?: boolean;
   realtimeSttFallbackToBatch?: boolean;
   realtimeSttProviderConnectTimeoutSeconds?: number;
   realtimeSttMaxChunkBytes?: number;
@@ -48,6 +49,7 @@ type Settings = {
   realtimeSttAllowManagedLearnerRealProvider?: boolean;
   realtimeSttConsentVersion?: string;
   realtimeSttRollbackMode?: string;
+  realtimeSttAllowedMimeTypes?: string[];
   elevenLabsSttBaseUrl?: string;
   elevenLabsSttModel?: string;
   elevenLabsSttLanguage?: string;
@@ -272,7 +274,7 @@ export default function AdminConversationSettingsPage() {
               <Section title="Realtime STT">
                 <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>ElevenLabs realtime STT uses the backend-held encrypted key only. Keep fallback enabled until protected live smoke passes for the selected audio strategy and audience.</span>
+                  <span>ElevenLabs realtime STT uses the backend-held encrypted key only. Production use requires legal/privacy approval, topology/region proof, spend cap approval, and protected smoke evidence.</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <label className="flex items-center gap-2 text-sm">
@@ -315,6 +317,14 @@ export default function AdminConversationSettingsPage() {
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
+                      checked={Boolean(v('realtimeSttRealProviderProductionAuthorized') ?? false)}
+                      onChange={(e) => setField('realtimeSttRealProviderProductionAuthorized', e.target.checked)}
+                    />
+                    Production authorization approved
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
                       checked={Boolean(v('realtimeSttAssumeLearnersAdult') ?? false)}
                       onChange={(e) => setField('realtimeSttAssumeLearnersAdult', e.target.checked)}
                     />
@@ -351,6 +361,9 @@ export default function AdminConversationSettingsPage() {
                   <Input label="Provider Region ID" value={String(v('realtimeSttRegionId') ?? '')} onChange={(e) => setField('realtimeSttRegionId', e.target.value)} placeholder="uk-prod-1" />
                   <Input label="Consent Version" value={String(v('realtimeSttConsentVersion') ?? '')} onChange={(e) => setField('realtimeSttConsentVersion', e.target.value)} placeholder="realtime-stt-v1-2026-05-14" />
                   <Input label="Rollback Mode" value={String(v('realtimeSttRollbackMode') ?? '')} onChange={(e) => setField('realtimeSttRollbackMode', e.target.value)} placeholder="disable-conversation-audio" />
+                  <Input label="Allowed realtime MIME types (CSV)" value={((v('realtimeSttAllowedMimeTypes') as string[]) ?? []).join(',')}
+                    onChange={(e) => setField('realtimeSttAllowedMimeTypes', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+                    placeholder="audio/pcm,audio/l16,audio/raw,application/octet-stream" />
                 </Grid>
                 <label className="flex items-center gap-2 text-sm">
                   <input

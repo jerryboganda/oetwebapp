@@ -97,6 +97,7 @@ public sealed class ConversationOptionsProvider(
         if (r.RealtimeSttEnabled.HasValue) o.RealtimeSttEnabled = r.RealtimeSttEnabled.Value;
         if (!string.IsNullOrWhiteSpace(r.RealtimeAsrProvider)) o.RealtimeAsrProvider = r.RealtimeAsrProvider;
         if (r.RealtimeSttAllowRealProvider.HasValue) o.RealtimeSttAllowRealProvider = r.RealtimeSttAllowRealProvider.Value;
+        if (r.RealtimeSttRealProviderProductionAuthorized.HasValue) o.RealtimeSttRealProviderProductionAuthorized = r.RealtimeSttRealProviderProductionAuthorized.Value;
         if (r.RealtimeSttFallbackToBatch.HasValue) o.RealtimeSttFallbackToBatch = r.RealtimeSttFallbackToBatch.Value;
         if (r.RealtimeSttProviderConnectTimeoutSeconds.HasValue && r.RealtimeSttProviderConnectTimeoutSeconds.Value > 0) o.RealtimeSttProviderConnectTimeoutSeconds = r.RealtimeSttProviderConnectTimeoutSeconds.Value;
         if (r.RealtimeSttMaxChunkBytes.HasValue && r.RealtimeSttMaxChunkBytes.Value > 0) o.RealtimeSttMaxChunkBytes = r.RealtimeSttMaxChunkBytes.Value;
@@ -113,6 +114,11 @@ public sealed class ConversationOptionsProvider(
         if (r.RealtimeSttAllowManagedLearnerRealProvider.HasValue) o.RealtimeSttAllowManagedLearnerRealProvider = r.RealtimeSttAllowManagedLearnerRealProvider.Value;
         if (!string.IsNullOrWhiteSpace(r.RealtimeSttConsentVersion)) o.RealtimeSttConsentVersion = r.RealtimeSttConsentVersion;
         if (!string.IsNullOrWhiteSpace(r.RealtimeSttRollbackMode)) o.RealtimeSttRollbackMode = r.RealtimeSttRollbackMode;
+        if (!string.IsNullOrWhiteSpace(r.RealtimeSttAllowedMimeTypesCsv))
+        {
+            var arr = r.RealtimeSttAllowedMimeTypesCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (arr.Length > 0) o.RealtimeSttAllowedMimeTypes = arr;
+        }
         var elevenSttKey = Unprotect(r.ElevenLabsSttApiKeyEncrypted);
         if (!string.IsNullOrEmpty(elevenSttKey)) o.ElevenLabsSttApiKey = elevenSttKey;
         if (!string.IsNullOrWhiteSpace(r.ElevenLabsSttBaseUrl)) o.ElevenLabsSttBaseUrl = r.ElevenLabsSttBaseUrl;
