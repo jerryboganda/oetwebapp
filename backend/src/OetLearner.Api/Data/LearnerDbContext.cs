@@ -121,6 +121,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ConversationTurnAnnotation> ConversationTurnAnnotations => Set<ConversationTurnAnnotation>();
     public DbSet<ConversationSessionResumeToken> ConversationSessionResumeTokens => Set<ConversationSessionResumeToken>();
     public DbSet<ConversationSettingsRow> ConversationSettings => Set<ConversationSettingsRow>();
+    public DbSet<RuntimeSettingsRow> RuntimeSettings => Set<RuntimeSettingsRow>();
     public DbSet<WritingCoachSession> WritingCoachSessions => Set<WritingCoachSession>();
     public DbSet<WritingCoachSuggestion> WritingCoachSuggestions => Set<WritingCoachSuggestion>();
     public DbSet<WritingRuleViolation> WritingRuleViolations => Set<WritingRuleViolation>();
@@ -748,6 +749,15 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<ConversationSessionResumeToken>().HasIndex(x => x.ExpiresAt);
         modelBuilder.Entity<ConversationTemplate>().HasIndex(x => new { x.Status, x.TaskTypeCode, x.ProfessionId });
         modelBuilder.Entity<ConversationTemplate>().HasIndex(x => new { x.Status, x.Difficulty });
+
+        // Runtime infrastructure-settings singleton row (Id="default").
+        // See Domain/RuntimeSettingsRow.cs for the DB-override contract used
+        // by IRuntimeSettingsProvider.
+        modelBuilder.Entity<RuntimeSettingsRow>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasMaxLength(32);
+        });
 
         // Writing coach indexes
         modelBuilder.Entity<WritingCoachSession>().HasIndex(x => x.AttemptId);

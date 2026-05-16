@@ -169,7 +169,43 @@ Recommended Nginx Proxy Manager settings:
 - Force SSL
 - Enable HTTP/2
 
-## 5. Verify after first deploy
+## 5. Runtime Settings (admin-configurable secrets)
+
+After the first deploy, a `system_admin` should visit
+`/admin/settings` and paste the service-level secrets from `.env.production`
+into the UI. Once saved, those values are stored encrypted in the database and
+the API picks up changes within 30 seconds — no restart or SSH required for
+future rotations.
+
+**Covered sections** (see [`docs/ADMIN-RUNTIME-SETTINGS.md`](docs/ADMIN-RUNTIME-SETTINGS.md)
+for the full field-to-env-key mapping):
+
+- Email — Brevo API + SMTP relay
+- Billing — Stripe (publishable key, secret key, webhook secret, price IDs)
+- Monitoring — Sentry DSN (backend + frontend)
+- Backup — S3-compatible storage credentials and GPG passphrase
+- OAuth — Google and Apple provider credentials
+- Push notifications — VAPID, FCM, APNs
+
+**Bootstrap minimum that must always remain in `.env.production`**
+(these are never managed through the UI):
+
+- `ConnectionStrings__DefaultConnection` — database is required before the API starts
+- `AUTHTOKENS__ACCESSTOKENSIGNINGKEY` / `AUTHTOKENS__REFRESHTOKENSIGNINGKEY` — JWT secrets require a restart to rotate
+- `AUTHTOKENS__ISSUER` / `AUTHTOKENS__AUDIENCE` — static JWT config
+- AI gateway key for the grounding gateway (see `docs/AI-USAGE-POLICY.md`)
+
+After pasting all service secrets into `/admin/settings`, the remaining entries
+in `.env.production` for Brevo, Stripe, Sentry, Backup, OAuth, and Push become
+inert fallbacks. They are still read if the DB row is absent or a field is null,
+so do not delete them — they are your last-resort baseline.
+
+Full setup guide, rotation runbook, and disaster-recovery procedure:
+**[`docs/ADMIN-RUNTIME-SETTINGS.md`](docs/ADMIN-RUNTIME-SETTINGS.md)**
+
+---
+
+## 6. Verify after first deploy
 
 Check containers:
 
@@ -190,7 +226,7 @@ Check frontend:
 curl https://app.example.com/api/health
 ```
 
-## 6. Persistent data and backups
+## 7. Persistent data and backups
 
 The stack persists:
 
@@ -199,7 +235,7 @@ The stack persists:
 
 Back up both named volumes before upgrades or VPS maintenance.
 
-## 7. Updating the deployment
+## 8. Updating the deployment
 
 For a clean production deploy, use the exact SHA that already has signed release
 evidence:

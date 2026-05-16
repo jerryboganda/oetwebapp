@@ -746,6 +746,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationTra
     OetLearner.Api.Services.Conversation.ConversationTranscriptExportService>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Conversation.IConversationOptionsProvider,
     OetLearner.Api.Services.Conversation.ConversationOptionsProvider>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Settings.IRuntimeSettingsProvider,
+    OetLearner.Api.Services.Settings.RuntimeSettingsProvider>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Conversation.ConversationRealtimeTurnStore>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationEntitlementService,
     OetLearner.Api.Services.Conversation.ConversationEntitlementService>();

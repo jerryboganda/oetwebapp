@@ -101,6 +101,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/escalations': [AdminPermission.SystemAdmin],
   '/admin/private-speaking': [AdminPermission.ReviewOps],
   '/admin/recalls/bulk-upload': [AdminPermission.ContentWrite],
+  '/admin/settings': [AdminPermission.SystemAdmin],
 };
 
 export const adminRoutePermissionMap: Record<string, string[]> = {
@@ -168,6 +169,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/roles': [AdminPermission.ManagePermissions],
   '/admin/rulebooks': [AdminPermission.ContentRead],
   '/admin/score-guarantee-claims': [AdminPermission.BillingRead],
+  '/admin/settings': [AdminPermission.SystemAdmin],
   '/admin/signup-catalog': [AdminPermission.ContentRead],
   '/admin/sla-health': [AdminPermission.SystemAdmin],
   '/admin/taxonomy': [AdminPermission.ContentRead],

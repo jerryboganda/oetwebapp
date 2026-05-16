@@ -39,6 +39,7 @@ import {
   MessageSquareText,
   BookOpenText,
   Rocket,
+  Cog,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -106,6 +107,12 @@ const adminNavGroups: NavGroup[] = [
       { href: '/admin/flags', label: 'Feature Flags', icon: <Flag className="w-5 h-5" />, matchPrefix: '/admin/flags' },
       { href: '/admin/notifications', label: 'Notifications', icon: <Bell className="w-5 h-5" />, matchPrefix: '/admin/notifications' },
       { href: '/admin/webhooks', label: 'Webhooks', icon: <Webhook className="w-5 h-5" />, matchPrefix: '/admin/webhooks' },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { href: '/admin/settings', label: 'Runtime Settings', icon: <Cog className="w-5 h-5" />, matchPrefix: '/admin/settings' },
     ],
   },
 ];
@@ -371,6 +378,10 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/community')) {
     return 'Community Moderation';
+  }
+
+  if (pathname.startsWith('/admin/settings')) {
+    return 'Runtime Settings';
   }
 
   return undefined;
