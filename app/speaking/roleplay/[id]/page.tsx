@@ -23,7 +23,8 @@ type TaskMode = 'self' | 'exam';
 export default function RoleCardPreview() {
   const params = useParams();
   const router = useRouter();
-  const id = params?.id as string;
+  const rawId = params?.id;
+  const id = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
 
   const [card, setCard] = useState<RoleCard | null>(null);
   const [loading, setLoading] = useState(true);

@@ -39,7 +39,7 @@ export default function RegisterSuccessPage() {
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       router.replace(signInHref);
-    }, 3000);
+    }, 10000);
 
     return () => window.clearTimeout(timeout);
   }, [router, signInHref]);

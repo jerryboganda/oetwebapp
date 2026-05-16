@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback } from 'react';
-import { analytics, type AnalyticsEvent } from '@/lib/analytics';
+import { analytics, type AnalyticsEvent, type EventProperties } from '@/lib/analytics';
 
 export function useAnalytics() {
-  const track = useCallback((event: AnalyticsEvent, properties?: Record<string, any>) => {
+  const track = useCallback((event: AnalyticsEvent, properties?: EventProperties) => {
     analytics.track(event, properties);
   }, []);
 

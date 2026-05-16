@@ -17,11 +17,13 @@ import {
   type AdminSpeakingCalibrationDriftRow,
   type AdminSpeakingCalibrationSampleRow,
 } from '@/lib/api';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 
 // Wave 4 of docs/SPEAKING-MODULE-PLAN.md - admin drift dashboard.
 // Shows the calibration sample inventory plus the per-tutor mean
 // absolute error against the gold rubric.
 export default function AdminSpeakingCalibrationPage() {
+  useAdminAuth();
   const [report, setReport] = useState<AdminSpeakingCalibrationDriftReport | null>(null);
   const [samples, setSamples] = useState<AdminSpeakingCalibrationSampleRow[]>([]);
   const [loading, setLoading] = useState(true);

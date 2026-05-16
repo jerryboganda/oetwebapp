@@ -57,11 +57,11 @@ export function ErrorState({ title = 'Something went wrong', message = 'An unexp
       role="alert"
       {...motionProps}
       className={cn(
-        'flex flex-col items-center justify-center rounded-[24px] border border-red-100 bg-red-50/70 px-6 py-12 text-center shadow-sm',
+        'flex flex-col items-center justify-center rounded-[24px] border border-red-100 bg-red-50/70 px-6 py-12 text-center shadow-sm dark:border-red-900 dark:bg-red-950/70',
         className,
       )}
     >
-      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-red-500 shadow-sm" aria-hidden="true">
+      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-red-500 shadow-sm dark:bg-gray-900 dark:text-red-400" aria-hidden="true">
         <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
       </div>
       <h3 className="mb-1 text-lg font-bold tracking-tight text-navy">{title}</h3>

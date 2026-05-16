@@ -15,6 +15,7 @@ import {
 } from '@/components/domain/admin-route-surface';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 
 /* ── types ─────────────────────────────────────── */
 interface FeatureFlag {
@@ -54,6 +55,7 @@ function toSearchableText(value: string | null | undefined): string {
 }
 
 export default function FreeTierStrategyPage() {
+  useAdminAuth();
   /* state */
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [loading, setLoading] = useState(true);

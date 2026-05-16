@@ -51,7 +51,7 @@ export function Stepper({ steps, currentStep, className, orientation = 'horizont
                   'w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
                   isComplete && 'bg-primary text-white',
                   isCurrent && 'bg-primary/10 text-primary border-2 border-primary',
-                  isUpcoming && 'bg-gray-100 text-muted border border-gray-200',
+                  isUpcoming && 'bg-gray-100 text-muted border border-gray-200 dark:bg-gray-800 dark:border-gray-700',
                 )}
                 aria-current={isCurrent ? 'step' : undefined}
               >
@@ -90,7 +90,7 @@ export function Stepper({ steps, currentStep, className, orientation = 'horizont
             </div>
             {/* Connector line */}
             {!isVertical && idx < steps.length - 1 && (
-              <div className="flex-1 h-0.5 rounded bg-gray-200 overflow-hidden">
+              <div className="flex-1 h-0.5 rounded bg-gray-200 dark:bg-gray-700 overflow-hidden">
                 <motion.div
                   className="h-full bg-primary rounded"
                   initial={{ width: '0%' }}

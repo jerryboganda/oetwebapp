@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Headphones, Target } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { getListeningDrill, type ListeningDrillDto } from '@/lib/listening-api';
@@ -15,7 +15,7 @@ function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export default function ListeningDrillPage() {
+function ListeningDrillContent() {
   const params = useParams<{ id?: string | string[] }>();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -90,5 +90,13 @@ export default function ListeningDrillPage() {
         ) : null}
       </div>
     </LearnerDashboardShell>
+  );
+}
+
+export default function ListeningDrillPage() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <ListeningDrillContent />
+    </Suspense>
   );
 }

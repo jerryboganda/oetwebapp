@@ -61,10 +61,10 @@ function humanizeCategory(raw: string): string {
 /* ── Severity visuals ── */
 
 const SEVERITY_STYLES: Record<NotificationSeverity, { bg: string; text: string; icon: ReactNode }> = {
-  info:     { bg: 'bg-blue-50',    text: 'text-blue-600',    icon: <Info className="h-4 w-4" /> },
-  success:  { bg: 'bg-emerald-50', text: 'text-emerald-600', icon: <CheckCircle2 className="h-4 w-4" /> },
-  warning:  { bg: 'bg-amber-50',   text: 'text-amber-600',   icon: <AlertTriangle className="h-4 w-4" /> },
-  critical: { bg: 'bg-red-50',     text: 'text-red-600',     icon: <Shield className="h-4 w-4" /> },
+  info:     { bg: 'bg-blue-50 dark:bg-blue-950',       text: 'text-blue-600 dark:text-blue-400',       icon: <Info className="h-4 w-4" /> },
+  success:  { bg: 'bg-emerald-50 dark:bg-emerald-950', text: 'text-emerald-600 dark:text-emerald-400', icon: <CheckCircle2 className="h-4 w-4" /> },
+  warning:  { bg: 'bg-amber-50 dark:bg-amber-950',     text: 'text-amber-600 dark:text-amber-400',     icon: <AlertTriangle className="h-4 w-4" /> },
+  critical: { bg: 'bg-red-50 dark:bg-red-950',         text: 'text-red-600 dark:text-red-400',         icon: <Shield className="h-4 w-4" /> },
 };
 
 /* ── Category icons ── */

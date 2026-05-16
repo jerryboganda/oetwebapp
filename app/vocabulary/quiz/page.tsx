@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { HelpCircle, CheckCircle2, XCircle, ArrowLeft, RotateCcw, Volume2 } from 'lucide-react';
 import Link from 'next/link';
@@ -8,7 +8,7 @@ import { useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchRecallsAudio, fetchVocabQuiz, submitVocabQuiz } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
@@ -26,7 +26,7 @@ const QUIZ_FORMATS = [
 
 type QuizFormatId = typeof QUIZ_FORMATS[number]['id'];
 
-export default function VocabQuizPage() {
+function VocabQuizContent() {
   const searchParams = useSearchParams();
   const initialFormat = (searchParams?.get('format') as QuizFormatId) ?? 'definition_match';
 
@@ -364,6 +364,14 @@ export default function VocabQuizPage() {
         </div>
       ) : null}
     </LearnerDashboardShell>
+  );
+}
+
+export default function VocabQuizPage() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <VocabQuizContent />
+    </Suspense>
   );
 }
 

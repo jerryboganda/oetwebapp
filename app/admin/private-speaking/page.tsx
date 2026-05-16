@@ -5,6 +5,7 @@ import { Users, Calendar, BarChart3, Settings, Plus, Trash2, RefreshCw, X, Check
 import { AdminRouteHero, AdminRoutePanel, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   fetchAdminPrivateSpeakingConfig,
   updateAdminPrivateSpeakingConfig,
@@ -69,6 +70,7 @@ function formatPrice(minorUnits: number, currency = 'aud') {
 }
 
 export default function AdminPrivateSpeakingPage() {
+  useAdminAuth();
   const [tab, setTab] = useState<AdminTab>('overview');
   const [stats, setStats] = useState<Stats | null>(null);
   const [config, setConfig] = useState<Config | null>(null);

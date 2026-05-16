@@ -39,7 +39,7 @@ export function Accordion({ items, allowMultiple = false, className }: Accordion
   };
 
   return (
-    <div className={cn('divide-y divide-gray-200 border border-gray-200 rounded', className)}>
+    <div className={cn('divide-y divide-gray-200 border border-gray-200 rounded dark:divide-gray-700 dark:border-gray-700', className)}>
       {items.map((item) => {
         const isOpen = openIds.has(item.id);
         return (
@@ -50,7 +50,7 @@ export function Accordion({ items, allowMultiple = false, className }: Accordion
               onClick={() => toggle(item.id)}
               aria-expanded={isOpen}
               aria-controls={`accordion-panel-${item.id}`}
-              className="flex items-center justify-between w-full px-5 py-4 text-left font-semibold text-navy hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+              className="flex items-center justify-between w-full px-5 py-4 text-left font-semibold text-navy hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
             >
               <span>{item.title}</span>
               <motion.span

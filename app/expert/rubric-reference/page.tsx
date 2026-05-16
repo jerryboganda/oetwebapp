@@ -1,3 +1,5 @@
+'use client';
+
 import { BookOpen, Scale, Star, AlertTriangle } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';

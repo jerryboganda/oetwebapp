@@ -96,7 +96,7 @@ export function RegisterForm() {
     resolver: zodResolver(signupPayloadSchema),
     mode: 'onTouched',
     defaultValues: {
-      agreeToPrivacy: true,
+      agreeToPrivacy: false,
       agreeToTerms: false,
       confirmPassword: '',
       countryTarget: '',
@@ -104,7 +104,7 @@ export function RegisterForm() {
       examTypeId: '',
       firstName: externalFirstName,
       lastName: externalLastName,
-      marketingOptIn: true,
+      marketingOptIn: false,
       mobileNumber: '',
       password: '',
       professionId: '',

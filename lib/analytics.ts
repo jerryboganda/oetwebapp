@@ -1,7 +1,7 @@
 import { ensureFreshAccessToken } from './auth-client';
 import { env } from './env';
 
-type EventProperties = Record<string, string | number | boolean | null | undefined>;
+export type EventProperties = Record<string, string | number | boolean | null | undefined>;
 
 const TRACKED_EVENTS = [
   'onboarding_started',
@@ -158,7 +158,6 @@ const TRACKED_EVENTS = [
   // docs/SPEAKING-MODULE-PLAN.md). Two role-plays attempted as one mock.
   'speaking_mock_set_card_opened',
   'speaking_mock_set_started_orchestrator',
-  'speaking_mock_set_card_opened',
   // Marketplace events
   'marketplace_page_viewed',
   'marketplace_submission_created',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import {
   ChevronLeft,
   Clock,
@@ -18,13 +18,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchTurnaroundOptions, fetchFocusAreas, fetchBilling, isApiError, submitReviewRequest } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { TurnaroundOption, FocusArea } from '@/lib/mock-data';
 
-export default function WritingExpertReviewRequest() {
+function WritingExpertReviewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const submissionId = searchParams?.get('id');
@@ -227,5 +227,13 @@ export default function WritingExpertReviewRequest() {
         </form>
       </main>
     </LearnerDashboardShell>
+  );
+}
+
+export default function WritingExpertReviewRequest() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <WritingExpertReviewContent />
+    </Suspense>
   );
 }

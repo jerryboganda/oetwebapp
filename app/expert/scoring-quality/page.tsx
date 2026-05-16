@@ -56,6 +56,7 @@ export default function ScoringQualityPage() {
   const [status, setStatus] = useState<AsyncStatus>('loading');
   const [days, setDays] = useState('30');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +73,7 @@ export default function ScoringQualityPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [days]);
+  }, [days, retryCount]);
 
   return (
     <ExpertRouteWorkspace>
@@ -90,7 +91,7 @@ export default function ScoringQualityPage() {
         ]} />
       </div>
 
-      <AsyncStateWrapper status={status} errorMessage={errorMsg ?? undefined} onRetry={() => setDays(days)}>
+      <AsyncStateWrapper status={status} errorMessage={errorMsg ?? undefined} onRetry={() => setRetryCount(c => c + 1)}>
         {data && (
           <>
             {/* Summary cards */}
