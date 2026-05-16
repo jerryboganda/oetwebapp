@@ -69,13 +69,13 @@ export function StatCard({
     default: {
       border: 'border-l-4 border-l-primary border-y border-r border-border/80 dark:border-border/60',
       bg: 'bg-surface',
-      text: 'text-navy dark:text-zinc-50',
-      label: 'text-muted dark:text-zinc-400',
+      text: 'text-navy dark:text-white',
+      label: 'text-muted dark:text-muted',
       iconFill: 'bg-primary/10 dark:bg-primary/20',
       iconText: 'text-primary dark:text-primary-light',
       trendUp: 'text-success dark:text-success',
       trendDown: 'text-danger dark:text-danger',
-      trendNeutral: 'text-muted dark:text-zinc-500',
+      trendNeutral: 'text-muted dark:text-muted',
       sparkline: 'text-primary/40 dark:text-primary/60',
     },
     success: {
@@ -133,7 +133,7 @@ export function StatCard({
   return (
     <Card 
       className={cn(
-        'relative overflow-hidden flex flex-col p-3 shadow-sm transition-shadow hover:shadow-md rounded-xl',
+        'relative overflow-hidden flex flex-col p-3 shadow-sm transition-shadow hover:shadow-md rounded-2xl',
         activeTone.border,
         activeTone.bg,
         className

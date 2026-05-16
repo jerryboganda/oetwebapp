@@ -18,6 +18,12 @@
   --color-border: #d8e0e8;
   --color-border-hover: #b9c6d1;
   
+  --color-admin-surface: #09090b;
+  --color-admin-surface-raised: #18181b;
+  --color-admin-border: #27272a;
+  --color-admin-text: #fafafa;
+  --color-admin-text-muted: #a1a1aa;
+
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-clinical: 0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);

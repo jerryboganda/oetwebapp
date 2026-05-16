@@ -54,7 +54,7 @@ export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }
   return (
     <div
       className={cn(
-        'inline-flex w-full items-center gap-2 rounded-[20px] border border-gray-200 bg-background-light p-2',
+        'inline-flex w-full items-center gap-2 rounded-2xl border border-border bg-background-light p-2',
         scrollable ? 'flex-nowrap overflow-x-auto scrollbar-hide [-webkit-overflow-scrolling:touch]' : 'flex-wrap',
         className,
       )}

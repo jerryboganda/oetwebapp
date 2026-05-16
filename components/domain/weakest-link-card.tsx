@@ -14,7 +14,7 @@ export function WeakestLinkCard({ criterion, subtest, description, score, classN
   return (
     <Card
       className={cn(
-        'relative overflow-hidden !border-violet-300/70 !bg-gradient-to-br !from-primary !via-violet-700 !to-primary-dark text-white shadow-lg shadow-violet-950/20 ring-1 ring-white/10 dark:!border-violet-300/30 dark:shadow-violet-950/40',
+        'relative overflow-hidden border-violet-300/70 bg-gradient-to-br from-primary via-violet-700 to-primary-dark text-white shadow-lg shadow-violet-950/20 ring-1 ring-white/10 dark:border-violet-300/30 dark:shadow-violet-950/40',
         'before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-amber-300',
         className,
       )}
@@ -24,10 +24,10 @@ export function WeakestLinkCard({ criterion, subtest, description, score, classN
           <AlertTriangle className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-black uppercase tracking-wide !text-amber-100">{subtest} · Weakest Area</p>
-          <p className="mt-0.5 text-sm font-black !text-white">{criterion}</p>
-          {description && <p className="mt-1 text-xs font-semibold !text-violet-50/95">{description}</p>}
-          {score && <p className="mt-1 text-xs font-bold !text-amber-100">Current: {score}</p>}
+          <p className="text-xs font-black uppercase tracking-wide text-amber-100">{subtest} · Weakest Area</p>
+          <p className="mt-0.5 text-sm font-black text-white">{criterion}</p>
+          {description && <p className="mt-1 text-xs font-semibold text-violet-50/95">{description}</p>}
+          {score && <p className="mt-1 text-xs font-bold text-amber-100">Current: {score}</p>}
         </div>
       </div>
     </Card>

@@ -47,8 +47,8 @@ export function SpeakingRoleCard({
       <div className="space-y-6">
         {(prepLabel || roleplayLabel) && (
           <div className="flex flex-wrap gap-2 pb-2">
-            {prepLabel && <span className="rounded-full bg-white shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-black tracking-wide text-primary">PREP: {prepLabel}</span>}
-            {roleplayLabel && <span className="rounded-full bg-white shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-black tracking-wide text-primary">ROLE-PLAY: {roleplayLabel}</span>}
+            {prepLabel && <span className="rounded-full bg-white shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-bold tracking-wide text-primary">PREP: {prepLabel}</span>}
+            {roleplayLabel && <span className="rounded-full bg-white shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-bold tracking-wide text-primary">ROLE-PLAY: {roleplayLabel}</span>}
           </div>
         )}
         <div className="grid gap-6 md:grid-cols-2">
@@ -123,19 +123,19 @@ export function SpeakingRoleCard({
           <div className="grid gap-3 rounded-xl border border-primary/20 bg-white/80 p-4 shrink-0 sm:grid-cols-3 mt-4 shadow-sm">
             {patientEmotion && (
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-1">Emotion</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted mb-1">Emotion</p>
                 <p className="font-bold text-navy text-sm">{patientEmotion}</p>
               </div>
             )}
             {communicationGoal && (
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-1">Goal</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted mb-1">Goal</p>
                 <p className="font-bold text-navy text-sm">{communicationGoal}</p>
               </div>
             )}
             {clinicalTopic && (
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-1">Topic</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted mb-1">Topic</p>
                 <p className="font-bold text-navy text-sm">{clinicalTopic}</p>
               </div>
             )}

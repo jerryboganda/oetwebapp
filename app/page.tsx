@@ -154,7 +154,7 @@ export default function Dashboard() {
     secondaryAction: {
       label: 'View Study Plan',
       href: '/study-plan',
-      variant: 'outline',
+      variant: 'secondary',
     },
   }
     : null;
@@ -278,7 +278,7 @@ export default function Dashboard() {
                         key={task.id}
                         whileHover={prefersReducedMotion || isComplete ? {} : { scale: 1.01 }}
                         whileTap={prefersReducedMotion || isComplete ? {} : { scale: 0.98 }}
-                        className={`group flex flex-col items-start justify-between rounded-xl border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,opacity,transform] duration-200 sm:flex-row sm:items-center ${
+                        className={`group flex flex-col items-start justify-between rounded-2xl border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,opacity,transform] duration-200 sm:flex-row sm:items-center ${
                           isComplete
                             ? 'border-border opacity-60'
                             : 'border-border/60 hover:border-border hover:shadow-md'
@@ -289,7 +289,7 @@ export default function Dashboard() {
                             {isComplete ? <CheckCircle2 className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
                           </div>
                           <div>
-                            <h3 className={`text-sm font-semibold text-navy ${isComplete ? 'line-through' : ''}`}>{task.title}</h3>
+                            <h3 className={`text-sm font-bold text-navy ${isComplete ? 'line-through' : ''}`}>{task.title}</h3>
                             <p className="text-xs text-muted">{task.duration} · {task.subTest}</p>
                           </div>
                         </div>
@@ -333,7 +333,7 @@ export default function Dashboard() {
                           <CardContent className="flex items-start gap-3 p-0">
                             <Icon className="mt-0.5 h-5 w-5 shrink-0 text-muted" />
                             <div>
-                              <h4 className="text-sm font-semibold text-navy">{task.title}</h4>
+                              <h4 className="text-sm font-bold text-navy">{task.title}</h4>
                               <p className="mt-0.5 text-xs text-muted">{task.dueDate} · {task.duration}</p>
                             </div>
                           </CardContent>

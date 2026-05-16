@@ -35,7 +35,7 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
 
       <div
         className={cn(
-          'hidden flex-wrap items-center gap-3 rounded-[20px] border border-gray-200 bg-background-light px-4 py-3 shadow-sm md:flex',
+          'hidden flex-wrap items-center gap-3 rounded-[20px] border border-border bg-background-light px-4 py-3 shadow-sm md:flex',
           className,
         )}
         role="toolbar"
@@ -55,7 +55,7 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
                       'flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium shadow-sm transition-all duration-200 active:scale-95',
                       isActive
                         ? 'border-primary/25 bg-primary/6 text-primary'
-                        : 'border-gray-200 bg-surface text-navy hover:border-gray-300 hover:bg-white',
+                        : 'border-border bg-surface text-navy hover:border-border hover:bg-surface',
                     )}
                     aria-label={`Filter by ${group.label}${isActive ? `, ${selectedCount} selected` : ''}`}
                     aria-expanded={undefined}
@@ -71,7 +71,7 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
                 </Popover.Trigger>
                 <Popover.Portal>
                   <Popover.Content
-                    className="z-50 w-60 rounded-2xl border border-gray-200 bg-surface p-2 shadow-xl data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98] data-[state=open]:slide-in-from-top-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.98] data-[state=closed]:slide-out-to-top-1 duration-200"
+                    className="z-50 w-60 rounded-2xl border border-border bg-surface p-2 shadow-xl data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98] data-[state=open]:slide-in-from-top-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.98] data-[state=closed]:slide-out-to-top-1 duration-200"
                     sideOffset={4}
                     align="start"
                   >
@@ -86,14 +86,14 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
                             aria-checked={isOptionSelected}
                             className={cn(
                               'flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition-colors',
-                              isOptionSelected ? 'bg-primary/6 font-semibold text-primary' : 'text-navy hover:bg-gray-50',
+                              isOptionSelected ? 'bg-primary/6 font-semibold text-primary' : 'text-navy hover:bg-background-light',
                             )}
                           >
                             <div className="flex items-center gap-2">
                               <div
                                 className={cn(
                                   'flex h-4 w-4 items-center justify-center rounded border transition-colors',
-                                  isOptionSelected ? 'border-primary bg-primary text-white' : 'border-gray-300',
+                                  isOptionSelected ? 'border-primary bg-primary text-white' : 'border-border',
                                 )}
                               >
                                 {isOptionSelected && <Check className="h-3 w-3" />}
@@ -112,7 +112,7 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
           })}
         </div>
 
-        {totalSelected > 0 && onClear && <div className="mx-1 hidden h-6 w-px bg-gray-200 sm:block" />}
+        {totalSelected > 0 && onClear && <div className="mx-1 hidden h-6 w-px bg-border sm:block" />}
 
         {totalSelected > 0 && onClear && (
           <button

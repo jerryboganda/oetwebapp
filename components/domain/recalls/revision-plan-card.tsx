@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchRecallsRevisionPlan, type RecallsRevisionPlanResponse } from '@/lib/api';
 
@@ -48,7 +49,7 @@ export function RevisionPlanCard() {
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+    <Card padding="md">
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold text-navy">Today’s revision plan</h3>
@@ -78,6 +79,6 @@ export function RevisionPlanCard() {
           </div>
         </div>
       ) : null}
-    </div>
+    </Card>
   );
 }

@@ -18,7 +18,7 @@ export function Skeleton({ className, variant = 'rectangle', width, height, line
         {Array.from({ length: lines }).map((_, i) => (
           <div
             key={i}
-            className={cn('rounded-xl bg-gray-200/80 dark:bg-gray-700/50', pulseClassName, i === lines - 1 && 'w-3/4')}
+            className={cn('rounded-xl bg-border/80 dark:bg-gray-700/50', pulseClassName, i === lines - 1 && 'w-3/4')}
             style={{ height: height ?? 16 }}
           />
         ))}
@@ -34,7 +34,7 @@ export function Skeleton({ className, variant = 'rectangle', width, height, line
 
   return (
     <div
-      className={cn('bg-gray-200/80 dark:bg-gray-700/50', pulseClassName, variantStyles[variant], className)}
+      className={cn('bg-border/80 dark:bg-gray-700/50', pulseClassName, variantStyles[variant], className)}
       style={{ width, height }}
       role="status"
       aria-busy="true"
@@ -47,7 +47,7 @@ export function Skeleton({ className, variant = 'rectangle', width, height, line
 export function CardSkeleton({ className }: { className?: string }) {
   return (
     <div
-      className={cn('rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm', className)}
+      className={cn('rounded-[24px] border border-border bg-surface p-5 shadow-sm', className)}
       role="status"
       aria-busy="true"
       aria-label="Loading card"
@@ -71,7 +71,7 @@ export function PageSkeleton({ className }: { className?: string }) {
       aria-busy="true"
       aria-label="Loading page"
     >
-      <div className="rounded-[24px] border border-gray-200 bg-surface px-5 py-5 shadow-sm sm:px-6 sm:py-6">
+      <div className="rounded-[24px] border border-border bg-surface px-5 py-5 shadow-sm sm:px-6 sm:py-6">
         <div className="space-y-4">
           <div className="flex items-start gap-4">
             <Skeleton variant="circle" className="h-12 w-12" />

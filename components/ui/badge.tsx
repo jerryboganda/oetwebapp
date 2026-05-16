@@ -13,7 +13,7 @@ const badgeVariants: Record<string, string> = {
   warning: 'bg-amber-50 text-amber-700 border border-amber-200/60 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800/60',
   danger: 'bg-red-50 text-red-700 border border-red-200/60 dark:bg-red-950 dark:text-red-300 dark:border-red-800/60',
   info: 'bg-blue-50 text-blue-700 border border-blue-200/60 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800/60',
-  muted: 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
+  muted: 'bg-surface text-muted border border-border dark:bg-surface dark:text-muted dark:border-border',
   outline: 'bg-transparent text-foreground border border-border',
 };
 
@@ -86,7 +86,7 @@ export function CriterionChip({ label, active, onClick, className }: { label: st
         'px-3.5 py-2.5 rounded-full text-xs font-semibold border transition-all duration-200 active:scale-95 shadow-sm',
         active
           ? 'bg-primary text-white border-primary ring-2 ring-primary/20 ring-offset-1'
-          : 'bg-surface text-navy border-gray-200/80 hover:border-primary/50 hover:bg-gray-50 hover:text-primary dark:text-white dark:border-gray-700/80 dark:hover:bg-gray-800 dark:hover:border-primary/50',
+          : 'bg-surface text-navy border-border hover:border-primary/50 hover:bg-background-light hover:text-primary dark:text-white dark:border-border dark:hover:bg-background-light dark:hover:border-primary/50',
         className,
       )}
     >

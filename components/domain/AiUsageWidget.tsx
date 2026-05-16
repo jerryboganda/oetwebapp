@@ -37,7 +37,7 @@ export function AiUsageWidget() {
   return (
     <Link
       href="/settings/ai"
-      className="block rounded-[20px] border border-border bg-surface p-4 hover:border-primary transition-colors"
+      className="block rounded-2xl border border-border bg-surface p-4 hover:border-primary transition-colors"
     >
       <div className="flex items-center gap-2 text-sm font-medium text-navy mb-2">
         <Cpu className="w-4 h-4" /> AI credits · {snap.planName}
