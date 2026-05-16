@@ -128,9 +128,23 @@ if [ -n "$duplicate_keys" ]; then
   failed=1
 fi
 
+# Keys that are admin-configurable via UI (DB-backed) OR optional infrastructure.
+# When empty in .env.production these warn but do not fail the validator —
+# the backend either no-ops gracefully (Brevo/Sentry/Backup) or reads the live
+# value from the admin-managed database (AI providers, Pronunciation,
+# Conversation). READING_SMOKE_* are CI test fixtures, never runtime config.
+ADMIN_OPTIONAL_KEYS="AI__APIKEY AI__BASEURL AI__DEFAULTMODEL AI__PROVIDERID BACKUP_ALERT_WEBHOOK BACKUP_AWS_ACCESS_KEY_ID BACKUP_AWS_SECRET_ACCESS_KEY BACKUP_GPG_PASSPHRASE BACKUP_S3_URL BREVO__APIKEY BREVO__EMAILVERIFICATIONTEMPLATEID BREVO__PASSWORDRESETTEMPLATEID CONVERSATION__ASRPROVIDER CONVERSATION__DEEPGRAMAPIKEY CONVERSATION__ELEVENLABSAPIKEY CONVERSATION__ENABLED CONVERSATION__TTSPROVIDER NEXT_PUBLIC_SENTRY_DSN PRONUNCIATION__AZURESPEECHKEY PRONUNCIATION__AZURESPEECHREGION PRONUNCIATION__PROVIDER READING_SMOKE_DISABLED_PAPER_ID READING_SMOKE_ENABLED_PAPER_ID READING_SMOKE_ENTITLED_MEDIA_ID READING_SMOKE_LEARNER_EMAIL READING_SMOKE_LEARNER_PASSWORD READING_SMOKE_PROTECTED_MEDIA_ID SENTRY_DSN"
+is_admin_optional() {
+  case " $ADMIN_OPTIONAL_KEYS " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
 for key in "${required_keys[@]}"; do
   value=$(read_env_value "$key" || true)
   if [ -z "$value" ]; then
+    if is_admin_optional "$key"; then
+      echo "[env] (admin-configurable, ok to be empty) $key" >&2
+      continue
+    fi
     echo "[env] missing or empty: $key" >&2
     failed=1
     continue
@@ -156,6 +170,9 @@ require_min_length() {
   local min_length="$2"
   local value
   value=$(read_env_value "$key" || true)
+  if [ -z "$value" ] && is_admin_optional "$key"; then
+    return 0
+  fi
   if [ "${#value}" -lt "$min_length" ]; then
     echo "[env] $key must be at least $min_length characters" >&2
     failed=1
@@ -166,6 +183,9 @@ require_https_url() {
   local key="$1"
   local value
   value=$(read_env_value "$key" || true)
+  if [ -z "$value" ] && is_admin_optional "$key"; then
+    return 0
+  fi
   case "$value" in
     https://*) ;;
     *)
@@ -313,6 +333,9 @@ require_s3_url() {
   local key="$1"
   local value
   value=$(read_env_value "$key" || true)
+  if [ -z "$value" ] && is_admin_optional "$key"; then
+    return 0
+  fi
   case "$value" in
     s3://*) ;;
     *)
@@ -326,6 +349,9 @@ require_email() {
   local key="$1"
   local value
   value=$(read_env_value "$key" || true)
+  if [ -z "$value" ] && is_admin_optional "$key"; then
+    return 0
+  fi
   case "$value" in
     *@*.*) ;;
     *)

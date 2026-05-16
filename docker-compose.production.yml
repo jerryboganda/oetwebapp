@@ -59,7 +59,7 @@ x-learner-api-slot: &learner-api-slot
     Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-true}
     Bootstrap__SeedDemoData: ${SEED_DEMO_DATA:-false}
     # Writing-sample seeder (Data/Seeds/writing-samples.v1.json). Idempotent
-    # — once papers exist they are not re-seeded. Keep enabled to allow
+    # â€” once papers exist they are not re-seeded. Keep enabled to allow
     # safe re-runs after schema changes; disable only for destructive resets.
     Content__WritingSeed__Enabled: ${CONTENT__WRITINGSEED__ENABLED:-true}
     Proxy__TrustForwardHeaders: true
@@ -70,23 +70,23 @@ x-learner-api-slot: &learner-api-slot
     # Grounded AI and server-authoritative speech providers. These map the
     # uppercase .env.production keys validated by validate-production-env.sh
     # into the .NET configuration shape consumed by startup fail-fast checks.
-    AI__ProviderId: ${AI__PROVIDERID:?Set AI__PROVIDERID}
-    AI__BaseUrl: ${AI__BASEURL:?Set AI__BASEURL}
-    AI__ApiKey: ${AI__APIKEY:?Set AI__APIKEY}
-    AI__DefaultModel: ${AI__DEFAULTMODEL:?Set AI__DEFAULTMODEL}
+    AI__ProviderId: ${AI__PROVIDERID:-}
+    AI__BaseUrl: ${AI__BASEURL:-}
+    AI__ApiKey: ${AI__APIKEY:-}
+    AI__DefaultModel: ${AI__DEFAULTMODEL:-}
     AI__ReasoningEffort: ${AI__REASONINGEFFORT:-}
     AI__DefaultMaxTokens: ${AI__DEFAULTMAXTOKENS:-4096}
     AI__DefaultTemperature: ${AI__DEFAULTTEMPERATURE:-0.2}
-    Pronunciation__Provider: ${PRONUNCIATION__PROVIDER:?Set PRONUNCIATION__PROVIDER}
-    Pronunciation__AzureSpeechKey: ${PRONUNCIATION__AZURESPEECHKEY:?Set PRONUNCIATION__AZURESPEECHKEY}
-    Pronunciation__AzureSpeechRegion: ${PRONUNCIATION__AZURESPEECHREGION:?Set PRONUNCIATION__AZURESPEECHREGION}
-    Conversation__Enabled: ${CONVERSATION__ENABLED:?Set CONVERSATION__ENABLED}
-    Conversation__AsrProvider: ${CONVERSATION__ASRPROVIDER:?Set CONVERSATION__ASRPROVIDER}
-    Conversation__DeepgramApiKey: ${CONVERSATION__DEEPGRAMAPIKEY:?Set CONVERSATION__DEEPGRAMAPIKEY}
-    Conversation__TtsProvider: ${CONVERSATION__TTSPROVIDER:?Set CONVERSATION__TTSPROVIDER}
-    Conversation__ElevenLabsApiKey: ${CONVERSATION__ELEVENLABSAPIKEY:?Set CONVERSATION__ELEVENLABSAPIKEY}
+    Pronunciation__Provider: ${PRONUNCIATION__PROVIDER:-}
+    Pronunciation__AzureSpeechKey: ${PRONUNCIATION__AZURESPEECHKEY:-}
+    Pronunciation__AzureSpeechRegion: ${PRONUNCIATION__AZURESPEECHREGION:-}
+    Conversation__Enabled: ${CONVERSATION__ENABLED:-}
+    Conversation__AsrProvider: ${CONVERSATION__ASRPROVIDER:-}
+    Conversation__DeepgramApiKey: ${CONVERSATION__DEEPGRAMAPIKEY:-}
+    Conversation__TtsProvider: ${CONVERSATION__TTSPROVIDER:-}
+    Conversation__ElevenLabsApiKey: ${CONVERSATION__ELEVENLABSAPIKEY:-}
     Conversation__RealtimeSttEnabled: ${CONVERSATION__REALTIMESTTENABLED:-false}
-    Conversation__RealtimeAsrProvider: ${CONVERSATION__REALTIMEASRPROVIDER:-mock}
+    Conversation__RealtimeAsrProvider: ${CONVERSATION__REALTIMEASRPROVIDER:-}
     Conversation__RealtimeSttAllowRealProvider: ${CONVERSATION__REALTIMESTTALLOWREALPROVIDER:-false}
     Conversation__RealtimeSttRealProviderProductionAuthorized: ${CONVERSATION__REALTIMESTTREALPROVIDERPRODUCTIONAUTHORIZED:-false}
     Conversation__RealtimeSttProviderSessionTopology: ${CONVERSATION__REALTIMESTTPROVIDERSESSIONTOPOLOGY:-unconfigured}
@@ -94,7 +94,7 @@ x-learner-api-slot: &learner-api-slot
     Conversation__RealtimeSttEstimatedCostUsdPerMinute: ${CONVERSATION__REALTIMESTTESTIMATEDCOSTUSDPERMINUTE:-0}
     Conversation__RealtimeSttAssumeLearnersAdult: ${CONVERSATION__REALTIMESTTASSUMELEARNERSADULT:-false}
     Conversation__RealtimeSttAllowManagedLearnerRealProvider: ${CONVERSATION__REALTIMESTTALLOWMANAGEDLEARNERREALPROVIDER:-false}
-    # Upload virus-scanning. Production MUST NOT run with Provider=noop — the
+    # Upload virus-scanning. Production MUST NOT run with Provider=noop â€” the
     # API refuses to start in that case. 'clamav' is the compose service name
     # of the sidecar above; port 3310 is clamd's default.
     UploadScanner__Provider: ${UPLOAD_SCANNER__PROVIDER:-clamav}
@@ -257,7 +257,7 @@ services:
 
   # Nightly encrypted Postgres backup sidecar. Runs pg_dump on BACKUP_SCHEDULE,
   # GPG-encrypts the dump, and optionally pushes to S3/R2. See
-  # scripts/backup/postgres-backup.sh and DEPLOYMENT.md §Disaster Recovery.
+  # scripts/backup/postgres-backup.sh and DEPLOYMENT.md Â§Disaster Recovery.
   # At minimum BACKUP_GPG_PASSPHRASE and BACKUP_S3_URL should be set in
   # .env.production for any production deployment that cares about its data.
   db-backup:
