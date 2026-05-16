@@ -119,7 +119,7 @@ public class ProfileAccessGuardTests
 
     private static PaymentGatewayService CreatePaymentGatewayService(IOptions<BillingOptions> billingOptions)
     {
-        var stripe = new StripeGateway(new HttpClient(), billingOptions);
+        var stripe = new StripeGateway(new HttpClient(), billingOptions, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions.Value));
         var paypal = new PayPalGateway(new HttpClient(), billingOptions);
         return new PaymentGatewayService(stripe, paypal);
     }

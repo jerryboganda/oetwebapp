@@ -20,11 +20,11 @@ export function BetterPhraseCard({
   return (
     <Card className={cn('', className)}>
       <div className="flex flex-col gap-3">
-        {criterion && <span className="text-xs font-semibold text-primary uppercase tracking-wide">{criterion}</span>}
+        {criterion && <span className="text-xs font-bold text-primary uppercase tracking-wide">{criterion}</span>}
 
         {/* Original */}
         <div className="p-3 bg-red-50 border border-red-200 rounded">
-          <p className="text-xs font-semibold text-red-700 mb-1">Original phrase</p>
+          <p className="text-xs font-bold text-red-700 mb-1">Original phrase</p>
           <div className="flex items-start gap-2">
             <p className="text-sm text-navy flex-1">&ldquo;{original}&rdquo;</p>
             {onPlayOriginal && (
@@ -38,12 +38,12 @@ export function BetterPhraseCard({
         {/* Issue */}
         <div className="flex items-center gap-2 text-xs text-amber-700">
           <ArrowRight className="w-3.5 h-3.5" />
-          <span className="font-semibold">Issue:</span> {issue}
+          <span className="font-bold">Issue:</span> {issue}
         </div>
 
         {/* Alternative */}
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded">
-          <p className="text-xs font-semibold text-emerald-700 mb-1">Stronger alternative</p>
+          <p className="text-xs font-bold text-emerald-700 mb-1">Stronger alternative</p>
           <div className="flex items-start gap-2">
             <p className="text-sm text-navy flex-1">&ldquo;{alternative}&rdquo;</p>
             {onPlayAlternative && (
@@ -56,7 +56,7 @@ export function BetterPhraseCard({
 
         {/* Repeat drill */}
         {onRepeatDrill && (
-          <Button size="sm" variant="outline" onClick={onRepeatDrill} className="self-start">
+          <Button size="sm" variant="secondary" onClick={onRepeatDrill} className="self-start">
             <RotateCcw className="w-3.5 h-3.5" /> Repeat Drill
           </Button>
         )}

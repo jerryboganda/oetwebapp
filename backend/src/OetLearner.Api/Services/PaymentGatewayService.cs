@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 using static OetLearner.Api.Services.PaymentGatewayJson;
 
 namespace OetLearner.Api.Services;
@@ -67,23 +68,26 @@ public record RefundResult(
 /// Stripe payment gateway adapter. Uses the hosted checkout session API when credentials are configured
 /// and falls back to a sandbox-style response for local development.
 /// </summary>
-public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions> billingOptions) : IPaymentGateway
+public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions> billingOptions, IRuntimeSettingsProvider runtimeSettings) : IPaymentGateway
 {
     private readonly HttpClient _httpClient = httpClient;
-    private readonly BillingOptions _billing = billingOptions.Value;
+    private readonly IOptions<BillingOptions> _billingOptions = billingOptions;
+    private readonly IRuntimeSettingsProvider _runtimeSettings = runtimeSettings;
 
     public string GatewayName => "stripe";
 
     public async Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct)
     {
-        var options = _billing.Stripe;
-        var successUrl = request.SuccessUrl ?? options.SuccessUrl;
-        var cancelUrl = request.CancelUrl ?? options.CancelUrl;
-        if (string.IsNullOrWhiteSpace(options.SecretKey)
+        var billingOptionsSnapshot = _billingOptions.Value;
+        var stripeOptions = billingOptionsSnapshot.Stripe;
+        var runtimeBilling = (await _runtimeSettings.GetAsync(ct)).Billing;
+        var successUrl = request.SuccessUrl ?? runtimeBilling.StripeSuccessUrl;
+        var cancelUrl = request.CancelUrl ?? runtimeBilling.StripeCancelUrl;
+        if (string.IsNullOrWhiteSpace(runtimeBilling.StripeSecretKey)
             || string.IsNullOrWhiteSpace(successUrl)
             || string.IsNullOrWhiteSpace(cancelUrl))
         {
-            if (_billing.AllowSandboxFallbacks)
+            if (billingOptionsSnapshot.AllowSandboxFallbacks)
             {
                 return BuildSandboxCheckout(request);
             }
@@ -93,8 +97,8 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
 
         using var message = new HttpRequestMessage(
             HttpMethod.Post,
-            new Uri(new Uri(EnsureTrailingSlash(options.ApiBaseUrl)), "v1/checkout/sessions"));
-        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.SecretKey);
+            new Uri(new Uri(EnsureTrailingSlash(stripeOptions.ApiBaseUrl)), "v1/checkout/sessions"));
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", runtimeBilling.StripeSecretKey);
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             message.Headers.TryAddWithoutValidation("Idempotency-Key", request.IdempotencyKey);
@@ -142,10 +146,12 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
 
     async Task<RefundResult> IPaymentGateway.ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, CancellationToken ct)
     {
-        var options = _billing.Stripe;
-        if (string.IsNullOrWhiteSpace(options.SecretKey))
+        var billingOptionsSnapshot = _billingOptions.Value;
+        var stripeOptions = billingOptionsSnapshot.Stripe;
+        var runtimeBilling = (await _runtimeSettings.GetAsync(ct)).Billing;
+        if (string.IsNullOrWhiteSpace(runtimeBilling.StripeSecretKey))
         {
-            if (_billing.AllowSandboxFallbacks)
+            if (billingOptionsSnapshot.AllowSandboxFallbacks)
             {
                 return new RefundResult($"re_local_{Guid.NewGuid():N}", "succeeded", amount);
             }
@@ -158,8 +164,8 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
         {
             using var sessionRequest = new HttpRequestMessage(
                 HttpMethod.Get,
-                new Uri(new Uri(EnsureTrailingSlash(options.ApiBaseUrl)), $"v1/checkout/sessions/{Uri.EscapeDataString(transactionId)}"));
-            sessionRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.SecretKey);
+                new Uri(new Uri(EnsureTrailingSlash(stripeOptions.ApiBaseUrl)), $"v1/checkout/sessions/{Uri.EscapeDataString(transactionId)}"));
+            sessionRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", runtimeBilling.StripeSecretKey);
             using var sessionResponse = await _httpClient.SendAsync(sessionRequest, ct);
             sessionResponse.EnsureSuccessStatusCode();
             await using var sessionStream = await sessionResponse.Content.ReadAsStreamAsync(ct);
@@ -170,8 +176,8 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
 
         using var message = new HttpRequestMessage(
             HttpMethod.Post,
-            new Uri(new Uri(EnsureTrailingSlash(options.ApiBaseUrl)), "v1/refunds"));
-        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.SecretKey);
+            new Uri(new Uri(EnsureTrailingSlash(stripeOptions.ApiBaseUrl)), "v1/refunds"));
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", runtimeBilling.StripeSecretKey);
 
         var form = new Dictionary<string, string>
         {
@@ -208,17 +214,18 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             ? "succeeded"
             : status.ToLowerInvariant();
 
-    public Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+    public async Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
     {
-        if (!VerifyStripeWebhook(payload, headers, out var verificationError))
+        var runtimeBilling = (await _runtimeSettings.GetAsync(ct)).Billing;
+        if (!VerifyStripeWebhook(payload, headers, runtimeBilling.StripeWebhookSecret, out var verificationError))
         {
-            return Task.FromResult(new WebhookProcessResult(
+            return new WebhookProcessResult(
                 EventId: $"stripe-invalid-{Guid.NewGuid():N}",
                 EventType: "signature_verification_failed",
                 Processed: false,
                 Error: verificationError,
                 SafePayloadJson: "{}",
-                EventCategory: PaymentWebhookCategories.Other));
+                EventCategory: PaymentWebhookCategories.Other);
         }
 
         using var document = JsonDocument.Parse(payload);
@@ -266,7 +273,7 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             _ => "pending"
         };
 
-        return Task.FromResult(new WebhookProcessResult(
+        return new WebhookProcessResult(
             EventId: eventId,
             EventType: eventType,
             Processed: true,
@@ -275,7 +282,7 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             NormalizedStatus: normalizedStatus,
             SafePayloadJson: PaymentWebhookPiiRedactor.RedactStripe(root),
             EventCategory: category,
-            GatewayObjectId: GetString(dataObject, "id")));
+            GatewayObjectId: GetString(dataObject, "id"));
     }
 
     private PaymentIntentResult BuildSandboxCheckout(CreatePaymentIntentRequest request)
@@ -288,9 +295,8 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             CheckoutUrl: $"https://checkout.stripe.com/pay/{sessionId}");
     }
 
-    private bool VerifyStripeWebhook(string payload, IReadOnlyDictionary<string, string> headers, out string? error)
+    private bool VerifyStripeWebhook(string payload, IReadOnlyDictionary<string, string> headers, string? secret, out string? error)
     {
-        var secret = _billing.Stripe.WebhookSecret;
         if (string.IsNullOrWhiteSpace(secret))
         {
             error = "Stripe webhook secret is not configured.";
@@ -328,7 +334,7 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             return false;
         }
 
-        var maxAge = Math.Max(1, _billing.WebhookMaxAgeSeconds);
+        var maxAge = Math.Max(1, _billingOptions.Value.WebhookMaxAgeSeconds);
         var ageSeconds = Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - unixSeconds);
         if (ageSeconds > maxAge)
         {

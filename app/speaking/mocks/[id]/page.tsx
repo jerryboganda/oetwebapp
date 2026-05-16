@@ -140,7 +140,9 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
         <div className="mx-auto max-w-3xl p-6">
           <EmptyState title="Could not start mock set" description={error} />
           <div className="mt-4 flex justify-center">
-            <Link href="/speaking/mocks"><Button variant="outline">Back to mock sets</Button></Link>
+            <Button variant="outline" asChild>
+<Link href="/speaking/mocks">Back to mock sets</Link>
+</Button>
           </div>
         </div>
       </LearnerDashboardShell>
@@ -161,7 +163,9 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
               <Button variant="primary" onClick={() => void beginMockSet()} disabled={starting}>
                 {starting ? 'Starting...' : 'Start timed mock set'}
               </Button>
-              <Link href="/speaking/mocks"><Button variant="outline">Back</Button></Link>
+              <Button variant="outline" asChild>
+<Link href="/speaking/mocks">Back</Link>
+</Button>
             </div>
           </section>
         </div>
@@ -216,10 +220,12 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
               Mock-set rules: <strong>strict 5-minute role-plays</strong>, audible 30-second warning, automatic submission at the cap. The AI patient won&apos;t pause for you.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Link href={role1Url}>
-                <Button variant="primary">Begin role-play 1</Button>
-              </Link>
-              <Link href="/speaking/mocks"><Button variant="outline">Back</Button></Link>
+              <Button variant="primary" asChild>
+<Link href={role1Url}>Begin role-play 1</Link>
+</Button>
+              <Button variant="outline" asChild>
+<Link href="/speaking/mocks">Back</Link>
+</Button>
             </div>
           </section>
         )}
@@ -232,9 +238,9 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <SpeakingSelfPracticeButton taskId={session.rolePlay1.contentId} label="Start AI patient role-play 1" />
-              <Link href={role1Url} className="inline-block">
-                <Button variant="outline">Record for evaluation</Button>
-              </Link>
+              <Button variant="outline" asChild>
+<Link href={role1Url} className="inline-block">Record for evaluation</Link>
+</Button>
             </div>
           </section>
         )}
@@ -259,9 +265,9 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
                 {bridgeAck ? (
                   <SpeakingSelfPracticeButton taskId={session.rolePlay2.contentId} label="Start AI patient role-play 2" />
                 ) : null}
-                <Link href={role2Url}>
-                  <Button variant="outline" disabled={!bridgeAck}>Record for evaluation</Button>
-                </Link>
+                <Button variant="outline" disabled={!bridgeAck} asChild>
+<Link href={role2Url}>Record for evaluation</Link>
+</Button>
               </div>
             </div>
           </section>
@@ -275,9 +281,9 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <SpeakingSelfPracticeButton taskId={session.rolePlay2.contentId} label="Start AI patient role-play 2" />
-              <Link href={role2Url} className="inline-block">
-                <Button variant="outline">Record for evaluation</Button>
-              </Link>
+              <Button variant="outline" asChild>
+<Link href={role2Url} className="inline-block">Record for evaluation</Link>
+</Button>
             </div>
           </section>
         )}
@@ -295,16 +301,18 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               {session.rolePlay1.evaluationId && (
-                <Link href={`/speaking/results/${session.rolePlay1.evaluationId}`}>
-                  <Button variant="outline">Role-play 1 details</Button>
-                </Link>
+                <Button variant="outline" asChild>
+<Link href={`/speaking/results/${session.rolePlay1.evaluationId}`}>Role-play 1 details</Link>
+</Button>
               )}
               {session.rolePlay2.evaluationId && (
-                <Link href={`/speaking/results/${session.rolePlay2.evaluationId}`}>
-                  <Button variant="outline">Role-play 2 details</Button>
-                </Link>
+                <Button variant="outline" asChild>
+<Link href={`/speaking/results/${session.rolePlay2.evaluationId}`}>Role-play 2 details</Link>
+</Button>
               )}
-              <Link href="/speaking/mocks"><Button variant="ghost">All mock sets</Button></Link>
+              <Button variant="ghost" asChild>
+<Link href="/speaking/mocks">All mock sets</Link>
+</Button>
             </div>
           </section>
         )}

@@ -48,8 +48,8 @@ const accentTokens = {
     eyebrow: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   },
   slate: {
-    icon: 'bg-slate-100 text-slate-700',
-    eyebrow: 'bg-slate-100 text-slate-700 border-slate-200',
+    icon: 'bg-background-light text-muted',
+    eyebrow: 'bg-background-light text-muted border-border',
   },
 } as const;
 
@@ -112,7 +112,7 @@ export function LearnerSurfaceMetaRow({ items, size = 'normal', className }: { i
   return (
     <div className={cn(
       'flex flex-wrap items-center gap-x-4 gap-y-2',
-      size === 'compact' ? 'text-xs text-muted' : 'text-sm font-semibold text-muted',
+      size === 'compact' ? 'text-xs text-muted' : 'text-sm text-muted',
       className,
     )}>
       {safeItems.map((item) => {
@@ -196,7 +196,7 @@ export function LearnerPageHero({
           </div>
         ) : null}
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">{item.label}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">{item.label}</p>
           <p className="text-sm font-semibold text-navy break-words">{item.value}</p>
         </div>
       </div>
@@ -214,7 +214,7 @@ export function LearnerPageHero({
             </div>
           ) : null}
             <div className="min-w-0">
-              {eyebrow ? <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">{eyebrow}</p> : null}
+              {eyebrow ? <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-muted">{eyebrow}</p> : null}
               <h1 className="text-xl font-bold tracking-tight text-navy sm:text-[1.75rem]">{title}</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{description}</p>
             </div>

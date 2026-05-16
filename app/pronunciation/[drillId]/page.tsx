@@ -111,9 +111,9 @@ export default function PronunciationDrillPage() {
                 <h2 className="text-sm font-semibold text-navy">Minimal-pair discrimination</h2>
                 <p className="mt-1 text-sm text-muted">Train your ear before recording a scored attempt.</p>
               </div>
-              <Link href={`/pronunciation/discrimination/${encodeURIComponent(drill.id)}`}>
-                <Button variant="outline"><Headphones className="h-4 w-4" /> Open discrimination</Button>
-              </Link>
+              <Button variant="outline" asChild>
+<Link href={`/pronunciation/discrimination/${encodeURIComponent(drill.id)}`}><Headphones className="h-4 w-4" /> Open discrimination</Link>
+</Button>
             </div>
           </Card>
         </div>

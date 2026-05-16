@@ -16,10 +16,10 @@ const MASKED = '********' as const;
 
 export interface EmailSettings {
   brevoApiKey: string;
-  brevoEmailVerificationTemplateId: string;
-  brevoPasswordResetTemplateId: string;
+  brevoEmailVerificationTemplateId: number | null;
+  brevoPasswordResetTemplateId: number | null;
   smtpHost: string;
-  smtpPort: number;
+  smtpPort: number | null;
   smtpUsername: string;
   smtpPassword: string;
   smtpFromAddress: string;
@@ -35,17 +35,17 @@ export interface BillingSettings {
 }
 
 export interface SentrySettings {
-  sentryDsn: string;
-  sentryEnvironment: string;
-  sentrySampleRate: number;
+  dsn: string;
+  environment: string;
+  sampleRate: number | null;
 }
 
 export interface BackupSettings {
-  backupS3Url: string;
-  backupAwsAccessKeyId: string;
-  backupAwsSecretAccessKey: string;
-  backupGpgPassphrase: string;
-  backupAlertWebhook: string;
+  s3Url: string;
+  awsAccessKeyId: string;
+  awsSecretAccessKey: string;
+  gpgPassphrase: string;
+  alertWebhook: string;
 }
 
 export interface OAuthSettings {
@@ -76,6 +76,7 @@ export interface RuntimeSettingsResponse {
   oauth: OAuthSettings;
   push: PushSettings;
   updatedBy: string | null;
+  updatedByUserId?: string | null;
   updatedAt: string | null;
 }
 
@@ -115,17 +116,17 @@ const BILLING_FIELDS: FieldDef<BillingSettings>[] = [
 ];
 
 const SENTRY_FIELDS: FieldDef<SentrySettings>[] = [
-  { key: 'sentryDsn', label: 'Sentry DSN', hint: 'Project DSN for error reporting.' },
-  { key: 'sentryEnvironment', label: 'Sentry Environment', hint: 'e.g. production, staging.' },
-  { key: 'sentrySampleRate', label: 'Sentry Sample Rate', type: 'number', hint: 'Number between 0 and 1 (e.g. 0.1 = 10%).' },
+  { key: 'dsn', label: 'Sentry DSN', hint: 'Project DSN for error reporting.' },
+  { key: 'environment', label: 'Sentry Environment', hint: 'e.g. production, staging.' },
+  { key: 'sampleRate', label: 'Sentry Sample Rate', type: 'number', hint: 'Number between 0 and 1 (e.g. 0.1 = 10%).' },
 ];
 
 const BACKUP_FIELDS: FieldDef<BackupSettings>[] = [
-  { key: 'backupS3Url', label: 'Backup S3 URL', type: 'url', hint: 's3://bucket/prefix or https-style endpoint.' },
-  { key: 'backupAwsAccessKeyId', label: 'AWS Access Key ID' },
-  { key: 'backupAwsSecretAccessKey', label: 'AWS Secret Access Key', secret: true },
-  { key: 'backupGpgPassphrase', label: 'GPG Passphrase', secret: true, hint: 'Used to encrypt backup archives.' },
-  { key: 'backupAlertWebhook', label: 'Backup Alert Webhook', type: 'url', hint: 'POSTed when a backup fails.' },
+  { key: 's3Url', label: 'Backup S3 URL', type: 'url', hint: 's3://bucket/prefix or https-style endpoint.' },
+  { key: 'awsAccessKeyId', label: 'AWS Access Key ID' },
+  { key: 'awsSecretAccessKey', label: 'AWS Secret Access Key', secret: true },
+  { key: 'gpgPassphrase', label: 'GPG Passphrase', secret: true, hint: 'Used to encrypt backup archives.' },
+  { key: 'alertWebhook', label: 'Backup Alert Webhook', type: 'url', hint: 'POSTed when a backup fails.' },
 ];
 
 const OAUTH_FIELDS: FieldDef<OAuthSettings>[] = [
@@ -163,10 +164,10 @@ function emptyResponse(): RuntimeSettingsResponse {
   return {
     email: {
       brevoApiKey: '',
-      brevoEmailVerificationTemplateId: '',
-      brevoPasswordResetTemplateId: '',
+      brevoEmailVerificationTemplateId: null,
+      brevoPasswordResetTemplateId: null,
       smtpHost: '',
-      smtpPort: 587,
+      smtpPort: null,
       smtpUsername: '',
       smtpPassword: '',
       smtpFromAddress: '',
@@ -179,13 +180,13 @@ function emptyResponse(): RuntimeSettingsResponse {
       stripeSuccessUrl: '',
       stripeCancelUrl: '',
     },
-    sentry: { sentryDsn: '', sentryEnvironment: '', sentrySampleRate: 0 },
+    sentry: { dsn: '', environment: '', sampleRate: null },
     backup: {
-      backupS3Url: '',
-      backupAwsAccessKeyId: '',
-      backupAwsSecretAccessKey: '',
-      backupGpgPassphrase: '',
-      backupAlertWebhook: '',
+      s3Url: '',
+      awsAccessKeyId: '',
+      awsSecretAccessKey: '',
+      gpgPassphrase: '',
+      alertWebhook: '',
     },
     oauth: {
       googleClientId: '',
@@ -206,8 +207,28 @@ function emptyResponse(): RuntimeSettingsResponse {
       fcmProjectId: '',
     },
     updatedBy: null,
+    updatedByUserId: null,
     updatedAt: null,
   };
+}
+
+function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSettingsResponse {
+  const empty = emptyResponse();
+  return {
+    ...empty,
+    ...data,
+    email: { ...empty.email, ...data.email },
+    billing: { ...empty.billing, ...data.billing },
+    sentry: { ...empty.sentry, ...data.sentry },
+    backup: { ...empty.backup, ...data.backup },
+    oauth: { ...empty.oauth, ...data.oauth },
+    push: { ...empty.push, ...data.push },
+  };
+}
+
+function parseNullableNumberInput(value: string): number | null {
+  if (value.trim() === '') return null;
+  return Number(value);
 }
 
 function getApiErrorMessage(err: unknown, fallback: string): string {
@@ -301,7 +322,7 @@ interface PlainFieldProps {
   label: string;
   hint?: string;
   type?: 'text' | 'number' | 'url';
-  value: string | number;
+  value: string | number | null | undefined;
   onChange: (next: string) => void;
 }
 
@@ -436,7 +457,7 @@ export function RuntimeSettingsClient() {
     try {
       const data = await apiClient.get<RuntimeSettingsResponse>('/v1/admin/runtime-settings');
       // Defensive merge so missing keys never blow up the UI.
-      const merged: RuntimeSettingsResponse = { ...emptyResponse(), ...data };
+      const merged = normalizeResponse(data);
       setServer(merged);
       setDraft(merged);
     } catch (err) {
@@ -479,17 +500,15 @@ export function RuntimeSettingsClient() {
     if (!draft) return;
     setSaving(true);
     try {
-      const updated = await apiClient.put<RuntimeSettingsResponse>('/v1/admin/runtime-settings', draft);
-      const merged: RuntimeSettingsResponse = { ...emptyResponse(), ...updated };
-      setServer(merged);
-      setDraft(merged);
+      await apiClient.put('/v1/admin/runtime-settings', draft);
+      await load();
       setToast({ variant: 'success', message: 'Runtime settings saved. Changes apply within ~30 seconds.' });
     } catch (err) {
       setToast({ variant: 'error', message: getApiErrorMessage(err, 'Failed to save runtime settings.') });
     } finally {
       setSaving(false);
     }
-  }, [draft]);
+  }, [draft, load]);
 
   const updatedLine = useMemo(() => {
     if (!server) return null;
@@ -560,12 +579,12 @@ export function RuntimeSettingsClient() {
                       label={field.label}
                       hint={field.hint}
                       type={field.type}
-                      value={draft.email[field.key] as string | number}
+                      value={draft.email[field.key] as string | number | null}
                       onChange={(next) =>
                         updateField(
                           'email',
                           field.key,
-                          (field.type === 'number' ? Number(next) : next) as never,
+                          (field.type === 'number' ? parseNullableNumberInput(next) : next) as never,
                         )
                       }
                     />
@@ -612,12 +631,12 @@ export function RuntimeSettingsClient() {
                       label={field.label}
                       hint={field.hint}
                       type={field.type}
-                      value={draft.sentry[field.key] as string | number}
+                      value={draft.sentry[field.key] as string | number | null}
                       onChange={(next) =>
                         updateField(
                           'sentry',
                           field.key,
-                          (field.type === 'number' ? Number(next) : next) as never,
+                          (field.type === 'number' ? parseNullableNumberInput(next) : next) as never,
                         )
                       }
                     />

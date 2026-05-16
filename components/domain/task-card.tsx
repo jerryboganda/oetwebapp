@@ -52,7 +52,7 @@ export function TaskCard({
           </div>
           <div className="flex flex-wrap gap-2 sm:justify-end">
             {onSecondaryAction && secondaryActionLabel ? (
-              <Button size="sm" variant="outline" onClick={onSecondaryAction}>
+              <Button size="sm" variant="secondary" onClick={onSecondaryAction}>
                 {secondaryActionLabel}
               </Button>
             ) : null}
@@ -104,7 +104,7 @@ export function SubmissionCard({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-          {onViewFeedback && <Button size="sm" variant="outline" onClick={onViewFeedback}>View Feedback</Button>}
+          {onViewFeedback && <Button size="sm" variant="primary" onClick={onViewFeedback}>View Feedback</Button>}
           {onRequestReview && <Button size="sm" variant="ghost" onClick={onRequestReview}>Request Review</Button>}
         </div>
       </div>

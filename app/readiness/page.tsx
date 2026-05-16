@@ -132,7 +132,7 @@ export default function ReadinessCenter() {
                 <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${riskAccent.tile}`}>
                   <RiskIconCmp className="w-4 h-4" />
                 </span>
-                <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${riskAccent.chip}`}>
+                <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${riskAccent.chip}`}>
                   Target-Date Risk
                 </span>
               </div>
@@ -170,19 +170,18 @@ export default function ReadinessCenter() {
 
           <MotionSection
             delayIndex={1}
-            className="rounded-[24px] border border-slate-800 bg-slate-950 p-8 text-white relative overflow-hidden shadow-sm flex flex-col justify-center dark:border-slate-700"
+            className="rounded-2xl border border-border bg-surface p-8 text-navy relative overflow-hidden shadow-sm flex flex-col justify-center"
           >
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3" aria-hidden="true" />
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="w-6 h-6 text-primary" />
-                <span className="text-sm font-bold uppercase tracking-widest text-violet-200">Recommended Study</span>
+                <span className="text-sm font-bold uppercase tracking-widest text-muted">Recommended Study</span>
               </div>
               <div className="flex items-baseline gap-2 mb-2">
                 <h2 className="text-5xl font-bold">{data.recommendedStudyHours}</h2>
-                <span className="text-xl font-bold text-slate-200">hours</span>
+                <span className="text-xl font-bold text-muted">hours</span>
               </div>
-              <p className="text-slate-200 text-sm leading-relaxed">
+              <p className="text-muted text-sm leading-relaxed">
                 Estimated remaining study time to reach target readiness levels before {data.targetDate}.
               </p>
             </div>
@@ -213,7 +212,7 @@ export default function ReadinessCenter() {
                 <div key={factor.label}>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm font-semibold text-navy">{factor.label}</span>
-                    <span className={`text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${sevToken.chip}`}>{factor.severity}</span>
+                    <span className={`text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${sevToken.chip}`}>{factor.severity}</span>
                   </div>
                   <div className="h-2 w-full bg-background-light rounded-full overflow-hidden">
                     <motion.div
@@ -263,7 +262,7 @@ export default function ReadinessCenter() {
                             <h3 className="text-base font-bold text-navy flex items-center gap-2">
                               {test.name}
                               {test.isWeakest && (
-                                <span className="bg-danger/10 text-danger text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                                <span className="bg-danger/10 text-danger text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
                                   <AlertTriangle className="w-3 h-3" /> Weakest Link
                                 </span>
                               )}

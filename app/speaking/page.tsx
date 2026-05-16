@@ -137,7 +137,7 @@ export default function SpeakingHome() {
     secondaryAction: {
       label: 'View Role-Play Library',
       href: '/speaking/selection',
-      variant: 'outline',
+      variant: 'secondary',
     },
   };
 
@@ -177,7 +177,7 @@ export default function SpeakingHome() {
                 { icon: RefreshCw, label: 'In progress' },
               ],
               primaryAction: { label: 'Resume Role Play', href: resumeAttempt.route },
-              secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'outline' },
+              secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'secondary' },
             }} />
           </MotionSection>
         ) : null}
@@ -204,7 +204,7 @@ export default function SpeakingHome() {
               secondaryAction: {
                 label: 'Breaking Bad News',
                 href: '/speaking/rulebook/RULE_44',
-                variant: 'outline',
+                variant: 'secondary',
               },
             }}
           />
@@ -221,7 +221,7 @@ export default function SpeakingHome() {
                   {(home?.commonIssuesToImprove ?? ['Build smoother openings for role plays.', 'Keep the professional tone consistent.']).slice(0, 3).map((issue) => (
                     <div
                       key={issue}
-                      className="rounded-xl border !border-amber-300 !bg-white px-3 py-2 text-sm font-bold !text-slate-950 shadow-sm shadow-amber-950/5 dark:!border-amber-300/30 dark:!bg-slate-950 dark:!text-amber-50 dark:shadow-none"
+                      className="rounded-2xl border !border-amber-300 !bg-white px-3 py-2 text-sm font-bold !text-slate-950 shadow-sm shadow-amber-950/5 dark:!border-amber-300/30 dark:!bg-slate-950 dark:!text-amber-50 dark:shadow-none"
                     >
                       {issue}
                     </div>
@@ -256,7 +256,7 @@ export default function SpeakingHome() {
               ],
               primaryAction: latestEvaluation.evaluationId
                 ? { label: 'Open Result', href: `/speaking/results/${latestEvaluation.evaluationId}` }
-                : { label: 'View Submissions', href: '/submissions', variant: 'outline' },
+                : { label: 'View Submissions', href: '/submissions' },
             }} />
           </MotionSection>
         ) : null}
@@ -314,7 +314,7 @@ export default function SpeakingHome() {
                                 </div>
                                 <h3 className="mt-2 text-base font-bold text-navy">{task.title}</h3>
                                 <p className="mt-1 text-sm text-muted">Focus: {focusLabel}</p>
-                                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-muted">
+                                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                                   <span>{scenarioLabel}</span>
                                   <span>{durationLabel}</span>
                                 </div>
@@ -363,7 +363,6 @@ export default function SpeakingHome() {
                     primaryAction: {
                       label: 'Open Drill Group',
                       href: group.items?.[0]?.route ?? '/speaking/selection',
-                      variant: 'outline',
                     },
                   };
 
@@ -429,7 +428,7 @@ export default function SpeakingHome() {
                         <Link
                           key={sub.id}
                           href={`/speaking/results/${sub.evaluationId ?? sub.id}`}
-                          className="block rounded-xl border border-border px-4 py-3 transition-all duration-200 hover:border-border-hover hover:bg-background-light"
+                           className="block rounded-2xl border border-border px-4 py-3 transition-all duration-200 hover:border-border-hover hover:bg-background-light"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
@@ -475,7 +474,7 @@ export default function SpeakingHome() {
                       { icon: Clock, label: report.date },
                       { icon: Award, label: report.overallScore },
                     ],
-                    primaryAction: { label: 'View Report', href: `/mocks/report/${report.id}`, variant: 'outline' },
+                    primaryAction: { label: 'View Report', href: `/mocks/report/${report.id}` },
                   }} />
                 </MotionItem>
               ))}

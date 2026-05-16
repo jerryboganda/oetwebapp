@@ -401,12 +401,12 @@ export default function UsersPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/admin/users/import">
-            <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" asChild>
+<Link href="/admin/users/import">
               <Upload className="h-4 w-4" />
               Bulk Import
-            </Button>
-          </Link>
+            </Link>
+</Button>
           <Button onClick={() => { setInviteForm({ ...defaultInviteForm, role: tab === 'tutors' ? 'tutor' : tab === 'admins' ? 'admin' : 'learner' }); setIsInviteOpen(true); }} className="gap-2">
             <MailPlus className="h-4 w-4" />
             Invite User

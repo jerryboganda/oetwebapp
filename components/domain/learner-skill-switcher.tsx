@@ -33,11 +33,11 @@ export function LearnerSkillSwitcher({
 
   return (
     <nav
-      className={cn('rounded-[20px] border border-border bg-surface p-3 shadow-sm', className)}
+      className={cn('rounded-2xl border border-border bg-surface p-3 shadow-sm', className)}
       aria-label="Skill modules"
     >
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-muted">{title}</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">{title}</p>
       </div>
       <div className={cn('grid gap-2', compact ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-7' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4')}>
         {learnerSkillModules.map((module) => {

@@ -195,7 +195,7 @@ export function ReadingPaperBooklet({
   const textById = new Map(structure.parts.flatMap((part) => part.texts.map((text) => [text.id, text] as const)));
 
   return (
-    <section className="min-h-[620px] rounded-lg border border-border bg-[#fbfaf7] p-5 shadow-sm" aria-label={title}>
+    <section className="min-h-[620px] rounded-lg border border-border bg-background-light p-5 shadow-sm" aria-label={title}>
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-sm font-black uppercase text-muted">{title}</h2>
         <Badge variant="muted">Booklet</Badge>
@@ -211,7 +211,7 @@ export function ReadingPaperBooklet({
 
 export function ReadingPaperBookletPage({ page, textById }: { page: ReadingPaperBookletPage; textById: Map<string, ReadingLearnerStructureDto['parts'][number]['texts'][number]> }) {
   return (
-    <article className="rounded-md border border-border/60 bg-white p-4 shadow-xs">
+    <article className="rounded-md border border-border/60 bg-surface p-4 shadow-xs">
       <h3 className="mb-3 text-sm font-bold text-navy">{page.label}</h3>
       {page.textIds.map((textId) => {
         const text = textById.get(textId);
@@ -275,7 +275,7 @@ export function ReadingPartBCBooklet({
   if (!page) return <ReadingPaperCollectedNotice label="No B/C booklet pages are available." />;
 
   return (
-    <section className="rounded-lg border border-border bg-[#fbfaf7] p-5 shadow-sm" aria-label="Parts B and C combined booklet">
+    <section className="rounded-lg border border-border bg-background-light p-5 shadow-sm" aria-label="Parts B and C combined booklet">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-black uppercase text-muted">Parts B and C Combined Booklet</h2>
@@ -299,7 +299,7 @@ export function ReadingPartBCBooklet({
           {page.textIds.map((textId) => {
             const text = textById.get(textId);
             return text ? (
-              <article key={text.id} className="rounded-md border border-border/60 bg-white p-4">
+              <article key={text.id} className="rounded-md border border-border/60 bg-surface p-4">
                 <h3 className="text-base font-bold text-navy">{text.title}</h3>
                 <div className="prose prose-sm mt-3 max-w-none text-navy selection:bg-warning/30" dangerouslySetInnerHTML={{ __html: text.bodyHtml }} />
               </article>
@@ -356,7 +356,7 @@ function PaperQuestionControl({
 }) {
   const current = parseAnswer(answers[question.id] ?? '');
   return (
-    <div className="rounded-md border border-border bg-white p-3">
+    <div className="rounded-md border border-border bg-surface p-3">
       <p className="text-xs font-black uppercase text-muted">Question {question.displayOrder}</p>
       <h3 className="mt-1 text-sm font-bold leading-6 text-navy selection:bg-warning/30">{question.stem}</h3>
       <div className="mt-3">

@@ -2,7 +2,6 @@
 
 import { LockKeyhole, Mail } from 'lucide-react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 import { useSponsorAuth } from '@/lib/hooks/use-sponsor-auth';
 
 function SponsorLayoutContent() {
@@ -27,10 +26,11 @@ function SponsorLayoutContent() {
           <Link className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90" href="/support">
             <Mail className="h-4 w-4" /> Contact support
           </Link>
-          <Link href="/dashboard">
-            <Button variant="secondary" size="sm">
-              ← Return to dashboard
-            </Button>
+          <Link
+            href="/dashboard"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-navy px-3 py-2 text-xs font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-navy/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            ← Return to dashboard
           </Link>
         </div>
       </div>

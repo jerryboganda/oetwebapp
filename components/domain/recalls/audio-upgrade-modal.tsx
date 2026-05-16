@@ -62,9 +62,9 @@ export function useRecallsAudioUpgrade() {
           <Button variant="secondary" onClick={() => setOpen(false)}>
             Not now
           </Button>
-          <Link href="/billing/upgrade" className="inline-flex">
-            <Button variant="primary">Upgrade</Button>
-          </Link>
+          <Button variant="primary" asChild>
+<Link href="/billing/upgrade" className="inline-flex">Upgrade</Link>
+</Button>
         </div>
       </div>
     </Modal>

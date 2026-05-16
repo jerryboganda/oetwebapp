@@ -1,8 +1,10 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
@@ -21,14 +23,16 @@ public static class EmailTemplateKeys
 public sealed class BrevoEmailSender(
     HttpClient httpClient,
     IOptions<BrevoOptions> options,
+    IRuntimeSettingsProvider runtimeSettings,
     IWebHostEnvironment environment,
     ILogger<BrevoEmailSender> logger) : IEmailSender
 {
-    private readonly BrevoOptions _options = options.Value;
+    private readonly IOptions<BrevoOptions> _options = options;
 
     public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled)
+        var optionsSnapshot = _options.Value;
+        if (!optionsSnapshot.Enabled)
         {
             if (environment.IsDevelopment())
             {
@@ -43,26 +47,29 @@ public sealed class BrevoEmailSender(
             throw new InvalidOperationException("Brevo is disabled and the application is not running in Development.");
         }
 
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        var effective = await runtimeSettings.GetAsync(cancellationToken);
+        var emailSettings = effective.Email;
+
+        if (string.IsNullOrWhiteSpace(emailSettings.BrevoApiKey))
         {
             throw new InvalidOperationException("Brevo:ApiKey must be configured when Brevo is enabled.");
         }
 
-        if (string.IsNullOrWhiteSpace(_options.FromEmail))
+        if (string.IsNullOrWhiteSpace(emailSettings.SmtpFromAddress))
         {
             throw new InvalidOperationException("Brevo:FromEmail must be configured when Brevo is enabled.");
         }
 
         var request = new BrevoSendRequest
         {
-            Sender = new BrevoSender(_options.FromEmail, _options.FromName),
+            Sender = new BrevoSender(emailSettings.SmtpFromAddress, emailSettings.SmtpFromName ?? "OET Learner"),
             To = [new BrevoRecipient(message.To)],
             Subject = string.IsNullOrWhiteSpace(message.Subject) ? "OET Learner" : message.Subject
         };
 
         if (message.TemplateKey is not null)
         {
-            request.TemplateId = ResolveTemplateId(message.TemplateKey);
+            request.TemplateId = ResolveTemplateId(message.TemplateKey, emailSettings, optionsSnapshot);
             request.Params = message.TemplateParameters?.ToDictionary(pair => pair.Key, pair => pair.Value) ?? new Dictionary<string, object?>();
         }
         else
@@ -71,7 +78,14 @@ public sealed class BrevoEmailSender(
             request.HtmlContent = message.HtmlBody;
         }
 
-        using var response = await httpClient.PostAsJsonAsync("/smtp/email", request, cancellationToken);
+        using var outbound = new HttpRequestMessage(HttpMethod.Post, "/smtp/email")
+        {
+            Content = JsonContent.Create(request)
+        };
+        outbound.Headers.Add("api-key", emailSettings.BrevoApiKey);
+        outbound.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        using var response = await httpClient.SendAsync(outbound, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -80,17 +94,17 @@ public sealed class BrevoEmailSender(
         }
     }
 
-    private int ResolveTemplateId(string templateKey)
+    private static int ResolveTemplateId(string templateKey, EmailSettings emailSettings, BrevoOptions options)
         => templateKey switch
         {
-            EmailTemplateKeys.EmailVerificationOtp => _options.EmailVerificationTemplateId ?? throw new InvalidOperationException("Brevo:EmailVerificationTemplateId must be configured."),
-            EmailTemplateKeys.PasswordResetOtp => _options.PasswordResetTemplateId ?? throw new InvalidOperationException("Brevo:PasswordResetTemplateId must be configured."),
-            EmailTemplateKeys.Welcome => _options.WelcomeTemplateId ?? throw new InvalidOperationException("Brevo:WelcomeTemplateId must be configured."),
-            EmailTemplateKeys.PasswordChanged => _options.PasswordChangedTemplateId ?? throw new InvalidOperationException("Brevo:PasswordChangedTemplateId must be configured."),
-            EmailTemplateKeys.MfaEnabled => _options.MfaEnabledTemplateId ?? throw new InvalidOperationException("Brevo:MfaEnabledTemplateId must be configured."),
-            EmailTemplateKeys.AdminInvite => _options.AdminInviteTemplateId ?? throw new InvalidOperationException("Brevo:AdminInviteTemplateId must be configured."),
-            EmailTemplateKeys.SecurityAlert => _options.SecurityAlertTemplateId ?? throw new InvalidOperationException("Brevo:SecurityAlertTemplateId must be configured."),
-            EmailTemplateKeys.ReviewCompleted => _options.ReviewCompletedTemplateId ?? throw new InvalidOperationException("Brevo:ReviewCompletedTemplateId must be configured."),
+            EmailTemplateKeys.EmailVerificationOtp => emailSettings.BrevoEmailVerificationTemplateId ?? throw new InvalidOperationException("Brevo:EmailVerificationTemplateId must be configured."),
+            EmailTemplateKeys.PasswordResetOtp => emailSettings.BrevoPasswordResetTemplateId ?? throw new InvalidOperationException("Brevo:PasswordResetTemplateId must be configured."),
+            EmailTemplateKeys.Welcome => options.WelcomeTemplateId ?? throw new InvalidOperationException("Brevo:WelcomeTemplateId must be configured."),
+            EmailTemplateKeys.PasswordChanged => options.PasswordChangedTemplateId ?? throw new InvalidOperationException("Brevo:PasswordChangedTemplateId must be configured."),
+            EmailTemplateKeys.MfaEnabled => options.MfaEnabledTemplateId ?? throw new InvalidOperationException("Brevo:MfaEnabledTemplateId must be configured."),
+            EmailTemplateKeys.AdminInvite => options.AdminInviteTemplateId ?? throw new InvalidOperationException("Brevo:AdminInviteTemplateId must be configured."),
+            EmailTemplateKeys.SecurityAlert => options.SecurityAlertTemplateId ?? throw new InvalidOperationException("Brevo:SecurityAlertTemplateId must be configured."),
+            EmailTemplateKeys.ReviewCompleted => options.ReviewCompletedTemplateId ?? throw new InvalidOperationException("Brevo:ReviewCompletedTemplateId must be configured."),
             _ => throw new InvalidOperationException($"Unsupported Brevo template key '{templateKey}'.")
         };
 

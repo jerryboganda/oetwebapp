@@ -260,11 +260,11 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
           {isStarting ? 'Starting...' : 'Start Audio & Task'}
         </Button>
         {session.paper.questionPaperUrl ? (
-          <Link href={session.paper.questionPaperUrl} target="_blank">
-            <Button size="lg" variant="outline" className="gap-2">
+          <Button size="lg" variant="outline" className="gap-2" asChild>
+<Link href={session.paper.questionPaperUrl} target="_blank">
               <FileText className="h-5 w-5" /> Question Paper
-            </Button>
-          </Link>
+            </Link>
+</Button>
         ) : null}
       </div>
     </motion.div>

@@ -96,10 +96,10 @@ export function DataTable<T>({
         <div className="space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
                 {primaryColumn?.header ?? 'Item'}
               </p>
-              <div id={`${rowKey}-mobile-title`} className="mt-1 break-words text-sm font-semibold text-navy">
+              <div id={`${rowKey}-mobile-title`} className="mt-1 break-words text-sm font-bold text-navy">
                 {primaryColumn?.render(row, index)}
               </div>
             </div>
@@ -115,7 +115,7 @@ export function DataTable<T>({
                     column.className,
                   )}
                 >
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
                     {column.header}
                   </span>
                   <div className="text-right text-sm text-navy">{column.render(row, index)}</div>
@@ -129,7 +129,7 @@ export function DataTable<T>({
   };
 
   return (
-    <div className={cn('overflow-hidden rounded-xl border border-border bg-surface shadow-sm', className)}>
+    <div className={cn('overflow-hidden rounded-2xl border border-border bg-surface shadow-sm', className)}>
       <div className="md:hidden p-3">
         {data.map((row, idx) => {
           const rowKey = keyExtractor(row, idx);
@@ -182,7 +182,7 @@ export function DataTable<T>({
                       key={column.key}
                       scope="col"
                       className={cn(
-                        'border-b border-border py-2 px-4 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-muted whitespace-nowrap',
+                        'border-b border-border py-2 px-4 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-muted whitespace-nowrap',
                         column.hideOnMobile && 'hidden md:table-cell',
                         column.className,
                       )}
@@ -287,7 +287,7 @@ function VirtualizedDesktopView<T>({
               key={column.key}
               role="columnheader"
               className={cn(
-                'border-b border-border py-2 px-4 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-muted whitespace-nowrap',
+                'border-b border-border py-2 px-4 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-muted whitespace-nowrap',
                 column.className,
               )}
             >

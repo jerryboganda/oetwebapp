@@ -37,9 +37,9 @@ export default function GrammarError({
               <Button variant="primary" size="sm" onClick={reset} className="inline-flex items-center gap-1.5">
                 <RefreshCcw className="h-3.5 w-3.5" /> Try again
               </Button>
-              <Link href="/">
-                <Button variant="outline" size="sm">Back to dashboard</Button>
-              </Link>
+              <Button variant="outline" size="sm" asChild>
+<Link href="/">Back to dashboard</Link>
+</Button>
             </div>
           </div>
         </Card>

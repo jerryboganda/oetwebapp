@@ -62,7 +62,7 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
                   >
                     {group.label}
                     {isActive && (
-                      <span className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-white">
+                      <span className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
                         {selectedCount}
                       </span>
                     )}

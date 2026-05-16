@@ -156,7 +156,7 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
-    public void App_FailsFastInProduction_WhenBrevoConfigIsMissing()
+    public async Task App_BootsInProduction_WhenRuntimeRotatableBrevoConfigIsMissing()
     {
         using var factory = CreateProductionFactory(settings =>
         {
@@ -167,22 +167,24 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
             settings["Smtp:Enabled"] = "false";
         });
 
-        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
-        Assert.Contains("Brevo", exception.ToString(), StringComparison.Ordinal);
-        Assert.Contains("EmailVerificationTemplateId", exception.ToString(), StringComparison.Ordinal);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/health/live");
+        response.EnsureSuccessStatusCode();
     }
 
     [Fact]
-    public void App_FailsFastInProduction_WhenBillingWebhookSecretIsMissing()
+    public async Task App_BootsInProduction_WhenRuntimeRotatableBillingWebhookSecretIsMissing()
     {
         using var factory = CreateProductionFactory(settings =>
         {
             settings.Remove("Billing:Stripe:WebhookSecret");
         });
 
-        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
-        Assert.Contains("Billing:Stripe", exception.ToString(), StringComparison.Ordinal);
-        Assert.Contains("WebhookSecret", exception.ToString(), StringComparison.Ordinal);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/health/live");
+        response.EnsureSuccessStatusCode();
     }
 
     [Fact]

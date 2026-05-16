@@ -59,7 +59,7 @@ export function MobileFilterSheet({ groups, selected, onChange, onClear, classNa
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-[20px] border border-border bg-background-light px-4 py-3 shadow-sm',
+        'flex items-center gap-3 rounded-2xl border border-border bg-background-light px-4 py-3 shadow-sm',
         className,
       )}
       role="toolbar"

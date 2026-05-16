@@ -343,9 +343,9 @@ export default function GrammarLessonPage() {
 
               <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
                 <Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>
-                <Link href="/grammar">
-                  <Button variant="primary" size="sm">Back to grammar hub</Button>
-                </Link>
+                <Button variant="primary" size="sm" asChild>
+<Link href="/grammar">Back to grammar hub</Link>
+</Button>
               </div>
             </MotionPage>
           ) : null}

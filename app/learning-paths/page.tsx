@@ -156,9 +156,9 @@ export default function LearningPathsPage() {
               </p>
             </div>
           </div>
-          <Link href="/speaking/drills">
-            <Button variant="primary">Open drills</Button>
-          </Link>
+          <Button variant="primary" asChild>
+<Link href="/speaking/drills">Open drills</Link>
+</Button>
         </Card>
       </MotionSection>
 
@@ -189,9 +189,9 @@ export default function LearningPathsPage() {
                     <p className="text-xs text-muted">{item.durationMinutes}min · {item.difficulty}</p>
                   </div>
                   {!item.completed && (
-                    <Link href={learningPathHref(sp.subtestCode, item.id)}>
-                      <Button size="sm" variant="outline">Start</Button>
-                    </Link>
+                    <Button size="sm" variant="outline" asChild>
+<Link href={learningPathHref(sp.subtestCode, item.id)}>Start</Link>
+</Button>
                   )}
                 </Card>
               </MotionItem>

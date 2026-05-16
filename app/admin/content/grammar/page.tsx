@@ -120,21 +120,21 @@ export default function AdminGrammarDashboard() {
         aside={canWriteContent ? (
           <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
             <div className="flex flex-wrap gap-2">
-              <Link href="/admin/content/grammar/topics">
-                <Button variant="outline" className="inline-flex items-center gap-2">
+              <Button variant="outline" className="inline-flex items-center gap-2" asChild>
+<Link href="/admin/content/grammar/topics">
                   <BookMarked className="h-4 w-4" /> Topics
-                </Button>
-              </Link>
-              <Link href="/admin/content/grammar/ai-draft">
-                <Button variant="outline" className="inline-flex items-center gap-2">
+                </Link>
+</Button>
+              <Button variant="outline" className="inline-flex items-center gap-2" asChild>
+<Link href="/admin/content/grammar/ai-draft">
                   <Wand2 className="h-4 w-4" /> AI draft
-                </Button>
-              </Link>
-              <Link href="/admin/content/grammar/lessons/new">
-                <Button className="inline-flex items-center gap-2">
+                </Link>
+</Button>
+              <Button className="inline-flex items-center gap-2" asChild>
+<Link href="/admin/content/grammar/lessons/new">
                   <Plus className="h-4 w-4" /> New lesson
-                </Button>
-              </Link>
+                </Link>
+</Button>
             </div>
           </div>
         ) : undefined}
@@ -260,9 +260,9 @@ export default function AdminGrammarDashboard() {
                       <td className="p-3">
                         <div className="flex flex-wrap gap-2">
                           {canWriteContent ? (
-                            <Link href={`/admin/content/grammar/lessons/${encodeURIComponent(l.id)}`}>
-                              <Button variant="outline" size="sm">Edit</Button>
-                            </Link>
+                            <Button variant="outline" size="sm" asChild>
+<Link href={`/admin/content/grammar/lessons/${encodeURIComponent(l.id)}`}>Edit</Link>
+</Button>
                           ) : null}
                           {canPublishContent ? (
                             l.publishState === 'published' ? (

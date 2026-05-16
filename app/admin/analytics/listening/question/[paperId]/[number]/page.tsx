@@ -164,11 +164,11 @@ export default function ListeningQuestionDeepDivePage() {
 
       <MotionSection delayIndex={0}>
         <div className="flex items-center gap-3">
-          <Link href="/admin/analytics/listening">
-            <Button variant="ghost" size="sm" className="gap-1">
+          <Button variant="ghost" size="sm" className="gap-1" asChild>
+<Link href="/admin/analytics/listening">
               <ArrowLeft className="h-4 w-4" /> Back to Listening analytics
-            </Button>
-          </Link>
+            </Link>
+</Button>
         </div>
       </MotionSection>
 

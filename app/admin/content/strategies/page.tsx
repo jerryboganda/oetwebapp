@@ -125,9 +125,9 @@ export default function AdminStrategiesPage() {
       header: 'Actions',
       render: (guide) => (
         <div className="flex flex-wrap gap-2">
-          <Link href={`/admin/content/strategies/${encodeURIComponent(guide.id)}`}>
-            <Button variant="outline" size="sm">Edit</Button>
-          </Link>
+          <Button variant="outline" size="sm" asChild>
+<Link href={`/admin/content/strategies/${encodeURIComponent(guide.id)}`}>Edit</Link>
+</Button>
           {guide.status !== 'active' && guide.status !== 'archived' ? (
             <Button size="sm" onClick={() => void publishGuide(guide.id)}>Publish</Button>
           ) : null}
@@ -150,12 +150,12 @@ export default function AdminStrategiesPage() {
         description="Manage guided learner articles, publish readiness, preview access, and content hierarchy placement."
         icon={BookOpenText}
         actions={
-          <Link href="/admin/content/strategies/new">
-            <Button className="gap-2">
+          <Button className="gap-2" asChild>
+<Link href="/admin/content/strategies/new">
               <FilePlus2 className="h-4 w-4" />
               New guide
-            </Button>
-          </Link>
+            </Link>
+</Button>
         }
       />
 
@@ -200,12 +200,12 @@ export default function AdminStrategiesPage() {
           <AdminRoutePanel>
             <div className="flex flex-col items-start gap-3">
               <p className="text-sm text-muted">No strategy guides match the current filters.</p>
-              <Link href="/admin/content/strategies/new">
-                <Button className="gap-2">
+              <Button className="gap-2" asChild>
+<Link href="/admin/content/strategies/new">
                   <FilePlus2 className="h-4 w-4" />
                   Create guide
-                </Button>
-              </Link>
+                </Link>
+</Button>
             </div>
           </AdminRoutePanel>
         }

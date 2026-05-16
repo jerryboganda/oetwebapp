@@ -39,8 +39,8 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
   return {
     email: {
       brevoApiKey: '********',
-      brevoEmailVerificationTemplateId: '7',
-      brevoPasswordResetTemplateId: '9',
+      brevoEmailVerificationTemplateId: 7,
+      brevoPasswordResetTemplateId: 9,
       smtpHost: 'smtp.example.com',
       smtpPort: 587,
       smtpUsername: 'mailer',
@@ -55,13 +55,13 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       stripeSuccessUrl: 'https://example.com/success',
       stripeCancelUrl: 'https://example.com/cancel',
     },
-    sentry: { sentryDsn: 'https://abc@sentry.io/1', sentryEnvironment: 'production', sentrySampleRate: 0.1 },
+    sentry: { dsn: 'https://abc@sentry.io/1', environment: 'production', sampleRate: 0.1 },
     backup: {
-      backupS3Url: 's3://b/p',
-      backupAwsAccessKeyId: 'AKIA',
-      backupAwsSecretAccessKey: '********',
-      backupGpgPassphrase: '********',
-      backupAlertWebhook: 'https://example.com/hook',
+      s3Url: 's3://b/p',
+      awsAccessKeyId: 'AKIA',
+      awsSecretAccessKey: '********',
+      gpgPassphrase: '********',
+      alertWebhook: 'https://example.com/hook',
     },
     oauth: {
       googleClientId: 'g-id',
@@ -82,6 +82,7 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       fcmProjectId: '',
     },
     updatedBy: 'admin@example.com',
+    updatedByUserId: 'u-1',
     updatedAt: '2026-05-16T10:00:00Z',
     ...overrides,
   };
@@ -173,7 +174,7 @@ describe('RuntimeSettingsClient', () => {
     // Secrets that the user never touched stay as '********'.
     expect(payload.email.brevoApiKey).toBe('********');
     expect(payload.email.smtpPassword).toBe('********');
-    expect(payload.backup.backupAwsSecretAccessKey).toBe('********');
+    expect(payload.backup.awsSecretAccessKey).toBe('********');
   });
 
   it('sends an empty string when the user clicks Clear on a set secret', async () => {

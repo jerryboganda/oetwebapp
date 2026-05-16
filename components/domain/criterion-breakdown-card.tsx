@@ -30,7 +30,7 @@ export function CriterionBreakdownCard({ criterion, score, grade, explanation, s
       {explanation && <p className="text-xs text-muted mb-3">{explanation}</p>}
       {strengths && strengths.length > 0 && (
         <div className="mb-2">
-          <p className="text-xs font-semibold text-emerald-700 mb-1">Strengths</p>
+          <p className="text-xs font-bold text-emerald-700 mb-1">Strengths</p>
           <ul className="text-xs text-navy space-y-0.5">
             {strengths.map((s, i) => <li key={i} className="flex items-start gap-1.5"><span className="text-emerald-500 mt-0.5">✓</span>{s}</li>)}
           </ul>
@@ -38,7 +38,7 @@ export function CriterionBreakdownCard({ criterion, score, grade, explanation, s
       )}
       {issues && issues.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-red-700 mb-1">Areas to Improve</p>
+          <p className="text-xs font-bold text-red-700 mb-1">Areas to Improve</p>
           <ul className="text-xs text-navy space-y-0.5">
             {issues.map((s, i) => <li key={i} className="flex items-start gap-1.5"><span className="text-red-500 mt-0.5">•</span>{s}</li>)}
           </ul>

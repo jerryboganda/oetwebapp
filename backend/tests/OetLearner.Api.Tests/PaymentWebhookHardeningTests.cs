@@ -16,14 +16,16 @@ public class PaymentWebhookHardeningTests
 {
     private const string Secret = "whsec_test_billing_hardening_b";
 
-    private static StripeGateway BuildStripe(int maxAge = 300, bool sandbox = false) => new(
-        new HttpClient(),
-        Options.Create(new BillingOptions
+    private static StripeGateway BuildStripe(int maxAge = 300, bool sandbox = false)
+    {
+        var options = new BillingOptions
         {
             AllowSandboxFallbacks = sandbox,
             WebhookMaxAgeSeconds = maxAge,
             Stripe = new StripeBillingOptions { WebhookSecret = Secret }
-        }));
+        };
+        return new StripeGateway(new HttpClient(), Options.Create(options), TestRuntimeSettingsProvider.FromBillingOptions(options));
+    }
 
     private static (string payload, Dictionary<string, string> headers) SignStripe(
         object body,

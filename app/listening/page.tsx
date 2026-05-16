@@ -157,7 +157,7 @@ export default function ListeningHome() {
     secondaryAction: {
       label: 'Open Mock Center',
       href: '/mocks',
-      variant: 'outline',
+      variant: 'secondary',
     },
   };
 
@@ -353,7 +353,7 @@ export default function ListeningHome() {
                         href: `${paper.route}?mode=practice`,
                       },
                       secondaryAction: paper.objectiveReady
-                        ? { label: 'Exam Mode', href: `${paper.route}?mode=exam`, variant: 'outline' }
+                        ? { label: 'Exam Mode', href: `${paper.route}?mode=exam`, variant: 'secondary' }
                         : undefined,
                     };
                     return (
@@ -415,7 +415,7 @@ export default function ListeningHome() {
                       ],
                       primaryAction: part.available && part.route
                         ? { label: 'Open Part Practice', href: part.route }
-                        : { label: 'See Study Plan', href: '/study-plan', variant: 'outline' },
+                        : { label: 'See Study Plan', href: '/study-plan' },
                     };
                     return (
                       <MotionItem key={part.id} delayIndex={index}>
@@ -471,7 +471,7 @@ export default function ListeningHome() {
                         { icon: Target, label: `${result.scaledScore}/500` },
                         { icon: Sparkles, label: `Grade ${result.grade}` },
                       ],
-                      primaryAction: { label: 'View Result', href: result.route, variant: 'outline' },
+                      primaryAction: { label: 'View Result', href: result.route },
                     };
                     return (
                       <MotionItem key={result.attemptId} delayIndex={index}>
@@ -554,7 +554,6 @@ export default function ListeningHome() {
                       primaryAction: {
                         label: 'View Report',
                         href: `/mocks/report/${report.id}`,
-                        variant: 'outline',
                       },
                     };
 

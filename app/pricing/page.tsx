@@ -12,7 +12,6 @@ import {
   Star,
   ShieldCheck,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { fetchPublicPlans, type PublicBillingPlan } from '@/lib/api';
 
@@ -166,11 +165,12 @@ export default function PricingPage() {
                   </ul>
 
                   <div className="mt-auto pt-6">
-                    <Link href="/register">
-                      <Button variant="primary" className="w-full">
-                        Get started
-                        <ArrowRight className="ml-1.5 h-4 w-4" />
-                      </Button>
+                    <Link
+                      href="/register"
+                      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                    >
+                      Get started
+                      <ArrowRight className="ml-1.5 h-4 w-4" />
                     </Link>
                   </div>
                 </motion.article>
@@ -255,16 +255,18 @@ export default function PricingPage() {
             Create an account to see available OET practice and any server-published billing options.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/register">
-              <Button variant="primary" size="lg">
-                Create account
-                <ArrowRight className="ml-1.5 h-4 w-4" />
-              </Button>
+            <Link
+              href="/register"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            >
+              Create account
+              <ArrowRight className="ml-1.5 h-4 w-4" />
             </Link>
-            <Link href="/sign-in">
-              <Button variant="outline" size="lg">
-                Sign in
-              </Button>
+            <Link
+              href="/sign-in"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-border px-6 py-3 text-base font-medium text-navy transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:border-border-hover hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            >
+              Sign in
             </Link>
           </div>
         </div>

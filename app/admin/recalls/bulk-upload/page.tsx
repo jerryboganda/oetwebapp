@@ -23,9 +23,9 @@ export default function AdminRecallsBulkUploadPage() {
           <InlineAlert variant="warning">
             This route previously inserted active rows and could overwrite existing terms. It is now blocked. Use the safe importer for every Recalls batch.
           </InlineAlert>
-          <Link href="/admin/content/vocabulary/import">
-            <Button variant="primary">Open safe Vocabulary import</Button>
-          </Link>
+          <Button variant="primary" asChild>
+<Link href="/admin/content/vocabulary/import">Open safe Vocabulary import</Link>
+</Button>
         </div>
       </AdminRoutePanel>
     </AdminRouteWorkspace>

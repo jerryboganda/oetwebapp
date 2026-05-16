@@ -206,18 +206,18 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700/70">Status</p>
-                  <p className="mt-1 text-sm font-semibold text-amber-950">{String(freeze.status ?? 'active')}</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700/70">Status</p>
+                  <p className="mt-1 text-sm font-normal text-amber-950">{String(freeze.status ?? 'active')}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700/70">Started</p>
-                  <p className="mt-1 text-sm font-semibold text-amber-950">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700/70">Started</p>
+                  <p className="mt-1 text-sm font-normal text-amber-950">
                     {freeze.startedAt ? new Date(freeze.startedAt).toLocaleString() : 'Pending'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700/70">Ends</p>
-                  <p className="mt-1 text-sm font-semibold text-amber-950">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700/70">Ends</p>
+                  <p className="mt-1 text-sm font-normal text-amber-950">
                     {freeze.endedAt ? new Date(freeze.endedAt).toLocaleString() : 'Not set'}
                   </p>
                 </div>
@@ -440,23 +440,23 @@ export default function Dashboard() {
                                   : 'bg-background-light border border-border'
                               }`}
                             />
-                            <span className="text-[10px] text-muted">{day.day}</span>
+                            <span className="text-[11px] text-muted">{day.day}</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-lg border border-border bg-background-light p-2.5 text-center">
+                      <div className="rounded-2xl border border-border bg-background-light p-2.5 text-center">
                         <div className="flex items-center justify-center gap-1 text-sm font-bold text-navy">
                           <Timer className="h-3.5 w-3.5" />
                           {Math.round(engagement.totalPracticeMinutes / 60)}h
                         </div>
-                        <div className="text-[10px] text-muted">Total Practice</div>
+                        <div className="text-[11px] text-muted">Total Practice</div>
                       </div>
-                      <div className="rounded-lg border border-border bg-background-light p-2.5 text-center">
+                      <div className="rounded-2xl border border-border bg-background-light p-2.5 text-center">
                         <div className="text-sm font-bold text-navy">{engagement.totalPracticeSessions}</div>
-                        <div className="text-[10px] text-muted">Sessions</div>
+                        <div className="text-[11px] text-muted">Sessions</div>
                       </div>
                     </div>
                   </CardContent>

@@ -685,7 +685,7 @@ export default function MockCenter() {
                                       <h3 className="flex items-center gap-2 text-base font-bold text-navy">
                                         <span className="truncate">{mock.title}</span>
                                         {mock.isRecommended ? (
-                                          <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-amber-700">
+                                           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-amber-700">
                                             Recommended
                                           </span>
                                         ) : null}

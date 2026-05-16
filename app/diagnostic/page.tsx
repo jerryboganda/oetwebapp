@@ -192,7 +192,7 @@ export default function DiagnosticIntroPage() {
             description="This page should answer what the diagnostic is, how it behaves, and what the learner gets afterward."
             className="mb-4"
           />
-          <Card className="bg-background-light/50 border-border">
+           <Card className="border-border bg-surface shadow-sm">
             <ul className="space-y-2 text-xs text-muted">
               <li className="flex items-start gap-2">
                 <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-px">1</span>

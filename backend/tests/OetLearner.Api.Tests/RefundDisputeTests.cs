@@ -22,9 +22,10 @@ public class RefundDisputeTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
-        var billingOpts = Options.Create(new BillingOptions { AllowSandboxFallbacks = true });
+        var billingOptions = new BillingOptions { AllowSandboxFallbacks = true };
+        var billingOpts = Options.Create(billingOptions);
         var gateways = new PaymentGatewayService(
-            new StripeGateway(new HttpClient(), billingOpts),
+            new StripeGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
             new PayPalGateway(new HttpClient(), billingOpts));
         return (db, new RefundService(db, gateways), new DisputeService(db));
     }

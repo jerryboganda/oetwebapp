@@ -73,17 +73,17 @@ export default function PronunciationPage() {
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="p-4">
           <Activity className="mb-3 h-5 w-5 text-primary" />
-          <p className="text-sm font-semibold text-navy">Rulebook-grounded scoring</p>
+          <p className="text-sm font-bold text-navy">Rulebook-grounded scoring</p>
           <p className="mt-1 text-xs leading-5 text-muted">Attempts are scored by the server-authoritative pronunciation pipeline.</p>
         </Card>
         <Card className="p-4">
           <CalendarClock className="mb-3 h-5 w-5 text-primary" />
-          <p className="text-sm font-semibold text-navy">Due drills first</p>
+          <p className="text-sm font-bold text-navy">Due drills first</p>
           <p className="mt-1 text-xs leading-5 text-muted">Your queue prioritises phonemes that need spaced-repetition practice.</p>
         </Card>
         <Card className="p-4">
           <Lock className="mb-3 h-5 w-5 text-primary" />
-          <p className="text-sm font-semibold text-navy">Protected audio</p>
+          <p className="text-sm font-bold text-navy">Protected audio</p>
           <p className="mt-1 text-xs leading-5 text-muted">Audio uploads stay behind authenticated learner endpoints.</p>
         </Card>
       </div>
@@ -107,12 +107,12 @@ export default function PronunciationPage() {
                     <Badge variant="outline">{drill.difficulty}</Badge>
                     <Badge variant="muted">{drill.focus}</Badge>
                   </div>
-                  <p className="text-sm font-semibold text-navy">{drill.label}</p>
+                  <p className="text-sm font-bold text-navy">{drill.label}</p>
                   <p className="mt-1 text-xs text-muted">{drill.targetPhoneme} · {drill.profession}</p>
                 </div>
-                <Link href={`/pronunciation/${encodeURIComponent(drill.id)}`} className="self-start">
-                  <Button size="sm">Open drill</Button>
-                </Link>
+                <Button size="sm" asChild>
+<Link href={`/pronunciation/${encodeURIComponent(drill.id)}`} className="self-start">Open drill</Link>
+</Button>
               </Card>
             ))}
           </div>

@@ -98,8 +98,8 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             SmtpPort: r.SmtpPort ?? (smtp.Port == 0 ? null : smtp.Port),
             SmtpUsername: Coalesce(r.SmtpUsername, smtp.Username),
             SmtpPassword: Unprotect(r.SmtpPasswordEncrypted) ?? NullIfEmpty(smtp.Password),
-            SmtpFromAddress: Coalesce(r.SmtpFromAddress, smtp.FromEmail),
-            SmtpFromName: Coalesce(r.SmtpFromName, smtp.FromName));
+            SmtpFromAddress: Coalesce(r.SmtpFromAddress, brevo.FromEmail, smtp.FromEmail),
+            SmtpFromName: Coalesce(r.SmtpFromName, brevo.FromName, smtp.FromName));
 
         var bill = new BillingSettings(
             StripeSecretKey: Unprotect(r.StripeSecretKeyEncrypted) ?? NullIfEmpty(stripe.SecretKey),
@@ -157,10 +157,8 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt);
     }
 
-    private static string? Coalesce(string? @override, string? fallback)
-        => !string.IsNullOrWhiteSpace(@override) ? @override
-         : !string.IsNullOrWhiteSpace(fallback) ? fallback
-         : null;
+    private static string? Coalesce(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private static string? NullIfEmpty(string? s)
         => string.IsNullOrWhiteSpace(s) ? null : s;

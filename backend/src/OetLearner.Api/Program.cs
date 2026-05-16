@@ -71,14 +71,9 @@ if (!builder.Environment.IsDevelopment())
 
     if (brevoOptions.Enabled)
     {
-        if (string.IsNullOrWhiteSpace(brevoOptions.ApiKey)
-            || string.IsNullOrWhiteSpace(brevoOptions.FromEmail)
-            || brevoOptions.EmailVerificationTemplateId is null
-            || brevoOptions.PasswordResetTemplateId is null)
-        {
-            throw new InvalidOperationException(
-                "Configure Brevo:Enabled=true, Brevo:ApiKey, Brevo:FromEmail, Brevo:EmailVerificationTemplateId, and Brevo:PasswordResetTemplateId outside the Development environment.");
-        }
+        // Brevo ApiKey/from/template values are runtime-rotatable. They are
+        // validated by BrevoEmailSender after IRuntimeSettingsProvider merges
+        // DB overrides with env/appsettings fallbacks.
     }
     else if (!smtpOptions.Enabled
         || string.IsNullOrWhiteSpace(smtpOptions.Host)
@@ -110,14 +105,9 @@ if (!builder.Environment.IsDevelopment())
         throw new InvalidOperationException("Billing:AllowSandboxFallbacks must be false outside the Development environment.");
     }
 
-    if (string.IsNullOrWhiteSpace(billingOptions.Stripe.SecretKey)
-        || string.IsNullOrWhiteSpace(billingOptions.Stripe.SuccessUrl)
-        || string.IsNullOrWhiteSpace(billingOptions.Stripe.CancelUrl)
-        || string.IsNullOrWhiteSpace(billingOptions.Stripe.WebhookSecret))
-    {
-        throw new InvalidOperationException(
-            "Configure Billing:Stripe:SecretKey, Billing:Stripe:SuccessUrl, Billing:Stripe:CancelUrl, and Billing:Stripe:WebhookSecret outside the Development environment.");
-    }
+    // Stripe secret/webhook/success/cancel values are runtime-rotatable. They
+    // are validated by StripeGateway after IRuntimeSettingsProvider merges DB
+    // overrides with env/appsettings fallbacks.
 }
 
 builder.WebHost.ConfigureKestrel(options =>
@@ -180,8 +170,6 @@ if (brevoOptions.Enabled)
     {
         var configuredBrevoOptions = serviceProvider.GetRequiredService<IOptions<BrevoOptions>>().Value;
         client.BaseAddress = new Uri(string.IsNullOrWhiteSpace(configuredBrevoOptions.BaseUrl) ? "https://api.brevo.com/v3" : configuredBrevoOptions.BaseUrl);
-        client.DefaultRequestHeaders.Add("api-key", configuredBrevoOptions.ApiKey);
-        client.DefaultRequestHeaders.Add("accept", "application/json");
     })
     // Transient Brevo outages must not cascade into 5xx from our API. The standard
     // resilience handler adds rate limiting, retry with exponential backoff + jitter,

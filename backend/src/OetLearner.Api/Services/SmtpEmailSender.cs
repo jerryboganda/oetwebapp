@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Mail;
 using System.Text;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
@@ -24,14 +25,16 @@ public interface IEmailSender
 
 public sealed class SmtpEmailSender(
     IOptions<SmtpOptions> options,
+    IRuntimeSettingsProvider runtimeSettings,
     IWebHostEnvironment environment,
     ILogger<SmtpEmailSender> logger) : IEmailSender
 {
-    private readonly SmtpOptions _options = options.Value;
+    private readonly IOptions<SmtpOptions> _options = options;
 
     public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled)
+        var optionsSnapshot = _options.Value;
+        if (!optionsSnapshot.Enabled)
         {
             if (environment.IsDevelopment())
             {
@@ -46,36 +49,38 @@ public sealed class SmtpEmailSender(
             throw new InvalidOperationException("SMTP is disabled and the application is not running in Development.");
         }
 
-        if (string.IsNullOrWhiteSpace(_options.Host))
+        var emailSettings = (await runtimeSettings.GetAsync(cancellationToken)).Email;
+
+        if (string.IsNullOrWhiteSpace(emailSettings.SmtpHost))
         {
             throw new InvalidOperationException("SMTP:Host must be configured when SMTP is enabled.");
         }
 
-        if (string.IsNullOrWhiteSpace(_options.FromEmail))
+        if (string.IsNullOrWhiteSpace(emailSettings.SmtpFromAddress))
         {
             throw new InvalidOperationException("SMTP:FromEmail must be configured when SMTP is enabled.");
         }
 
         logger.LogInformation(
             "SMTP sending email: To={To} Subject={Subject} Host={Host}:{Port} From={From} SSL={Ssl}",
-            message.To, message.Subject, _options.Host, _options.Port, _options.FromEmail, _options.EnableSsl);
+            message.To, message.Subject, emailSettings.SmtpHost, emailSettings.SmtpPort, emailSettings.SmtpFromAddress, optionsSnapshot.EnableSsl);
 
         var sw = Stopwatch.StartNew();
 
-        using var smtpClient = new SmtpClient(_options.Host, _options.Port)
+        using var smtpClient = new SmtpClient(emailSettings.SmtpHost, emailSettings.SmtpPort ?? 587)
         {
-            EnableSsl = _options.EnableSsl,
+            EnableSsl = optionsSnapshot.EnableSsl,
             Timeout = 30_000
         };
 
-        if (!string.IsNullOrWhiteSpace(_options.Username))
+        if (!string.IsNullOrWhiteSpace(emailSettings.SmtpUsername))
         {
-            smtpClient.Credentials = new NetworkCredential(_options.Username, _options.Password ?? string.Empty);
+            smtpClient.Credentials = new NetworkCredential(emailSettings.SmtpUsername, emailSettings.SmtpPassword ?? string.Empty);
         }
 
         using var mailMessage = new MailMessage
         {
-            From = new MailAddress(_options.FromEmail, _options.FromName),
+            From = new MailAddress(emailSettings.SmtpFromAddress, emailSettings.SmtpFromName),
             Subject = message.Subject,
             SubjectEncoding = Encoding.UTF8,
             BodyEncoding = Encoding.UTF8

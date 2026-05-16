@@ -185,7 +185,7 @@ export default function MarketplacePage() {
           {loading ? (
             <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
           ) : browseItems.length === 0 ? (
-            <div className="text-center py-16 bg-background-light rounded-2xl border border-dashed border-border">
+            <div className="text-center py-16 rounded-2xl border border-border bg-surface shadow-sm">
               <Store className="w-10 h-10 text-muted/40 mx-auto mb-3" />
               <p className="text-sm font-semibold text-muted">No marketplace content yet</p>
               <p className="text-xs text-muted/60 mt-1">Be the first to submit practice content!</p>
@@ -197,7 +197,7 @@ export default function MarketplacePage() {
                   const SubIcon = SUBTEST_ICONS[item.subtestCode] ?? BookOpen;
                   return (
                     <MotionItem key={item.id} delayIndex={i}
-                      className="bg-surface rounded-xl border border-border p-4 hover:border-primary/30 hover:shadow-sm transition-all">
+                      className="rounded-2xl border border-border bg-surface p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md">
                       <div className="flex items-start gap-3">
                         <div className="p-2 rounded-lg bg-primary/10 text-primary">
                           <SubIcon className="w-5 h-5" />
@@ -291,7 +291,7 @@ export default function MarketplacePage() {
         <section>
           {/* Profile Summary */}
           {profile && (
-            <div className="bg-primary/5 rounded-xl border border-primary/20 p-4 mb-4">
+            <div className="mb-4 rounded-2xl border border-border bg-surface p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-navy">{profile.displayName}</h3>
@@ -306,7 +306,7 @@ export default function MarketplacePage() {
           )}
 
           {myItems.length === 0 ? (
-            <div className="text-center py-12 bg-background-light rounded-2xl border border-dashed border-border">
+            <div className="text-center py-12 rounded-2xl border border-border bg-surface shadow-sm">
               <Upload className="w-10 h-10 text-muted/40 mx-auto mb-3" />
               <p className="text-sm font-semibold text-muted">No submissions yet</p>
               <p className="text-xs text-muted/60 mt-1">Switch to the Submit tab to contribute content</p>
@@ -318,11 +318,11 @@ export default function MarketplacePage() {
                 const StatusIcon = statusInfo.icon;
                 return (
                   <MotionItem key={item.id} delayIndex={i}
-                    className="bg-surface rounded-xl border border-border p-4">
+                    className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-sm font-semibold text-navy truncate">{item.title}</span>
+                          <span className="text-sm font-bold text-navy truncate">{item.title}</span>
                           <ExamTypeBadge examType={item.examFamilyCode} size="sm" />
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted/60">
@@ -331,7 +331,7 @@ export default function MarketplacePage() {
                           <span>{dateFormatter.format(new Date(item.submittedAt))}</span>
                         </div>
                       </div>
-                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1 ${statusInfo.color}`}>
+                      <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${statusInfo.color}`}>
                         <StatusIcon className="w-3 h-3" /> {statusInfo.label}
                       </span>
                     </div>

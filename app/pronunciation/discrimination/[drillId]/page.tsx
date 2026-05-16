@@ -21,9 +21,9 @@ export default function PronunciationDiscriminationPage() {
               This first-class pronunciation route is ready for the learner module. The live listening rounds stay disabled until the published drill includes verified audio pairs and scoring evidence.
             </p>
           </div>
-          <Link href="/pronunciation">
-            <Button variant="outline">Choose another drill</Button>
-          </Link>
+          <Button variant="outline" asChild>
+<Link href="/pronunciation">Choose another drill</Link>
+</Button>
         </div>
       </Card>
     </LearnerDashboardShell>
