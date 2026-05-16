@@ -137,12 +137,12 @@ export default function AdminStrategyDetailPage() {
         icon={BookOpenText}
         actions={
           <>
-            <Link href="/admin/content/strategies">
-              <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" asChild>
+<Link href="/admin/content/strategies">
                 <ArrowLeft className="h-4 w-4" />
                 Back
-              </Button>
-            </Link>
+              </Link>
+</Button>
             <Button
               type="button"
               className="gap-2"

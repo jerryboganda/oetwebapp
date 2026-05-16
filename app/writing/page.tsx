@@ -103,8 +103,11 @@ function WritingEntitlementBanner({ entitlement }: { entitlement: WritingEntitle
           <span className="font-semibold">AI grading is a premium feature</span>
           <span className="ml-1">— Upgrade for instant rule-cited feedback.</span>
         </div>
-        <Link href="/billing/subscribe">
-          <Button variant="primary" size="sm">Upgrade</Button>
+        <Link
+          href="/billing/subscribe"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
+          Upgrade
         </Link>
       </div>
     );
@@ -124,8 +127,11 @@ function WritingEntitlementBanner({ entitlement }: { entitlement: WritingEntitle
           <span className="font-semibold">Free quota reached.</span>
           <span className="ml-1">Resets {reset}.</span>
         </div>
-        <Link href="/billing/subscribe">
-          <Button variant="primary" size="sm">Upgrade for more</Button>
+        <Link
+          href="/billing/subscribe"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
+          Upgrade for more
         </Link>
       </div>
     );
@@ -311,7 +317,7 @@ export default function WritingHome() {
             />
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-2">
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Exam mode</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted">Exam mode</p>
                 <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-background-light p-1">
                   {([
                     { id: 'computer' as WritingExamMode, label: 'Computer', icon: Monitor },
@@ -330,7 +336,7 @@ export default function WritingHome() {
                 </div>
               </div>
               <div className="space-y-2">
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Assessor</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted">Assessor</p>
                 <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-background-light p-1">
                   {([
                     { id: 'ai' as WritingAssessorType, label: 'AI', icon: Brain },
@@ -374,7 +380,7 @@ export default function WritingHome() {
                 { icon: RefreshCw, label: 'In progress' },
               ],
               primaryAction: { label: 'Resume Draft', href: resumeAction.route },
-              secondaryAction: { label: 'Start a Fresh Task', href: '/writing/library', variant: 'outline' },
+              secondaryAction: { label: 'Start a Fresh Task', href: '/writing/library', variant: 'secondary' },
             }} />
           </MotionSection>
         ) : null}
@@ -400,7 +406,7 @@ export default function WritingHome() {
               secondaryAction: {
                 label: 'Model Answers',
                 href: '/writing/model',
-                variant: 'outline',
+                variant: 'secondary',
               },
             }}
           />
@@ -443,7 +449,7 @@ export default function WritingHome() {
               ],
               primaryAction: latestEvaluation.evaluationId
                 ? { label: 'Open Result', href: `/writing/result?id=${encodeURIComponent(latestEvaluation.evaluationId)}` }
-                : { label: 'View Submissions', href: '/writing', variant: 'outline' },
+                : { label: 'View Submissions', href: '/writing' },
             }} />
           </MotionSection>
         ) : null}
@@ -471,7 +477,7 @@ export default function WritingHome() {
 
           <MotionCollapse open={activeTab !== 'past'}>
                 <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange}
-                  onClear={() => setFilters({})} className="mb-6 bg-surface p-4 rounded-xl border border-border shadow-sm" />
+                  onClear={() => setFilters({})} className="mb-6 bg-surface p-4 rounded-2xl border border-border shadow-sm" />
           </MotionCollapse>
 
           <div className="bg-surface rounded-2xl shadow-sm border border-border overflow-hidden">
@@ -500,7 +506,7 @@ export default function WritingHome() {
                           <Badge variant="info" size="sm">{task.scenarioType}</Badge>
                         </div>
                       </div>
-                      <Button size="sm" variant="outline">Start Practice</Button>
+                      <Button size="sm" variant="primary">Start Practice</Button>
                     </div>
                   ))}
                 </motion.div>
@@ -568,7 +574,7 @@ export default function WritingHome() {
                           </div>
                           <p className="text-sm text-muted max-w-2xl">{drill.rationale ?? 'Target this criterion with a focused drill based on your most recent evaluation.'}</p>
                         </div>
-                        <Button size="sm" variant="outline">Start Drill</Button>
+                        <Button size="sm" variant="primary">Start Drill</Button>
                       </div>
                     ))
                   ) : filteredTasks.length === 0 ? (
@@ -595,7 +601,7 @@ export default function WritingHome() {
                             <Badge variant={task.difficulty === 'Hard' ? 'danger' : task.difficulty === 'Medium' ? 'warning' : 'success'} size="sm">{task.difficulty}</Badge>
                           </div>
                         </div>
-                        <Button size="sm" variant="outline">Start Drill</Button>
+                        <Button size="sm" variant="primary">Start Drill</Button>
                       </div>
                     ))
                   )}
@@ -662,7 +668,7 @@ export default function WritingHome() {
                       { icon: Calendar, label: report.date },
                       { icon: Target, label: report.overallScore },
                     ],
-                    primaryAction: { label: 'View Report', href: `/mocks/report/${report.id}`, variant: 'outline' },
+                    primaryAction: { label: 'View Report', href: `/mocks/report/${report.id}` },
                   }} />
                 </MotionItem>
               ))}

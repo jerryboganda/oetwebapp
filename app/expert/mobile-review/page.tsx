@@ -16,12 +16,12 @@ export default function ExpertMobileReviewPage() {
           This route is intentionally closed until each mobile review has candidate evidence, audio or transcript context, rubric references, draft persistence, and rework-flow binding. Use the full expert review console for launch-critical reviews.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Link href="/expert/queue">
-            <Button><FileSearch className="h-4 w-4" /> Open review queue</Button>
-          </Link>
-          <Link href="/support">
-            <Button variant="outline">Contact support</Button>
-          </Link>
+          <Button asChild>
+<Link href="/expert/queue"><FileSearch className="h-4 w-4" /> Open review queue</Link>
+</Button>
+          <Button variant="outline" asChild>
+<Link href="/support">Contact support</Link>
+</Button>
         </div>
       </Card>
     </main>

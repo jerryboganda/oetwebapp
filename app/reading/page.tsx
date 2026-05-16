@@ -203,9 +203,9 @@ export default function ReadingHome() {
                     <MotionItem key={paper.id} delayIndex={index}>
                       <LearnerSurfaceCard card={paperCard(paper, home?.activeAttempts ?? [])}>
                         <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold text-muted">
-                          <span className="rounded-lg bg-background-light px-2 py-2">A {paper.partACount}</span>
-                          <span className="rounded-lg bg-background-light px-2 py-2">B {paper.partBCount}</span>
-                          <span className="rounded-lg bg-background-light px-2 py-2">C {paper.partCCount}</span>
+                          <span className="rounded-full bg-background-light px-2 py-2">A {paper.partACount}</span>
+                          <span className="rounded-full bg-background-light px-2 py-2">B {paper.partBCount}</span>
+                          <span className="rounded-full bg-background-light px-2 py-2">C {paper.partCCount}</span>
                         </div>
                         {home?.policy.allowPaperReadingMode && !(paper.entitlement ? !paper.entitlement.allowed : false) ? (
                           <Link
@@ -321,7 +321,6 @@ export default function ReadingHome() {
                       primaryAction: {
                         label: 'View Report',
                         href: `/mocks/report/${report.id}`,
-                        variant: 'outline',
                       },
                     };
                     return (
@@ -411,7 +410,7 @@ function paperCard(paper: ReadingHomePaperDto, attempts: ReadingHomeAttemptDto[]
     secondaryAction: !locked && lastSubmitted ? {
       label: 'Review latest result',
       href: lastSubmitted.route,
-      variant: 'outline',
+      variant: 'secondary',
     } : undefined,
     statusLabel: locked ? 'Locked' : active ? 'In progress' : undefined,
   };
@@ -438,7 +437,6 @@ function resultCard(result: ReadingHomeResultDto): LearnerSurfaceCardModel {
     primaryAction: {
       label: 'Open review',
       href: result.route,
-      variant: 'outline',
     },
     statusLabel: isPracticeOnly ? 'Practice only' : passed ? 'Passed' : 'Needs work',
   };

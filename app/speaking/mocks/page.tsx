@@ -114,14 +114,14 @@ export default function SpeakingMockSetIndexPage() {
                   <p className="text-xs text-muted">
                     Two role-plays · combined readiness band
                   </p>
-                  <Link
-                    href={`/speaking/mocks/${set.mockSetId}`}
-                    onClick={() => analytics.track('speaking_mock_set_card_opened', { mockSetId: set.mockSetId })}
-                  >
-                    <Button variant={blocked ? 'outline' : 'primary'} disabled={blocked}>
+                  <Button variant={blocked ? 'outline' : 'primary'} disabled={blocked} asChild>
+                    <Link
+                      href={`/speaking/mocks/${set.mockSetId}`}
+                      onClick={() => analytics.track('speaking_mock_set_card_opened', { mockSetId: set.mockSetId })}
+                    >
                       {blocked ? 'Cap reached' : 'Start mock'}
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               </li>
             ))}

@@ -59,7 +59,7 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   if (data.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+      <div className="rounded-2xl border border-dashed border-border bg-background-light px-6 py-10 text-center text-sm text-muted">
         {emptyMessage}
       </div>
     );
@@ -96,10 +96,10 @@ export function DataTable<T>({
         <div className="space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
                 {primaryColumn?.header ?? 'Item'}
               </p>
-              <div id={`${rowKey}-mobile-title`} className="mt-1 break-words text-sm font-semibold text-navy">
+              <div id={`${rowKey}-mobile-title`} className="mt-1 break-words text-sm font-bold text-navy">
                 {primaryColumn?.render(row, index)}
               </div>
             </div>
@@ -115,7 +115,7 @@ export function DataTable<T>({
                     column.className,
                   )}
                 >
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
                     {column.header}
                   </span>
                   <div className="text-right text-sm text-navy">{column.render(row, index)}</div>
@@ -129,7 +129,7 @@ export function DataTable<T>({
   };
 
   return (
-    <div className={cn('overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950', className)}>
+    <div className={cn('overflow-hidden rounded-2xl border border-border bg-surface shadow-sm', className)}>
       <div className="md:hidden p-3">
         {data.map((row, idx) => {
           const rowKey = keyExtractor(row, idx);
@@ -175,14 +175,14 @@ export function DataTable<T>({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-full text-sm" aria-label={ariaLabel}>
-              <thead className="bg-zinc-50 dark:bg-zinc-900/50">
-                <tr className="border-b border-gray-200/60">
+              <thead className="bg-background-light">
+                <tr className="border-b border-border/60">
                   {columns.map((column) => (
                     <th
                       key={column.key}
                       scope="col"
                       className={cn(
-                        'border-b border-zinc-100 dark:border-zinc-800/50 py-2 px-4 text-left text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400 whitespace-nowrap',
+                        'border-b border-border py-2 px-4 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-muted whitespace-nowrap',
                         column.hideOnMobile && 'hidden md:table-cell',
                         column.className,
                       )}
@@ -193,7 +193,7 @@ export function DataTable<T>({
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-zinc-100 bg-white dark:divide-zinc-800/80 dark:bg-zinc-950">
+              <tbody className="divide-y divide-border bg-surface">
                 {data.map((row, idx) => (
                   <tr
                     key={keyExtractor(row, idx)}
@@ -208,7 +208,7 @@ export function DataTable<T>({
                     tabIndex={onRowClick ? 0 : undefined}
                     role={onRowClick ? 'button' : undefined}
                     className={cn(
-                      'border-b border-zinc-50 dark:border-zinc-800/30 hover:bg-zinc-50/70 dark:hover:bg-zinc-900/30 transition-colors focus:outline-none',
+                      'border-b border-border/30 hover:bg-background-light/70 transition-colors focus:outline-none',
                       onRowClick && 'cursor-pointer hover:bg-primary/[0.03] focus-visible:bg-primary/[0.03] focus-visible:outline-none',
                     )}
                   >
@@ -279,7 +279,7 @@ function VirtualizedDesktopView<T>({
     >
       <div
         role="rowgroup"
-        className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/50"
+        className="sticky top-0 z-10 border-b border-border bg-background-light"
       >
         <div role="row" className="grid" style={{ gridTemplateColumns: gridTemplate }}>
           {columns.map((column) => (
@@ -287,7 +287,7 @@ function VirtualizedDesktopView<T>({
               key={column.key}
               role="columnheader"
               className={cn(
-                'border-b border-zinc-100 dark:border-zinc-800/50 py-2 px-4 text-left text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400 whitespace-nowrap',
+                'border-b border-border py-2 px-4 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-muted whitespace-nowrap',
                 column.className,
               )}
             >
@@ -317,7 +317,7 @@ function VirtualizedDesktopView<T>({
               }}
               tabIndex={onRowClick ? 0 : undefined}
               className={cn(
-                'grid border-b border-zinc-50 dark:border-zinc-800/30 hover:bg-zinc-50/70 dark:hover:bg-zinc-900/30 transition-colors focus:outline-none',
+                'grid border-b border-border/30 hover:bg-background-light/70 transition-colors focus:outline-none',
                 onRowClick && 'cursor-pointer focus-visible:bg-primary/[0.03]',
               )}
               style={{

@@ -157,7 +157,7 @@ export default function ListeningHome() {
     secondaryAction: {
       label: 'Open Mock Center',
       href: '/mocks',
-      variant: 'outline',
+      variant: 'secondary',
     },
   };
 
@@ -232,13 +232,13 @@ export default function ListeningHome() {
                       }`}
                     >
                       <span
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                           m.achieved ? '!bg-emerald-600 !text-white' : '!bg-primary/10 !text-primary ring-1 ring-primary/20 dark:!bg-white/10 dark:!text-primary'
                         }`}
                       >
                         {m.achieved ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : milestoneIndex + 1}
                       </span>
-                      <span className="min-w-0 text-xs font-black leading-snug">{m.label}</span>
+                      <span className="min-w-0 text-xs font-bold leading-snug">{m.label}</span>
                     </div>
                   ))}
                 </div>
@@ -353,7 +353,7 @@ export default function ListeningHome() {
                         href: `${paper.route}?mode=practice`,
                       },
                       secondaryAction: paper.objectiveReady
-                        ? { label: 'Exam Mode', href: `${paper.route}?mode=exam`, variant: 'outline' }
+                        ? { label: 'Exam Mode', href: `${paper.route}?mode=exam`, variant: 'secondary' }
                         : undefined,
                     };
                     return (
@@ -415,7 +415,7 @@ export default function ListeningHome() {
                       ],
                       primaryAction: part.available && part.route
                         ? { label: 'Open Part Practice', href: part.route }
-                        : { label: 'See Study Plan', href: '/study-plan', variant: 'outline' },
+                        : { label: 'See Study Plan', href: '/study-plan' },
                     };
                     return (
                       <MotionItem key={part.id} delayIndex={index}>
@@ -471,7 +471,7 @@ export default function ListeningHome() {
                         { icon: Target, label: `${result.scaledScore}/500` },
                         { icon: Sparkles, label: `Grade ${result.grade}` },
                       ],
-                      primaryAction: { label: 'View Result', href: result.route, variant: 'outline' },
+                      primaryAction: { label: 'View Result', href: result.route },
                     };
                     return (
                       <MotionItem key={result.attemptId} delayIndex={index}>
@@ -554,7 +554,6 @@ export default function ListeningHome() {
                       primaryAction: {
                         label: 'View Report',
                         href: `/mocks/report/${report.id}`,
-                        variant: 'outline',
                       },
                     };
 

@@ -236,14 +236,14 @@ export default function ListeningAnalyticsPage() {
                       <div className="flex items-center gap-3">
                         <Badge variant="muted">{q.attemptCount} attempts</Badge>
                         <span className="text-sm font-semibold text-danger">{formatPercent(q.accuracyPercent)}</span>
-                        <Link
+                        <Button type="button" size="sm" variant="outline" asChild>
+<Link
                           href={`/admin/analytics/listening/question/${encodeURIComponent(q.paperId)}/${q.questionNumber}`}
                           aria-label={`Deep-dive Q${q.questionNumber} of ${q.paperTitle}`}
                         >
-                          <Button type="button" size="sm" variant="outline">
                             Deep dive
-                          </Button>
-                        </Link>
+                          </Link>
+</Button>
                       </div>
                     </div>
                   ))}

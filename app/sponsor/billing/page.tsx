@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { CreditCard, Building2, Users } from 'lucide-react';
 import { fetchSponsorBilling, isApiError, type SponsorBillingData } from '@/lib/api';
+import { Card } from '@/components/ui/card';
+import { StatCard } from '@/components/ui/stat-card';
 
 export default function SponsorBillingPage() {
   const [data, setData] = useState<SponsorBillingData | null>(null);
@@ -39,7 +41,7 @@ export default function SponsorBillingPage() {
         <h1 className="text-2xl font-bold text-navy">Billing</h1>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="page-surface h-28 animate-pulse rounded-2xl" />
+            <div key={i} className="h-28 animate-pulse rounded-2xl border border-border bg-surface shadow-sm" />
           ))}
         </div>
       </div>
@@ -50,9 +52,9 @@ export default function SponsorBillingPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-navy">Billing</h1>
-        <div className="page-surface rounded-2xl p-6 text-center">
-          <p className="text-sm text-red-600">{error}</p>
-        </div>
+        <Card padding="lg" className="text-center">
+          <p className="text-sm text-danger">{error}</p>
+        </Card>
       </div>
     );
   }
@@ -67,40 +69,28 @@ export default function SponsorBillingPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="page-surface rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Users className="h-5 w-5" />
-            </div>
-            <span className="text-sm font-medium text-muted">Active Sponsorships</span>
-          </div>
-          <p className="text-2xl font-bold text-navy">{data?.totalSponsorships ?? 0}</p>
-        </div>
-
-        <div className="page-surface rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <CreditCard className="h-5 w-5" />
-            </div>
-            <span className="text-sm font-medium text-muted">This Month</span>
-          </div>
-          <p className="text-2xl font-bold text-navy">£{(data?.currentMonthSpend ?? 0).toFixed(2)}</p>
-        </div>
-
-        <div className="page-surface rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Building2 className="h-5 w-5" />
-            </div>
-            <span className="text-sm font-medium text-muted">Total Spend</span>
-          </div>
-          <p className="text-2xl font-bold text-navy">£{(data?.totalSpend ?? 0).toFixed(2)}</p>
-        </div>
+        <StatCard
+          label="Active Sponsorships"
+          value={data?.totalSponsorships ?? 0}
+          icon={<Users />}
+          tone="info"
+        />
+        <StatCard
+          label="This Month"
+          value={`£${(data?.currentMonthSpend ?? 0).toFixed(2)}`}
+          icon={<CreditCard />}
+          tone="warning"
+        />
+        <StatCard
+          label="Total Spend"
+          value={`£${(data?.totalSpend ?? 0).toFixed(2)}`}
+          icon={<Building2 />}
+        />
       </div>
 
       {/* Billing cycle */}
-      <div className="page-surface rounded-2xl p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-navy mb-4">Billing Details</h2>
+      <Card padding="lg">
+        <h2 className="text-lg font-bold text-navy mb-4">Billing Details</h2>
         <dl className="grid gap-4 sm:grid-cols-2">
           <div>
             <dt className="text-sm font-medium text-muted">Billing Cycle</dt>
@@ -111,20 +101,20 @@ export default function SponsorBillingPage() {
             <dd className="mt-1 text-sm text-navy">{data?.sponsorName ?? '—'}</dd>
           </div>
         </dl>
-      </div>
+      </Card>
 
       {/* Invoices */}
-      <div className="page-surface rounded-2xl p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-navy mb-4">Invoices</h2>
+      <Card padding="lg">
+        <h2 className="text-lg font-bold text-navy mb-4">Invoices</h2>
         {(data?.invoices?.length ?? 0) === 0 ? (
           <p className="text-sm text-muted">No invoices yet. Invoices will appear here once billing is active.</p>
         ) : (
-          <div className="rounded-xl border border-dashed border-border p-6 text-center">
+          <div className="rounded-2xl border border-dashed border-border p-6 text-center">
             <p className="text-sm font-medium text-muted">Coming soon</p>
-            <p className="mt-1 text-xs text-muted/70">Invoice display is under development. {data?.invoices?.length} invoice{(data?.invoices?.length ?? 0) !== 1 ? 's' : ''} on file.</p>
+            <p className="mt-1 text-xs text-muted">Invoice display is under development. {data?.invoices?.length} invoice{(data?.invoices?.length ?? 0) !== 1 ? 's' : ''} on file.</p>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

@@ -13,15 +13,15 @@ const badgeVariants: Record<string, string> = {
   warning: 'bg-amber-50 text-amber-700 border border-amber-200/60 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800/60',
   danger: 'bg-red-50 text-red-700 border border-red-200/60 dark:bg-red-950 dark:text-red-300 dark:border-red-800/60',
   info: 'bg-blue-50 text-blue-700 border border-blue-200/60 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800/60',
-  muted: 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
-  outline: 'bg-transparent text-foreground border border-border',
+  muted: 'bg-surface text-muted border border-border dark:bg-surface dark:text-muted dark:border-border',
+  outline: 'bg-transparent text-navy border border-border',
 };
 
 export function Badge({ variant = 'default', size = 'sm', className, children, ...props }: BadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center font-semibold rounded-full',
+        'inline-flex items-center font-bold rounded-full',
         badgeVariants[variant],
         size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm',
         className,
@@ -56,7 +56,7 @@ export function StatusBadge({ status, className }: { status: StatusType; classNa
 export function ScoreRangeBadge({ low, high, label, className }: { low: number; high: number; label?: string; className?: string }) {
   return (
     <span className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary font-bold text-sm', className)}>
-      {label && <span className="text-xs font-semibold text-primary/70">{label}</span>}
+      {label && <span className="text-xs font-bold text-primary/70">{label}</span>}
       {low}–{high}
     </span>
   );
@@ -83,10 +83,10 @@ export function CriterionChip({ label, active, onClick, className }: { label: st
       type="button"
       onClick={onClick}
       className={cn(
-        'px-3.5 py-2.5 rounded-full text-xs font-semibold border transition-all duration-200 active:scale-95 shadow-sm',
+        'px-3.5 py-2.5 rounded-full text-xs font-bold border transition-all duration-200 active:scale-95 shadow-sm',
         active
           ? 'bg-primary text-white border-primary ring-2 ring-primary/20 ring-offset-1'
-          : 'bg-surface text-navy border-gray-200/80 hover:border-primary/50 hover:bg-gray-50 hover:text-primary dark:text-white dark:border-gray-700/80 dark:hover:bg-gray-800 dark:hover:border-primary/50',
+          : 'bg-surface text-navy border-border hover:border-primary/50 hover:bg-background-light hover:text-primary dark:text-white dark:border-border dark:hover:bg-background-light dark:hover:border-primary/50',
         className,
       )}
     >

@@ -29,7 +29,7 @@ export function SubtestSwitcher({ active, onChange, className }: SubtestSwitcher
           aria-selected={active === key}
           onClick={() => onChange(key)}
           className={cn(
-            'flex items-center gap-1.5 px-3.5 py-2.5 rounded-full text-xs font-semibold border transition-colors shrink-0',
+            'flex items-center gap-1.5 px-3.5 py-2.5 rounded-full text-xs font-bold border transition-colors shrink-0',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
             active === key ? config.color : 'text-muted bg-white border-border hover:border-border',
           )}

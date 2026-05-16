@@ -94,16 +94,16 @@ export default function AdminPronunciationDashboard() {
         aside={(
           <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
             <div className="flex flex-wrap gap-2">
-              <Link href="/admin/content/pronunciation/ai-draft">
-                <Button variant="secondary" className="gap-2">
+              <Button variant="secondary" className="gap-2" asChild>
+<Link href="/admin/content/pronunciation/ai-draft">
                   <Sparkles className="h-4 w-4" /> AI draft
-                </Button>
-              </Link>
-              <Link href="/admin/content/pronunciation/new">
-                <Button variant="primary" className="gap-2">
+                </Link>
+</Button>
+              <Button variant="primary" className="gap-2" asChild>
+<Link href="/admin/content/pronunciation/new">
                   <Plus className="h-4 w-4" /> New drill
-                </Button>
-              </Link>
+                </Link>
+</Button>
             </div>
           </div>
         )}
@@ -236,11 +236,11 @@ export default function AdminPronunciationDashboard() {
                     </td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex justify-end gap-1">
-                        <Link href={`/admin/content/pronunciation/${r.id}`}>
-                          <Button variant="ghost" size="sm" aria-label={`Edit ${r.label}`}>
+                        <Button variant="ghost" size="sm" aria-label={`Edit ${r.label}`} asChild>
+<Link href={`/admin/content/pronunciation/${r.id}`}>
                             <Mic className="h-3.5 w-3.5" />
-                          </Button>
-                        </Link>
+                          </Link>
+</Button>
                         {r.status !== 'archived' && (
                           <Button
                             variant="ghost"

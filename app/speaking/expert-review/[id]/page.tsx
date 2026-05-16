@@ -94,11 +94,11 @@ function ExpertReviewRequestContent() {
             <p className="text-muted mb-10 leading-relaxed">
               Your recording has been queued for tutor review. {selectedCost} review credit{selectedCost > 1 ? 's were' : ' was'} used, and the estimated turnaround is {estimatedDelivery ?? '48-72 hours'}.
             </p>
-            <Link href="/speaking">
-              <Button size="lg">
+            <Button size="lg" asChild>
+<Link href="/speaking">
                 Back to Dashboard <ArrowRight className="w-5 h-5" />
-              </Button>
-            </Link>
+              </Link>
+</Button>
           </MotionPage>
         </div>
       </LearnerDashboardShell>

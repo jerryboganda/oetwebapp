@@ -254,14 +254,14 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
           <motion.div
             ref={dialogRef}
             className={cn(
-              'relative flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-[28px] border border-gray-200 bg-surface shadow-2xl sm:max-h-[calc(100dvh-1.5rem)]',
+              'relative flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl sm:max-h-[calc(100dvh-1.5rem)]',
               sizeStyles[size],
               className,
             )}
             {...panelMotion}
           >
             {title && (
-              <div className="flex items-center justify-between border-b border-gray-200 px-4 py-4 sm:px-6 sm:py-5">
+              <div className="flex items-center justify-between border-b border-border px-4 py-4 sm:px-6 sm:py-5">
                 <h2 id={titleId} className="text-lg font-bold text-navy">
                   {title}
                 </h2>
@@ -410,14 +410,14 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
           <motion.div
             ref={drawerRef}
             className={cn(
-              'fixed bottom-0 top-0 flex w-full max-w-md flex-col border-l border-gray-200 bg-surface pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-2xl',
+              'fixed bottom-0 top-0 flex w-full max-w-md flex-col border-l border-border bg-surface pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-2xl',
               side === 'right' ? 'right-0' : 'left-0 border-l-0 border-r',
               className,
             )}
             {...drawerMotion}
           >
             {title && (
-              <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-4 sm:px-6 sm:py-5">
+              <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-4 sm:px-6 sm:py-5">
                 <h2 id={drawerTitleId} className="text-lg font-bold text-navy">
                   {title}
                 </h2>

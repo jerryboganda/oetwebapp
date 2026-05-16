@@ -29,9 +29,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'rounded-2xl border border-gray-200 bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
+            'rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
             'focus:outline-none focus:ring-4 focus:ring-primary/15 focus:border-primary focus:bg-surface',
-            error ? 'border-red-400 focus:ring-red-400/20' : 'hover:border-gray-300',
+            error ? 'border-red-400 focus:ring-red-400/20' : 'hover:border-border-hover',
             className,
           )}
           aria-invalid={!!error}
@@ -69,9 +69,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'min-h-[80px] resize-y rounded-2xl border border-gray-200 bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
+            'min-h-[80px] resize-y rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
             'focus:outline-none focus:ring-4 focus:ring-primary/15 focus:border-primary focus:bg-surface',
-            error ? 'border-red-400 focus:ring-red-400/20' : 'hover:border-gray-300',
+            error ? 'border-red-400 focus:ring-red-400/20' : 'hover:border-border-hover',
             className,
           )}
           aria-invalid={!!error}
@@ -111,9 +111,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'appearance-none rounded-2xl border border-gray-200 bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
+            'appearance-none rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
             'focus:outline-none focus:ring-4 focus:ring-primary/15 focus:border-primary focus:bg-surface',
-            error ? 'border-red-400 focus:ring-red-400/20' : 'hover:border-gray-300',
+            error ? 'border-red-400 focus:ring-red-400/20' : 'hover:border-border-hover',
             className,
           )}
           aria-invalid={!!error}
@@ -146,11 +146,11 @@ export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement
 
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
   ({ label, error, className, ...props }, ref) => (
-    <label className={cn('flex items-start gap-3 rounded-2xl border border-gray-200 bg-background-light px-4 py-3 shadow-sm transition-colors hover:border-gray-300', className)}>
+    <label className={cn('flex items-start gap-3 rounded-2xl border border-border bg-background-light px-4 py-3 shadow-sm transition-colors hover:border-border-hover', className)}>
       <input
         ref={ref}
         type="checkbox"
-        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+        className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
         {...props}
       />
       <span className="flex-1 text-sm text-navy">{label}</span>
@@ -183,7 +183,7 @@ export function RadioGroup({ name, label, options, value, onChange, error, class
       {label && <legend className="mb-1 text-sm font-semibold tracking-tight text-navy">{label}</legend>}
       <div className="flex flex-col gap-2">
         {options.map((opt) => (
-          <label key={opt.value} className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-background-light px-4 py-3 shadow-sm transition-colors hover:border-gray-300">
+          <label key={opt.value} className="flex items-start gap-3 rounded-2xl border border-border bg-background-light px-4 py-3 shadow-sm transition-colors hover:border-border-hover">
             <input
               type="radio"
               name={name}

@@ -320,12 +320,12 @@ export default function AdminMockBundlesPage() {
                   Speaking → Review &amp; publish in one flow.
                 </p>
               </div>
-              <Link href="/admin/content/mocks/wizard">
-                <Button variant="primary">
+              <Button variant="primary" asChild>
+<Link href="/admin/content/mocks/wizard">
                   <Sparkles className="mr-2 h-4 w-4" />
                   Build a complete mock with the wizard
-                </Button>
-              </Link>
+                </Link>
+</Button>
             </div>
           </div>
 

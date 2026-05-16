@@ -12,7 +12,6 @@ import {
   Star,
   ShieldCheck,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { fetchPublicPlans, type PublicBillingPlan } from '@/lib/api';
 
@@ -38,7 +37,7 @@ export default function PricingPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <h1 className="mx-auto max-w-3xl text-4xl font-black tracking-tight text-navy sm:text-5xl">
+          <h1 className="mx-auto max-w-3xl text-4xl font-bold tracking-tight text-navy sm:text-5xl">
             Prepare for OET with confidence
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-muted">
@@ -94,15 +93,15 @@ export default function PricingPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-[11px] font-black uppercase tracking-widest text-muted">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-muted">
                         {plan.tier}
                       </p>
-                      <h3 className="mt-1 text-2xl font-black text-navy">
+                      <h3 className="mt-1 text-2xl font-bold text-navy">
                         {plan.label}
                       </h3>
                     </div>
                     {plan.changeDirection === 'current' && (
-                      <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
+                      <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
                         Popular
                       </span>
                     )}
@@ -113,7 +112,7 @@ export default function PricingPage() {
                   </p>
 
                   <div className="mt-5 rounded-xl border border-border bg-background-light p-4">
-                    <p className="text-3xl font-black text-navy">
+                    <p className="text-3xl font-bold text-navy">
                       {new Intl.NumberFormat('en-AU', {
                         style: 'currency',
                         currency: plan.price.currency || 'AUD',
@@ -166,11 +165,12 @@ export default function PricingPage() {
                   </ul>
 
                   <div className="mt-auto pt-6">
-                    <Link href="/register">
-                      <Button variant="primary" className="w-full">
-                        Get started
-                        <ArrowRight className="ml-1.5 h-4 w-4" />
-                      </Button>
+                    <Link
+                      href="/register"
+                      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                    >
+                      Get started
+                      <ArrowRight className="ml-1.5 h-4 w-4" />
                     </Link>
                   </div>
                 </motion.article>
@@ -183,7 +183,7 @@ export default function PricingPage() {
       {/* Features grid */}
       <section className="border-t border-border bg-surface px-4 py-20">
         <div className="mx-auto max-w-6xl">
-          <h2 className="text-center text-2xl font-black text-navy">
+          <h2 className="text-center text-2xl font-bold text-navy">
             OET preparation tools in one place
           </h2>
           <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -234,10 +234,10 @@ export default function PricingPage() {
                 initial={reducedMotion ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: i * 0.04 }}
-                className="rounded-xl border border-border bg-background p-5"
+                className="rounded-2xl border border-border bg-background p-5"
               >
                 <f.icon className="h-6 w-6 text-primary" />
-                <h4 className="mt-3 text-sm font-black text-navy">{f.title}</h4>
+                <h4 className="mt-3 text-sm font-bold text-navy">{f.title}</h4>
                 <p className="mt-1 text-sm text-muted">{f.desc}</p>
               </motion.div>
             ))}
@@ -248,23 +248,25 @@ export default function PricingPage() {
       {/* CTA */}
       <section className="px-4 py-20 text-center">
         <div className="mx-auto max-w-2xl">
-          <h2 className="text-3xl font-black text-navy">
+          <h2 className="text-3xl font-bold text-navy">
             Start preparing for OET
           </h2>
           <p className="mt-3 text-muted">
             Create an account to see available OET practice and any server-published billing options.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/register">
-              <Button variant="primary" size="lg">
-                Create account
-                <ArrowRight className="ml-1.5 h-4 w-4" />
-              </Button>
+            <Link
+              href="/register"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            >
+              Create account
+              <ArrowRight className="ml-1.5 h-4 w-4" />
             </Link>
-            <Link href="/sign-in">
-              <Button variant="outline" size="lg">
-                Sign in
-              </Button>
+            <Link
+              href="/sign-in"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-border px-6 py-3 text-base font-medium text-navy transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:border-border-hover hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            >
+              Sign in
             </Link>
           </div>
         </div>

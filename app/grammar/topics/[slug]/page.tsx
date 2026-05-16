@@ -138,9 +138,9 @@ export default function GrammarTopicPage() {
                 Content is being finalised for this topic. Check back soon, or explore the full grammar library.
               </p>
               <div className="mt-6 flex justify-center">
-                <Link href="/grammar">
-                  <Button variant="outline" size="sm">Browse other topics</Button>
-                </Link>
+                <Button variant="outline" size="sm" asChild>
+<Link href="/grammar">Browse other topics</Link>
+</Button>
               </div>
             </Card>
           ) : (

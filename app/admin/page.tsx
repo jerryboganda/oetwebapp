@@ -52,21 +52,21 @@ export default function AdminDashboardPage() {
           <div className="flex flex-col gap-3">
 
             {/* ── Command strip ─────────────────────────────────────── */}
-            <div className="flex flex-col justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-3.5 shadow-sm sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-3 rounded-2xl border border-admin-border bg-admin-surface px-5 py-3.5 shadow-sm sm:flex-row sm:items-center">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="rounded-lg bg-violet-500/20 p-2 shrink-0">
                   <Sparkles className="h-4 w-4 text-violet-400" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-violet-400 leading-none">Operations Center</h1>
-                  <p className="text-[11px] text-zinc-400 leading-none mt-1 truncate">Platform health · review risk · rollout signals</p>
+                  <h1 className="text-xs font-bold uppercase tracking-[0.2em] text-violet-400 leading-none">Operations Center</h1>
+                  <p className="text-xs text-admin-text-muted leading-none mt-1 truncate">Platform health · review risk · rollout signals</p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2.5 text-[10px] font-bold uppercase tracking-widest sm:justify-end">
-                <span className="text-zinc-400">Q·{d.freshness.qualityWindow}</span>
-                <span className="text-zinc-700">|</span>
-                <span className="text-zinc-400">{new Date(d.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                <span className="text-zinc-700">|</span>
+              <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold uppercase tracking-widest sm:justify-end">
+                <span className="text-admin-text-muted">Q·{d.freshness.qualityWindow}</span>
+                <span className="text-admin-text-muted/60">|</span>
+                <span className="text-admin-text-muted">{new Date(d.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="text-admin-text-muted/60">|</span>
                 <span className="flex items-center gap-1.5 text-emerald-400">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
                   Live
@@ -96,29 +96,29 @@ export default function AdminDashboardPage() {
                     cols={['Workstream', 'Status', 'Vol']}
                     rows={[
                       [
-                        <span key="bl" className="font-semibold text-zinc-800 dark:text-zinc-200">Backlog</span>,
+                        <span key="bl" className="font-semibold text-admin-text">Backlog</span>,
                         <StatusBadge key="bls" tone={d.reviewOps.backlog > 0 ? 'warning' : 'default'} label={d.reviewOps.backlog > 0 ? 'Action Req' : 'Normal'} />,
-                        <span key="blv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.backlog > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-500 dark:text-zinc-400')}>{d.reviewOps.backlog}</span>,
+                        <span key="blv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.backlog > 0 ? 'text-amber-400' : 'text-admin-text-muted')}>{d.reviewOps.backlog}</span>,
                       ],
                       [
-                        <span key="ov" className="font-semibold text-zinc-800 dark:text-zinc-200">Overdue</span>,
+                        <span key="ov" className="font-semibold text-admin-text">Overdue</span>,
                         <StatusBadge key="ovs" tone={d.reviewOps.overdue > 0 ? 'danger' : 'success'} label={d.reviewOps.overdue > 0 ? 'Critical' : 'Clear'} />,
-                        <span key="ovv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.overdue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{d.reviewOps.overdue}</span>,
+                        <span key="ovv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.overdue > 0 ? 'text-rose-400' : 'text-emerald-400')}>{d.reviewOps.overdue}</span>,
                       ],
                       [
-                        <span key="ip" className="font-semibold text-zinc-800 dark:text-zinc-200">In Progress</span>,
+                        <span key="ip" className="font-semibold text-admin-text">In Progress</span>,
                         <StatusBadge key="ips" tone="info" label="Active" />,
-                        <span key="ipv" className="font-mono text-zinc-500 dark:text-zinc-400 tabular-nums">{d.reviewOps.inProgress}</span>,
+                        <span key="ipv" className="font-mono text-admin-text-muted tabular-nums">{d.reviewOps.inProgress}</span>,
                       ],
                       [
-                        <span key="fr" className="font-semibold text-zinc-800 dark:text-zinc-200">Failed Reviews</span>,
+                        <span key="fr" className="font-semibold text-admin-text">Failed Reviews</span>,
                         <StatusBadge key="frs" tone={d.reviewOps.failedReviews > 0 ? 'danger' : 'success'} label={d.reviewOps.failedReviews > 0 ? 'Failing' : 'Clear'} />,
-                        <span key="frv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.failedReviews > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{d.reviewOps.failedReviews}</span>,
+                        <span key="frv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.failedReviews > 0 ? 'text-rose-400' : 'text-emerald-400')}>{d.reviewOps.failedReviews}</span>,
                       ],
                       [
-                        <span key="fj" className="font-semibold text-zinc-800 dark:text-zinc-200">Failed Jobs</span>,
+                        <span key="fj" className="font-semibold text-admin-text">Failed Jobs</span>,
                         <StatusBadge key="fjs" tone={d.reviewOps.failedJobs > 0 ? 'danger' : 'success'} label={d.reviewOps.failedJobs > 0 ? 'Failing' : 'Healthy'} />,
-                        <span key="fjv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.failedJobs > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{d.reviewOps.failedJobs}</span>,
+                        <span key="fjv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.failedJobs > 0 ? 'text-rose-400' : 'text-emerald-400')}>{d.reviewOps.failedJobs}</span>,
                       ],
                     ]}
                   />
@@ -130,24 +130,24 @@ export default function AdminDashboardPage() {
                     cols={['Category', 'Status', 'Count']}
                     rows={[
                       [
-                        <span key="as" className="font-semibold text-zinc-800 dark:text-zinc-200">Active Subscribers</span>,
+                        <span key="as" className="font-semibold text-admin-text">Active Subscribers</span>,
                         <StatusBadge key="ass" tone="success" label="Stable" />,
-                        <span key="asv" className="font-mono font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{d.billingRisk.activeSubscribers.toLocaleString()}</span>,
+                        <span key="asv" className="font-mono font-bold text-emerald-400 tabular-nums">{d.billingRisk.activeSubscribers.toLocaleString()}</span>,
                       ],
                       [
-                        <span key="pi" className="font-semibold text-zinc-800 dark:text-zinc-200">Pending Invoices</span>,
+                        <span key="pi" className="font-semibold text-admin-text">Pending Invoices</span>,
                         <StatusBadge key="pis" tone={d.billingRisk.pendingInvoices > 0 ? 'warning' : 'success'} label={d.billingRisk.pendingInvoices > 0 ? 'Pending' : 'Clear'} />,
-                        <span key="piv" className={cn('font-mono font-bold tabular-nums', d.billingRisk.pendingInvoices > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400')}>{d.billingRisk.pendingInvoices}</span>,
+                        <span key="piv" className={cn('font-mono font-bold tabular-nums', d.billingRisk.pendingInvoices > 0 ? 'text-amber-400' : 'text-emerald-400')}>{d.billingRisk.pendingInvoices}</span>,
                       ],
                       [
-                        <span key="fi" className="font-semibold text-zinc-800 dark:text-zinc-200">Failed Invoices</span>,
+                        <span key="fi" className="font-semibold text-admin-text">Failed Invoices</span>,
                         <StatusBadge key="fis" tone={d.billingRisk.failedInvoices > 0 ? 'danger' : 'success'} label={d.billingRisk.failedInvoices > 0 ? 'At Risk' : 'Clear'} />,
-                        <span key="fiv" className={cn('font-mono font-bold tabular-nums', d.billingRisk.failedInvoices > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{d.billingRisk.failedInvoices}</span>,
+                        <span key="fiv" className={cn('font-mono font-bold tabular-nums', d.billingRisk.failedInvoices > 0 ? 'text-rose-400' : 'text-emerald-400')}>{d.billingRisk.failedInvoices}</span>,
                       ],
                       [
-                        <span key="lp" className="font-semibold text-zinc-800 dark:text-zinc-200">Legacy Plans</span>,
+                        <span key="lp" className="font-semibold text-admin-text">Legacy Plans</span>,
                         <StatusBadge key="lps" tone="warning" label="Deprecating" />,
-                        <span key="lpv" className="font-mono text-amber-600 dark:text-amber-400 tabular-nums">{d.billingRisk.legacyPlans}</span>,
+                        <span key="lpv" className="font-mono text-amber-400 tabular-nums">{d.billingRisk.legacyPlans}</span>,
                       ],
                     ]}
                   />
@@ -199,25 +199,25 @@ export default function AdminDashboardPage() {
                 <Panel title="Quick Actions" icon={Zap}>
                   <div className="grid grid-cols-3">
                     {([
-                      { href: '/admin/content',               label: 'Content Hub', icon: FileText,  color: 'text-blue-500',   bg: 'hover:bg-blue-50   dark:hover:bg-blue-950/30' },
-                      { href: '/admin/review-ops',            label: 'Review Ops',  icon: Inbox,     color: 'text-violet-500', bg: 'hover:bg-violet-50 dark:hover:bg-violet-950/30' },
-                      { href: '/admin/freeze',                label: 'Freezes',     icon: Clock4,    color: 'text-cyan-500',   bg: 'hover:bg-cyan-50   dark:hover:bg-cyan-950/30' },
-                      { href: '/admin/billing',               label: 'Billing',     icon: CreditCard, color: 'text-emerald-500', bg: 'hover:bg-emerald-50 dark:hover:bg-emerald-950/30' },
-                      { href: '/admin/business-intelligence', label: 'BI',          icon: BarChart3, color: 'text-amber-500',  bg: 'hover:bg-amber-50  dark:hover:bg-amber-950/30' },
-                      { href: '/admin/analytics/quality',     label: 'Quality',     icon: Shield,    color: 'text-rose-500',   bg: 'hover:bg-rose-50   dark:hover:bg-rose-950/30' },
+                      { href: '/admin/content',               label: 'Content Hub', icon: FileText,  color: 'text-blue-500',   bg: 'hover:bg-blue-500/10' },
+                      { href: '/admin/review-ops',            label: 'Review Ops',  icon: Inbox,     color: 'text-violet-500', bg: 'hover:bg-violet-500/10' },
+                      { href: '/admin/freeze',                label: 'Freezes',     icon: Clock4,    color: 'text-cyan-500',   bg: 'hover:bg-cyan-500/10' },
+                      { href: '/admin/billing',               label: 'Billing',     icon: CreditCard, color: 'text-emerald-500', bg: 'hover:bg-emerald-500/10' },
+                      { href: '/admin/business-intelligence', label: 'BI',          icon: BarChart3, color: 'text-amber-500',  bg: 'hover:bg-amber-500/10' },
+                      { href: '/admin/analytics/quality',     label: 'Quality',     icon: Shield,    color: 'text-rose-500',   bg: 'hover:bg-rose-500/10' },
                     ] as const).map((a, i) => (
                       <Link
                         key={a.href}
                         href={a.href}
                         className={cn(
                           'flex flex-col items-center justify-center gap-2 py-4 transition-colors group',
-                          i % 3 !== 2 && 'border-r border-zinc-100 dark:border-zinc-800/50',
-                          i < 3 && 'border-b border-zinc-100 dark:border-zinc-800/50',
+                          i % 3 !== 2 && 'border-r border-admin-border/60',
+                          i < 3 && 'border-b border-admin-border/60',
                           a.bg,
                         )}
                       >
                         <a.icon className={cn('h-5 w-5 transition-transform group-hover:scale-110', a.color)} />
-                        <span className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors leading-none">{a.label}</span>
+                        <span className="text-xs font-bold uppercase tracking-[0.15em] text-admin-text-muted group-hover:text-admin-text transition-colors leading-none">{a.label}</span>
                       </Link>
                     ))}
                   </div>

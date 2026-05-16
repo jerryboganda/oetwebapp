@@ -69,61 +69,61 @@ export function StatCard({
     default: {
       border: 'border-l-4 border-l-primary border-y border-r border-border/80 dark:border-border/60',
       bg: 'bg-surface',
-      text: 'text-navy dark:text-zinc-50',
-      label: 'text-muted dark:text-zinc-400',
+      text: 'text-navy dark:text-white',
+      label: 'text-muted dark:text-muted',
       iconFill: 'bg-primary/10 dark:bg-primary/20',
-      iconText: 'text-primary dark:text-primary-light',
+      iconText: 'text-primary dark:text-primary',
       trendUp: 'text-success dark:text-success',
       trendDown: 'text-danger dark:text-danger',
-      trendNeutral: 'text-muted dark:text-zinc-500',
+      trendNeutral: 'text-muted dark:text-muted',
       sparkline: 'text-primary/40 dark:text-primary/60',
     },
     success: {
       border: 'border-l-4 border-l-success border-y border-r border-success/30 dark:border-success/30',
       bg: 'bg-success/5 dark:bg-success/10',
-      text: 'text-success-dark dark:text-success',
-      label: 'text-success-dark/70 dark:text-success/70',
+      text: 'text-success dark:text-success',
+      label: 'text-success/70 dark:text-success/70',
       iconFill: 'bg-success/20 dark:bg-success/20',
-      iconText: 'text-success-dark dark:text-success',
-      trendUp: 'text-success-dark dark:text-success',
+      iconText: 'text-success dark:text-success',
+      trendUp: 'text-success dark:text-success',
       trendDown: 'text-danger dark:text-danger',
-      trendNeutral: 'text-success-dark/60 dark:text-success/60',
+      trendNeutral: 'text-success/60 dark:text-success/60',
       sparkline: 'text-success/40 dark:text-success/50',
     },
     warning: {
       border: 'border-l-4 border-l-warning border-y border-r border-warning/30 dark:border-warning/30',
       bg: 'bg-warning/5 dark:bg-warning/10',
-      text: 'text-amber-950 dark:text-amber-400',
-      label: 'text-amber-900/70 dark:text-amber-400/70',
+      text: 'text-warning dark:text-warning',
+      label: 'text-warning/70 dark:text-warning/70',
       iconFill: 'bg-warning/20 dark:bg-warning/20',
-      iconText: 'text-amber-900 dark:text-amber-400',
+      iconText: 'text-warning dark:text-warning',
       trendUp: 'text-danger dark:text-danger',
       trendDown: 'text-success dark:text-success',
-      trendNeutral: 'text-amber-900/60 dark:text-amber-400/60',
+      trendNeutral: 'text-warning/60 dark:text-warning/60',
       sparkline: 'text-warning/50 dark:text-warning/50',
     },
     danger: {
       border: 'border-l-4 border-l-danger border-y border-r border-danger/30 dark:border-danger/30',
       bg: 'bg-danger/5 dark:bg-danger/10',
-      text: 'text-danger-dark dark:text-danger',
-      label: 'text-danger-dark/70 dark:text-danger/70',
+      text: 'text-danger dark:text-danger',
+      label: 'text-danger/70 dark:text-danger/70',
       iconFill: 'bg-danger/20 dark:bg-danger/20',
-      iconText: 'text-danger-dark dark:text-danger',
-      trendUp: 'text-danger-dark dark:text-danger',
+      iconText: 'text-danger dark:text-danger',
+      trendUp: 'text-danger dark:text-danger',
       trendDown: 'text-success dark:text-success',
-      trendNeutral: 'text-danger-dark/60 dark:text-danger/60',
+      trendNeutral: 'text-danger/60 dark:text-danger/60',
       sparkline: 'text-danger/40 dark:text-danger/50',
     },
     info: {
       border: 'border-l-4 border-l-info border-y border-r border-info/30 dark:border-info/30',
       bg: 'bg-info/5 dark:bg-info/10',
-      text: 'text-info-dark dark:text-info',
-      label: 'text-info-dark/70 dark:text-info/70',
+      text: 'text-info dark:text-info',
+      label: 'text-info/70 dark:text-info/70',
       iconFill: 'bg-info/20 dark:bg-info/20',
-      iconText: 'text-info-dark dark:text-info',
+      iconText: 'text-info dark:text-info',
       trendUp: 'text-success dark:text-success',
       trendDown: 'text-danger dark:text-danger',
-      trendNeutral: 'text-info-dark/60 dark:text-info/60',
+      trendNeutral: 'text-info/60 dark:text-info/60',
       sparkline: 'text-info/40 dark:text-info/50',
     },
   };
@@ -133,7 +133,7 @@ export function StatCard({
   return (
     <Card 
       className={cn(
-        'relative overflow-hidden flex flex-col p-3 shadow-sm transition-shadow hover:shadow-md rounded-xl',
+        'relative overflow-hidden flex flex-col p-3 shadow-sm transition-shadow hover:shadow-md rounded-2xl',
         activeTone.border,
         activeTone.bg,
         className
@@ -155,7 +155,7 @@ export function StatCard({
       {/* Main Content: Value & Sparkline */}
       <div className="mt-2 flex items-end justify-between flex-1 gap-2">
         <div className="min-w-0">
-          <div className={cn('text-xl font-extrabold tracking-tight truncate', activeTone.text)}>
+          <div className={cn('text-xl font-bold tracking-tight truncate', activeTone.text)}>
             {value}
           </div>
           
@@ -177,7 +177,7 @@ export function StatCard({
                 {trend.value}
               </span>
               {trend.label && (
-                <span className={cn('ml-0.5 text-[10px] uppercase truncate', activeTone.label)}>
+                <span className={cn('ml-0.5 text-[11px] uppercase truncate', activeTone.label)}>
                   {trend.label}
                 </span>
               )}
@@ -195,7 +195,7 @@ export function StatCard({
 
       {/* Hint Text */}
       {hint && (
-        <div className={cn('mt-1.5 text-[10px] font-medium leading-tight line-clamp-2', activeTone.label)}>
+        <div className={cn('mt-1.5 text-[11px] font-medium leading-tight line-clamp-2', activeTone.label)}>
           {hint}
         </div>
       )}

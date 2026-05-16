@@ -21,7 +21,7 @@ const EXAM_CONFIG: Record<string, { label: string; bg: string; text: string; rin
 };
 
 const SIZE_CLASSES: Record<BadgeSize, string> = {
-  sm: 'px-2 py-0.5 text-[10px]',
+  sm: 'px-2 py-0.5 text-[11px]',
   md: 'px-2.5 py-1 text-xs',
 };
 
@@ -29,9 +29,9 @@ export function ExamTypeBadge({ examType, size = 'sm', className }: ExamTypeBadg
   const normalized = (examType ?? '').toLowerCase().trim();
   const config = EXAM_CONFIG[normalized] ?? {
     label: 'OET',
-    bg: 'bg-background-light dark:bg-gray-800',
+    bg: 'bg-background-light dark:bg-surface',
     text: 'text-muted dark:text-muted/60',
-    ring: 'ring-gray-200/60 dark:ring-gray-700/50',
+    ring: 'ring-border/60',
   };
 
   return (

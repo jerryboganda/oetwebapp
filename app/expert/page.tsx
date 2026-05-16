@@ -62,16 +62,16 @@ function ExpertReviewRow({
     ? 'border-rose-200 bg-rose-50 text-rose-700'
     : review.status === 'in_progress'
       ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-      : 'border-slate-200 bg-slate-100 text-slate-600';
+      : 'border-border bg-background-light text-muted';
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="pressable flex w-full items-start justify-between gap-4 rounded-xl border border-gray-200 bg-surface p-4 text-left hover:border-primary/40 hover:shadow-sm"
+      className="pressable flex w-full items-start justify-between gap-4 rounded-2xl border border-border bg-surface p-4 text-left hover:border-primary/40 hover:shadow-sm"
     >
       <div className="space-y-1">
-        <p className="text-sm font-semibold text-navy">{review.learnerName}</p>
+        <p className="text-sm font-bold text-navy">{review.learnerName}</p>
         <p className="text-xs text-muted">{formatReviewSummary(review)}</p>
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
           <span>SLA {formatDateTime(review.slaDue)}</span>
@@ -98,10 +98,10 @@ function ExpertActivityRow({
   onOpen?: () => void;
 }) {
   return (
-    <li className="rounded-xl border border-gray-200 bg-surface p-4">
+    <li className="rounded-2xl border border-border bg-surface p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-navy">{title}</p>
+          <p className="text-sm font-bold text-navy">{title}</p>
           {description ? <p className="text-sm text-muted">{description}</p> : null}
           <p className="text-xs text-muted/80">{formatDateTime(timestamp)}</p>
         </div>
@@ -221,7 +221,7 @@ export default function ExpertDashboardPage() {
               description="Use the dashboard to decide the next action, check readiness evidence, and move without guesswork."
               highlights={heroHighlights}
               aside={(
-                <div className="space-y-4 rounded-2xl border border-gray-200 bg-background-light p-4 shadow-sm">
+                <div className="space-y-4 rounded-2xl border border-border bg-background-light p-4 shadow-sm">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Quick Actions</p>
                     <p className="mt-1 text-sm text-muted">Jump straight into the highest-priority expert workflows.</p>
@@ -230,7 +230,7 @@ export default function ExpertDashboardPage() {
                     <Button fullWidth onClick={() => router.push('/expert/queue')}>
                       Open Queue
                     </Button>
-                    <Button fullWidth variant="outline" onClick={() => router.push('/expert/calibration')}>
+                    <Button fullWidth variant="secondary" onClick={() => router.push('/expert/calibration')}>
                       Open Calibration
                     </Button>
                   </div>
@@ -246,7 +246,7 @@ export default function ExpertDashboardPage() {
               variant="warning"
               title="Recommended security step"
               action={(
-                <Button variant="outline" size="sm" onClick={() => router.push('/mfa/setup?next=/expert')}>
+                <Button variant="primary" size="sm" onClick={() => router.push('/mfa/setup?next=/expert')}>
                   Set up MFA
                 </Button>
               )}

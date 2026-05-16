@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -45,7 +46,7 @@ public static class AdminRuntimeSettingsEndpoints
                 CancellationToken ct) =>
             {
                 var row = await provider.GetRawAsync(ct);
-                return Results.Ok(BuildResponse(row, provider));
+                return Results.Ok(BuildResponse(row));
             })
             .WithAdminRead("AdminSystemAdmin");
 
@@ -94,7 +95,7 @@ public static class AdminRuntimeSettingsEndpoints
                 await db.SaveChangesAsync(ct);
                 provider.Invalidate();
 
-                return Results.Ok(new { ok = true, updatedAt = now, changedKeys });
+                return Results.Ok(BuildResponse(row));
             })
             .WithAdminWrite("AdminSystemAdmin");
 
@@ -110,7 +111,7 @@ public static class AdminRuntimeSettingsEndpoints
 
     // ── Response shaping ───────────────────────────────────────────
 
-    private static object BuildResponse(RuntimeSettingsRow r, IRuntimeSettingsProvider provider)
+    private static object BuildResponse(RuntimeSettingsRow r)
         => new
         {
             email = new
@@ -182,10 +183,10 @@ public static class AdminRuntimeSettingsEndpoints
     {
         if (d is null) return;
         if (TrySetSecret(d.BrevoApiKey, p, v => row.BrevoApiKeyEncrypted = v, "email.brevoApiKey", changed)) { }
-        if (d.BrevoEmailVerificationTemplateId.HasValue) { row.BrevoEmailVerificationTemplateId = d.BrevoEmailVerificationTemplateId; changed.Add("email.brevoEmailVerificationTemplateId"); }
-        if (d.BrevoPasswordResetTemplateId.HasValue) { row.BrevoPasswordResetTemplateId = d.BrevoPasswordResetTemplateId; changed.Add("email.brevoPasswordResetTemplateId"); }
+        if (TrySetNullableInt(d.BrevoEmailVerificationTemplateId, v => row.BrevoEmailVerificationTemplateId = v, "email.brevoEmailVerificationTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoPasswordResetTemplateId, v => row.BrevoPasswordResetTemplateId = v, "email.brevoPasswordResetTemplateId", changed)) { }
         if (TrySetPlain(d.SmtpHost, v => row.SmtpHost = v, "email.smtpHost", changed)) { }
-        if (d.SmtpPort.HasValue) { row.SmtpPort = d.SmtpPort; changed.Add("email.smtpPort"); }
+        if (TrySetNullableInt(d.SmtpPort, v => row.SmtpPort = v, "email.smtpPort", changed)) { }
         if (TrySetPlain(d.SmtpUsername, v => row.SmtpUsername = v, "email.smtpUsername", changed)) { }
         if (TrySetSecret(d.SmtpPassword, p, v => row.SmtpPasswordEncrypted = v, "email.smtpPassword", changed)) { }
         if (TrySetPlain(d.SmtpFromAddress, v => row.SmtpFromAddress = v, "email.smtpFromAddress", changed)) { }
@@ -208,7 +209,7 @@ public static class AdminRuntimeSettingsEndpoints
         if (d is null) return;
         if (TrySetPlain(d.Dsn, v => row.SentryDsn = v, "sentry.dsn", changed)) { }
         if (TrySetPlain(d.Environment, v => row.SentryEnvironment = v, "sentry.environment", changed)) { }
-        if (d.SampleRate.HasValue) { row.SentrySampleRate = d.SampleRate; changed.Add("sentry.sampleRate"); }
+        if (TrySetNullableDouble(d.SampleRate, v => row.SentrySampleRate = v, "sentry.sampleRate", changed)) { }
     }
 
     private static void ApplyBackup(RuntimeSettingsRow row, RuntimeSettingsBackupUpdate? d,
@@ -249,10 +250,11 @@ public static class AdminRuntimeSettingsEndpoints
     }
 
     // ── Per-field semantics ───────────────────────────────────────
-    // null     => do nothing (leave stored value untouched)
+    // strings: null => do nothing (leave stored value untouched)
     // "********" => secret-mask sentinel: do nothing
     // ""       => clear stored value
     // other    => set (encrypting if secret)
+    // nullable numbers: omitted => do nothing; null or "" => clear override; number => set
 
     private static bool TrySetPlain(string? input, Action<string?> setter, string key, List<string> changed)
     {
@@ -270,6 +272,57 @@ public static class AdminRuntimeSettingsEndpoints
         setter(input.Length == 0 ? null : p.Protect(input));
         changed.Add(key);
         return true;
+    }
+
+    private static bool TrySetNullableInt(JsonElement? input, Action<int?> setter, string key, List<string> changed)
+    {
+        if (!TryReadNullableNumber(input, key, element => element.GetInt32(), out var value))
+            return false;
+
+        setter(value);
+        changed.Add(key);
+        return true;
+    }
+
+    private static bool TrySetNullableDouble(JsonElement? input, Action<double?> setter, string key, List<string> changed)
+    {
+        if (!TryReadNullableNumber(input, key, element => element.GetDouble(), out var value))
+            return false;
+
+        setter(value);
+        changed.Add(key);
+        return true;
+    }
+
+    private static bool TryReadNullableNumber<T>(JsonElement? input, string key, Func<JsonElement, T> reader, out T? value)
+        where T : struct
+    {
+        value = null;
+        if (input is null) return false; // omitted => leave unchanged
+
+        var element = input.Value;
+        if (element.ValueKind is JsonValueKind.Null)
+            return true; // explicit null => clear override
+
+        if (element.ValueKind is JsonValueKind.String && element.GetString() == string.Empty)
+            return true; // tolerate legacy empty-string clears from HTML number inputs
+
+        if (element.ValueKind is not JsonValueKind.Number)
+            throw new InvalidOperationException($"{key} must be a number or null.");
+
+        try
+        {
+            value = reader(element);
+            return true;
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidOperationException($"{key} must be a valid number.", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException($"{key} must be a valid number.", ex);
+        }
     }
 }
 
@@ -289,10 +342,10 @@ public sealed class RuntimeSettingsUpdateRequest
 public sealed class RuntimeSettingsEmailUpdate
 {
     public string? BrevoApiKey { get; set; }
-    public int? BrevoEmailVerificationTemplateId { get; set; }
-    public int? BrevoPasswordResetTemplateId { get; set; }
+    public JsonElement? BrevoEmailVerificationTemplateId { get; set; }
+    public JsonElement? BrevoPasswordResetTemplateId { get; set; }
     public string? SmtpHost { get; set; }
-    public int? SmtpPort { get; set; }
+    public JsonElement? SmtpPort { get; set; }
     public string? SmtpUsername { get; set; }
     public string? SmtpPassword { get; set; }
     public string? SmtpFromAddress { get; set; }
@@ -312,7 +365,7 @@ public sealed class RuntimeSettingsSentryUpdate
 {
     public string? Dsn { get; set; }
     public string? Environment { get; set; }
-    public double? SampleRate { get; set; }
+    public JsonElement? SampleRate { get; set; }
 }
 
 public sealed class RuntimeSettingsBackupUpdate

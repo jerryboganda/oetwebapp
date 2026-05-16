@@ -154,7 +154,7 @@ export default function Dashboard() {
     secondaryAction: {
       label: 'View Study Plan',
       href: '/study-plan',
-      variant: 'outline',
+      variant: 'secondary',
     },
   }
     : null;
@@ -206,18 +206,18 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700/70">Status</p>
-                  <p className="mt-1 text-sm font-semibold text-amber-950">{String(freeze.status ?? 'active')}</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700/70">Status</p>
+                  <p className="mt-1 text-sm font-normal text-amber-950">{String(freeze.status ?? 'active')}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700/70">Started</p>
-                  <p className="mt-1 text-sm font-semibold text-amber-950">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700/70">Started</p>
+                  <p className="mt-1 text-sm font-normal text-amber-950">
                     {freeze.startedAt ? new Date(freeze.startedAt).toLocaleString() : 'Pending'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700/70">Ends</p>
-                  <p className="mt-1 text-sm font-semibold text-amber-950">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700/70">Ends</p>
+                  <p className="mt-1 text-sm font-normal text-amber-950">
                     {freeze.endedAt ? new Date(freeze.endedAt).toLocaleString() : 'Not set'}
                   </p>
                 </div>
@@ -278,7 +278,7 @@ export default function Dashboard() {
                         key={task.id}
                         whileHover={prefersReducedMotion || isComplete ? {} : { scale: 1.01 }}
                         whileTap={prefersReducedMotion || isComplete ? {} : { scale: 0.98 }}
-                        className={`group flex flex-col items-start justify-between rounded-xl border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,opacity,transform] duration-200 sm:flex-row sm:items-center ${
+                        className={`group flex flex-col items-start justify-between rounded-2xl border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,opacity,transform] duration-200 sm:flex-row sm:items-center ${
                           isComplete
                             ? 'border-border opacity-60'
                             : 'border-border/60 hover:border-border hover:shadow-md'
@@ -289,7 +289,7 @@ export default function Dashboard() {
                             {isComplete ? <CheckCircle2 className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
                           </div>
                           <div>
-                            <h3 className={`text-sm font-semibold text-navy ${isComplete ? 'line-through' : ''}`}>{task.title}</h3>
+                            <h3 className={`text-sm font-bold text-navy ${isComplete ? 'line-through' : ''}`}>{task.title}</h3>
                             <p className="text-xs text-muted">{task.duration} · {task.subTest}</p>
                           </div>
                         </div>
@@ -333,7 +333,7 @@ export default function Dashboard() {
                           <CardContent className="flex items-start gap-3 p-0">
                             <Icon className="mt-0.5 h-5 w-5 shrink-0 text-muted" />
                             <div>
-                              <h4 className="text-sm font-semibold text-navy">{task.title}</h4>
+                              <h4 className="text-sm font-bold text-navy">{task.title}</h4>
                               <p className="mt-0.5 text-xs text-muted">{task.dueDate} · {task.duration}</p>
                             </div>
                           </CardContent>
@@ -440,23 +440,23 @@ export default function Dashboard() {
                                   : 'bg-background-light border border-border'
                               }`}
                             />
-                            <span className="text-[10px] text-muted">{day.day}</span>
+                            <span className="text-[11px] text-muted">{day.day}</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-lg border border-border bg-background-light p-2.5 text-center">
+                      <div className="rounded-2xl border border-border bg-background-light p-2.5 text-center">
                         <div className="flex items-center justify-center gap-1 text-sm font-bold text-navy">
                           <Timer className="h-3.5 w-3.5" />
                           {Math.round(engagement.totalPracticeMinutes / 60)}h
                         </div>
-                        <div className="text-[10px] text-muted">Total Practice</div>
+                        <div className="text-[11px] text-muted">Total Practice</div>
                       </div>
-                      <div className="rounded-lg border border-border bg-background-light p-2.5 text-center">
+                      <div className="rounded-2xl border border-border bg-background-light p-2.5 text-center">
                         <div className="text-sm font-bold text-navy">{engagement.totalPracticeSessions}</div>
-                        <div className="text-[10px] text-muted">Sessions</div>
+                        <div className="text-[11px] text-muted">Sessions</div>
                       </div>
                     </div>
                   </CardContent>

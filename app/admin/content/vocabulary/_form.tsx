@@ -209,9 +209,9 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
           icon={BookOpen}
           actions={
             <>
-              <Link href="/admin/content/vocabulary">
-                <Button variant="secondary" size="sm"><ArrowLeft className="mr-1.5 h-4 w-4" />Back</Button>
-              </Link>
+              <Button variant="secondary" size="sm" asChild>
+<Link href="/admin/content/vocabulary"><ArrowLeft className="mr-1.5 h-4 w-4" />Back</Link>
+</Button>
             </>
           }
         />

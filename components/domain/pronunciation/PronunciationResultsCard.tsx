@@ -73,7 +73,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
         <ScoreTile label="Overall" value={props.overall} hint="Composite" highlight />
       </div>
 
-      <div className="rounded-3xl border border-border bg-surface p-5 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.18em] text-muted">Projected OET Speaking band</div>
@@ -89,7 +89,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
         </div>
       </div>
 
-      <section aria-labelledby="word-heatmap-heading" className="rounded-3xl border border-border bg-surface p-5 shadow-sm">
+      <section aria-labelledby="word-heatmap-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <h3 id="word-heatmap-heading" className="mb-3 text-sm font-semibold text-navy dark:text-white">
           Word-level accuracy
         </h3>
@@ -97,7 +97,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
       </section>
 
       {phonemes.length > 0 && (
-        <section aria-labelledby="phoneme-issues-heading" className="rounded-3xl border border-border bg-surface p-5 shadow-sm">
+        <section aria-labelledby="phoneme-issues-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <h3 id="phoneme-issues-heading" className="mb-3 text-sm font-semibold text-navy dark:text-white">
             Phonemes that need work
           </h3>
@@ -135,7 +135,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
       )}
 
       {(feedback.summary || (feedback.improvements?.length ?? 0) > 0) && (
-        <section aria-labelledby="coaching-heading" className="rounded-3xl border border-primary/30 bg-primary/5 p-5 shadow-sm">
+        <section aria-labelledby="coaching-heading" className="rounded-2xl border border-primary/30 bg-primary/5 p-5 shadow-sm">
           <h3 id="coaching-heading" className="mb-2 text-sm font-semibold text-navy dark:text-white">
             Targeted coaching
           </h3>

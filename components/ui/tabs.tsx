@@ -54,7 +54,7 @@ export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }
   return (
     <div
       className={cn(
-        'inline-flex w-full items-center gap-2 rounded-[20px] border border-gray-200 bg-background-light p-2',
+        'inline-flex w-full items-center gap-2 rounded-2xl border border-border bg-background-light p-2',
         scrollable ? 'flex-nowrap overflow-x-auto scrollbar-hide [-webkit-overflow-scrolling:touch]' : 'flex-wrap',
         className,
       )}
@@ -74,7 +74,7 @@ export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }
           onClick={() => onChange(tab.id)}
           onKeyDown={(event) => handleKeyDown(event, index)}
           className={cn(
-            'relative flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-4 py-3 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+            'relative flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-4 py-3 text-sm font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
             activeTab === tab.id ? 'text-primary shadow-sm' : 'text-muted hover:bg-white hover:text-navy',
           )}
         >
@@ -91,7 +91,7 @@ export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }
             {tab.count !== undefined && (
               <span
                 className={cn(
-                  'rounded-full px-1.5 py-0.5 text-xs',
+                  'rounded-full px-1.5 py-0.5 text-xs font-bold',
                   activeTab === tab.id ? 'bg-primary/10 text-primary' : 'bg-white text-muted',
                 )}
               >

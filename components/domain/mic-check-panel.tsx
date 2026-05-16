@@ -248,7 +248,7 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
       animate={{ opacity: 1, y: 0 }}
       className={cn('flex flex-col gap-4', className)}
     >
-      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-navy shadow-sm">
+      <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 text-sm text-navy shadow-sm">
         <p className="flex items-start gap-2">
           <Mic className="w-5 h-5 text-primary shrink-0" />
           <span>

@@ -44,7 +44,7 @@ export function TranscriptFlagList({ flags, activeFlagId, onFlagClick, className
           >
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className={cn('px-2 py-0.5 rounded text-xs font-semibold border', config.color)}>{config.label}</span>
+                <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold border', config.color)}>{config.label}</span>
                 {flag.startTime && <span className="text-xs text-muted">{flag.startTime}</span>}
               </div>
               <p className="text-sm text-navy">{flag.text}</p>
@@ -62,7 +62,7 @@ export function TranscriptFlagLegend({ className }: { className?: string }) {
   return (
     <div className={cn('flex flex-wrap gap-2', className)}>
       {(Object.entries(flagConfig) as [FlagType, typeof flagConfig[FlagType]][]).map(([key, config]) => (
-        <span key={key} className={cn('px-2 py-0.5 rounded text-xs font-semibold border', config.color)}>
+        <span key={key} className={cn('px-2 py-0.5 rounded-full text-xs font-semibold border', config.color)}>
           {config.label}
         </span>
       ))}

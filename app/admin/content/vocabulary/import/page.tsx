@@ -297,9 +297,9 @@ export default function AdminVocabularyImportPage() {
           icon={Upload}
           actions={
             <>
-              <Link href="/admin/content/vocabulary">
-                <Button variant="secondary" size="sm"><ArrowLeft className="mr-1.5 h-4 w-4" />Back</Button>
-              </Link>
+              <Button variant="secondary" size="sm" asChild>
+<Link href="/admin/content/vocabulary"><ArrowLeft className="mr-1.5 h-4 w-4" />Back</Link>
+</Button>
               <Button variant="secondary" size="sm" onClick={downloadSample}>
                 <Download className="mr-1.5 h-4 w-4" /> Sample CSV
               </Button>

@@ -40,7 +40,7 @@ export function MockReportSummary({
           <ScoreRangeBadge low={overallScore.low} high={overallScore.high} label="Overall" />
           {overallGrade && <Badge size="md">{overallGrade}</Badge>}
           {priorComparison && (
-            <span className={cn('text-xs font-semibold', priorComparison.change >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+            <span className={cn('text-xs font-bold', priorComparison.change >= 0 ? 'text-emerald-600' : 'text-red-600')}>
               {priorComparison.change >= 0 ? '+' : ''}{priorComparison.change} {priorComparison.label}
             </span>
           )}
@@ -51,7 +51,7 @@ export function MockReportSummary({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {subtests.map((st) => (
             <div key={st.subtest} className="text-center p-3 bg-background-light rounded">
-              <p className="text-xs font-semibold text-muted capitalize mb-1">{st.subtest}</p>
+               <p className="text-xs font-bold text-muted capitalize mb-1">{st.subtest}</p>
               <p className="text-sm font-bold text-navy">{st.scoreLow}–{st.scoreHigh}</p>
               <Badge size="sm" variant={st.confidence === 'high' ? 'success' : st.confidence === 'low' ? 'danger' : 'warning'}>{st.grade}</Badge>
             </div>

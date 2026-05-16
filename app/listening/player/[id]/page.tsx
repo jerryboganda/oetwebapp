@@ -916,7 +916,9 @@ function PlayerContent() {
             message={contentLockedMessage}
             previewHint="Tip: subscribers get the first extract of every paper to preview before committing."
           />
-          <Link href="/listening"><Button variant="ghost">Back to Listening</Button></Link>
+          <Button variant="ghost" asChild>
+<Link href="/listening">Back to Listening</Link>
+</Button>
         </div>
       </AppShell>
     );
@@ -929,7 +931,9 @@ function PlayerContent() {
           <AlertCircle className="h-12 w-12 text-danger" />
           <h2 className="text-xl font-black text-navy">Listening task unavailable</h2>
           <p className="max-w-md text-sm text-muted">{loadError ?? 'Task not found.'}</p>
-          <Link href="/listening"><Button variant="ghost">Back to Listening</Button></Link>
+          <Button variant="ghost" asChild>
+<Link href="/listening">Back to Listening</Link>
+</Button>
         </div>
       </AppShell>
     );

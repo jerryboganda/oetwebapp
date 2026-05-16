@@ -13,7 +13,7 @@ function SponsorLayoutContent() {
 
   return (
     <main className="min-h-screen bg-background px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl rounded-[2rem] border border-border bg-surface p-6 shadow-sm sm:p-8">
+      <div className="mx-auto max-w-3xl rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
         <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           <LockKeyhole className="h-7 w-7" />
         </div>
@@ -26,8 +26,11 @@ function SponsorLayoutContent() {
           <Link className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90" href="/support">
             <Mail className="h-4 w-4" /> Contact support
           </Link>
-          <Link className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-navy hover:bg-background-light" href="/dashboard">
-            Return to dashboard
+          <Link
+            href="/dashboard"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-navy px-3 py-2 text-xs font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-navy/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            ← Return to dashboard
           </Link>
         </div>
       </div>

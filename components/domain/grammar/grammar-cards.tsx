@@ -51,7 +51,7 @@ export function GrammarTopicCard({ topic }: { topic: GrammarTopicLearner }) {
 
   return (
     <Link href={href} className="block h-full focus-visible:outline-none">
-      <Card hoverable className="h-full overflow-hidden border-primary/15 bg-gradient-to-br from-primary/10 via-surface to-surface p-0">
+      <Card hoverable className="h-full overflow-hidden border-border bg-surface p-0 shadow-sm">
         <div className="flex h-full flex-col p-5">
           <div className="flex items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-inner">
@@ -59,7 +59,7 @@ export function GrammarTopicCard({ topic }: { topic: GrammarTopicLearner }) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-black uppercase tracking-[0.18em] text-muted">{titleCase(topic.levelHint || 'OET')}</p>
-              <h3 className="mt-1 text-lg font-black leading-tight text-navy">{topic.name}</h3>
+              <h3 className="mt-1 text-lg font-bold leading-tight text-navy">{topic.name}</h3>
             </div>
             <Badge variant="info">{topic.lessonCount} lessons</Badge>
           </div>
@@ -178,7 +178,7 @@ export function GrammarRecommendationStrip({
   if (recommendations.length === 0) return null;
 
   return (
-    <Card padding="md" className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-surface to-background-light">
+    <Card padding="md" className="overflow-hidden border-border bg-surface shadow-sm">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-inner">
@@ -186,7 +186,7 @@ export function GrammarRecommendationStrip({
           </div>
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-muted">Recommended next</p>
-            <h3 className="text-lg font-black text-navy">Pick up where you left off</h3>
+            <h3 className="text-lg font-bold text-navy">Pick up where you left off</h3>
           </div>
         </div>
         <Badge variant="info">{recommendations.length} ready</Badge>
@@ -209,7 +209,7 @@ export function GrammarRecommendationStrip({
                     <p className="truncate text-[11px] font-black uppercase tracking-[0.16em] text-muted">
                       {rec.topicName ?? (rec.topicSlug ? titleCase(rec.topicSlug) : 'Grammar')}
                     </p>
-                    <h4 className="mt-1 line-clamp-2 text-sm font-black leading-snug text-navy">{rec.title}</h4>
+                    <h4 className="mt-1 line-clamp-2 text-sm font-bold leading-snug text-navy">{rec.title}</h4>
                   </div>
                   <Badge variant="info">{titleCase(rec.level)}</Badge>
                 </div>
@@ -290,7 +290,7 @@ export function GrammarExerciseRunner({
       <ExerciseInput exercise={exercise} answer={answer} disabled={disabled || isResultMode} onAnswer={onAnswer} result={result} />
 
       {result ? (
-        <div className="space-y-3 rounded-xl border border-border/60 bg-surface p-4 text-sm shadow-sm">
+        <div className="space-y-3 rounded-2xl border border-border/60 bg-surface p-4 text-sm shadow-sm">
           <div className="flex flex-wrap gap-2">
             <Badge variant={result.isCorrect ? 'success' : 'danger'}>
               {result.pointsAwarded}/{result.pointsPossible} points
@@ -347,7 +347,7 @@ function ExerciseInput({
         <div className="space-y-3">
           {pairs.map((pair, index) => (
             <div key={`${pair.left}-${index}`} className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
-              <div className="rounded-lg border border-border/60 bg-surface px-4 py-3 text-sm text-navy shadow-sm">
+              <div className="rounded-2xl border border-border/60 bg-surface px-4 py-3 text-sm text-navy shadow-sm">
                 {pair.left}
               </div>
               <div className="hidden justify-center text-muted md:flex">→</div>
@@ -391,7 +391,7 @@ function ResultPanel({ title, value, accent = 'default' }: { title: string; valu
   return (
     <div
       className={cn(
-        'rounded-lg border px-4 py-3 text-sm shadow-sm',
+        'rounded-2xl border px-4 py-3 text-sm shadow-sm',
         accent === 'success'
           ? 'border-emerald-200 bg-emerald-50/80 text-emerald-900'
           : 'border-border/70 bg-surface text-navy',
@@ -405,8 +405,8 @@ function ResultPanel({ title, value, accent = 'default' }: { title: string; valu
 
 function StatPill({ icon: Icon, label, value }: { icon: ElementType; label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-surface px-3 py-2 shadow-sm">
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+    <div className="rounded-2xl border border-border/60 bg-surface px-3 py-2 shadow-sm">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
         <Icon className="h-3.5 w-3.5" /> {label}
       </div>
       <div className="mt-0.5 text-base font-bold text-navy">{value}</div>

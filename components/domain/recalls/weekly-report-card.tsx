@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { fetchRecallsWeeklyReport, type RecallsWeeklyReport } from '@/lib/api';
 
 /**
@@ -45,7 +46,7 @@ export function WeeklyReportCard() {
   ];
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+    <Card padding="md">
       <div className="flex items-center gap-2">
         <TrendingUp className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold text-navy">This week</h3>
@@ -74,6 +75,6 @@ export function WeeklyReportCard() {
           </>
         )}
       </div>
-    </div>
+    </Card>
   );
 }

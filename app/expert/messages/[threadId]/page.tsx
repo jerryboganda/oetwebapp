@@ -44,7 +44,7 @@ export default function MessageThreadPage() {
 
   return (
     <ExpertRouteWorkspace>
-      <button onClick={() => router.push('/expert/messages')} className="text-sm text-muted-foreground hover:text-foreground mb-4 flex items-center gap-1">
+      <button onClick={() => router.push('/expert/messages')} className="text-sm text-muted hover:text-navy mb-4 flex items-center gap-1">
         <ArrowLeft className="w-4 h-4" /> Back to Messages
       </button>
 
@@ -54,10 +54,10 @@ export default function MessageThreadPage() {
 
       <div className="space-y-3 mb-6">
         {thread.replies.map((msg) => (
-          <div key={msg.id} className={`rounded-lg border p-3 ${msg.authorRole === 'expert' ? 'bg-primary/5 border-primary/20' : ''}`}>
+          <div key={msg.id} className={`rounded-2xl border p-3 ${msg.authorRole === 'expert' ? 'bg-primary/5 border-primary/20' : ''}`}>
             <div className="flex items-center justify-between mb-1">
               <p className="text-sm font-medium">{msg.authorName}</p>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted">
                 {msg.authorRole === 'expert' ? 'Expert' : 'Admin'} · {new Date(msg.createdAt).toLocaleString()}
               </span>
             </div>

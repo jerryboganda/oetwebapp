@@ -244,16 +244,16 @@ export default function SpeakingResultSummary() {
             <div className="w-px h-24 bg-border hidden md:block" />
 
             <div className="flex flex-col gap-4 w-full md:w-auto">
-              <Link href={`/speaking/transcript/${id}`}>
-                <Button fullWidth>
+              <Button fullWidth asChild>
+<Link href={`/speaking/transcript/${id}`}>
                   <FileText className="w-5 h-5" /> Review Transcript
-                </Button>
-              </Link>
-              <Link href={`/speaking/expert-review/${id}`}>
-                <Button variant="outline" fullWidth>
+                </Link>
+</Button>
+              <Button variant="outline" fullWidth asChild>
+<Link href={`/speaking/expert-review/${id}`}>
                   <UserCheck className="w-5 h-5" /> Request Tutor Review
-                </Button>
-              </Link>
+                </Link>
+</Button>
               {/* Wave 5: deep-link this attempt's scenario into the
                   AI-patient Conversation module for unlimited
                   rehearsal. Falls back to no button when the result
@@ -401,16 +401,16 @@ export default function SpeakingResultSummary() {
                 Use the targeted drill workflow to improve weak sounds, word stress, and intonation.
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
-                <Link href="/recalls/words">
-                  <Button variant="outline">
+                <Button variant="outline" asChild>
+<Link href="/recalls/words">
                     <Mic className="w-4 h-4" /> Open Recalls Audio
-                  </Button>
-                </Link>
-                <Link href="/recalls/words">
-                  <Button variant="ghost">
+                  </Link>
+</Button>
+                <Button variant="ghost" asChild>
+<Link href="/recalls/words">
                     Practice recall words
-                  </Button>
-                </Link>
+                  </Link>
+</Button>
               </div>
             </Card>
           </MotionSection>
@@ -431,11 +431,11 @@ export default function SpeakingResultSummary() {
                 <p className="text-sm text-white/60 max-w-sm">{result.nextDrill.description}</p>
               </div>
             </div>
-            <Link href={result.nextDrill.route ?? `/speaking/phrasing/${result.nextDrill.id}`}>
-              <Button className="bg-primary text-white px-8 py-4 rounded-2xl font-black whitespace-nowrap">
+            <Button className="bg-primary text-white px-8 py-4 rounded-2xl font-black whitespace-nowrap" asChild>
+<Link href={result.nextDrill.route ?? `/speaking/phrasing/${result.nextDrill.id}`}>
                 Start Drill <ChevronRight className="w-5 h-5" />
-              </Button>
-            </Link>
+              </Link>
+</Button>
           </MotionSection>
         )}
       </div>

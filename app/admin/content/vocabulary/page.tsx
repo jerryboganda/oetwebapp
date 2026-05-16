@@ -160,15 +160,15 @@ export default function AdminVocabularyPage() {
           icon={BookOpen}
           actions={
             <div className="flex flex-wrap gap-2">
-              <Link href="/admin/content/vocabulary/import">
-                <Button variant="secondary" size="sm"><Upload className="mr-1.5 h-4 w-4" />Import CSV</Button>
-              </Link>
-              <Link href="/admin/content/vocabulary/ai-draft">
-                <Button variant="secondary" size="sm"><Sparkles className="mr-1.5 h-4 w-4" />AI draft</Button>
-              </Link>
-              <Link href="/admin/content/vocabulary/new">
-                <Button variant="primary" size="sm"><Plus className="mr-1.5 h-4 w-4" />New term</Button>
-              </Link>
+              <Button variant="secondary" size="sm" asChild>
+<Link href="/admin/content/vocabulary/import"><Upload className="mr-1.5 h-4 w-4" />Import CSV</Link>
+</Button>
+              <Button variant="secondary" size="sm" asChild>
+<Link href="/admin/content/vocabulary/ai-draft"><Sparkles className="mr-1.5 h-4 w-4" />AI draft</Link>
+</Button>
+              <Button variant="primary" size="sm" asChild>
+<Link href="/admin/content/vocabulary/new"><Plus className="mr-1.5 h-4 w-4" />New term</Link>
+</Button>
             </div>
           }
         />

@@ -9,14 +9,15 @@ public class PaymentGatewaySecurityTests
     [Fact]
     public async Task StripeWebhook_MissingSecret_RejectsEvenWhenSandboxFallbacksAreEnabled()
     {
-        var gateway = new StripeGateway(new HttpClient(), Options.Create(new BillingOptions
+        var options = new BillingOptions
         {
             AllowSandboxFallbacks = true,
             Stripe = new StripeBillingOptions
             {
                 WebhookSecret = null
             }
-        }));
+        };
+        var gateway = new StripeGateway(new HttpClient(), Options.Create(options), TestRuntimeSettingsProvider.FromBillingOptions(options));
 
         var result = await gateway.HandleWebhookAsync("{}", new Dictionary<string, string>(), default);
 
@@ -28,11 +29,12 @@ public class PaymentGatewaySecurityTests
     [Fact]
     public async Task StripeCheckout_MissingConfiguration_ThrowsWhenSandboxFallbacksAreDisabled()
     {
-        var gateway = new StripeGateway(new HttpClient(), Options.Create(new BillingOptions
+        var options = new BillingOptions
         {
             AllowSandboxFallbacks = false,
             Stripe = new StripeBillingOptions()
-        }));
+        };
+        var gateway = new StripeGateway(new HttpClient(), Options.Create(options), TestRuntimeSettingsProvider.FromBillingOptions(options));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(

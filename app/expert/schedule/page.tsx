@@ -188,7 +188,7 @@ export default function SchedulePage() {
               { icon: CalendarClock, label: 'Active days', value: String(activeDays) },
               { icon: ShieldCheck, label: 'Working window', value: timeWindow },
             ]}
-            aside={schedule?.lastUpdatedAt ? <span className="text-xs text-slate-500">Last updated: {new Date(schedule.lastUpdatedAt).toLocaleString()}</span> : undefined}
+            aside={schedule?.lastUpdatedAt ? <span className="text-xs text-muted">Last updated: {new Date(schedule.lastUpdatedAt).toLocaleString()}</span> : undefined}
           />
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -224,7 +224,7 @@ export default function SchedulePage() {
             <Card>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
                 <div>
-                  <h3 className="font-semibold text-navy">Weekly Availability</h3>
+                  <h3 className="font-bold text-navy">Weekly Availability</h3>
                 </div>
                 <div className="w-64">
                   <Select
@@ -303,14 +303,14 @@ export default function SchedulePage() {
             />
             <Card>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
-                <h3 className="font-semibold text-navy">Upcoming Exceptions</h3>
-                <Button variant="outline" size="sm" onClick={() => setShowAddForm(true)} aria-label="Add schedule exception">
+                <h3 className="font-bold text-navy">Upcoming Exceptions</h3>
+                <Button variant="secondary" size="sm" onClick={() => setShowAddForm(true)} aria-label="Add schedule exception">
                   <Plus className="mr-1 h-4 w-4" /> Add Exception
                 </Button>
               </div>
               <CardContent className="space-y-4 p-6">
                 {showAddForm ? (
-                  <div className="rounded-xl border border-border bg-slate-50 p-4 space-y-3">
+                  <div className="rounded-2xl border border-border bg-background-light p-4 space-y-3">
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                       <div>
                         <label className="mb-1 block text-sm font-medium text-navy">Date</label>

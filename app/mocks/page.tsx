@@ -342,7 +342,7 @@ export default function MockCenter() {
     primaryAction: {
       label: availableCredits > 0 ? 'Reserve a review' : 'Purchase New Review',
       href: reviewSummary.route ?? '/billing',
-      variant: 'outline',
+      variant: 'primary',
     },
   };
 
@@ -386,7 +386,7 @@ export default function MockCenter() {
         primaryAction: {
           label: 'Open billing',
           href: scoreGuarantee.route ?? '/billing/score-guarantee',
-          variant: 'outline',
+          variant: 'primary',
         },
       }
     : null;
@@ -520,7 +520,7 @@ export default function MockCenter() {
                             href: attempt.resumeRoute,
                           },
                           secondaryAction: attempt.reportRoute
-                            ? { label: 'View report so far', href: attempt.reportRoute, variant: 'outline' }
+                            ? { label: 'View report so far', href: attempt.reportRoute, variant: 'secondary' as const }
                             : undefined,
                         }}
                       />
@@ -685,7 +685,7 @@ export default function MockCenter() {
                                       <h3 className="flex items-center gap-2 text-base font-bold text-navy">
                                         <span className="truncate">{mock.title}</span>
                                         {mock.isRecommended ? (
-                                          <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-amber-700">
+                                           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-amber-700">
                                             Recommended
                                           </span>
                                         ) : null}

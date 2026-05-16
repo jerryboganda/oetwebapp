@@ -61,9 +61,9 @@ export default function NewPronunciationDrillPage() {
         aside={(
           <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
             <div className="flex flex-wrap gap-2">
-              <Link href="/admin/content/pronunciation">
-                <Button variant="ghost">Cancel</Button>
-              </Link>
+              <Button variant="ghost" asChild>
+<Link href="/admin/content/pronunciation">Cancel</Link>
+</Button>
               <Button variant="primary" onClick={handleSave} loading={saving} className="gap-2">
                 <Save className="h-4 w-4" /> Save draft
               </Button>

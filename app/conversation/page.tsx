@@ -161,7 +161,7 @@ export default function ConversationPage() {
                           <Icon className="w-5 h-5" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-semibold text-navy transition-colors group-hover:text-primary-dark">
+                          <h3 className="text-sm font-bold text-navy transition-colors group-hover:text-primary-dark">
                             {task.label}
                           </h3>
                           <p className="mt-1 text-xs text-muted">{task.description}</p>

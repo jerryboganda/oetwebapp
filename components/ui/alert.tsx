@@ -40,7 +40,7 @@ export function InlineAlert({ variant = 'info', title, children, dismissible, cl
         <motion.div
           role="alert"
           {...motionProps}
-          className={cn('flex items-start gap-3 rounded-[20px] border px-4 py-4 shadow-sm', config.bgClass, config.borderClass, className)}
+          className={cn('flex items-start gap-3 rounded-2xl border px-4 py-4 shadow-sm', config.bgClass, config.borderClass, className)}
         >
           <div className={cn('mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/70', config.textClass)}>
             <Icon className="h-5 w-5" aria-hidden="true" />
@@ -94,7 +94,7 @@ export function Toast({ variant = 'info', message, onClose, className, duration 
       role="status"
       aria-live="polite"
       {...celebrateProps}
-      className={cn('fixed bottom-[calc(var(--bottom-nav-height,6rem)+env(safe-area-inset-bottom)+0.75rem)] right-4 left-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-sm z-[100] flex items-center gap-3 rounded-[20px] border px-5 py-3.5 shadow-xl', config.bgClass, config.borderClass, className)}
+      className={cn('fixed bottom-[calc(var(--bottom-nav-height,6rem)+env(safe-area-inset-bottom)+0.75rem)] right-4 left-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-sm z-[100] flex items-center gap-3 rounded-2xl border px-5 py-3.5 shadow-xl', config.bgClass, config.borderClass, className)}
     >
       <div className={cn('flex h-10 w-10 items-center justify-center rounded-2xl bg-white/70', config.textClass)}>
         <Icon className="h-5 w-5" aria-hidden="true" />

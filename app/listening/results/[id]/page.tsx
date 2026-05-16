@@ -109,7 +109,9 @@ function ListeningResultsContent() {
           <AlertCircle className="h-12 w-12 text-danger" />
           <h2 className="text-xl font-black text-navy">Result not found</h2>
           <p className="max-w-md text-sm text-muted">{error ?? 'Complete a Listening task before opening results.'}</p>
-          <Link href="/listening"><Button variant="ghost">Back to Listening</Button></Link>
+          <Button variant="ghost" asChild>
+<Link href="/listening">Back to Listening</Link>
+</Button>
         </div>
       </LearnerDashboardShell>
     );
@@ -281,12 +283,12 @@ function ListeningResultsContent() {
               <p className="text-xs font-black uppercase tracking-widest text-muted">Transcript Access</p>
               <p className="mt-2 text-sm text-muted">{result.transcriptAccess.reason}</p>
             </div>
-            <Link href={`/listening/review/${result.attemptId}`}>
-              <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" asChild>
+<Link href={`/listening/review/${result.attemptId}`}>
                 <FileText className="h-4 w-4" />
                 Open Transcript Review
-              </Button>
-            </Link>
+              </Link>
+</Button>
           </div>
         </section>
       </div>

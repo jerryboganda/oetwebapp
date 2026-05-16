@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Users, DollarSign, UserCheck, Clock } from 'lucide-react';
 import { fetchSponsorDashboard, isApiError, type SponsorDashboardData } from '@/lib/api';
+import { Card } from '@/components/ui/card';
 import { StatCard } from '@/components/ui/stat-card';
 
 export default function SponsorDashboardPage() {
@@ -40,7 +41,7 @@ export default function SponsorDashboardPage() {
         <h1 className="text-2xl font-bold text-navy">Sponsor Dashboard</h1>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="page-surface h-28 animate-pulse rounded-2xl" />
+            <div key={i} className="h-28 animate-pulse rounded-2xl border border-border bg-surface shadow-sm" />
           ))}
         </div>
       </div>
@@ -51,9 +52,9 @@ export default function SponsorDashboardPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-navy">Sponsor Dashboard</h1>
-        <div className="page-surface rounded-2xl p-6 text-center">
-          <p className="text-sm text-red-600">{error}</p>
-        </div>
+        <Card padding="lg" className="text-center">
+          <p className="text-sm text-danger">{error}</p>
+        </Card>
       </div>
     );
   }
@@ -94,9 +95,9 @@ export default function SponsorDashboardPage() {
       </div>
 
       {/* Success rate and avg score require backend analytics — not yet available */}
-      <div className="rounded-xl border border-dashed border-border p-6 text-center">
+      <div className="rounded-2xl border border-dashed border-border p-6 text-center">
         <p className="text-sm font-medium text-muted">Coming soon</p>
-        <p className="mt-1 text-xs text-muted/70">Success rate and average score analytics are under development.</p>
+        <p className="mt-1 text-xs text-muted">Success rate and average score analytics are under development.</p>
       </div>
     </div>
   );

@@ -116,9 +116,9 @@ export default function AdminVocabularyAiDraftPage() {
           description="Uses the rulebook-grounded AI Gateway (admin.vocabulary_draft feature code, platform-only). Every generated term must cite at least one vocabulary rule ID from the active rulebook. Review and edit before accepting."
           icon={Sparkles}
           actions={
-            <Link href="/admin/content/vocabulary">
-              <Button variant="secondary" size="sm"><ArrowLeft className="mr-1.5 h-4 w-4" />Back</Button>
-            </Link>
+            <Button variant="secondary" size="sm" asChild>
+<Link href="/admin/content/vocabulary"><ArrowLeft className="mr-1.5 h-4 w-4" />Back</Link>
+</Button>
           }
         />
 
