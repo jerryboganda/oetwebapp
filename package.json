@@ -6,7 +6,7 @@
   "author": "OET Prep",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "mobile:dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
     "start": "next start",
