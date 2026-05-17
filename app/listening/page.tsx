@@ -225,20 +225,20 @@ export default function ListeningHome() {
                     <div
                       key={m.code}
                       title={m.target != null && m.progress != null ? `${m.label} (${m.progress}/${m.target})` : m.label}
-                      className={`flex min-h-14 items-center gap-2 rounded-2xl border px-3 py-2.5 shadow-sm ${
+                      className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
                         m.achieved
-                          ? '!border-emerald-300 !bg-white !text-emerald-900 dark:!border-emerald-300/30 dark:!bg-slate-950 dark:!text-emerald-100'
-                          : '!border-primary/25 !bg-white !text-slate-950 dark:!border-primary/30 dark:!bg-slate-950 dark:!text-white'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                          : 'border-slate-200 bg-white text-slate-700'
                       }`}
                     >
                       <span
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                          m.achieved ? '!bg-emerald-600 !text-white' : '!bg-primary/10 !text-primary ring-1 ring-primary/20 dark:!bg-white/10 dark:!text-primary'
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                          m.achieved ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 ring-1 ring-slate-200'
                         }`}
                       >
-                        {m.achieved ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : milestoneIndex + 1}
+                        {m.achieved ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> : milestoneIndex + 1}
                       </span>
-                      <span className="min-w-0 text-xs font-bold leading-snug">{m.label}</span>
+                      <span className="min-w-0 text-xs font-semibold leading-snug">{m.label}</span>
                     </div>
                   ))}
                 </div>
@@ -246,7 +246,7 @@ export default function ListeningHome() {
                   <Button
                     variant="primary"
                     size="md"
-                    className="w-full justify-center sm:w-auto sm:min-w-72"
+                    className="w-full justify-center sm:w-auto"
                     disabled={pathwayBusy}
                     onClick={() => void handlePathwayAction()}
                   >

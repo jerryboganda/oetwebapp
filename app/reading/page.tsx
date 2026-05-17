@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowRight,
   BookOpen,
   CheckCircle2,
   Clock,
@@ -37,47 +38,32 @@ import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
-const partGuides: LearnerSurfaceCardModel[] = [
+const partGuides = [
   {
-    kind: 'insight',
-    sourceType: 'frontend_insight',
-    accent: 'amber',
-    eyebrow: 'Part A',
-    eyebrowIcon: Clock,
-    title: 'Lock exact details first',
-    description: 'Use the opening window for rapid extraction across the four medical texts (varied length — Text C may include large tables) before moving into the longer timer block.',
-    metaItems: [
-      { icon: Target, label: '20 items' },
-      { icon: Clock, label: 'Strict timer' },
-    ],
+    part: 'A',
+    accent: 'amber' as const,
+    icon: Clock,
+    title: 'Part A — Rapid Extraction',
+    tip: '20 items across 4 medical texts under strict time',
+    href: '/reading/practice?part=A',
   },
   {
-    kind: 'insight',
-    sourceType: 'frontend_insight',
-    accent: 'blue',
-    eyebrow: 'Part B',
-    eyebrowIcon: FileText,
-    title: 'Read the purpose of each extract',
-    description: 'Short extracts from different healthcare contexts — policies, notices, guidelines, clinical communications. Choose the option supported by the exact wording.',
-    metaItems: [
-      { icon: Target, label: '6 items' },
-      { icon: ListChecks, label: '3 options' },
-    ],
+    part: 'B',
+    accent: 'blue' as const,
+    icon: FileText,
+    title: 'Part B — Short Extracts',
+    tip: '6 items from healthcare policies & guidelines',
+    href: '/reading/practice?part=B',
   },
   {
-    kind: 'insight',
-    sourceType: 'frontend_insight',
-    accent: 'indigo',
-    eyebrow: 'Part C',
-    eyebrowIcon: TrendingUp,
-    title: 'Control inference choices',
-    description: 'Separate stated evidence from tempting distractors while holding the main argument of each passage.',
-    metaItems: [
-      { icon: Target, label: '16 items' },
-      { icon: ListChecks, label: '4 options' },
-    ],
+    part: 'C',
+    accent: 'indigo' as const,
+    icon: TrendingUp,
+    title: 'Part C — Inference & Evidence',
+    tip: '16 items testing argument comprehension',
+    href: '/reading/practice?part=C',
   },
-];
+] as const;
 
 export default function ReadingHome() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -171,6 +157,34 @@ export default function ReadingHome() {
 
         <LearnerSkillSwitcher compact />
 
+        {/* Part Guidance — compact quick-start row */}
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {partGuides.map((guide) => {
+            const Icon = guide.icon;
+            const accentMap = {
+              amber: 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:border-amber-300',
+              blue: 'border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 hover:border-blue-300',
+              indigo: 'border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 hover:border-indigo-300',
+            } as const;
+            return (
+              <Link
+                key={guide.part}
+                href={guide.href}
+                className={`group flex items-center gap-3 rounded-xl border px-4 py-3 transition-all duration-200 ${accentMap[guide.accent]}`}
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/60">
+                  <Icon className="h-4.5 w-4.5" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold leading-tight">{guide.title}</p>
+                  <p className="mt-0.5 text-xs opacity-75 leading-snug">{guide.tip}</p>
+                </div>
+                <ArrowRight className="h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+              </Link>
+            );
+          })}
+        </section>
+
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <div className="flex justify-end">
@@ -250,22 +264,6 @@ export default function ReadingHome() {
                 </div>
               </section>
             ) : null}
-
-            <section>
-              <LearnerSurfaceSectionHeader
-                eyebrow="Part Guidance"
-                title="Practice under exam conditions"
-                description={`Part A is ${home?.policy.partATimerMinutes ?? 15} minutes, followed by ${home?.policy.partBCTimerMinutes ?? 45} shared minutes for Parts B and C.`}
-                className="mb-5"
-              />
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {partGuides.map((card, index) => (
-                  <MotionItem key={card.title} delayIndex={index}>
-                    <LearnerSurfaceCard card={card} />
-                  </MotionItem>
-                ))}
-              </div>
-            </section>
 
             <section>
               <LearnerSurfaceSectionHeader
