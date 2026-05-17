@@ -76,19 +76,8 @@ public static class DatabaseBootstrapper
         await OetLearner.Api.Services.Recalls.RecallSetTagSeeder.EnsureAsync(
             db, environment, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, cancellationToken);
 
-        // Demo/test data (mock user, goals, settings) only in development or when explicitly enabled
-        if (seedDemoData)
-        {
-            await SeedData.EnsureDemoDataAsync(db, cancellationToken);
-            if (!db.Database.IsInMemory())
-            {
-                await SeedData.EnsureDemoOperationalStateAsync(db, cancellationToken);
-            }
-            await SeedData.EnsureDemoMediaAsync(db, storage, cancellationToken);
-            // Wave 3 of docs/SPEAKING-MODULE-PLAN.md - seed canonical
-            // speaking mock set when both st-001 and st-002 exist.
-            await SeedData.EnsureSpeakingMockSetsAsync(db, cancellationToken);
-        }
+        // Demo/test data seeding permanently disabled — production DB is the source of truth.
+        // See commit history for removed SeedDemoData/EnsureLocalAuthAccounts if ever needed for tests.
     }
 
     /// <summary>
