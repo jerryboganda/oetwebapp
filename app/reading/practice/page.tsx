@@ -17,9 +17,9 @@
  * `docs/READING-MODULE-A-Z-IMPLEMENTATION-PLAN.md` Phase 3.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
   ArrowRight,
@@ -237,6 +237,31 @@ export default function ReadingPracticePage() {
     [],
   );
 
+  // ── Deep-link support: /reading/practice?focus=A|B|C&tab=errors ─────────
+  const searchParams = useSearchParams();
+  const focusParamRaw = searchParams?.get('focus') ?? null;
+  const focusPart = focusParamRaw === 'A' || focusParamRaw === 'B' || focusParamRaw === 'C'
+    ? focusParamRaw
+    : null;
+  const tabParam = searchParams?.get('tab') ?? null;
+
+  const errorBankSectionRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (tabParam === 'errors' && !loading && errorBankSectionRef.current) {
+      errorBankSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [tabParam, loading]);
+
+  const filteredDrills = useMemo(() => {
+    const all = drillCatalogue?.drills ?? [];
+    return focusPart ? all.filter((d) => d.partCode === focusPart) : all;
+  }, [drillCatalogue, focusPart]);
+
+  const filteredErrorEntries = useMemo(() => {
+    const all = errorBank?.entries ?? [];
+    return focusPart ? all.filter((e) => e.partCode === focusPart) : all;
+  }, [errorBank, focusPart]);
+
   if (authLoading || (loading && !home && !errorBank)) {
     return (
       <LearnerDashboardShell>
@@ -386,18 +411,21 @@ export default function ReadingPracticePage() {
         </section>
 
         {/* ── Error Bank ──────────────────────────────────────── */}
-        <section>
+        <section ref={errorBankSectionRef} id="error-bank">
           <LearnerSurfaceSectionHeader
             eyebrow="Error Bank"
-            title={`${openErrorCount} question${openErrorCount === 1 ? '' : 's'} to revisit`}
-            description="Questions you missed in past graded attempts. Clear an entry when you're confident — the next time you answer it correctly we clear it automatically."
+            title={`${focusPart ? `Part ${focusPart} \u2014 ` : ''}${focusPart ? filteredErrorEntries.length : openErrorCount} question${(focusPart ? filteredErrorEntries.length : openErrorCount) === 1 ? '' : 's'} to revisit`}
+            description={focusPart
+              ? `Filtered to Part ${focusPart}. Clear ?focus to see every part.`
+              : "Questions you missed in past graded attempts. Clear an entry when you're confident \u2014 the next time you answer it correctly we clear it automatically."}
             className="mb-5"
           />
-          {openErrorCount === 0 ? (
+          {(focusPart ? filteredErrorEntries.length === 0 : openErrorCount === 0) ? (
             <InlineAlert variant="success">
               <CheckCircle2 className="mr-2 inline h-4 w-4" aria-hidden />
-              You have no open Error Bank entries. Submit a graded Reading attempt to start
-              tracking missed questions.
+              {focusPart
+                ? `You have no open Error Bank entries in Part ${focusPart}.`
+                : 'You have no open Error Bank entries. Submit a graded Reading attempt to start tracking missed questions.'}
             </InlineAlert>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -413,7 +441,7 @@ export default function ReadingPracticePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(errorBank?.entries ?? []).map((entry) => (
+                  {filteredErrorEntries.map((entry) => (
                     <tr key={entry.id} className="border-t border-slate-100">
                       <td className="px-4 py-3">
                         {entry.paper ? (
@@ -493,7 +521,7 @@ export default function ReadingPracticePage() {
                 </select>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {drillCatalogue.drills.map((d, idx) => {
+                {filteredDrills.map((d, idx) => {
                   const key = drillPaperId ? `${drillPaperId}::drill::${d.code}` : null;
                   const busy = key !== null && busyKey === key;
                   return (

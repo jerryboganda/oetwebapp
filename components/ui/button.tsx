@@ -1,7 +1,16 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { forwardRef, type ButtonHTMLAttributes } from 'react';
+import {
+  Children,
+  cloneElement,
+  forwardRef,
+  isValidElement,
+  type ButtonHTMLAttributes,
+  type MouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { Loader2 } from 'lucide-react';
 import { motion, useReducedMotion, AnimatePresence } from 'motion/react';
 import { getMicroHover, getMicroTap, motionTokens, prefersReducedMotion } from '@/lib/motion';
@@ -12,6 +21,7 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   fullWidth?: boolean;
+  asChild?: boolean;
 }
 
 const variantStyles: Record<string, string> = {
@@ -36,10 +46,36 @@ const hapticStyles: Record<NonNullable<ButtonProps['variant']>, HapticImpactStyl
   outline: 'LIGHT',
 };
 
+type ButtonClassNameOptions = {
+  variant?: NonNullable<ButtonProps['variant']>;
+  size?: NonNullable<ButtonProps['size']>;
+  fullWidth?: boolean;
+  className?: string;
+};
+
+type AsChildProps = Record<string, unknown> & {
+  className?: string;
+  onClick?: (event: MouseEvent<HTMLElement>) => void;
+  tabIndex?: number;
+  children?: ReactNode;
+  'aria-disabled'?: boolean;
+};
+
+export function buttonClassName({ variant = 'primary', size = 'md', fullWidth, className }: ButtonClassNameOptions = {}) {
+  return cn(
+    'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-[background-color,border-color,color,box-shadow,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+    variantStyles[variant],
+    sizeStyles[size],
+    fullWidth && 'w-full',
+    className,
+  );
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', loading, fullWidth, disabled, children, onClick, ...props }, ref) => {
+  ({ className, variant = 'primary', size = 'md', loading, fullWidth, disabled, asChild, children, onClick, ...props }, ref) => {
     const reducedMotion = prefersReducedMotion(useReducedMotion());
     const isDisabled = disabled || loading;
+    const classes = buttonClassName({ variant, size, fullWidth, className });
 
     const handleClick: NonNullable<ButtonProps['onClick']> = (event) => {
       if (!isDisabled) {
@@ -49,6 +85,35 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       onClick?.(event);
     };
 
+    if (asChild) {
+      const child = Children.only(children);
+
+      if (!isValidElement<AsChildProps>(child)) {
+        return null;
+      }
+
+      const typedChild = child as ReactElement<AsChildProps>;
+      const { type: _buttonType, ...childPropsFromButton } = props;
+      const handleChildClick = (event: MouseEvent<HTMLElement>) => {
+        if (isDisabled) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
+        void triggerImpactHaptic(hapticStyles[variant]);
+        typedChild.props.onClick?.(event);
+      };
+
+      return cloneElement(typedChild, {
+        ...childPropsFromButton,
+        className: cn(classes, typedChild.props.className),
+        onClick: handleChildClick,
+        'aria-disabled': isDisabled || typedChild.props['aria-disabled'],
+        tabIndex: isDisabled ? -1 : typedChild.props.tabIndex,
+      });
+    }
+
     return (
       <motion.button
         ref={ref}
@@ -57,13 +122,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         aria-disabled={isDisabled || undefined}
         whileHover={isDisabled ? undefined : getMicroHover(reducedMotion)}
         whileTap={isDisabled ? undefined : getMicroTap(reducedMotion)}
-        className={cn(
-          'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-[background-color,border-color,color,box-shadow,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
-          variantStyles[variant],
-          sizeStyles[size],
-          fullWidth && 'w-full',
-          className,
-        )}
+        className={classes}
         onClick={handleClick}
         {...props}
       >

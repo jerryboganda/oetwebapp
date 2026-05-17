@@ -1133,29 +1133,68 @@ export async function completeOnboarding(): Promise<void> {
   await apiRequest('/v1/learner/onboarding/complete', { method: 'POST' });
 }
 
-export async function fetchDiagnosticOverview(): Promise<ApiRecord> {
-  return apiRequest<ApiRecord>('/v1/diagnostic/overview');
+export interface DiagnosticOverviewResponse {
+  subtests?: { subtest: string; estimatedDurationMinutes: number }[];
+  estimatedTotalMinutes?: number;
+  disclaimer?: string;
 }
 
-export async function fetchDashboardHome(): Promise<ApiRecord> {
-  const data = await apiRequest<ApiRecord>('/v1/learner/dashboard');
-  return normalizeRouteValues(data);
+export async function fetchDiagnosticOverview(): Promise<DiagnosticOverviewResponse> {
+  return apiRequest<DiagnosticOverviewResponse>('/v1/diagnostic/overview');
 }
 
-export async function fetchEngagement(): Promise<ApiRecord> {
-  return apiRequest<ApiRecord>('/v1/learner/engagement');
+export interface DashboardHomeResponse {
+  freeze?: { currentFreeze?: unknown };
+  cards?: {
+    examDate?: { value?: string };
+    pendingExpertReviews?: { count?: number };
+    nextMockRecommendation?: unknown;
+  };
+  [key: string]: unknown;
 }
 
-export async function fetchWalletTransactions(limit = 20): Promise<ApiRecord> {
-  return apiRequest<ApiRecord>(`/v1/billing/wallet/transactions?limit=${limit}`);
+export async function fetchDashboardHome(): Promise<DashboardHomeResponse> {
+  const data = await apiRequest<DashboardHomeResponse>('/v1/learner/dashboard');
+  return normalizeRouteValues(data) as DashboardHomeResponse;
+}
+
+export interface EngagementResponse {
+  currentStreak?: number;
+  longestStreak?: number;
+  lastPracticeDate?: string | null;
+  totalPracticeMinutes?: number;
+  totalPracticeSessions?: number;
+  avgSessionMinutes?: number;
+  weeklyActivity?: { day: string; active: boolean }[];
+  streakFreezeAvailable?: boolean;
+  streakFreezeUsedThisWeek?: boolean;
+}
+
+export async function fetchEngagement(): Promise<EngagementResponse> {
+  return apiRequest<EngagementResponse>('/v1/learner/engagement');
+}
+
+export interface WalletTransactionsResponse {
+  balance: number;
+  lastUpdatedAt?: string;
+  transactions: unknown[];
+}
+
+export async function fetchWalletTransactions(limit = 20): Promise<WalletTransactionsResponse> {
+  return apiRequest<WalletTransactionsResponse>(`/v1/billing/wallet/transactions?limit=${limit}`);
+}
+
+export interface WalletTopUpResponse {
+  checkoutUrl?: string;
+  totalCredits?: number;
 }
 
 export async function createWalletTopUp(
   amount: number,
   gateway: 'stripe' | 'paypal',
   idempotencyKey?: string,
-): Promise<ApiRecord> {
-  return apiRequest<ApiRecord>('/v1/billing/wallet/top-up', {
+): Promise<WalletTopUpResponse> {
+  return apiRequest<WalletTopUpResponse>('/v1/billing/wallet/top-up', {
     method: 'POST',
     body: JSON.stringify({ amount, gateway, idempotencyKey: idempotencyKey ?? null }),
   });
@@ -1179,12 +1218,21 @@ export async function fetchWalletTopUpTiers(): Promise<WalletTopUpTiersResponse>
   return apiRequest<WalletTopUpTiersResponse>('/v1/billing/wallet/top-up-tiers');
 }
 
-export async function fetchExamFamilies(): Promise<ApiRecord> {
-  return apiRequest<ApiRecord>('/v1/reference/exam-families');
+export interface ExamFamiliesResponse {
+  examFamilies?: { code: string; label?: string }[];
 }
 
-export async function fetchSettingsData(): Promise<ApiRecord> {
-  return apiRequest<ApiRecord>('/v1/settings');
+export async function fetchExamFamilies(): Promise<ExamFamiliesResponse> {
+  return apiRequest<ExamFamiliesResponse>('/v1/reference/exam-families');
+}
+
+export interface SettingsDataResponse {
+  audio?: { lowBandwidthMode?: boolean };
+  [key: string]: unknown;
+}
+
+export async function fetchSettingsData(): Promise<SettingsDataResponse> {
+  return apiRequest<SettingsDataResponse>('/v1/settings');
 }
 
 export async function fetchSettingsSection(section: SettingsSectionId): Promise<SettingsSectionData> {
@@ -1195,8 +1243,13 @@ export async function fetchSettingsSection(section: SettingsSectionId): Promise<
   };
 }
 
-export async function updateSettingsSection(section: 'profile' | 'goals' | 'notifications' | 'privacy' | 'accessibility' | 'audio' | 'study', values: Record<string, unknown>): Promise<ApiRecord> {
-  return apiRequest<ApiRecord>(`/v1/settings/${section}`, {
+export interface UpdateSettingsSectionResponse {
+  values?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export async function updateSettingsSection(section: 'profile' | 'goals' | 'notifications' | 'privacy' | 'accessibility' | 'audio' | 'study', values: Record<string, unknown>): Promise<UpdateSettingsSectionResponse> {
+  return apiRequest<UpdateSettingsSectionResponse>(`/v1/settings/${section}`, {
     method: 'PATCH',
     body: JSON.stringify({ values }),
   });
@@ -1226,19 +1279,47 @@ export async function revokeAllOtherSessions(): Promise<{ revokedCount: number }
   return apiRequest<{ revokedCount: number }>('/v1/auth/sessions', { method: 'DELETE' });
 }
 
-export async function fetchReadingHome(): Promise<ApiRecord> {
-  const data = await apiRequest<ApiRecord>('/v1/reading-papers/home');
-  return normalizeRouteValues(data);
+export interface ReadingHomeResponse {
+  [key: string]: unknown;
 }
 
-export async function fetchListeningHome(): Promise<ApiRecord> {
-  const data = await apiRequest<ApiRecord>('/v1/listening/home');
-  return normalizeRouteValues(data);
+export async function fetchReadingHome(): Promise<ReadingHomeResponse> {
+  const data = await apiRequest<ReadingHomeResponse>('/v1/reading-papers/home');
+  return normalizeRouteValues(data) as ReadingHomeResponse;
 }
 
-export async function fetchWritingHome(): Promise<ApiRecord> {
-  const data = await apiRequest<ApiRecord>('/v1/writing/home');
-  return normalizeRouteValues(data);
+export interface ListeningHomeResponse {
+  [key: string]: unknown;
+}
+
+export async function fetchListeningHome(): Promise<ListeningHomeResponse> {
+  const data = await apiRequest<ListeningHomeResponse>('/v1/listening/home');
+  return normalizeRouteValues(data) as ListeningHomeResponse;
+}
+
+export interface WritingHomeResponse {
+  recommendedTask?: Record<string, unknown> & {
+    id?: string;
+    contentId?: string;
+    title?: string;
+    criteriaFocus?: string | string[];
+    scenarioType?: string;
+    profession?: string;
+    time?: string;
+    estimatedDurationMinutes?: number;
+    difficulty?: string;
+  };
+  reviewCredits?: { available?: number };
+  fullMockEntry?: { title?: string; route?: string; rationale?: string };
+  actions?: unknown[];
+  latestEvaluation?: unknown | null;
+  criterionDrillLibrary?: unknown[];
+  [key: string]: unknown;
+}
+
+export async function fetchWritingHome(): Promise<WritingHomeResponse> {
+  const data = await apiRequest<WritingHomeResponse>('/v1/writing/home');
+  return normalizeRouteValues(data) as WritingHomeResponse;
 }
 
 export async function fetchSpeakingHome(): Promise<SpeakingHome> {
@@ -1294,9 +1375,41 @@ export async function fetchSpeakingHome(): Promise<SpeakingHome> {
   };
 }
 
-export async function fetchMocksHome(): Promise<ApiRecord> {
-  const data = await apiRequest<ApiRecord>('/v1/mocks');
-  return normalizeRouteValues(data);
+export interface MocksHomeResponse {
+  reports?: Record<string, unknown>[];
+  resumableAttempts?: unknown[];
+  recommendedNextMock?: {
+    id?: string;
+    title?: string;
+    rationale?: string;
+    route?: string;
+    latestOverallScore?: string | null;
+    latestOverallGrade?: string | null;
+    trend?: string | null;
+    readiness?: {
+      tier?: string;
+      message?: string;
+      passThreshold?: number;
+      overallScore?: number;
+    } | null;
+  } | null;
+  purchasedMockReviews?: unknown;
+  collections?: { fullMocks?: unknown[]; subTestMocks?: unknown[] };
+  emptyState?: { title?: string; description?: string; route?: string } | null;
+  learnerProfession?: string | null;
+  availableProfessions?: { id: string; label: string }[];
+  scoreGuarantee?: unknown | null;
+  cohortPercentile?: unknown | null;
+  [key: string]: unknown;
+}
+
+export async function fetchMocksHome(): Promise<MocksHomeResponse> {
+  const data = await apiRequest<MocksHomeResponse>('/v1/mocks');
+  return normalizeRouteValues(data) as MocksHomeResponse;
+}
+
+export interface SpeakingDeviceCheckResponse {
+  [key: string]: unknown;
 }
 
 export async function postSpeakingDeviceCheck(payload: {
@@ -1306,8 +1419,8 @@ export async function postSpeakingDeviceCheck(payload: {
   taskId?: string;
   noiseLevel?: number;
   noiseAcceptable?: boolean;
-}): Promise<ApiRecord> {
-  return apiRequest<ApiRecord>('/v1/speaking/device-checks', {
+}): Promise<SpeakingDeviceCheckResponse> {
+  return apiRequest<SpeakingDeviceCheckResponse>('/v1/speaking/device-checks', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -1550,7 +1663,10 @@ export async function fetchWritingSubmissions(): Promise<WritingSubmission[]> {
 
 export async function fetchCriteriaDeltas(): Promise<CriteriaDelta[]> {
   const writingSubmissions = await fetchWritingSubmissions();
-  const latest = writingSubmissions[0]?.id ?? 'we-001';
+  const latest = writingSubmissions[0]?.id;
+  if (!latest) {
+    return [];
+  }
   const result = await fetchWritingResult(latest);
   return result.criteria.map((criterion) => ({
     name: criterion.name,
@@ -3226,6 +3342,25 @@ export async function fetchSubmissionComparison(leftId?: string, rightId?: strin
   };
 }
 
+export interface PublicBillingPlan {
+  planId: string;
+  code: string;
+  label: string;
+  tier: string;
+  description: string;
+  price: { amount: number; currency: string; interval: string };
+  reviewCredits: number;
+  mockReportsIncluded: boolean;
+  includedSubtests: string[];
+  trialDays: number;
+  isRenewable: boolean;
+  changeDirection: string;
+}
+
+export async function fetchPublicPlans(): Promise<{ items: PublicBillingPlan[] }> {
+  return apiRequest('/v1/public/plans');
+}
+
 export async function fetchBilling(): Promise<BillingData> {
   const [summary, invoices, plans, extras] = await Promise.all([
     apiRequest<ApiRecord>('/v1/billing/summary'),
@@ -3542,19 +3677,9 @@ export async function startDiagnostic(): Promise<DiagnosticSession> {
   };
 }
 
-const LEGACY_DIAGNOSTIC_TASK_IDS: Record<SubTest, string> = {
-  Writing: 'wt-001',
-  Speaking: 'st-001',
-  Reading: 'rt-001',
-  Listening: 'lt-001',
-};
-
 /**
  * Fetches the diagnostic task ID for a given sub-test.
- * Tries the backend diagnostic content endpoint first; falls back to legacy
- * hardcoded IDs if the endpoint is unavailable or returns no task.
- *
- * TODO: Remove legacy fallback once /v1/diagnostic/tasks is fully deployed.
+ * Fails closed if the backend has not published a real diagnostic task.
  */
 export async function fetchDiagnosticTaskId(subTest: SubTest): Promise<string> {
   try {
@@ -3562,12 +3687,10 @@ export async function fetchDiagnosticTaskId(subTest: SubTest): Promise<string> {
     const taskId = response.taskId ?? response.contentId ?? null;
     if (taskId) return String(taskId);
   } catch {
-    // Backend endpoint may lag behind static diagnostic fixtures during deploy.
+    // Fail closed below; learner-facing diagnostics must not use demo IDs.
   }
 
-  const fallback = LEGACY_DIAGNOSTIC_TASK_IDS[subTest];
-  console.warn(`[Diagnostic] Dynamic task endpoint unavailable for ${subTest}. Using legacy fallback ${fallback}.`);
-  return fallback;
+  throw new Error(`Diagnostic ${subTest} task is unavailable.`);
 }
 
 export async function fetchDiagnosticResults(): Promise<DiagnosticResult[]> {
@@ -8103,6 +8226,61 @@ export async function updateAdminConversationSettings(body: Record<string, unkno
   });
 }
 
+export interface AdminLaunchReadinessSettings {
+  mobileMinSupportedVersion: string;
+  mobileLatestVersion: string;
+  mobileForceUpdate: boolean;
+  iosAppStoreUrl: string | null;
+  androidPlayStoreUrl: string | null;
+  iosBundleId: string | null;
+  appleTeamId: string | null;
+  appleAssociatedDomainStatus: string | null;
+  appleUniversalLinksStatus: string | null;
+  iosSigningProfileReference: string | null;
+  iosIapStatus: string | null;
+  iosPushStatus: string | null;
+  androidPackageName: string | null;
+  androidSha256Fingerprints: string | null;
+  androidSigningKeyReference: string | null;
+  androidAssetLinksStatus: string | null;
+  androidIapStatus: string | null;
+  androidPushStatus: string | null;
+  desktopMinSupportedVersion: string;
+  desktopLatestVersion: string;
+  desktopForceUpdate: boolean;
+  desktopUpdateFeedUrl: string | null;
+  desktopUpdateChannel: string | null;
+  windowsSigningStatus: string | null;
+  macSigningStatus: string | null;
+  linuxSigningStatus: string | null;
+  deviceValidationEvidenceUrl: string | null;
+  deviceValidationNotes: string | null;
+  realtimeLegalApprovalStatus: string | null;
+  realtimePrivacyApprovalStatus: string | null;
+  realtimeProtectedSmokeStatus: string | null;
+  realtimeEvidenceUrl: string | null;
+  realtimeSpendCapApproved: boolean;
+  realtimeTopologyApproved: boolean;
+  releaseOwnerApprovalStatus: string | null;
+  launchNotes: string | null;
+  updatedAt: string;
+  updatedByAdminId: string | null;
+  updatedByAdminName: string | null;
+}
+
+export async function fetchAdminLaunchReadinessSettings(): Promise<AdminLaunchReadinessSettings> {
+  return apiRequest<AdminLaunchReadinessSettings>('/v1/admin/launch-readiness/settings');
+}
+
+export async function updateAdminLaunchReadinessSettings(
+  body: Partial<AdminLaunchReadinessSettings>,
+): Promise<AdminLaunchReadinessSettings> {
+  return apiRequest<AdminLaunchReadinessSettings>('/v1/admin/launch-readiness/settings', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function adminConversationTtsPreview(body: { text?: string; voice?: string; locale?: string }) {
   const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
   const { ensureFreshAccessToken } = await import('@/lib/auth-client');
@@ -9044,6 +9222,10 @@ export async function fetchAdminPrivateSpeakingAuditLogs(params?: { bookingId?: 
 
 export async function fetchStudyPlanDrift() {
   return apiRequest('/v1/learner/study-plan/drift');
+}
+
+export async function regenerateStudyPlan(): Promise<ApiRecord> {
+  return apiRequest<ApiRecord>('/v1/study-plan/regenerate', { method: 'POST' });
 }
 
 export async function fetchReadinessRisk() {

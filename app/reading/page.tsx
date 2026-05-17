@@ -21,6 +21,7 @@ import { MotionItem } from '@/components/ui/motion-primitives';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import {
+  getReadingErrorBank,
   getReadingHome,
   type ReadingHomeAttemptDto,
   type ReadingHomeDto,
@@ -32,57 +33,18 @@ import { fetchMockReports } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
 import { isListeningReadingPassByScaled } from '@/lib/scoring';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { PartLaunchpadCard, type PartCode } from '@/components/domain/part-launchpad-card';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
-const partGuides: LearnerSurfaceCardModel[] = [
-  {
-    kind: 'insight',
-    sourceType: 'frontend_insight',
-    accent: 'amber',
-    eyebrow: 'Part A',
-    eyebrowIcon: Clock,
-    title: 'Lock exact details first',
-    description: 'Use the opening window for rapid extraction across the four medical texts (varied length — Text C may include large tables) before moving into the longer timer block.',
-    metaItems: [
-      { icon: Target, label: '20 items' },
-      { icon: Clock, label: 'Strict timer' },
-    ],
-  },
-  {
-    kind: 'insight',
-    sourceType: 'frontend_insight',
-    accent: 'blue',
-    eyebrow: 'Part B',
-    eyebrowIcon: FileText,
-    title: 'Read the purpose of each extract',
-    description: 'Short extracts from different healthcare contexts — policies, notices, guidelines, clinical communications. Choose the option supported by the exact wording.',
-    metaItems: [
-      { icon: Target, label: '6 items' },
-      { icon: ListChecks, label: '3 options' },
-    ],
-  },
-  {
-    kind: 'insight',
-    sourceType: 'frontend_insight',
-    accent: 'indigo',
-    eyebrow: 'Part C',
-    eyebrowIcon: TrendingUp,
-    title: 'Control inference choices',
-    description: 'Separate stated evidence from tempting distractors while holding the main argument of each passage.',
-    metaItems: [
-      { icon: Target, label: '16 items' },
-      { icon: ListChecks, label: '4 options' },
-    ],
-  },
-];
 
 export default function ReadingHome() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [home, setHome] = useState<ReadingHomeDto | null>(null);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
+  const [partErrorCounts, setPartErrorCounts] = useState<Record<PartCode, number>>({ A: 0, B: 0, C: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,13 +62,20 @@ export default function ReadingHome() {
       try {
         setLoading(true);
         setError(null);
-        const [readingHome, reports] = await Promise.all([
+        const [readingHome, reports, errorBank] = await Promise.all([
           getReadingHome(),
           fetchMockReports().catch(() => [] as MockReport[]),
+          getReadingErrorBank({ limit: 200 }).catch(() => null),
         ]);
         if (cancelled) return;
         setHome(readingHome);
         setMockReports(reports);
+        const counts: Record<PartCode, number> = { A: 0, B: 0, C: 0 };
+        for (const entry of errorBank?.entries ?? []) {
+          const code = entry.partCode as PartCode | undefined;
+          if (code === 'A' || code === 'B' || code === 'C') counts[code] += 1;
+        }
+        setPartErrorCounts(counts);
       } catch (err) {
         if (!cancelled) setError(readErrorMessage(err, 'Failed to load Reading papers.'));
       } finally {
@@ -259,11 +228,11 @@ export default function ReadingHome() {
                 className="mb-5"
               />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {partGuides.map((card, index) => (
-                  <MotionItem key={card.title} delayIndex={index}>
-                    <LearnerSurfaceCard card={card} />
+                {home ? (['A', 'B', 'C'] as const).map((code, index) => (
+                  <MotionItem key={code} delayIndex={index}>
+                    <PartLaunchpadCard partCode={code} home={home} errorBankCount={partErrorCounts[code]} />
                   </MotionItem>
-                ))}
+                )) : null}
               </div>
             </section>
 

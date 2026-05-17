@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { ClipboardCheck, FileText, Clock, MapPin, CheckCircle2, Circle, BookOpen, AlertTriangle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -42,15 +43,6 @@ const CATEGORY_META: Record<string, { label: string; icon: React.ReactNode; colo
   preparation: { label: 'Final Preparation', icon: <BookOpen className="w-5 h-5" />, color: 'text-primary' },
   on_the_day: { label: 'On the Day', icon: <Clock className="w-5 h-5" />, color: 'text-warning' },
 };
-
-const TIPS = [
-  'Time management is crucial — practise pacing for each subtest.',
-  'In Writing, always re-read the case notes before finalising your letter.',
-  'In Speaking, build rapport by using the patient\'s name and maintaining eye contact.',
-  'In Listening, write answers as you listen — don\'t rely on memory alone.',
-  'In Reading, scan for keywords before reading passages in detail.',
-  'Stay calm if you find a section difficult — every candidate feels this way.',
-];
 
 export default function TestDayPrepPage() {
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -139,22 +131,21 @@ export default function TestDayPrepPage() {
         );
       })}
 
-      {/* Expert Tips */}
+      {/* Strategies link */}
       <MotionSection className="mt-8">
         <LearnerSurfaceSectionHeader
           icon={<AlertTriangle className="w-5 h-5" />}
-          title="Tutor Tips"
-          description="Key advice from OET tutors and past high-scorers."
+          title="Exam-day strategies"
+          description="Subtest-specific pacing, scanning, and rapport techniques used by high-scorers."
         />
-        <div className="grid gap-3 sm:grid-cols-2 mt-3">
-          {TIPS.map((tip, i) => (
-            <MotionItem key={i}>
-              <Card className="p-4 bg-amber-50/60 border-warning/30">
-                <p className="text-sm text-warning">{tip}</p>
-              </Card>
-            </MotionItem>
-          ))}
-        </div>
+        <MotionItem>
+          <Link href="/strategies" className="block mt-3">
+            <Card className="p-4 bg-amber-50/60 border-warning/30 hover:bg-amber-50 transition-colors">
+              <p className="text-sm font-semibold text-warning">View detailed strategies →</p>
+              <p className="text-xs text-muted mt-1">Listening, Reading, Writing, and Speaking tactical guides.</p>
+            </Card>
+          </Link>
+        </MotionItem>
       </MotionSection>
     </LearnerDashboardShell>
   );

@@ -99,10 +99,6 @@ export default function StudyPlanPage() {
     }
   };
 
-  const handleReschedule = (_id: string) => {
-    track('plan_item_rescheduled');
-  };
-
   const handleStart = (task: StudyPlanTask) => {
     track('task_started', { subTest: task.subTest, contentId: task.contentId });
     router.push(`/${task.subTest.toLowerCase()}`);
@@ -183,17 +179,9 @@ export default function StudyPlanPage() {
                   <Button variant="primary" size="sm" onClick={() => handleStart(task)} className="flex-1 sm:flex-none">
                     <PlayCircle className="w-4 h-4 mr-1" /> Start
                   </Button>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Button variant="ghost" size="sm" onClick={() => handleMarkComplete(task.id)} title="Mark Complete">
-                      <CheckCircle2 className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleReschedule(task.id)} title="Reschedule">
-                      <Calendar className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" title="Swap Task">
-                      <RefreshCw className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => handleMarkComplete(task.id)} title="Mark Complete">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </Button>
                 </>
               ) : (
                 <Button variant="ghost" size="sm" onClick={() => handleUndo(task.id)}>
