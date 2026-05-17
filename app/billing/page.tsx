@@ -407,8 +407,8 @@ export default function BillingPage() {
               <div className="flex items-center gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-700 dark:text-emerald-200" />
                 <div>
-                  <p className="text-xs font-black uppercase tracking-widest">Validated quote</p>
-                  <p className="text-sm font-bold">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-800/80 dark:text-emerald-100/80">Validated quote</p>
+                  <p className="mt-0.5 text-sm font-semibold">
                     {quoteLabel ?? 'Checkout'} · {formatCurrency(quote.totalAmount, quote.currency)}
                     {quote.discountAmount > 0 ? (
                       <span className="ml-2 font-semibold">
@@ -447,12 +447,12 @@ export default function BillingPage() {
 
         {/* ── OVERVIEW ────────────────────────────────────────────── */}
         <TabPanel id="overview" activeTab={activeTab}>
-          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-stretch">
+            <section className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-widest text-muted">Current subscription</p>
-                  <h2 className="mt-2 text-2xl font-black text-navy">{data.currentPlan}</h2>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Current subscription</p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy">{data.currentPlan}</h2>
                   <p className="mt-1 text-sm text-muted">
                     {data.price} / {data.interval}
                   </p>
@@ -460,35 +460,35 @@ export default function BillingPage() {
                     <p className="mt-3 max-w-md text-sm leading-6 text-muted">{data.planDescription}</p>
                   ) : null}
                 </div>
-                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-700">
-                  <CheckCircle2 className="h-4 w-4" />
+                <span className="inline-flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
                   {data.status}
                 </span>
               </div>
 
               <dl className="mt-6 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <dt className="text-[11px] font-black uppercase tracking-widest text-muted">Renews</dt>
-                  <dd className="mt-1 text-sm font-bold text-navy">
+                <div className="rounded-xl border border-border/70 bg-background-light/60 p-4">
+                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">Renews</dt>
+                  <dd className="mt-1.5 text-sm font-semibold text-navy">
                     {formatOptionalDate(data.nextRenewal)}
                   </dd>
                 </div>
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <dt className="text-[11px] font-black uppercase tracking-widest text-muted">Tutor reviews</dt>
-                  <dd className="mt-1 text-sm font-bold text-navy">
+                <div className="rounded-xl border border-border/70 bg-background-light/60 p-4">
+                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">Tutor reviews</dt>
+                  <dd className="mt-1.5 text-sm font-semibold text-navy">
                     {supportedReviewSubtests.length > 0 ? supportedReviewSubtests.join(' + ') : 'Not included'}
                   </dd>
                 </div>
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <dt className="text-[11px] font-black uppercase tracking-widest text-muted">Invoice access</dt>
-                  <dd className="mt-1 text-sm font-bold text-navy">
+                <div className="rounded-xl border border-border/70 bg-background-light/60 p-4">
+                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">Invoice access</dt>
+                  <dd className="mt-1.5 text-sm font-semibold text-navy">
                     {invoiceDownloadsAvailable ? 'Downloads available' : 'Unavailable'}
                   </dd>
                 </div>
               </dl>
 
-              <div className="mt-6 flex flex-wrap gap-2">
-                <Button variant="outline" onClick={() => setActiveTab('plans')}>
+              <div className="mt-auto flex flex-wrap gap-2 pt-6">
+                <Button onClick={() => setActiveTab('plans')}>
                   Change plan
                 </Button>
                 <Button variant="outline" onClick={() => setActiveTab('credits')}>
@@ -500,25 +500,27 @@ export default function BillingPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+            <section className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-widest text-muted">Credit wallet</p>
-                  <h3 className="mt-2 text-3xl font-black text-navy">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Credit wallet</p>
+                  <h3 className="mt-2 text-4xl font-semibold tracking-tight text-navy tabular-nums">
                     {walletLoading ? '—' : (wallet?.balance ?? 0)}
                   </h3>
                   <p className="mt-1 text-sm text-muted">review credits available</p>
                 </div>
-                <div className="rounded-2xl bg-success/10 p-3 text-success">
+                <div className="rounded-xl bg-success/10 p-2.5 text-success">
                   <Wallet className="h-5 w-5" />
                 </div>
               </div>
               <p className="mt-4 text-sm leading-6 text-muted">
                 Credits unlock tutor review for Writing and Speaking. Reading and Listening stay AI-evaluated.
               </p>
-              <Button className="mt-4" fullWidth onClick={() => setActiveTab('credits')}>
-                Manage credits
-              </Button>
+              <div className="mt-auto pt-4">
+                <Button fullWidth onClick={() => setActiveTab('credits')}>
+                  Manage credits
+                </Button>
+              </div>
             </section>
           </div>
 
@@ -526,30 +528,33 @@ export default function BillingPage() {
           <div className="mt-6 grid gap-6 lg:grid-cols-2">
             <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-black uppercase tracking-widest text-muted">Recent invoices</h3>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Activity</p>
+                  <h3 className="mt-1 text-base font-semibold text-navy">Recent invoices</h3>
+                </div>
                 <button
                   type="button"
                   onClick={() => setActiveTab('invoices')}
-                  className="text-xs font-bold text-primary transition-colors hover:text-primary/80"
+                  className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
                 >
-                  View all
+                  View all →
                 </button>
               </div>
               {recentInvoices.length === 0 ? (
                 <p className="mt-4 text-sm text-muted">No invoices yet. They will appear after your first paid checkout.</p>
               ) : (
-                <ul className="mt-4 space-y-2">
+                <ul className="mt-4 divide-y divide-border/60">
                   {recentInvoices.map((invoice) => (
                     <li
                       key={invoice.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background-light px-4 py-3"
+                      className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="rounded-lg bg-surface p-2 text-muted">
+                        <div className="rounded-lg bg-background-light p-2 text-muted">
                           <FileText className="h-4 w-4" />
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-navy">
+                          <p className="text-sm font-semibold text-navy">
                             {new Date(invoice.date).toLocaleDateString()}
                           </p>
                           <p className="text-[11px] text-muted">
@@ -557,7 +562,8 @@ export default function BillingPage() {
                           </p>
                         </div>
                       </div>
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
                         {invoice.status}
                       </span>
                     </li>
@@ -568,13 +574,16 @@ export default function BillingPage() {
 
             <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-black uppercase tracking-widest text-muted">Recent credit activity</h3>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Activity</p>
+                  <h3 className="mt-1 text-base font-semibold text-navy">Recent credit activity</h3>
+                </div>
                 <button
                   type="button"
                   onClick={() => setActiveTab('credits')}
-                  className="text-xs font-bold text-primary transition-colors hover:text-primary/80"
+                  className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
                 >
-                  View all
+                  View all →
                 </button>
               </div>
               {walletLoading ? (
@@ -589,15 +598,15 @@ export default function BillingPage() {
                   <p className="text-sm text-muted">No credit activity yet.</p>
                 </div>
               ) : (
-                <ul className="mt-4 space-y-2">
+                <ul className="mt-4 divide-y divide-border/60">
                   {recentTransactions.map((tx) => (
                     <li
                       key={tx.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background-light px-4 py-3"
+                      className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`rounded-lg p-1.5 ${tx.amount >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}
+                          className={`rounded-lg p-1.5 ${tx.amount >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}
                         >
                           {tx.amount >= 0 ? (
                             <ArrowDownCircle className="h-4 w-4" />
@@ -613,7 +622,7 @@ export default function BillingPage() {
                         </div>
                       </div>
                       <p
-                        className={`text-sm font-bold ${tx.amount >= 0 ? 'text-success' : 'text-danger'}`}
+                        className={`text-sm font-semibold tabular-nums ${tx.amount >= 0 ? 'text-success' : 'text-danger'}`}
                       >
                         {tx.amount >= 0 ? '+' : ''}
                         {tx.amount}
@@ -658,13 +667,14 @@ export default function BillingPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-[11px] font-black uppercase tracking-widest text-muted">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
                           {plan.tier}
                         </p>
-                        <h3 className="mt-1 text-xl font-black text-navy">{plan.label}</h3>
+                        <h3 className="mt-1 text-xl font-semibold tracking-tight text-navy">{plan.label}</h3>
                       </div>
                       {isCurrent ? (
-                        <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
                           Current
                         </span>
                       ) : plan.changeDirection === 'upgrade' ? (
@@ -676,10 +686,10 @@ export default function BillingPage() {
 
                     <p className="mt-3 text-sm leading-6 text-muted">{plan.description}</p>
 
-                    <div className="mt-5 rounded-xl border border-border bg-background-light p-4">
-                      <p className="text-2xl font-black text-navy">
+                    <div className="mt-5 rounded-xl border border-border/70 bg-background-light/60 p-4">
+                      <p className="text-2xl font-semibold tracking-tight text-navy">
                         {plan.price}
-                        <span className="ml-1 text-sm font-semibold text-muted">/ {plan.interval}</span>
+                        <span className="ml-1 text-sm font-medium text-muted">/ {plan.interval}</span>
                       </p>
                       <p className="mt-1 text-sm text-muted">
                         {plan.reviewCredits} review credits included
@@ -734,7 +744,7 @@ export default function BillingPage() {
                         </Button>
                         {isPreviewing ? (
                           <div className="rounded-xl border border-border bg-background-light p-4 text-sm text-muted">
-                            <p className="font-bold text-navy">{preview.summary}</p>
+                            <p className="font-semibold text-navy">{preview.summary}</p>
                             <p className="mt-2">Prorated: {preview.proratedAmount}</p>
                             <p className="mt-1">
                               Effective {new Date(preview.effectiveAt).toLocaleDateString()}
@@ -762,7 +772,7 @@ export default function BillingPage() {
                         ) : null}
                       </div>
                     ) : (
-                      <div className="mt-5 rounded-xl border border-dashed border-border bg-background-light/60 px-4 py-3 text-center text-xs font-bold uppercase tracking-widest text-muted">
+                      <div className="mt-5 rounded-xl border border-dashed border-border bg-background-light/50 px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-muted">
                         Active plan
                       </div>
                     )}
@@ -786,14 +796,14 @@ export default function BillingPage() {
               />
 
               <div className="mb-5 flex items-center gap-3">
-                <p className="text-[11px] font-black uppercase tracking-widest text-muted">Pay with</p>
+                <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">Pay with</p>
                 <div className="inline-flex rounded-xl border border-border bg-background-light p-1">
                   {(['stripe', 'paypal'] as const).map((gw) => (
                     <button
                       key={gw}
                       type="button"
                       onClick={() => setSelectedGateway(gw)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
                         selectedGateway === gw
                           ? 'bg-emerald-700 text-white shadow-sm'
                           : 'text-navy hover:bg-surface'
@@ -832,26 +842,26 @@ export default function BillingPage() {
                       }`}
                     >
                       {tier.isPopular ? (
-                        <span className="absolute -top-2 right-3 rounded-full bg-emerald-700 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white">
+                        <span className="absolute -top-2 right-3 rounded-full bg-emerald-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-white">
                           Popular
                         </span>
                       ) : null}
-                      <p className="text-lg font-black text-navy">
+                      <p className="text-lg font-semibold tracking-tight text-navy">
                         {formatCurrency(tier.amount, walletCurrency)}
                       </p>
                       <p className="text-xs text-muted">
                         {tier.credits} credits
                         {tier.bonus > 0 ? (
-                          <span className="ml-1 font-bold text-emerald-700">+{tier.bonus} bonus</span>
+                          <span className="ml-1 font-semibold text-emerald-700">+{tier.bonus} bonus</span>
                         ) : null}
                       </p>
                       {tier.label ? (
-                        <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-muted">
+                        <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.1em] text-muted/80">
                           {tier.label}
                         </p>
                       ) : null}
                       {busyKey === `topup:${tier.amount}` ? (
-                        <p className="mt-2 text-xs font-bold text-emerald-700">Processing…</p>
+                        <p className="mt-2 text-xs font-medium text-emerald-700">Processing…</p>
                       ) : null}
                     </motion.button>
                   ))
@@ -879,14 +889,14 @@ export default function BillingPage() {
               />
               {activeAddOns.length > 0 ? (
                 <div className="mb-4 rounded-2xl border border-primary/15 bg-primary/5 p-4">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-primary">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary">
                     Active on this account
                   </p>
                   <ul className="mt-2 space-y-1">
                     {activeAddOns.map((addOn) => (
                       <li key={addOn.id} className="flex items-center justify-between text-sm">
-                        <span className="font-bold text-navy">{addOn.name}</span>
-                        <span className="text-xs font-bold uppercase tracking-widest text-primary">
+                        <span className="font-semibold text-navy">{addOn.name}</span>
+                        <span className="text-xs font-medium text-primary tabular-nums">
                           ×{addOn.quantity}
                         </span>
                       </li>
@@ -908,26 +918,26 @@ export default function BillingPage() {
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="text-[11px] font-black uppercase tracking-widest text-muted">
+                            <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">
                               {addOn.productType.replace(/_/g, ' ')}
                             </p>
-                            <h3 className="mt-1 text-base font-black text-navy">{addOn.name}</h3>
+                            <h3 className="mt-1 text-base font-semibold tracking-tight text-navy">{addOn.name}</h3>
                             <p className="mt-2 text-sm text-muted">{addOn.description}</p>
-                            <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-black uppercase tracking-widest text-muted">
-                              <span className="rounded-full bg-background-light px-2.5 py-1">
+                            <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-medium text-muted">
+                              <span className="rounded-full border border-border/60 px-2.5 py-0.5">
                                 {addOn.quantity} credits
                               </span>
-                              <span className="rounded-full bg-background-light px-2.5 py-1">
+                              <span className="rounded-full border border-border/60 px-2.5 py-0.5">
                                 {addOn.interval}
                               </span>
                               {addOn.isRecurring ? (
-                                <span className="rounded-full bg-background-light px-2.5 py-1">
+                                <span className="rounded-full border border-border/60 px-2.5 py-0.5">
                                   Recurring
                                 </span>
                               ) : null}
                             </div>
                           </div>
-                          <div className="rounded-xl bg-background-light px-3 py-2 text-sm font-black text-navy">
+                          <div className="rounded-xl bg-background-light px-3 py-2 text-sm font-semibold tabular-nums text-navy">
                             {addOn.price}
                           </div>
                         </div>
@@ -961,13 +971,14 @@ export default function BillingPage() {
           {/* Full transaction history */}
           <section className="mt-6 rounded-2xl border border-border bg-surface p-6 shadow-sm">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-black uppercase tracking-widest text-muted">
-                Wallet transaction history
-              </h3>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Wallet</p>
+                <h3 className="mt-1 text-base font-semibold text-navy">Transaction history</h3>
+              </div>
               <button
                 type="button"
                 onClick={() => loadWallet()}
-                className="text-xs font-bold text-primary transition-colors hover:text-primary/80"
+                className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
               >
                 Refresh
               </button>
@@ -987,15 +998,15 @@ export default function BillingPage() {
               </div>
             ) : (
               <div className="mt-4 max-h-[420px] overflow-y-auto pr-1">
-                <ul className="space-y-2">
+                <ul className="divide-y divide-border/60">
                   {wallet.transactions.map((tx) => (
                     <li
                       key={tx.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background-light px-4 py-3"
+                      className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`rounded-lg p-1.5 ${tx.amount >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}
+                          className={`rounded-lg p-1.5 ${tx.amount >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}
                         >
                           {tx.amount >= 0 ? (
                             <ArrowDownCircle className="h-4 w-4" />
@@ -1012,12 +1023,12 @@ export default function BillingPage() {
                       </div>
                       <div className="text-right">
                         <p
-                          className={`text-sm font-bold ${tx.amount >= 0 ? 'text-success' : 'text-danger'}`}
+                          className={`text-sm font-semibold tabular-nums ${tx.amount >= 0 ? 'text-success' : 'text-danger'}`}
                         >
                           {tx.amount >= 0 ? '+' : ''}
                           {tx.amount}
                         </p>
-                        <p className="text-[11px] text-muted">bal: {tx.balanceAfter}</p>
+                        <p className="text-[11px] text-muted tabular-nums">bal: {tx.balanceAfter}</p>
                       </div>
                     </li>
                   ))}
@@ -1044,7 +1055,7 @@ export default function BillingPage() {
                 </p>
               </div>
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className="divide-y divide-border/60">
                 {invoices.map((invoice) => (
                   <li
                     key={invoice.id}
@@ -1055,7 +1066,7 @@ export default function BillingPage() {
                         <FileText className="h-5 w-5" />
                       </div>
                       <div>
-                        <p className="text-sm font-black text-navy">
+                        <p className="text-sm font-semibold text-navy">
                           {new Date(invoice.date).toLocaleDateString()}
                         </p>
                         <p className="text-sm text-muted">
@@ -1064,7 +1075,8 @@ export default function BillingPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-700">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
                         {invoice.status}
                       </span>
                       <Button
