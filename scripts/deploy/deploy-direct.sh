@@ -152,6 +152,17 @@ current_sha=$(git rev-parse HEAD)
 } > .deploy/previous-good.env
 echo "ACTIVE_SLOT=$target_slot" > .deploy/active-slot.env
 
+# --- Stop previous slot to prevent chunk-hash mismatch ---
+# Each Next.js build produces unique content-hashed chunk filenames in .next/static/chunks/.
+# If both slots stay running, any request to the router that ends up at the wrong slot
+# (e.g. due to NPM upstream config or DNS caching) returns 404 for chunks compiled in the
+# other slot, which renders the page blank in the browser. Stop the inactive slot to
+# guarantee all /_next/static/* requests resolve to the active build.
+if [ -n "$previous_slot" ] && [ "$previous_slot" != "$target_slot" ]; then
+  echo "--- Stopping previous slot ($previous_slot) to prevent static-chunk mismatch ---"
+  docker stop "oet-web-$previous_slot" "oet-api-$previous_slot" 2>/dev/null || true
+fi
+
 echo ""
 echo "=== DIRECT_DEPLOY_DONE: $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 echo "  SHA: $current_sha"
