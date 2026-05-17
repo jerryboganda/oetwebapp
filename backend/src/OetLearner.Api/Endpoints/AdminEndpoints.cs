@@ -1135,6 +1135,7 @@ public static class AdminEndpoints
                     merged.RealtimeSttEnabled,
                     merged.RealtimeAsrProvider,
                     merged.RealtimeSttAllowRealProvider,
+                    merged.RealtimeSttRealProviderProductionAuthorized,
                     merged.RealtimeSttFallbackToBatch,
                     merged.RealtimeSttProviderConnectTimeoutSeconds,
                     merged.RealtimeSttMaxChunkBytes,
@@ -1224,6 +1225,7 @@ public static class AdminEndpoints
                 if (request.RealtimeSttEnabled.HasValue) row.RealtimeSttEnabled = request.RealtimeSttEnabled;
                 if (request.RealtimeAsrProvider is not null) row.RealtimeAsrProvider = NormalizeRealtimeAsrProvider(request.RealtimeAsrProvider);
                 if (request.RealtimeSttAllowRealProvider.HasValue) row.RealtimeSttAllowRealProvider = request.RealtimeSttAllowRealProvider;
+                if (request.RealtimeSttRealProviderProductionAuthorized.HasValue) row.RealtimeSttRealProviderProductionAuthorized = request.RealtimeSttRealProviderProductionAuthorized;
                 if (request.RealtimeSttFallbackToBatch.HasValue) row.RealtimeSttFallbackToBatch = request.RealtimeSttFallbackToBatch;
                 if (request.RealtimeSttProviderConnectTimeoutSeconds.HasValue) row.RealtimeSttProviderConnectTimeoutSeconds = request.RealtimeSttProviderConnectTimeoutSeconds;
                 if (request.RealtimeSttMaxChunkBytes.HasValue) row.RealtimeSttMaxChunkBytes = request.RealtimeSttMaxChunkBytes;
@@ -1297,6 +1299,7 @@ public static class AdminEndpoints
                         row.RealtimeSttEnabled,
                         row.RealtimeAsrProvider,
                         row.RealtimeSttAllowRealProvider,
+                        row.RealtimeSttRealProviderProductionAuthorized,
                         row.RealtimeSttFallbackToBatch,
                         row.RealtimeSttProviderConnectTimeoutSeconds,
                         row.RealtimeSttMaxChunkBytes,
@@ -1320,7 +1323,7 @@ public static class AdminEndpoints
                 return Results.Ok(new { ok = true, updatedAt = now });
             })
             .RequireRateLimiting("PerUserWrite")
-            .WithAdminRead("AdminContentWrite");
+            .WithAdminWrite("AdminAiConfig");
 
         // Admin sessions / evaluations operational viewer
         admin.MapGet("/conversation/sessions", async (

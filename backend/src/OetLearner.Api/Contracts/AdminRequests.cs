@@ -669,6 +669,7 @@ public record AdminConversationSettingsRequest(
     bool? RealtimeSttEnabled,
     string? RealtimeAsrProvider,
     bool? RealtimeSttAllowRealProvider,
+    bool? RealtimeSttRealProviderProductionAuthorized,
     bool? RealtimeSttFallbackToBatch,
     int? RealtimeSttProviderConnectTimeoutSeconds,
     int? RealtimeSttMaxChunkBytes,

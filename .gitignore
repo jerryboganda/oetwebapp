@@ -43,6 +43,9 @@ tsconfig.tsbuildinfo
 !.env.example
 !.env.staging.example
 
+# Copilot worktrees (nested git repos — never track these)
+copilot-worktrees/
+
 # Local/temp artifacts
 .local-deploy/
 .opencode/*.tmp

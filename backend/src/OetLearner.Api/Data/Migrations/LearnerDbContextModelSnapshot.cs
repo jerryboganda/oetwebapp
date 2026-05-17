@@ -4091,6 +4091,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<bool?>("RealtimeSttFallbackToBatch")
                         .HasColumnType("boolean");
 
+                    b.Property<bool?>("RealtimeSttRealProviderProductionAuthorized")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("RealtimeSttMaxAudioSecondsPerSession")
                         .HasColumnType("integer");
 

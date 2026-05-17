@@ -234,6 +234,81 @@ const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
     // models:read) and verify before flipping live.
     isActive: false,
   },
+  'elevenlabs-stt': {
+    code: 'elevenlabs-stt',
+    name: 'ElevenLabs Scribe realtime STT',
+    dialect: 'ElevenLabsStt',
+    category: 'Asr',
+    baseUrl: 'https://api.elevenlabs.io/v1',
+    defaultModel: 'scribe_v2_realtime',
+    pricePer1kPromptTokens: 0,
+    pricePer1kCompletionTokens: 0,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 10,
+    isActive: true,
+  },
+  'elevenlabs-tts': {
+    code: 'elevenlabs-tts',
+    name: 'ElevenLabs TTS',
+    dialect: 'ElevenLabsTts',
+    category: 'Tts',
+    baseUrl: 'https://api.elevenlabs.io/v1',
+    defaultModel: 'eleven_multilingual_v2',
+    pricePer1kPromptTokens: 0,
+    pricePer1kCompletionTokens: 0,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 20,
+    isActive: true,
+  },
+  'azure-speech-asr': {
+    code: 'azure-asr',
+    name: 'Azure Speech ASR',
+    dialect: 'AzureAsr',
+    category: 'Asr',
+    baseUrl: 'https://uksouth.stt.speech.microsoft.com',
+    defaultModel: 'en-GB',
+    pricePer1kPromptTokens: 0,
+    pricePer1kCompletionTokens: 0,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 30,
+    isActive: true,
+  },
+  'azure-speech-tts': {
+    code: 'azure-tts',
+    name: 'Azure Speech TTS',
+    dialect: 'AzureTts',
+    category: 'Tts',
+    baseUrl: 'https://uksouth.tts.speech.microsoft.com',
+    defaultModel: 'en-GB-SoniaNeural',
+    pricePer1kPromptTokens: 0,
+    pricePer1kCompletionTokens: 0,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 40,
+    isActive: true,
+  },
+  'whisper-asr': {
+    code: 'whisper-asr',
+    name: 'Whisper ASR',
+    dialect: 'WhisperAsr',
+    category: 'Asr',
+    baseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'whisper-1',
+    pricePer1kPromptTokens: 0,
+    pricePer1kCompletionTokens: 0,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 50,
+    isActive: true,
+  },
 };
 
 export default function AiProvidersPage() {
@@ -295,6 +370,7 @@ export default function AiProvidersPage() {
             code: preset.code ?? prev.code,
             name: preset.name ?? prev.name,
             dialect: (preset.dialect as AiProviderRow['dialect']) ?? prev.dialect,
+            category: (preset.category as AiProviderRow['category']) ?? prev.category,
             baseUrl: preset.baseUrl ?? prev.baseUrl,
             defaultModel: preset.defaultModel ?? prev.defaultModel,
             pricePer1kPromptTokens: preset.pricePer1kPromptTokens ?? prev.pricePer1kPromptTokens,
@@ -330,16 +406,25 @@ export default function AiProvidersPage() {
         : <span className="text-xs text-muted">—</span>,
     },
     {
-      key: 'acts', header: 'Actions', render: (p) => (
-        <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" size="sm" onClick={() => { setEditing({ ...p, apiKey: '' }); setCreating(false); }}>Edit</Button>
-          <Button variant="ghost" size="sm" onClick={() => setAccountsFor(p)}>Accounts</Button>
-          <Button variant="ghost" size="sm" disabled={testingCode === p.code} onClick={() => void runTest(p.code)}>
-            {testingCode === p.code ? 'Testing…' : 'Test'}
-          </Button>
-          {p.isActive && <Button variant="ghost" size="sm" onClick={() => void deactivate(p.id)}>Deactivate</Button>}
-        </div>
-      ),
+      key: 'acts', header: 'Actions', render: (p) => {
+        const canRunGenericTest = p.category === 'TextChat';
+        return (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" size="sm" onClick={() => { setEditing({ ...p, apiKey: '' }); setCreating(false); }}>Edit</Button>
+            <Button variant="ghost" size="sm" onClick={() => setAccountsFor(p)}>Accounts</Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={testingCode === p.code || !canRunGenericTest}
+              onClick={() => void runTest(p.code)}
+              title={canRunGenericTest ? 'Run provider test' : 'Voice providers are verified from their feature surfaces'}
+            >
+              {testingCode === p.code ? 'Testing…' : 'Test'}
+            </Button>
+            {p.isActive && <Button variant="ghost" size="sm" onClick={() => void deactivate(p.id)}>Deactivate</Button>}
+          </div>
+        );
+      },
     },
   ];
 
@@ -436,6 +521,7 @@ export default function AiProvidersPage() {
                   { value: 'AzureAsr', label: 'Azure Speech — ASR' },
                   { value: 'WhisperAsr', label: 'Whisper — ASR' },
                   { value: 'AzurePhoneme', label: 'Azure Pronunciation Assessment' },
+                  { value: 'ElevenLabsStt', label: 'ElevenLabs — STT' },
                   { value: 'Mock', label: 'Mock (dev only)' },
                 ]} />
               <Select label="Category" value={editing.category}

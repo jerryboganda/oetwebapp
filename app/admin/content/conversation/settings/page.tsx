@@ -32,6 +32,7 @@ type Settings = {
   realtimeSttEnabled?: boolean;
   realtimeAsrProvider?: string;
   realtimeSttAllowRealProvider?: boolean;
+  realtimeSttRealProviderProductionAuthorized?: boolean;
   realtimeSttFallbackToBatch?: boolean;
   realtimeSttProviderConnectTimeoutSeconds?: number;
   realtimeSttMaxChunkBytes?: number;
@@ -115,7 +116,44 @@ export default function AdminConversationSettingsPage() {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
   function setSecret(key: string, value: string) {
-    setDraft((prev) => ({ ...prev, [key]: value }));
+    setDraft((prev) => {
+      const next = { ...prev };
+      if (value.length === 0) delete next[key];
+      else next[key] = value;
+      return next;
+    });
+  }
+
+  function applyElevenLabsRealtimeDefaults() {
+    setDraft((prev) => ({
+      ...prev,
+      realtimeSttEnabled: true,
+      realtimeAsrProvider: 'elevenlabs-stt',
+      realtimeSttAllowRealProvider: true,
+      realtimeSttFallbackToBatch: true,
+      realtimeSttProviderConnectTimeoutSeconds: 10,
+      realtimeSttMaxChunkBytes: 32768,
+      realtimeSttPartialMinIntervalMs: 250,
+      realtimeSttTurnIdleTimeoutSeconds: 30,
+      realtimeSttMaxConcurrentStreamsPerUser: 1,
+      realtimeSttMaxAudioSecondsPerSession: 900,
+      realtimeSttDailyAudioSecondsPerUser: 1800,
+      realtimeSttMonthlyBudgetCapUsd: 25,
+      realtimeSttEstimatedCostUsdPerMinute: 0.005,
+      realtimeSttProviderSessionTopology: 'single-instance',
+      realtimeSttRegionId: 'uk-prod-1',
+      realtimeSttAssumeLearnersAdult: true,
+      realtimeSttAllowManagedLearnerRealProvider: true,
+      realtimeSttConsentVersion: 'realtime-stt-v1-2026-05-14',
+      realtimeSttRollbackMode: 'fallback-only',
+      elevenLabsSttBaseUrl: 'https://api.elevenlabs.io/v1',
+      elevenLabsSttModel: 'scribe_v2_realtime',
+      elevenLabsSttLanguage: 'auto',
+      elevenLabsSttAudioFormat: 'pcm_16000',
+      elevenLabsSttCommitStrategy: 'manual',
+      elevenLabsSttEnableProviderLogging: false,
+      elevenLabsSttTokenTtlSeconds: 900,
+    }));
   }
 
   async function handleSave() {
@@ -274,6 +312,14 @@ export default function AdminConversationSettingsPage() {
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>ElevenLabs realtime STT uses the backend-held encrypted key only. Keep fallback enabled until protected live smoke passes for the selected audio strategy and audience.</span>
                 </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={applyElevenLabsRealtimeDefaults}>
+                    Apply ElevenLabs realtime defaults
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => router.push('/admin/ai-providers')}>
+                    Open provider keys
+                  </Button>
+                </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <label className="flex items-center gap-2 text-sm">
                     <input
@@ -311,6 +357,14 @@ export default function AdminConversationSettingsPage() {
                       onChange={(e) => setField('realtimeSttAllowRealProvider', e.target.checked)}
                     />
                     Allow paid realtime provider
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(v('realtimeSttRealProviderProductionAuthorized') ?? false)}
+                      onChange={(e) => setField('realtimeSttRealProviderProductionAuthorized', e.target.checked)}
+                    />
+                    Production authorization confirmed
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <input

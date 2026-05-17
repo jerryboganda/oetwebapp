@@ -97,6 +97,7 @@ public sealed class ConversationOptionsProvider(
         if (r.RealtimeSttEnabled.HasValue) o.RealtimeSttEnabled = r.RealtimeSttEnabled.Value;
         if (!string.IsNullOrWhiteSpace(r.RealtimeAsrProvider)) o.RealtimeAsrProvider = r.RealtimeAsrProvider;
         if (r.RealtimeSttAllowRealProvider.HasValue) o.RealtimeSttAllowRealProvider = r.RealtimeSttAllowRealProvider.Value;
+        if (r.RealtimeSttRealProviderProductionAuthorized.HasValue) o.RealtimeSttRealProviderProductionAuthorized = r.RealtimeSttRealProviderProductionAuthorized.Value;
         if (r.RealtimeSttFallbackToBatch.HasValue) o.RealtimeSttFallbackToBatch = r.RealtimeSttFallbackToBatch.Value;
         if (r.RealtimeSttProviderConnectTimeoutSeconds.HasValue && r.RealtimeSttProviderConnectTimeoutSeconds.Value > 0) o.RealtimeSttProviderConnectTimeoutSeconds = r.RealtimeSttProviderConnectTimeoutSeconds.Value;
         if (r.RealtimeSttMaxChunkBytes.HasValue && r.RealtimeSttMaxChunkBytes.Value > 0) o.RealtimeSttMaxChunkBytes = r.RealtimeSttMaxChunkBytes.Value;

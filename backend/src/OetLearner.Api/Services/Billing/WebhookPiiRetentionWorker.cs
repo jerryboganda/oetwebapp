@@ -117,7 +117,7 @@ public sealed class WebhookPiiRetentionWorker(
 
         // Relational set-based update.
         return await db.PaymentWebhookEvents
-            .Where(e => e.ReceivedAt < cutoff && e.PayloadJson != "{}" && e.PayloadJson != string.Empty)
+            .Where(e => e.ReceivedAt < cutoff && e.PayloadJson != "{}")
             .OrderBy(e => e.ReceivedAt)
             .Take(batch)
             .ExecuteUpdateAsync(s => s

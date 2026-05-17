@@ -46,6 +46,7 @@ public class ConversationSettingsRow
     public bool? RealtimeSttEnabled { get; set; }
     [MaxLength(64)] public string? RealtimeAsrProvider { get; set; }
     public bool? RealtimeSttAllowRealProvider { get; set; }
+    public bool? RealtimeSttRealProviderProductionAuthorized { get; set; }
     public bool? RealtimeSttFallbackToBatch { get; set; }
     public int? RealtimeSttProviderConnectTimeoutSeconds { get; set; }
     public int? RealtimeSttMaxChunkBytes { get; set; }
