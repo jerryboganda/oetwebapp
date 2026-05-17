@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
-import { fetchStudyPlanDrift } from '@/lib/api';
+import { fetchStudyPlanDrift, regenerateStudyPlan } from '@/lib/api';
 
 interface DriftData {
   hasPlan: boolean;
@@ -40,11 +40,33 @@ const DRIFT_COLOR: Record<string, string> = {
 export default function StudyPlanDriftPage() {
   const [data, setData] = useState<DriftData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenError, setRegenError] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    fetchStudyPlanDrift().then((d) => setData(d as DriftData)).catch(() => {}).finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     analytics.track('study_plan_drift_viewed');
-    fetchStudyPlanDrift().then((d) => setData(d as DriftData)).catch(() => {}).finally(() => setLoading(false));
+    load();
   }, []);
+
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    setRegenError(null);
+    try {
+      analytics.track('study_plan_regenerate_clicked');
+      await regenerateStudyPlan();
+      load();
+    } catch (e: unknown) {
+      const err = e as { userMessage?: string; message?: string };
+      setRegenError(err.userMessage ?? err.message ?? 'Could not regenerate plan.');
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   return (
     <LearnerDashboardShell>
@@ -71,7 +93,12 @@ export default function StudyPlanDriftPage() {
                       <span className="text-sm">Progress: <strong>{data.drift.actualCompleted}/{data.drift.totalItems}</strong></span>
                     </div>
                     {data.drift.shouldRegenerate && (
-                      <Button variant="primary" size="sm" className="mt-3"><RefreshCw className="w-4 h-4 mr-1" /> Regenerate Plan</Button>
+                      <>
+                        <Button variant="primary" size="sm" className="mt-3" onClick={handleRegenerate} disabled={regenerating}>
+                          <RefreshCw className={`w-4 h-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} /> {regenerating ? 'Regenerating…' : 'Regenerate Plan'}
+                        </Button>
+                        {regenError && <p className="mt-2 text-xs text-danger">{regenError}</p>}
+                      </>
                     )}
                   </div>
                 </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { MotionItem } from '@/components/ui/motion-primitives';
-import { GraduationCap, Calendar, Star, Plus } from 'lucide-react';
+import { GraduationCap, Calendar, Star } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -56,20 +56,11 @@ export default function TutoringPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="flex items-center justify-between mb-6">
-        <LearnerPageHero
-          title="Tutoring Sessions"
-          description="Book 1-on-1 sessions with OET expert tutors"
-          icon={GraduationCap}
-        />
-        <button
-          disabled
-          title="Booking reopens after tutor discovery and canonical pricing are configured."
-          className="flex items-center gap-2 px-4 py-2 bg-muted text-muted-foreground rounded-xl text-sm font-medium opacity-70"
-        >
-          <Plus className="w-4 h-4" /> Booking paused
-        </button>
-      </div>
+      <LearnerPageHero
+        title="Tutoring Sessions"
+        description="Book 1-on-1 sessions with OET expert tutors"
+        icon={GraduationCap}
+      />
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
       <InlineAlert variant="info" title="Booking temporarily paused" className="mb-4">

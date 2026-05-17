@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Mic, Activity, CalendarClock, Lock } from 'lucide-react';
+import { Mic } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
@@ -69,24 +69,6 @@ export default function PronunciationPage() {
           {entitlement.resetAt ? ` on ${new Date(entitlement.resetAt).toLocaleDateString()}` : ' at the next billing window'}.
         </InlineAlert>
       )}
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="p-4">
-          <Activity className="mb-3 h-5 w-5 text-primary" />
-          <p className="text-sm font-bold text-navy">Rulebook-grounded scoring</p>
-          <p className="mt-1 text-xs leading-5 text-muted">Attempts are scored by the server-authoritative pronunciation pipeline.</p>
-        </Card>
-        <Card className="p-4">
-          <CalendarClock className="mb-3 h-5 w-5 text-primary" />
-          <p className="text-sm font-bold text-navy">Due drills first</p>
-          <p className="mt-1 text-xs leading-5 text-muted">Your queue prioritises phonemes that need spaced-repetition practice.</p>
-        </Card>
-        <Card className="p-4">
-          <Lock className="mb-3 h-5 w-5 text-primary" />
-          <p className="text-sm font-bold text-navy">Protected audio</p>
-          <p className="mt-1 text-xs leading-5 text-muted">Audio uploads stay behind authenticated learner endpoints.</p>
-        </Card>
-      </div>
 
       <section className="mt-6">
         <LearnerSurfaceSectionHeader title="Due pronunciation drills" />
