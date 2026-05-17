@@ -460,7 +460,7 @@ export default function BillingPage() {
                     <p className="mt-3 max-w-md text-sm leading-6 text-muted">{data.planDescription}</p>
                   ) : null}
                 </div>
-                <span className="inline-flex items-center gap-2 text-[13px] font-bold text-green-800 dark:text-green-300">
+                <span className="inline-flex items-center gap-2 text-sm font-extrabold text-green-900 dark:text-green-200">
                   <span className="h-1.5 w-1.5 rounded-full bg-green-700" aria-hidden="true" />
                   {data.status}
                 </span>
@@ -562,7 +562,7 @@ export default function BillingPage() {
                           </p>
                         </div>
                       </div>
-                      <span className="inline-flex items-center gap-1.5 text-[13px] font-bold text-green-800 dark:text-green-300">
+                      <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-green-900 dark:text-green-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-green-700" aria-hidden="true" />
                         {invoice.status}
                       </span>
@@ -1075,7 +1075,7 @@ export default function BillingPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="inline-flex items-center gap-1.5 text-[13px] font-bold text-green-800 dark:text-green-300">
+                      <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-green-900 dark:text-green-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-green-700" aria-hidden="true" />
                         {invoice.status}
                       </span>
