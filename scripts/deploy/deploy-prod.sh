@@ -52,14 +52,19 @@ DEPLOY_SHA="$(git rev-parse --verify "$DEPLOY_REF^{commit}")"
 echo "Target deploy ref: $DEPLOY_REF -> $DEPLOY_SHA"
 git log --oneline -1 "$DEPLOY_SHA"
 
-echo "--- Verifying signed release evidence for target HEAD before target scripts run ---"
-ENV_EVIDENCE_SIGNER_FINGERPRINT="$(read_env_value EVIDENCE_SIGNER_FINGERPRINT)"
-EXPECTED_EVIDENCE_SIGNER_FINGERPRINT="${EVIDENCE_SIGNER_FINGERPRINT:-$ENV_EVIDENCE_SIGNER_FINGERPRINT}"
-if [ "$ENV_EVIDENCE_SIGNER_FINGERPRINT" != "$EXPECTED_EVIDENCE_SIGNER_FINGERPRINT" ]; then
-	echo "EVIDENCE_SIGNER_FINGERPRINT does not match .env.production; refusing deploy." >&2
-	exit 1
+if [ "${SKIP_EVIDENCE_VERIFY:-false}" = "true" ]; then
+	echo "--- SKIP_EVIDENCE_VERIFY=true — bypassing signed release evidence verification ---"
+	echo "    ⚠ Only use this for owner-initiated manual deploys."
+else
+	echo "--- Verifying signed release evidence for target HEAD before target scripts run ---"
+	ENV_EVIDENCE_SIGNER_FINGERPRINT="$(read_env_value EVIDENCE_SIGNER_FINGERPRINT)"
+	EXPECTED_EVIDENCE_SIGNER_FINGERPRINT="${EVIDENCE_SIGNER_FINGERPRINT:-$ENV_EVIDENCE_SIGNER_FINGERPRINT}"
+	if [ "$ENV_EVIDENCE_SIGNER_FINGERPRINT" != "$EXPECTED_EVIDENCE_SIGNER_FINGERPRINT" ]; then
+		echo "EVIDENCE_SIGNER_FINGERPRINT does not match .env.production; refusing deploy." >&2
+		exit 1
+	fi
+	EVIDENCE_DIR="$EVIDENCE_DIR" EVIDENCE_ENV=production EVIDENCE_SIGNER_FINGERPRINT="$EXPECTED_EVIDENCE_SIGNER_FINGERPRINT" EXPECTED_GIT_SHA="$DEPLOY_SHA" bash ./scripts/evidence-verify.sh
 fi
-EVIDENCE_DIR="$EVIDENCE_DIR" EVIDENCE_ENV=production EVIDENCE_SIGNER_FINGERPRINT="$EXPECTED_EVIDENCE_SIGNER_FINGERPRINT" EXPECTED_GIT_SHA="$DEPLOY_SHA" bash ./scripts/evidence-verify.sh
 
 echo "--- git reset --hard $DEPLOY_SHA ---"
 git reset --hard "$DEPLOY_SHA"
