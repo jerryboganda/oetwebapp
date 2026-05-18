@@ -50,6 +50,42 @@ describe('ApiError', () => {
   });
 });
 
+describe('mobile push token API helper', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    document.cookie = 'oet_csrf=; Max-Age=0; path=/';
+    vi.resetModules();
+  });
+
+  it('registers native push tokens through the central API client', async () => {
+    const calls: Array<{ url: string; method: string; headers: Headers; body?: unknown }> = [];
+    document.cookie = 'oet_csrf=csrf-mobile';
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(input),
+        method: String(init?.method ?? 'GET'),
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+      });
+
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const { registerMobilePushToken } = await import('../api');
+    await registerMobilePushToken({ token: 'native-token', platform: 'ios' });
+
+    expect(calls[0].url).toContain('/v1/notifications/push-token');
+    expect(calls[0].method).toBe('POST');
+    expect(calls[0].headers.get('x-csrf-token')).toBe('csrf-mobile');
+    expect(calls[0].body).toEqual({ token: 'native-token', platform: 'ios' });
+  });
+});
+
 describe('learner route normalization', () => {
   const originalFetch = globalThis.fetch;
 

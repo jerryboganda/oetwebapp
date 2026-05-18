@@ -7,14 +7,10 @@ namespace OetLearner.Api.Services;
 public class SponsorService(LearnerDbContext db, ILogger<SponsorService> logger, TimeProvider clock)
 {
     /// <summary>
-    /// RW-013 — sponsor-attributable spend is computed from
-    /// <see cref="PaymentTransaction"/> rows belonging to learners who are
-    /// (or were) sponsored by this sponsor, restricted to the time window
-    /// during which the <see cref="Sponsorship"/> was active. We do not yet
-    /// have a direct sponsor-paid flag on <c>PaymentTransaction</c>, so this
-    /// is the most defensible heuristic until institutional billing lands:
-    /// any completed transaction by a linked learner inside the active
-    /// sponsorship window is counted as sponsor-attributable.
+    /// RW-013 — sponsor-attributable spend prefers explicit
+    /// <see cref="PaymentTransaction.SponsorshipId"/> attribution. Legacy rows
+    /// that predate payer attribution still fall back to the old active-window
+    /// heuristic so historical dashboards remain stable.
     /// </summary>
     private async Task<SponsorBillingSnapshot> ComputeBillingAsync(string sponsorUserId, CancellationToken ct)
     {
@@ -36,39 +32,47 @@ public class SponsorService(LearnerDbContext db, ILogger<SponsorService> logger,
             .Select(s => s.LearnerUserId!)
             .Distinct()
             .ToList();
+        var sponsorshipById = sponsorships.ToDictionary(s => s.Id);
 
-        // Pull only completed transactions for the linked learners. This is
-        // an over-fetch versus the per-sponsorship windows but lets us match
-        // window membership in memory below — typical sponsor cohorts are
-        // small, so the round-trip cost is bounded.
+        // Pull only completed transactions for the linked learners. Explicit
+        // payer attribution is evaluated first; rows with no payer fields keep
+        // the legacy active-window fallback for pre-attribution data only.
         var transactions = await db.PaymentTransactions
             .AsNoTracking()
             .Where(t => learnerIds.Contains(t.LearnerUserId) && t.Status == "completed")
             .ToListAsync(ct);
 
         var invoices = new List<SponsorInvoice>();
-        foreach (var sponsorship in sponsorships)
+        foreach (var tx in transactions)
         {
-            var windowEnd = sponsorship.RevokedAt ?? now;
-            foreach (var tx in transactions)
+            if (IsExplicitLearnerPaid(tx))
             {
+                continue;
+            }
+
+            if (tx.SponsorshipId is Guid explicitSponsorshipId)
+            {
+                if (IsSponsorPaid(tx)
+                    && sponsorshipById.TryGetValue(explicitSponsorshipId, out var explicitSponsorship)
+                    && string.Equals(tx.LearnerUserId, explicitSponsorship.LearnerUserId, StringComparison.Ordinal))
+                {
+                    invoices.Add(ToSponsorInvoice(tx, explicitSponsorship.Id, explicitSponsorship.LearnerEmail));
+                }
+                continue;
+            }
+
+            if (!IsLegacyAttributionCandidate(tx))
+            {
+                continue;
+            }
+
+            foreach (var sponsorship in sponsorships)
+            {
+                var windowEnd = sponsorship.RevokedAt ?? now;
                 if (tx.LearnerUserId != sponsorship.LearnerUserId) continue;
                 if (tx.CreatedAt < sponsorship.CreatedAt) continue;
                 if (tx.CreatedAt > windowEnd) continue;
-                invoices.Add(new SponsorInvoice(
-                    Id: tx.Id,
-                    SponsorshipId: sponsorship.Id,
-                    LearnerUserId: tx.LearnerUserId,
-                    LearnerEmail: sponsorship.LearnerEmail,
-                    Gateway: tx.Gateway,
-                    GatewayTransactionId: tx.GatewayTransactionId,
-                    TransactionType: tx.TransactionType,
-                    ProductType: tx.ProductType,
-                    ProductId: tx.ProductId,
-                    Amount: tx.Amount,
-                    Currency: tx.Currency,
-                    Status: tx.Status,
-                    CreatedAt: tx.CreatedAt));
+                invoices.Add(ToSponsorInvoice(tx, sponsorship.Id, sponsorship.LearnerEmail));
             }
         }
 
@@ -92,6 +96,31 @@ public class SponsorService(LearnerDbContext db, ILogger<SponsorService> logger,
 
         return new SponsorBillingSnapshot(totalSpend, currentMonthSpend, aggregateCurrency, orderedInvoices);
     }
+
+    private static bool IsExplicitLearnerPaid(PaymentTransaction tx)
+        => string.Equals(tx.PayerType, "learner", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSponsorPaid(PaymentTransaction tx)
+        => string.Equals(tx.PayerType, "sponsor", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLegacyAttributionCandidate(PaymentTransaction tx)
+        => tx.SponsorshipId is null && string.IsNullOrWhiteSpace(tx.PayerType);
+
+    private static SponsorInvoice ToSponsorInvoice(PaymentTransaction tx, Guid sponsorshipId, string learnerEmail)
+        => new(
+            Id: tx.Id,
+            SponsorshipId: sponsorshipId,
+            LearnerUserId: tx.LearnerUserId,
+            LearnerEmail: learnerEmail,
+            Gateway: tx.Gateway,
+            GatewayTransactionId: tx.GatewayTransactionId,
+            TransactionType: tx.TransactionType,
+            ProductType: tx.ProductType,
+            ProductId: tx.ProductId,
+            Amount: tx.Amount,
+            Currency: tx.Currency,
+            Status: tx.Status,
+            CreatedAt: tx.CreatedAt);
 
     public async Task<object> GetDashboardAsync(string sponsorUserId, CancellationToken ct)
     {

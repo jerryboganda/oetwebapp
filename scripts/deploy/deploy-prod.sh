@@ -54,7 +54,34 @@ git log --oneline -1 "$DEPLOY_SHA"
 
 if [ "${SKIP_EVIDENCE_VERIFY:-false}" = "true" ]; then
 	echo "--- SKIP_EVIDENCE_VERIFY=true — bypassing signed release evidence verification ---"
-	echo "    ⚠ Only use this for owner-initiated manual deploys."
+	if [ "${BREAK_GLASS_APPROVER:-}" != "Dr Faisal Maqsood" ]; then
+		echo "BREAK_GLASS_APPROVER must be Dr Faisal Maqsood when SKIP_EVIDENCE_VERIFY=true." >&2
+		exit 1
+	fi
+	if [ "${BREAK_GLASS_ACCEPT_RISK:-false}" != "true" ]; then
+		echo "BREAK_GLASS_ACCEPT_RISK=true is required when SKIP_EVIDENCE_VERIFY=true." >&2
+		exit 1
+	fi
+	for required_key in BREAK_GLASS_REASON BREAK_GLASS_BACKUP_ID BREAK_GLASS_ROLLBACK_REF; do
+		if [ -z "${!required_key:-}" ]; then
+			echo "$required_key is required when SKIP_EVIDENCE_VERIFY=true." >&2
+			exit 1
+		fi
+	done
+	case "$BREAK_GLASS_ROLLBACK_REF" in
+		*[!0-9a-fA-F]*)
+			echo "BREAK_GLASS_ROLLBACK_REF must be a full 40-character hexadecimal SHA." >&2
+			exit 1
+			;;
+	esac
+	if [ "${#BREAK_GLASS_ROLLBACK_REF}" -ne 40 ]; then
+		echo "BREAK_GLASS_ROLLBACK_REF must be a full 40-character SHA." >&2
+		exit 1
+	fi
+	echo "    Break-glass approver: $BREAK_GLASS_APPROVER"
+	echo "    Break-glass backup id: $BREAK_GLASS_BACKUP_ID"
+	echo "    Break-glass rollback ref: $BREAK_GLASS_ROLLBACK_REF"
+	echo "    Break-glass reason: $BREAK_GLASS_REASON"
 else
 	echo "--- Verifying signed release evidence for target HEAD before target scripts run ---"
 	ENV_EVIDENCE_SIGNER_FINGERPRINT="$(read_env_value EVIDENCE_SIGNER_FINGERPRINT)"

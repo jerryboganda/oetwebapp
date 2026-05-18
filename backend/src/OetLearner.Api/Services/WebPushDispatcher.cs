@@ -1,5 +1,4 @@
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 using WebPush;
 
 namespace OetLearner.Api.Services;
@@ -20,17 +19,24 @@ public interface IWebPushDispatcher
     Task SendAsync(OetLearner.Api.Domain.PushSubscription subscription, string payload, CancellationToken cancellationToken = default);
 }
 
-public sealed class WebPushDispatcher(IOptions<WebPushOptions> options) : IWebPushDispatcher
+public sealed class WebPushDispatcher(IRuntimeSettingsProvider runtimeSettings) : IWebPushDispatcher
 {
-    private readonly WebPushOptions _options = options.Value;
-
     public async Task SendAsync(OetLearner.Api.Domain.PushSubscription subscription, string payload, CancellationToken cancellationToken = default)
     {
         try
         {
+            var pushSettings = (await runtimeSettings.GetAsync(cancellationToken)).Push;
+            if (!pushSettings.WebPushEnabled
+                || string.IsNullOrWhiteSpace(pushSettings.WebPushSubject)
+                || string.IsNullOrWhiteSpace(pushSettings.WebPushPublicKey)
+                || string.IsNullOrWhiteSpace(pushSettings.WebPushPrivateKey))
+            {
+                throw new InvalidOperationException("WebPush runtime settings must be configured before sending push notifications.");
+            }
+
             var client = new WebPushClient();
             var webPushSubscription = new WebPush.PushSubscription(subscription.Endpoint, subscription.P256dh, subscription.Auth);
-            var vapidDetails = new VapidDetails(_options.Subject, _options.PublicKey, _options.PrivateKey);
+            var vapidDetails = new VapidDetails(pushSettings.WebPushSubject, pushSettings.WebPushPublicKey, pushSettings.WebPushPrivateKey);
             await client.SendNotificationAsync(webPushSubscription, payload, vapidDetails, cancellationToken);
         }
         catch (WebPushException ex)

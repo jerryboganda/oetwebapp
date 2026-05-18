@@ -161,7 +161,7 @@ export function TopNav({
       >
         <div className="flex items-center gap-3">
           <button
-            className="touch-target pressable rounded-2xl p-2 text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5 lg:hidden"
+            className="touch-target pressable rounded-2xl p-2 text-slate-700 hover:bg-white/70 hover:text-navy dark:text-muted dark:hover:bg-white/5 lg:hidden"
             onClick={() => {
               void triggerImpactHaptic('LIGHT');
               setMobileMenuOpen((current) => !current);
@@ -246,7 +246,7 @@ export function TopNav({
                                     onClick={handleMobileItemClick}
                                     className={cn(
                                       'pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold',
-                                      active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5',
+                                       active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-slate-700 hover:bg-white/70 hover:text-navy dark:text-muted dark:hover:bg-white/5',
                                     )}
                                     aria-current={active ? 'page' : undefined}
                                   >

@@ -164,25 +164,19 @@ builder.Services.AddSingleton<IPasswordHasher<ApplicationUserAccount>, PasswordH
 builder.Services.AddSingleton<AuthTokenService>();
 builder.Services.AddHttpClient<IExternalIdentityProviderClient, ExternalIdentityProviderClient>();
 builder.Services.AddSingleton<ExternalAuthTicketService>();
-if (brevoOptions.Enabled)
+builder.Services.AddHttpClient<BrevoEmailSender>((serviceProvider, client) =>
 {
-    builder.Services.AddHttpClient<BrevoEmailSender>((serviceProvider, client) =>
-    {
-        var configuredBrevoOptions = serviceProvider.GetRequiredService<IOptions<BrevoOptions>>().Value;
-        client.BaseAddress = new Uri(string.IsNullOrWhiteSpace(configuredBrevoOptions.BaseUrl) ? "https://api.brevo.com/v3" : configuredBrevoOptions.BaseUrl);
-    })
-    // Transient Brevo outages must not cascade into 5xx from our API. The standard
-    // resilience handler adds rate limiting, retry with exponential backoff + jitter,
-    // a circuit breaker, and total + per-attempt timeouts. Defaults (3 retries, 30s
-    // total timeout, 10s per attempt) are safe for transactional email and honour any
-    // CancellationToken the caller passes.
-    .AddStandardResilienceHandler();
-    builder.Services.AddTransient<IEmailSender, BrevoEmailSender>();
-}
-else
-{
-    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
-}
+    var configuredBrevoOptions = serviceProvider.GetRequiredService<IOptions<BrevoOptions>>().Value;
+    client.BaseAddress = new Uri(string.IsNullOrWhiteSpace(configuredBrevoOptions.BaseUrl) ? "https://api.brevo.com/v3" : configuredBrevoOptions.BaseUrl);
+})
+// Transient Brevo outages must not cascade into 5xx from our API. The standard
+// resilience handler adds rate limiting, retry with exponential backoff + jitter,
+// a circuit breaker, and total + per-attempt timeouts. Defaults (3 retries, 30s
+// total timeout, 10s per attempt) are safe for transactional email and honour any
+// CancellationToken the caller passes.
+.AddStandardResilienceHandler();
+builder.Services.AddSingleton<SmtpEmailSender>();
+builder.Services.AddTransient<IEmailSender, RuntimeEmailSender>();
 builder.Services.AddScoped<EmailOtpService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<AuthService>();
@@ -618,14 +612,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningPathwayPro
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.TeacherClassService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningV2BackfillService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAnalyticsService, OetLearner.Api.Services.Reading.ReadingAnalyticsService>();
-if (builder.Environment.IsDevelopment())
-{
-    builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.StubReadingExtractionAi>();
-}
-else
-{
-    builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.DisabledReadingExtractionAi>();
-}
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.GroundedReadingExtractionAi>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionService, OetLearner.Api.Services.Reading.ReadingExtractionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPathwayService, OetLearner.Api.Services.Reading.ReadingPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService, OetLearner.Api.Services.Reading.ReadingReviewService>();

@@ -15,26 +15,21 @@ If a behaviour described here is not yet implemented, the gap is recorded in
 against the owning slice. Do **not** silently weaken this document to match
 current code — fix the code or escalate.
 
-## Known v1 limitation: sponsor billing is heuristic-attributed
+## Sponsor billing attribution
 
-The sponsor billing read model in `SponsorService.ComputeBillingAsync`
-attributes any **completed** `PaymentTransaction` row whose `LearnerUserId`
-matches a learner inside an **active** sponsorship window
-(`Sponsorship.CreatedAt..RevokedAt ?? now`) to that sponsor. This is a
-**heuristic for the v1 launch** (decision recorded 2026-05-10 against
-`RW-013` in `docs/STATUS/remaining-work.yaml`), not a true sponsor-paid
-invoice link. Practical implication:
+The sponsor billing read model in `SponsorService.ComputeBillingAsync` now
+prefers explicit payer attribution on `PaymentTransaction`:
 
-- If a sponsored learner pays for an upgrade themselves while a sponsorship
-  is active, that spend currently shows on the sponsor's billing surface.
-- If a sponsorship is revoked retroactively, transactions inside the prior
-  active window remain attributed to the sponsor.
+- `SponsorshipId` links a sponsor-paid transaction to the exact sponsorship.
+- `PayerType` distinguishes learner-paid rows from sponsor-paid rows.
+- Current learner checkout and wallet top-up flows stamp `PayerType=learner`,
+  so self-paid learner purchases are not sponsor invoices.
 
-The post-v1 follow-up is a `SponsorshipId` foreign key (or a `payer_type`
-column) on `PaymentTransaction`, populated from Stripe metadata at checkout.
-Until then, the heuristic is intentionally simple and locked down by
-`SponsorBillingReadModelTests` (5 cases) plus `SponsorContractTests` (2
-shape locks).
+Legacy rows that predate these fields (`SponsorshipId IS NULL` and
+`PayerType IS NULL`) still use the previous active-sponsorship-window
+heuristic for historical continuity. New sponsor-paid checkout paths must
+populate `SponsorshipId` and `PayerType=sponsor` before they are treated as
+finance-grade sponsor spend.
 
 ---
 

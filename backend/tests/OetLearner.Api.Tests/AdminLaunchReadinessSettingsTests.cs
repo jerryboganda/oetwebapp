@@ -23,6 +23,13 @@ public sealed class AdminLaunchReadinessSettingsTests
             mobileForceUpdate = true,
             iosAppStoreUrl = "https://apps.apple.com/app/oet-prep/id1234567890",
             androidPlayStoreUrl = "https://play.google.com/store/apps/details?id=com.oetprep.learner",
+            mobileBillingPolicy = "native-iap",
+            revenueCatIosApiKey = "appl_public_ios",
+            revenueCatAndroidApiKey = "goog_public_android",
+            iosIapProductId = "com.oetprep.monthly",
+            androidIapProductId = "oetprep_monthly",
+            mobileBillingEvidenceUrl = "https://evidence.example.test/mobile-billing",
+            mobileStoreReviewNotes = "Native IAP is approved for store-managed digital subscriptions.",
             desktopMinSupportedVersion = "2.0.0",
             desktopLatestVersion = "2.1.0",
             desktopForceUpdate = false,
@@ -52,6 +59,9 @@ public sealed class AdminLaunchReadinessSettingsTests
         Assert.Equal("1.3.0", publicBody.RootElement.GetProperty("latestVersion").GetString());
         Assert.True(publicBody.RootElement.GetProperty("forceUpdate").GetBoolean());
         Assert.Equal("https://apps.apple.com/app/oet-prep/id1234567890", publicBody.RootElement.GetProperty("storeUrl").GetString());
+        Assert.Equal("native-iap", publicBody.RootElement.GetProperty("billingPolicy").GetString());
+        Assert.Equal("appl_public_ios", publicBody.RootElement.GetProperty("revenueCatApiKey").GetString());
+        Assert.Equal("com.oetprep.monthly", publicBody.RootElement.GetProperty("iapProductId").GetString());
     }
 
     [Fact]

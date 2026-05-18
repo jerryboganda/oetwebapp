@@ -165,6 +165,98 @@ public sealed class SponsorBillingReadModelTests : IAsyncDisposable
         Assert.Empty(GetInvoiceList(billing));
     }
 
+    [Fact]
+    public async Task Billing_DoesNotCountExplicitLearnerPaidTransactionInsideActiveWindow()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedSponsorAsync(db, sponsorUserId: "sponsor-1");
+        await SeedSponsorshipAsync(db,
+            sponsorUserId: "sponsor-1",
+            learnerUserId: "learner-1",
+            createdAt: _clock.GetUtcNow().AddMonths(-2));
+
+        await SeedTxAsync(db, learnerUserId: "learner-1", amount: 120m, status: "completed",
+            createdAt: _clock.GetUtcNow().AddDays(-1), payerType: "learner");
+
+        var service = new SponsorService(db, NullLogger<SponsorService>.Instance, _clock);
+        var billing = await service.GetBillingAsync("sponsor-1", default);
+
+        Assert.Equal(0m, GetProperty<decimal>(billing, "totalSpend"));
+        Assert.Empty(GetInvoiceList(billing));
+    }
+
+    [Fact]
+    public async Task Billing_CountsExplicitSponsorPaidTransactionBySponsorshipId()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedSponsorAsync(db, sponsorUserId: "sponsor-1");
+        var sponsorshipId = await SeedSponsorshipAsync(db,
+            sponsorUserId: "sponsor-1",
+            learnerUserId: "learner-1",
+            createdAt: _clock.GetUtcNow().AddMonths(-2),
+            revokedAt: _clock.GetUtcNow().AddDays(-10));
+
+        // Explicit sponsor attribution is the durable finance link and should
+        // not rely on the legacy active-window heuristic.
+        await SeedTxAsync(db, learnerUserId: "learner-1", amount: 75m, status: "completed",
+            createdAt: _clock.GetUtcNow().AddDays(-1), payerType: "sponsor", sponsorshipId: sponsorshipId);
+        await SeedTxAsync(db, learnerUserId: "learner-1", amount: 500m, status: "completed",
+            createdAt: _clock.GetUtcNow().AddDays(-1), payerType: "sponsor", sponsorshipId: Guid.NewGuid());
+
+        var service = new SponsorService(db, NullLogger<SponsorService>.Instance, _clock);
+        var billing = await service.GetBillingAsync("sponsor-1", default);
+
+        Assert.Equal(75m, GetProperty<decimal>(billing, "totalSpend"));
+        var invoice = Assert.Single(GetInvoiceList(billing));
+        Assert.Equal(sponsorshipId, invoice.SponsorshipId);
+    }
+
+    [Fact]
+    public async Task Billing_RequiresExplicitSponsorshipToMatchTransactionLearner()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedSponsorAsync(db, sponsorUserId: "sponsor-1");
+        await SeedSponsorshipAsync(db,
+            sponsorUserId: "sponsor-1",
+            learnerUserId: "learner-1",
+            createdAt: _clock.GetUtcNow().AddMonths(-2));
+        var learnerTwoSponsorshipId = await SeedSponsorshipAsync(db,
+            sponsorUserId: "sponsor-1",
+            learnerUserId: "learner-2",
+            createdAt: _clock.GetUtcNow().AddMonths(-2));
+
+        await SeedTxAsync(db, learnerUserId: "learner-1", amount: 75m, status: "completed",
+            createdAt: _clock.GetUtcNow().AddDays(-1), payerType: "sponsor", sponsorshipId: learnerTwoSponsorshipId);
+
+        var service = new SponsorService(db, NullLogger<SponsorService>.Instance, _clock);
+        var billing = await service.GetBillingAsync("sponsor-1", default);
+
+        Assert.Equal(0m, GetProperty<decimal>(billing, "totalSpend"));
+        Assert.Empty(GetInvoiceList(billing));
+    }
+
+    [Fact]
+    public async Task Billing_RequiresSponsorPayerTypeWhenSponsorshipIdIsPresent()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedSponsorAsync(db, sponsorUserId: "sponsor-1");
+        var sponsorshipId = await SeedSponsorshipAsync(db,
+            sponsorUserId: "sponsor-1",
+            learnerUserId: "learner-1",
+            createdAt: _clock.GetUtcNow().AddMonths(-2));
+
+        await SeedTxAsync(db, learnerUserId: "learner-1", amount: 75m, status: "completed",
+            createdAt: _clock.GetUtcNow().AddDays(-1), payerType: null, sponsorshipId: sponsorshipId);
+        await SeedTxAsync(db, learnerUserId: "learner-1", amount: 50m, status: "completed",
+            createdAt: _clock.GetUtcNow().AddDays(-1), payerType: " ", sponsorshipId: sponsorshipId);
+
+        var service = new SponsorService(db, NullLogger<SponsorService>.Instance, _clock);
+        var billing = await service.GetBillingAsync("sponsor-1", default);
+
+        Assert.Equal(0m, GetProperty<decimal>(billing, "totalSpend"));
+        Assert.Empty(GetInvoiceList(billing));
+    }
+
     // ── Helpers ────────────────────────────────────────────────────
 
     private async Task SeedSponsorAsync(LearnerDbContext db, string sponsorUserId)
@@ -211,12 +303,16 @@ public sealed class SponsorBillingReadModelTests : IAsyncDisposable
         decimal amount,
         string status,
         DateTimeOffset createdAt,
-        string currency = "GBP")
+        string currency = "GBP",
+        string? payerType = null,
+        Guid? sponsorshipId = null)
     {
         db.PaymentTransactions.Add(new PaymentTransaction
         {
             Id = Guid.NewGuid(),
             LearnerUserId = learnerUserId,
+            SponsorshipId = sponsorshipId,
+            PayerType = payerType,
             Gateway = "stripe",
             GatewayTransactionId = $"pi_{Guid.NewGuid():N}",
             TransactionType = "subscription_payment",

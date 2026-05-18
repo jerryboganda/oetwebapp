@@ -710,6 +710,8 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 
         if (ctx.Kind == RuleKind.Listening)
             return (OetScoring.ScaledPassGradeB, "B"); // Listening: 30/42 ≡ 350/500 anchor; admin authoring tasks reference but never produce scaled scores.
+        if (ctx.Kind == RuleKind.Reading)
+            return (OetScoring.ScaledPassGradeB, "B"); // Reading: 30/42 ≡ 350/500 anchor; admin authoring tasks reference but never produce scaled scores.
 
         var t = OetScoring.GetWritingPassThreshold(ctx.CandidateCountry);
         if (t is null) return (OetScoring.ScaledPassGradeB, "B");
@@ -809,6 +811,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             RuleKind.Vocabulary => "**This call concerns VOCABULARY authoring** — the scoring table is background context only. Do NOT produce a candidate scaled score. You are producing teaching content (terms, glosses) grounded in the vocabulary rulebook. Vocabulary quiz percentages (0–100) are pedagogical metrics and NEVER equivalent to an OET scaled score.",
             RuleKind.Conversation => "**This call concerns CONVERSATION (OET Speaking practice)** — conversation advisory criteria (0–6 each: Intelligibility, Fluency, Appropriateness, Grammar & Expression) project to the universal Speaking 0–500 scale. PASS anchor: mean 4.2/6 ≡ 350/500 (Grade B). Never produce a grade that contradicts the Speaking pass at 350.",
             RuleKind.Listening => "**This call concerns LISTENING authoring** — the 30/42 ≡ 350/500 anchor is background context only. You are producing an authored 42-item structure (Part A 24 short-answer items + Part B 6 MCQ + Part C 12 MCQ). Do NOT produce a candidate score; admins grade learners after publish via the canonical OetScoring service.",
+            RuleKind.Reading => "**This call concerns READING authoring** — the 30/42 ≡ 350/500 anchor is background context only. You are producing an authored 42-item structure (Part A 20 items + Part B 6 MCQ3 + Part C 16 MCQ4). Do NOT produce a candidate score; admins grade learners after publish via the canonical OetScoring service.",
             _ => ""
         });
         sb.AppendLine();
@@ -887,6 +890,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             RuleKind.Pronunciation => "8. For pronunciation: every finding MUST cite a rule ID from the pronunciation rulebook (e.g. \"P01.1\", \"P04.1\"). Never invent a phoneme or stress-pattern rule. If the input shows issues outside the rulebook, describe them as observations rather than scored findings.",
             RuleKind.Vocabulary => "8. For vocabulary authoring: every term MUST cite at least one vocabulary rule ID (e.g. \"V02.1\") in appliedRuleIds. Definitions must be clinically accurate, concise (≤ 25 words), and written in formal healthcare register. Example sentences must mirror OET letter register. Never include brand names, trademarks, or colloquialisms. Never invent a rule ID.",
             RuleKind.Conversation => "8. For conversation: STAY IN ROLE as the patient/colleague specified in the scenario. Do NOT break character. Do NOT dispense real medical advice to the learner. Do NOT score or grade the learner mid-conversation (evaluation is a separate task). Keep replies 1–3 sentences, natural spoken register (contractions allowed in speech). When evaluating (EvaluateConversation task), every turnAnnotation MUST cite at least one C-rule ID (e.g. \"C01.1\"). Never invent a rule.",
+            RuleKind.Reading => "8. For reading authoring: extract only from the supplied paper text and answer-key text. Never invent passages, questions, options, correct answers, or explanations. If answer keys are absent, return an invalid/missing field rather than guessing.",
             _ => "8. For writing: respect the letter structure order (Address → Date → Salutation → Re: line → Body → Yours sincerely/faithfully → Doctor) and flag layout violations."
         });
         sb.AppendLine();
@@ -1115,6 +1119,42 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("```");
                 sb.AppendLine("Hard requirements: exactly 42 questions, contiguous numbers 1..42, exactly 24 in Part A (12 in A1 + 12 in A2), exactly 6 in Part B, exactly 12 in Part C (6 in C1 + 6 in C2), every MCQ has exactly 3 options + correctAnswer in {A,B,C}, every appliedRuleIds value exists in the rulebook above. No answer keys outside the structure above.");
                 break;
+            case AiTaskMode.GenerateReadingStructure:
+                sb.AppendLine("Return a SINGLE JSON object containing an OET Reading structure manifest. Canonical shape: Part A (20 items), Part B (6 three-option MCQ), Part C (16 four-option MCQ). Every question MUST cite ≥1 reading rule ID in `appliedRuleIds`. Never invent a rule ID or answer key.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"parts\": [");
+                sb.AppendLine("    {");
+                sb.AppendLine("      \"partCode\": \"A|B|C\",");
+                sb.AppendLine("      \"timeLimitMinutes\": 15,");
+                sb.AppendLine("      \"instructions\": \"...\",");
+                sb.AppendLine("      \"texts\": [");
+                sb.AppendLine("        { \"displayOrder\": 1, \"title\": \"Text A\", \"source\": \"...\", \"bodyHtml\": \"<p>...</p>\", \"wordCount\": 120, \"topicTag\": \"...\" }");
+                sb.AppendLine("      ],");
+                sb.AppendLine("      \"questions\": [");
+                sb.AppendLine("        {");
+                sb.AppendLine("          \"displayOrder\": 1,");
+                sb.AppendLine("          \"points\": 1,");
+                sb.AppendLine("          \"questionType\": \"MatchingTextReference|ShortAnswer|SentenceCompletion|MultipleChoice3|MultipleChoice4\",");
+                sb.AppendLine("          \"stem\": \"...\",");
+                sb.AppendLine("          \"options\": [\"A\",\"B\",\"C\"],");
+                sb.AppendLine("          \"correctAnswer\": \"A\",");
+                sb.AppendLine("          \"acceptedSynonyms\": [],");
+                sb.AppendLine("          \"caseSensitive\": false,");
+                sb.AppendLine("          \"explanationMarkdown\": \"...\",");
+                sb.AppendLine("          \"skillTag\": \"scan|detail|purpose|inference|vocabulary_in_context\",");
+                sb.AppendLine("          \"readingTextDisplayOrder\": 1,");
+                sb.AppendLine("          \"appliedRuleIds\": [\"RD01.1\"]");
+                sb.AppendLine("        }");
+                sb.AppendLine("      ]");
+                sb.AppendLine("    }");
+                sb.AppendLine("  ],");
+                sb.AppendLine("  \"appliedRuleIds\": [\"RD01.1\"],");
+                sb.AppendLine("  \"selfCheckNotes\": \"...\"");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                sb.AppendLine("Hard requirements: exactly three parts A/B/C; Part A exactly 4 texts and 20 questions; Part B exactly 6 texts and 6 MultipleChoice3 questions with exactly 3 options and correctAnswer in {A,B,C}; Part C exactly 2 texts and 16 MultipleChoice4 questions with exactly 4 options and correctAnswer in {A,B,C,D}; all correctAnswer values must be present from the supplied answer key. This is AI-generated draft content; human approval is mandatory before use.");
+                break;
             default:
                 sb.AppendLine("Plain text, concise, ≤ 200 words. Cite rule IDs in parentheses when invoking rules.");
                 break;
@@ -1182,6 +1222,11 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 AiTaskMode.GenerateListeningStructure => "Task: extract the 42-item OET Listening authored structure (Part A 24 short-answer + Part B 6 MCQ + Part C 12 MCQ) from the supplied Question-Paper text + Audio-Script + Answer-Key. Every question must cite ≥1 listening rule ID. Never invent rule IDs. Validate the canonical shape before responding.",
                 _ => "Task: respond according to the reply format above."
             },
+            RuleKind.Reading => ctx.Task switch
+            {
+                AiTaskMode.GenerateReadingStructure => "Task: extract the 42-item OET Reading authored structure (Part A 20 items + Part B 6 MCQ3 + Part C 16 MCQ4) from the supplied Question-Paper text and Answer-Key text. Every question must cite ≥1 reading rule ID. Never invent rule IDs or answers. Validate the canonical shape before responding.",
+                _ => "Task: respond according to the reply format above."
+            },
             _ => "Task: respond according to the reply format above."
         };
         if (ctx.Kind == RuleKind.Grammar)
@@ -1194,6 +1239,8 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             return $"{baseText} Respond strictly in the reply format above.";
         if (ctx.Kind == RuleKind.Listening)
             return $"{baseText} Respond strictly in the reply format above.";
+        if (ctx.Kind == RuleKind.Reading)
+            return $"{baseText} Respond strictly in the reply format above.";
         return $"{baseText} Apply the {passMark}/500 (Grade {passGrade}) pass mark for this {ctx.Kind.ToString().ToLowerInvariant()} call. Respond strictly in the reply format above.";
     }
 }
@@ -1202,7 +1249,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 // Types
 // ---------------------------------------------------------------------------
 
-public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure }
+public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure, GenerateReadingStructure }
 
 public sealed class AiGroundingContext
 {

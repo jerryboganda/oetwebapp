@@ -54,6 +54,23 @@ only after internal slot health passes, then runs post-deploy verification,
 observability smoke, and the Reading/media smoke gate. It never runs
 volume-destructive commands.
 
+## Emergency Break-Glass
+
+`SKIP_EVIDENCE_VERIFY=true` is not a normal production deploy path. It is only
+available for owner-initiated emergency containment after the deploy operator
+sets all of these environment variables:
+
+- `BREAK_GLASS_APPROVER="Dr Faisal Maqsood"`
+- `BREAK_GLASS_ACCEPT_RISK=true`
+- `BREAK_GLASS_REASON=<incident reason>`
+- `BREAK_GLASS_BACKUP_ID=<verified backup or snapshot id>`
+- `BREAK_GLASS_ROLLBACK_REF=<40-character previous-good SHA>`
+
+The deploy script refuses break-glass without those values and still requires a
+40-character `DEPLOY_REF`. After a break-glass deploy, open an incident record,
+attach the backup and rollback evidence, and rebuild signed release evidence for
+the deployed SHA before returning to normal deploys.
+
 ## Post-Deploy Smoke Gate
 
 Within 5 minutes of deploy completion the approver must confirm:

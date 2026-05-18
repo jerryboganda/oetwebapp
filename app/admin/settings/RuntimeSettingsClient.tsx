@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Cog, Eye, EyeOff, Loader2, Lock, Save } from 'lucide-react';
+import { ChevronDown, ChevronRight, Cog, ExternalLink, Eye, EyeOff, Loader2, Lock, Save } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,13 +15,22 @@ import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 const MASKED = '********' as const;
 
 export interface EmailSettings {
+  brevoEnabled: boolean;
   brevoApiKey: string;
   brevoEmailVerificationTemplateId: number | null;
   brevoPasswordResetTemplateId: number | null;
+  brevoWelcomeTemplateId: number | null;
+  brevoPasswordChangedTemplateId: number | null;
+  brevoMfaEnabledTemplateId: number | null;
+  brevoAdminInviteTemplateId: number | null;
+  brevoSecurityAlertTemplateId: number | null;
+  brevoReviewCompletedTemplateId: number | null;
+  smtpEnabled: boolean;
   smtpHost: string;
   smtpPort: number | null;
   smtpUsername: string;
   smtpPassword: string;
+  smtpEnableSsl: boolean;
   smtpFromAddress: string;
   smtpFromName: string;
 }
@@ -49,17 +58,26 @@ export interface BackupSettings {
 }
 
 export interface OAuthSettings {
+  googleEnabled: boolean;
   googleClientId: string;
   googleClientSecret: string;
   appleClientId: string;
   appleTeamId: string;
   appleKeyId: string;
   applePrivateKey: string;
+  facebookEnabled: boolean;
   facebookAppId: string;
   facebookAppSecret: string;
+  linkedInEnabled: boolean;
+  linkedInClientId: string;
+  linkedInClientSecret: string;
 }
 
 export interface PushSettings {
+  webPushEnabled: boolean;
+  webPushSubject: string;
+  webPushPublicKey: string;
+  webPushPrivateKey: string;
   apnsKeyId: string;
   apnsTeamId: string;
   apnsBundleId: string;
@@ -91,18 +109,27 @@ interface FieldDef<TSection> {
   label: string;
   hint?: string;
   secret?: boolean;
-  type?: 'text' | 'number' | 'url';
+  type?: 'text' | 'number' | 'url' | 'checkbox';
   placeholder?: string;
 }
 
 const EMAIL_FIELDS: FieldDef<EmailSettings>[] = [
+  { key: 'brevoEnabled', label: 'Enable Brevo', type: 'checkbox', hint: 'Routes transactional email through Brevo when enabled.' },
   { key: 'brevoApiKey', label: 'Brevo API Key', secret: true, hint: 'Server-side Brevo (Sendinblue) API key for transactional email.' },
-  { key: 'brevoEmailVerificationTemplateId', label: 'Brevo Email Verification Template ID', hint: 'Numeric template id used for OTP verification emails.' },
-  { key: 'brevoPasswordResetTemplateId', label: 'Brevo Password Reset Template ID', hint: 'Numeric template id used for password-reset emails.' },
+  { key: 'brevoEmailVerificationTemplateId', label: 'Brevo Email Verification Template ID', type: 'number', hint: 'Numeric template id used for OTP verification emails.' },
+  { key: 'brevoPasswordResetTemplateId', label: 'Brevo Password Reset Template ID', type: 'number', hint: 'Numeric template id used for password-reset emails.' },
+  { key: 'brevoWelcomeTemplateId', label: 'Brevo Welcome Template ID', type: 'number' },
+  { key: 'brevoPasswordChangedTemplateId', label: 'Brevo Password Changed Template ID', type: 'number' },
+  { key: 'brevoMfaEnabledTemplateId', label: 'Brevo MFA Enabled Template ID', type: 'number' },
+  { key: 'brevoAdminInviteTemplateId', label: 'Brevo Admin Invite Template ID', type: 'number' },
+  { key: 'brevoSecurityAlertTemplateId', label: 'Brevo Security Alert Template ID', type: 'number' },
+  { key: 'brevoReviewCompletedTemplateId', label: 'Brevo Review Completed Template ID', type: 'number' },
+  { key: 'smtpEnabled', label: 'Enable SMTP fallback', type: 'checkbox', hint: 'Routes email through SMTP when Brevo is disabled.' },
   { key: 'smtpHost', label: 'SMTP Host', hint: 'Fallback SMTP server hostname.' },
   { key: 'smtpPort', label: 'SMTP Port', type: 'number', hint: 'Typically 587 (STARTTLS) or 465 (TLS).' },
   { key: 'smtpUsername', label: 'SMTP Username' },
   { key: 'smtpPassword', label: 'SMTP Password', secret: true },
+  { key: 'smtpEnableSsl', label: 'SMTP SSL/TLS', type: 'checkbox' },
   { key: 'smtpFromAddress', label: 'From Address', hint: 'Address used in the From header of outgoing email.' },
   { key: 'smtpFromName', label: 'From Name' },
 ];
@@ -130,17 +157,26 @@ const BACKUP_FIELDS: FieldDef<BackupSettings>[] = [
 ];
 
 const OAUTH_FIELDS: FieldDef<OAuthSettings>[] = [
+  { key: 'googleEnabled', label: 'Enable Google OAuth', type: 'checkbox' },
   { key: 'googleClientId', label: 'Google Client ID' },
   { key: 'googleClientSecret', label: 'Google Client Secret', secret: true },
   { key: 'appleClientId', label: 'Apple Client ID', hint: 'The service identifier (e.g. com.example.web).' },
   { key: 'appleTeamId', label: 'Apple Team ID' },
   { key: 'appleKeyId', label: 'Apple Key ID' },
   { key: 'applePrivateKey', label: 'Apple Private Key (.p8 contents)', secret: true },
+  { key: 'facebookEnabled', label: 'Enable Facebook OAuth', type: 'checkbox' },
   { key: 'facebookAppId', label: 'Facebook App ID' },
   { key: 'facebookAppSecret', label: 'Facebook App Secret', secret: true },
+  { key: 'linkedInEnabled', label: 'Enable LinkedIn OAuth', type: 'checkbox' },
+  { key: 'linkedInClientId', label: 'LinkedIn Client ID' },
+  { key: 'linkedInClientSecret', label: 'LinkedIn Client Secret', secret: true },
 ];
 
 const PUSH_FIELDS: FieldDef<PushSettings>[] = [
+  { key: 'webPushEnabled', label: 'Enable Web Push', type: 'checkbox' },
+  { key: 'webPushSubject', label: 'Web Push Subject', hint: 'mailto: or https: contact used by push services.' },
+  { key: 'webPushPublicKey', label: 'Web Push Public Key' },
+  { key: 'webPushPrivateKey', label: 'Web Push Private Key', secret: true },
   { key: 'apnsKeyId', label: 'APNs Key ID' },
   { key: 'apnsTeamId', label: 'APNs Team ID' },
   { key: 'apnsBundleId', label: 'APNs Bundle ID', hint: 'iOS app bundle identifier.' },
@@ -154,22 +190,64 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
   { id: 'sentry', title: 'Sentry', description: 'Error reporting and performance monitoring.' },
   { id: 'backup', title: 'Backup S3', description: 'Off-site database and media backup destination.' },
-  { id: 'oauth', title: 'OAuth (Google + Apple + Facebook)', description: 'Social sign-in providers.' },
-  { id: 'push', title: 'Push (APNs + FCM)', description: 'Mobile push notifications via Apple and Firebase.' },
+  { id: 'oauth', title: 'OAuth (Google + Apple + Facebook + LinkedIn)', description: 'Social sign-in providers, enable flags, and client secrets.' },
+  { id: 'push', title: 'Push (Web Push + APNs + FCM)', description: 'Browser and native push notifications via Web Push, Apple, and Firebase.' },
 ];
+
+const CONFIGURATION_SURFACES = [
+  {
+    title: 'ElevenLabs realtime STT and voices',
+    href: '/admin/content/conversation/settings',
+    description:
+      'Manage encrypted ElevenLabs STT keys, realtime provider, model, spend cap, topology, consent gates, and transcript controls.',
+  },
+  {
+    title: 'AI providers, keys, failover, and budgets',
+    href: '/admin/ai-providers',
+    description:
+      'Register OpenAI-compatible, Anthropic, Copilot, Azure, ElevenLabs, ASR, TTS, OCR, and PDF providers with key rotation, retries, circuit breakers, model allowlists, and tests.',
+  },
+  {
+    title: 'AI usage quotas and kill switches',
+    href: '/admin/ai-usage',
+    description:
+      'Control platform budget, BYOK policy, feature disable lists, overage behavior, and live spend monitoring.',
+  },
+  {
+    title: 'Notification channels, caps, and test sends',
+    href: '/admin/notifications',
+    description:
+      'Configure learner, expert, and admin notification policy, per-event overrides, rate caps, email mode, and delivery audit/test flows.',
+  },
+  {
+    title: 'Mobile, RevenueCat, desktop, and launch gates',
+    href: '/admin/launch-readiness',
+    description:
+      'Set mobile billing policy, RevenueCat public SDK keys, IAP product IDs, legal/privacy evidence, protected smoke URLs, desktop signing, and rollout readiness.',
+  },
+] as const;
 
 /* ───────────────────────── Helpers ───────────────────────── */
 
 function emptyResponse(): RuntimeSettingsResponse {
   return {
     email: {
+      brevoEnabled: false,
       brevoApiKey: '',
       brevoEmailVerificationTemplateId: null,
       brevoPasswordResetTemplateId: null,
+      brevoWelcomeTemplateId: null,
+      brevoPasswordChangedTemplateId: null,
+      brevoMfaEnabledTemplateId: null,
+      brevoAdminInviteTemplateId: null,
+      brevoSecurityAlertTemplateId: null,
+      brevoReviewCompletedTemplateId: null,
+      smtpEnabled: false,
       smtpHost: '',
       smtpPort: null,
       smtpUsername: '',
       smtpPassword: '',
+      smtpEnableSsl: false,
       smtpFromAddress: '',
       smtpFromName: '',
     },
@@ -189,16 +267,25 @@ function emptyResponse(): RuntimeSettingsResponse {
       alertWebhook: '',
     },
     oauth: {
+      googleEnabled: false,
       googleClientId: '',
       googleClientSecret: '',
       appleClientId: '',
       appleTeamId: '',
       appleKeyId: '',
       applePrivateKey: '',
+      facebookEnabled: false,
       facebookAppId: '',
       facebookAppSecret: '',
+      linkedInEnabled: false,
+      linkedInClientId: '',
+      linkedInClientSecret: '',
     },
     push: {
+      webPushEnabled: false,
+      webPushSubject: '',
+      webPushPublicKey: '',
+      webPushPrivateKey: '',
       apnsKeyId: '',
       apnsTeamId: '',
       apnsBundleId: '',
@@ -347,6 +434,33 @@ function PlainField({ label, hint, type = 'text', value, onChange }: PlainFieldP
   );
 }
 
+interface BooleanFieldProps {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}
+
+function BooleanField({ label, hint, checked, onChange }: BooleanFieldProps) {
+  const reactId = useId();
+  const inputId = `bool-${reactId}`;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={inputId} className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-background-light px-4 py-3 text-sm font-semibold tracking-tight text-navy shadow-sm">
+        <input
+          id={inputId}
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+        />
+        {label}
+      </label>
+      {hint ? <p className="text-xs leading-5 text-muted">{hint}</p> : null}
+    </div>
+  );
+}
+
 /* ───────────────────────── Section ───────────────────────── */
 
 interface SectionProps {
@@ -427,6 +541,38 @@ function LockedState() {
           Ask a super-admin to grant access if you need to change Brevo, Stripe, Sentry, OAuth, push, or backup
           credentials from this UI.
         </p>
+      </div>
+    </section>
+  );
+}
+
+function ConfigurationCoverage() {
+  return (
+    <section className="mb-5 rounded-2xl border border-border bg-surface p-4 shadow-sm" aria-labelledby="runtime-settings-coverage-heading">
+      <div className="flex flex-col gap-1">
+        <h2 id="runtime-settings-coverage-heading" className="text-base font-semibold text-navy">
+          Admin-managed provider coverage
+        </h2>
+        <p className="text-sm leading-6 text-slate-700 dark:text-muted">
+          Secret-adjacent runtime settings live here. Feature-specific providers and operational policies are also
+          admin-managed from the linked control surfaces below, so operators do not need to edit committed code or
+          server env files for ElevenLabs, AI budgets, notifications, RevenueCat, or launch evidence.
+        </p>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {CONFIGURATION_SURFACES.map((surface) => (
+          <a
+            key={surface.href}
+            href={surface.href}
+            className="group rounded-2xl border border-border bg-background-light p-4 shadow-sm transition hover:border-primary/40 hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <span className="flex items-start justify-between gap-3">
+              <span className="text-sm font-semibold text-navy">{surface.title}</span>
+              <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-slate-700 transition group-hover:text-primary dark:text-muted" aria-hidden="true" />
+            </span>
+            <span className="mt-2 block text-xs leading-5 text-slate-700 dark:text-muted">{surface.description}</span>
+          </a>
+        ))}
       </div>
     </section>
   );
@@ -553,6 +699,8 @@ export function RuntimeSettingsClient() {
         <LoadingState />
       ) : (
         <div className="space-y-4">
+          <ConfigurationCoverage />
+
           {SECTION_META.map((section) => (
             <Section
               key={section.id}
@@ -564,7 +712,15 @@ export function RuntimeSettingsClient() {
             >
               {section.id === 'email' &&
                 EMAIL_FIELDS.map((field) =>
-                  field.secret ? (
+                  field.type === 'checkbox' ? (
+                    <BooleanField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      checked={Boolean(draft.email[field.key])}
+                      onChange={(next) => updateField('email', field.key, next as never)}
+                    />
+                  ) : field.secret ? (
                     <SecretField
                       key={field.key}
                       label={field.label}
@@ -593,7 +749,15 @@ export function RuntimeSettingsClient() {
 
               {section.id === 'billing' &&
                 BILLING_FIELDS.map((field) =>
-                  field.secret ? (
+                  field.type === 'checkbox' ? (
+                    <BooleanField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      checked={Boolean(draft.billing[field.key])}
+                      onChange={(next) => updateField('billing', field.key, next as never)}
+                    />
+                  ) : field.secret ? (
                     <SecretField
                       key={field.key}
                       label={field.label}
@@ -616,7 +780,15 @@ export function RuntimeSettingsClient() {
 
               {section.id === 'sentry' &&
                 SENTRY_FIELDS.map((field) =>
-                  field.secret ? (
+                  field.type === 'checkbox' ? (
+                    <BooleanField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      checked={Boolean(draft.sentry[field.key])}
+                      onChange={(next) => updateField('sentry', field.key, next as never)}
+                    />
+                  ) : field.secret ? (
                     <SecretField
                       key={field.key}
                       label={field.label}
@@ -645,7 +817,15 @@ export function RuntimeSettingsClient() {
 
               {section.id === 'backup' &&
                 BACKUP_FIELDS.map((field) =>
-                  field.secret ? (
+                  field.type === 'checkbox' ? (
+                    <BooleanField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      checked={Boolean(draft.backup[field.key])}
+                      onChange={(next) => updateField('backup', field.key, next as never)}
+                    />
+                  ) : field.secret ? (
                     <SecretField
                       key={field.key}
                       label={field.label}
@@ -668,7 +848,15 @@ export function RuntimeSettingsClient() {
 
               {section.id === 'oauth' &&
                 OAUTH_FIELDS.map((field) =>
-                  field.secret ? (
+                  field.type === 'checkbox' ? (
+                    <BooleanField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      checked={Boolean(draft.oauth[field.key])}
+                      onChange={(next) => updateField('oauth', field.key, next as never)}
+                    />
+                  ) : field.secret ? (
                     <SecretField
                       key={field.key}
                       label={field.label}
@@ -691,7 +879,15 @@ export function RuntimeSettingsClient() {
 
               {section.id === 'push' &&
                 PUSH_FIELDS.map((field) =>
-                  field.secret ? (
+                  field.type === 'checkbox' ? (
+                    <BooleanField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      checked={Boolean(draft.push[field.key])}
+                      onChange={(next) => updateField('push', field.key, next as never)}
+                    />
+                  ) : field.secret ? (
                     <SecretField
                       key={field.key}
                       label={field.label}

@@ -67,7 +67,7 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], i
     `media-src 'self' blob: ${apiOrigins.join(' ')}`,
     "worker-src 'self' blob:",
     "frame-src 'self'",
-    "frame-ancestors 'self'",
+    "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

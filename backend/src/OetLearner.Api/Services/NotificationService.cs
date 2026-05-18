@@ -7,6 +7,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Settings;
 using WebPush;
 
 namespace OetLearner.Api.Services;
@@ -70,7 +71,7 @@ public sealed class NotificationService(
     IHubContext<NotificationHub> hubContext,
     PlatformLinkService platformLinks,
     TimeProvider timeProvider,
-    IOptions<WebPushOptions> webPushOptions,
+    IRuntimeSettingsProvider runtimeSettings,
     IOptions<NotificationProofHarnessOptions> notificationProofOptions,
     IWebHostEnvironment environment,
     ILogger<NotificationService> logger)
@@ -1439,16 +1440,7 @@ public sealed class NotificationService(
         }
         catch (Exception ex) when (ex is not ApiException)
         {
-            logger.LogError(ex, "Notification proof trigger failed for {EventKey} to {RecipientEmail}. Base: {BaseMessage}", request.EventKey, request.RecipientEmail, ex.GetBaseException().Message);
-            try
-            {
-                var logPath = Path.Combine(Path.GetTempPath(), "oet-notification-proof-errors.log");
-                var logEntry = $"[{DateTimeOffset.UtcNow:O}] {request.EventKey} -> {request.RecipientEmail}{Environment.NewLine}{ex}{Environment.NewLine}{new string('-', 80)}{Environment.NewLine}";
-                await File.AppendAllTextAsync(logPath, logEntry, ct);
-            }
-            catch
-            {
-            }
+            logger.LogError(ex, "Notification proof trigger failed for {EventKey}. Base: {BaseMessage}", request.EventKey, ex.GetBaseException().Message);
             throw;
         }
     }
@@ -3246,11 +3238,11 @@ public sealed class NotificationService(
             return;
         }
 
-        var options = webPushOptions.Value;
-        if (!options.Enabled
-            || string.IsNullOrWhiteSpace(options.Subject)
-            || string.IsNullOrWhiteSpace(options.PublicKey)
-            || string.IsNullOrWhiteSpace(options.PrivateKey))
+        var pushSettings = (await runtimeSettings.GetAsync(ct)).Push;
+        if (!pushSettings.WebPushEnabled
+            || string.IsNullOrWhiteSpace(pushSettings.WebPushSubject)
+            || string.IsNullOrWhiteSpace(pushSettings.WebPushPublicKey)
+            || string.IsNullOrWhiteSpace(pushSettings.WebPushPrivateKey))
         {
             await RecordSuppressedAttemptIfMissingAsync(
                 notificationEvent,

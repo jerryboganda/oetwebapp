@@ -99,10 +99,6 @@ export default function StudyPlanPage() {
     }
   };
 
-  const handleReschedule = (_id: string) => {
-    track('plan_item_rescheduled');
-  };
-
   const handleStart = (task: StudyPlanTask) => {
     track('task_started', { subTest: task.subTest, contentId: task.contentId });
     router.push(`/${task.subTest.toLowerCase()}`);
@@ -187,10 +183,10 @@ export default function StudyPlanPage() {
                     <Button variant="ghost" size="sm" onClick={() => handleMarkComplete(task.id)} title="Mark Complete">
                       <CheckCircle2 className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleReschedule(task.id)} title="Reschedule">
+                    <Button variant="ghost" size="sm" disabled title="Reschedule coming soon" aria-label="Reschedule coming soon">
                       <Calendar className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" title="Swap Task">
+                    <Button variant="ghost" size="sm" disabled title="Swap task coming soon" aria-label="Swap task coming soon">
                       <RefreshCw className="w-4 h-4" />
                     </Button>
                   </div>

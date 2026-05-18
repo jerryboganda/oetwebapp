@@ -148,7 +148,7 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
                 PaperId: anchorPaperId,
                 Route: "/diagnostic/reading");
         }
-        else if (openCount >= 5 || (bestScaled is int bs && bs < 300))
+        else if (openCount >= 5 || (bestScaled is int bs && bs < OetScoring.ScaledPassGradeCPlus))
         {
             stage = "drilling";
             var drillCode = ResolveDrillCode(weakestSkill, openEntries);
@@ -161,7 +161,7 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
                 PaperId: anchorPaperId,
                 Route: "/reading/practice");
         }
-        else if (bestScaled is int bs2 && bs2 < 350)
+        else if (bestScaled is int bs2 && !OetScoring.IsListeningReadingPassByScaled(bs2))
         {
             stage = "mini_tests";
             nextAction = new ReadingPathwayAction(
@@ -213,7 +213,9 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
                 openCount == 0 && (examAttempts.Count > 0 || practiceAttempts > 0),
                 Math.Max(0, 10 - openCount), 10),
             new("scaled_350", "Reach 350 scaled in an Exam attempt",
-                bestScaled is int s && s >= 350, bestScaled, 350),
+                bestScaled is int s && OetScoring.IsListeningReadingPassByScaled(s),
+                bestScaled,
+                OetScoring.ScaledPassGradeB),
             new("first_mock_pass", "Pass your first Reading mock",
                 readingMockCount >= 1, readingMockCount, 1),
         };

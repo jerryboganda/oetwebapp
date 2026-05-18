@@ -9,7 +9,7 @@
   --color-background-light: #f7f5ef;
   --color-background-dark: #07111d;
   --color-surface: #fffefb;
-  --color-muted: #526072;
+  --color-muted: #475569;
   --color-success: #10b981;
   --color-warning: #d97706;
   --color-danger: #ef4444;
@@ -415,4 +415,3 @@
     transition-duration: 0.01ms !important;
   }
 }
-

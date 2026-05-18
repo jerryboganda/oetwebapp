@@ -1,6 +1,6 @@
 # Current Remaining Work
 
-Status date: 2026-05-14
+Status date: 2026-05-17
 
 Audience: owner, engineering, QA, release, support, and stakeholder review.
 
@@ -33,6 +33,7 @@ Current active work is tracked here by workstream and points to the authoritativ
 | UX audit inventory | `docs/ux/UX-AUDIT-ROUTE-INVENTORY.md` | Active route-readiness input. |
 | Mobile plan | `docs/capacitor-mobile-app-plan.md` | External credential/store/device readiness input. |
 | Desktop plan | `docs/electron-desktop-conversion-plan.md` | Signed artifact/update-flow readiness input. |
+| Notification module | `docs/NOTIFICATIONS-PRD.md`, `docs/NOTIFICATIONS-PROGRESS.md` | Active multi-channel notification backlog. |
 | Listening V2 deferrals | `docs/LISTENING.md`, `PRD-LISTENING-V2.md`, `docs/LISTENING-RULEBOOK-CITATIONS.md` | Local deferrals closed; content evidence remains separate. |
 | Grammar GA | `docs/GRAMMAR-MODULE.md` | GA signoff status needs owner decision. |
 
@@ -51,10 +52,10 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P0-002 - Backend Build Health Check
 
-- Evidence: one failure-mode audit reported `npm run backend:build` failing on `ConversationAsrProviderSelector.cs` and `ConversationOptions` resolution.
-- Remaining work: rerun `npm run backend:build` in the current worktree and fix any live compile errors before relying on deeper validation.
+- Evidence: `npm run backend:build` passes, and `npm run backend:test` now builds once and runs the backend test project in deterministic class-prefix batches to avoid the monolithic VSTest/xUnit scheduling stall observed on Windows.
+- Remaining work: none for local compile/test health; continue with targeted and full backend tests as code changes warrant.
 - Input required: none.
-- Recommendation: make this the first verification command after planning edits.
+- Recommendation: keep `npm run backend:build` as the first backend verification command after planning edits.
 
 ### P0-003 - ElevenLabs Realtime STT Production Authorization
 
@@ -83,17 +84,18 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P0-006 - Production Release Evidence Handoff
 
-- Evidence: production deploy workflow expects an evidence bundle already present in the production checkout, while the deploy wrapper fails closed if it is missing.
-- Remaining work: document and automate how signed CI evidence reaches `/opt/oetwebapp` for a given SHA.
-- Input required: choose manual copy to release-evidence or GitHub Actions artifact fetch by SHA.
-- Recommendation: automate artifact fetch by SHA and verify with `EXPECTED_GIT_SHA`.
+- Evidence: production deploy workflow now downloads the exact-SHA production release evidence artifact, copies it to `/opt/oetwebapp`, and the deploy wrapper verifies `EXPECTED_GIT_SHA` before rollout.
+- Local hardening complete: production deploy concurrency now queues instead of canceling in-progress deploys, production evidence generation requires same-SHA QA smoke plus SBOM/SCA success before signing, and `SKIP_EVIDENCE_VERIFY=true` is restricted to explicit break-glass with owner approval, risk acceptance, backup ID, rollback SHA, and incident reason.
+- Remaining work: attach real production evidence artifact/run links for the target SHA during release execution.
+- Input required: none for local deploy-safety code; unsafe no-verification normal production deploys remain blocked by the production contract.
+- Recommendation: use signed exact-SHA evidence for all normal production releases and reserve break-glass for emergency containment only.
 
 ### P0-007 - Accessibility Launch Policy
 
 - Evidence: release readiness requires manual NVDA/VoiceOver signoff, while the old remaining-work register marks broader accessibility as done-v1-scope.
-- Remaining work: decide whether manual assistive-tech signoff is a hard launch gate or an accepted post-launch risk with owner and expiry.
-- Input required: owner decision on launch gate.
-- Recommendation: require manual signoff for auth, dashboard, billing, one immersive learner flow, expert review submit, and admin audit/user-credit flows.
+- Remaining work: complete and attach manual assistive-tech signoff for auth, dashboard, billing, one immersive learner flow, expert review submit, and admin audit/user-credit flows.
+- Input required: manual QA availability and signoff evidence.
+- Recommendation: keep this as a hard public-launch gate.
 
 ## Active P1 Work
 
@@ -119,9 +121,9 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P1-005 - Mobile Release Readiness
 
-- Local hardening complete: mobile release CI passes app version/version-code inputs into the validator and stamps Capacitor/iOS versions with structured Node updates instead of fragile shell substitutions.
-- Remaining work: validate signing secrets, store metadata, privacy manifest, deep links, push config, real-device microphone/keyboard/safe-area/background tests, and signed artifact verification.
-- Input required: Apple Developer account, Google Play account, signing certs, provisioning profile, store billing stance.
+- Local hardening complete: mobile release CI passes app version/version-code inputs into the validator, stamps Capacitor/iOS versions with structured Node updates instead of fragile shell substitutions, and release preflight now enforces an explicit `MOBILE_BILLING_POLICY` (`web-checkout`, `native-iap`, or `hybrid`) instead of assuming web-only checkout.
+- Remaining work: validate signing secrets, store metadata, privacy manifest, deep links, push config, real-device microphone/keyboard/safe-area/background tests, RevenueCat/App Store/Play product IDs where IAP is required, and signed artifact verification.
+- Input required: Apple Developer account, Google Play account, signing certs, provisioning profile, store billing stance, RevenueCat public SDK keys, and iOS/Android IAP product IDs when `native-iap` or `hybrid` is selected.
 
 ### P1-006 - Desktop Release Readiness
 
@@ -131,35 +133,40 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P1-007 - Sponsor Billing Attribution
 
-- Remaining work: replace active-sponsorship-window heuristics with explicit payer attribution before finance reporting is contractual.
-- Input required: choose `SponsorshipId` foreign key or payer-type/reference model and backfill semantics.
+- Local hardening complete: `PaymentTransaction.SponsorshipId` and `PayerType` now provide explicit sponsor-paid attribution; learner checkout and wallet top-up paths stamp `PayerType=learner`; legacy unattributed rows keep the active-window fallback for historical continuity only.
+- Remaining work: create any new sponsor-paid checkout paths with `SponsorshipId` plus `PayerType=sponsor`, then define a production backfill policy for historical rows before contractual finance reporting.
+- Input required: backfill semantics for historical sponsor-paid rows, if any.
 
 ### P1-008 - Sponsor Portal Trustworthiness
 
-- Remaining work: remove or label static ROI metrics, replace placeholder invoices with real empty states, and show seat/invite status from real data only.
-- Input required: whether sponsor portal is launch-critical or beta.
+- Local hardening complete: dashboard spend and billing now come from real sponsor-attributed `PaymentTransaction` rows, invoice empty state is honest, existing sponsor invoices render from API data, and static success/ROI analytics are labelled as under development instead of presented as real metrics.
+- Remaining work: attach sponsor browser smoke and legal/privacy approval before public sponsor launch.
+- Input required: sponsor launch approval and any required finance/legal signoff.
 
 ### P1-009 - Expert Mobile Review Evidence Binding
 
-- Remaining work: hide or redirect `/expert/mobile-review` until candidate evidence, audio/transcript, rubric context, draft state, and rework flow are bound.
-- Input required: ship, hide, or redirect decision.
-- Recommendation: redirect to the full expert review workspace until complete.
+- Local hardening complete: `/expert/mobile-review` redirects to `/expert/queue` until candidate evidence, audio/transcript, rubric context, draft state, and rework flow are bound.
+- Remaining work: only re-expose the route after evidence-bound mobile review is implemented and tested.
+- Input required: none until re-exposure is requested.
 
 ### P1-010 - Mobile Push Token Registration
 
-- Remaining work: route native push-token registration through `apiClient` or a typed helper with CSRF/auth coverage and add a bridge test.
+- Local hardening complete: native push-token registration now routes through a typed `apiClient` helper with CSRF/auth coverage, and focused bridge/API tests cover the request shape.
+- Remaining work: real-device push proof with production APNs/FCM credentials.
 - Input required: none.
 
 ### P1-011 - OET Scoring Threshold Audit
 
-- Remaining work: audit direct `>= 350`, `>= 70`, and `>= 4.2` decision points and replace mission-critical pass/fail logic with scoring helpers.
+- Local hardening complete: mission-critical OET pass/fail and projected-grade threshold decisions found in the audit now route through canonical scoring helpers; remaining `>= 70` matches are display/readiness percentages or canonical helper internals.
+- Remaining work: keep future scoring call sites on `lib/scoring.ts` and `OetScoring`.
 - Input required: none.
 - Recommendation: triage only pass/fail or projected-grade decisions; do not blanket-change display thresholds.
 
 ### P1-012 - Reading AI Extraction Production Posture
 
-- Remaining work: decide whether Reading AI extraction is intentionally disabled in production or should be implemented through grounded feature-coded provider flow.
-- Input required: production product decision.
+- Local hardening complete: Reading AI extraction now uses grounded admin-only gateway flow with feature routing, strict 20/6/16 structure validation, reading rulebook grounding, and mandatory human approval.
+- Remaining work: attach provider-smoke evidence and admin browser proof before launch exposure.
+- Input required: approved AI provider credentials through the protected runtime settings path.
 
 ## Active P2 Work
 
@@ -187,8 +194,9 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P2-006 - Mobile Billing Policy
 
-- Remaining work: record mobile monetization decision: reader-app scope, web checkout link placement, App Review notes, fallback IAP plan, and rejection criteria.
-- Recommendation: reader-app/subscriber-access for first mobile release; keep checkout on web.
+- Local hardening complete: Launch Readiness now exposes mobile billing policy, RevenueCat iOS/Android public SDK keys, platform IAP product IDs, billing evidence URL, and store-review notes; the Capacitor checkout helper can use RevenueCat native IAP when policy is `native-iap` and otherwise keeps web checkout available for reader-app/subscriber-access flows.
+- Remaining work: enter real store-approved policy values and attach App Review / Play review evidence before mobile submission.
+- Recommendation: keep policy `hybrid` until store review is complete so web checkout remains available while native IAP can be enabled where Apple/Google policy requires it.
 
 ### P2-007 - Admin/Support Navigation And Public Support
 
@@ -212,17 +220,23 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 - Remaining work: run markdownlint over release, ops, QA, and mission-critical docs; fix violations or define a launch-doc lint scope that excludes historical docs.
 
+### P2-012 - Notification Module Multi-Channel Completion
+
+- Local planning complete: `docs/NOTIFICATIONS-PRD.md` and `docs/NOTIFICATIONS-PROGRESS.md` now split shipped foundation from remaining SMS, WhatsApp, campaign, segment, template, webhook, cost, consent, and evidence work.
+- Remaining work: implement SMS/WhatsApp dispatchers, provider webhooks, campaigns/segments/approvals, template manager, cost dashboard, lifecycle automation, and browser evidence.
+- Input required: approved SMS/WhatsApp providers, sender IDs/templates, channel budgets, and consent/privacy policy for schools, sponsors, and minors.
+
 ## Inputs Still Required From You
 
 | Input | Best recommendation |
 | --- | --- |
-| Web/API versus whole-platform public launch order | Launch web/API first; keep mobile stores and signed desktop as beta until external evidence lands. |
-| Manual accessibility signoff | Require it for T0/T1 launch flows before public launch. |
-| Mobile billing policy | Use reader-app/subscriber-access first; keep checkout on web until store review guidance is confirmed. |
-| Production evidence handoff | Automate GitHub artifact fetch by SHA on the VPS/deploy workflow. |
-| Support route | Add a public `/support` page with privacy/delete-account/contact details. |
-| Sponsor portal launch status | Treat sponsor portal as beta unless real billing, ROI, and invoice evidence is attached. |
-| Expert mobile review status | Hide or redirect to full expert review until real evidence binding is complete. |
+| Whole-platform launch order | Keep public launch blocked until mobile, desktop, sponsor, realtime, accessibility, notifications, production evidence, and QA gates are evidence-complete. |
+| Manual accessibility signoff | Require it for T0/T1 launch flows before public launch; this is now a hard gate. |
+| Mobile billing policy | Use `hybrid`: keep web checkout for reader-app/subscriber-access flows and configure RevenueCat native IAP where App Store/Play policy requires it. |
+| Production evidence handoff | Automate GitHub artifact fetch by SHA on the VPS/deploy workflow; do not use unsafe no-verification normal deploys. |
+| Support route | Public `/support` exists; keep privacy/delete-account/contact content current for store review. |
+| Sponsor portal launch status | Treat sponsor portal as blocked until sponsor browser smoke and finance/legal evidence are attached. |
+| Notification providers | Choose approved SMS/WhatsApp vendors, sender IDs/templates, and budget caps through Admin/runtime settings. |
 | ElevenLabs key | Provide only through protected secret/admin channel, never chat. |
 | Vendor/privacy approval | Direct adults first; sponsors/schools/minors only after legal/privacy approval and server-side tests. |
 
@@ -238,6 +252,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ## Change Log
 
+- 2026-05-17: Closed local backend verification and release-safety gaps: backend tests now run deterministically through `npm run backend:test`, production evidence handoff downloads exact-SHA artifacts, and deploy break-glass requires explicit owner/backup/rollback safeguards.
 - 2026-05-15: Closed the local Listening/Reading live-smoke blocker with an isolated Postgres-backed runtime and focused Chromium learner Playwright pass; fixed stale Listening E2E proxy/locator assumptions and a Postgres-only webhook-retention query bug discovered during runtime validation.
 - 2026-05-14: Closed local launch-gate hardening for Listening V2 no-stack coverage, mobile/desktop release guards, realtime STT topology validation, grounded AI provider credential fail-fast, and status-doc synchronization. Remaining P0/P1 items are external evidence/credential gates.
 - 2026-05-14: Created current remaining-work index from user decisions, code/doc audit, and 8-subagent sweep covering research, architecture, adversarial review, DevOps, UX/accessibility, failure modes, canonical planning, and documentation. Preserved `docs/STATUS/remaining-work.yaml` as the closed v1 launch register.

@@ -423,7 +423,8 @@ public class WalletService(
             {
                 ["wallet_id"] = wallet.Id,
                 ["credits"] = tier.Credits.ToString(),
-                ["bonus"] = tier.Bonus.ToString()
+                ["bonus"] = tier.Bonus.ToString(),
+                ["payer_type"] = "learner"
             },
             SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gateway)}"),
             CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gateway)}"),
@@ -435,6 +436,7 @@ public class WalletService(
         {
             Id = Guid.NewGuid(),
             LearnerUserId = userId,
+            PayerType = "learner",
             Gateway = gateway,
             GatewayTransactionId = intent.GatewayTransactionId,
             TransactionType = "wallet_top_up",
@@ -448,7 +450,8 @@ public class WalletService(
                 providerIntentId = intent.ClientSecret,
                 credits = tier.Credits,
                 bonus = tier.Bonus,
-                totalCredits
+                totalCredits,
+                payerType = "learner"
             }),
             CreatedAt = now,
             UpdatedAt = now

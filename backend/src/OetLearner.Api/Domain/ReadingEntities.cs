@@ -495,7 +495,7 @@ public class ReadingPolicy
     public bool AllowResultSharing { get; set; }
 
     // §5 — AI-assisted extraction
-    public bool AiExtractionEnabled { get; set; }
+    public bool AiExtractionEnabled { get; set; } = true;
     public bool AiExtractionRequireHumanApproval { get; set; } = true;
     public int AiExtractionMaxRetriesPerPaper { get; set; } = 5;
     [MaxLength(64)]

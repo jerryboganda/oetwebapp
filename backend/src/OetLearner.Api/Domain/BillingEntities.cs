@@ -456,6 +456,12 @@ public class PaymentTransaction
     [MaxLength(64)]
     public string LearnerUserId { get; set; } = default!;
 
+    public Guid? SponsorshipId { get; set; }
+
+    [MaxLength(32)]
+    public string? PayerType { get; set; }
+    // learner | sponsor | organization
+
     [MaxLength(16)]
     public string Gateway { get; set; } = default!; // stripe | paypal
 

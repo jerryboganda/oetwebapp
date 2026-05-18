@@ -17,14 +17,15 @@ public sealed class ExternalAuthService(
 {
     private readonly PlatformOptions _platformOptions = platformOptions.Value;
 
-    public Uri BuildAuthorizationRedirect(string provider, string? nextPath, string? platform)
+    public async Task<Uri> BuildAuthorizationRedirectAsync(string provider, string? nextPath, string? platform, CancellationToken cancellationToken = default)
     {
         var normalizedProvider = NormalizeProvider(provider);
         var state = ticketService.CreateStateToken(normalizedProvider, nextPath, platform);
-        return providerClient.BuildAuthorizationUri(
+        return await providerClient.BuildAuthorizationUriAsync(
             normalizedProvider,
             state,
-            BuildBackendCallbackUrl(normalizedProvider));
+            BuildBackendCallbackUrl(normalizedProvider),
+            cancellationToken);
     }
 
     public async Task<Uri> CompleteCallbackAsync(

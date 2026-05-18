@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { registerMobilePushToken } from '@/lib/api';
 import { initializeMobileRuntime } from '@/lib/mobile/runtime';
 import { triggerResumeMotion } from '@/lib/mobile/lifecycle-motion';
 import { registerPushNotifications } from '@/lib/mobile/push-notifications';
@@ -48,10 +50,10 @@ export function MobileRuntimeBridge() {
           console.debug('[push] Registered with token:', token.value.slice(0, 8) + '...');
           // Send push token to backend for targeting
           try {
-            await fetch('/api/backend/v1/notifications/push-token', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token: token.value, platform: (globalThis as unknown as Record<string, unknown>).__CAPACITOR_PLATFORM__ ?? 'unknown' }),
+            const platform = Capacitor.getPlatform();
+            await registerMobilePushToken({
+              token: token.value,
+              platform,
             });
           } catch {
             console.warn('[push] Failed to register push token with backend');

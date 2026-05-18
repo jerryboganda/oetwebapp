@@ -20,6 +20,13 @@ const baseSettings: AdminLaunchReadinessSettings = {
   mobileForceUpdate: false,
   iosAppStoreUrl: null,
   androidPlayStoreUrl: null,
+  mobileBillingPolicy: 'hybrid',
+  revenueCatIosApiKey: null,
+  revenueCatAndroidApiKey: null,
+  iosIapProductId: null,
+  androidIapProductId: null,
+  mobileBillingEvidenceUrl: null,
+  mobileStoreReviewNotes: null,
   iosBundleId: null,
   appleTeamId: null,
   appleAssociatedDomainStatus: 'pending',
@@ -67,6 +74,7 @@ describe('LaunchReadinessPage', () => {
     render(<LaunchReadinessPage />);
 
     expect(await screen.findByLabelText('Minimum supported mobile version')).toHaveValue('1.0.0');
+    expect(screen.getByLabelText('Mobile billing policy')).toHaveValue('hybrid');
     expect(screen.getByLabelText('Force mobile update')).not.toBeChecked();
     expect(screen.getByLabelText('Legal approval status')).toHaveValue('pending');
   });

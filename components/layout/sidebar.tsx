@@ -136,7 +136,7 @@ function NavSection({
                 className={cn(
                   'pressable relative flex items-center gap-3 overflow-hidden rounded-2xl px-4 py-2.5 text-sm font-semibold',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
-                  active ? 'text-primary-dark dark:text-primary' : 'text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5',
+                   active ? 'text-primary-dark dark:text-primary' : 'text-slate-700 hover:bg-white/70 hover:text-navy dark:text-muted dark:hover:bg-white/5',
                 )}
                 aria-current={active ? 'page' : undefined}
               >
@@ -148,7 +148,7 @@ function NavSection({
                     transition={getSurfaceTransition('item', reducedMotion)}
                   />
                 )}
-                <span className={cn('relative z-10 flex items-center justify-center', active ? 'text-primary-dark dark:text-primary' : 'text-muted')}>
+                <span className={cn('relative z-10 flex items-center justify-center', active ? 'text-primary-dark dark:text-primary' : 'text-slate-700 dark:text-muted')}>
                   {item.icon}
                 </span>
                 <span className="relative z-10">{item.label}</span>
@@ -257,7 +257,7 @@ export function Sidebar({
             <Link
               href="/settings"
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
-              className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5"
+              className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-white/70 hover:text-navy dark:text-muted dark:hover:bg-white/5"
             >
               <Settings className="h-4 w-4" />
               Settings
@@ -267,7 +267,7 @@ export function Sidebar({
             <a
               href="mailto:support@edu80.app?subject=Need%20help%20with%20my%20OET%20account&body=Hello%20Support%20Team%2C%0AI%20need%20assistance%20with%20my%20OET%20account."
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
-              className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5"
+              className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-white/70 hover:text-navy dark:text-muted dark:hover:bg-white/5"
             >
               <HelpCircle className="h-4 w-4" />
               Help & Support
@@ -288,9 +288,9 @@ export function Sidebar({
           </div>
           <div className="flex flex-col overflow-hidden">
             <span className="text-sm font-bold text-navy truncate">{displayName}</span>
-            <span className="text-xs text-muted truncate">{email}</span>
+            <span className="text-xs text-slate-700 dark:text-muted truncate">{email}</span>
           </div>
-          <LogOut className="ml-auto h-4 w-4 text-muted" aria-hidden="true" />
+          <LogOut className="ml-auto h-4 w-4 text-slate-700 dark:text-muted" aria-hidden="true" />
         </button>
       </div>
     </motion.aside>

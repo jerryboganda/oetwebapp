@@ -43,4 +43,14 @@ describe('Study plan page', () => {
     expect(await screen.findByText('Reading')).toBeInTheDocument();
     expect(screen.getByText('Listening')).toBeInTheDocument();
   });
+
+  it('disables unimplemented reschedule and swap actions', async () => {
+    renderWithRouter(<StudyPlanPage />, { router: { push: mockPush } });
+    expect(await screen.findAllByLabelText('Reschedule coming soon')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ disabled: true })]),
+    );
+    expect(screen.getAllByLabelText('Swap task coming soon')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ disabled: true })]),
+    );
+  });
 });

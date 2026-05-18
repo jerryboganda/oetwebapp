@@ -53,6 +53,7 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
                 row.MobileMinSupportedVersion,
                 row.MobileLatestVersion,
                 row.MobileForceUpdate,
+                row.MobileBillingPolicy,
                 row.DesktopMinSupportedVersion,
                 row.DesktopLatestVersion,
                 row.DesktopForceUpdate,
@@ -76,10 +77,10 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
         var normalized = string.IsNullOrWhiteSpace(platform) ? "mobile" : platform.Trim().ToLowerInvariant();
         return normalized switch
         {
-            "ios" => new(normalized, row.MobileMinSupportedVersion, row.MobileLatestVersion, row.MobileForceUpdate, row.IosAppStoreUrl, null, null),
-            "android" => new(normalized, row.MobileMinSupportedVersion, row.MobileLatestVersion, row.MobileForceUpdate, row.AndroidPlayStoreUrl, null, null),
-            "desktop" or "windows" or "mac" or "macos" or "linux" => new(normalized, row.DesktopMinSupportedVersion, row.DesktopLatestVersion, row.DesktopForceUpdate, null, row.DesktopUpdateFeedUrl, row.DesktopUpdateChannel),
-            _ => new(normalized, row.MobileMinSupportedVersion, row.MobileLatestVersion, row.MobileForceUpdate, null, null, null),
+            "ios" => new(normalized, row.MobileMinSupportedVersion, row.MobileLatestVersion, row.MobileForceUpdate, row.IosAppStoreUrl, null, null, row.MobileBillingPolicy, row.RevenueCatIosApiKey, row.IosIapProductId, row.IosIapStatus),
+            "android" => new(normalized, row.MobileMinSupportedVersion, row.MobileLatestVersion, row.MobileForceUpdate, row.AndroidPlayStoreUrl, null, null, row.MobileBillingPolicy, row.RevenueCatAndroidApiKey, row.AndroidIapProductId, row.AndroidIapStatus),
+            "desktop" or "windows" or "mac" or "macos" or "linux" => new(normalized, row.DesktopMinSupportedVersion, row.DesktopLatestVersion, row.DesktopForceUpdate, null, row.DesktopUpdateFeedUrl, row.DesktopUpdateChannel, "web-checkout", null, null, null),
+            _ => new(normalized, row.MobileMinSupportedVersion, row.MobileLatestVersion, row.MobileForceUpdate, null, null, null, row.MobileBillingPolicy, null, null, null),
         };
     }
 
@@ -106,9 +107,11 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
 
         ValidateHttpsUrl(request.IosAppStoreUrl, nameof(request.IosAppStoreUrl));
         ValidateHttpsUrl(request.AndroidPlayStoreUrl, nameof(request.AndroidPlayStoreUrl));
+        ValidateHttpsUrl(request.MobileBillingEvidenceUrl, nameof(request.MobileBillingEvidenceUrl));
         ValidateHttpsUrl(request.DesktopUpdateFeedUrl, nameof(request.DesktopUpdateFeedUrl));
         ValidateHttpsUrl(request.DeviceValidationEvidenceUrl, nameof(request.DeviceValidationEvidenceUrl));
         ValidateHttpsUrl(request.RealtimeEvidenceUrl, nameof(request.RealtimeEvidenceUrl));
+        ValidateMobileBillingPolicy(request.MobileBillingPolicy);
     }
 
     private static void ValidateVersion(string? value, string field)
@@ -131,6 +134,14 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
         }
     }
 
+    private static void ValidateMobileBillingPolicy(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized is "web-checkout" or "native-iap" or "hybrid") return;
+        throw ApiException.Validation("INVALID_MOBILE_BILLING_POLICY", "MobileBillingPolicy must be web-checkout, native-iap, or hybrid.");
+    }
+
     private static void Apply(AdminLaunchReadinessSettingsRequest r, LaunchReadinessSettings row)
     {
         if (r.MobileMinSupportedVersion is not null) row.MobileMinSupportedVersion = Clean(r.MobileMinSupportedVersion) ?? "1.0.0";
@@ -138,6 +149,13 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
         if (r.MobileForceUpdate.HasValue) row.MobileForceUpdate = r.MobileForceUpdate.Value;
         if (r.IosAppStoreUrl is not null) row.IosAppStoreUrl = Clean(r.IosAppStoreUrl);
         if (r.AndroidPlayStoreUrl is not null) row.AndroidPlayStoreUrl = Clean(r.AndroidPlayStoreUrl);
+        if (r.MobileBillingPolicy is not null) row.MobileBillingPolicy = Clean(r.MobileBillingPolicy)?.ToLowerInvariant() ?? "hybrid";
+        if (r.RevenueCatIosApiKey is not null) row.RevenueCatIosApiKey = Clean(r.RevenueCatIosApiKey);
+        if (r.RevenueCatAndroidApiKey is not null) row.RevenueCatAndroidApiKey = Clean(r.RevenueCatAndroidApiKey);
+        if (r.IosIapProductId is not null) row.IosIapProductId = Clean(r.IosIapProductId);
+        if (r.AndroidIapProductId is not null) row.AndroidIapProductId = Clean(r.AndroidIapProductId);
+        if (r.MobileBillingEvidenceUrl is not null) row.MobileBillingEvidenceUrl = Clean(r.MobileBillingEvidenceUrl);
+        if (r.MobileStoreReviewNotes is not null) row.MobileStoreReviewNotes = Clean(r.MobileStoreReviewNotes);
         if (r.IosBundleId is not null) row.IosBundleId = Clean(r.IosBundleId);
         if (r.AppleTeamId is not null) row.AppleTeamId = Clean(r.AppleTeamId);
         if (r.AppleAssociatedDomainStatus is not null) row.AppleAssociatedDomainStatus = Clean(r.AppleAssociatedDomainStatus);
@@ -183,6 +201,13 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
         r.MobileForceUpdate,
         r.IosAppStoreUrl,
         r.AndroidPlayStoreUrl,
+        r.MobileBillingPolicy,
+        r.RevenueCatIosApiKey,
+        r.RevenueCatAndroidApiKey,
+        r.IosIapProductId,
+        r.AndroidIapProductId,
+        r.MobileBillingEvidenceUrl,
+        r.MobileStoreReviewNotes,
         r.IosBundleId,
         r.AppleTeamId,
         r.AppleAssociatedDomainStatus,

@@ -27,14 +27,23 @@ public class RuntimeSettingsRow
     public string Id { get; set; } = "default";
 
     // ── Email / Brevo ──────────────────────────────────────────────
+    public bool? BrevoEnabled { get; set; }
     public string? BrevoApiKeyEncrypted { get; set; }
     public int? BrevoEmailVerificationTemplateId { get; set; }
     public int? BrevoPasswordResetTemplateId { get; set; }
+    public int? BrevoWelcomeTemplateId { get; set; }
+    public int? BrevoPasswordChangedTemplateId { get; set; }
+    public int? BrevoMfaEnabledTemplateId { get; set; }
+    public int? BrevoAdminInviteTemplateId { get; set; }
+    public int? BrevoSecurityAlertTemplateId { get; set; }
+    public int? BrevoReviewCompletedTemplateId { get; set; }
 
+    public bool? SmtpEnabled { get; set; }
     [MaxLength(256)] public string? SmtpHost { get; set; }
     public int? SmtpPort { get; set; }
     [MaxLength(256)] public string? SmtpUsername { get; set; }
     public string? SmtpPasswordEncrypted { get; set; }
+    public bool? SmtpEnableSsl { get; set; }
     [MaxLength(256)] public string? SmtpFromAddress { get; set; }
     [MaxLength(256)] public string? SmtpFromName { get; set; }
 
@@ -58,6 +67,7 @@ public class RuntimeSettingsRow
     [MaxLength(1024)] public string? BackupAlertWebhook { get; set; }
 
     // ── OAuth providers ────────────────────────────────────────────
+    public bool? GoogleEnabled { get; set; }
     [MaxLength(256)] public string? GoogleClientId { get; set; }
     public string? GoogleClientSecretEncrypted { get; set; }
 
@@ -66,10 +76,20 @@ public class RuntimeSettingsRow
     [MaxLength(64)] public string? AppleKeyId { get; set; }
     public string? ApplePrivateKeyEncrypted { get; set; }
 
+    public bool? FacebookEnabled { get; set; }
     [MaxLength(256)] public string? FacebookAppId { get; set; }
     public string? FacebookAppSecretEncrypted { get; set; }
 
-    // ── Push (APNs / FCM) ──────────────────────────────────────────
+    public bool? LinkedInEnabled { get; set; }
+    [MaxLength(256)] public string? LinkedInClientId { get; set; }
+    public string? LinkedInClientSecretEncrypted { get; set; }
+
+    // ── Push (Web Push / APNs / FCM) ───────────────────────────────
+    public bool? WebPushEnabled { get; set; }
+    [MaxLength(256)] public string? WebPushSubject { get; set; }
+    [MaxLength(1024)] public string? WebPushPublicKey { get; set; }
+    public string? WebPushPrivateKeyEncrypted { get; set; }
+
     [MaxLength(64)] public string? ApnsKeyId { get; set; }
     [MaxLength(64)] public string? ApnsTeamId { get; set; }
     [MaxLength(256)] public string? ApnsBundleId { get; set; }

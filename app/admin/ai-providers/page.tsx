@@ -468,6 +468,12 @@ export default function AiProvidersPage() {
               <Input label="Base URL" value={editing.baseUrl} onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })} />
               <Input label={creating ? 'API key' : 'API key (leave blank to keep)'} type="password" value={editing.apiKey ?? ''} onChange={(e) => setEditing({ ...editing, apiKey: e.target.value })} />
               <Input label="Default model" value={editing.defaultModel} onChange={(e) => setEditing({ ...editing, defaultModel: e.target.value })} />
+              <Input
+                label="Allowed models CSV"
+                value={editing.allowedModelsCsv ?? ''}
+                hint="Optional comma-separated model allowlist for this provider. Leave blank to allow the default model and feature overrides."
+                onChange={(e) => setEditing({ ...editing, allowedModelsCsv: e.target.value })}
+              />
               <Select label="Reasoning effort" value={editing.reasoningEffort ?? ''}
                 onChange={(e) => setEditing({ ...editing, reasoningEffort: e.target.value || null })}
                 options={[
@@ -479,6 +485,20 @@ export default function AiProvidersPage() {
               <Input label="Price / 1k prompt tokens (USD)" type="number" step="0.0001" value={editing.pricePer1kPromptTokens} onChange={(e) => setEditing({ ...editing, pricePer1kPromptTokens: Number(e.target.value) })} />
               <Input label="Price / 1k completion tokens (USD)" type="number" step="0.0001" value={editing.pricePer1kCompletionTokens} onChange={(e) => setEditing({ ...editing, pricePer1kCompletionTokens: Number(e.target.value) })} />
               <Input label="Retry count" type="number" value={editing.retryCount} onChange={(e) => setEditing({ ...editing, retryCount: Number(e.target.value) })} />
+              <Input
+                label="Circuit breaker failure threshold"
+                type="number"
+                value={editing.circuitBreakerThreshold}
+                hint="Provider opens the circuit after this many consecutive failures in the window."
+                onChange={(e) => setEditing({ ...editing, circuitBreakerThreshold: Number(e.target.value) })}
+              />
+              <Input
+                label="Circuit breaker window seconds"
+                type="number"
+                value={editing.circuitBreakerWindowSeconds}
+                hint="Rolling failure window for the provider-level circuit breaker."
+                onChange={(e) => setEditing({ ...editing, circuitBreakerWindowSeconds: Number(e.target.value) })}
+              />
               <Input label="Failover priority" type="number" value={editing.failoverPriority} onChange={(e) => setEditing({ ...editing, failoverPriority: Number(e.target.value) })} />
               <label className="col-span-2 flex items-center gap-2">
                 <input type="checkbox" checked={editing.isActive} onChange={(e) => setEditing({ ...editing, isActive: e.target.checked })} />

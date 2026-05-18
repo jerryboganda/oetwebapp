@@ -3178,8 +3178,9 @@ public partial class LearnerService(
                                         ["add_on_codes"] = string.Join(',', JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, [])),
                                         ["plan_version_id"] = quoteEntity.PlanVersionId ?? string.Empty,
                                         ["add_on_version_ids"] = quoteEntity.AddOnVersionIdsJson,
-                                        ["coupon_version_id"] = quoteEntity.CouponVersionId ?? string.Empty
-                                },
+                                        ["coupon_version_id"] = quoteEntity.CouponVersionId ?? string.Empty,
+                                        ["payer_type"] = "learner"
+                                 },
                                 SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
                                     CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}"),
                                     IdempotencyKey: idempotencyKey),
@@ -3228,6 +3229,7 @@ public partial class LearnerService(
             {
                 Id = Guid.NewGuid(),
                 LearnerUserId = userId,
+                PayerType = "learner",
                 Gateway = gatewayLabel,
                 GatewayTransactionId = checkoutIntent.GatewayTransactionId,
                 TransactionType = normalizedProductType is "plan_upgrade" or "plan_downgrade"
@@ -3253,7 +3255,8 @@ public partial class LearnerService(
                     couponCode = quoteEntity.CouponCode,
                     planVersionId = quoteEntity.PlanVersionId,
                     addOnVersionIds = DeserializeAddOnVersionIds(quoteEntity),
-                    couponVersionId = quoteEntity.CouponVersionId
+                    couponVersionId = quoteEntity.CouponVersionId,
+                    payerType = "learner"
                 }),
                 CreatedAt = now,
                 UpdatedAt = now
@@ -3262,6 +3265,7 @@ public partial class LearnerService(
         }
 
         paymentTransaction.QuoteId = quoteEntity.Id;
+        paymentTransaction.PayerType ??= "learner";
         paymentTransaction.PlanVersionId = quoteEntity.PlanVersionId;
         paymentTransaction.AddOnVersionIdsJson = quoteEntity.AddOnVersionIdsJson;
         paymentTransaction.CouponVersionId = quoteEntity.CouponVersionId;
@@ -3276,7 +3280,8 @@ public partial class LearnerService(
             couponCode = quoteEntity.CouponCode,
             planVersionId = quoteEntity.PlanVersionId,
             addOnVersionIds = DeserializeAddOnVersionIds(quoteEntity),
-            couponVersionId = quoteEntity.CouponVersionId
+            couponVersionId = quoteEntity.CouponVersionId,
+            payerType = "learner"
         });
 
         var reservedRedemptions = await db.BillingCouponRedemptions

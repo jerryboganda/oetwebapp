@@ -151,7 +151,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
                 PaperId: anchorPaperId,
                 Route: "/diagnostic/listening");
         }
-        else if (bestScaled is int bs && bs < 300)
+        else if (bestScaled is int bs && bs < OetScoring.ScaledPassGradeCPlus)
         {
             stage = "drilling";
             // No skill-tagged error bank yet — point the learner at the
@@ -164,7 +164,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
                 PaperId: anchorPaperId,
                 Route: "/listening");
         }
-        else if (bestScaled is int bs2 && bs2 < OetScoring.ScaledPassGradeB)
+        else if (bestScaled is int bs2 && !OetScoring.IsListeningReadingPassByScaled(bs2))
         {
             stage = "mini_tests";
             nextAction = new ListeningPathwayAction(
@@ -215,7 +215,9 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
             new("scaled_300", "Reach 300 scaled",
                 bestScaled is int s1 && s1 >= 300, bestScaled, 300),
             new("scaled_350", "Reach 350 scaled (Grade B)",
-                bestScaled is int s2 && s2 >= OetScoring.ScaledPassGradeB, bestScaled, OetScoring.ScaledPassGradeB),
+                bestScaled is int s2 && OetScoring.IsListeningReadingPassByScaled(s2),
+                bestScaled,
+                OetScoring.ScaledPassGradeB),
             new("first_mock_pass", "Pass a Listening mock",
                 listeningMockCount >= 1, listeningMockCount, 1),
         };

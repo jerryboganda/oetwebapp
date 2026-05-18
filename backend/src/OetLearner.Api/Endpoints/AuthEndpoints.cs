@@ -39,8 +39,8 @@ public static class AuthEndpoints
             .AllowAnonymous()
             .RequireRateLimiting("AuthBruteforce");
 
-        auth.MapGet("/external/{provider}/start", (string provider, string? next, string? platform, ExternalAuthService service)
-                => Results.Redirect(service.BuildAuthorizationRedirect(provider, next, platform).ToString()))
+        auth.MapGet("/external/{provider}/start", async (string provider, string? next, string? platform, ExternalAuthService service, CancellationToken ct)
+                => Results.Redirect((await service.BuildAuthorizationRedirectAsync(provider, next, platform, ct)).ToString()))
             .AllowAnonymous();
 
         auth.MapGet("/external/{provider}/callback", async (

@@ -28,10 +28,17 @@ const statusOptions = [
   { value: 'failed', label: 'Failed' },
 ];
 
+const mobileBillingPolicyOptions = [
+  { value: '', label: 'Not set' },
+  { value: 'hybrid', label: 'Hybrid: web checkout + native IAP where required' },
+  { value: 'web-checkout', label: 'Web checkout only' },
+  { value: 'native-iap', label: 'Native IAP required' },
+];
+
 const sections: Array<{
   title: string;
   description: string;
-  fields: Array<{ key: LaunchField; label: string; kind?: 'text' | 'url' | 'version' | 'status' | 'textarea' | 'checkbox' }>;
+  fields: Array<{ key: LaunchField; label: string; kind?: 'text' | 'url' | 'version' | 'status' | 'textarea' | 'checkbox' | 'billing-policy' }>;
 }> = [
   {
     title: 'Mobile release policy',
@@ -42,6 +49,13 @@ const sections: Array<{
       { key: 'mobileForceUpdate', label: 'Force mobile update', kind: 'checkbox' },
       { key: 'iosAppStoreUrl', label: 'iOS App Store URL', kind: 'url' },
       { key: 'androidPlayStoreUrl', label: 'Android Play Store URL', kind: 'url' },
+      { key: 'mobileBillingPolicy', label: 'Mobile billing policy', kind: 'billing-policy' },
+      { key: 'revenueCatIosApiKey', label: 'RevenueCat iOS public SDK key' },
+      { key: 'revenueCatAndroidApiKey', label: 'RevenueCat Android public SDK key' },
+      { key: 'iosIapProductId', label: 'iOS IAP product id' },
+      { key: 'androidIapProductId', label: 'Android IAP product id' },
+      { key: 'mobileBillingEvidenceUrl', label: 'Mobile billing evidence URL', kind: 'url' },
+      { key: 'mobileStoreReviewNotes', label: 'Store review billing notes', kind: 'textarea' },
     ],
   },
   {
@@ -221,7 +235,7 @@ function LaunchInput({
   value,
   onChange,
 }: {
-  field: { key: LaunchField; label: string; kind?: 'text' | 'url' | 'version' | 'status' | 'textarea' | 'checkbox' };
+  field: { key: LaunchField; label: string; kind?: 'text' | 'url' | 'version' | 'status' | 'textarea' | 'checkbox' | 'billing-policy' };
   value: AdminLaunchReadinessSettings[LaunchField] | undefined;
   onChange: (next: string | boolean | null) => void;
 }) {
@@ -241,6 +255,17 @@ function LaunchInput({
         label={field.label}
         options={statusOptions}
         value={String(value ?? '')}
+        onChange={(event) => onChange(event.target.value || null)}
+      />
+    );
+  }
+
+  if (field.kind === 'billing-policy') {
+    return (
+      <Select
+        label={field.label}
+        options={mobileBillingPolicyOptions}
+        value={typeof value === 'string' ? value : ''}
         onChange={(event) => onChange(event.target.value || null)}
       />
     );

@@ -28,6 +28,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     private readonly IOptions<BillingOptions> _billing;
     private readonly IOptions<ExternalAuthOptions> _oauth;
     private readonly IOptionsMonitor<SmtpOptions> _smtp;
+    private readonly IOptions<WebPushOptions> _webPush;
     private readonly IConfiguration _config;
 
     public RuntimeSettingsProvider(
@@ -38,6 +39,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         IOptions<BillingOptions> billing,
         IOptions<ExternalAuthOptions> oauth,
         IOptionsMonitor<SmtpOptions> smtp,
+        IOptions<WebPushOptions> webPush,
         IConfiguration config)
     {
         _scopeFactory = scopeFactory;
@@ -47,6 +49,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         _billing = billing;
         _oauth = oauth;
         _smtp = smtp;
+        _webPush = webPush;
         _config = config;
     }
 
@@ -89,15 +92,25 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var stripe = billing.Stripe;
         var oauth = _oauth.Value;
         var smtp = _smtp.CurrentValue;
+        var webPush = _webPush.Value;
 
         var email = new EmailSettings(
+            BrevoEnabled: r.BrevoEnabled ?? brevo.Enabled,
             BrevoApiKey: Unprotect(r.BrevoApiKeyEncrypted) ?? NullIfEmpty(brevo.ApiKey),
             BrevoEmailVerificationTemplateId: r.BrevoEmailVerificationTemplateId ?? brevo.EmailVerificationTemplateId,
             BrevoPasswordResetTemplateId: r.BrevoPasswordResetTemplateId ?? brevo.PasswordResetTemplateId,
+            BrevoWelcomeTemplateId: r.BrevoWelcomeTemplateId ?? brevo.WelcomeTemplateId,
+            BrevoPasswordChangedTemplateId: r.BrevoPasswordChangedTemplateId ?? brevo.PasswordChangedTemplateId,
+            BrevoMfaEnabledTemplateId: r.BrevoMfaEnabledTemplateId ?? brevo.MfaEnabledTemplateId,
+            BrevoAdminInviteTemplateId: r.BrevoAdminInviteTemplateId ?? brevo.AdminInviteTemplateId,
+            BrevoSecurityAlertTemplateId: r.BrevoSecurityAlertTemplateId ?? brevo.SecurityAlertTemplateId,
+            BrevoReviewCompletedTemplateId: r.BrevoReviewCompletedTemplateId ?? brevo.ReviewCompletedTemplateId,
+            SmtpEnabled: r.SmtpEnabled ?? smtp.Enabled,
             SmtpHost: Coalesce(r.SmtpHost, smtp.Host),
             SmtpPort: r.SmtpPort ?? (smtp.Port == 0 ? null : smtp.Port),
             SmtpUsername: Coalesce(r.SmtpUsername, smtp.Username),
             SmtpPassword: Unprotect(r.SmtpPasswordEncrypted) ?? NullIfEmpty(smtp.Password),
+            SmtpEnableSsl: r.SmtpEnableSsl ?? smtp.EnableSsl,
             SmtpFromAddress: Coalesce(r.SmtpFromAddress, brevo.FromEmail, smtp.FromEmail),
             SmtpFromName: Coalesce(r.SmtpFromName, brevo.FromName, smtp.FromName));
 
@@ -127,17 +140,27 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
 
         var google = oauth.Google;
         var facebook = oauth.Facebook;
+        var linkedIn = oauth.LinkedIn;
         var oa = new OAuthSettings(
+            GoogleEnabled: r.GoogleEnabled ?? google.Enabled,
             GoogleClientId: Coalesce(r.GoogleClientId, google.ClientId),
             GoogleClientSecret: Unprotect(r.GoogleClientSecretEncrypted) ?? NullIfEmpty(google.ClientSecret),
             AppleClientId: r.AppleClientId,
             AppleTeamId: r.AppleTeamId,
             AppleKeyId: r.AppleKeyId,
             ApplePrivateKey: Unprotect(r.ApplePrivateKeyEncrypted),
+            FacebookEnabled: r.FacebookEnabled ?? facebook.Enabled,
             FacebookAppId: Coalesce(r.FacebookAppId, facebook.ClientId),
-            FacebookAppSecret: Unprotect(r.FacebookAppSecretEncrypted) ?? NullIfEmpty(facebook.ClientSecret));
+            FacebookAppSecret: Unprotect(r.FacebookAppSecretEncrypted) ?? NullIfEmpty(facebook.ClientSecret),
+            LinkedInEnabled: r.LinkedInEnabled ?? linkedIn.Enabled,
+            LinkedInClientId: Coalesce(r.LinkedInClientId, linkedIn.ClientId),
+            LinkedInClientSecret: Unprotect(r.LinkedInClientSecretEncrypted) ?? NullIfEmpty(linkedIn.ClientSecret));
 
         var push = new PushSettings(
+            WebPushEnabled: r.WebPushEnabled ?? webPush.Enabled,
+            WebPushSubject: Coalesce(r.WebPushSubject, webPush.Subject),
+            WebPushPublicKey: Coalesce(r.WebPushPublicKey, webPush.PublicKey),
+            WebPushPrivateKey: Unprotect(r.WebPushPrivateKeyEncrypted) ?? NullIfEmpty(webPush.PrivateKey),
             ApnsKeyId: r.ApnsKeyId,
             ApnsTeamId: r.ApnsTeamId,
             ApnsBundleId: r.ApnsBundleId,

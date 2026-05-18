@@ -86,7 +86,7 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         response.EnsureSuccessStatusCode();
 
         var sender = factory.Services.GetRequiredService<IEmailSender>();
-        Assert.Equal("BrevoEmailSender", sender.GetType().Name);
+        Assert.Equal("RuntimeEmailSender", sender.GetType().Name);
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         response.EnsureSuccessStatusCode();
 
         var sender = factory.Services.GetRequiredService<IEmailSender>();
-        Assert.Equal("SmtpEmailSender", sender.GetType().Name);
+        Assert.Equal("RuntimeEmailSender", sender.GetType().Name);
     }
 
     [Fact]

@@ -45,8 +45,8 @@ public static class AdminRuntimeSettingsEndpoints
                 IRuntimeSettingsProvider provider,
                 CancellationToken ct) =>
             {
-                var row = await provider.GetRawAsync(ct);
-                return Results.Ok(BuildResponse(row));
+                var effective = await provider.GetAsync(ct);
+                return Results.Ok(BuildResponse(effective));
             })
             .WithAdminRead("AdminSystemAdmin");
 
@@ -94,8 +94,9 @@ public static class AdminRuntimeSettingsEndpoints
 
                 await db.SaveChangesAsync(ct);
                 provider.Invalidate();
+                var effective = await provider.GetAsync(ct);
 
-                return Results.Ok(BuildResponse(row));
+                return Results.Ok(BuildResponse(effective));
             })
             .WithAdminWrite("AdminSystemAdmin");
 
@@ -111,70 +112,88 @@ public static class AdminRuntimeSettingsEndpoints
 
     // ── Response shaping ───────────────────────────────────────────
 
-    private static object BuildResponse(RuntimeSettingsRow r)
+    private static object BuildResponse(EffectiveSettings effective)
         => new
         {
             email = new
             {
-                brevoApiKey = MaskSecret(r.BrevoApiKeyEncrypted),
-                brevoEmailVerificationTemplateId = r.BrevoEmailVerificationTemplateId,
-                brevoPasswordResetTemplateId = r.BrevoPasswordResetTemplateId,
-                smtpHost = r.SmtpHost,
-                smtpPort = r.SmtpPort,
-                smtpUsername = r.SmtpUsername,
-                smtpPassword = MaskSecret(r.SmtpPasswordEncrypted),
-                smtpFromAddress = r.SmtpFromAddress,
-                smtpFromName = r.SmtpFromName,
+                brevoEnabled = effective.Email.BrevoEnabled,
+                brevoApiKey = MaskSecretValue(effective.Email.BrevoApiKey),
+                brevoEmailVerificationTemplateId = effective.Email.BrevoEmailVerificationTemplateId,
+                brevoPasswordResetTemplateId = effective.Email.BrevoPasswordResetTemplateId,
+                brevoWelcomeTemplateId = effective.Email.BrevoWelcomeTemplateId,
+                brevoPasswordChangedTemplateId = effective.Email.BrevoPasswordChangedTemplateId,
+                brevoMfaEnabledTemplateId = effective.Email.BrevoMfaEnabledTemplateId,
+                brevoAdminInviteTemplateId = effective.Email.BrevoAdminInviteTemplateId,
+                brevoSecurityAlertTemplateId = effective.Email.BrevoSecurityAlertTemplateId,
+                brevoReviewCompletedTemplateId = effective.Email.BrevoReviewCompletedTemplateId,
+                smtpEnabled = effective.Email.SmtpEnabled,
+                smtpHost = effective.Email.SmtpHost,
+                smtpPort = effective.Email.SmtpPort,
+                smtpUsername = effective.Email.SmtpUsername,
+                smtpPassword = MaskSecretValue(effective.Email.SmtpPassword),
+                smtpEnableSsl = effective.Email.SmtpEnableSsl,
+                smtpFromAddress = effective.Email.SmtpFromAddress,
+                smtpFromName = effective.Email.SmtpFromName,
             },
             billing = new
             {
-                stripeSecretKey = MaskSecret(r.StripeSecretKeyEncrypted),
-                stripePublishableKey = r.StripePublishableKey,
-                stripeWebhookSecret = MaskSecret(r.StripeWebhookSecretEncrypted),
-                stripeSuccessUrl = r.StripeSuccessUrl,
-                stripeCancelUrl = r.StripeCancelUrl,
+                stripeSecretKey = MaskSecretValue(effective.Billing.StripeSecretKey),
+                stripePublishableKey = effective.Billing.StripePublishableKey,
+                stripeWebhookSecret = MaskSecretValue(effective.Billing.StripeWebhookSecret),
+                stripeSuccessUrl = effective.Billing.StripeSuccessUrl,
+                stripeCancelUrl = effective.Billing.StripeCancelUrl,
             },
             sentry = new
             {
-                dsn = r.SentryDsn,
-                environment = r.SentryEnvironment,
-                sampleRate = r.SentrySampleRate,
+                dsn = effective.Sentry.Dsn,
+                environment = effective.Sentry.Environment,
+                sampleRate = effective.Sentry.SampleRate,
             },
             backup = new
             {
-                s3Url = r.BackupS3Url,
-                awsAccessKeyId = r.BackupAwsAccessKeyId,
-                awsSecretAccessKey = MaskSecret(r.BackupAwsSecretAccessKeyEncrypted),
-                gpgPassphrase = MaskSecret(r.BackupGpgPassphraseEncrypted),
-                alertWebhook = r.BackupAlertWebhook,
+                s3Url = effective.Backup.S3Url,
+                awsAccessKeyId = effective.Backup.AwsAccessKeyId,
+                awsSecretAccessKey = MaskSecretValue(effective.Backup.AwsSecretAccessKey),
+                gpgPassphrase = MaskSecretValue(effective.Backup.GpgPassphrase),
+                alertWebhook = effective.Backup.AlertWebhook,
             },
             oauth = new
             {
-                googleClientId = r.GoogleClientId,
-                googleClientSecret = MaskSecret(r.GoogleClientSecretEncrypted),
-                appleClientId = r.AppleClientId,
-                appleTeamId = r.AppleTeamId,
-                appleKeyId = r.AppleKeyId,
-                applePrivateKey = MaskSecret(r.ApplePrivateKeyEncrypted),
-                facebookAppId = r.FacebookAppId,
-                facebookAppSecret = MaskSecret(r.FacebookAppSecretEncrypted),
+                googleEnabled = effective.OAuth.GoogleEnabled,
+                googleClientId = effective.OAuth.GoogleClientId,
+                googleClientSecret = MaskSecretValue(effective.OAuth.GoogleClientSecret),
+                appleClientId = effective.OAuth.AppleClientId,
+                appleTeamId = effective.OAuth.AppleTeamId,
+                appleKeyId = effective.OAuth.AppleKeyId,
+                applePrivateKey = MaskSecretValue(effective.OAuth.ApplePrivateKey),
+                facebookEnabled = effective.OAuth.FacebookEnabled,
+                facebookAppId = effective.OAuth.FacebookAppId,
+                facebookAppSecret = MaskSecretValue(effective.OAuth.FacebookAppSecret),
+                linkedInEnabled = effective.OAuth.LinkedInEnabled,
+                linkedInClientId = effective.OAuth.LinkedInClientId,
+                linkedInClientSecret = MaskSecretValue(effective.OAuth.LinkedInClientSecret),
             },
             push = new
             {
-                apnsKeyId = r.ApnsKeyId,
-                apnsTeamId = r.ApnsTeamId,
-                apnsBundleId = r.ApnsBundleId,
-                apnsAuthKey = MaskSecret(r.ApnsAuthKeyEncrypted),
-                fcmServerKey = MaskSecret(r.FcmServerKeyEncrypted),
-                fcmProjectId = r.FcmProjectId,
+                webPushEnabled = effective.Push.WebPushEnabled,
+                webPushSubject = effective.Push.WebPushSubject,
+                webPushPublicKey = effective.Push.WebPushPublicKey,
+                webPushPrivateKey = MaskSecretValue(effective.Push.WebPushPrivateKey),
+                apnsKeyId = effective.Push.ApnsKeyId,
+                apnsTeamId = effective.Push.ApnsTeamId,
+                apnsBundleId = effective.Push.ApnsBundleId,
+                apnsAuthKey = MaskSecretValue(effective.Push.ApnsAuthKey),
+                fcmServerKey = MaskSecretValue(effective.Push.FcmServerKey),
+                fcmProjectId = effective.Push.FcmProjectId,
             },
-            updatedBy = r.UpdatedByUserName,
-            updatedByUserId = r.UpdatedByUserId,
-            updatedAt = r.UpdatedAt == default ? (DateTimeOffset?)null : r.UpdatedAt,
+            updatedBy = effective.UpdatedByUserName,
+            updatedByUserId = effective.UpdatedByUserId,
+            updatedAt = effective.UpdatedAt,
         };
 
-    private static string MaskSecret(string? cipher)
-        => string.IsNullOrEmpty(cipher) ? string.Empty : SecretMask;
+    private static string MaskSecretValue(string? secret)
+        => string.IsNullOrEmpty(secret) ? string.Empty : SecretMask;
 
     // ── Per-section appliers ───────────────────────────────────────
 
@@ -182,13 +201,22 @@ public static class AdminRuntimeSettingsEndpoints
         IRuntimeSettingsProvider p, List<string> changed)
     {
         if (d is null) return;
+        if (TrySetNullableBool(d.BrevoEnabled, v => row.BrevoEnabled = v, "email.brevoEnabled", changed)) { }
         if (TrySetSecret(d.BrevoApiKey, p, v => row.BrevoApiKeyEncrypted = v, "email.brevoApiKey", changed)) { }
         if (TrySetNullableInt(d.BrevoEmailVerificationTemplateId, v => row.BrevoEmailVerificationTemplateId = v, "email.brevoEmailVerificationTemplateId", changed)) { }
         if (TrySetNullableInt(d.BrevoPasswordResetTemplateId, v => row.BrevoPasswordResetTemplateId = v, "email.brevoPasswordResetTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoWelcomeTemplateId, v => row.BrevoWelcomeTemplateId = v, "email.brevoWelcomeTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoPasswordChangedTemplateId, v => row.BrevoPasswordChangedTemplateId = v, "email.brevoPasswordChangedTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoMfaEnabledTemplateId, v => row.BrevoMfaEnabledTemplateId = v, "email.brevoMfaEnabledTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoAdminInviteTemplateId, v => row.BrevoAdminInviteTemplateId = v, "email.brevoAdminInviteTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoSecurityAlertTemplateId, v => row.BrevoSecurityAlertTemplateId = v, "email.brevoSecurityAlertTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoReviewCompletedTemplateId, v => row.BrevoReviewCompletedTemplateId = v, "email.brevoReviewCompletedTemplateId", changed)) { }
+        if (TrySetNullableBool(d.SmtpEnabled, v => row.SmtpEnabled = v, "email.smtpEnabled", changed)) { }
         if (TrySetPlain(d.SmtpHost, v => row.SmtpHost = v, "email.smtpHost", changed)) { }
         if (TrySetNullableInt(d.SmtpPort, v => row.SmtpPort = v, "email.smtpPort", changed)) { }
         if (TrySetPlain(d.SmtpUsername, v => row.SmtpUsername = v, "email.smtpUsername", changed)) { }
         if (TrySetSecret(d.SmtpPassword, p, v => row.SmtpPasswordEncrypted = v, "email.smtpPassword", changed)) { }
+        if (TrySetNullableBool(d.SmtpEnableSsl, v => row.SmtpEnableSsl = v, "email.smtpEnableSsl", changed)) { }
         if (TrySetPlain(d.SmtpFromAddress, v => row.SmtpFromAddress = v, "email.smtpFromAddress", changed)) { }
         if (TrySetPlain(d.SmtpFromName, v => row.SmtpFromName = v, "email.smtpFromName", changed)) { }
     }
@@ -227,20 +255,29 @@ public static class AdminRuntimeSettingsEndpoints
         IRuntimeSettingsProvider p, List<string> changed)
     {
         if (d is null) return;
+        if (TrySetNullableBool(d.GoogleEnabled, v => row.GoogleEnabled = v, "oauth.googleEnabled", changed)) { }
         if (TrySetPlain(d.GoogleClientId, v => row.GoogleClientId = v, "oauth.googleClientId", changed)) { }
         if (TrySetSecret(d.GoogleClientSecret, p, v => row.GoogleClientSecretEncrypted = v, "oauth.googleClientSecret", changed)) { }
         if (TrySetPlain(d.AppleClientId, v => row.AppleClientId = v, "oauth.appleClientId", changed)) { }
         if (TrySetPlain(d.AppleTeamId, v => row.AppleTeamId = v, "oauth.appleTeamId", changed)) { }
         if (TrySetPlain(d.AppleKeyId, v => row.AppleKeyId = v, "oauth.appleKeyId", changed)) { }
         if (TrySetSecret(d.ApplePrivateKey, p, v => row.ApplePrivateKeyEncrypted = v, "oauth.applePrivateKey", changed)) { }
+        if (TrySetNullableBool(d.FacebookEnabled, v => row.FacebookEnabled = v, "oauth.facebookEnabled", changed)) { }
         if (TrySetPlain(d.FacebookAppId, v => row.FacebookAppId = v, "oauth.facebookAppId", changed)) { }
         if (TrySetSecret(d.FacebookAppSecret, p, v => row.FacebookAppSecretEncrypted = v, "oauth.facebookAppSecret", changed)) { }
+        if (TrySetNullableBool(d.LinkedInEnabled, v => row.LinkedInEnabled = v, "oauth.linkedInEnabled", changed)) { }
+        if (TrySetPlain(d.LinkedInClientId, v => row.LinkedInClientId = v, "oauth.linkedInClientId", changed)) { }
+        if (TrySetSecret(d.LinkedInClientSecret, p, v => row.LinkedInClientSecretEncrypted = v, "oauth.linkedInClientSecret", changed)) { }
     }
 
     private static void ApplyPush(RuntimeSettingsRow row, RuntimeSettingsPushUpdate? d,
         IRuntimeSettingsProvider p, List<string> changed)
     {
         if (d is null) return;
+        if (TrySetNullableBool(d.WebPushEnabled, v => row.WebPushEnabled = v, "push.webPushEnabled", changed)) { }
+        if (TrySetPlain(d.WebPushSubject, v => row.WebPushSubject = v, "push.webPushSubject", changed)) { }
+        if (TrySetPlain(d.WebPushPublicKey, v => row.WebPushPublicKey = v, "push.webPushPublicKey", changed)) { }
+        if (TrySetSecret(d.WebPushPrivateKey, p, v => row.WebPushPrivateKeyEncrypted = v, "push.webPushPrivateKey", changed)) { }
         if (TrySetPlain(d.ApnsKeyId, v => row.ApnsKeyId = v, "push.apnsKeyId", changed)) { }
         if (TrySetPlain(d.ApnsTeamId, v => row.ApnsTeamId = v, "push.apnsTeamId", changed)) { }
         if (TrySetPlain(d.ApnsBundleId, v => row.ApnsBundleId = v, "push.apnsBundleId", changed)) { }
@@ -294,6 +331,52 @@ public static class AdminRuntimeSettingsEndpoints
         return true;
     }
 
+    private static bool TrySetNullableBool(JsonElement? input, Action<bool?> setter, string key, List<string> changed)
+    {
+        if (!TryReadNullableBool(input, key, out var value))
+            return false;
+
+        setter(value);
+        changed.Add(key);
+        return true;
+    }
+
+    private static bool TryReadNullableBool(JsonElement? input, string key, out bool? value)
+    {
+        value = null;
+        if (input is null) return false; // omitted => leave unchanged
+
+        var element = input.Value;
+        if (element.ValueKind is JsonValueKind.Null)
+            return true; // explicit null => clear override
+
+        if (element.ValueKind is JsonValueKind.String)
+        {
+            var s = element.GetString();
+            if (s == string.Empty)
+                return true; // tolerate legacy empty-string clears from HTML inputs
+            if (bool.TryParse(s, out var parsed))
+            {
+                value = parsed;
+                return true;
+            }
+        }
+
+        if (element.ValueKind is JsonValueKind.True)
+        {
+            value = true;
+            return true;
+        }
+
+        if (element.ValueKind is JsonValueKind.False)
+        {
+            value = false;
+            return true;
+        }
+
+        throw new InvalidOperationException($"{key} must be a boolean or null.");
+    }
+
     private static bool TryReadNullableNumber<T>(JsonElement? input, string key, Func<JsonElement, T> reader, out T? value)
         where T : struct
     {
@@ -341,13 +424,22 @@ public sealed class RuntimeSettingsUpdateRequest
 
 public sealed class RuntimeSettingsEmailUpdate
 {
+    public JsonElement? BrevoEnabled { get; set; }
     public string? BrevoApiKey { get; set; }
     public JsonElement? BrevoEmailVerificationTemplateId { get; set; }
     public JsonElement? BrevoPasswordResetTemplateId { get; set; }
+    public JsonElement? BrevoWelcomeTemplateId { get; set; }
+    public JsonElement? BrevoPasswordChangedTemplateId { get; set; }
+    public JsonElement? BrevoMfaEnabledTemplateId { get; set; }
+    public JsonElement? BrevoAdminInviteTemplateId { get; set; }
+    public JsonElement? BrevoSecurityAlertTemplateId { get; set; }
+    public JsonElement? BrevoReviewCompletedTemplateId { get; set; }
+    public JsonElement? SmtpEnabled { get; set; }
     public string? SmtpHost { get; set; }
     public JsonElement? SmtpPort { get; set; }
     public string? SmtpUsername { get; set; }
     public string? SmtpPassword { get; set; }
+    public JsonElement? SmtpEnableSsl { get; set; }
     public string? SmtpFromAddress { get; set; }
     public string? SmtpFromName { get; set; }
 }
@@ -379,18 +471,27 @@ public sealed class RuntimeSettingsBackupUpdate
 
 public sealed class RuntimeSettingsOAuthUpdate
 {
+    public JsonElement? GoogleEnabled { get; set; }
     public string? GoogleClientId { get; set; }
     public string? GoogleClientSecret { get; set; }
     public string? AppleClientId { get; set; }
     public string? AppleTeamId { get; set; }
     public string? AppleKeyId { get; set; }
     public string? ApplePrivateKey { get; set; }
+    public JsonElement? FacebookEnabled { get; set; }
     public string? FacebookAppId { get; set; }
     public string? FacebookAppSecret { get; set; }
+    public JsonElement? LinkedInEnabled { get; set; }
+    public string? LinkedInClientId { get; set; }
+    public string? LinkedInClientSecret { get; set; }
 }
 
 public sealed class RuntimeSettingsPushUpdate
 {
+    public JsonElement? WebPushEnabled { get; set; }
+    public string? WebPushSubject { get; set; }
+    public string? WebPushPublicKey { get; set; }
+    public string? WebPushPrivateKey { get; set; }
     public string? ApnsKeyId { get; set; }
     public string? ApnsTeamId { get; set; }
     public string? ApnsBundleId { get; set; }

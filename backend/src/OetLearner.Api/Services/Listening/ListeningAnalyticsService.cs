@@ -333,7 +333,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
 
         int? best = scaledByAttempt.Count == 0 ? null : scaledByAttempt.Values.Max();
         int? avg = scaledByAttempt.Count == 0 ? null : (int)Math.Round(scaledByAttempt.Values.Average());
-        var passing = (best ?? 0) >= OetScoring.ScaledPassGradeB;
+        var passing = best is int bestScaled && OetScoring.IsListeningReadingPassByScaled(bestScaled);
 
         var plan = BuildStudentActionPlan(weaknesses, partBreakdown, passing);
 

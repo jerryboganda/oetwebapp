@@ -121,6 +121,7 @@ Every feature the gateway serves is classified. Defaults:
 | `admin.conversation_draft` | ❌ | ❌ | ✅ | Conversation scenario drafting (grounded), platform only |
 | `admin.vocabulary_draft` | ❌ | ❌ | ✅ | Vocabulary term drafting (grounded), platform only |
 | `admin.listening_draft` | ❌ | ❌ | ✅ | Listening 42-item structure drafting from PDFs (grounded), platform only |
+| `admin.reading_draft` | ❌ | ❌ | ✅ | Reading 42-item structure drafting from PDFs (grounded), platform only; human approval required |
 
 Admin can toggle the BYOK column per feature. `AllowByokOnScoringFeatures`
 global switch gates the scoring-critical rows.

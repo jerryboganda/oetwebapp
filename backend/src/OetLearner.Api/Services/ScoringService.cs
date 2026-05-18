@@ -106,15 +106,11 @@ public class ScoringService
     /// <summary>
     /// Convert a raw OET score (0–500) to an OET grade letter.
     /// </summary>
-    public static string OetGrade(double score) => score switch
+    public static string OetGrade(double score)
     {
-        >= 450 => "Grade A",
-        >= 350 => "Grade B",
-        >= 300 => "Grade C+",
-        >= 200 => "Grade C",
-        >= 100 => "Grade D",
-        _ => "Grade E"
-    };
+        var scaled = double.IsFinite(score) ? (int)Math.Floor(score) : OetScoring.ScaledMin;
+        return OetScoring.OetGradeLabel(OetScoring.OetGradeLetterFromScaled(scaled));
+    }
 
     /// <summary>
     /// Convert a raw IELTS score to a band score (round to nearest 0.5).
@@ -148,7 +144,7 @@ public class ScoringService
         var code = (examFamilyCode ?? "oet").Trim().ToLowerInvariant();
         return code switch
         {
-            "oet" => 350,
+            "oet" => OetScoring.ScaledPassGradeB,
             "ielts" => 7.0,
             "pte" => 65,
             _ => 60

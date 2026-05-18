@@ -522,8 +522,9 @@ public sealed class SpeakingEvaluationPipeline(
         // provided per-criterion scores via `criterionScores`, those are
         // authoritative. Otherwise we derive a deterministic baseline from
         // the rulebook findings so the shape stays stable for retries.
-        var baselineLinguistic = scaledEstimate >= OetScoring.ScaledPassGradeB ? 4 : 3;
-        var baselineClinical = scaledEstimate >= OetScoring.ScaledPassGradeB ? 2 : 1;
+        var isSpeakingPass = OetScoring.IsSpeakingPass(scaledEstimate);
+        var baselineLinguistic = isSpeakingPass ? 4 : 3;
+        var baselineClinical = isSpeakingPass ? 2 : 1;
 
         int LinguisticScore(string code, Func<OetScoring.SpeakingCriterionScores, int>? aiPicker)
         {

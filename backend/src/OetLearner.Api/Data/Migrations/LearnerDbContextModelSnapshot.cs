@@ -6175,6 +6175,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("AndroidIapProductId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<string>("AndroidPackageName")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
@@ -6248,6 +6252,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("IosIapProductId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<string>("IosPushStatus")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -6271,6 +6279,15 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<bool>("MobileForceUpdate")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("MobileBillingEvidenceUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("MobileBillingPolicy")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("MobileLatestVersion")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -6280,6 +6297,10 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<string>("MobileStoreReviewNotes")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
 
                     b.Property<string>("RealtimeEvidenceUrl")
                         .HasMaxLength(512)
@@ -6302,6 +6323,14 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<bool>("RealtimeTopologyApproved")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("RevenueCatAndroidApiKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("RevenueCatIosApiKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<string>("ReleaseOwnerApprovalStatus")
                         .HasMaxLength(64)
@@ -9703,6 +9732,10 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("MetadataJson")
                         .HasColumnType("text");
 
+                    b.Property<string>("PayerType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("PlanVersionId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -9718,6 +9751,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("QuoteId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("SponsorshipId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -9744,6 +9780,8 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("PlanVersionId");
 
                     b.HasIndex("QuoteId");
+
+                    b.HasIndex("SponsorshipId");
 
                     b.HasIndex("LearnerUserId", "CreatedAt");
 
@@ -12212,13 +12250,34 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<int?>("BrevoAdminInviteTemplateId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("BrevoApiKeyEncrypted")
                         .HasColumnType("text");
 
                     b.Property<int?>("BrevoEmailVerificationTemplateId")
                         .HasColumnType("integer");
 
+                    b.Property<bool?>("BrevoEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("BrevoMfaEnabledTemplateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BrevoPasswordChangedTemplateId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("BrevoPasswordResetTemplateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BrevoReviewCompletedTemplateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BrevoSecurityAlertTemplateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BrevoWelcomeTemplateId")
                         .HasColumnType("integer");
 
                     b.Property<string>("FacebookAppId")
@@ -12227,6 +12286,9 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<string>("FacebookAppSecretEncrypted")
                         .HasColumnType("text");
+
+                    b.Property<bool?>("FacebookEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("FcmProjectId")
                         .HasMaxLength(256)
@@ -12242,6 +12304,19 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("GoogleClientSecretEncrypted")
                         .HasColumnType("text");
 
+                    b.Property<bool?>("GoogleEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LinkedInClientId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("LinkedInClientSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<bool?>("LinkedInEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("SentryDsn")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
@@ -12252,6 +12327,12 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<double?>("SentrySampleRate")
                         .HasColumnType("double precision");
+
+                    b.Property<bool?>("SmtpEnableSsl")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("SmtpEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("SmtpFromAddress")
                         .HasMaxLength(256)
@@ -12303,6 +12384,20 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("UpdatedByUserName")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<bool?>("WebPushEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("WebPushPrivateKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WebPushPublicKey")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("WebPushSubject")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.HasKey("Id");
 

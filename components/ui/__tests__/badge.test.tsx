@@ -29,7 +29,7 @@ describe('Badge visual contracts', () => {
 
     expectClasses(screen.getByText('Muted badge'), [
       'bg-surface',
-      'text-muted',
+      'text-slate-700',
       'border-border',
       'px-3',
       'py-1',

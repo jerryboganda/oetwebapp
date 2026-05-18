@@ -61,6 +61,7 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         AiFeatureCodes.AdminVocabularyDraft,
         AiFeatureCodes.AdminConversationDraft,
         AiFeatureCodes.AdminListeningDraft,
+        AiFeatureCodes.AdminReadingDraft,
         AiFeatureCodes.AdminWritingDraft,
     };
 

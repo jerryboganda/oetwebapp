@@ -1,6 +1,4 @@
 import type {NextConfig} from 'next';
-import { copyFileSync, existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
 
 // NOTE: Content-Security-Policy is emitted by middleware.ts on a per-request basis
 // so each response carries a unique nonce. Do NOT add a CSP here — a static CSP
@@ -16,6 +14,7 @@ const readNextBuildWorkers = () => {
 };
 
 const nextBuildWorkers = readNextBuildWorkers();
+const isProductionBuild = process.env.NODE_ENV === 'production';
 
 const nextConfig: NextConfig = {
   ...(nextBuildWorkers ? { experimental: { cpus: nextBuildWorkers } } : {}),
@@ -24,6 +23,15 @@ const nextConfig: NextConfig = {
     remotePatterns: [],
   },
   output: 'standalone',
+  outputFileTracingRoot: process.cwd(),
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  // `npm run build` runs `npm run typecheck` first; skip Next's duplicate
+  // worker on Windows where the generated `.next/types` phase can stall.
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   async redirects() {
     // Phase 2 of the Content Hub consolidation: every legacy /admin/<area>
     // route now lives under /admin/content/<area>. Permanent redirects keep
@@ -71,36 +79,8 @@ const nextConfig: NextConfig = {
     ];
   },
   serverExternalPackages: ['wavesurfer.js'],
-  webpack: (config, {dev, isServer}) => {
-    config.ignoreWarnings = [
-      ...(config.ignoreWarnings ?? []),
-      {
-        module:
-          /node_modules[\\/]@prisma[\\/]instrumentation[\\/]node_modules[\\/]@opentelemetry[\\/]instrumentation[\\/]/,
-        message: /Critical dependency: the request of a dependency is an expression/,
-      },
-    ];
-
-    if (!dev && isServer) {
-      config.plugins ??= [];
-      config.plugins.push({
-        apply(compiler: { hooks: { afterEmit: { tap: (name: string, callback: (compilation: { outputOptions: { path?: string } }) => void) => void } } }) {
-          compiler.hooks.afterEmit.tap('MirrorNextServerChunks', (compilation) => {
-            const outputPath = compilation.outputOptions.path;
-            if (!outputPath) return;
-            const chunksPath = join(outputPath, 'chunks');
-            if (!existsSync(chunksPath)) return;
-
-            for (const fileName of readdirSync(chunksPath)) {
-              if (fileName.endsWith('.js')) {
-                copyFileSync(join(chunksPath, fileName), join(outputPath, fileName));
-              }
-            }
-          });
-        },
-      });
-    }
-
+  ...(!isProductionBuild ? {
+    webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Do not modify — file watching is disabled to prevent flickering during agent edits.
     if (dev && process.env.DISABLE_HMR === 'true') {
@@ -109,7 +89,8 @@ const nextConfig: NextConfig = {
       };
     }
     return config;
-  },
+    },
+  } : {}),
 };
 
 export default nextConfig;

@@ -147,6 +147,20 @@ describe('AiProvidersPage — GitHub Copilot integration', () => {
     expect(payload.defaultModel).toBe('scribe_v2_realtime');
   });
 
+  it('exposes advanced provider controls for model allowlists and circuit breakers', async () => {
+    mockFetch.mockResolvedValue([]);
+
+    render(<AiProvidersPage />);
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+
+    await userEvent.click(screen.getByRole('button', { name: /Register provider/i }));
+
+    expect(await screen.findByLabelText('Allowed models CSV')).toBeInTheDocument();
+    expect(screen.getByLabelText('Circuit breaker failure threshold')).toBeInTheDocument();
+    expect(screen.getByLabelText('Circuit breaker window seconds')).toBeInTheDocument();
+    expect(screen.getByLabelText('Failover priority')).toBeInTheDocument();
+  });
+
   it('blocks non-admin viewers', () => {
     authState.role = 'learner';
     render(<AiProvidersPage />);

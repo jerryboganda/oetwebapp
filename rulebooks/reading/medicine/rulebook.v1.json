@@ -1,0 +1,61 @@
+{
+  "version": "1.0.0",
+  "kind": "reading",
+  "profession": "medicine",
+  "publishedAt": "2026-05-17",
+  "authoritySource": "docs/READING-AUTHORING-PLAN.md and docs/READING-AUTHORING-POLICY.md",
+  "sections": [
+    { "id": "01", "title": "Canonical OET Reading paper shape", "order": 1 },
+    { "id": "02", "title": "AI-assisted authoring guardrails", "order": 2 }
+  ],
+  "rules": [
+    {
+      "id": "RD01.1",
+      "section": "01",
+      "severity": "critical",
+      "title": "Reading paper has 42 scored items",
+      "body": "An authored Reading paper has exactly 42 one-point scored items: Part A has 20, Part B has 6, and Part C has 16.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RD01.2",
+      "section": "01",
+      "severity": "critical",
+      "title": "Part topology",
+      "body": "Part A contains 4 medical texts on a single topic, Part B contains 6 short workplace extracts, and Part C contains 2 long healthcare articles.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RD01.3",
+      "section": "01",
+      "severity": "critical",
+      "title": "Question types by part",
+      "body": "Part A may use matching text reference, short answer, or sentence completion items. Part B uses exactly three-option multiple choice. Part C uses exactly four-option multiple choice.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RD01.4",
+      "section": "01",
+      "severity": "critical",
+      "title": "Canonical scoring anchor",
+      "body": "Reading raw score 30 out of 42 is exactly 350 out of 500. AI authoring must not produce learner grades or replace canonical OetScoring.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RD02.1",
+      "section": "02",
+      "severity": "critical",
+      "title": "Human approval is mandatory",
+      "body": "AI-extracted Reading structures are draft content only until an admin reviews and explicitly approves them. There is no production auto-approval path.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RD02.2",
+      "section": "02",
+      "severity": "critical",
+      "title": "Do not invent answer keys",
+      "body": "AI extraction may only use the supplied question-paper and answer-key text. Missing answers, passages, options, or explanations must remain missing/invalid rather than guessed.",
+      "appliesTo": "all"
+    }
+  ]
+}

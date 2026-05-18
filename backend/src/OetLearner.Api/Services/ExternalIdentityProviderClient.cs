@@ -2,26 +2,24 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.WebUtilities;
-using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
 public interface IExternalIdentityProviderClient
 {
-    Uri BuildAuthorizationUri(string provider, string state, string redirectUri);
+    Task<Uri> BuildAuthorizationUriAsync(string provider, string state, string redirectUri, CancellationToken cancellationToken = default);
     Task<ExternalIdentityProfile> ExchangeCodeAsync(string provider, string code, string redirectUri, CancellationToken cancellationToken = default);
 }
 
 public sealed class ExternalIdentityProviderClient(
     HttpClient httpClient,
-    IOptions<ExternalAuthOptions> optionsAccessor) : IExternalIdentityProviderClient
+    IRuntimeSettingsProvider runtimeSettings) : IExternalIdentityProviderClient
 {
-    private readonly ExternalAuthOptions _options = optionsAccessor.Value;
-
-    public Uri BuildAuthorizationUri(string provider, string state, string redirectUri)
+    public async Task<Uri> BuildAuthorizationUriAsync(string provider, string state, string redirectUri, CancellationToken cancellationToken = default)
     {
-        var configuration = GetProviderConfiguration(provider);
+        var configuration = await GetProviderConfigurationAsync(provider, cancellationToken);
         var parameters = provider switch
         {
             ExternalAuthProviders.Google => new Dictionary<string, string?>
@@ -62,7 +60,7 @@ public sealed class ExternalIdentityProviderClient(
             throw ApiException.Validation("external_auth_code_required", "The external sign-in code is missing.");
         }
 
-        var configuration = GetProviderConfiguration(provider);
+        var configuration = await GetProviderConfigurationAsync(provider, cancellationToken);
         var tokenPayload = await ExchangeAuthorizationCodeAsync(provider, configuration, code, redirectUri, cancellationToken);
         var accessToken = tokenPayload.GetProperty("access_token").GetString();
         if (string.IsNullOrWhiteSpace(accessToken))
@@ -81,7 +79,7 @@ public sealed class ExternalIdentityProviderClient(
 
     private async Task<JsonElement> ExchangeAuthorizationCodeAsync(
         string provider,
-        ExternalAuthProviderOptions configuration,
+        RuntimeExternalAuthProviderOptions configuration,
         string code,
         string redirectUri,
         CancellationToken cancellationToken)
@@ -185,14 +183,15 @@ public sealed class ExternalIdentityProviderClient(
             profile.EmailVerified ?? false);
     }
 
-    private ExternalAuthProviderOptions GetProviderConfiguration(string provider)
+    private async Task<RuntimeExternalAuthProviderOptions> GetProviderConfigurationAsync(string provider, CancellationToken cancellationToken)
     {
         if (!ExternalAuthProviders.All.Contains(provider, StringComparer.OrdinalIgnoreCase))
         {
             throw ApiException.Validation("unsupported_external_provider", $"Unsupported external auth provider '{provider}'.");
         }
 
-        var configuration = _options.GetProvider(provider);
+        var settings = (await runtimeSettings.GetAsync(cancellationToken)).OAuth;
+        var configuration = RuntimeExternalAuthProviderOptions.From(settings, provider);
         if (!configuration.Enabled
             || string.IsNullOrWhiteSpace(configuration.ClientId)
             || string.IsNullOrWhiteSpace(configuration.ClientSecret))
@@ -246,6 +245,18 @@ public sealed class ExternalIdentityProviderClient(
         string? FamilyName,
         string? Name,
         [property: System.Text.Json.Serialization.JsonPropertyName("email_verified")] bool? EmailVerified);
+}
+
+internal sealed record RuntimeExternalAuthProviderOptions(bool Enabled, string? ClientId, string? ClientSecret)
+{
+    public static RuntimeExternalAuthProviderOptions From(OAuthSettings settings, string provider)
+        => provider.ToLowerInvariant() switch
+        {
+            ExternalAuthProviders.Google => new(settings.GoogleEnabled, settings.GoogleClientId, settings.GoogleClientSecret),
+            ExternalAuthProviders.Facebook => new(settings.FacebookEnabled, settings.FacebookAppId, settings.FacebookAppSecret),
+            ExternalAuthProviders.LinkedIn => new(settings.LinkedInEnabled, settings.LinkedInClientId, settings.LinkedInClientSecret),
+            _ => throw new InvalidOperationException($"Unsupported external auth provider '{provider}'.")
+        };
 }
 
 public sealed record ExternalIdentityProfile(

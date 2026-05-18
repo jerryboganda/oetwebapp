@@ -638,6 +638,17 @@ export const apiClient = {
   },
 };
 
+export interface RegisterMobilePushTokenRequest {
+  token: string;
+  platform: string;
+}
+
+export async function registerMobilePushToken(
+  request: RegisterMobilePushTokenRequest,
+): Promise<ApiRecord> {
+  return apiClient.post<ApiRecord>('/v1/notifications/push-token', request);
+}
+
 async function uploadBinary(pathOrUrl: string, blob: Blob): Promise<void> {
   const response = await fetchWithTimeout(resolveApiUploadUrl(pathOrUrl), {
     method: 'PUT',
@@ -8232,6 +8243,13 @@ export interface AdminLaunchReadinessSettings {
   mobileForceUpdate: boolean;
   iosAppStoreUrl: string | null;
   androidPlayStoreUrl: string | null;
+  mobileBillingPolicy: 'web-checkout' | 'native-iap' | 'hybrid';
+  revenueCatIosApiKey: string | null;
+  revenueCatAndroidApiKey: string | null;
+  iosIapProductId: string | null;
+  androidIapProductId: string | null;
+  mobileBillingEvidenceUrl: string | null;
+  mobileStoreReviewNotes: string | null;
   iosBundleId: string | null;
   appleTeamId: string | null;
   appleAssociatedDomainStatus: string | null;
@@ -8268,6 +8286,20 @@ export interface AdminLaunchReadinessSettings {
   updatedByAdminName: string | null;
 }
 
+export interface PublicAppReleaseSettings {
+  platform: string;
+  minVersion: string;
+  latestVersion: string;
+  forceUpdate: boolean;
+  storeUrl: string | null;
+  updateFeedUrl: string | null;
+  channel: string | null;
+  billingPolicy: 'web-checkout' | 'native-iap' | 'hybrid';
+  revenueCatApiKey: string | null;
+  iapProductId: string | null;
+  iapStatus: string | null;
+}
+
 export async function fetchAdminLaunchReadinessSettings(): Promise<AdminLaunchReadinessSettings> {
   return apiRequest<AdminLaunchReadinessSettings>('/v1/admin/launch-readiness/settings');
 }
@@ -8279,6 +8311,11 @@ export async function updateAdminLaunchReadinessSettings(
     method: 'PUT',
     body: JSON.stringify(body),
   });
+}
+
+export async function fetchPublicAppReleaseSettings(platform?: string): Promise<PublicAppReleaseSettings> {
+  const query = platform ? `?platform=${encodeURIComponent(platform)}` : '';
+  return apiRequest<PublicAppReleaseSettings>(`/v1/app-release${query}`);
 }
 
 export async function adminConversationTtsPreview(body: { text?: string; voice?: string; locale?: string }) {

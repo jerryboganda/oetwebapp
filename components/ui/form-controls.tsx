@@ -43,7 +43,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-red-600 overflow-hidden">{error}</motion.p>
           )}
           {hint && !error && (
-            <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
+            <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-slate-700 dark:text-muted overflow-hidden">{hint}</motion.p>
           )}
         </AnimatePresence>
       </div>
@@ -83,7 +83,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-red-600 overflow-hidden">{error}</motion.p>
           )}
           {hint && !error && (
-            <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
+            <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-slate-700 dark:text-muted overflow-hidden">{hint}</motion.p>
           )}
         </AnimatePresence>
       </div>
@@ -129,7 +129,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             <motion.p key="error" {...errorReveal} className="text-xs text-red-600 overflow-hidden">{error}</motion.p>
           )}
           {hint && !error && (
-            <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
+            <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-slate-700 dark:text-muted overflow-hidden">{hint}</motion.p>
           )}
         </AnimatePresence>
       </div>
@@ -194,7 +194,7 @@ export function RadioGroup({ name, label, options, value, onChange, error, class
             />
             <div>
               <span className="text-sm font-medium text-navy">{opt.label}</span>
-              {opt.description && <p className="mt-1 text-xs leading-5 text-muted">{opt.description}</p>}
+              {opt.description && <p className="mt-1 text-xs leading-5 text-slate-700 dark:text-muted">{opt.description}</p>}
             </div>
           </label>
         ))}

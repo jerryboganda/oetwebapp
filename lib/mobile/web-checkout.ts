@@ -1,35 +1,49 @@
-// Mobile / Capacitor-aware checkout opener.
-//
-// Decision recorded 2026-05-10 against `RW-014` in
-// `docs/STATUS/remaining-work.yaml`: payment processing on Capacitor builds
-// is performed entirely on the web via Stripe Checkout. We do NOT use Apple
-// or Google in-app purchases. To keep store-policy compliance simple the
-// checkout URL is launched in the **system browser** rather than the
-// in-app webview.
-//
-// On the web this falls back to `window.open(...)` so the behaviour for
-// existing learners is unchanged.
-
 import { Capacitor } from '@capacitor/core';
+import { fetchPublicAppReleaseSettings } from '@/lib/api';
+import { purchaseConfiguredNativeProduct, type MobileBillingPolicy } from '@/lib/mobile/in-app-purchases';
 
-export type OpenCheckoutResult = 'capacitor-browser' | 'window-open' | 'window-assign' | 'noop';
+export type OpenCheckoutResult = 'native-iap' | 'capacitor-browser' | 'window-open' | 'window-assign' | 'noop';
+
+export interface OpenCheckoutOptions {
+  appUserId?: string | null;
+  nativeProductId?: string | null;
+  billingPolicyOverride?: MobileBillingPolicy | null;
+}
+
+function normalizeBillingPolicy(value: string | null | undefined): MobileBillingPolicy {
+  return value === 'native-iap' || value === 'web-checkout' || value === 'hybrid' ? value : 'hybrid';
+}
 
 /**
  * Opens a checkout / billing-portal URL in the most appropriate context for
  * the current runtime.
  *
- * - On Capacitor native builds: uses `@capacitor/browser` so Stripe runs in
- *   the OS browser (Safari View Controller / Chrome Custom Tabs). This is
- *   the path required by App Store + Play Store policy because we are
- *   processing payment on the web, not via in-app purchase.
+ * - On Capacitor native builds: the admin-configured Launch Readiness policy
+ *   decides whether to use RevenueCat-backed native IAP or web checkout in the
+ *   system browser.
  * - On the web: opens a new tab; falls back to a same-tab redirect when the
  *   popup blocker prevents it.
  */
-export async function openCheckoutUrl(url: string): Promise<OpenCheckoutResult> {
+export async function openCheckoutUrl(url: string, options: OpenCheckoutOptions = {}): Promise<OpenCheckoutResult> {
   if (typeof url !== 'string' || url.length === 0) return 'noop';
 
   // Capacitor native shell — route through the system browser plugin.
   if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+    const platform = Capacitor.getPlatform();
+    const releaseSettings = await fetchPublicAppReleaseSettings(platform).catch(() => null);
+    const policy = options.billingPolicyOverride ?? normalizeBillingPolicy(releaseSettings?.billingPolicy);
+    if (policy === 'native-iap') {
+      if (!releaseSettings) {
+        throw new Error('Native in-app purchase policy could not be loaded. Try again when release settings are reachable.');
+      }
+      await purchaseConfiguredNativeProduct({
+        releaseSettings,
+        appUserId: options.appUserId,
+        productId: options.nativeProductId,
+      });
+      return 'native-iap';
+    }
+
     try {
       const { Browser } = await import('@capacitor/browser');
       await Browser.open({ url, presentationStyle: 'fullscreen' });

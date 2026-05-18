@@ -126,7 +126,6 @@ x-web-slot: &web-slot
     NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
     SENTRY_DSN: ${SENTRY_DSN}
     APP_URL: ${APP_URL}
-    GEMINI_API_KEY: ${GEMINI_API_KEY:-}
   expose:
     - "3000"
   networks:

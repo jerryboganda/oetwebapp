@@ -38,13 +38,22 @@ import { RuntimeSettingsClient } from './RuntimeSettingsClient';
 function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): RuntimeSettingsResponse {
   return {
     email: {
+      brevoEnabled: true,
       brevoApiKey: '********',
       brevoEmailVerificationTemplateId: 7,
       brevoPasswordResetTemplateId: 9,
+      brevoWelcomeTemplateId: 11,
+      brevoPasswordChangedTemplateId: 12,
+      brevoMfaEnabledTemplateId: 13,
+      brevoAdminInviteTemplateId: 14,
+      brevoSecurityAlertTemplateId: 15,
+      brevoReviewCompletedTemplateId: 16,
+      smtpEnabled: true,
       smtpHost: 'smtp.example.com',
       smtpPort: 587,
       smtpUsername: 'mailer',
       smtpPassword: '********',
+      smtpEnableSsl: true,
       smtpFromAddress: 'noreply@example.com',
       smtpFromName: 'Example',
     },
@@ -64,16 +73,25 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       alertWebhook: 'https://example.com/hook',
     },
     oauth: {
+      googleEnabled: true,
       googleClientId: 'g-id',
       googleClientSecret: '********',
       appleClientId: '',
       appleTeamId: '',
       appleKeyId: '',
       applePrivateKey: '',
+      facebookEnabled: false,
       facebookAppId: '',
       facebookAppSecret: '',
+      linkedInEnabled: false,
+      linkedInClientId: '',
+      linkedInClientSecret: '',
     },
     push: {
+      webPushEnabled: true,
+      webPushSubject: 'mailto:ops@example.com',
+      webPushPublicKey: 'public',
+      webPushPrivateKey: '********',
       apnsKeyId: 'kid',
       apnsTeamId: 'tid',
       apnsBundleId: 'com.example',
@@ -106,12 +124,17 @@ describe('RuntimeSettingsClient', () => {
 
     render(<RuntimeSettingsClient />);
 
+    expect(await screen.findByText('Admin-managed provider coverage')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /ElevenLabs realtime STT and voices/i })).toHaveAttribute(
+      'href',
+      '/admin/content/conversation/settings',
+    );
     expect(await screen.findByRole('region', { name: 'Email (Brevo + SMTP)' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Billing (Stripe)' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Sentry' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Backup S3' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'OAuth (Google + Apple + Facebook)' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Push (APNs + FCM)' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'OAuth (Google + Apple + Facebook + LinkedIn)' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Push (Web Push + APNs + FCM)' })).toBeInTheDocument();
   });
 
   it('shows the "Set" badge when the API returns the masked sentinel', async () => {
@@ -157,6 +180,25 @@ describe('RuntimeSettingsClient', () => {
     expect(path).toBe('/v1/admin/runtime-settings');
     const payload = body as RuntimeSettingsResponse;
     expect(payload.email.brevoApiKey).toBe('new-brevo-key');
+  });
+
+  it('saves runtime boolean feature flags from checkbox fields', async () => {
+    mockGet.mockResolvedValue(makeResponse());
+    mockPut.mockResolvedValue(makeResponse());
+    const user = userEvent.setup();
+
+    render(<RuntimeSettingsClient />);
+
+    await screen.findByRole('region', { name: 'Email (Brevo + SMTP)' });
+    await user.click(screen.getByRole('checkbox', { name: 'Enable Brevo' }));
+    await expandSection('OAuth \\(Google \\+ Apple \\+ Facebook \\+ LinkedIn\\)');
+    await user.click(screen.getByRole('checkbox', { name: 'Enable LinkedIn OAuth' }));
+    await user.click(screen.getByRole('button', { name: 'Save all runtime settings' }));
+
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+    const payload = mockPut.mock.calls[0][1] as RuntimeSettingsResponse;
+    expect(payload.email.brevoEnabled).toBe(false);
+    expect(payload.oauth.linkedInEnabled).toBe(true);
   });
 
   it('preserves untouched secrets by sending the masked sentinel back unchanged', async () => {

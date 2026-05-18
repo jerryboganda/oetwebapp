@@ -913,7 +913,7 @@ jobs:
 | **Reader app exception** | Only for "reader" apps (content purchased elsewhere) | N/A | If accessible: content purchased on web, consumed in app |
 | **External link entitlement (US)** | Available in US via StoreKit 2 | Available via User Choice Billing | Allows linking to web for purchase |
 
-**Recommendation:** Start with the "reader app" approach — users purchase subscriptions on the web, the mobile app provides access to purchased content. This avoids the 30% IAP commission and simplifies implementation. If Apple rejects, implement IAP as fallback.
+**Recommendation:** Use the admin-configurable hybrid policy now implemented in Launch Readiness: keep web checkout for reader-app/subscriber-access flows, and configure RevenueCat native IAP product IDs where Apple or Google policy requires in-app purchase. Release preflight must set `MOBILE_BILLING_POLICY=web-checkout|native-iap|hybrid` and provide platform RevenueCat keys/product IDs whenever `native-iap` or `hybrid` is selected.
 
 ---
 

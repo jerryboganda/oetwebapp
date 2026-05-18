@@ -1898,8 +1898,8 @@ public class AuthFlowsTests
 
     private sealed class StubExternalIdentityProviderClient : IExternalIdentityProviderClient
     {
-        public Uri BuildAuthorizationUri(string provider, string state, string redirectUri)
-            => new($"https://example.test/oauth/{provider}?state={Uri.EscapeDataString(state)}");
+        public Task<Uri> BuildAuthorizationUriAsync(string provider, string state, string redirectUri, CancellationToken cancellationToken = default)
+            => Task.FromResult(new Uri($"https://example.test/oauth/{provider}?state={Uri.EscapeDataString(state)}"));
 
         public Task<ExternalIdentityProfile> ExchangeCodeAsync(
             string provider,

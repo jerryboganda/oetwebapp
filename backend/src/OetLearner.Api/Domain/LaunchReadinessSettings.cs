@@ -18,6 +18,13 @@ public class LaunchReadinessSettings
     public bool MobileForceUpdate { get; set; }
     [MaxLength(512)] public string? IosAppStoreUrl { get; set; }
     [MaxLength(512)] public string? AndroidPlayStoreUrl { get; set; }
+    [MaxLength(32)] public string MobileBillingPolicy { get; set; } = "hybrid";
+    [MaxLength(256)] public string? RevenueCatIosApiKey { get; set; }
+    [MaxLength(256)] public string? RevenueCatAndroidApiKey { get; set; }
+    [MaxLength(256)] public string? IosIapProductId { get; set; }
+    [MaxLength(256)] public string? AndroidIapProductId { get; set; }
+    [MaxLength(512)] public string? MobileBillingEvidenceUrl { get; set; }
+    [MaxLength(2048)] public string? MobileStoreReviewNotes { get; set; }
     [MaxLength(128)] public string? IosBundleId { get; set; }
     [MaxLength(64)] public string? AppleTeamId { get; set; }
     [MaxLength(64)] public string? AppleAssociatedDomainStatus { get; set; }

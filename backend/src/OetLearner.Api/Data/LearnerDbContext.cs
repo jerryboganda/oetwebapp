@@ -699,6 +699,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.QuoteId);
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.PlanVersionId);
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.CouponVersionId);
+        modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.SponsorshipId);
 
         // Multi-exam indexes
         modelBuilder.Entity<ExamFamily>().HasIndex(x => new { x.IsActive, x.SortOrder });

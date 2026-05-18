@@ -11,6 +11,7 @@ function argValue(name) {
 const platform = argValue('--platform') ?? 'both';
 const version = argValue('--version');
 const versionCode = argValue('--version-code');
+const mobileBillingPolicy = (process.env.MOBILE_BILLING_POLICY ?? 'hybrid').trim().toLowerCase();
 const iosBundleId = 'com.oetprep.learner';
 const androidPackageName = 'com.oetprep.learner';
 
@@ -57,8 +58,34 @@ function assertCapacitorMajorAlignment() {
     fail(`Capacitor package major versions must match: ${majors.map(([name, major]) => `${name}@${major}`).join(', ')}`);
   }
 
-  if (dependencies['@revenuecat/purchases-capacitor']) {
-    fail('RevenueCat native IAP dependency is installed, but mobile launch uses web checkout only.');
+  if (dependencies['@revenuecat/purchases-capacitor'] && majorFromRange(dependencies['@revenuecat/purchases-capacitor']) !== 9) {
+    fail('RevenueCat Capacitor plugin must stay on major 9 for Capacitor 6 native builds.');
+  }
+}
+
+function assertMobileBillingPolicy() {
+  const supportedPolicies = new Set(['web-checkout', 'native-iap', 'hybrid']);
+  if (!supportedPolicies.has(mobileBillingPolicy)) {
+    fail('MOBILE_BILLING_POLICY must be web-checkout, native-iap, or hybrid.');
+    return;
+  }
+
+  if (mobileBillingPolicy === 'native-iap' || mobileBillingPolicy === 'hybrid') {
+    const packageJson = readJson('package.json');
+    const dependencies = {
+      ...(packageJson?.dependencies ?? {}),
+      ...(packageJson?.devDependencies ?? {}),
+    };
+    if (!dependencies['@revenuecat/purchases-capacitor']) {
+      fail('RevenueCat native IAP dependency is required when MOBILE_BILLING_POLICY is native-iap or hybrid.');
+    }
+    const missing = [
+      platform !== 'android' ? 'REVENUECAT_IOS_API_KEY' : null,
+      platform !== 'android' ? 'IOS_IAP_PRODUCT_ID' : null,
+      platform !== 'ios' ? 'REVENUECAT_ANDROID_API_KEY' : null,
+      platform !== 'ios' ? 'ANDROID_IAP_PRODUCT_ID' : null,
+    ].filter(Boolean);
+    assertRequiredEnv(missing, 'Mobile IAP');
   }
 }
 
@@ -167,6 +194,7 @@ function assertIosEntitlements() {
 
 assertCapacitorMajorAlignment();
 assertReleaseVersionInputs();
+assertMobileBillingPolicy();
 assertNoAssociationPlaceholders();
 
 if (platform === 'android' || platform === 'both') {

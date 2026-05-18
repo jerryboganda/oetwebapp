@@ -3,7 +3,9 @@ using System.Net.Http.Json;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,6 +16,7 @@ using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Reading;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -73,6 +76,8 @@ public class ReadingAuthoringTests
         });
         await db.SaveChangesAsync();
     }
+
+    private static IWebHostEnvironment Env(string name = "Test") => new TestWebHostEnvironment { EnvironmentName = name };
 
     // ════════════════════════════════════════════════════════════════════
     // Structure service + validator
@@ -2323,7 +2328,7 @@ public class ReadingAuthoringTests
         await EnableReadingAiExtractionAsync(policy);
 
         var ai = new OetLearner.Api.Services.Reading.StubReadingExtractionAi();
-        var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
+        var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy, Env());
 
         var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
         Assert.Equal(OetLearner.Api.Domain.ReadingExtractionStatus.Pending, draft.Status);
@@ -2351,7 +2356,7 @@ public class ReadingAuthoringTests
         await EnableReadingAiExtractionAsync(policy);
 
         var ai = new OetLearner.Api.Services.Reading.StubReadingExtractionAi();
-        var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
+        var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy, Env());
 
         var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
         var rejected = await svc.RejectDraftAsync(draft.Id, "admin", "Looks wrong", default);
@@ -2382,10 +2387,85 @@ public class ReadingAuthoringTests
         await policy.UpsertGlobalAsync(current, "admin", default);
 
         var ai = new OetLearner.Api.Services.Reading.StubReadingExtractionAi();
-        var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
+        var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy, Env());
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extraction_routes_through_grounded_gateway_with_platform_only_feature()
+    {
+        var (db, _, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = "media-p1",
+            OriginalFilename = "reading.pdf",
+            MimeType = "application/pdf",
+            Format = "pdf",
+            SizeBytes = 123,
+            StoragePath = "reading/p1.pdf",
+            Status = MediaAssetStatus.Ready,
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = "asset-p1",
+            PaperId = "p1",
+            Role = PaperAssetRole.QuestionPaper,
+            Part = "A",
+            MediaAssetId = "media-p1",
+            Title = "Reading PDF",
+            DisplayOrder = 0,
+            IsPrimary = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        var extracted = new Dictionary<string, string> { ["asset-p1"] = "Question paper text plus answer key text." };
+        var paper = await db.ContentPapers.FirstAsync(p => p.Id == "p1");
+        paper.ExtractedTextJson = JsonSerializer.Serialize(extracted);
+        await db.SaveChangesAsync();
+
+        var gateway = new CapturingReadingGateway(BuildReadingAiJson());
+        var ai = new GroundedReadingExtractionAi(db, gateway, NullLogger<GroundedReadingExtractionAi>.Instance);
+
+        var result = await ai.ExtractAsync("p1", mediaAssetId: null, default);
+
+        Assert.False(result.IsStub);
+        Assert.Equal(RuleKind.Reading, gateway.LastGroundingContext?.Kind);
+        Assert.Equal(AiTaskMode.GenerateReadingStructure, gateway.LastGroundingContext?.Task);
+        Assert.Equal(AiFeatureCodes.AdminReadingDraft, gateway.LastRequest?.FeatureCode);
+        Assert.NotNull(gateway.LastRequest?.Prompt);
+        Assert.Contains("Question paper text plus answer key text.", gateway.LastRequest?.UserInput);
+        Assert.Equal(3, result.Manifest.Parts.Count);
+        Assert.Equal(42, result.Manifest.Parts.Sum(p => p.Questions.Count));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extraction_never_auto_approves_ai_generated_structure_in_production()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var current = await policy.GetGlobalAsync(default);
+        current.AiExtractionEnabled = true;
+        current.AiExtractionRequireHumanApproval = false;
+        await policy.UpsertGlobalAsync(current, "admin", default);
+
+        var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(
+            db,
+            new NonStubReadingExtractionAi(),
+            structure,
+            policy,
+            Env("Production"));
+
+        var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
+
+        Assert.Equal(OetLearner.Api.Domain.ReadingExtractionStatus.Pending, draft.Status);
+        Assert.False(draft.IsStub);
+        Assert.Equal(0, await db.ReadingQuestions.CountAsync(q => q.Part!.PaperId == "p1"));
         await db.DisposeAsync();
     }
 
@@ -2436,6 +2516,115 @@ public class ReadingAuthoringTests
         Assert.True(s2.SubmittedExamAttempts >= 1);
 
         await db.DisposeAsync();
+    }
+
+    private static string BuildReadingAiJson()
+    {
+        static object Text(int order, string prefix) => new
+        {
+            displayOrder = order,
+            title = $"{prefix} text {order}",
+            source = "Test source",
+            bodyHtml = $"<p>{prefix} body {order}</p>",
+            wordCount = 3,
+            topicTag = prefix.ToLowerInvariant()
+        };
+
+        static object Question(int order, string type, object options, object answer, int textOrder) => new
+        {
+            displayOrder = order,
+            points = 1,
+            questionType = type,
+            stem = $"Question {order}",
+            options,
+            correctAnswer = answer,
+            acceptedSynonyms = Array.Empty<string>(),
+            caseSensitive = false,
+            explanationMarkdown = "Extracted explanation",
+            skillTag = "detail",
+            readingTextDisplayOrder = textOrder,
+            appliedRuleIds = new[] { "RD01.1" }
+        };
+
+        var partA = new
+        {
+            partCode = "A",
+            timeLimitMinutes = 15,
+            instructions = "Part A instructions",
+            texts = Enumerable.Range(1, 4).Select(i => Text(i, "A")).ToArray(),
+            questions = Enumerable.Range(1, 20)
+                .Select(i => Question(i, "ShortAnswer", Array.Empty<string>(), $"answer-{i}", ((i - 1) % 4) + 1))
+                .ToArray()
+        };
+        var partB = new
+        {
+            partCode = "B",
+            timeLimitMinutes = 45,
+            instructions = "Part B instructions",
+            texts = Enumerable.Range(1, 6).Select(i => Text(i, "B")).ToArray(),
+            questions = Enumerable.Range(1, 6)
+                .Select(i => Question(i, "MultipleChoice3", new[] { "A", "B", "C" }, "A", i))
+                .ToArray()
+        };
+        var partC = new
+        {
+            partCode = "C",
+            timeLimitMinutes = 45,
+            instructions = "Part C instructions",
+            texts = Enumerable.Range(1, 2).Select(i => Text(i, "C")).ToArray(),
+            questions = Enumerable.Range(1, 16)
+                .Select(i => Question(i, "MultipleChoice4", new[] { "A", "B", "C", "D" }, "A", ((i - 1) / 8) + 1))
+                .ToArray()
+        };
+
+        return JsonSerializer.Serialize(new { parts = new[] { partA, partB, partC } });
+    }
+
+    private sealed class CapturingReadingGateway(string completion) : IAiGatewayService
+    {
+        public AiGroundingContext? LastGroundingContext { get; private set; }
+        public AiGatewayRequest? LastRequest { get; private set; }
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+        {
+            LastRequest = request;
+            return Task.FromResult(new AiGatewayResult { Completion = completion, RulebookVersion = "test" });
+        }
+
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+        {
+            LastGroundingContext = context;
+            return new AiGroundedPrompt
+            {
+                SystemPrompt = "# OET AI — Rulebook-Grounded System Prompt\nTest Reading prompt",
+                TaskInstruction = "Test",
+                Metadata = new AiGroundedPromptMetadata
+                {
+                    RulebookKind = context.Kind,
+                    Profession = context.Profession,
+                    RulebookVersion = "test"
+                }
+            };
+        }
+    }
+
+    private sealed class NonStubReadingExtractionAi : IReadingExtractionAi
+    {
+        public async Task<ReadingExtractionAiResult> ExtractAsync(string paperId, string? mediaAssetId, CancellationToken ct)
+        {
+            var stub = await new StubReadingExtractionAi().ExtractAsync(paperId, mediaAssetId, ct);
+            return stub with { IsStub = false, StubReason = null, RawResponseJson = stub.RawResponseJson ?? "{}" };
+        }
+    }
+
+    private sealed class TestWebHostEnvironment : IWebHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Test";
+        public string ApplicationName { get; set; } = "OetLearner.Api.Tests";
+        public string WebRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }
 

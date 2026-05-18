@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Tests;
 
@@ -31,6 +32,8 @@ public class BrevoResilienceTests
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         services.AddLogging();
         services.AddSingleton<IWebHostEnvironment>(new TestWebHostEnvironment());
+        services.AddSingleton<IRuntimeSettingsProvider>(
+            TestRuntimeSettingsProvider.ForBrevoEmail("test-key", "noreply@example.test", "OET Test"));
         services.Configure<BrevoOptions>(o =>
         {
             o.Enabled = true;

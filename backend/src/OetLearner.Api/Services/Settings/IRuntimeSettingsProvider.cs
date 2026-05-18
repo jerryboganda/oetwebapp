@@ -55,13 +55,22 @@ public sealed record EffectiveSettings(
     DateTimeOffset? UpdatedAt);
 
 public sealed record EmailSettings(
+    bool BrevoEnabled,
     string? BrevoApiKey,
     int? BrevoEmailVerificationTemplateId,
     int? BrevoPasswordResetTemplateId,
+    int? BrevoWelcomeTemplateId,
+    int? BrevoPasswordChangedTemplateId,
+    int? BrevoMfaEnabledTemplateId,
+    int? BrevoAdminInviteTemplateId,
+    int? BrevoSecurityAlertTemplateId,
+    int? BrevoReviewCompletedTemplateId,
+    bool SmtpEnabled,
     string? SmtpHost,
     int? SmtpPort,
     string? SmtpUsername,
     string? SmtpPassword,
+    bool SmtpEnableSsl,
     string? SmtpFromAddress,
     string? SmtpFromName);
 
@@ -85,16 +94,25 @@ public sealed record BackupSettings(
     string? AlertWebhook);
 
 public sealed record OAuthSettings(
+    bool GoogleEnabled,
     string? GoogleClientId,
     string? GoogleClientSecret,
     string? AppleClientId,
     string? AppleTeamId,
     string? AppleKeyId,
     string? ApplePrivateKey,
+    bool FacebookEnabled,
     string? FacebookAppId,
-    string? FacebookAppSecret);
+    string? FacebookAppSecret,
+    bool LinkedInEnabled,
+    string? LinkedInClientId,
+    string? LinkedInClientSecret);
 
 public sealed record PushSettings(
+    bool WebPushEnabled,
+    string? WebPushSubject,
+    string? WebPushPublicKey,
+    string? WebPushPrivateKey,
     string? ApnsKeyId,
     string? ApnsTeamId,
     string? ApnsBundleId,
