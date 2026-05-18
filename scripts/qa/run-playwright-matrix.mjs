@@ -183,6 +183,7 @@ const smokeRuns = [
         'tests/e2e/expert/review-completion.spec.ts',
       ],
       projects: ['chromium-expert'],
+      workers: 1,
     }),
   },
   {
