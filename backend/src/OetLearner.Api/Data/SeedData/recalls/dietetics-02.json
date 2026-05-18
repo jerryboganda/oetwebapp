@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "professionId": "dietetics",
   "examTypeCode": "OET",
-  "sourceProvenance": "ai-author:claude-opus-4.7:v1",
+  "sourceProvenance": "generated:platform-authored:recalls-content-pack-v1",
   "defaultStatus": "draft",
   "terms": [
     {

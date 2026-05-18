@@ -8,13 +8,13 @@ set -eu
 # Default: 02:17 UTC daily. Override with BACKUP_SCHEDULE="*/30 * * * *" etc.
 SCHEDULE="${BACKUP_SCHEDULE:-17 2 * * *}"
 
-# Carry all BACKUP_* / POSTGRES_* / PG_* / AWS_* / UPLOAD_* env vars into the
+# Carry all BACKUP_* / POSTGRES_* / PG_* / AWS_* / UPLOAD_* / MEDIA_* env vars into the
 # cron-invoked shell. Cron runs with a minimal environment, so quote every value
 # before sourcing it from the scheduled shell.
 : > /etc/cron.env
 env | while IFS='=' read -r key value; do
     case "$key" in
-        POSTGRES_*|PG_*|BACKUP_*|AWS_*|UPLOAD_*)
+        POSTGRES_*|PG_*|BACKUP_*|AWS_*|UPLOAD_*|MEDIA_*)
             escaped=$(printf '%s' "$value" | sed "s/'/'\\''/g")
             printf "export %s='%s'\n" "$key" "$escaped" >> /etc/cron.env
             ;;

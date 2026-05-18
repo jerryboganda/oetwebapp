@@ -3,8 +3,8 @@
   "recallSetCode": "old",
   "examTypeCode": "OET",
   "displayName": "Old Recalls + Most Common Words in OET",
-  "sourceProvenance": "Dr Hesham — 'Old Recalls & Most common words in OET' PDF (2026-05 ingest)",
-  "_notes": "Tag-only pack. Each item is a term name; the seeder applies the recall-set code 'old' to any matching VocabularyTerm row by case-insensitive name. Terms not yet present in the curated VocabularyTerm catalogue are reported back as 'missing' for admin curation — they are NOT auto-created.",
+  "sourceProvenance": "generated:platform-authored:recall-set-label-pack-v1:old;not-source-backed",
+  "_notes": "Tag-only practice collection pack. Each item is a term name; the seeder applies the recall-set code 'old' to any matching VocabularyTerm row by case-insensitive name. Missing terms are inserted as draft placeholders for admin curation. This pack is not source-backed unless a row has separate source-backed provenance.",
   "terms": [
     "Malarone tablets", "Administrator", "Coconut oil", "Headaches", "Breathless",
     "Muscular dystrophy", "Chubby", "Chunky soup", "Skewers", "Marinated chicken",

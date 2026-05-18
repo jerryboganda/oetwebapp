@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
@@ -13,7 +14,9 @@ public sealed class StrategyGuideServiceTests
     [Fact]
     public async Task Feature_flag_disables_strategy_surface()
     {
-        var (db, service) = Build();
+        await using var harness = Build();
+        var db = harness.Db;
+        var service = harness.Service;
         db.FeatureFlags.Add(new FeatureFlag
         {
             Id = "flag-strategy-guides",
@@ -26,13 +29,14 @@ public sealed class StrategyGuideServiceTests
         await db.SaveChangesAsync();
 
         Assert.False(await service.IsEnabledAsync(default));
-        await db.DisposeAsync();
     }
 
     [Fact]
     public async Task ListGuides_returns_progress_buckets_and_weak_subtest_recommendations()
     {
-        var (db, service) = Build();
+        await using var harness = Build();
+        var db = harness.Db;
+        var service = harness.Service;
         await SeedStrategyGuidesAsync(db);
         db.Goals.Add(new LearnerGoal
         {
@@ -66,13 +70,14 @@ public sealed class StrategyGuideServiceTests
         Assert.Equal("strategy-writing", Assert.Single(library.ContinueReading).Id);
         Assert.Equal("strategy-writing", Assert.Single(library.Bookmarked).Id);
         Assert.Contains(library.Categories, category => category.Code == "writing");
-        await db.DisposeAsync();
     }
 
     [Fact]
     public async Task Progress_and_bookmark_updates_are_idempotent_and_non_regressive()
     {
-        var (db, service) = Build();
+        await using var harness = Build();
+        var db = harness.Db;
+        var service = harness.Service;
         await SeedStrategyGuidesAsync(db);
 
         var first = await service.UpdateProgressAsync(UserId, "strategy-writing", 65, default);
@@ -94,13 +99,14 @@ public sealed class StrategyGuideServiceTests
         Assert.True(stored.Bookmarked);
         Assert.True(stored.Completed);
         Assert.NotNull(stored.CompletedAt);
-        await db.DisposeAsync();
     }
 
     [Fact]
     public async Task PublishGuide_rejects_missing_source_body_and_title()
     {
-        var (db, service) = Build();
+        await using var harness = Build();
+        var db = harness.Db;
+        var service = harness.Service;
         db.StrategyGuides.Add(new StrategyGuide
         {
             Id = "strategy-draft",
@@ -128,13 +134,14 @@ public sealed class StrategyGuideServiceTests
         Assert.Contains(result.Validation.Errors, error => error.Field == "content");
         Assert.Equal("draft", (await db.StrategyGuides.SingleAsync(guide => guide.Id == "strategy-draft")).Status);
         Assert.Empty(db.AuditEvents);
-        await db.DisposeAsync();
     }
 
     [Fact]
     public async Task PublishGuide_sets_status_and_writes_audit_event_when_valid()
     {
-        var (db, service) = Build();
+        await using var harness = Build();
+        var db = harness.Db;
+        var service = harness.Service;
         db.StrategyGuides.Add(new StrategyGuide
         {
             Id = "strategy-valid",
@@ -164,17 +171,36 @@ public sealed class StrategyGuideServiceTests
         Assert.Equal("Published", audit.Action);
         Assert.Equal("StrategyGuide", audit.ResourceType);
         Assert.Equal("strategy-valid", audit.ResourceId);
-        await db.DisposeAsync();
     }
 
-    private static (LearnerDbContext Db, StrategyGuideService Service) Build()
+    private static TestHarness Build() => new();
+
+    private sealed class TestHarness : IAsyncDisposable
     {
-        var options = new DbContextOptionsBuilder<LearnerDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
-            .Options;
-        var db = new LearnerDbContext(options);
-        var service = new StrategyGuideService(db);
-        return (db, service);
+        private readonly SqliteConnection connection;
+
+        public TestHarness()
+        {
+            connection = new SqliteConnection("DataSource=:memory:");
+            connection.Open();
+
+            var options = new DbContextOptionsBuilder<LearnerDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            Db = new LearnerDbContext(options);
+            Db.Database.EnsureCreated();
+            Service = new StrategyGuideService(Db);
+        }
+
+        public LearnerDbContext Db { get; }
+
+        public StrategyGuideService Service { get; }
+
+        public async ValueTask DisposeAsync()
+        {
+            await Db.DisposeAsync();
+            await connection.DisposeAsync();
+        }
     }
 
     private static async Task SeedStrategyGuidesAsync(LearnerDbContext db)

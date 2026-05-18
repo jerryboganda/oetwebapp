@@ -9,6 +9,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import {
   fetchVocabularyTerms,
   addToMyVocabulary,
@@ -20,6 +21,7 @@ import {
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { vocabularyProvenanceLabel } from '@/lib/vocabulary-provenance';
 import type { VocabularyTerm, VocabularyCategoriesResponse } from '@/lib/types/vocabulary';
 
 // Mobile offline cache — lazy, best-effort; skipped in SSR and when IndexedDB is unavailable.
@@ -35,7 +37,7 @@ async function cacheVocabularyToIndexedDb(terms: unknown[]) {
   } catch {/* offline cache is best-effort */}
 }
 
-type TermRow = Pick<VocabularyTerm, 'id' | 'term' | 'definition' | 'category' | 'difficulty' | 'exampleSentence' | 'ipaPronunciation'>;
+type TermRow = Pick<VocabularyTerm, 'id' | 'term' | 'definition' | 'category' | 'difficulty' | 'exampleSentence' | 'ipaPronunciation' | 'sourceProvenance'>;
 
 export default function BrowseVocabularyPage() {
   const [terms, setTerms] = useState<TermRow[]>([]);
@@ -87,7 +89,7 @@ export default function BrowseVocabularyPage() {
         setCategories(d.categories ?? []);
       })
       .catch(() => {/* non-fatal */});
-    // Load recall-set registry (year/source dimension).
+    // Load recall-set registry (practice-collection dimension).
     fetchVocabularyRecallSets({ examTypeCode: 'oet' })
       .then((data) => setRecallSets(data.sets ?? []))
       .catch(() => {/* non-fatal */});
@@ -126,8 +128,8 @@ export default function BrowseVocabularyPage() {
   return (
     <LearnerDashboardShell>
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/vocabulary" className="text-muted transition-colors hover:text-navy">
-          <ArrowLeft className="w-5 h-5" />
+        <Link href="/vocabulary" aria-label="Back to vocabulary" className="text-muted transition-colors hover:text-navy">
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </Link>
         <LearnerPageHero title="Browse Vocabulary" description="Explore OET medical vocabulary terms" icon={BookOpen} />
       </div>
@@ -145,9 +147,10 @@ export default function BrowseVocabularyPage() {
         />
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-muted" />
+            <Search className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-muted" aria-hidden="true" />
             <input
               type="text"
+              aria-label="Search vocabulary terms"
               placeholder="Search terms..."
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
@@ -155,6 +158,7 @@ export default function BrowseVocabularyPage() {
             />
           </div>
           <select
+            aria-label="Filter vocabulary by category"
             value={category}
             onChange={e => { setCategory(e.target.value); setPage(1); }}
             className="rounded-xl border border-border bg-background-light px-3 py-2.5 text-sm text-navy capitalize"
@@ -169,9 +173,10 @@ export default function BrowseVocabularyPage() {
         </div>
         {recallSets.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted">Recall set:</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">Practice collection:</span>
             <button
               type="button"
+              aria-pressed={recallSet === ''}
               onClick={() => { setRecallSet(''); setPage(1); }}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                 recallSet === ''
@@ -185,6 +190,7 @@ export default function BrowseVocabularyPage() {
               <button
                 key={s.code}
                 type="button"
+                aria-pressed={recallSet === s.code}
                 onClick={() => { setRecallSet(s.code); setPage(1); }}
                 title={s.description}
                 className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
@@ -209,51 +215,55 @@ export default function BrowseVocabularyPage() {
       ) : (
         <>
           <div className="space-y-3 mb-6">
-            {terms.map((term, i) => (
-              <MotionItem
-                key={term.id}
-                delayIndex={i}
-                className="flex gap-4 rounded-2xl border border-border bg-surface p-4"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="mb-1 flex flex-wrap items-center gap-2">
-                    <Link
-                      href={`/vocabulary/terms/${encodeURIComponent(term.id)}`}
-                      className="font-bold text-navy hover:underline"
-                    >
-                      {term.term}
-                    </Link>
-                    {term.ipaPronunciation && (
-                      <span className="text-xs italic text-muted">{term.ipaPronunciation}</span>
-                    )}
-                    <button
-                      onClick={() => void playAudio(term.id)}
-                      className="inline-flex items-center rounded-full p-1 text-muted transition-colors hover:bg-background-light hover:text-primary"
-                      aria-label={`Play pronunciation of ${term.term}`}
-                    >
-                      <Volume2 className="h-3.5 w-3.5" />
-                    </button>
-                    <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">
-                      {term.category.replace(/_/g, ' ')}
-                    </span>
-                    <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">
-                      {term.difficulty}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted">{term.definition}</p>
-                  {term.exampleSentence && <p className="mt-1 text-xs italic text-muted">&quot;{term.exampleSentence}&quot;</p>}
-                </div>
-                <button
-                  onClick={() => handleAdd(term.id)}
-                  disabled={adding.has(term.id) || added.has(term.id)}
-                  className={`flex-shrink-0 rounded-lg p-2 transition-colors ${added.has(term.id) ? 'bg-success/10 text-success' : 'text-muted hover:bg-background-light hover:text-primary'}`}
-                  title="Add to my list"
-                  aria-label={added.has(term.id) ? `${term.term} added to your list` : `Add ${term.term} to your list`}
+            {terms.map((term, i) => {
+              const provenanceLabel = vocabularyProvenanceLabel(term.sourceProvenance);
+              return (
+                <MotionItem
+                  key={term.id}
+                  delayIndex={i}
+                  className="flex gap-4 rounded-2xl border border-border bg-surface p-4"
                 >
-                  {added.has(term.id) ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                </button>
-              </MotionItem>
-            ))}
+                  <div className="flex-1 min-w-0">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/vocabulary/terms/${encodeURIComponent(term.id)}`}
+                        className="font-bold text-navy hover:underline"
+                      >
+                        {term.term}
+                      </Link>
+                      {term.ipaPronunciation && (
+                        <span className="text-xs italic text-muted">{term.ipaPronunciation}</span>
+                      )}
+                      <button
+                        onClick={() => void playAudio(term.id)}
+                        className="inline-flex items-center rounded-full p-1 text-muted transition-colors hover:bg-background-light hover:text-primary"
+                        aria-label={`Play pronunciation of ${term.term}`}
+                      >
+                        <Volume2 className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">
+                        {term.category.replace(/_/g, ' ')}
+                      </span>
+                      <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">
+                        {term.difficulty}
+                      </span>
+                      {provenanceLabel && <Badge variant="warning">{provenanceLabel}</Badge>}
+                    </div>
+                    <p className="text-sm text-muted">{term.definition}</p>
+                    {term.exampleSentence && <p className="mt-1 text-xs italic text-muted">&quot;{term.exampleSentence}&quot;</p>}
+                  </div>
+                  <button
+                    onClick={() => handleAdd(term.id)}
+                    disabled={adding.has(term.id) || added.has(term.id)}
+                    className={`flex-shrink-0 rounded-lg p-2 transition-colors ${added.has(term.id) ? 'bg-success/10 text-success' : 'text-muted hover:bg-background-light hover:text-primary'}`}
+                    title="Add to my list"
+                    aria-label={added.has(term.id) ? `${term.term} added to your list` : `Add ${term.term} to your list`}
+                  >
+                    {added.has(term.id) ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                  </button>
+                </MotionItem>
+              );
+            })}
           </div>
 
           {totalPages > 1 && (

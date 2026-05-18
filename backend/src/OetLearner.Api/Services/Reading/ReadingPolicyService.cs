@@ -149,7 +149,7 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
         row.AllowResultDownload = next.AllowResultDownload;
         row.AllowResultSharing = next.AllowResultSharing;
         row.AiExtractionEnabled = next.AiExtractionEnabled;
-        row.AiExtractionRequireHumanApproval = next.AiExtractionRequireHumanApproval;
+        row.AiExtractionRequireHumanApproval = true;
         row.AiExtractionMaxRetriesPerPaper = next.AiExtractionMaxRetriesPerPaper;
         row.AiExtractionModelOverride = next.AiExtractionModelOverride;
         row.AiExtractionStrictSchemaMode = next.AiExtractionStrictSchemaMode;

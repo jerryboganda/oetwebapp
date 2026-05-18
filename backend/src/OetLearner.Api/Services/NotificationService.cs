@@ -7,7 +7,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
-using WebPush;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
@@ -67,10 +67,12 @@ public sealed class NotificationService(
     LearnerDbContext db,
     IEmailSender emailSender,
     IWebPushDispatcher webPushDispatcher,
+    IMobilePushDispatcher mobilePushDispatcher,
     IHubContext<NotificationHub> hubContext,
     PlatformLinkService platformLinks,
     TimeProvider timeProvider,
     IOptions<WebPushOptions> webPushOptions,
+    IRuntimeSettingsProvider runtimeSettingsProvider,
     IOptions<NotificationProofHarnessOptions> notificationProofOptions,
     IWebHostEnvironment environment,
     ILogger<NotificationService> logger)
@@ -3234,29 +3236,47 @@ public sealed class NotificationService(
         var subscriptions = await db.PushSubscriptions
             .Where(subscription => subscription.AuthAccountId == notificationEvent.RecipientAuthAccountId && subscription.IsActive)
             .ToListAsync(ct);
+        var mobileTokens = await db.MobilePushTokens
+            .Where(token => token.AuthAccountId == notificationEvent.RecipientAuthAccountId && token.IsActive && token.Platform != "web")
+            .ToListAsync(ct);
 
-        if (subscriptions.Count == 0)
+        if (subscriptions.Count == 0 && mobileTokens.Count == 0)
         {
             await RecordSuppressedAttemptIfMissingAsync(
                 notificationEvent,
                 NotificationChannel.Push,
                 "push_subscription_missing",
-                "Push delivery skipped because the recipient has no active browser push subscriptions.",
+                "Push delivery skipped because the recipient has no active browser or native push registrations.",
                 ct);
             return;
         }
 
         var options = webPushOptions.Value;
-        if (!options.Enabled
-            || string.IsNullOrWhiteSpace(options.Subject)
-            || string.IsNullOrWhiteSpace(options.PublicKey)
-            || string.IsNullOrWhiteSpace(options.PrivateKey))
+        var pushSettings = (await runtimeSettingsProvider.GetAsync(ct)).Push;
+        var vapidSubject = Coalesce(pushSettings.VapidSubject, options.Subject);
+        var vapidPublicKey = Coalesce(pushSettings.VapidPublicKey, options.PublicKey);
+        var vapidPrivateKey = Coalesce(pushSettings.VapidPrivateKey, options.PrivateKey);
+        var browserPushConfigured = options.Enabled
+            && !string.IsNullOrWhiteSpace(vapidSubject)
+            && !string.IsNullOrWhiteSpace(vapidPublicKey)
+            && !string.IsNullOrWhiteSpace(vapidPrivateKey);
+        var fcmConfigured = !string.IsNullOrWhiteSpace(pushSettings.FcmServerKey);
+        var apnsConfigured = !string.IsNullOrWhiteSpace(pushSettings.ApnsBundleId)
+            && !string.IsNullOrWhiteSpace(pushSettings.ApnsTeamId)
+            && !string.IsNullOrWhiteSpace(pushSettings.ApnsKeyId)
+            && !string.IsNullOrWhiteSpace(pushSettings.ApnsAuthKey);
+        var hasConfiguredTarget =
+            (subscriptions.Count > 0 && browserPushConfigured)
+            || mobileTokens.Any(token => token.Platform == "android" && fcmConfigured)
+            || mobileTokens.Any(token => token.Platform == "ios" && apnsConfigured);
+
+        if (!hasConfiguredTarget)
         {
             await RecordSuppressedAttemptIfMissingAsync(
                 notificationEvent,
                 NotificationChannel.Push,
                 "push_not_configured",
-                "Push delivery skipped because web push is not configured for this environment.",
+                "Push delivery skipped because no configured browser, FCM, or APNs target matched the recipient registrations.",
                 ct);
             return;
         }
@@ -3275,10 +3295,20 @@ public sealed class NotificationService(
             severity = NormalizeSeverity(notificationEvent.Severity),
             unreadCount
         });
+        var mobilePayload = new MobilePushPayload(
+            notificationEvent.Id,
+            notificationEvent.EventKey,
+            notificationEvent.Title,
+            notificationEvent.Body,
+            platformLinks.BuildWebUrl(notificationEvent.ActionUrl ?? "/"),
+            NormalizeSeverity(notificationEvent.Severity),
+            unreadCount);
 
         var pushFailures = 0;
 
-        foreach (var subscription in subscriptions)
+        foreach (var subscription in browserPushConfigured
+            ? subscriptions
+            : Enumerable.Empty<OetLearner.Api.Domain.PushSubscription>())
         {
             var subscriptionId = subscription.Id.ToString();
             var subscriptionAlreadySent = await db.NotificationDeliveryAttempts
@@ -3375,11 +3405,104 @@ public sealed class NotificationService(
             }
         }
 
+        foreach (var token in mobileTokens)
+        {
+            if ((token.Platform == "android" && !fcmConfigured)
+                || (token.Platform == "ios" && !apnsConfigured))
+            {
+                continue;
+            }
+
+            var subscriptionId = $"mobile:{token.Id}";
+            var tokenAlreadySent = await db.NotificationDeliveryAttempts
+                .AsNoTracking()
+                .AnyAsync(attempt =>
+                    attempt.NotificationEventId == notificationEvent.Id
+                    && attempt.Channel == NotificationChannel.Push
+                    && attempt.SubscriptionId == subscriptionId
+                    && attempt.Status == NotificationDeliveryStatus.Sent, ct);
+            if (tokenAlreadySent)
+            {
+                continue;
+            }
+
+            try
+            {
+                await mobilePushDispatcher.SendAsync(token, mobilePayload, ct);
+                token.UpdatedAt = timeProvider.GetUtcNow();
+
+                db.NotificationDeliveryAttempts.Add(new NotificationDeliveryAttempt
+                {
+                    Id = $"nda-{Guid.NewGuid():N}",
+                    NotificationEventId = notificationEvent.Id,
+                    AuthAccountId = notificationEvent.RecipientAuthAccountId,
+                    Channel = NotificationChannel.Push,
+                    SubscriptionId = subscriptionId,
+                    Status = NotificationDeliveryStatus.Sent,
+                    Provider = token.Platform == "ios" ? "apns" : "fcm",
+                    AttemptedAt = timeProvider.GetUtcNow(),
+                    CompletedAt = timeProvider.GetUtcNow(),
+                    ResponsePayloadJson = pushPayload
+                });
+            }
+            catch (MobilePushDispatchException ex)
+            {
+                logger.LogWarning(ex, "Native push delivery failed for event {NotificationEventId} token {TokenId}", notificationEvent.Id, token.Id);
+                var statusCode = ex.StatusCode ?? 0;
+                var isExpired = statusCode is 404 or 410;
+                token.UpdatedAt = timeProvider.GetUtcNow();
+                if (isExpired)
+                {
+                    token.IsActive = false;
+                }
+
+                db.NotificationDeliveryAttempts.Add(new NotificationDeliveryAttempt
+                {
+                    Id = $"nda-{Guid.NewGuid():N}",
+                    NotificationEventId = notificationEvent.Id,
+                    AuthAccountId = notificationEvent.RecipientAuthAccountId,
+                    Channel = NotificationChannel.Push,
+                    SubscriptionId = subscriptionId,
+                    Status = isExpired ? NotificationDeliveryStatus.Expired : NotificationDeliveryStatus.Failed,
+                    Provider = token.Platform == "ios" ? "apns" : "fcm",
+                    ErrorCode = isExpired ? "native_push_token_expired" : "native_push_send_failed",
+                    ErrorMessage = ex.Message,
+                    AttemptedAt = timeProvider.GetUtcNow(),
+                    ResponsePayloadJson = pushPayload
+                });
+
+                if (!isExpired)
+                {
+                    pushFailures += 1;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unexpected native push delivery failure for event {NotificationEventId} token {TokenId}", notificationEvent.Id, token.Id);
+                token.UpdatedAt = timeProvider.GetUtcNow();
+                db.NotificationDeliveryAttempts.Add(new NotificationDeliveryAttempt
+                {
+                    Id = $"nda-{Guid.NewGuid():N}",
+                    NotificationEventId = notificationEvent.Id,
+                    AuthAccountId = notificationEvent.RecipientAuthAccountId,
+                    Channel = NotificationChannel.Push,
+                    SubscriptionId = subscriptionId,
+                    Status = NotificationDeliveryStatus.Failed,
+                    Provider = token.Platform == "ios" ? "apns" : "fcm",
+                    ErrorCode = "native_push_send_failed",
+                    ErrorMessage = ex.Message,
+                    AttemptedAt = timeProvider.GetUtcNow(),
+                    ResponsePayloadJson = pushPayload
+                });
+                pushFailures += 1;
+            }
+        }
+
         await db.SaveChangesAsync(ct);
 
         if (pushFailures > 0)
         {
-            throw new InvalidOperationException("One or more web push deliveries failed.");
+            throw new InvalidOperationException("One or more push deliveries failed.");
         }
     }
 
@@ -3606,4 +3729,7 @@ public sealed class NotificationService(
 
         return eventOverride ?? (globalEnabled && defaultEnabled);
     }
+
+    private static string? Coalesce(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 }

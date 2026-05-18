@@ -135,8 +135,20 @@ export default function AdminConversationSettingsPage() {
 
   async function handlePreview() {
     try {
+      const provider = String(v('ttsProvider') ?? '').toLowerCase();
+      const voice = provider === 'elevenlabs'
+        ? String(v('elevenLabsDefaultVoiceId') ?? '')
+        : provider === 'cosyvoice'
+          ? String(v('cosyVoiceDefaultVoice') ?? '')
+          : provider === 'chattts'
+            ? String(v('chatTtsDefaultVoice') ?? '')
+            : provider === 'gptsovits'
+              ? String(v('gptSoVitsDefaultVoice') ?? '')
+              : provider === 'azure'
+                ? String(v('azureTtsDefaultVoice') ?? '')
+                : '';
       const blob = await adminConversationTtsPreview({
-        voice: (draft.azureTtsDefaultVoice as string) ?? settings?.azureTtsDefaultVoice ?? '',
+        voice,
         locale: 'en-GB',
         text: 'Good morning. Thank you for coming in today. How can I help you?',
       });

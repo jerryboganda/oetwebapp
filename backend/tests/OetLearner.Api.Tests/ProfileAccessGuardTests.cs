@@ -5,6 +5,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Tests;
 
@@ -60,13 +61,12 @@ public class ProfileAccessGuardTests
 
         var storageRoot = Path.Combine(Path.GetTempPath(), $"oet-profile-guards-{Guid.NewGuid():N}");
         var storageOptions = Options.Create(new StorageOptions { LocalRootPath = storageRoot });
-        var mediaStorage = new MediaStorageService(new TestHostEnvironment(storageRoot), storageOptions);
-        var fileStorage = new OetLearner.Api.Services.Content.LocalFileStorage(new TestHostEnvironment(storageRoot), storageOptions);
-        var pdfTextExtractor = new OetLearner.Api.Services.Content.NoOpPdfTextExtractor();
+        var fileStorage = new LocalFileStorage(new TestHostEnvironment(storageRoot), storageOptions);
+        var pdfTextExtractor = new NoOpPdfTextExtractor();
         var paymentGateways = CreatePaymentGatewayService(billingOptions);
         var walletService = new WalletService(db, paymentGateways, platformLinks, billingOptions);
 
-        return new LearnerService(db, mediaStorage, fileStorage, pdfTextExtractor, platformLinks, null!, walletService, paymentGateways, null!);
+        return new LearnerService(db, fileStorage, pdfTextExtractor, platformLinks, null!, walletService, paymentGateways, null!, billingOptions, storageOptions);
     }
 
     private static ExpertService CreateExpertService(LearnerDbContext db)
@@ -77,9 +77,9 @@ public class ProfileAccessGuardTests
 
         var storageRoot = Path.Combine(Path.GetTempPath(), $"oet-profile-guards-{Guid.NewGuid():N}");
         var storageOptions = Options.Create(new StorageOptions { LocalRootPath = storageRoot });
-        var mediaStorage = new MediaStorageService(new TestHostEnvironment(storageRoot), storageOptions);
+        var fileStorage = new LocalFileStorage(new TestHostEnvironment(storageRoot), storageOptions);
 
-        return new ExpertService(db, NullLogger<ExpertService>.Instance, mediaStorage, platformLinks, null!, CreatePronunciationService(db, storageRoot));
+        return new ExpertService(db, NullLogger<ExpertService>.Instance, fileStorage, platformLinks, null!, CreatePronunciationService(db, storageRoot));
     }
 
     private static PronunciationService CreatePronunciationService(LearnerDbContext db, string storageRoot)

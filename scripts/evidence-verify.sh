@@ -71,6 +71,104 @@ verify_detached_signature() {
   fi
 }
 
+read_evidence_field() {
+  local file="$1"
+  local key="$2"
+  awk -F= -v key="$key" '
+    $1 == key {
+      value = $0
+      sub(/^[^=]*=/, "", value)
+      last = value
+      found = 1
+    }
+    END {
+      if (!found) {
+        exit 1
+      }
+      print last
+    }
+  ' "$file" | awk '{$1=$1; print}'
+}
+
+require_accessibility_field() {
+  local file="$1"
+  local key="$2"
+  local value
+  value=$(read_evidence_field "$file" "$key" || true)
+  if [ -z "$value" ]; then
+    echo "accessibility-signoff.env must include non-empty $key." >&2
+    exit 1
+  fi
+  case "$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')" in
+    *placeholder*|*todo*|*tbd*|*changeme*|*replace-with*|*example.invalid*)
+      echo "accessibility-signoff.env $key contains a placeholder value." >&2
+      exit 1
+      ;;
+  esac
+}
+
+require_accessibility_pass() {
+  local file="$1"
+  local key="$2"
+  local value
+  value=$(read_evidence_field "$file" "$key" || true)
+  value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+  if [ "$value" != "pass" ]; then
+    echo "accessibility-signoff.env $key must be pass; found: ${value:-empty}." >&2
+    exit 1
+  fi
+}
+
+require_accessibility_zero() {
+  local file="$1"
+  local key="$2"
+  local value
+  value=$(read_evidence_field "$file" "$key" || true)
+  if [ "$value" != "0" ]; then
+    echo "accessibility-signoff.env $key must be 0; found: ${value:-empty}." >&2
+    exit 1
+  fi
+}
+
+validate_accessibility_evidence() {
+  local file="$EVIDENCE_DIR/accessibility-signoff.env"
+  if [ ! -s "$file" ]; then
+    if [ "$EVIDENCE_ENV" = "production" ]; then
+      echo "Production evidence requires accessibility-signoff.env." >&2
+      exit 1
+    fi
+    echo "No accessibility-signoff.env found; manual accessibility evidence is required before production."
+    return
+  fi
+
+  require_manifest_entry "accessibility-signoff.env"
+  require_accessibility_zero "$file" ACCESSIBILITY_AXE_CRITICAL
+  require_accessibility_zero "$file" ACCESSIBILITY_AXE_SERIOUS
+
+  for key in \
+    ACCESSIBILITY_NVDA_SIGNOFF \
+    ACCESSIBILITY_VOICEOVER_SIGNOFF \
+    ACCESSIBILITY_AUTH_SIGN_IN \
+    ACCESSIBILITY_LEARNER_DASHBOARD \
+    ACCESSIBILITY_LEARNER_BILLING \
+    ACCESSIBILITY_LEARNER_IMMERSIVE_FLOW \
+    ACCESSIBILITY_EXPERT_REVIEW_SUBMIT \
+    ACCESSIBILITY_ADMIN_AUDIT_LOGS \
+    ACCESSIBILITY_ADMIN_USER_CREDIT
+  do
+    require_accessibility_pass "$file" "$key"
+  done
+
+  for key in \
+    ACCESSIBILITY_REVIEWER \
+    ACCESSIBILITY_REVIEWED_AT_UTC \
+    ACCESSIBILITY_PLAYWRIGHT_REPORT \
+    ACCESSIBILITY_MANUAL_EVIDENCE_URL
+  do
+    require_accessibility_field "$file" "$key"
+  done
+}
+
 for file in "${payload_required[@]}"; do
   require_manifest_entry "$file"
 done
@@ -114,6 +212,10 @@ if [ "$EVIDENCE_ENV" = "production" ]; then
     fi
     validate_digest_ref "$key" "$value"
   done
+fi
+
+if [ "$EVIDENCE_ENV" = "production" ] || [ -s "$EVIDENCE_DIR/accessibility-signoff.env" ]; then
+  validate_accessibility_evidence
 fi
 
 sca_exit_code=$(awk -F= '$1 == "sca_exit_code" { print $2 }' "$EVIDENCE_DIR/release-metadata.env" | tail -n 1)

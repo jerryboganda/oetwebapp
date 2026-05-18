@@ -255,9 +255,9 @@ services:
       <<: *web-env
       API_PROXY_TARGET_URL: http://learner-api-green:8080
 
-  # Nightly encrypted Postgres backup sidecar. Runs pg_dump on BACKUP_SCHEDULE,
-  # GPG-encrypts the dump, and optionally pushes to S3/R2. See
-  # scripts/backup/postgres-backup.sh and DEPLOYMENT.md Â§Disaster Recovery.
+  # Nightly encrypted backup sidecar. Runs pg_dump and learner-media archive on
+  # BACKUP_SCHEDULE, GPG-encrypts the artifacts, and pushes to S3/R2. See
+  # scripts/backup/postgres-backup.sh and DEPLOYMENT.md Disaster Recovery.
   # At minimum BACKUP_GPG_PASSPHRASE and BACKUP_S3_URL should be set in
   # .env.production for any production deployment that cares about its data.
   db-backup:
@@ -286,12 +286,15 @@ services:
       BACKUP_S3_URL: ${BACKUP_S3_URL:-}
       BACKUP_S3_EXTRA_ARGS: ${BACKUP_S3_EXTRA_ARGS:-}
       BACKUP_ALERT_WEBHOOK: ${BACKUP_ALERT_WEBHOOK:-}
+      MEDIA_BACKUP_ENABLED: ${MEDIA_BACKUP_ENABLED:-true}
+      MEDIA_BACKUP_SOURCE_DIR: /media-storage
       AWS_ACCESS_KEY_ID: ${BACKUP_AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${BACKUP_AWS_SECRET_ACCESS_KEY:-}
       AWS_DEFAULT_REGION: ${BACKUP_AWS_REGION:-auto}
       TZ: UTC
     volumes:
       - oet_db_backups:/backups
+      - oet_learner_storage:/media-storage:ro
     networks:
       - internal
 

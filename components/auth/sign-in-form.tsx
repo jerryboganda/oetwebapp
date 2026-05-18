@@ -74,6 +74,8 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
   const [error, setError] = useState<string | null>(resolveExternalErrorMessage(externalError));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [desktopRuntimeInfo, setDesktopRuntimeInfo] = useState<Awaited<ReturnType<NonNullable<typeof window.desktopBridge>['runtime']['info']>> | null>(null);
+  const emailHintId = 'sign-in-email-hint';
+  const errorMessageId = 'sign-in-error';
 
   React.useEffect(() => {
     let cancelled = false;
@@ -198,11 +200,13 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="email"
+            aria-describedby={error ? `${emailHintId} ${errorMessageId}` : emailHintId}
+            aria-invalid={Boolean(error)}
             inputMode="email"
             spellCheck={false}
             required
           />
-          <p className={styles.fieldHint}>
+          <p id={emailHintId} className={styles.fieldHint}>
             We&apos;ll never share your email with anyone else.
           </p>
         </div>
@@ -216,6 +220,8 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
+            aria-describedby={error ? errorMessageId : undefined}
+            aria-invalid={Boolean(error)}
             required
           />
         </div>
@@ -239,6 +245,9 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
         {error ? (
           <AnimatePresence mode="wait">
             <motion.p
+              id={errorMessageId}
+              role="alert"
+              aria-live="assertive"
               key="error"
               initial={{ opacity: 0, y: -6, height: 0 }}
               animate={{ opacity: 1, y: 0, height: 'auto' }}

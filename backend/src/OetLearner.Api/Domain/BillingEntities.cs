@@ -3,6 +3,44 @@ using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
 
+/// <summary>
+/// Native App Store / Play Billing product id mapping to an existing OET billing
+/// catalog target. This stores no provider credentials or receipt material.
+/// </summary>
+public class NativeIapProductMapping
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(16)]
+    public string Platform { get; set; } = default!;
+
+    [MaxLength(192)]
+    public string StoreProductId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string TargetType { get; set; } = default!;
+
+    [MaxLength(96)]
+    public string TargetId { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string? DisplayName { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    [MaxLength(64)]
+    public string? CreatedByAdminId { get; set; }
+
+    [MaxLength(64)]
+    public string? UpdatedByAdminId { get; set; }
+}
+
 /// <summary>Managed add-on that can be sold alongside a billing plan.</summary>
 public class BillingAddOn
 {

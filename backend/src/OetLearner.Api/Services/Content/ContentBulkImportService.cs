@@ -62,6 +62,7 @@ public sealed class ContentBulkImportService(
     IContentConventionParser parser,
     IContentPaperService paperService,
     IOptions<StorageOptions> options,
+    IUploadScanner? scanner,
     ILogger<ContentBulkImportService> logger) : IContentBulkImportService
 {
     private readonly ContentUploadOptions _opts = options.Value.ContentUpload;
@@ -80,6 +81,7 @@ public sealed class ContentBulkImportService(
         try
         {
             await WriteLimitedAsync(zipKey, zipStream, _opts.MaxZipBytes, "ZIP exceeds configured byte limit.", ct);
+            await ScanStagedFileAsync(zipKey, filename, ct);
         }
         catch
         {
@@ -130,6 +132,7 @@ public sealed class ContentBulkImportService(
                     var stagingKey = $"{stagingPrefix}/{relativePath}";
                     using var entryStream = entry.Open();
                     await WriteValidatedZipEntryAsync(stagingKey, relativePath, entryStream, entry.Length, ct);
+                    await ScanStagedFileAsync(stagingKey, relativePath, ct);
                     relativeToStaging[relativePath] = stagingKey;
                     relatives.Add(relativePath);
                 }
@@ -402,6 +405,22 @@ public sealed class ContentBulkImportService(
         }
 
         return total;
+    }
+
+    private async Task ScanStagedFileAsync(string key, string filename, CancellationToken ct)
+    {
+        if (scanner is null)
+        {
+            return;
+        }
+
+        await using var stream = await storage.OpenReadAsync(key, ct);
+        var (clean, reason) = await scanner.ScanAsync(stream, filename, ct);
+        if (!clean)
+        {
+            throw new InvalidOperationException(
+                $"ZIP import file {filename} failed security scanning: {reason ?? "scanner rejected the file"}");
+        }
     }
 
     private static string? NormalizeZipEntryPath(ZipArchiveEntry entry)

@@ -28,6 +28,11 @@ public sealed record VocabularyTermResponse(
     string? SourceProvenance,
     string Status,
     /// <summary>
+    /// OET-subtest dimension for the Recalls matrix, e.g.
+    /// listening_a, reading_c, writing, speaking.
+    /// </summary>
+    string[] OetSubtestTags,
+    /// <summary>
     /// Recalls Content Pack v1: year/source dimension. Multi-tag — a term may
     /// appear in several historical recall PDFs (e.g. ["old","2026"]).
     /// Empty array means the term is not part of any curated recall set yet.

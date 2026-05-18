@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, BookOpen, Plus, Save, X } from 'lucide-react';
@@ -15,6 +15,7 @@ import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useProfessions } from '@/lib/hooks/use-professions';
 import { fetchAdminVocabularyRecallSets } from '@/lib/api';
+import { vocabularyProvenanceLabel } from '@/lib/vocabulary-provenance';
 
 export type VocabFormValues = {
   term: string;
@@ -74,6 +75,7 @@ type RecallSetOption = { code: string; displayName: string };
 
 
 function TagInput({ value, onChange, placeholder, label }: { value: string[]; onChange: (v: string[]) => void; placeholder: string; label: string }) {
+  const inputId = useId();
   const [draft, setDraft] = useState('');
   function add() {
     const v = draft.trim();
@@ -83,7 +85,7 @@ function TagInput({ value, onChange, placeholder, label }: { value: string[]; on
   }
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-navy">{label}</label>
+      <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-navy">{label}</label>
       <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-surface p-2">
         {value.map((v, i) => (
           <span key={i} className="inline-flex items-center gap-1 rounded-full bg-background-light px-2 py-0.5 text-sm">
@@ -95,6 +97,7 @@ function TagInput({ value, onChange, placeholder, label }: { value: string[]; on
         ))}
         <input
           type="text"
+          id={inputId}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); } }}
@@ -164,6 +167,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
   });
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const provenanceLabel = vocabularyProvenanceLabel(v.sourceProvenance);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -222,15 +226,15 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Term <span className="text-danger">*</span></label>
-                <Input required value={v.term} onChange={(e) => setV({ ...v, term: e.target.value })} maxLength={128} />
+                <Input required aria-label="Term" value={v.term} onChange={(e) => setV({ ...v, term: e.target.value })} maxLength={128} />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">IPA Pronunciation</label>
-                <Input value={v.ipaPronunciation} onChange={(e) => setV({ ...v, ipaPronunciation: e.target.value })} placeholder="/ˈ.../" maxLength={64} />
+                <Input aria-label="IPA pronunciation" value={v.ipaPronunciation} onChange={(e) => setV({ ...v, ipaPronunciation: e.target.value })} placeholder="/ˈ.../" maxLength={64} />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">American spelling</label>
-                <Input value={v.americanSpelling} onChange={(e) => setV({ ...v, americanSpelling: e.target.value })} placeholder="e.g. hemorrhage" maxLength={128} />
+                <Input aria-label="American spelling" value={v.americanSpelling} onChange={(e) => setV({ ...v, americanSpelling: e.target.value })} placeholder="e.g. hemorrhage" maxLength={128} />
               </div>
             </div>
 
@@ -238,6 +242,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
               <label className="mb-1 block text-sm font-medium text-navy">Definition <span className="text-danger">*</span></label>
               <textarea
                 required
+                aria-label="Definition"
                 value={v.definition}
                 onChange={(e) => setV({ ...v, definition: e.target.value })}
                 maxLength={1024}
@@ -251,6 +256,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
               <label className="mb-1 block text-sm font-medium text-navy">Example sentence <span className="text-danger">*</span></label>
               <textarea
                 required
+                aria-label="Example sentence"
                 value={v.exampleSentence}
                 onChange={(e) => setV({ ...v, exampleSentence: e.target.value })}
                 maxLength={2048}
@@ -262,6 +268,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
             <div>
               <label className="mb-1 block text-sm font-medium text-navy">Context notes</label>
               <textarea
+                aria-label="Context notes"
                 value={v.contextNotes}
                 onChange={(e) => setV({ ...v, contextNotes: e.target.value })}
                 maxLength={1024}
@@ -274,7 +281,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
             <div className="grid gap-4 md:grid-cols-4">
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Exam</label>
-                <select value={v.examTypeCode} onChange={(e) => setV({ ...v, examTypeCode: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
+                <select aria-label="Exam" value={v.examTypeCode} onChange={(e) => setV({ ...v, examTypeCode: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
                   <option value="oet">OET</option>
                   <option value="ielts">IELTS</option>
                   <option value="pte">PTE</option>
@@ -282,19 +289,19 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Profession</label>
-                <select value={v.professionId} onChange={(e) => setV({ ...v, professionId: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
+                <select aria-label="Profession" value={v.professionId} onChange={(e) => setV({ ...v, professionId: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
                   {PROFESSIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Category <span className="text-danger">*</span></label>
-                <select required value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
+                <select required aria-label="Category" value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
                   {CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Difficulty</label>
-                <select value={v.difficulty} onChange={(e) => setV({ ...v, difficulty: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
+                <select aria-label="Difficulty" value={v.difficulty} onChange={(e) => setV({ ...v, difficulty: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
                   <option value="easy">Easy</option>
                   <option value="medium">Medium</option>
                   <option value="hard">Hard</option>
@@ -306,23 +313,23 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Audio URL</label>
-                <Input value={v.audioUrl} onChange={(e) => setV({ ...v, audioUrl: e.target.value })} placeholder="https://..." />
+                <Input aria-label="Audio URL" value={v.audioUrl} onChange={(e) => setV({ ...v, audioUrl: e.target.value })} placeholder="https://..." />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Slow audio URL</label>
-                <Input value={v.audioSlowUrl} onChange={(e) => setV({ ...v, audioSlowUrl: e.target.value })} placeholder="https://..." maxLength={256} />
+                <Input aria-label="Slow audio URL" value={v.audioSlowUrl} onChange={(e) => setV({ ...v, audioSlowUrl: e.target.value })} placeholder="https://..." maxLength={256} />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Sentence audio URL</label>
-                <Input value={v.audioSentenceUrl} onChange={(e) => setV({ ...v, audioSentenceUrl: e.target.value })} placeholder="https://..." maxLength={256} />
+                <Input aria-label="Sentence audio URL" value={v.audioSentenceUrl} onChange={(e) => setV({ ...v, audioSentenceUrl: e.target.value })} placeholder="https://..." maxLength={256} />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Audio media asset ID</label>
-                <Input value={v.audioMediaAssetId} onChange={(e) => setV({ ...v, audioMediaAssetId: e.target.value })} placeholder="MediaAsset id" maxLength={64} />
+                <Input aria-label="Audio media asset ID" value={v.audioMediaAssetId} onChange={(e) => setV({ ...v, audioMediaAssetId: e.target.value })} placeholder="MediaAsset id" maxLength={64} />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Image URL</label>
-                <Input value={v.imageUrl} onChange={(e) => setV({ ...v, imageUrl: e.target.value })} placeholder="https://..." />
+                <Input aria-label="Image URL" value={v.imageUrl} onChange={(e) => setV({ ...v, imageUrl: e.target.value })} placeholder="https://..." />
               </div>
             </div>
 
@@ -335,7 +342,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
 
             {/* Recall set tags */}
             <div>
-              <label className="mb-1 block text-sm font-medium text-navy">Recall sets (year tags)</label>
+              <label className="mb-1 block text-sm font-medium text-navy">Recall practice collection labels</label>
               <div className="flex flex-wrap gap-2">
                 {recallSetOptions.map(opt => {
                   const checked = v.recallSetCodes.includes(opt.code);
@@ -357,7 +364,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
                   );
                 })}
               </div>
-              <p className="mt-1 text-xs text-muted">Tag this term with one or more recall sets so learners can filter by year.</p>
+              <p className="mt-1 text-xs text-muted">Tag this term with one or more practice collection labels. A label is not source-backed unless the term provenance explicitly says so.</p>
             </div>
 
             {/* OET subtest tags */}
@@ -398,16 +405,26 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
                 <label className="mb-1 block text-sm font-medium text-navy">Source provenance <span className="text-danger">*</span> (required to publish)</label>
                 <Input
                   value={v.sourceProvenance}
+                  aria-label="Source provenance"
                   onChange={(e) => setV({ ...v, sourceProvenance: e.target.value })}
-                  placeholder='e.g. "Admin curation by Dr Hesham 2026-04-20"'
+                  placeholder='e.g. "generated:platform-authored:recalls-content-pack-v1"'
                   maxLength={512}
                 />
+                <p className="mt-1 text-xs text-muted">
+                  Use a structured prefix such as <code>generated:platform-authored:...</code> for original platform-authored practice content. Do not label generated material as source-backed recalls.
+                </p>
+                {provenanceLabel && (
+                  <Badge variant="warning" className="mt-2">
+                    {provenanceLabel}
+                  </Badge>
+                )}
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Status</label>
                 <div className="flex items-center gap-2">
                   <select
                     value={v.status}
+                    aria-label="Status"
                     onChange={(e) => setV({ ...v, status: e.target.value as VocabFormValues['status'] })}
                     className="rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize"
                   >

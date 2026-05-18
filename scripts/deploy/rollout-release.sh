@@ -81,8 +81,11 @@ public_gates() {
 mkdir -p .deploy
 previous_sha=""
 previous_slot=""
+previous_evidence_dir=""
 if [ -s .deploy/previous-good.env ]; then
   previous_sha=$(awk -F= '$1 == "PREVIOUS_GOOD_SHA" { print $2 }' .deploy/previous-good.env | tail -n 1)
+  previous_evidence_dir=$(awk -F= '$1 == "PREVIOUS_GOOD_EVIDENCE_DIR" { print $2 }' .deploy/previous-good.env | tail -n 1)
+  cp .deploy/previous-good.env .deploy/rollback-target.env
 fi
 if [ -s .deploy/active-slot.env ]; then
   previous_slot=$(awk -F= '$1 == "ACTIVE_SLOT" { print $2 }' .deploy/active-slot.env | tail -n 1)
@@ -152,11 +155,25 @@ current_sha=$(git rev-parse HEAD)
   echo "PREVIOUS_GOOD_WEB_IMAGE=$WEB_IMAGE"
   echo "PREVIOUS_GOOD_API_IMAGE=$API_IMAGE"
   echo "PREVIOUS_GOOD_DB_BACKUP_IMAGE=$DB_BACKUP_IMAGE"
+  echo "PREVIOUS_GOOD_ROUTER_IMAGE=$ROUTER_IMAGE"
   echo "PREVIOUS_GOOD_RECORDED_AT_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   if [ -n "$previous_sha" ]; then
     echo "ROLLED_FROM_SHA=$previous_sha"
+    echo "ROLLED_FROM_SLOT=$previous_slot"
+    echo "ROLLED_FROM_EVIDENCE_DIR=$previous_evidence_dir"
   fi
 } > .deploy/previous-good.env
+
+{
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "$current_sha" \
+    "$target_slot" \
+    "$EVIDENCE_DIR" \
+    "$WEB_IMAGE" \
+    "$API_IMAGE" \
+    "$DB_BACKUP_IMAGE"
+} >> .deploy/release-history.tsv
 
 echo "ACTIVE_SLOT=$target_slot" > .deploy/active-slot.env
 

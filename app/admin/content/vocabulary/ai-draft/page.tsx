@@ -83,7 +83,7 @@ export default function AdminVocabularyAiDraftPage() {
       const res = await acceptAdminVocabularyAiDrafts({
         examTypeCode,
         professionId: professionId || null,
-        sourceProvenance: `AI draft v${response.rulebookVersion} reviewed by admin on ${new Date().toISOString().slice(0, 10)}`,
+        sourceProvenance: `generated:platform-authored:ai-draft:admin-reviewed:${response.rulebookVersion};reviewedAt=${new Date().toISOString().slice(0, 10)}`,
         drafts: acceptedDrafts,
       });
       const r = res as { createdIds: string[]; count: number };
@@ -127,11 +127,11 @@ export default function AdminVocabularyAiDraftPage() {
             <div className="grid gap-3 md:grid-cols-4">
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Count (1–25)</label>
-                <Input type="number" min={1} max={25} value={count} onChange={(e) => setCount(Math.max(1, Math.min(25, parseInt(e.target.value) || 5)))} />
+                <Input aria-label="Draft count" type="number" min={1} max={25} value={count} onChange={(e) => setCount(Math.max(1, Math.min(25, parseInt(e.target.value) || 5)))} />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Profession</label>
-                <select value={professionId} onChange={(e) => setProfessionId(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
+                <select aria-label="Profession" value={professionId} onChange={(e) => setProfessionId(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
                   <option value="">General (medicine)</option>
                   <option value="medicine">Medicine</option>
                   <option value="nursing">Nursing</option>
@@ -141,7 +141,7 @@ export default function AdminVocabularyAiDraftPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Category</label>
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
+                <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
                   {['medical', 'anatomy', 'symptoms', 'procedures', 'pharmacology', 'conditions', 'clinical_communication', 'diagnostics'].map(c => (
                     <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>
                   ))}
@@ -149,7 +149,7 @@ export default function AdminVocabularyAiDraftPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Difficulty</label>
-                <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
+                <select aria-label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
                   <option value="easy">Easy</option>
                   <option value="medium">Medium</option>
                   <option value="hard">Hard</option>
@@ -161,6 +161,7 @@ export default function AdminVocabularyAiDraftPage() {
               <label className="mb-1 block text-sm font-medium text-navy">Seed hint (optional)</label>
               <textarea
                 value={seedPrompt}
+                aria-label="Seed hint"
                 onChange={(e) => setSeedPrompt(e.target.value)}
                 rows={2}
                 maxLength={500}

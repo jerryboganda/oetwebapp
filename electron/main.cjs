@@ -71,6 +71,25 @@ let tray = null;
 const allowPackagedLoopbackApiTarget = !app.isPackaged || process.env.ELECTRON_ALLOW_LOCAL_API_TARGET === 'true';
 let activeBackendUrl = null;
 let ignoredPackagedLoopbackApiTarget = null;
+const pendingProtocolUrls = [];
+
+function isDesktopProtocolUrl(value) {
+  return typeof value === 'string' && value.startsWith('oet-prep://');
+}
+
+function enqueueProtocolUrl(protocolUrl) {
+  if (!isDesktopProtocolUrl(protocolUrl)) {
+    return;
+  }
+
+  if (!pendingProtocolUrls.includes(protocolUrl)) {
+    pendingProtocolUrls.push(protocolUrl);
+  }
+}
+
+function findProtocolUrl(argv) {
+  return argv.find(isDesktopProtocolUrl);
+}
 
 function getMainWindowState() {
   if (!mainWindow) {
@@ -269,7 +288,12 @@ function openOrNavigateUrl(urlString) {
     return;
   }
 
-  if (urlString.startsWith('oet-prep://')) {
+  if (isDesktopProtocolUrl(urlString)) {
+    if (!mainWindow) {
+      enqueueProtocolUrl(urlString);
+      return;
+    }
+
     const mappedUrl = mapProtocolUrlToRendererUrl(urlString);
     if (mappedUrl) {
       navigateToUrl(mappedUrl);
@@ -278,6 +302,17 @@ function openOrNavigateUrl(urlString) {
   }
 
   navigateToUrl(urlString);
+}
+
+function flushPendingProtocolUrls() {
+  if (!mainWindow || pendingProtocolUrls.length === 0) {
+    return;
+  }
+
+  const protocolUrls = pendingProtocolUrls.splice(0, pendingProtocolUrls.length);
+  for (const protocolUrl of protocolUrls) {
+    openOrNavigateUrl(protocolUrl);
+  }
 }
 
 function formatStartupError(error) {
@@ -715,7 +750,7 @@ function scheduleUpdateCheck() {
 }
 
 app.on('second-instance', (_event, argv) => {
-  const protocolUrl = argv.find((argument) => argument.startsWith('oet-prep://'));
+  const protocolUrl = findProtocolUrl(argv);
   if (protocolUrl) {
     openOrNavigateUrl(protocolUrl);
   }
@@ -833,6 +868,10 @@ app.whenReady().then(async () => {
 
     if (app.isPackaged) {
       app.setAsDefaultProtocolClient('oet-prep');
+      const startupProtocolUrl = findProtocolUrl(process.argv);
+      if (startupProtocolUrl) {
+        enqueueProtocolUrl(startupProtocolUrl);
+      }
     }
 
     desktopUpdater = createDesktopUpdater({
@@ -844,6 +883,7 @@ app.whenReady().then(async () => {
 
     await resolveRendererUrl();
     await createWindow();
+    flushPendingProtocolUrls();
     refreshApplicationMenu();
     scheduleUpdateCheck();
 

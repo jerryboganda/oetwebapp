@@ -296,6 +296,8 @@ public static class AdminEndpoints
 
         // ── Billing ─────────────────────────────────────────
 
+        admin.MapAdminNativeIapEndpoints();
+
         admin.MapGet("/billing/plans", async (AdminService service, CancellationToken ct, string? status)
             => Results.Ok(await service.GetBillingPlansAsync(status, ct)))
             .WithAdminRead("AdminBillingRead");
@@ -721,54 +723,84 @@ public static class AdminEndpoints
 
         // ── B3: Enterprise / Sponsor Channel ────────────
 
-        admin.MapGet("/sponsors", async (AdminService service, CancellationToken ct,
-            string? status, int? page, int? pageSize)
-            => Results.Ok(await service.GetSponsorsAsync(status, page ?? 1, pageSize ?? 20, ct)))
+        admin.MapGet("/sponsors", async (IConfiguration config, AdminService service, CancellationToken ct,
+            string? status, int? page, int? pageSize) =>
+        {
+            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            return Results.Ok(await service.GetSponsorsAsync(status, page ?? 1, pageSize ?? 20, ct));
+        })
             .WithAdminRead("AdminUsersRead");
 
-        admin.MapPost("/sponsors", async (HttpContext http,
-            SponsorCreateRequest request, AdminService service, CancellationToken ct)
-            => Results.Ok(await service.CreateSponsorAsync(http.AdminId(), http.AdminName(), request, ct)))
+        admin.MapPost("/sponsors", async (IConfiguration config, HttpContext http,
+            SponsorCreateRequest request, AdminService service, CancellationToken ct) =>
+        {
+            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            return Results.Ok(await service.CreateSponsorAsync(http.AdminId(), http.AdminName(), request, ct));
+        })
             .WithAdminWrite("AdminUsersWrite");
 
-        admin.MapPatch("/sponsors/{sponsorId}", async (string sponsorId, HttpContext http,
-            SponsorUpdateRequest request, AdminService service, CancellationToken ct)
-            => Results.Ok(await service.UpdateSponsorAsync(http.AdminId(), http.AdminName(), sponsorId, request, ct)))
+        admin.MapPatch("/sponsors/{sponsorId}", async (string sponsorId, IConfiguration config, HttpContext http,
+            SponsorUpdateRequest request, AdminService service, CancellationToken ct) =>
+        {
+            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            return Results.Ok(await service.UpdateSponsorAsync(http.AdminId(), http.AdminName(), sponsorId, request, ct));
+        })
             .WithAdminWrite("AdminUsersWrite");
 
-        admin.MapGet("/sponsors/{sponsorId}/learners", async (string sponsorId, AdminService service, CancellationToken ct,
-            int? page, int? pageSize)
-            => Results.Ok(await service.GetSponsorLearnersAsync(sponsorId, page ?? 1, pageSize ?? 20, ct)))
+        admin.MapGet("/sponsors/{sponsorId}/learners", async (string sponsorId, IConfiguration config, AdminService service, CancellationToken ct,
+            int? page, int? pageSize) =>
+        {
+            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            return Results.Ok(await service.GetSponsorLearnersAsync(sponsorId, page ?? 1, pageSize ?? 20, ct));
+        })
             .WithAdminRead("AdminUsersRead");
 
-        admin.MapPost("/sponsors/{sponsorId}/learners", async (string sponsorId, HttpContext http,
-            CohortMemberAddRequest request, AdminService service, CancellationToken ct)
-            => Results.Ok(await service.LinkSponsorLearnerAsync(http.AdminId(), http.AdminName(), sponsorId, request.LearnerId, ct)))
+        admin.MapPost("/sponsors/{sponsorId}/learners", async (string sponsorId, IConfiguration config, HttpContext http,
+            CohortMemberAddRequest request, AdminService service, CancellationToken ct) =>
+        {
+            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            return Results.Ok(await service.LinkSponsorLearnerAsync(http.AdminId(), http.AdminName(), sponsorId, request.LearnerId, ct));
+        })
             .WithAdminWrite("AdminUsersWrite");
 
-        admin.MapGet("/cohorts", async (AdminService service, CancellationToken ct,
-            string? sponsorId, string? status, int? page, int? pageSize)
-            => Results.Ok(await service.GetCohortsAsync(sponsorId, status, page ?? 1, pageSize ?? 20, ct)))
+        admin.MapGet("/cohorts", async (IConfiguration config, AdminService service, CancellationToken ct,
+            string? sponsorId, string? status, int? page, int? pageSize) =>
+        {
+            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            return Results.Ok(await service.GetCohortsAsync(sponsorId, status, page ?? 1, pageSize ?? 20, ct));
+        })
             .WithAdminRead("AdminUsersRead");
 
-        admin.MapPost("/cohorts", async (HttpContext http,
-            CohortCreateRequest request, AdminService service, CancellationToken ct)
-            => Results.Ok(await service.CreateCohortAsync(http.AdminId(), http.AdminName(), request, ct)))
+        admin.MapPost("/cohorts", async (IConfiguration config, HttpContext http,
+            CohortCreateRequest request, AdminService service, CancellationToken ct) =>
+        {
+            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            return Results.Ok(await service.CreateCohortAsync(http.AdminId(), http.AdminName(), request, ct));
+        })
             .WithAdminWrite("AdminUsersWrite");
 
-        admin.MapPatch("/cohorts/{cohortId}", async (string cohortId, HttpContext http,
-            CohortUpdateRequest request, AdminService service, CancellationToken ct)
-            => Results.Ok(await service.UpdateCohortAsync(http.AdminId(), http.AdminName(), cohortId, request, ct)))
+        admin.MapPatch("/cohorts/{cohortId}", async (string cohortId, IConfiguration config, HttpContext http,
+            CohortUpdateRequest request, AdminService service, CancellationToken ct) =>
+        {
+            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            return Results.Ok(await service.UpdateCohortAsync(http.AdminId(), http.AdminName(), cohortId, request, ct));
+        })
             .WithAdminWrite("AdminUsersWrite");
 
-        admin.MapGet("/cohorts/{cohortId}/members", async (string cohortId, AdminService service, CancellationToken ct,
-            int? page, int? pageSize)
-            => Results.Ok(await service.GetCohortMembersAsync(cohortId, page ?? 1, pageSize ?? 20, ct)))
+        admin.MapGet("/cohorts/{cohortId}/members", async (string cohortId, IConfiguration config, AdminService service, CancellationToken ct,
+            int? page, int? pageSize) =>
+        {
+            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            return Results.Ok(await service.GetCohortMembersAsync(cohortId, page ?? 1, pageSize ?? 20, ct));
+        })
             .WithAdminRead("AdminUsersRead");
 
-        admin.MapPost("/cohorts/{cohortId}/members", async (string cohortId, HttpContext http,
-            CohortMemberAddRequest request, AdminService service, CancellationToken ct)
-            => Results.Ok(await service.AddCohortMemberAsync(http.AdminId(), http.AdminName(), cohortId, request.LearnerId, ct)))
+        admin.MapPost("/cohorts/{cohortId}/members", async (string cohortId, IConfiguration config, HttpContext http,
+            CohortMemberAddRequest request, AdminService service, CancellationToken ct) =>
+        {
+            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            return Results.Ok(await service.AddCohortMemberAsync(http.AdminId(), http.AdminName(), cohortId, request.LearnerId, ct));
+        })
             .WithAdminWrite("AdminUsersWrite");
 
         // ── AE1: Content Item Analytics ─────────────────
@@ -1833,6 +1865,16 @@ public static class AdminEndpoints
 
     private static string AdminName(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
+
+    private static bool SponsorPortalEnabled(IConfiguration configuration)
+        => configuration.GetValue<bool>("Features:SponsorPortalEnabled");
+
+    private static IResult SponsorPortalDisabled()
+        => Results.NotFound(new
+        {
+            code = "SPONSOR_PORTAL_DISABLED",
+            message = "Sponsor and enterprise management are held for a later launch gate.",
+        });
 
     private static string NormalizeRealtimeAsrProvider(string provider)
         => provider.Trim().ToLowerInvariant() switch

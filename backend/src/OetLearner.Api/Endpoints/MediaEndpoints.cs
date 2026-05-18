@@ -33,7 +33,7 @@ public static class MediaEndpoints
         HttpContext http,
         IFormFile file,
         LearnerDbContext db,
-        MediaStorageService storage,
+        IFileStorage storage,
         IUploadContentValidator validator,
         IUploadScanner scanner,
         CancellationToken ct)
@@ -46,11 +46,11 @@ public static class MediaEndpoints
         if (file.Length > MaxMediaUploadBytes)
             return Results.BadRequest(new { code = "file_too_large", message = "File must be 10 MB or smaller." });
 
-        if (!MediaStorageService.IsAllowedMediaContentType(file.ContentType))
+        if (!MediaStoragePolicy.IsAllowedMediaContentType(file.ContentType))
             return Results.BadRequest(new { code = "invalid_file_type", message = "Allowed types: jpg, png, gif, webp, pdf, mp3, m4a, wav, ogg, webm." });
 
         var originalFileName = Path.GetFileName(file.FileName ?? "upload");
-        if (!MediaStorageService.IsAllowedMediaExtension(originalFileName))
+        if (!MediaStoragePolicy.IsAllowedMediaExtension(originalFileName))
             return Results.BadRequest(new { code = "invalid_file_extension", message = "Allowed extensions: .jpg, .jpeg, .png, .gif, .webp, .pdf, .mp3, .m4a, .wav, .ogg, .webm." });
 
         await using var buffer = new MemoryStream((int)Math.Min(file.Length, MaxMediaUploadBytes));
@@ -61,7 +61,7 @@ public static class MediaEndpoints
         if (!validation.Accepted
             || string.IsNullOrWhiteSpace(validation.DetectedMime)
             || string.IsNullOrWhiteSpace(validation.DetectedExtension)
-            || !MediaStorageService.IsAllowedMediaContentType(validation.DetectedMime))
+            || !MediaStoragePolicy.IsAllowedMediaContentType(validation.DetectedMime))
         {
             return Results.BadRequest(new
             {
@@ -87,7 +87,7 @@ public static class MediaEndpoints
         var normalizedContentType = validation.DetectedMime!;
 
         buffer.Position = 0;
-        var sizeBytes = await storage.SaveAsync(storageKey, buffer, ct);
+        var sizeBytes = await storage.WriteAsync(storageKey, buffer, ct);
 
         var format = extension.TrimStart('.').ToLowerInvariant();
         if (format == "jpeg") format = "jpg";
@@ -163,7 +163,7 @@ public static class MediaEndpoints
         string id,
         HttpContext http,
         LearnerDbContext db,
-        MediaStorageService storage,
+        IFileStorage storage,
         CancellationToken ct)
     {
         var userId = http.MediaUserId();
@@ -187,7 +187,7 @@ public static class MediaEndpoints
                 statusCode: StatusCodes.Status409Conflict);
         }
 
-        storage.DeleteFile(asset.StoragePath);
+        storage.Delete(asset.StoragePath);
         db.MediaAssets.Remove(asset);
         await db.SaveChangesAsync(ct);
 

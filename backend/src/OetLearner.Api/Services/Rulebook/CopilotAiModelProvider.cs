@@ -159,6 +159,9 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
             throw new InvalidOperationException(
                 "GitHub Copilot provider requires an explicit model (e.g. openai/gpt-4o-mini). " +
                 "Set DefaultModel on the AiProviders row with Code=\"copilot\" or pass request.Model.");
+        var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
+        if (unsafeBaseUrlReason is not null)
+            throw new InvalidOperationException(unsafeBaseUrlReason);
 
         var endpoint = new Uri(baseUrl);
         var credential = new AzureKeyCredential(apiKey);

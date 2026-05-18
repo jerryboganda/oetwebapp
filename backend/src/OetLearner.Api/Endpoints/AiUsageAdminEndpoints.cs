@@ -424,6 +424,10 @@ public static class AiUsageAdminEndpoints
                 return Results.BadRequest(new { error = "Code and Name are required." });
             if (string.IsNullOrWhiteSpace(dto.BaseUrl))
                 return Results.BadRequest(new { error = "BaseUrl is required." });
+            var baseUrl = dto.BaseUrl.Trim();
+            var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
+            if (unsafeBaseUrlReason is not null)
+                return Results.BadRequest(new { error = unsafeBaseUrlReason });
             if (string.IsNullOrWhiteSpace(dto.ApiKey) || dto.ApiKey.Length < 16)
                 return Results.BadRequest(new { error = "ApiKey is required and must be at least 16 chars." });
 
@@ -436,7 +440,7 @@ public static class AiUsageAdminEndpoints
                 Name = dto.Name.Trim(),
                 Dialect = dto.Dialect,
                 Category = dto.Category,
-                BaseUrl = dto.BaseUrl.Trim(),
+                BaseUrl = baseUrl,
                 EncryptedApiKey = protector.Protect(dto.ApiKey),
                 ApiKeyHint = $"…{dto.ApiKey[^4..]}",
                 DefaultModel = dto.DefaultModel ?? string.Empty,
@@ -472,7 +476,14 @@ public static class AiUsageAdminEndpoints
             row.Name = dto.Name?.Trim() ?? row.Name;
             row.Dialect = dto.Dialect;
             row.Category = dto.Category;
-            if (!string.IsNullOrWhiteSpace(dto.BaseUrl)) row.BaseUrl = dto.BaseUrl.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.BaseUrl))
+            {
+                var baseUrl = dto.BaseUrl.Trim();
+                var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
+                if (unsafeBaseUrlReason is not null)
+                    return Results.BadRequest(new { error = unsafeBaseUrlReason });
+                row.BaseUrl = baseUrl;
+            }
             if (!string.IsNullOrWhiteSpace(dto.ApiKey) && dto.ApiKey.Length < 16)
                 return Results.BadRequest(new { error = "ApiKey must be at least 16 chars." });
             if (!string.IsNullOrWhiteSpace(dto.ApiKey))

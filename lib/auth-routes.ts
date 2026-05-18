@@ -1,5 +1,9 @@
 import type { CurrentUser, UserRole } from '@/lib/types/auth';
 
+function isSponsorPortalEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_SPONSOR_PORTAL_ENABLED === 'true';
+}
+
 export function defaultRouteForRole(role: UserRole): string {
   switch (role) {
     case 'admin':
@@ -7,7 +11,7 @@ export function defaultRouteForRole(role: UserRole): string {
     case 'expert':
       return '/expert';
     case 'sponsor':
-      return '/sponsor';
+      return isSponsorPortalEnabled() ? '/sponsor' : '/support';
     default:
       return '/';
   }
@@ -27,7 +31,7 @@ export function roleCanAccessPath(role: UserRole, path: string): boolean {
   }
 
   if (path.startsWith('/sponsor')) {
-    return role === 'sponsor';
+    return role === 'sponsor' && isSponsorPortalEnabled();
   }
 
   return role === 'learner';

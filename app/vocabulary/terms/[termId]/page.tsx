@@ -9,6 +9,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import {
   fetchVocabularyTerm,
   fetchMyVocabulary,
@@ -19,6 +20,7 @@ import {
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { vocabularyProvenanceLabel } from '@/lib/vocabulary-provenance';
 import type { VocabularyTerm, LearnerVocabulary } from '@/lib/types/vocabulary';
 
 const MASTERY_COLORS: Record<string, string> = {
@@ -106,8 +108,8 @@ export default function VocabularyTermDetailPage() {
     return (
       <LearnerDashboardShell>
         <div className="mb-6 flex items-center gap-3">
-          <Link href="/vocabulary/browse" className="text-muted hover:text-navy">
-            <ArrowLeft className="w-5 h-5" />
+          <Link href="/vocabulary/browse" aria-label="Back to vocabulary browse" className="text-muted hover:text-navy">
+            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
           </Link>
           <Skeleton className="h-8 w-48 rounded" />
         </div>
@@ -124,12 +126,13 @@ export default function VocabularyTermDetailPage() {
       </LearnerDashboardShell>
     );
   }
+  const provenanceLabel = vocabularyProvenanceLabel(term.sourceProvenance);
 
   return (
     <LearnerDashboardShell>
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/vocabulary" className="text-muted transition-colors hover:text-navy">
-          <ArrowLeft className="w-5 h-5" />
+        <Link href="/vocabulary" aria-label="Back to vocabulary" className="text-muted transition-colors hover:text-navy">
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </Link>
         <LearnerPageHero
           eyebrow="Vocabulary"
@@ -157,6 +160,7 @@ export default function VocabularyTermDetailPage() {
               className="mb-3"
             />
             <div className="flex flex-wrap items-center gap-3">
+              {provenanceLabel && <Badge variant="warning">{provenanceLabel}</Badge>}
               <button
                 onClick={() => void playAudio()}
                 className="inline-flex items-center gap-2 rounded-full bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10"

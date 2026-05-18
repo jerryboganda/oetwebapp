@@ -9,15 +9,17 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { RuntimeSettingsResponse } from './RuntimeSettingsClient';
 
-const { mockGet, mockPut } = vi.hoisted(() => ({
+const { mockGet, mockPut, mockPost } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockPut: vi.fn(),
+  mockPost: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
   apiClient: {
     get: mockGet,
     put: mockPut,
+    post: mockPost,
   },
 }));
 
@@ -54,6 +56,11 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       stripeWebhookSecret: '',
       stripeSuccessUrl: 'https://example.com/success',
       stripeCancelUrl: 'https://example.com/cancel',
+      paypalClientId: 'paypal-client',
+      paypalClientSecret: '********',
+      paypalWebhookId: '********',
+      paypalSuccessUrl: 'https://example.com/paypal/success',
+      paypalCancelUrl: 'https://example.com/paypal/cancel',
     },
     sentry: { dsn: 'https://abc@sentry.io/1', environment: 'production', sampleRate: 0.1 },
     backup: {
@@ -80,6 +87,16 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       apnsAuthKey: '********',
       fcmServerKey: '',
       fcmProjectId: '',
+      vapidSubject: 'mailto:support@example.com',
+      vapidPublicKey: 'vapid-public',
+      vapidPrivateKey: '********',
+    },
+    uploadScanner: {
+      provider: 'clamav',
+      host: 'clamav',
+      port: 3310,
+      timeoutSeconds: 10,
+      failClosedOnError: true,
     },
     updatedBy: 'admin@example.com',
     updatedByUserId: 'u-1',
@@ -101,7 +118,7 @@ describe('RuntimeSettingsClient', () => {
     vi.clearAllMocks();
   });
 
-  it('renders all 6 sections after the initial fetch resolves', async () => {
+  it('renders all runtime integration sections after the initial fetch resolves', async () => {
     mockGet.mockResolvedValue(makeResponse());
 
     render(<RuntimeSettingsClient />);
@@ -111,7 +128,8 @@ describe('RuntimeSettingsClient', () => {
     expect(screen.getByRole('region', { name: 'Sentry' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Backup S3' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'OAuth (Google + Apple + Facebook)' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Push (APNs + FCM)' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Push (Browser + APNs + FCM)' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Upload Scanner (ClamAV)' })).toBeInTheDocument();
   });
 
   it('shows the "Set" badge when the API returns the masked sentinel', async () => {
@@ -219,5 +237,44 @@ describe('RuntimeSettingsClient', () => {
     await user.click(screen.getByRole('button', { name: 'Save all runtime settings' }));
 
     expect(await screen.findByText('Stripe key is invalid')).toBeInTheDocument();
+  });
+
+  it('tests an integration section without saving settings', async () => {
+    mockGet.mockResolvedValue(makeResponse());
+    mockPost.mockResolvedValue({
+      section: 'uploadscanner',
+      status: 'ok',
+      message: 'ClamAV TCP endpoint accepted a connection.',
+      testedAt: '2026-05-16T11:00:00Z',
+    });
+    const user = userEvent.setup();
+
+    render(<RuntimeSettingsClient />);
+
+    await screen.findByRole('region', { name: 'Email (Brevo + SMTP)' });
+    await expandSection('Upload Scanner \\(ClamAV\\)');
+    await user.click(screen.getByRole('button', { name: 'Test Upload Scanner (ClamAV)' }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    expect(mockPost).toHaveBeenCalledWith('/v1/admin/runtime-settings/test/uploadScanner');
+    expect(mockPut).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getAllByText('ClamAV TCP endpoint accepted a connection.').length).toBeGreaterThan(0),
+    );
+  });
+
+  it('masks unexpected raw secret values returned by the API before rendering', async () => {
+    mockGet.mockResolvedValue(makeResponse({
+      email: {
+        ...makeResponse().email,
+        brevoApiKey: 'raw-brevo-secret',
+      },
+    }));
+
+    render(<RuntimeSettingsClient />);
+
+    const input = await screen.findByLabelText('Brevo API Key');
+    expect(input).toHaveValue('');
+    expect(screen.queryByDisplayValue('raw-brevo-secret')).not.toBeInTheDocument();
   });
 });

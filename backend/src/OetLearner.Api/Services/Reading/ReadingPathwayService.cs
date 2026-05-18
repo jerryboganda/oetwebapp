@@ -212,8 +212,8 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
             new("error_bank_cleared", "Clear error bank",
                 openCount == 0 && (examAttempts.Count > 0 || practiceAttempts > 0),
                 Math.Max(0, 10 - openCount), 10),
-            new("scaled_350", "Reach 350 scaled in an Exam attempt",
-                bestScaled is int s && s >= 350, bestScaled, 350),
+            new("scaled_350", $"Reach {OetScoring.ScaledPassGradeB} scaled in an Exam attempt",
+                bestScaled is int s && OetScoring.IsListeningReadingPassByScaled(s), bestScaled, OetScoring.ScaledPassGradeB),
             new("first_mock_pass", "Pass your first Reading mock",
                 readingMockCount >= 1, readingMockCount, 1),
         };

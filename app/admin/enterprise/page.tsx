@@ -14,6 +14,8 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
+const SPONSOR_PORTAL_ENABLED = process.env.NEXT_PUBLIC_SPONSOR_PORTAL_ENABLED === 'true';
+
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
@@ -76,7 +78,9 @@ export default function EnterprisePage() {
 
   useEffect(() => {
     analytics.track('admin_view', { page: 'enterprise' });
-    loadData();
+    if (SPONSOR_PORTAL_ENABLED) {
+      loadData();
+    }
   }, []);
 
   async function loadData() {
@@ -148,6 +152,23 @@ export default function EnterprisePage() {
     { key: 'status', header: 'Status', render: (r) => { const b = STATUS_BADGE[r.status] ?? { label: r.status, variant: 'outline' as const }; return <Badge variant={b.variant}>{b.label}</Badge>; } },
     { key: 'dates', header: 'Period', render: (r) => <span className="text-xs text-muted">{r.startDate || '—'} → {r.endDate || '—'}</span> },
   ];
+
+  if (!SPONSOR_PORTAL_ENABLED) {
+    return (
+      <AdminRouteWorkspace>
+        <AdminRouteSectionHeader
+          title="Enterprise Channel"
+          description="Sponsor and cohort management is held until the sponsor launch gate is explicitly opened."
+          icon={<Building2 className="w-5 h-5" />}
+        />
+        <AdminRoutePanel>
+          <p className="text-sm leading-6 text-muted">
+            Sponsor finance, learner attribution, reporting, contracts, and privacy evidence are not launch-ready. Backend sponsor and enterprise endpoints are disabled by default with the same feature gate.
+          </p>
+        </AdminRoutePanel>
+      </AdminRouteWorkspace>
+    );
+  }
 
   return (
     <AdminRouteWorkspace>

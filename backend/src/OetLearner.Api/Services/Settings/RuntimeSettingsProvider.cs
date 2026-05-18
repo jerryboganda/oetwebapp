@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -27,8 +28,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     private readonly IOptions<BrevoOptions> _brevo;
     private readonly IOptions<BillingOptions> _billing;
     private readonly IOptions<ExternalAuthOptions> _oauth;
+    private readonly IOptions<UploadScannerOptions> _uploadScanner;
+    private readonly IOptions<WebPushOptions> _webPush;
     private readonly IOptionsMonitor<SmtpOptions> _smtp;
     private readonly IConfiguration _config;
+    private readonly IHostEnvironment _environment;
 
     public RuntimeSettingsProvider(
         IServiceScopeFactory scopeFactory,
@@ -37,8 +41,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         IOptions<BrevoOptions> brevo,
         IOptions<BillingOptions> billing,
         IOptions<ExternalAuthOptions> oauth,
+        IOptions<UploadScannerOptions> uploadScanner,
+        IOptions<WebPushOptions> webPush,
         IOptionsMonitor<SmtpOptions> smtp,
-        IConfiguration config)
+        IConfiguration config,
+        IHostEnvironment environment)
     {
         _scopeFactory = scopeFactory;
         _cache = cache;
@@ -46,8 +53,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         _brevo = brevo;
         _billing = billing;
         _oauth = oauth;
+        _uploadScanner = uploadScanner;
+        _webPush = webPush;
         _smtp = smtp;
         _config = config;
+        _environment = environment;
     }
 
     public async Task<EffectiveSettings> GetAsync(CancellationToken ct = default)
@@ -79,16 +89,30 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        return await db.RuntimeSettings.AsNoTracking().FirstOrDefaultAsync(r => r.Id == "default", ct);
+        try
+        {
+            return await db.RuntimeSettings.AsNoTracking().FirstOrDefaultAsync(r => r.Id == "default", ct);
+        }
+        catch (DbException ex) when (!_environment.IsProduction() && IsMissingRuntimeSettingsTable(ex))
+        {
+            return null;
+        }
     }
+
+    private static bool IsMissingRuntimeSettingsTable(DbException ex)
+        => ex.Message.Contains("RuntimeSettings", StringComparison.OrdinalIgnoreCase)
+           && (ex.Message.Contains("no such table", StringComparison.OrdinalIgnoreCase)
+               || ex.Message.Contains("does not exist", StringComparison.OrdinalIgnoreCase));
 
     private EffectiveSettings Merge(RuntimeSettingsRow r)
     {
         var brevo = _brevo.Value;
         var billing = _billing.Value;
         var stripe = billing.Stripe;
+        var paypal = billing.PayPal;
         var oauth = _oauth.Value;
         var smtp = _smtp.CurrentValue;
+        var scanner = _uploadScanner.Value;
 
         var email = new EmailSettings(
             BrevoApiKey: Unprotect(r.BrevoApiKeyEncrypted) ?? NullIfEmpty(brevo.ApiKey),
@@ -106,7 +130,12 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             StripePublishableKey: Coalesce(r.StripePublishableKey, stripe.PublishableKey),
             StripeWebhookSecret: Unprotect(r.StripeWebhookSecretEncrypted) ?? NullIfEmpty(stripe.WebhookSecret),
             StripeSuccessUrl: Coalesce(r.StripeSuccessUrl, stripe.SuccessUrl),
-            StripeCancelUrl: Coalesce(r.StripeCancelUrl, stripe.CancelUrl));
+            StripeCancelUrl: Coalesce(r.StripeCancelUrl, stripe.CancelUrl),
+            PayPalClientId: Coalesce(r.PayPalClientId, paypal.ClientId),
+            PayPalClientSecret: Unprotect(r.PayPalClientSecretEncrypted) ?? NullIfEmpty(paypal.ClientSecret),
+            PayPalWebhookId: Unprotect(r.PayPalWebhookIdEncrypted) ?? NullIfEmpty(paypal.WebhookId),
+            PayPalSuccessUrl: Coalesce(r.PayPalSuccessUrl, paypal.SuccessUrl),
+            PayPalCancelUrl: Coalesce(r.PayPalCancelUrl, paypal.CancelUrl));
 
         // Sentry is wired from raw configuration (Sentry:Dsn) rather than an
         // IOptions binding, so fall back to IConfiguration for env defaults.
@@ -127,6 +156,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
 
         var google = oauth.Google;
         var facebook = oauth.Facebook;
+        var webPush = _webPush.Value;
         var oa = new OAuthSettings(
             GoogleClientId: Coalesce(r.GoogleClientId, google.ClientId),
             GoogleClientSecret: Unprotect(r.GoogleClientSecretEncrypted) ?? NullIfEmpty(google.ClientSecret),
@@ -143,7 +173,17 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             ApnsBundleId: r.ApnsBundleId,
             ApnsAuthKey: Unprotect(r.ApnsAuthKeyEncrypted),
             FcmServerKey: Unprotect(r.FcmServerKeyEncrypted),
-            FcmProjectId: r.FcmProjectId);
+            FcmProjectId: r.FcmProjectId,
+            VapidSubject: Coalesce(r.VapidSubject, webPush.Subject),
+            VapidPublicKey: Coalesce(r.VapidPublicKey, webPush.PublicKey),
+            VapidPrivateKey: Unprotect(r.VapidPrivateKeyEncrypted) ?? NullIfEmpty(webPush.PrivateKey));
+
+        var uploadScanner = new UploadScannerSettings(
+            Provider: Coalesce(r.UploadScannerProvider, scanner.Provider) ?? "noop",
+            Host: Coalesce(r.UploadScannerHost, scanner.Host) ?? "127.0.0.1",
+            Port: r.UploadScannerPort ?? (scanner.Port <= 0 ? 3310 : scanner.Port),
+            TimeoutSeconds: r.UploadScannerTimeoutSeconds ?? Math.Max(1, (int)Math.Ceiling(scanner.Timeout.TotalSeconds)),
+            FailClosedOnError: r.UploadScannerFailClosedOnError ?? scanner.FailClosedOnError);
 
         return new EffectiveSettings(
             Email: email,
@@ -152,6 +192,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             Backup: backup,
             OAuth: oa,
             Push: push,
+            UploadScanner: uploadScanner,
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt);

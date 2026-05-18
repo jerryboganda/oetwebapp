@@ -1,7 +1,11 @@
+using System.Data.Common;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -9,6 +13,32 @@ public static class NotificationEndpoints
 {
     public static IEndpointRouteBuilder MapNotificationEndpoints(this IEndpointRouteBuilder app)
     {
+        app.MapGet("/v1/notifications/push-config", async (
+            IRuntimeSettingsProvider runtimeSettingsProvider,
+            IOptions<WebPushOptions> webPushOptions,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
+        {
+            var options = webPushOptions.Value;
+            var publicKey = options.PublicKey;
+            try
+            {
+                var pushSettings = (await runtimeSettingsProvider.GetAsync(ct)).Push;
+                publicKey = Coalesce(pushSettings.VapidPublicKey, options.PublicKey);
+            }
+            catch (DbException ex)
+            {
+                var logger = loggerFactory.CreateLogger("NotificationEndpoints");
+                logger.LogWarning(ex, "Runtime browser push configuration unavailable; falling back to WebPush options.");
+            }
+
+            return Results.Ok(new
+            {
+                enabled = options.Enabled && !string.IsNullOrWhiteSpace(publicKey),
+                publicKey = publicKey ?? string.Empty
+            });
+        });
+
         var notifications = app.MapGroup("/v1/notifications")
             .RequireAuthorization()
             .RequireRateLimiting("PerUser");
@@ -223,6 +253,9 @@ public static class NotificationEndpoints
     private static string UserRole(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.Role)
            ?? throw new InvalidOperationException("Authenticated role is required.");
+
+    private static string? Coalesce(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private static string AdminId(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)

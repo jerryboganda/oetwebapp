@@ -9,6 +9,7 @@ import {
   deletePushSubscription,
   fetchNotificationPreferences,
   fetchNotifications,
+  fetchPushConfiguration,
   markAllNotificationsRead,
   markNotificationRead,
   updateNotificationPreferences,
@@ -235,6 +236,7 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
   const [isUpdatingPreferences, setIsUpdatingPreferences] = useState(false);
   const [pushPermission, setPushPermission] = useState<PushPermissionState>(getPushPermission());
   const [pushEnabled, setPushEnabled] = useState(false);
+  const [webPushPublicKey, setWebPushPublicKey] = useState(env.webPushPublicKey);
   const [isUpdatingPush, setIsUpdatingPush] = useState(false);
   const [toastState, setToastState] = useState<{ message: string; variant: ToastVariant } | null>(null);
   const hubConnectionRef = useRef<HubConnection | null>(null);
@@ -244,7 +246,32 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     && 'serviceWorker' in navigator
     && 'PushManager' in window
     && pushPermission !== 'unsupported';
-  const pushPublicKeyConfigured = Boolean(env.webPushPublicKey);
+  const pushPublicKeyConfigured = Boolean(webPushPublicKey);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setWebPushPublicKey(env.webPushPublicKey);
+      return;
+    }
+
+    let active = true;
+    fetchPushConfiguration()
+      .then((config) => {
+        if (active) {
+          setWebPushPublicKey(config.enabled ? config.publicKey : '');
+        }
+      })
+      .catch((error) => {
+        console.warn('Unable to load runtime browser push configuration.', error);
+        if (active) {
+          setWebPushPublicKey(env.webPushPublicKey);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated]);
 
   const refreshFeed = useCallback(async (options?: { reset?: boolean; silent?: boolean }) => {
     if (!isAuthenticated) {
@@ -368,7 +395,7 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
       const subscription = existingSubscription
         ?? await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: base64UrlToArrayBuffer(env.webPushPublicKey),
+          applicationServerKey: base64UrlToArrayBuffer(webPushPublicKey),
         });
 
       const payload = toPushPayload(subscription);
@@ -392,7 +419,7 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     } finally {
       setIsUpdatingPush(false);
     }
-  }, [pushPublicKeyConfigured, pushSupported]);
+  }, [pushPublicKeyConfigured, pushSupported, webPushPublicKey]);
 
   const unsubscribeFromPush = useCallback(async () => {
     if (!pushSupported) {

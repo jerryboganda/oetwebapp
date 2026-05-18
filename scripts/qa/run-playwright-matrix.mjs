@@ -183,6 +183,7 @@ const smokeRuns = [
         'tests/e2e/expert/review-completion.spec.ts',
       ],
       projects: ['chromium-expert'],
+      workers: 1,
     }),
   },
   {
@@ -251,7 +252,7 @@ const fullRuns = [
     args: playwrightArgs({
       files: ['tests/e2e/shared/accessibility.spec.ts'],
       projects: ['chromium-learner'],
-      grep: 'learner dashboard|settings profile',
+      grep: 'learner dashboard|settings profile|billing center|writing player',
     }),
   },
   {
@@ -263,11 +264,11 @@ const fullRuns = [
     }),
   },
   {
-    label: 'accessibility: admin content library',
+    label: 'accessibility: admin launch surfaces',
     args: playwrightArgs({
       files: ['tests/e2e/shared/accessibility.spec.ts'],
       projects: ['chromium-admin'],
-      grep: 'admin content library',
+      grep: 'admin content library|admin audit logs|admin user credit',
     }),
   },
   {

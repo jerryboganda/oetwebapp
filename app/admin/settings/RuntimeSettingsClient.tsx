@@ -32,6 +32,11 @@ export interface BillingSettings {
   stripeWebhookSecret: string;
   stripeSuccessUrl: string;
   stripeCancelUrl: string;
+  paypalClientId: string;
+  paypalClientSecret: string;
+  paypalWebhookId: string;
+  paypalSuccessUrl: string;
+  paypalCancelUrl: string;
 }
 
 export interface SentrySettings {
@@ -66,6 +71,17 @@ export interface PushSettings {
   apnsAuthKey: string;
   fcmServerKey: string;
   fcmProjectId: string;
+  vapidSubject: string;
+  vapidPublicKey: string;
+  vapidPrivateKey: string;
+}
+
+export interface UploadScannerSettings {
+  provider: string;
+  host: string;
+  port: number | null;
+  timeoutSeconds: number | null;
+  failClosedOnError: boolean | null;
 }
 
 export interface RuntimeSettingsResponse {
@@ -75,14 +91,23 @@ export interface RuntimeSettingsResponse {
   backup: BackupSettings;
   oauth: OAuthSettings;
   push: PushSettings;
+  uploadScanner: UploadScannerSettings;
   updatedBy: string | null;
   updatedByUserId?: string | null;
   updatedAt: string | null;
 }
 
-type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push';
+export interface RuntimeSettingsIntegrationTestResponse {
+  section: string;
+  status: 'ok' | 'failed';
+  message: string;
+  testedAt: string;
+}
+
+type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+type TestStatusState = Partial<Record<SectionId, RuntimeSettingsIntegrationTestResponse>>;
 
 /* ───────────────────────── Field metadata ───────────────────────── */
 
@@ -91,7 +116,7 @@ interface FieldDef<TSection> {
   label: string;
   hint?: string;
   secret?: boolean;
-  type?: 'text' | 'number' | 'url';
+  type?: 'text' | 'number' | 'url' | 'checkbox';
   placeholder?: string;
 }
 
@@ -113,6 +138,11 @@ const BILLING_FIELDS: FieldDef<BillingSettings>[] = [
   { key: 'stripeWebhookSecret', label: 'Stripe Webhook Signing Secret', secret: true, hint: 'Used to verify Stripe webhook signatures (starts with whsec_).' },
   { key: 'stripeSuccessUrl', label: 'Checkout Success URL', type: 'url' },
   { key: 'stripeCancelUrl', label: 'Checkout Cancel URL', type: 'url' },
+  { key: 'paypalClientId', label: 'PayPal Client ID', hint: 'REST app client id for PayPal checkout and refunds.' },
+  { key: 'paypalClientSecret', label: 'PayPal Client Secret', secret: true },
+  { key: 'paypalWebhookId', label: 'PayPal Webhook ID', secret: true, hint: 'Used to verify PayPal webhook signatures.' },
+  { key: 'paypalSuccessUrl', label: 'PayPal Success URL', type: 'url' },
+  { key: 'paypalCancelUrl', label: 'PayPal Cancel URL', type: 'url' },
 ];
 
 const SENTRY_FIELDS: FieldDef<SentrySettings>[] = [
@@ -141,6 +171,9 @@ const OAUTH_FIELDS: FieldDef<OAuthSettings>[] = [
 ];
 
 const PUSH_FIELDS: FieldDef<PushSettings>[] = [
+  { key: 'vapidSubject', label: 'Browser Push VAPID Subject', hint: 'Contact URI, usually mailto:support@example.com.' },
+  { key: 'vapidPublicKey', label: 'Browser Push VAPID Public Key' },
+  { key: 'vapidPrivateKey', label: 'Browser Push VAPID Private Key', secret: true },
   { key: 'apnsKeyId', label: 'APNs Key ID' },
   { key: 'apnsTeamId', label: 'APNs Team ID' },
   { key: 'apnsBundleId', label: 'APNs Bundle ID', hint: 'iOS app bundle identifier.' },
@@ -149,13 +182,22 @@ const PUSH_FIELDS: FieldDef<PushSettings>[] = [
   { key: 'fcmProjectId', label: 'FCM Project ID' },
 ];
 
+const UPLOAD_SCANNER_FIELDS: FieldDef<UploadScannerSettings>[] = [
+  { key: 'provider', label: 'Scanner Provider', hint: 'Use "clamav" for production; "noop" is development-only.' },
+  { key: 'host', label: 'ClamAV Host', hint: 'ClamAV daemon host, for example clamav or 127.0.0.1.' },
+  { key: 'port', label: 'ClamAV Port', type: 'number', hint: 'Default clamd port is 3310.' },
+  { key: 'timeoutSeconds', label: 'Scan Timeout (seconds)', type: 'number', hint: 'Fail fast for slow scanners; valid range is 1-120.' },
+  { key: 'failClosedOnError', label: 'Fail closed on scanner errors', type: 'checkbox', hint: 'Reject uploads when ClamAV is unavailable or times out.' },
+];
+
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
   { id: 'sentry', title: 'Sentry', description: 'Error reporting and performance monitoring.' },
   { id: 'backup', title: 'Backup S3', description: 'Off-site database and media backup destination.' },
   { id: 'oauth', title: 'OAuth (Google + Apple + Facebook)', description: 'Social sign-in providers.' },
-  { id: 'push', title: 'Push (APNs + FCM)', description: 'Mobile push notifications via Apple and Firebase.' },
+  { id: 'push', title: 'Push (Browser + APNs + FCM)', description: 'Browser VAPID and native mobile push notifications via Apple and Firebase.' },
+  { id: 'uploadScanner', title: 'Upload Scanner (ClamAV)', description: 'Antivirus scanning for learner/admin uploads.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -179,6 +221,11 @@ function emptyResponse(): RuntimeSettingsResponse {
       stripeWebhookSecret: '',
       stripeSuccessUrl: '',
       stripeCancelUrl: '',
+      paypalClientId: '',
+      paypalClientSecret: '',
+      paypalWebhookId: '',
+      paypalSuccessUrl: '',
+      paypalCancelUrl: '',
     },
     sentry: { dsn: '', environment: '', sampleRate: null },
     backup: {
@@ -205,6 +252,16 @@ function emptyResponse(): RuntimeSettingsResponse {
       apnsAuthKey: '',
       fcmServerKey: '',
       fcmProjectId: '',
+      vapidSubject: '',
+      vapidPublicKey: '',
+      vapidPrivateKey: '',
+    },
+    uploadScanner: {
+      provider: '',
+      host: '',
+      port: null,
+      timeoutSeconds: null,
+      failClosedOnError: null,
     },
     updatedBy: null,
     updatedByUserId: null,
@@ -214,7 +271,7 @@ function emptyResponse(): RuntimeSettingsResponse {
 
 function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSettingsResponse {
   const empty = emptyResponse();
-  return {
+  return sanitizeSecretFields({
     ...empty,
     ...data,
     email: { ...empty.email, ...data.email },
@@ -223,7 +280,47 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     backup: { ...empty.backup, ...data.backup },
     oauth: { ...empty.oauth, ...data.oauth },
     push: { ...empty.push, ...data.push },
+    uploadScanner: { ...empty.uploadScanner, ...data.uploadScanner },
+  });
+}
+
+function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsResponse {
+  return {
+    ...data,
+    email: {
+      ...data.email,
+      brevoApiKey: maskUnexpectedSecret(data.email.brevoApiKey),
+      smtpPassword: maskUnexpectedSecret(data.email.smtpPassword),
+    },
+    billing: {
+      ...data.billing,
+      stripeSecretKey: maskUnexpectedSecret(data.billing.stripeSecretKey),
+      stripeWebhookSecret: maskUnexpectedSecret(data.billing.stripeWebhookSecret),
+      paypalClientSecret: maskUnexpectedSecret(data.billing.paypalClientSecret),
+      paypalWebhookId: maskUnexpectedSecret(data.billing.paypalWebhookId),
+    },
+    backup: {
+      ...data.backup,
+      awsSecretAccessKey: maskUnexpectedSecret(data.backup.awsSecretAccessKey),
+      gpgPassphrase: maskUnexpectedSecret(data.backup.gpgPassphrase),
+    },
+    oauth: {
+      ...data.oauth,
+      googleClientSecret: maskUnexpectedSecret(data.oauth.googleClientSecret),
+      applePrivateKey: maskUnexpectedSecret(data.oauth.applePrivateKey),
+      facebookAppSecret: maskUnexpectedSecret(data.oauth.facebookAppSecret),
+    },
+    push: {
+      ...data.push,
+      apnsAuthKey: maskUnexpectedSecret(data.push.apnsAuthKey),
+      fcmServerKey: maskUnexpectedSecret(data.push.fcmServerKey),
+      vapidPrivateKey: maskUnexpectedSecret(data.push.vapidPrivateKey),
+    },
   };
+}
+
+function maskUnexpectedSecret(value: string): string {
+  return value && value !== MASKED ? MASKED : value;
 }
 
 function parseNullableNumberInput(value: string): number | null {
@@ -232,9 +329,16 @@ function parseNullableNumberInput(value: string): number | null {
 }
 
 function getApiErrorMessage(err: unknown, fallback: string): string {
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === 'string') return err;
+  if (err instanceof Error && err.message) return redactPotentialSecrets(err.message);
+  if (typeof err === 'string') return redactPotentialSecrets(err);
   return fallback;
+}
+
+function redactPotentialSecrets(value: string): string {
+  return value.replace(
+    /(?:github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9_]{12,}|whsec_[A-Za-z0-9_]{12,}|AIza[0-9A-Za-z_-]{20,})/gi,
+    '***REDACTED***',
+  );
 }
 
 function formatTimestamp(value: string | null): string {
@@ -321,14 +425,32 @@ function SecretField({ label, hint, serverValue, draftValue, onChange }: SecretF
 interface PlainFieldProps {
   label: string;
   hint?: string;
-  type?: 'text' | 'number' | 'url';
-  value: string | number | null | undefined;
-  onChange: (next: string) => void;
+  type?: 'text' | 'number' | 'url' | 'checkbox';
+  value: string | number | boolean | null | undefined;
+  onChange: (next: string | boolean) => void;
 }
 
 function PlainField({ label, hint, type = 'text', value, onChange }: PlainFieldProps) {
   const reactId = useId();
   const inputId = `plain-${reactId}`;
+  if (type === 'checkbox') {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={inputId} className="flex items-center gap-3 text-sm font-semibold tracking-tight text-navy">
+          <input
+            id={inputId}
+            type="checkbox"
+            checked={Boolean(value)}
+            onChange={(event) => onChange(event.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          {label}
+        </label>
+        {hint ? <p className="text-xs leading-5 text-muted">{hint}</p> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={inputId} className="text-sm font-semibold tracking-tight text-navy">
@@ -355,10 +477,13 @@ interface SectionProps {
   description: string;
   open: boolean;
   onToggle: () => void;
+  testing: boolean;
+  testStatus?: RuntimeSettingsIntegrationTestResponse;
+  onTest: () => void;
   children: ReactNode;
 }
 
-function Section({ id, title, description, open, onToggle, children }: SectionProps) {
+function Section({ id, title, description, open, onToggle, testing, testStatus, onTest, children }: SectionProps) {
   const headingId = `runtime-settings-${id}-heading`;
   return (
     <section
@@ -387,6 +512,34 @@ function Section({ id, title, description, open, onToggle, children }: SectionPr
       </button>
       {open && (
         <div id={`runtime-settings-${id}-body`} className="border-t border-border px-5 py-5">
+          <div className="mb-5 flex flex-col gap-3 rounded-2xl bg-background-light p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-navy">Connection check</span>
+                {testStatus ? (
+                  <Badge variant={testStatus.status === 'ok' ? 'success' : 'danger'}>
+                    {testStatus.status === 'ok' ? 'Green' : 'Failed'}
+                  </Badge>
+                ) : (
+                  <Badge variant="muted">Not tested</Badge>
+                )}
+              </div>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                {testStatus?.message ?? 'Runs a non-mutating sandbox/format check; no live learner data is sent.'}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onTest}
+              disabled={testing}
+              aria-label={`Test ${title}`}
+            >
+              {testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+              {testing ? 'Testing...' : 'Test'}
+            </Button>
+          </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">{children}</div>
         </div>
       )}
@@ -442,6 +595,8 @@ export function RuntimeSettingsClient() {
   const [draft, setDraft] = useState<RuntimeSettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testingSections, setTestingSections] = useState<Partial<Record<SectionId, boolean>>>({});
+  const [testStatuses, setTestStatuses] = useState<TestStatusState>({});
   const [toast, setToast] = useState<ToastState>(null);
   const [openSections, setOpenSections] = useState<Record<SectionId, boolean>>({
     email: true,
@@ -450,6 +605,7 @@ export function RuntimeSettingsClient() {
     backup: false,
     oauth: false,
     push: false,
+    uploadScanner: false,
   });
 
   const load = useCallback(async () => {
@@ -510,6 +666,34 @@ export function RuntimeSettingsClient() {
     }
   }, [draft, load]);
 
+  const handleTest = useCallback(async (section: SectionId) => {
+    setTestingSections((prev) => ({ ...prev, [section]: true }));
+    try {
+      const result = await apiClient.post<RuntimeSettingsIntegrationTestResponse>(
+        `/v1/admin/runtime-settings/test/${section}`,
+      );
+      setTestStatuses((prev) => ({ ...prev, [section]: result }));
+      setToast({
+        variant: result.status === 'ok' ? 'success' : 'error',
+        message: result.message,
+      });
+    } catch (err) {
+      const message = getApiErrorMessage(err, 'Failed to test integration.');
+      setTestStatuses((prev) => ({
+        ...prev,
+        [section]: {
+          section,
+          status: 'failed',
+          message,
+          testedAt: new Date().toISOString(),
+        },
+      }));
+      setToast({ variant: 'error', message });
+    } finally {
+      setTestingSections((prev) => ({ ...prev, [section]: false }));
+    }
+  }, []);
+
   const updatedLine = useMemo(() => {
     if (!server) return null;
     if (!server.updatedBy && !server.updatedAt) return null;
@@ -561,6 +745,9 @@ export function RuntimeSettingsClient() {
               description={section.description}
               open={openSections[section.id]}
               onToggle={() => toggleSection(section.id)}
+              testing={Boolean(testingSections[section.id])}
+              testStatus={testStatuses[section.id]}
+              onTest={() => handleTest(section.id)}
             >
               {section.id === 'email' &&
                 EMAIL_FIELDS.map((field) =>
@@ -584,7 +771,7 @@ export function RuntimeSettingsClient() {
                         updateField(
                           'email',
                           field.key,
-                          (field.type === 'number' ? parseNullableNumberInput(next) : next) as never,
+                          (field.type === 'number' && typeof next === 'string' ? parseNullableNumberInput(next) : next) as never,
                         )
                       }
                     />
@@ -636,7 +823,7 @@ export function RuntimeSettingsClient() {
                         updateField(
                           'sentry',
                           field.key,
-                          (field.type === 'number' ? parseNullableNumberInput(next) : next) as never,
+                          (field.type === 'number' && typeof next === 'string' ? parseNullableNumberInput(next) : next) as never,
                         )
                       }
                     />
@@ -711,6 +898,28 @@ export function RuntimeSettingsClient() {
                     />
                   ),
                 )}
+
+              {section.id === 'uploadScanner' &&
+                UPLOAD_SCANNER_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.uploadScanner[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'uploadScanner',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
             </Section>
           ))}
 
