@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -12,6 +13,32 @@ public static class NotificationEndpoints
 {
     public static IEndpointRouteBuilder MapNotificationEndpoints(this IEndpointRouteBuilder app)
     {
+        app.MapGet("/v1/notifications/push-config", async (
+            IRuntimeSettingsProvider runtimeSettingsProvider,
+            IOptions<WebPushOptions> webPushOptions,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
+        {
+            var options = webPushOptions.Value;
+            var publicKey = options.PublicKey;
+            try
+            {
+                var pushSettings = (await runtimeSettingsProvider.GetAsync(ct)).Push;
+                publicKey = Coalesce(pushSettings.VapidPublicKey, options.PublicKey);
+            }
+            catch (DbException ex)
+            {
+                var logger = loggerFactory.CreateLogger("NotificationEndpoints");
+                logger.LogWarning(ex, "Runtime browser push configuration unavailable; falling back to WebPush options.");
+            }
+
+            return Results.Ok(new
+            {
+                enabled = options.Enabled && !string.IsNullOrWhiteSpace(publicKey),
+                publicKey = publicKey ?? string.Empty
+            });
+        });
+
         var notifications = app.MapGroup("/v1/notifications")
             .RequireAuthorization()
             .RequireRateLimiting("PerUser");
@@ -54,22 +81,6 @@ public static class NotificationEndpoints
             NotificationService service,
             CancellationToken ct) =>
             Results.Ok(await service.GetPreferencesAsync(http.AuthAccountId(), http.UserRole(), ct)));
-
-        notifications.MapGet("/push-config", async (
-            IRuntimeSettingsProvider runtimeSettingsProvider,
-            IOptions<WebPushOptions> webPushOptions,
-            CancellationToken ct) =>
-        {
-            var pushSettings = (await runtimeSettingsProvider.GetAsync(ct)).Push;
-            var options = webPushOptions.Value;
-            var publicKey = Coalesce(pushSettings.VapidPublicKey, options.PublicKey);
-
-            return Results.Ok(new
-            {
-                enabled = options.Enabled && !string.IsNullOrWhiteSpace(publicKey),
-                publicKey = publicKey ?? string.Empty
-            });
-        });
 
         notifications.MapPatch("/preferences", async (
             HttpContext http,
