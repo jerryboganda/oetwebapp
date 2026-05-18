@@ -1,7 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
-const { RUNTIME_CONFIG_FILE, createDesktopRuntimeConfig } = require('./electron/runtime-config.cjs');
+const {
+  RUNTIME_CONFIG_FILE,
+  createDesktopRuntimeConfig,
+  validateRequiredDesktopApiBaseUrl,
+} = require('./electron/runtime-config.cjs');
 const packageJson = require('./package.json');
 
 const updateUrl = (process.env.ELECTRON_UPDATES_URL || '').trim().replace(/\/$/, '');
@@ -54,8 +58,10 @@ function syncStandaloneRuntime(context) {
 function syncDesktopRuntimeConfig(context) {
   const resourcesDir = getResourcesDirectory(context.appOutDir, context.electronPlatformName);
   const runtimeConfigPath = path.join(resourcesDir, RUNTIME_CONFIG_FILE);
+  const allowLoopback = process.env.ELECTRON_ALLOW_LOCAL_API_TARGET === 'true';
+  const requireHttps = process.env.ELECTRON_ALLOW_INSECURE_REMOTE_API_TARGET !== 'true';
   const runtimeConfig = createDesktopRuntimeConfig(process.env, {
-    allowLoopback: process.env.ELECTRON_ALLOW_LOCAL_API_TARGET === 'true',
+    allowLoopback,
   });
 
   if (Object.keys(runtimeConfig).length === 0) {
@@ -64,6 +70,8 @@ function syncDesktopRuntimeConfig(context) {
     }
     return;
   }
+
+  validateRequiredDesktopApiBaseUrl(process.env, { allowLoopback, requireHttps });
 
   fs.mkdirSync(resourcesDir, { recursive: true });
   fs.writeFileSync(runtimeConfigPath, `${JSON.stringify(runtimeConfig, null, 2)}\n`, 'utf8');
@@ -109,6 +117,12 @@ module.exports = {
       throw fuseError;
     }
   },
+  protocols: [
+    {
+      name: 'OET Prep desktop deep links',
+      schemes: ['oet-prep'],
+    },
+  ],
   publish,
   win: {
     ...winBuildConfig,

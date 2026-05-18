@@ -19,6 +19,10 @@ const runtimeConfig = require('../runtime-config.cjs') as {
     runtimeConfig?: Record<string, unknown>,
     options?: { allowLoopback?: boolean }
   ) => string | null;
+  validateRequiredDesktopApiBaseUrl: (
+    environment?: NodeJS.ProcessEnv,
+    options?: { allowLoopback?: boolean; requireHttps?: boolean }
+  ) => string;
 };
 
 const temporaryDirectories: string[] = [];
@@ -219,5 +223,25 @@ describe('desktop runtime config helpers', () => {
     });
 
     expect(loadedConfig).toEqual({ publicApiBaseUrl: 'https://api.example.com' });
+  });
+
+  it('requires a non-loopback API URL for release packaging', () => {
+    expect(() => runtimeConfig.validateRequiredDesktopApiBaseUrl({
+      NEXT_PUBLIC_API_BASE_URL: '/api/backend',
+    } as unknown as NodeJS.ProcessEnv)).toThrow(/requires a non-loopback API URL/);
+
+    expect(() => runtimeConfig.validateRequiredDesktopApiBaseUrl({
+      PUBLIC_API_BASE_URL: 'http://127.0.0.1:5198',
+    } as unknown as NodeJS.ProcessEnv)).toThrow(/requires a non-loopback API URL/);
+
+    expect(runtimeConfig.validateRequiredDesktopApiBaseUrl({
+      PUBLIC_API_BASE_URL: 'https://api.example.com',
+    } as unknown as NodeJS.ProcessEnv, { requireHttps: true })).toBe('https://api.example.com');
+  });
+
+  it('rejects insecure remote API URLs when HTTPS is required', () => {
+    expect(() => runtimeConfig.validateRequiredDesktopApiBaseUrl({
+      PUBLIC_API_BASE_URL: 'http://api.example.com',
+    } as unknown as NodeJS.ProcessEnv, { requireHttps: true })).toThrow(/must use HTTPS/);
   });
 });

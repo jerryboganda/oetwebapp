@@ -71,6 +71,36 @@ test.describe('Accessibility smoke @a11y', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
+  test('billing center is free of critical axe violations', async ({ page }, testInfo) => {
+    if (!testInfo.project.name.includes('chromium-learner')) {
+      test.skip();
+    }
+
+    const diagnostics = observePage(page);
+    await page.goto('/billing', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: /your billing center/i })).toBeVisible();
+    await expectNoSeriousAxeViolations(page);
+
+    expectNoSevereClientIssues(diagnostics);
+    diagnostics.detach();
+    await attachDiagnostics(testInfo, diagnostics);
+  });
+
+  test('writing player is free of critical axe violations', async ({ page }, testInfo) => {
+    if (!testInfo.project.name.includes('chromium-learner')) {
+      test.skip();
+    }
+
+    const diagnostics = observePage(page);
+    await page.goto('/writing/player?taskId=wt-001', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('main').getByRole('heading').first()).toBeVisible();
+    await expectNoSeriousAxeViolations(page);
+
+    expectNoSevereClientIssues(diagnostics);
+    diagnostics.detach();
+    await attachDiagnostics(testInfo, diagnostics);
+  });
+
   test('expert queue is free of critical axe violations', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('chromium-expert')) {
       test.skip();
@@ -94,6 +124,36 @@ test.describe('Accessibility smoke @a11y', () => {
     const diagnostics = observePage(page);
     await page.goto('/admin/content', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: /content library/i })).toBeVisible();
+    await expectNoSeriousAxeViolations(page);
+
+    expectNoSevereClientIssues(diagnostics);
+    diagnostics.detach();
+    await attachDiagnostics(testInfo, diagnostics);
+  });
+
+  test('admin audit logs are free of critical axe violations', async ({ page }, testInfo) => {
+    if (!testInfo.project.name.includes('chromium-admin')) {
+      test.skip();
+    }
+
+    const diagnostics = observePage(page);
+    await page.goto('/admin/audit-logs', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: /audit logs/i })).toBeVisible();
+    await expectNoSeriousAxeViolations(page);
+
+    expectNoSevereClientIssues(diagnostics);
+    diagnostics.detach();
+    await attachDiagnostics(testInfo, diagnostics);
+  });
+
+  test('admin user credit surface is free of critical axe violations', async ({ page }, testInfo) => {
+    if (!testInfo.project.name.includes('chromium-admin')) {
+      test.skip();
+    }
+
+    const diagnostics = observePage(page);
+    await page.goto('/admin/users/mock-user-001', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: /faisal maqsood/i })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
 
     expectNoSevereClientIssues(diagnostics);

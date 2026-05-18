@@ -1,6 +1,6 @@
 # Current Remaining Work
 
-Status date: 2026-05-14
+Status date: 2026-05-17
 
 Audience: owner, engineering, QA, release, support, and stakeholder review.
 
@@ -19,6 +19,9 @@ Current active work is tracked here by workstream and points to the authoritativ
 | Realtime beta topology | Single API instance | Acceptable for beta only; sticky/distributed remains a scale-out blocker. |
 | Protected ElevenLabs smoke | Mandatory | Required before real-provider admin exposure or paid beta. |
 | Final audience goal | All audiences eventually | Direct adult first; sponsors, schools, and minors require explicit privacy/legal gates. |
+| Launch packaging goal | Web, mobile, and desktop together | Code guardrails are in place; external signing/store/accessibility evidence remains launch-blocking. |
+| Sponsor portal | Hidden until fully ready | Keep sponsor routes disabled until payer attribution, real invoices, ROI analytics, and contracts are proven. |
+| Reading AI extraction | Launch-critical with human approval | Safety guardrails are in place; full grounded provider extraction/admin review UI remains. |
 
 ## Source-Of-Truth Map
 
@@ -68,7 +71,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 ### P0-004 - External Launch Readiness Gate
 
 - Evidence: mobile store credentials/assets/privacy approval, signed desktop artifacts, manual assistive-tech signoff, and GitHub-hosted QA observation are still external-evidence items.
-- Local hardening complete: mobile release validation rejects placeholder association files, invalid app versions/version codes, and malformed Android certificate fingerprints; desktop release workflow now verifies signed Windows artifacts and publishes SHA-256 checksums.
+- Local hardening complete: mobile release validation rejects placeholder association files, invalid app versions/version codes, and malformed Android certificate fingerprints; production Capacitor app URLs now fail closed to HTTPS/non-loopback except explicit local-loopback development mode; mobile app-host deep links reject HTTP; desktop public release builds require a safe remote API target, verify update metadata/checksums, and route packaged smoke through the release wrapper.
 - Remaining work: attach real external evidence for these explicit `pending-external` gates instead of hiding them behind closed v1 status.
 - Input required: Apple/Google accounts and signing assets, desktop signing method, release channel decisions, manual QA availability.
 - Recommendation: launch web/API first if desired; keep mobile stores and signed desktop as beta until evidence is attached.
@@ -76,7 +79,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 ### P0-005 - Mobile Association Files And Support Surface
 
 - Evidence: `public/.well-known/apple-app-site-association` contains `TEAM_ID.com.oetprep.learner`; `public/.well-known/assetlinks.json` contains `REPLACE_WITH_YOUR_SHA256_CERT_FINGERPRINT`.
-- Local hardening complete: `/support` exists; `scripts/qa/validate-mobile-release-inputs.mjs` blocks placeholder or malformed association files and checks release version inputs before store packaging.
+- Local hardening complete: `/support` exists; `.well-known` mobile association files bypass auth middleware; `scripts/qa/validate-mobile-release-inputs.mjs` blocks placeholder or malformed association files and checks release version inputs before store packaging.
 - Remaining work: replace placeholders with production Team ID, bundle ID, and SHA-256 cert fingerprints.
 - Input required: Apple Team ID, final bundle ID, Android signing certificate fingerprint, support contact path.
 - Recommendation: create a simple public support page with contact, privacy, delete-account, and response-time expectations.
@@ -91,9 +94,10 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 ### P0-007 - Accessibility Launch Policy
 
 - Evidence: release readiness requires manual NVDA/VoiceOver signoff, while the old remaining-work register marks broader accessibility as done-v1-scope.
-- Remaining work: decide whether manual assistive-tech signoff is a hard launch gate or an accepted post-launch risk with owner and expiry.
-- Input required: owner decision on launch gate.
-- Recommendation: require manual signoff for auth, dashboard, billing, one immersive learner flow, expert review submit, and admin audit/user-credit flows.
+- Local hardening complete: production release evidence verification now fails closed unless `accessibility-signoff.env` records zero critical/serious axe violations plus manual NVDA and VoiceOver pass results for auth, dashboard, billing, one immersive learner flow, expert review submit, and admin audit/user-credit flows.
+- Remaining work: execute the manual assistive-technology pass and attach the evidence manifest to the release bundle.
+- Input required: manual QA operator availability and the final evidence URL/artifact.
+- Recommendation: keep this as a hard production launch gate.
 
 ## Active P1 Work
 
@@ -119,31 +123,32 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P1-005 - Mobile Release Readiness
 
-- Local hardening complete: mobile release CI passes app version/version-code inputs into the validator and stamps Capacitor/iOS versions with structured Node updates instead of fragile shell substitutions.
-- Remaining work: validate signing secrets, store metadata, privacy manifest, deep links, push config, real-device microphone/keyboard/safe-area/background tests, and signed artifact verification.
-- Input required: Apple Developer account, Google Play account, signing certs, provisioning profile, store billing stance.
+- Local hardening complete: mobile release CI passes app version/version-code inputs into the validator and stamps Capacitor/iOS versions with structured Node updates instead of fragile shell substitutions. Production Capacitor config now enforces HTTPS/non-loopback URLs unless explicit local-loopback development mode is enabled, and app deep-link handling rejects HTTP.
+- Remaining work: validate signing secrets, store metadata, privacy manifest, deep links, push config, real-device microphone/keyboard/safe-area/background tests, signed artifact verification, native IAP products, receipt validation, entitlement mapping, cancellation/refund handling, and store-review evidence.
+- Input required: Apple Developer account, Google Play account, signing certs, provisioning profile, store products, privacy/support/delete-account metadata, and final IAP policy.
 
 ### P1-006 - Desktop Release Readiness
 
-- Local hardening complete: desktop release CI has write permission for GitHub Releases, uses the workflow token explicitly, verifies Windows Authenticode signatures when signing is required, and uploads `SHA256SUMS.txt` with the packaged artifacts.
-- Remaining work: prove signed Windows release, update server behavior, OAuth callback, packaged desktop smoke, backend version pinning, and macOS/Linux signing/notarization decisions.
-- Input required: Windows signing method, update server URL, macOS/Linux launch scope.
+- Local hardening complete: desktop release CI has write permission for GitHub Releases, uses the workflow token explicitly, verifies Windows Authenticode signatures when signing is required, uploads `SHA256SUMS.txt`, enforces safe remote API targets for public releases, validates Electron update metadata, registers the `oet-prep` protocol, queues cold-start deep links, and provides a packaged-smoke wrapper.
+- Remaining work: prove signed Windows release, hosted update server behavior, OAuth callback, packaged desktop smoke, backend API/version compatibility evidence, macOS signing/notarization, and Linux package evidence.
+- Input required: Windows signing method, update server URL/CDN, Apple Developer ID/notarization access, Linux package targets, and final release channel.
 
 ### P1-007 - Sponsor Billing Attribution
 
+- Local hardening complete: sponsor portal/frontend access, backend sponsor route mapping, admin sponsor/cohort endpoints, sponsor default redirects, and admin enterprise UI are disabled by default behind explicit sponsor feature flags.
 - Remaining work: replace active-sponsorship-window heuristics with explicit payer attribution before finance reporting is contractual.
 - Input required: choose `SponsorshipId` foreign key or payer-type/reference model and backfill semantics.
 
 ### P1-008 - Sponsor Portal Trustworthiness
 
-- Remaining work: remove or label static ROI metrics, replace placeholder invoices with real empty states, and show seat/invite status from real data only.
-- Input required: whether sponsor portal is launch-critical or beta.
+- Remaining work: keep sponsor portal hidden until static ROI metrics are removed/labeled, placeholder invoices are replaced with real empty states, and seat/invite status comes from real data only.
+- Input required: explicit owner approval before enabling the sponsor feature flags.
 
 ### P1-009 - Expert Mobile Review Evidence Binding
 
-- Remaining work: hide or redirect `/expert/mobile-review` until candidate evidence, audio/transcript, rubric context, draft state, and rework flow are bound.
-- Input required: ship, hide, or redirect decision.
-- Recommendation: redirect to the full expert review workspace until complete.
+- Local hardening complete: `/expert/mobile-review` redirects to the full expert review workspace.
+- Remaining work: build a dedicated mobile review surface only after candidate evidence, audio/transcript, rubric context, draft state, and rework flow are bound.
+- Input required: none for the redirect; future dedicated surface requires evidence-binding requirements.
 
 ### P1-010 - Mobile Push Token Registration
 
@@ -152,14 +157,16 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P1-011 - OET Scoring Threshold Audit
 
-- Remaining work: audit direct `>= 350`, `>= 70`, and `>= 4.2` decision points and replace mission-critical pass/fail logic with scoring helpers.
+- Local hardening complete: conversation evaluation pass/grade response, conversation results criterion coloring, and Reading pathway milestone pass logic now route through canonical scoring helpers.
+- Remaining work: continue auditing direct `>= 350`, `>= 70`, and `>= 4.2` decision points and replace any remaining mission-critical pass/fail logic with scoring helpers.
 - Input required: none.
 - Recommendation: triage only pass/fail or projected-grade decisions; do not blanket-change display thresholds.
 
 ### P1-012 - Reading AI Extraction Production Posture
 
-- Remaining work: decide whether Reading AI extraction is intentionally disabled in production or should be implemented through grounded feature-coded provider flow.
-- Input required: production product decision.
+- Local hardening complete: `admin.reading_draft` is registered as a platform-only known AI feature, Reading AI extraction always requires human approval, auto-approval was removed, raw provider bodies are not retained by default, and provider/internal failure details are not persisted into draft notes or audit details.
+- Remaining work: implement full grounded provider extraction and admin review UI/approval evidence for production.
+- Input required: provider credentials and owner approval for protected sandbox/provider smoke.
 
 ## Active P2 Work
 
@@ -221,7 +228,9 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 | Mobile billing policy | Use reader-app/subscriber-access first; keep checkout on web until store review guidance is confirmed. |
 | Production evidence handoff | Automate GitHub artifact fetch by SHA on the VPS/deploy workflow. |
 | Support route | Add a public `/support` page with privacy/delete-account/contact details. |
-| Sponsor portal launch status | Treat sponsor portal as beta unless real billing, ROI, and invoice evidence is attached. |
+| Sponsor portal launch status | Keep disabled by default until real billing, ROI, invoice, and contract evidence is attached. |
+| Native app release credentials | Provide Apple Team ID, bundle IDs, Android SHA-256, signing assets, store products, and app-store metadata before public mobile/desktop release. |
+| External integration credentials | Provide sandbox/test-mode provider credentials before enabling connection-test buttons or protected smoke. |
 | Expert mobile review status | Hide or redirect to full expert review until real evidence binding is complete. |
 | ElevenLabs key | Provide only through protected secret/admin channel, never chat. |
 | Vendor/privacy approval | Direct adults first; sponsors/schools/minors only after legal/privacy approval and server-side tests. |

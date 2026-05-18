@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Speaking;
 
@@ -13,10 +14,9 @@ namespace OetLearner.Api.Services.Speaking;
 /// <see cref="OetLearner.Api.Services.Conversation.ConversationAudioRetentionWorker"/>.
 ///
 /// Sweeps in batches of 500 to keep memory bounded. The blob is removed
-/// via <see cref="MediaStorageService"/> (which is the same path used to
-/// originally write speaking audio) and the <c>AudioObjectKey</c> column
-/// is cleared. Other attempt fields (transcript, analysis, scores) are
-/// retained — only the raw recording is reaped.
+/// via <see cref="IFileStorage"/> and the <c>AudioObjectKey</c> column is
+/// cleared. Other attempt fields (transcript, analysis, scores) are retained
+/// — only the raw recording is reaped.
 /// </summary>
 public sealed class SpeakingAudioRetentionWorker(
     IServiceScopeFactory scopeFactory,
@@ -57,7 +57,7 @@ public sealed class SpeakingAudioRetentionWorker(
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        var media = scope.ServiceProvider.GetRequiredService<MediaStorageService>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
         var options = scope.ServiceProvider
             .GetRequiredService<IOptions<SpeakingComplianceOptions>>().Value;
 
@@ -93,9 +93,9 @@ public sealed class SpeakingAudioRetentionWorker(
             var canClearPointer = true;
             try
             {
-                if (media.Exists(key))
+                if (storage.Exists(key))
                 {
-                    media.DeleteFile(key);
+                    storage.Delete(key);
                     deletedBlobs++;
                 }
             }

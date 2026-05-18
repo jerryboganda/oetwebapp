@@ -2146,6 +2146,66 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("BillingEvents");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.NativeIapProductMapping", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByAdminId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("StoreProductId")
+                        .IsRequired()
+                        .HasMaxLength(192)
+                        .HasColumnType("character varying(192)");
+
+                    b.Property<string>("TargetId")
+                        .IsRequired()
+                        .HasMaxLength(96)
+                        .HasColumnType("character varying(96)");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByAdminId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Platform", "IsActive");
+
+                    b.HasIndex("Platform", "StoreProductId")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = TRUE");
+
+                    b.HasIndex("TargetType", "TargetId");
+
+                    b.ToTable("NativeIapProductMappings");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.BillingPlan", b =>
                 {
                     b.Property<string>("Id")
@@ -12242,6 +12302,24 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("GoogleClientSecretEncrypted")
                         .HasColumnType("text");
 
+                    b.Property<string>("PayPalCancelUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("PayPalClientId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("PayPalClientSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PayPalSuccessUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("PayPalWebhookIdEncrypted")
+                        .HasColumnType("text");
+
                     b.Property<string>("SentryDsn")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
@@ -12292,6 +12370,34 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<string>("StripeWebhookSecretEncrypted")
                         .HasColumnType("text");
+
+                    b.Property<bool?>("UploadScannerFailClosedOnError")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("UploadScannerHost")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int?>("UploadScannerPort")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UploadScannerProvider")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("UploadScannerTimeoutSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VapidPrivateKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("VapidPublicKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("VapidSubject")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

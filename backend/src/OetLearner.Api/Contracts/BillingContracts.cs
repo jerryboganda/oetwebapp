@@ -33,6 +33,36 @@ public record BillingQuoteResponse(
     string Summary,
     Dictionary<string, object?> Validation);
 
+public record NativeIapProductMappingUpsertRequest(
+    string Platform,
+    string StoreProductId,
+    string TargetType,
+    string TargetId,
+    bool IsActive,
+    string? DisplayName = null);
+
+public record NativeIapProductMappingResponse(
+    string Id,
+    string Platform,
+    string StoreProductId,
+    string TargetType,
+    string TargetId,
+    bool IsActive,
+    string? DisplayName,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+public record NativeIapReceiptValidationRequest(
+    string Platform,
+    string ReceiptToken,
+    string? StoreProductId = null);
+
+public record NativeIapReceiptValidationResponse(
+    bool IsValid,
+    bool EntitlementGranted,
+    string Code,
+    string Message);
+
 public record BillingPlanUpsertRequest(
     [property: Required, MaxLength(64)] string Code,
     [property: Required, MaxLength(128)] string Name,

@@ -22,9 +22,13 @@ export interface VocabularyTerm {
   sourceProvenance: string | null;
   status: 'active' | 'draft' | 'archived' | string;
   /**
-   * Year/source dimension — multi-tag of recall-set codes (`old`, `2023-2025`,
-   * `2026`, …). Empty array if the term has not been classified into any
-   * curated recall PDF yet.
+   * OET-subtest dimension for the Recalls matrix.
+   */
+  oetSubtestTags?: string[];
+  /**
+   * Practice-collection dimension — multi-tag of recall-set codes (`old`,
+   * `2023-2025`, `2026`, …). Empty array if the term has not been classified
+   * into any practice collection label yet.
    */
   recallSetCodes?: string[];
 }

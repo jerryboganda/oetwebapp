@@ -26,7 +26,7 @@ public class ContentBulkImportE2ETests
 
     private static (LearnerDbContext db, InMemoryFileStorage storage, ContentBulkImportService svc,
                     ContentPaperService paperSvc, ContentConventionParser parser)
-        Build(ContentUploadOptions? contentUploadOptions = null)
+        Build(ContentUploadOptions? contentUploadOptions = null, IUploadScanner? scanner = null)
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -38,6 +38,7 @@ public class ContentBulkImportE2ETests
         var opts = Options.Create(new StorageOptions { LocalRootPath = "/tmp", ContentUpload = contentUploadOptions ?? new() });
         var svc = new ContentBulkImportService(
             db, storage, parser, paperSvc, opts,
+            scanner,
             NullLogger<ContentBulkImportService>.Instance);
         return (db, storage, svc, paperSvc, parser);
     }
@@ -114,6 +115,20 @@ public class ContentBulkImportE2ETests
         }
         ms.Position = 0;
         return ms;
+    }
+
+    private sealed class RejectingUploadScanner(Func<string, bool> reject)
+        : IUploadScanner
+    {
+        public List<string> ScannedFilenames { get; } = [];
+
+        public Task<(bool clean, string? reason)> ScanAsync(Stream stream, string filename, CancellationToken ct)
+        {
+            ScannedFilenames.Add(filename);
+            return Task.FromResult(reject(filename)
+                ? (clean: false, reason: (string?)"test scanner rejected file")
+                : (clean: true, reason: (string?)null));
+        }
     }
 
     [Fact]
@@ -249,6 +264,24 @@ public class ContentBulkImportE2ETests
             svc.StagePayloadAsync("admin-1", zip, "bad.zip", default));
 
         Assert.Contains("failed file signature validation", ex.Message);
+    }
+
+    [Fact]
+    public async Task Stage_rejects_zip_entry_that_fails_security_scan()
+    {
+        var scanner = new RejectingUploadScanner(filename =>
+            filename.EndsWith("Question-Paper.pdf", StringComparison.OrdinalIgnoreCase));
+        var (db, storage, svc, _, _) = Build(scanner: scanner);
+        await using var zip = BuildTinyZip(
+            ("Listening/Listening Sample 1/Listening Sample 1 Question-Paper.pdf", "%PDF-1.4\nbody"));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.StagePayloadAsync("admin-1", zip, "scan-fails.zip", default));
+
+        Assert.Contains("failed security scanning", ex.Message);
+        Assert.Contains("Listening/Listening Sample 1/Listening Sample 1 Question-Paper.pdf", scanner.ScannedFilenames);
+        Assert.False(storage.AnyKeyStartsWith("uploads/staging/bulk/admin-1/"));
+        await db.DisposeAsync();
     }
 
     [Fact]

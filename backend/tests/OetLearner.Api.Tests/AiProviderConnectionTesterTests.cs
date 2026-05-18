@@ -70,6 +70,77 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
         Assert.Contains("No API key", result.ErrorMessage);
     }
 
+    [Theory]
+    [InlineData("http://127.0.0.1:11434")]
+    [InlineData("https://127.0.0.1")]
+    [InlineData("http://169.254.169.254")]
+    [InlineData("https://metadata.google.internal")]
+    [InlineData("https://models.local")]
+    [InlineData("https://ollama")]
+    public async Task UnsafeBaseUrl_ReturnsUnknownAndDoesNotCallNetwork(string baseUrl)
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-key-1234567890", baseUrl);
+        var called = false;
+        var tester = NewTester(db, _ =>
+        {
+            called = true;
+            return Task.FromResult(BuildResponse(HttpStatusCode.OK));
+        });
+
+        var result = await tester.TestProviderAsync("copilot", default);
+
+        Assert.Equal(AiProviderTestStatuses.Unknown, result.Status);
+        Assert.False(called);
+        Assert.NotNull(result.ErrorMessage);
+        var persisted = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        Assert.Equal(AiProviderTestStatuses.Unknown, persisted.LastTestStatus);
+    }
+
+    [Fact]
+    public async Task ProviderProbe_DoesNotMutateProviderConfigurationFields()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-key-1234567890");
+        var before = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        var tester = NewTester(db, _ => Task.FromResult(BuildResponse(HttpStatusCode.OK)));
+
+        await tester.TestProviderAsync("copilot", default);
+
+        var after = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        Assert.Equal(before.BaseUrl, after.BaseUrl);
+        Assert.Equal(before.DefaultModel, after.DefaultModel);
+        Assert.Equal(before.EncryptedApiKey, after.EncryptedApiKey);
+        Assert.Equal(before.ApiKeyHint, after.ApiKeyHint);
+        Assert.Equal(before.IsActive, after.IsActive);
+        Assert.Equal(before.FailoverPriority, after.FailoverPriority);
+    }
+
+    [Theory]
+    [InlineData(AiProviderDialect.ElevenLabsStt, AiProviderCategory.Asr)]
+    [InlineData(AiProviderDialect.ElevenLabsTts, AiProviderCategory.Tts)]
+    public async Task VoiceProviderProbe_ReturnsUnsupportedWithoutChatCompletionNetworkCall(
+        AiProviderDialect dialect,
+        AiProviderCategory category)
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-key-1234567890", dialect: dialect, category: category);
+        var called = false;
+        var tester = NewTester(db, _ =>
+        {
+            called = true;
+            return Task.FromResult(BuildResponse(HttpStatusCode.OK));
+        });
+
+        var result = await tester.TestProviderAsync("copilot", default);
+
+        Assert.Equal(AiProviderTestStatuses.Unknown, result.Status);
+        Assert.False(called);
+        Assert.Contains("not available", result.ErrorMessage);
+        var persisted = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        Assert.Equal(AiProviderTestStatuses.Unknown, persisted.LastTestStatus);
+    }
+
     [Fact]
     public async Task NetworkException_ReturnsNetwork()
     {
@@ -222,7 +293,12 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
             NullLogger<AiProviderConnectionTester>.Instance);
     }
 
-    private async Task SeedProviderAsync(LearnerDbContext db, string? apiKey)
+    private async Task SeedProviderAsync(
+        LearnerDbContext db,
+        string? apiKey,
+        string baseUrl = "https://models.github.ai/inference",
+        AiProviderDialect dialect = AiProviderDialect.Copilot,
+        AiProviderCategory category = AiProviderCategory.TextChat)
     {
         var protector = _dp.CreateProtector("AiProvider.PlatformKey.v1");
         db.AiProviders.Add(new AiProvider
@@ -230,8 +306,9 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
             Id = Guid.NewGuid().ToString("N"),
             Code = "copilot",
             Name = "GitHub Copilot",
-            Dialect = AiProviderDialect.Copilot,
-            BaseUrl = "https://models.github.ai/inference",
+            Dialect = dialect,
+            Category = category,
+            BaseUrl = baseUrl,
             EncryptedApiKey = string.IsNullOrEmpty(apiKey) ? string.Empty : protector.Protect(apiKey),
             ApiKeyHint = string.Empty,
             DefaultModel = "openai/gpt-4o-mini",

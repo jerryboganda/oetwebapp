@@ -31,7 +31,7 @@ function isAllowedDeepLinkUrl(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl);
     return (
-      (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
+      parsed.protocol === 'https:' &&
       (ALLOWED_HOSTS as readonly string[]).includes(parsed.hostname)
     );
   } catch {
@@ -131,4 +131,3 @@ function dispatchDeepLink(event: DeepLinkEvent, handlers: DeepLinkHandlers): voi
   }
   handlers.onDeepLink?.(event);
 }
-

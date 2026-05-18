@@ -149,6 +149,23 @@ export interface ReadingStructureImportResultDto {
   report: ReadingValidationReport;
 }
 
+export type ReadingExtractionStatus = 'Pending' | 'Approved' | 'Rejected' | 'Failed';
+
+export interface ReadingExtractionDraftDto {
+  id: string;
+  paperId: string;
+  mediaAssetId: string | null;
+  status: ReadingExtractionStatus;
+  manifest: ReadingStructureManifestDto | null;
+  rawAiResponseJson: string | null;
+  isStub: boolean;
+  notes: string | null;
+  createdByAdminId: string;
+  resolvedByAdminId: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
 export interface ReadingValidationReport {
   isPublishReady: boolean;
   issues: Array<{ code: string; severity: 'error' | 'warning'; message: string; targetId: string | null }>;
@@ -570,6 +587,90 @@ export const importReadingStructureManifest = (
 ) => api<ReadingStructureImportResultDto>(`/v1/admin/papers/${paperId}/reading/manifest`, {
   method: 'POST', body: JSON.stringify(body),
 });
+
+type ReadingExtractionDraftWire = Partial<ReadingExtractionDraftDto> & {
+  id: string;
+  paperId: string;
+  status: ReadingExtractionStatus;
+  extractedManifestJson?: string | null;
+  manifest?: ReadingStructureManifestDto | null;
+  isStub: boolean;
+  notes?: string | null;
+  createdByAdminId: string;
+  resolvedByAdminId?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+};
+
+function parseReadingManifest(json: string | null | undefined): ReadingStructureManifestDto | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === 'object' ? (parsed as ReadingStructureManifestDto) : null;
+  } catch {
+    return null;
+  }
+}
+
+function normaliseReadingExtractionDraft(wire: ReadingExtractionDraftWire): ReadingExtractionDraftDto {
+  return {
+    id: wire.id,
+    paperId: wire.paperId,
+    mediaAssetId: wire.mediaAssetId ?? null,
+    status: wire.status,
+    manifest: wire.manifest ?? parseReadingManifest(wire.extractedManifestJson),
+    rawAiResponseJson: wire.rawAiResponseJson ?? null,
+    isStub: wire.isStub,
+    notes: wire.notes ?? null,
+    createdByAdminId: wire.createdByAdminId,
+    resolvedByAdminId: wire.resolvedByAdminId ?? null,
+    createdAt: wire.createdAt,
+    resolvedAt: wire.resolvedAt ?? null,
+  };
+}
+
+export async function proposeReadingStructure(
+  paperId: string,
+  mediaAssetId?: string | null,
+): Promise<ReadingExtractionDraftDto> {
+  const wire = await api<ReadingExtractionDraftWire>(`/v1/admin/papers/${paperId}/reading/extractions`, {
+    method: 'POST',
+    body: JSON.stringify({ mediaAssetId: mediaAssetId ?? null }),
+  });
+  return normaliseReadingExtractionDraft(wire);
+}
+
+export async function listReadingExtractionDrafts(
+  paperId: string,
+  status?: ReadingExtractionStatus,
+): Promise<ReadingExtractionDraftDto[]> {
+  const wire = await api<ReadingExtractionDraftWire[]>(`/v1/admin/papers/${paperId}/reading/extractions`);
+  const drafts = wire.map(normaliseReadingExtractionDraft);
+  return status ? drafts.filter((draft) => draft.status === status) : drafts;
+}
+
+export async function approveReadingExtractionDraft(
+  paperId: string,
+  draftId: string,
+): Promise<ReadingExtractionDraftDto> {
+  const wire = await api<ReadingExtractionDraftWire>(
+    `/v1/admin/papers/${paperId}/reading/extractions/${draftId}/approve`,
+    { method: 'POST' },
+  );
+  return normaliseReadingExtractionDraft(wire);
+}
+
+export async function rejectReadingExtractionDraft(
+  paperId: string,
+  draftId: string,
+  reason: string,
+): Promise<ReadingExtractionDraftDto> {
+  const wire = await api<ReadingExtractionDraftWire>(
+    `/v1/admin/papers/${paperId}/reading/extractions/${draftId}/reject`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+  );
+  return normaliseReadingExtractionDraft(wire);
+}
 
 export const upsertReadingPart = (paperId: string, partCode: ReadingPartCode, body: {
   timeLimitMinutes?: number | null; instructions?: string | null;

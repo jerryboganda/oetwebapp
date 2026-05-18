@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "kind": "reading",
+  "profession": "medicine",
+  "publishedAt": "2026-05-18T00:00:00Z",
+  "authoritySource": "Dr. Ahmed Hesham - OET Reading Authoring Rulebook v1",
+  "sections": [
+    { "id": "R01", "title": "Canonical 42-item shape", "order": 1 },
+    { "id": "R02", "title": "Part A rapid matching and short answers", "order": 2 },
+    { "id": "R03", "title": "Part B workplace extracts", "order": 3 },
+    { "id": "R04", "title": "Part C long texts", "order": 4 },
+    { "id": "R05", "title": "Answer-key fidelity", "order": 5 }
+  ],
+  "rules": [
+    { "id": "R01.1", "section": "R01", "severity": "critical", "title": "Exactly 42 Reading items", "body": "Every authored Reading paper has exactly 42 raw-score items: Part A has 20, Part B has 6, and Part C has 16. The publish gate rejects any other shape.", "appliesTo": "all" },
+    { "id": "R01.2", "section": "R01", "severity": "critical", "title": "30/42 equals 350/500", "body": "Reading grading uses the canonical raw to scaled anchor 30/42 equals 350/500. Authors never hardcode pass/fail thresholds in extracted structures.", "appliesTo": "all" },
+    { "id": "R02.1", "section": "R02", "severity": "critical", "title": "Part A has four source texts", "body": "Part A must contain four short clinical source texts and 20 items linked to those texts. Items may be matching, short answer, or sentence completion.", "appliesTo": "all" },
+    { "id": "R02.2", "section": "R02", "severity": "major", "title": "Short answers remain exact-match safe", "body": "Part A accepted synonyms must be clinically equivalent spelling or abbreviation variants only. Do not accept a medically different concept.", "appliesTo": "all" },
+    { "id": "R03.1", "section": "R03", "severity": "critical", "title": "Part B is six three-option MCQs", "body": "Part B has six independent workplace extracts and exactly one three-option multiple-choice item per extract.", "appliesTo": "all" },
+    { "id": "R04.1", "section": "R04", "severity": "critical", "title": "Part C is two texts and sixteen four-option MCQs", "body": "Part C has two longer texts with eight four-option multiple-choice questions per text. Correct answers must be A, B, C, or D.", "appliesTo": "all" },
+    { "id": "R05.1", "section": "R05", "severity": "critical", "title": "Answers must come from the source", "body": "Every correct answer and explanation must be grounded in the supplied source text or answer key, never general medical knowledge.", "appliesTo": "all" },
+    { "id": "R05.2", "section": "R05", "severity": "major", "title": "Distractors are plausible and cited", "body": "Wrong options should be plausible misreadings of the text and explanations should identify why they are wrong without revealing unsupported facts.", "appliesTo": "all" }
+  ],
+  "tables": {
+    "shape": { "totalItems": 42, "partA": 20, "partB": 6, "partC": 16, "partATexts": 4, "partBTexts": 6, "partCTexts": 2 }
+  }
+}

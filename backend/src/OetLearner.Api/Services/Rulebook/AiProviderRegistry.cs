@@ -122,6 +122,10 @@ public sealed class RegistryBackedProvider(
     private async Task<AiProviderCompletion> CallOpenAiCompatibleAsync(
         string baseUrl, string apiKey, string? reasoningEffort, AiProviderRequest request, CancellationToken ct)
     {
+        var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
+        if (unsafeBaseUrlReason is not null)
+            throw new InvalidOperationException(unsafeBaseUrlReason);
+
         var client = httpClientFactory.CreateClient("AiRegistryClient");
         client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
@@ -220,6 +224,10 @@ public sealed class AnthropicProvider(
                 ?? throw new InvalidOperationException("Platform API key missing for Anthropic.");
         }
 
+        var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
+        if (unsafeBaseUrlReason is not null)
+            throw new InvalidOperationException(unsafeBaseUrlReason);
+
         var client = httpClientFactory.CreateClient("AiRegistryClient");
         client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
         client.DefaultRequestHeaders.Remove("x-api-key");
@@ -303,6 +311,10 @@ public sealed class CloudflareWorkersAiProvider(
         // CF model ids commonly start with "@cf/...". The path segment is
         // appended verbatim — the leading "@" is valid in URL paths and
         // CF's routing accepts it without escaping.
+        var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
+        if (unsafeBaseUrlReason is not null)
+            throw new InvalidOperationException(unsafeBaseUrlReason);
+
         var client = httpClientFactory.CreateClient("AiRegistryClient");
         client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);

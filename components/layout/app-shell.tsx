@@ -33,7 +33,7 @@ export interface AppShellProps {
 function ShellFallback() {
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
-      <div className="page-surface w-full max-w-sm rounded-[2rem] px-6 py-8 text-center shadow-lg">
+      <div className="page-surface w-full max-w-sm rounded-[2rem] px-6 py-8 text-center shadow-lg" role="status" aria-live="polite">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           <div className="h-5 w-5 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden="true" />
         </div>
@@ -95,6 +95,7 @@ export function AppShell({
       <AnimatePresence initial={!reducedMotion} mode={presenceMode}>
         <motion.main
           id="main-content"
+          tabIndex={-1}
           key={pathname}
           layout="position"
           className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto py-4 lg:py-6', className)}
@@ -135,6 +136,7 @@ export function AppShell({
         <AnimatePresence initial={!reducedMotion} mode={presenceMode}>
           <motion.main
             id="main-content"
+            tabIndex={-1}
             key={pathname}
             layout="position"
             className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] lg:py-6 lg:pb-6', className)}

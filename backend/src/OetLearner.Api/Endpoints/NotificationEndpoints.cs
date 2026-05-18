@@ -1,7 +1,10 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -51,6 +54,22 @@ public static class NotificationEndpoints
             NotificationService service,
             CancellationToken ct) =>
             Results.Ok(await service.GetPreferencesAsync(http.AuthAccountId(), http.UserRole(), ct)));
+
+        notifications.MapGet("/push-config", async (
+            IRuntimeSettingsProvider runtimeSettingsProvider,
+            IOptions<WebPushOptions> webPushOptions,
+            CancellationToken ct) =>
+        {
+            var pushSettings = (await runtimeSettingsProvider.GetAsync(ct)).Push;
+            var options = webPushOptions.Value;
+            var publicKey = Coalesce(pushSettings.VapidPublicKey, options.PublicKey);
+
+            return Results.Ok(new
+            {
+                enabled = options.Enabled && !string.IsNullOrWhiteSpace(publicKey),
+                publicKey = publicKey ?? string.Empty
+            });
+        });
 
         notifications.MapPatch("/preferences", async (
             HttpContext http,
@@ -223,6 +242,9 @@ public static class NotificationEndpoints
     private static string UserRole(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.Role)
            ?? throw new InvalidOperationException("Authenticated role is required.");
+
+    private static string? Coalesce(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private static string AdminId(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)

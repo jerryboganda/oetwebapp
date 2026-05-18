@@ -134,12 +134,18 @@ const PUBLIC_PATHS = new Set([
   '/mfa/setup',
   '/mfa/recovery',
   '/auth/callback',
+  '/.well-known/apple-app-site-association',
+  '/.well-known/assetlinks.json',
 ]);
 
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
   if (pathname.startsWith('/auth/callback/')) return true;
   return false;
+}
+
+function isSponsorPortalEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_SPONSOR_PORTAL_ENABLED === 'true';
 }
 
 /** Mutation methods that require CSRF validation */
@@ -167,6 +173,10 @@ export function middleware(request: NextRequest) {
   function withCsp(res: NextResponse): NextResponse {
     res.headers.set('Content-Security-Policy', csp);
     return res;
+  }
+
+  if (pathname.startsWith('/sponsor') && !isSponsorPortalEnabled()) {
+    return withCsp(NextResponse.redirect(new URL('/support', request.url)));
   }
 
   if (isPublicPath(pathname)) {

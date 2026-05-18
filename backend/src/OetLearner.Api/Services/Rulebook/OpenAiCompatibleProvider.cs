@@ -33,6 +33,9 @@ public sealed class OpenAiCompatibleProvider(
             throw new InvalidOperationException($"{AiProviderOptions.SectionName}:BaseUrl is not configured.");
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException($"{AiProviderOptions.SectionName}:ApiKey is not configured.");
+        var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
+        if (unsafeBaseUrlReason is not null)
+            throw new InvalidOperationException(unsafeBaseUrlReason);
 
         var client = httpClientFactory.CreateClient("AiOpenAiCompatible");
         client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");

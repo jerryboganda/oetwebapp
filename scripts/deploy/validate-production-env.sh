@@ -60,6 +60,7 @@ required_keys=(
   BACKUP_AWS_ACCESS_KEY_ID
   BACKUP_AWS_SECRET_ACCESS_KEY
   BACKUP_ALERT_WEBHOOK
+  BACKUP_RESTORE_DRILL_ID
   READING_SMOKE_LEARNER_EMAIL
   READING_SMOKE_LEARNER_PASSWORD
   READING_SMOKE_DISABLED_PAPER_ID
@@ -132,17 +133,46 @@ fi
 # When empty in .env.production these warn but do not fail the validator —
 # the backend either no-ops gracefully (Brevo/Sentry/Backup) or reads the live
 # value from the admin-managed database (AI providers, Pronunciation,
-# Conversation). READING_SMOKE_* are CI test fixtures, never runtime config.
-ADMIN_OPTIONAL_KEYS="AI__APIKEY AI__BASEURL AI__DEFAULTMODEL AI__PROVIDERID BACKUP_ALERT_WEBHOOK BACKUP_AWS_ACCESS_KEY_ID BACKUP_AWS_SECRET_ACCESS_KEY BACKUP_GPG_PASSPHRASE BACKUP_S3_URL BREVO__APIKEY BREVO__EMAILVERIFICATIONTEMPLATEID BREVO__PASSWORDRESETTEMPLATEID CONVERSATION__ASRPROVIDER CONVERSATION__DEEPGRAMAPIKEY CONVERSATION__ELEVENLABSAPIKEY CONVERSATION__ENABLED CONVERSATION__TTSPROVIDER NEXT_PUBLIC_SENTRY_DSN PRONUNCIATION__AZURESPEECHKEY PRONUNCIATION__AZURESPEECHREGION PRONUNCIATION__PROVIDER READING_SMOKE_DISABLED_PAPER_ID READING_SMOKE_ENABLED_PAPER_ID READING_SMOKE_ENTITLED_MEDIA_ID READING_SMOKE_LEARNER_EMAIL READING_SMOKE_LEARNER_PASSWORD READING_SMOKE_PROTECTED_MEDIA_ID SENTRY_DSN"
+# Conversation). Backup settings are fail-closed separately unless the owner
+# sets the explicit break-glass acknowledgement. READING_SMOKE_* are CI test
+# fixtures, never runtime config.
+ADMIN_OPTIONAL_KEYS="AI__APIKEY AI__BASEURL AI__DEFAULTMODEL AI__PROVIDERID BREVO__APIKEY BREVO__EMAILVERIFICATIONTEMPLATEID BREVO__PASSWORDRESETTEMPLATEID CONVERSATION__ASRPROVIDER CONVERSATION__DEEPGRAMAPIKEY CONVERSATION__ELEVENLABSAPIKEY CONVERSATION__ENABLED CONVERSATION__TTSPROVIDER NEXT_PUBLIC_SENTRY_DSN PRONUNCIATION__AZURESPEECHKEY PRONUNCIATION__AZURESPEECHREGION PRONUNCIATION__PROVIDER READING_SMOKE_DISABLED_PAPER_ID READING_SMOKE_ENABLED_PAPER_ID READING_SMOKE_ENTITLED_MEDIA_ID READING_SMOKE_LEARNER_EMAIL READING_SMOKE_LEARNER_PASSWORD READING_SMOKE_PROTECTED_MEDIA_ID SENTRY_DSN"
 is_admin_optional() {
   case " $ADMIN_OPTIONAL_KEYS " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
+BACKUP_REQUIRED_KEYS="BACKUP_ALERT_WEBHOOK BACKUP_AWS_ACCESS_KEY_ID BACKUP_AWS_SECRET_ACCESS_KEY BACKUP_GPG_PASSPHRASE BACKUP_RESTORE_DRILL_ID BACKUP_S3_URL"
+is_backup_required_key() {
+  case " $BACKUP_REQUIRED_KEYS " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
+backup_break_glass_acknowledged() {
+  local ack
+  ack=$(read_env_value_ci BACKUP_BREAK_GLASS_ACKNOWLEDGEMENT || true)
+  ack=$(printf '%s' "$ack" | tr '[:upper:]' '[:lower:]')
+  [ "$ack" = "i-accept-temporary-no-offsite-backup-risk" ]
+}
+
+allows_empty_key() {
+  local key="$1"
+  if is_admin_optional "$key"; then
+    return 0
+  fi
+  if is_backup_required_key "$key" && backup_break_glass_acknowledged; then
+    return 0
+  fi
+  return 1
 }
 
 for key in "${required_keys[@]}"; do
   value=$(read_env_value "$key" || true)
   if [ -z "$value" ]; then
-    if is_admin_optional "$key"; then
-      echo "[env] (admin-configurable, ok to be empty) $key" >&2
+    if allows_empty_key "$key"; then
+      if is_backup_required_key "$key"; then
+        echo "[env] BREAK-GLASS: $key is empty under BACKUP_BREAK_GLASS_ACKNOWLEDGEMENT" >&2
+      else
+        echo "[env] (admin-configurable, ok to be empty) $key" >&2
+      fi
       continue
     fi
     echo "[env] missing or empty: $key" >&2
@@ -170,7 +200,7 @@ require_min_length() {
   local min_length="$2"
   local value
   value=$(read_env_value "$key" || true)
-  if [ -z "$value" ] && is_admin_optional "$key"; then
+  if [ -z "$value" ] && allows_empty_key "$key"; then
     return 0
   fi
   if [ "${#value}" -lt "$min_length" ]; then
@@ -183,7 +213,7 @@ require_https_url() {
   local key="$1"
   local value
   value=$(read_env_value "$key" || true)
-  if [ -z "$value" ] && is_admin_optional "$key"; then
+  if [ -z "$value" ] && allows_empty_key "$key"; then
     return 0
   fi
   case "$value" in
@@ -333,7 +363,7 @@ require_s3_url() {
   local key="$1"
   local value
   value=$(read_env_value "$key" || true)
-  if [ -z "$value" ] && is_admin_optional "$key"; then
+  if [ -z "$value" ] && allows_empty_key "$key"; then
     return 0
   fi
   case "$value" in
@@ -390,6 +420,7 @@ require_min_length CONVERSATION__ELEVENLABSAPIKEY 16
 require_min_length BACKUP_GPG_PASSPHRASE 16
 require_min_length BACKUP_AWS_ACCESS_KEY_ID 8
 require_min_length BACKUP_AWS_SECRET_ACCESS_KEY 16
+require_min_length BACKUP_RESTORE_DRILL_ID 8
 require_min_length READING_SMOKE_LEARNER_PASSWORD 12
 require_email READING_SMOKE_LEARNER_EMAIL
 require_https_url PUBLIC_API_BASE_URL

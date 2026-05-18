@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.DataProtection;
@@ -111,6 +112,25 @@ public sealed class AiProviderConnectionTester(
                 startedAt);
         }
 
+        var unsafeReason = GetUnsafeBaseUrlReason(provider.BaseUrl);
+        if (unsafeReason is not null)
+        {
+            return new AiProviderTestResult(
+                AiProviderTestStatuses.Unknown,
+                unsafeReason,
+                (int)stopwatch.ElapsedMilliseconds,
+                startedAt);
+        }
+
+        if (!SupportsChatCompletionProbe(provider))
+        {
+            return new AiProviderTestResult(
+                AiProviderTestStatuses.Unknown,
+                $"Connection test is not available for {provider.Category}/{provider.Dialect} providers yet.",
+                (int)stopwatch.ElapsedMilliseconds,
+                startedAt);
+        }
+
         try
         {
             using var client = httpClientFactory.CreateClient(nameof(AiProviderConnectionTester));
@@ -120,8 +140,8 @@ public sealed class AiProviderConnectionTester(
             // dialects accept POST {baseUrl}/chat/completions with a Bearer
             // token + a minimal messages payload. Keep tokens to 1 to make
             // the probe as cheap as possible.
-            var baseUrl = provider.BaseUrl.TrimEnd('/');
-            var url = baseUrl + "/chat/completions";
+            var baseUri = new Uri(provider.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+            var url = new Uri(baseUri, "chat/completions");
             var model = string.IsNullOrWhiteSpace(provider.DefaultModel)
                 ? "openai/gpt-4o-mini"
                 : provider.DefaultModel;
@@ -259,6 +279,82 @@ public sealed class AiProviderConnectionTester(
         result = SecretPatterns.Replace(result, "***REDACTED***");
         return result;
     }
+
+    internal static string? GetUnsafeBaseUrlReason(string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            return "Provider BaseUrl is not configured.";
+
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
+            return "Provider BaseUrl must be an absolute https:// URL.";
+
+        if (uri.Scheme != Uri.UriSchemeHttps)
+            return "Provider BaseUrl must use https://.";
+
+        if (string.IsNullOrWhiteSpace(uri.Host))
+            return "Provider BaseUrl host is required.";
+
+        var host = uri.Host.Trim().TrimEnd('.');
+        if (uri.IsLoopback
+            || host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || host.Equals("metadata.google.internal", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Provider BaseUrl host is not allowed.";
+        }
+
+        if (IPAddress.TryParse(host, out _))
+            return "Provider BaseUrl must use an external DNS hostname, not an IP address literal.";
+
+        if (!host.Contains('.', StringComparison.Ordinal))
+            return "Provider BaseUrl must use a fully qualified external DNS hostname.";
+
+        try
+        {
+            foreach (var address in Dns.GetHostAddresses(host))
+            {
+                if (IsUnsafeIpAddress(address))
+                    return "Provider BaseUrl host resolves to a non-public address.";
+            }
+        }
+        catch (SocketException)
+        {
+            // Save-time validation should not require the host to resolve from
+            // every admin workstation/test environment. The outbound call path
+            // repeats this guard immediately before sending provider traffic.
+        }
+
+        return null;
+    }
+
+    private static bool IsUnsafeIpAddress(IPAddress address)
+    {
+        if (IPAddress.IsLoopback(address)) return true;
+        if (address.AddressFamily == AddressFamily.InterNetworkV6)
+            return address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6Multicast;
+
+        if (address.AddressFamily != AddressFamily.InterNetwork)
+            return true;
+
+        var bytes = address.GetAddressBytes();
+        return bytes[0] == 0
+               || bytes[0] == 10
+               || bytes[0] == 127
+               || (bytes[0] == 169 && bytes[1] == 254)
+               || (bytes[0] == 172 && bytes[1] is >= 16 and <= 31)
+               || (bytes[0] == 192 && bytes[1] == 168)
+               || (bytes[0] == 100 && bytes[1] is >= 64 and <= 127)
+               || (bytes[0] == 198 && bytes[1] is 18 or 19)
+               || address.Equals(IPAddress.Broadcast);
+    }
+
+    private static bool SupportsChatCompletionProbe(AiProvider provider)
+        => provider.Category == AiProviderCategory.TextChat
+           && provider.Dialect is AiProviderDialect.OpenAiCompatible
+               or AiProviderDialect.Anthropic
+               or AiProviderDialect.Cloudflare
+               or AiProviderDialect.Copilot;
 
     private static readonly Regex SecretPatterns = new(
         @"(?:github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|ghr_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_\-]{20,}|sk-proj-[A-Za-z0-9_\-]{20,}|sk-[A-Za-z0-9_\-]{20,}|AIza[0-9A-Za-z_\-]{20,}|xox[baprs]-[A-Za-z0-9\-]{20,})",

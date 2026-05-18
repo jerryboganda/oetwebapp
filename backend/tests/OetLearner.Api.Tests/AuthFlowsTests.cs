@@ -1801,7 +1801,7 @@ public class AuthFlowsTests
                 // Production-env test factory: C5 UploadScannerValidator refuses noop provider.
                 // DI swap below registers TestCleanUploadScanner so this config is cosmetic for the validator only.
                 ["UploadScanner:Provider"] = "clamav",
-                ["UploadScanner:Host"] = "localhost",
+                ["UploadScanner:Host"] = "clamav",
                 ["UploadScanner:Port"] = "3310",
                 ["AI:ProviderId"] = "digitalocean-serverless",
                 ["AI:DefaultModel"] = "glm-5",

@@ -288,7 +288,14 @@ export default function AuditLogsPage() {
             itemLabel="event"
             itemLabelPlural="events"
           />
-          <DataTable columns={columns} data={rows} keyExtractor={(log) => log.id} onRowClick={handleRowClick} mobileCardRender={mobileCardRender} />
+          <DataTable
+            aria-label="Audit log events"
+            columns={columns}
+            data={rows}
+            keyExtractor={(log) => log.id}
+            onRowClick={handleRowClick}
+            mobileCardRender={mobileCardRender}
+          />
         </AsyncStateWrapper>
       </AdminRoutePanel>
 

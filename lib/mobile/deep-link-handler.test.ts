@@ -101,6 +101,9 @@ describe('deep-link-handler', () => {
 
       urlOpenCallback!({ url: 'file:///etc/passwd' });
       expect(onDeepLink).not.toHaveBeenCalled();
+
+      urlOpenCallback!({ url: 'http://app.oetwithdrhesham.co.uk/dashboard' });
+      expect(onDeepLink).not.toHaveBeenCalled();
     });
 
     it('handles cold-start launch URL', async () => {

@@ -9,7 +9,7 @@ using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services;
 
-public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, MediaStorageService mediaStorage, PlatformLinkService platformLinks, NotificationService notifications, PronunciationService pronunciationService)
+public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, IFileStorage fileStorage, PlatformLinkService platformLinks, NotificationService notifications, PronunciationService pronunciationService)
 {
     // Canonical writing criterion codes (match rulebooks/writing/common/assessment-criteria.json).
     // Purpose is scored 0\u20133; all others 0\u20137 (rulebook R16.1 / R16.2). British spelling is intentional.
@@ -625,7 +625,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
                 "Voice notes must be audio files.",
                 [new ApiFieldError("mediaAssetId", "invalid_type", "Upload mp3, m4a, wav, ogg, or webm audio.")]);
         }
-        if (media.Status != MediaAssetStatus.Ready || string.IsNullOrWhiteSpace(media.StoragePath) || !mediaStorage.Exists(media.StoragePath))
+        if (media.Status != MediaAssetStatus.Ready || string.IsNullOrWhiteSpace(media.StoragePath) || !fileStorage.Exists(media.StoragePath))
         {
             throw ApiException.Validation(
                 "voice_note_media_not_ready",
@@ -757,7 +757,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             ct);
         await db.SaveChangesAsync(ct);
 
-        return mediaStorage.OpenRead(context.Attempt.AudioObjectKey, contentType);
+        return await fileStorage.OpenStoredMediaFileAsync(context.Attempt.AudioObjectKey, contentType, ct);
     }
 
     public async Task<ExpertDraftResponse> SaveDraftAsync(string reviewRequestId, string reviewerId, ExpertDraftSaveRequest request, CancellationToken ct)
@@ -835,7 +835,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         var hasVoiceNote = voiceNoteMedia.Any(item => item.Status == MediaAssetStatus.Ready
             && item.MimeType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)
             && !string.IsNullOrWhiteSpace(item.StoragePath)
-            && mediaStorage.Exists(item.StoragePath));
+            && fileStorage.Exists(item.StoragePath));
         if (!hasVoiceNote)
         {
             throw ApiException.Validation(

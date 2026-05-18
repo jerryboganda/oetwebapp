@@ -87,11 +87,16 @@
   - real screen-reader announcement quality
 
 ## Manual-Style Accessibility Limitations
-- No real NVDA or VoiceOver session was executed in this pass.
+- No real NVDA or VoiceOver session was executed in this pass. Production
+  evidence now fails closed until `release-evidence/accessibility-signoff.env`
+  records manual NVDA and VoiceOver pass results for the required launch flows.
 - No dedicated 200% zoom, reduced-motion, or forced-colors matrix was run across the full app.
 - Accessibility confidence is good on the audited critical screens and audited modal-heavy paths, but not exhaustive across the whole route inventory.
 
 ## Human Assistive-Tech Signoff Checklist
+
+These checks must be summarized in `accessibility-signoff.env` before a
+production evidence bundle can pass verification.
 
 ### NVDA on Windows
 - Sign-in:

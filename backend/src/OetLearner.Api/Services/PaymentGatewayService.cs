@@ -361,16 +361,20 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
 /// PayPal payment gateway adapter. Creates hosted orders when credentials are configured and falls back to
 /// sandbox-style responses when running locally without provider credentials.
 /// </summary>
-public sealed class PayPalGateway(HttpClient httpClient, IOptions<BillingOptions> billingOptions) : IPaymentGateway
+public sealed class PayPalGateway(
+    HttpClient httpClient,
+    IOptions<BillingOptions> billingOptions,
+    IRuntimeSettingsProvider? runtimeSettings = null) : IPaymentGateway
 {
     private readonly HttpClient _httpClient = httpClient;
     private readonly BillingOptions _billing = billingOptions.Value;
+    private readonly IRuntimeSettingsProvider? _runtimeSettings = runtimeSettings;
 
     public string GatewayName => "paypal";
 
     public async Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct)
     {
-        var options = _billing.PayPal;
+        var options = await GetEffectivePayPalOptionsAsync(ct);
         var successUrl = request.SuccessUrl ?? options.SuccessUrl;
         var cancelUrl = request.CancelUrl ?? options.CancelUrl;
         if (string.IsNullOrWhiteSpace(options.ClientId)
@@ -386,7 +390,7 @@ public sealed class PayPalGateway(HttpClient httpClient, IOptions<BillingOptions
             throw new InvalidOperationException("PayPal billing is not fully configured and sandbox fallbacks are disabled.");
         }
 
-        var accessToken = await GetAccessTokenAsync(ct);
+        var accessToken = await GetAccessTokenAsync(options, ct);
 
         using var message = new HttpRequestMessage(
             HttpMethod.Post,
@@ -445,7 +449,7 @@ public sealed class PayPalGateway(HttpClient httpClient, IOptions<BillingOptions
 
     async Task<RefundResult> IPaymentGateway.ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, CancellationToken ct)
     {
-        var options = _billing.PayPal;
+        var options = await GetEffectivePayPalOptionsAsync(ct);
         if (string.IsNullOrWhiteSpace(options.ClientId) || string.IsNullOrWhiteSpace(options.ClientSecret))
         {
             if (_billing.AllowSandboxFallbacks)
@@ -456,7 +460,7 @@ public sealed class PayPalGateway(HttpClient httpClient, IOptions<BillingOptions
             throw new InvalidOperationException("PayPal refunds are not configured and sandbox fallbacks are disabled.");
         }
 
-        var accessToken = await GetAccessTokenAsync(ct);
+        var accessToken = await GetAccessTokenAsync(options, ct);
         var captureId = transactionId;
         if (!transactionId.StartsWith("CAPTURE-", StringComparison.OrdinalIgnoreCase))
         {
@@ -544,7 +548,8 @@ public sealed class PayPalGateway(HttpClient httpClient, IOptions<BillingOptions
             }
         }
 
-        if (!await VerifyWebhookAsync(payload, headers, ct))
+        var options = await GetEffectivePayPalOptionsAsync(ct);
+        if (!await VerifyWebhookAsync(options, payload, headers, ct))
         {
             return new WebhookProcessResult(
                 EventId: $"paypal-invalid-{Guid.NewGuid():N}",
@@ -614,9 +619,8 @@ public sealed class PayPalGateway(HttpClient httpClient, IOptions<BillingOptions
             CheckoutUrl: $"https://www.sandbox.paypal.com/checkoutnow?token={orderId}");
     }
 
-    private async Task<string> GetAccessTokenAsync(CancellationToken ct)
+    private async Task<string> GetAccessTokenAsync(EffectivePayPalOptions options, CancellationToken ct)
     {
-        var options = _billing.PayPal;
         using var message = new HttpRequestMessage(
             HttpMethod.Post,
             new Uri(new Uri(EnsureTrailingSlash(GetPayPalApiBaseUrl(options))), "v1/oauth2/token"));
@@ -637,9 +641,12 @@ public sealed class PayPalGateway(HttpClient httpClient, IOptions<BillingOptions
             ?? throw new InvalidOperationException("PayPal access token response did not contain an access token.");
     }
 
-    private async Task<bool> VerifyWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+    private async Task<bool> VerifyWebhookAsync(
+        EffectivePayPalOptions options,
+        string payload,
+        IReadOnlyDictionary<string, string> headers,
+        CancellationToken ct)
     {
-        var options = _billing.PayPal;
         if (string.IsNullOrWhiteSpace(options.WebhookId)
             || string.IsNullOrWhiteSpace(options.ClientId)
             || string.IsNullOrWhiteSpace(options.ClientSecret))
@@ -656,7 +663,7 @@ public sealed class PayPalGateway(HttpClient httpClient, IOptions<BillingOptions
             return false;
         }
 
-        var accessToken = await GetAccessTokenAsync(ct);
+        var accessToken = await GetAccessTokenAsync(options, ct);
         using var message = new HttpRequestMessage(
             HttpMethod.Post,
             new Uri(new Uri(EnsureTrailingSlash(GetPayPalApiBaseUrl(options))), "v1/notifications/verify-webhook-signature"));
@@ -687,7 +694,42 @@ public sealed class PayPalGateway(HttpClient httpClient, IOptions<BillingOptions
         return string.Equals(GetString(document.RootElement, "verification_status"), "SUCCESS", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetPayPalApiBaseUrl(PayPalBillingOptions options)
+    private async Task<EffectivePayPalOptions> GetEffectivePayPalOptionsAsync(CancellationToken ct)
+    {
+        var configured = _billing.PayPal;
+        if (_runtimeSettings is null)
+        {
+            return new EffectivePayPalOptions(
+                configured.ApiBaseUrl,
+                configured.UseSandbox,
+                configured.ClientId,
+                configured.ClientSecret,
+                configured.WebhookId,
+                configured.SuccessUrl,
+                configured.CancelUrl);
+        }
+
+        var billing = (await _runtimeSettings.GetAsync(ct)).Billing;
+        return new EffectivePayPalOptions(
+            configured.ApiBaseUrl,
+            configured.UseSandbox,
+            billing.PayPalClientId,
+            billing.PayPalClientSecret,
+            billing.PayPalWebhookId,
+            billing.PayPalSuccessUrl,
+            billing.PayPalCancelUrl);
+    }
+
+    private sealed record EffectivePayPalOptions(
+        string ApiBaseUrl,
+        bool UseSandbox,
+        string? ClientId,
+        string? ClientSecret,
+        string? WebhookId,
+        string? SuccessUrl,
+        string? CancelUrl);
+
+    private static string GetPayPalApiBaseUrl(EffectivePayPalOptions options)
     {
         if (!string.IsNullOrWhiteSpace(options.ApiBaseUrl)
             && !string.Equals(options.ApiBaseUrl, "https://api-m.paypal.com", StringComparison.OrdinalIgnoreCase))

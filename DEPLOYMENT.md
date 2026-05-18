@@ -247,8 +247,10 @@ DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
 That script preserves named volumes, verifies signed release evidence and image
 digests for the deployed SHA, runs pre-flight, rolls out digest-pinned images
 into the inactive blue/green slot, and only records `.deploy/previous-good.env`
-and `.deploy/active-slot.env` after the health and smoke gates pass. By default
-the previous slot remains running for fast router rollback; set
+and `.deploy/active-slot.env` after the health and smoke gates pass. The prior
+known-good record is copied to `.deploy/rollback-target.env` before it is
+overwritten, and every successful rollout appends `.deploy/release-history.tsv`.
+By default the previous slot remains running for fast router rollback; set
 `KEEP_PREVIOUS_SLOT_RUNNING=false` only after confirming VPS capacity and a
 separate rollback image path. Keep at least one previous-good evidence bundle and
 digest set available for rollback.
@@ -298,13 +300,21 @@ Notes:
 
 ## Disaster Recovery
 
-The production compose stack includes an oet-db-backup sidecar that runs an encrypted pg_dump on BACKUP_SCHEDULE (default 02:17 UTC daily). Backups are kept locally in the `oetwebsite_oet_db_backups` Docker volume for BACKUP_RETENTION_DAYS (default 14) and pushed to S3-compatible storage via BACKUP_S3_URL.
+The production compose stack includes an oet-db-backup sidecar that runs an
+encrypted pg_dump and a learner-media archive on BACKUP_SCHEDULE (default 02:17
+UTC daily). Backups are kept locally in the `oetwebsite_oet_db_backups` Docker
+volume for BACKUP_RETENTION_DAYS (default 14) and pushed to S3-compatible
+storage via BACKUP_S3_URL.
 
 ### Prerequisites
 
 - BACKUP_GPG_PASSPHRASE is set in .env.production. Without it backups are stored in plaintext which defeats the purpose.
 - BACKUP_S3_URL is set to an offsite bucket. Local-only backups are lost if the VPS disk fails.
 - BACKUP_AWS_ACCESS_KEY_ID / BACKUP_AWS_SECRET_ACCESS_KEY scoped to write-only on the bucket. Use a dedicated IAM user, not your root key.
+- BACKUP_RESTORE_DRILL_ID names the latest successful non-live restore drill
+  evidence. Production env validation fails closed without it. Temporary
+  owner-approved break glass uses
+  `BACKUP_BREAK_GLASS_ACKNOWLEDGEMENT=i-accept-temporary-no-offsite-backup-risk`.
 
 ### Run a backup immediately
 
@@ -325,7 +335,8 @@ docker compose --env-file .env.production -f docker-compose.production.yml exec 
 
 ### Restore procedure
 
-1. Copy the target backup from S3/R2, or pick a local one from the `oetwebsite_oet_db_backups` volume, into the sidecar container.
+1. Copy the target DB and media backups from S3/R2, or pick local ones from the
+   `oetwebsite_oet_db_backups` volume, into the sidecar container.
 2. Export `BACKUP_GPG_PASSPHRASE` in the shell or load it from the approved secret channel. Do not paste the passphrase into command history.
 3. Restore into a **non-live** database first and verify:
 
@@ -340,7 +351,19 @@ docker compose --env-file .env.production -f docker-compose.production.yml exec 
 ```
 
 4. Point a temporary API container at the restored DB and run smoke tests.
-5. Only if (4) succeeds, restore into the live DB by also setting `RESTORE_INTO_LIVE=YES` and `TARGET_DB=`. Announce a maintenance window first.
+5. Verify the media archive into a non-live directory:
+
+```bash
+cd /opt/oetwebapp
+docker compose --env-file .env.production -f docker-compose.production.yml exec \
+  -e MEDIA_BACKUP_FILE=/backups/oet-media-20260423T021700Z.tar.gz.gpg \
+  -e BACKUP_GPG_PASSPHRASE \
+  db-backup /usr/local/bin/media-restore-verify.sh
+```
+
+6. Only if (4) and (5) succeed, restore into live targets. For DB restore, also
+   set `RESTORE_INTO_LIVE=YES` and `TARGET_DB=`. Announce a maintenance window
+   first.
 
 ### Verify backups are happening
 
@@ -349,4 +372,8 @@ cd /opt/oetwebapp
 docker compose --env-file .env.production -f docker-compose.production.yml logs -f db-backup
 ```
 
-A successful run ends with `[backup] ok: /backups/oet-...dump.gpg`. If you see nothing for 48 hours, the sidecar is not running; check `BACKUP_SCHEDULE` and `docker compose --env-file .env.production -f docker-compose.production.yml ps db-backup`.
+A successful run ends with `[backup] ok: /backups/oet-...dump.gpg` and
+`[backup] media ok: /backups/oet-media-...tar.gz.gpg`. If you see nothing for
+48 hours, the sidecar is not running; check `BACKUP_SCHEDULE` and
+`docker compose --env-file .env.production -f docker-compose.production.yml ps
+db-backup`.
