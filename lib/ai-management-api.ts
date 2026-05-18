@@ -233,6 +233,21 @@ function resolveUrl(path: string): string {
   return path;
 }
 
+const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * Reads the double-submit CSRF cookie set by the auth flow. The Next.js
+ * backend proxy at /api/backend/* requires `x-csrf-token` matching the
+ * `oet_csrf` cookie for any state-changing method when a refresh-token
+ * cookie is present, otherwise it returns 403 before the request reaches
+ * the .NET API. See lib/backend-proxy.ts:validateProxyCsrf.
+ */
+function readCsrfCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 async function aiApi<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await ensureFreshAccessToken();
   const headers = new Headers(init?.headers);
@@ -241,7 +256,16 @@ async function aiApi<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  const response = await fetchWithTimeout(resolveUrl(path), { ...init, headers });
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (!CSRF_SAFE_METHODS.has(method) && !headers.has('x-csrf-token')) {
+    const csrf = readCsrfCookie();
+    if (csrf) headers.set('x-csrf-token', csrf);
+  }
+  const response = await fetchWithTimeout(resolveUrl(path), {
+    ...init,
+    headers,
+    credentials: init?.credentials ?? 'include',
+  });
   if (!response.ok) {
     let detail: unknown = null;
     try {
@@ -348,6 +372,18 @@ export const deactivateAiProvider = (id: string) =>
  */
 export const testAiProvider = (code: string) =>
   aiApi<AiProviderTestResult>(`/v1/admin/ai/providers/${code}/test`, { method: 'POST' });
+
+/**
+ * Calls the provider's OpenAI-compatible `GET /models` endpoint via the
+ * admin backend, using the encrypted platform key. Returns the list of
+ * model ids the operator can paste into "Default model" / allowed models.
+ *
+ * Returns `{ models: [] }` when the provider has no /models endpoint or
+ * an unexpected JSON shape; throws on 401/403/5xx so the UI can show the
+ * cause.
+ */
+export const discoverAiProviderModels = (code: string) =>
+  aiApi<{ models: string[] }>(`/v1/admin/ai/providers/${encodeURIComponent(code)}/models`);
 
 // ═════════════════════════════════════════════════════════════════════════
 // Admin — provider account pool (multi-PAT failover)

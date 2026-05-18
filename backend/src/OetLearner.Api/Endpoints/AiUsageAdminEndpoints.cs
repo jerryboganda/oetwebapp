@@ -543,6 +543,98 @@ public static class AiUsageAdminEndpoints
             });
         }).RequireRateLimiting("PerUserWrite");
 
+        // Discover models from an OpenAI-compatible provider via GET /models.
+        // Used by the admin "Discover models" button so the operator can
+        // pick a model from a dropdown instead of typing a free-form string.
+        // Returns 200 with { models: [] } when the provider has no /models
+        // route or returns an unexpected shape; bubbles up 502 for auth /
+        // network failures so the UI can surface the cause.
+        group.MapGet("/providers/{code}/models", async (
+            string code,
+            LearnerDbContext db,
+            IDataProtectionProvider dpProvider,
+            IHttpClientFactory httpFactory,
+            CancellationToken ct) =>
+        {
+            var providerRow = await db.AiProviders.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Code == code, ct);
+            if (providerRow is null) return Results.NotFound();
+            if (string.IsNullOrWhiteSpace(providerRow.BaseUrl))
+                return Results.BadRequest(new { error = "Provider has no BaseUrl configured." });
+            if (string.IsNullOrWhiteSpace(providerRow.EncryptedApiKey))
+                return Results.BadRequest(new { error = "Provider has no API key configured." });
+
+            string apiKey;
+            try
+            {
+                var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+                apiKey = protector.Unprotect(providerRow.EncryptedApiKey);
+            }
+            catch
+            {
+                return Results.Problem(
+                    title: "Failed to decrypt provider API key",
+                    detail: "The platform API key could not be decrypted. Re-enter the key and save.",
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
+
+            var client = httpFactory.CreateClient("ai-provider-discovery");
+            client.Timeout = TimeSpan.FromSeconds(15);
+            var url = $"{providerRow.BaseUrl.TrimEnd('/')}/models";
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+            req.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+            try
+            {
+                using var resp = await client.SendAsync(req, ct);
+                var body = await resp.Content.ReadAsStringAsync(ct);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    return Results.Problem(
+                        title: $"Provider /models call failed ({(int)resp.StatusCode})",
+                        detail: body.Length > 500 ? body[..500] : body,
+                        statusCode: StatusCodes.Status502BadGateway);
+                }
+                var models = new List<string>();
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("data", out var data) &&
+                        data.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var el in data.EnumerateArray())
+                        {
+                            if (el.TryGetProperty("id", out var idProp) &&
+                                idProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                            {
+                                var idVal = idProp.GetString();
+                                if (!string.IsNullOrWhiteSpace(idVal)) models.Add(idVal);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Non-JSON or unexpected shape — return empty list rather than 500.
+                }
+                models.Sort(StringComparer.OrdinalIgnoreCase);
+                return Results.Ok(new { models });
+            }
+            catch (TaskCanceledException)
+            {
+                return Results.Problem(
+                    title: "Provider /models call timed out",
+                    statusCode: StatusCodes.Status504GatewayTimeout);
+            }
+            catch (HttpRequestException ex)
+            {
+                return Results.Problem(
+                    title: "Provider /models call failed",
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
+        }).RequireRateLimiting("PerUserWrite");
+
         // ═══ Multi-account pool (Phase 2 Slice 2b) ═══════════════════════════
         // Admin CRUD over AiProviderAccount rows. Used today by the Copilot
         // dialect to spread requests across multiple PATs with auto-failover

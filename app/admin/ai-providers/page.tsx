@@ -18,6 +18,7 @@ import {
   updateAiProvider,
   deactivateAiProvider,
   testAiProvider,
+  discoverAiProviderModels,
   type AiProviderRow,
   type AiProviderTestStatus,
 } from '@/lib/ai-management-api';
@@ -261,6 +262,8 @@ export default function AiProvidersPage() {
   const [accountsFor, setAccountsFor] = useState<AiProviderRow | null>(null);
   const [testingCode, setTestingCode] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<AiProviderRow['category'] | 'All'>('All');
+  const [discoveringModels, setDiscoveringModels] = useState(false);
+  const [discoveredModels, setDiscoveredModels] = useState<string[] | null>(null);
 
   const load = useCallback(async () => {
     try { setRows(await fetchAiProviders()); setStatus('success'); } catch { setStatus('error'); }
@@ -275,7 +278,7 @@ export default function AiProvidersPage() {
       if (creating) await createAiProvider(payload);
       else await updateAiProvider(editing.id, payload);
       setToast({ variant: 'success', message: creating ? 'Provider registered.' : 'Provider updated.' });
-      setEditing(null); setCreating(false); await load();
+      setEditing(null); setCreating(false); setDiscoveredModels(null); await load();
     } catch (e) { setToast({ variant: 'error', message: `Save failed: ${(e as Error).message}` }); }
   };
 
@@ -297,6 +300,39 @@ export default function AiProvidersPage() {
       setToast({ variant: 'error', message: `Test failed: ${(e as Error).message}` });
     } finally {
       setTestingCode(null);
+    }
+  };
+
+  // "Discover models" button on the edit modal — calls the provider's
+  // OpenAI-compatible GET /models endpoint via the admin backend. The
+  // provider row must already be saved (so the encrypted API key exists)
+  // before the button is enabled.
+  const discoverModels = async () => {
+    if (!editing || !editing.code || creating) return;
+    setDiscoveringModels(true);
+    try {
+      const result = await discoverAiProviderModels(editing.code);
+      const models = result.models ?? [];
+      setDiscoveredModels(models);
+      if (models.length === 0) {
+        setToast({ variant: 'error', message: 'Provider returned no models.' });
+        return;
+      }
+      setEditing((prev) => {
+        if (!prev) return prev;
+        const nextDefault = prev.defaultModel && models.includes(prev.defaultModel)
+          ? prev.defaultModel
+          : models[0];
+        const nextAllowed = prev.allowedModelsCsv && prev.allowedModelsCsv.trim().length > 0
+          ? prev.allowedModelsCsv
+          : models.join(',');
+        return { ...prev, defaultModel: nextDefault, allowedModelsCsv: nextAllowed };
+      });
+      setToast({ variant: 'success', message: `Discovered ${models.length} model(s).` });
+    } catch (e) {
+      setToast({ variant: 'error', message: `Discover failed: ${(e as Error).message}` });
+    } finally {
+      setDiscoveringModels(false);
     }
   };
 
@@ -467,7 +503,33 @@ export default function AiProvidersPage() {
                 ]} />
               <Input label="Base URL" value={editing.baseUrl} onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })} />
               <Input label={creating ? 'API key' : 'API key (leave blank to keep)'} type="password" value={editing.apiKey ?? ''} onChange={(e) => setEditing({ ...editing, apiKey: e.target.value })} />
-              <Input label="Default model" value={editing.defaultModel} onChange={(e) => setEditing({ ...editing, defaultModel: e.target.value })} />
+              <div>
+                {discoveredModels && discoveredModels.length > 0 ? (
+                  <Select
+                    label="Default model"
+                    value={editing.defaultModel}
+                    onChange={(e) => setEditing({ ...editing, defaultModel: e.target.value })}
+                    options={discoveredModels.map((m) => ({ value: m, label: m }))}
+                  />
+                ) : (
+                  <Input label="Default model" value={editing.defaultModel} onChange={(e) => setEditing({ ...editing, defaultModel: e.target.value })} />
+                )}
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => void discoverModels()}
+                    disabled={creating || !editing.code || discoveringModels}
+                  >
+                    {discoveringModels ? 'Discovering…' : 'Discover models'}
+                  </Button>
+                  {creating && (
+                    <span className="text-xs text-muted-foreground">Save the provider first to enable discovery.</span>
+                  )}
+                  {discoveredModels && discoveredModels.length === 0 && !discoveringModels && (
+                    <span className="text-xs text-muted-foreground">No models returned by provider.</span>
+                  )}
+                </div>
+              </div>
               <Select label="Reasoning effort" value={editing.reasoningEffort ?? ''}
                 onChange={(e) => setEditing({ ...editing, reasoningEffort: e.target.value || null })}
                 options={[
@@ -487,7 +549,7 @@ export default function AiProvidersPage() {
             </div>
             <div className="flex gap-3 mt-4">
               <Button variant="primary" onClick={() => void save()}>Save</Button>
-              <Button variant="ghost" onClick={() => { setEditing(null); setCreating(false); }}>Cancel</Button>
+              <Button variant="ghost" onClick={() => { setEditing(null); setCreating(false); setDiscoveredModels(null); }}>Cancel</Button>
             </div>
           </div>
         </Modal>
