@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 
-const { mockGetReadingHome, mockTrack, mockUseAuth, mockFetchMockReports } = vi.hoisted(() => ({
+const { mockGetReadingHome, mockGetReadingErrorBank, mockTrack, mockUseAuth, mockFetchMockReports } = vi.hoisted(() => ({
   mockGetReadingHome: vi.fn(),
+  mockGetReadingErrorBank: vi.fn(),
   mockTrack: vi.fn(),
   mockUseAuth: vi.fn(),
   mockFetchMockReports: vi.fn(),
@@ -29,10 +30,15 @@ vi.mock('@/lib/analytics', () => ({
 
 vi.mock('@/lib/reading-authoring-api', () => ({
   getReadingHome: mockGetReadingHome,
+  getReadingErrorBank: mockGetReadingErrorBank,
 }));
 
 vi.mock('@/lib/api', () => ({
   fetchMockReports: mockFetchMockReports,
+}));
+
+vi.mock('@/components/domain/part-launchpad-card', () => ({
+  PartLaunchpadCard: ({ partCode }: { partCode: string }) => <div data-testid={`part-launchpad-${partCode}`}>{partCode}</div>,
 }));
 
 import ReadingPage from './page';
@@ -45,6 +51,7 @@ describe('Reading page', () => {
       loading: false,
     });
     mockFetchMockReports.mockResolvedValue([]);
+    mockGetReadingErrorBank.mockResolvedValue({ entries: [], total: 0 });
     mockGetReadingHome.mockResolvedValue({
       intro: 'Reading practice uses full structured papers.',
       papers: [

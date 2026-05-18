@@ -76,8 +76,18 @@ public static class DatabaseBootstrapper
         await OetLearner.Api.Services.Recalls.RecallSetTagSeeder.EnsureAsync(
             db, environment, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, cancellationToken);
 
-        // Demo/test data seeding permanently disabled — production DB is the source of truth.
-        // See commit history for removed SeedDemoData/EnsureLocalAuthAccounts if ever needed for tests.
+        // Demo/test data — only seeded when Bootstrap:SeedDemoData is true (used by test harness).
+        // Production and localhost both set this to false; only TestWebApplicationFactory enables it.
+        if (seedDemoData)
+        {
+            await SeedData.EnsureDemoDataAsync(db, cancellationToken);
+            if (!db.Database.IsInMemory())
+            {
+                await SeedData.EnsureDemoOperationalStateAsync(db, cancellationToken);
+            }
+            await SeedData.EnsureDemoMediaAsync(db, storage, cancellationToken);
+            await SeedData.EnsureSpeakingMockSetsAsync(db, cancellationToken);
+        }
     }
 
     /// <summary>
