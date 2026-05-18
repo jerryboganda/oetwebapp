@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Tests;
 
@@ -39,6 +40,17 @@ public class BrevoResilienceTests
             o.FromName = "OET Test";
             o.BaseUrl = "https://api.brevo.test/v3";
         });
+        services.AddSingleton<IRuntimeSettingsProvider>(TestRuntimeSettingsProvider.FromEmailSettings(
+            new EmailSettings(
+                BrevoApiKey: "test-key",
+                BrevoEmailVerificationTemplateId: null,
+                BrevoPasswordResetTemplateId: null,
+                SmtpHost: null,
+                SmtpPort: null,
+                SmtpUsername: null,
+                SmtpPassword: null,
+                SmtpFromAddress: "noreply@example.test",
+                SmtpFromName: "OET Test")));
 
         services
             .AddHttpClient<BrevoEmailSender>(client =>
