@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace OetLearner.Api.Data.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260518131500_AddPushVapidRuntimeSettings")]
     public partial class AddPushVapidRuntimeSettings : Migration
     {
         /// <inheritdoc />
