@@ -9225,6 +9225,10 @@ export async function fetchStudyPlanDrift() {
   return apiRequest('/v1/learner/study-plan/drift');
 }
 
+export async function regenerateStudyPlan(): Promise<ApiRecord> {
+  return apiRequest<ApiRecord>('/v1/study-plan/regenerate', { method: 'POST' });
+}
+
 export async function fetchReadinessRisk() {
   return apiRequest('/v1/learner/readiness/risk');
 }

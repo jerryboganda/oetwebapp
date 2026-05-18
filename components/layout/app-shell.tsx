@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, type ReactNode, useContext } from 'react';
+import { Suspense, type ReactNode, useContext, useEffect } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { AuthContext, AuthProvider } from '@/contexts/auth-context';
@@ -11,6 +11,15 @@ import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
 import { BottomNav, type NavGroup, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
 import { TopNav, type MobileMenuSection } from './top-nav';
+
+/** Scrolls the main content area to top on every mount (triggered by route change via key={pathname}). */
+function ScrollReset() {
+  useEffect(() => {
+    const el = document.getElementById('main-content');
+    if (el) el.scrollTop = 0;
+  }, []);
+  return null;
+}
 
 export interface AppShellProps {
   children: ReactNode;
@@ -101,6 +110,7 @@ export function AppShell({
           className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto py-4 lg:py-6', className)}
           {...routeMotionProps}
         >
+          <ScrollReset />
           {children}
         </motion.main>
       </AnimatePresence>
@@ -142,6 +152,7 @@ export function AppShell({
             className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] lg:py-6 lg:pb-6', className)}
             {...routeMotionProps}
           >
+            <ScrollReset />
             {children}
           </motion.main>
         </AnimatePresence>

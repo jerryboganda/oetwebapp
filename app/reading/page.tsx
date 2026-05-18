@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowRight,
   BookOpen,
   CheckCircle2,
   Clock,
@@ -22,6 +21,7 @@ import { MotionItem } from '@/components/ui/motion-primitives';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import {
+  getReadingErrorBank,
   getReadingHome,
   type ReadingHomeAttemptDto,
   type ReadingHomeDto,
@@ -33,42 +33,18 @@ import { fetchMockReports } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
 import { isListeningReadingPassByScaled } from '@/lib/scoring';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { PartLaunchpadCard, type PartCode } from '@/components/domain/part-launchpad-card';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
-const partGuides = [
-  {
-    part: 'A',
-    accent: 'amber' as const,
-    icon: Clock,
-    title: 'Part A — Rapid Extraction',
-    tip: '20 items across 4 medical texts under strict time',
-    href: '/reading/practice?part=A',
-  },
-  {
-    part: 'B',
-    accent: 'blue' as const,
-    icon: FileText,
-    title: 'Part B — Short Extracts',
-    tip: '6 items from healthcare policies & guidelines',
-    href: '/reading/practice?part=B',
-  },
-  {
-    part: 'C',
-    accent: 'indigo' as const,
-    icon: TrendingUp,
-    title: 'Part C — Inference & Evidence',
-    tip: '16 items testing argument comprehension',
-    href: '/reading/practice?part=C',
-  },
-] as const;
 
 export default function ReadingHome() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [home, setHome] = useState<ReadingHomeDto | null>(null);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
+  const [partErrorCounts, setPartErrorCounts] = useState<Record<PartCode, number>>({ A: 0, B: 0, C: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,13 +62,20 @@ export default function ReadingHome() {
       try {
         setLoading(true);
         setError(null);
-        const [readingHome, reports] = await Promise.all([
+        const [readingHome, reports, errorBank] = await Promise.all([
           getReadingHome(),
           fetchMockReports().catch(() => [] as MockReport[]),
+          getReadingErrorBank({ limit: 200 }).catch(() => null),
         ]);
         if (cancelled) return;
         setHome(readingHome);
         setMockReports(reports);
+        const counts: Record<PartCode, number> = { A: 0, B: 0, C: 0 };
+        for (const entry of errorBank?.entries ?? []) {
+          const code = entry.partCode as PartCode | undefined;
+          if (code === 'A' || code === 'B' || code === 'C') counts[code] += 1;
+        }
+        setPartErrorCounts(counts);
       } catch (err) {
         if (!cancelled) setError(readErrorMessage(err, 'Failed to load Reading papers.'));
       } finally {
@@ -157,34 +140,6 @@ export default function ReadingHome() {
 
         <LearnerSkillSwitcher compact />
 
-        {/* Part Guidance — compact quick-start row */}
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {partGuides.map((guide) => {
-            const Icon = guide.icon;
-            const accentMap = {
-              amber: 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:border-amber-300',
-              blue: 'border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 hover:border-blue-300',
-              indigo: 'border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 hover:border-indigo-300',
-            } as const;
-            return (
-              <Link
-                key={guide.part}
-                href={guide.href}
-                className={`group flex items-center gap-3 rounded-xl border px-4 py-3 transition-all duration-200 ${accentMap[guide.accent]}`}
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/60">
-                  <Icon className="h-4.5 w-4.5" aria-hidden />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold leading-tight">{guide.title}</p>
-                  <p className="mt-0.5 text-xs opacity-75 leading-snug">{guide.tip}</p>
-                </div>
-                <ArrowRight className="h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
-              </Link>
-            );
-          })}
-        </section>
-
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <div className="flex justify-end">
@@ -217,9 +172,9 @@ export default function ReadingHome() {
                     <MotionItem key={paper.id} delayIndex={index}>
                       <LearnerSurfaceCard card={paperCard(paper, home?.activeAttempts ?? [])}>
                         <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold text-muted">
-                          <span className="rounded-full bg-background-light px-2 py-2">A {paper.partACount}</span>
-                          <span className="rounded-full bg-background-light px-2 py-2">B {paper.partBCount}</span>
-                          <span className="rounded-full bg-background-light px-2 py-2">C {paper.partCCount}</span>
+                          <span className="rounded-lg bg-background-light px-2 py-2">A {paper.partACount}</span>
+                          <span className="rounded-lg bg-background-light px-2 py-2">B {paper.partBCount}</span>
+                          <span className="rounded-lg bg-background-light px-2 py-2">C {paper.partCCount}</span>
                         </div>
                         {home?.policy.allowPaperReadingMode && !(paper.entitlement ? !paper.entitlement.allowed : false) ? (
                           <Link
@@ -264,6 +219,22 @@ export default function ReadingHome() {
                 </div>
               </section>
             ) : null}
+
+            <section>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Part Guidance"
+                title="Practice under exam conditions"
+                description={`Part A is ${home?.policy.partATimerMinutes ?? 15} minutes, followed by ${home?.policy.partBCTimerMinutes ?? 45} shared minutes for Parts B and C.`}
+                className="mb-5"
+              />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {home ? (['A', 'B', 'C'] as const).map((code, index) => (
+                  <MotionItem key={code} delayIndex={index}>
+                    <PartLaunchpadCard partCode={code} home={home} errorBankCount={partErrorCounts[code]} />
+                  </MotionItem>
+                )) : null}
+              </div>
+            </section>
 
             <section>
               <LearnerSurfaceSectionHeader
@@ -319,6 +290,7 @@ export default function ReadingHome() {
                       primaryAction: {
                         label: 'View Report',
                         href: `/mocks/report/${report.id}`,
+                        variant: 'outline',
                       },
                     };
                     return (
@@ -408,7 +380,7 @@ function paperCard(paper: ReadingHomePaperDto, attempts: ReadingHomeAttemptDto[]
     secondaryAction: !locked && lastSubmitted ? {
       label: 'Review latest result',
       href: lastSubmitted.route,
-      variant: 'secondary',
+      variant: 'outline',
     } : undefined,
     statusLabel: locked ? 'Locked' : active ? 'In progress' : undefined,
   };
@@ -435,6 +407,7 @@ function resultCard(result: ReadingHomeResultDto): LearnerSurfaceCardModel {
     primaryAction: {
       label: 'Open review',
       href: result.route,
+      variant: 'outline',
     },
     statusLabel: isPracticeOnly ? 'Practice only' : passed ? 'Passed' : 'Needs work',
   };

@@ -288,7 +288,7 @@ export default function FreezePage() {
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Freeze ID</p>
                       <p className="mt-1 text-sm font-semibold text-navy">{currentFreeze.id}</p>
                     </div>
-                    <span className="rounded-full bg-warning/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-warning">
+                    <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warning">
                       {currentFreeze.status}
                     </span>
                   </div>

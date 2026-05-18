@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Common;
 
 namespace OetLearner.Api.Services;
 
@@ -31,6 +32,7 @@ public class VocabularyService(
         string? recallSet = null,
         string? oetSubtestTag = null)
     {
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
         query = ApplyExamTypeFilter(query, examTypeCode);
         if (!string.IsNullOrEmpty(category)) query = query.Where(t => t.Category == category);
@@ -76,7 +78,8 @@ public class VocabularyService(
         string? profession,
         CancellationToken ct)
     {
-        var resolvedExam = string.IsNullOrWhiteSpace(examTypeCode) ? "oet" : examTypeCode;
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
+        var resolvedExam = examTypeCode ?? ExamCodes.DefaultCode;
 
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
         query = ApplyExamTypeFilter(query, examTypeCode);
@@ -131,6 +134,7 @@ public class VocabularyService(
             return new VocabularyLookupResult(false, null, Array.Empty<VocabularyTermSummary>());
 
         var normalised = query.Trim().ToLowerInvariant();
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var baseQuery = db.VocabularyTerms.Where(t => t.Status == "active");
         baseQuery = ApplyExamTypeFilter(baseQuery, examTypeCode);
 
@@ -157,6 +161,7 @@ public class VocabularyService(
         string? profession,
         CancellationToken ct)
     {
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
         query = ApplyExamTypeFilter(query, examTypeCode);
         if (!string.IsNullOrEmpty(profession)) query = query.Where(t => t.ProfessionId == profession);
@@ -171,7 +176,7 @@ public class VocabularyService(
             .ToList();
 
         return new VocabularyCategoriesResponse(
-            ExamTypeCode: examTypeCode ?? "oet",
+            ExamTypeCode: examTypeCode ?? ExamCodes.DefaultCode,
             ProfessionId: profession,
             Categories: grouped);
     }
