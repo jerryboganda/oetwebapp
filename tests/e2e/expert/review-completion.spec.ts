@@ -81,10 +81,12 @@ test.describe('Tutor review completion workflows @expert', () => {
     await expect(page.getByRole('button', { name: /^stop$/i })).toBeVisible();
     await page.getByRole('button', { name: /^stop$/i }).click();
     await expect(page.getByText(/dr-ahmed-writing-review-.*\.webm/i).first()).toBeVisible({ timeout: 30_000 });
-    await page.getByLabel('Written voice-note summary').fill('Voice note confirms rubric strengths and priority corrections.');
+    const voiceNoteSummary = 'Voice note confirms rubric strengths and priority corrections.';
+    await page.getByLabel('Written voice-note summary').fill(voiceNoteSummary);
     await page.getByLabel('Transcript').fill('This voice note summarises the final written feedback for the learner.');
     await page.getByRole('button', { name: /save voice note/i }).click();
-    await expect(page.getByText(/voice note attached to this review\./i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/^No voice notes have been saved yet\.$/i)).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByText(voiceNoteSummary)).toBeVisible();
 
     await page.getByRole('button', { name: /submit review/i }).click();
 
