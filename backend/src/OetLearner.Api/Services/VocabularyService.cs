@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Common;
 
 namespace OetLearner.Api.Services;
 
@@ -30,6 +31,7 @@ public class VocabularyService(
         CancellationToken ct,
         string? recallSet = null)
     {
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
         if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
         if (!string.IsNullOrEmpty(category)) query = query.Where(t => t.Category == category);
@@ -68,7 +70,8 @@ public class VocabularyService(
         string? profession,
         CancellationToken ct)
     {
-        var resolvedExam = string.IsNullOrWhiteSpace(examTypeCode) ? "oet" : examTypeCode;
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
+        var resolvedExam = examTypeCode ?? ExamCodes.DefaultCode;
 
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
         if (!string.IsNullOrWhiteSpace(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
@@ -123,6 +126,7 @@ public class VocabularyService(
             return new VocabularyLookupResult(false, null, Array.Empty<VocabularyTermSummary>());
 
         var normalised = query.Trim().ToLowerInvariant();
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var baseQuery = db.VocabularyTerms.Where(t => t.Status == "active");
         if (!string.IsNullOrEmpty(examTypeCode)) baseQuery = baseQuery.Where(t => t.ExamTypeCode == examTypeCode);
 
@@ -149,6 +153,7 @@ public class VocabularyService(
         string? profession,
         CancellationToken ct)
     {
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
         if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
         if (!string.IsNullOrEmpty(profession)) query = query.Where(t => t.ProfessionId == profession);
@@ -163,7 +168,7 @@ public class VocabularyService(
             .ToList();
 
         return new VocabularyCategoriesResponse(
-            ExamTypeCode: examTypeCode ?? "oet",
+            ExamTypeCode: examTypeCode ?? ExamCodes.DefaultCode,
             ProfessionId: profession,
             Categories: grouped);
     }
