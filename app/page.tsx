@@ -193,7 +193,7 @@ export default function Dashboard() {
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Read-only mode</p>
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700">Read-only mode</p>
                     <CardTitle className="mt-2 flex items-center gap-2 text-xl text-amber-950">
                       <Shield className="h-5 w-5" />
                       Your account is currently frozen
@@ -206,17 +206,17 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700/70">Status</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70">Status</p>
                   <p className="mt-1 text-sm font-normal text-amber-950">{String(freeze.status ?? 'active')}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700/70">Started</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70">Started</p>
                   <p className="mt-1 text-sm font-normal text-amber-950">
                     {freeze.startedAt ? new Date(freeze.startedAt).toLocaleString() : 'Pending'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700/70">Ends</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70">Ends</p>
                   <p className="mt-1 text-sm font-normal text-amber-950">
                     {freeze.endedAt ? new Date(freeze.endedAt).toLocaleString() : 'Not set'}
                   </p>
