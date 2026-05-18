@@ -1212,10 +1212,6 @@ public static partial class SeedData
 
     private static void SeedDemoUserData(LearnerDbContext db)
     {
-        // Idempotency: skip if demo data already exists (e.g., from prod DB sync or prior partial seed)
-        if (db.StudyPlans.Any(x => x.Id == "plan-001"))
-            return;
-
         var now = DateTimeOffset.UtcNow;
         var userId = "mock-user-001";
 
@@ -1620,9 +1616,6 @@ public static partial class SeedData
         });
 
         // ─── Expert Console Seed Data ───
-        // Guard: skip if expert-001 already exists (e.g., from a prior seed or prod DB sync)
-        if (!db.ExpertUsers.Any(x => x.Id == "expert-001"))
-        {
 
         db.ExpertUsers.Add(new ExpertUser
         {
@@ -1807,8 +1800,6 @@ public static partial class SeedData
                 new { day = "Sun", count = 2 }
             })
         });
-
-        } // end expert-001 guard
 
         // ─── Admin / CMS Seed Data ───
 
