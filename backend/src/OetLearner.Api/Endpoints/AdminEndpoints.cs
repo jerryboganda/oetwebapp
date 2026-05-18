@@ -884,7 +884,7 @@ public static class AdminEndpoints
                 try
                 {
                     var result = await draft.GenerateAsync(new OetLearner.Api.Services.Grammar.GrammarDraftRequest(
-                        ExamTypeCode: body.ExamTypeCode ?? "oet",
+                        ExamTypeCode: OetLearner.Api.Services.Common.ExamCodes.NormalizeOrNull(body.ExamTypeCode) ?? OetLearner.Api.Services.Common.ExamCodes.DefaultCode,
                         TopicSlug: body.TopicSlug,
                         Prompt: body.Prompt,
                         Level: body.Level ?? "intermediate",

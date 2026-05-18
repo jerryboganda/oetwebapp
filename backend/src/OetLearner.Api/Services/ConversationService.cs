@@ -50,7 +50,7 @@ public class ConversationService(
             UserId = userId,
             ContentId = request.ContentId,
             TemplateId = template?.Id,
-            ExamTypeCode = "oet",
+            ExamTypeCode = OetLearner.Api.Services.Common.ExamCodes.DefaultCode,
             SubtestCode = "speaking",
             TaskTypeCode = taskType,
             Profession = profession,

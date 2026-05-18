@@ -29,7 +29,7 @@ public static partial class SeedData
                 Definition = definition,
                 ExampleSentence = example,
                 ContextNotes = contextNotes,
-                ExamTypeCode = "oet",
+                ExamTypeCode = OetLearner.Api.Services.Common.ExamCodes.DefaultCode,
                 ProfessionId = professionId,
                 Category = category,
                 Difficulty = difficulty,

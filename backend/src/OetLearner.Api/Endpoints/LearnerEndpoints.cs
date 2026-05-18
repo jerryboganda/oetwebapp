@@ -398,7 +398,7 @@ public static class LearnerEndpoints
         // ── L3: Profession-Specific Learning Paths ──────
 
         v1.MapGet("/learner/learning-path", async (HttpContext http, [FromQuery] string? professionId, [FromQuery] string? examTypeCode, LearnerService service, CancellationToken ct)
-            => Results.Ok(await service.GetLearningPathAsync(http.UserId(), professionId, examTypeCode ?? "oet", ct)))
+            => Results.Ok(await service.GetLearningPathAsync(http.UserId(), professionId, OetLearner.Api.Services.Common.ExamCodes.NormalizeOrNull(examTypeCode) ?? OetLearner.Api.Services.Common.ExamCodes.DefaultCode, ct)))
             .RequireAuthorization("LearnerOnly");
 
         // ── L5: Adaptive Weak-Area Remediation ──────────

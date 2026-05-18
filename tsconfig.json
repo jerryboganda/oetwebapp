@@ -27,6 +27,7 @@
   "exclude": [
     "node_modules",
     "OET Web App Login only screens take from here",
+    "copilot-worktrees",
     ".storybook/**/*",
     "**/__stories__/**/*",
     "**/*.stories.ts",

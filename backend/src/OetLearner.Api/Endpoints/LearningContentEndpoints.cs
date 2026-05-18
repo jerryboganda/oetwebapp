@@ -7,6 +7,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Common;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -252,7 +253,7 @@ public static class LearningContentEndpoints
                 return FeatureDisabled("Video lessons");
             }
 
-            return Results.Ok(await service.ListLessonsAsync(http.UserId(), examTypeCode ?? "oet", subtestCode, category, ct));
+            return Results.Ok(await service.ListLessonsAsync(http.UserId(), ExamCodes.NormalizeOrNull(examTypeCode) ?? ExamCodes.DefaultCode, subtestCode, category, ct));
         });
 
         lessons.MapGet("/programs/{programId}", async (HttpContext http, string programId, VideoLessonService service, CancellationToken ct) =>
@@ -308,7 +309,7 @@ public static class LearningContentEndpoints
 
             return Results.Ok(await service.ListGuidesAsync(
                 http.UserId(),
-                examTypeCode ?? "oet",
+                ExamCodes.NormalizeOrNull(examTypeCode) ?? ExamCodes.DefaultCode,
                 subtestCode,
                 category,
                 q,

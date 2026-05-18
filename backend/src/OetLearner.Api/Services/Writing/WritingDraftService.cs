@@ -193,7 +193,7 @@ public sealed class WritingDraftService(
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             ExamFamilyCode = "oet",
-            ExamTypeCode = "oet",
+            ExamTypeCode = OetLearner.Api.Services.Common.ExamCodes.DefaultCode,
             SourceType = warning is null ? "ai_generated" : "ai_generated_fallback",
             QaStatus = "pending",
         };

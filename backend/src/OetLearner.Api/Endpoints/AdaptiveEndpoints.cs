@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Common;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -22,7 +23,7 @@ public static class AdaptiveEndpoints
             [FromQuery] string subtestCode,
             [FromQuery] int count,
             AdaptiveDifficultyService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetAdaptiveContentAsync(http.UserId(), examTypeCode ?? "oet", subtestCode ?? "writing", count <= 0 ? 5 : count, ct)));
+            Results.Ok(await svc.GetAdaptiveContentAsync(http.UserId(), ExamCodes.NormalizeOrNull(examTypeCode) ?? ExamCodes.DefaultCode, subtestCode ?? "writing", count <= 0 ? 5 : count, ct)));
 
         return app;
     }

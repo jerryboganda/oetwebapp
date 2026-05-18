@@ -54,8 +54,10 @@ public class LearnerUser
     public string? WeeklyActivityJson { get; set; }
 
     // ── Multi-exam ──
+    // NOTE: canonical exam-type code is "OET" (upper). All read paths normalize via
+    // ExamCodes.Normalize / NormalizeOrNull. Keep default uppercase to match canonical.
     [MaxLength(16)]
-    public string ActiveExamTypeCode { get; set; } = "oet";
+    public string ActiveExamTypeCode { get; set; } = "OET";
 
     public ApplicationUserAccount? AuthAccount { get; set; }
 }

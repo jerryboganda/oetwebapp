@@ -1152,7 +1152,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         };
         db.ConversationEvaluations.Add(evaluation);
 
-        var examTypeCode = session.ExamTypeCode ?? "oet";
+        var examTypeCode = OetLearner.Api.Services.Common.ExamCodes.NormalizeOrNull(session.ExamTypeCode) ?? OetLearner.Api.Services.Common.ExamCodes.DefaultCode;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var seededReviewKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 

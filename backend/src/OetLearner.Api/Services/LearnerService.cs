@@ -9645,7 +9645,7 @@ public partial class LearnerService(
     public async Task<object> GetExamSimulationConfigAsync(string userId, CancellationToken ct)
     {
         var goal = await db.Goals.FirstOrDefaultAsync(g => g.UserId == userId, ct);
-        var examType = goal?.ExamTypeCode ?? "oet";
+        var examType = OetLearner.Api.Services.Common.ExamCodes.NormalizeOrNull(goal?.ExamTypeCode) ?? OetLearner.Api.Services.Common.ExamCodes.DefaultCode;
 
         // Count user's completed mocks to determine readiness for simulation
         var completedMocks = await db.Attempts

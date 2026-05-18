@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Common;
 
 namespace OetLearner.Api.Services;
 
@@ -35,7 +36,8 @@ public sealed class StrategyGuideService(LearnerDbContext db)
         bool recommendedOnly,
         CancellationToken ct)
     {
-        var query = QueryActiveGuides(examTypeCode ?? "oet", subtestCode, category, q);
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode) ?? ExamCodes.DefaultCode;
+        var query = QueryActiveGuides(examTypeCode, subtestCode, category, q);
         var guides = await query
             .OrderBy(guide => guide.SortOrder)
             .ThenBy(guide => guide.Title)
@@ -44,7 +46,7 @@ public sealed class StrategyGuideService(LearnerDbContext db)
         var progress = await LoadProgressAsync(userId, guides.Select(guide => guide.Id), ct);
         var hierarchy = await LoadHierarchyRowsAsync(guides.Select(guide => guide.ContentLessonId), ct);
         var access = await LoadAccessScopeAsync(userId, ct);
-        var weakSubtests = await LoadWeakSubtestsAsync(userId, examTypeCode ?? "oet", ct);
+        var weakSubtests = await LoadWeakSubtestsAsync(userId, examTypeCode, ct);
 
         var allItems = guides
             .Select(guide => ToListItem(guide, progress, hierarchy, access, weakSubtests))
@@ -741,7 +743,7 @@ public sealed class StrategyGuideService(LearnerDbContext db)
     private static void ApplyUpsert(StrategyGuide guide, StrategyGuideUpsertRequest request, DateTimeOffset now)
     {
         guide.Slug = string.IsNullOrWhiteSpace(request.Slug) ? Slugify(request.Title) : Slugify(request.Slug);
-        guide.ExamTypeCode = NullIfWhiteSpace(request.ExamTypeCode) ?? "oet";
+        guide.ExamTypeCode = ExamCodes.Normalize(NullIfWhiteSpace(request.ExamTypeCode));
         guide.SubtestCode = NullIfWhiteSpace(request.SubtestCode)?.ToLowerInvariant();
         guide.Title = request.Title.Trim();
         guide.Summary = request.Summary.Trim();

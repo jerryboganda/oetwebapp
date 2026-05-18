@@ -220,7 +220,7 @@ public class GamificationService(LearnerDbContext db)
                 Id = Guid.NewGuid(),
                 UserId = userId,
                 DisplayName = user?.DisplayName ?? "Learner",
-                ExamTypeCode = "oet",
+                ExamTypeCode = OetLearner.Api.Services.Common.ExamCodes.DefaultCode,
                 Period = "weekly",
                 PeriodStart = DateOnly.FromDateTime(DateTime.UtcNow),
                 XP = 0,
