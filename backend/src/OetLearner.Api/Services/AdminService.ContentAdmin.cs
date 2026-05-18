@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Common;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -232,7 +233,7 @@ public partial class AdminService
             Definition = request.Definition.Trim(),
             ExampleSentence = request.ExampleSentence.Trim(),
             ContextNotes = string.IsNullOrWhiteSpace(request.ContextNotes) ? null : request.ContextNotes.Trim(),
-            ExamTypeCode = string.IsNullOrWhiteSpace(request.ExamTypeCode) ? "oet" : request.ExamTypeCode,
+            ExamTypeCode = ExamCodes.Normalize(request.ExamTypeCode),
             ProfessionId = request.ProfessionId,
             Category = request.Category.Trim(),
             Difficulty = request.Difficulty ?? "medium",
@@ -273,7 +274,7 @@ public partial class AdminService
         if (request.Definition is not null) entity.Definition = request.Definition.Trim();
         if (request.ExampleSentence is not null) entity.ExampleSentence = request.ExampleSentence.Trim();
         if (request.ContextNotes is not null) entity.ContextNotes = request.ContextNotes.Trim();
-        if (request.ExamTypeCode is not null) entity.ExamTypeCode = request.ExamTypeCode;
+        if (request.ExamTypeCode is not null) entity.ExamTypeCode = ExamCodes.Normalize(request.ExamTypeCode);
         if (request.ProfessionId is not null) entity.ProfessionId = request.ProfessionId;
         if (request.Category is not null) entity.Category = request.Category;
         if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
@@ -407,6 +408,7 @@ public partial class AdminService
     public async Task<object> GetVocabularyCategoriesAdminAsync(
         string? examTypeCode, string? professionId, CancellationToken ct)
     {
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.AsQueryable();
         if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
         if (!string.IsNullOrEmpty(professionId)) query = query.Where(t => t.ProfessionId == professionId);
@@ -439,6 +441,7 @@ public partial class AdminService
     public async Task<object> GetRecallSetsAdminAsync(
         string? examTypeCode, string? professionId, CancellationToken ct)
     {
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.AsQueryable();
         if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
         if (!string.IsNullOrEmpty(professionId)) query = query.Where(t => t.ProfessionId == professionId);
@@ -923,7 +926,7 @@ public partial class AdminService
 
     private static VocabularyTerm CreateVocabularyTermFromCsvRow(CsvVocabRow row, string id, string importBatchId)
     {
-        var examType = string.IsNullOrWhiteSpace(row.ExamTypeCode) ? "oet" : row.ExamTypeCode!.Trim();
+        var examType = ExamCodes.Normalize(row.ExamTypeCode);
         return new VocabularyTerm
         {
             Id = id,
@@ -1209,7 +1212,7 @@ public partial class AdminService
         if (!ApprovedVocabularyDifficulties.Contains(difficulty))
             return (false, $"Unknown difficulty '{difficulty}'. Use easy, medium, or hard.");
 
-        var examTypeCode = string.IsNullOrWhiteSpace(r.ExamTypeCode) ? "oet" : r.ExamTypeCode.Trim();
+        var examTypeCode = ExamCodes.Normalize(r.ExamTypeCode);
         if (!validation.ExamTypeCodes.Contains(examTypeCode))
             return (false, $"Unknown exam type code '{examTypeCode}'.");
 
