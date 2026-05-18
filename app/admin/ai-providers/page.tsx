@@ -323,10 +323,11 @@ export default function AiProvidersPage() {
         const nextDefault = prev.defaultModel && models.includes(prev.defaultModel)
           ? prev.defaultModel
           : models[0];
-        const nextAllowed = prev.allowedModelsCsv && prev.allowedModelsCsv.trim().length > 0
-          ? prev.allowedModelsCsv
-          : models.join(',');
-        return { ...prev, defaultModel: nextDefault, allowedModelsCsv: nextAllowed };
+        // Do NOT auto-fill `allowedModelsCsv` from the full discovered list —
+        // some providers (e.g. DigitalOcean Serverless) expose 60+ models and
+        // the joined CSV can overflow the column. The admin should pick a
+        // subset manually if they want allow-listing; empty = allow all.
+        return { ...prev, defaultModel: nextDefault };
       });
       setToast({ variant: 'success', message: `Discovered ${models.length} model(s).` });
     } catch (e) {

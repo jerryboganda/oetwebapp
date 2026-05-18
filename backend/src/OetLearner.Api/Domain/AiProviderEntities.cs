@@ -113,8 +113,11 @@ public class AiProvider
     [MaxLength(16)]
     public string? ReasoningEffort { get; set; }
 
-    /// <summary>Comma-separated allow-list of permitted models. Empty = all.</summary>
-    [MaxLength(1024)]
+    /// <summary>Comma-separated allow-list of permitted models. Empty = all.
+    /// Sized generously (4096 chars) so providers exposing many models —
+    /// e.g. DigitalOcean Serverless Inference (~64 model IDs ≈ 1.3 KB) —
+    /// can be allow-listed in a single field.</summary>
+    [MaxLength(4096)]
     public string AllowedModelsCsv { get; set; } = string.Empty;
 
     /// <summary>Price per 1,000 prompt tokens, USD. Stored at provider level
