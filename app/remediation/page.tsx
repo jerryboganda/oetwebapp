@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, ArrowRight, BookOpen, BarChart3, Lightbulb } from 'lucide-react';
+import { AlertTriangle, ArrowRight, BarChart3 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
@@ -139,48 +139,6 @@ export default function RemediationPage() {
         </MotionSection>
       )}
 
-      {/* Recommendations */}
-      {data && data.recommendations.length > 0 && (
-        <MotionSection className="mt-6">
-          <LearnerSurfaceSectionHeader icon={<Lightbulb className="w-5 h-5" />} title="Recommended Resources" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mt-3">
-            {data.recommendations.map((rec, i) => (
-              <MotionItem key={i}>
-                <Card className="p-4">
-                  <p className="font-medium text-sm capitalize text-navy">
-                    {rec.area.subtestCode} — {rec.area.criterionCode}
-                  </p>
-                  <ul className="mt-2 space-y-1">
-                    {rec.suggestedResources.map((r) => (
-                      <li key={r.id} className="text-xs text-muted flex items-center gap-1">
-                        <BookOpen className="w-3 h-3" /> {r.title}
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              </MotionItem>
-            ))}
-          </div>
-        </MotionSection>
-      )}
-
-      {/* Available Resources */}
-      {data && data.availableResources.length > 0 && (
-        <MotionSection className="mt-6">
-          <LearnerSurfaceSectionHeader icon={<BookOpen className="w-5 h-5" />} title="Foundation Resources" />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
-            {data.availableResources.map((r) => (
-              <MotionItem key={r.id}>
-                <Card className="p-3">
-                  <Badge variant="outline" className="mb-2">{r.resourceType.replace(/_/g, ' ')}</Badge>
-                  <p className="text-sm font-medium text-navy">{r.title}</p>
-                  <p className="text-xs text-muted mt-1 capitalize">{r.difficulty}</p>
-                </Card>
-              </MotionItem>
-            ))}
-          </div>
-        </MotionSection>
-      )}
     </LearnerDashboardShell>
   );
 }

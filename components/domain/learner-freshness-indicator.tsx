@@ -64,17 +64,17 @@ export function LearnerFreshnessIndicator({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em]',
+        'inline-flex items-center gap-1 text-xs font-medium',
         date
           ? isStale
-            ? 'border-amber-200 bg-amber-50 text-amber-700'
-            : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-          : 'border-border bg-background-light text-muted',
+            ? 'text-amber-600'
+            : 'text-muted'
+          : 'text-muted/70',
         className,
       )}
       title={date ? date.toLocaleString() : 'No freshness timestamp available'}
     >
-      <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+      <Clock className="h-3 w-3 opacity-60" aria-hidden="true" />
       <time dateTime={date?.toISOString()}>{label}</time>
     </span>
   );

@@ -235,6 +235,8 @@ const TRACKED_EVENTS = [
   'score_guarantee_claim_submitted',
   'study_commitment_set',
   'study_plan_drift_viewed',
+  'study_plan_regenerate_clicked',
+  'score_calculator_target_set',
   // Test day events
   'test_day_checklist_toggle',
   // Community events
