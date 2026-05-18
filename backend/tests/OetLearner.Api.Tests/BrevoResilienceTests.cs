@@ -8,7 +8,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Tests;
 
@@ -31,6 +33,7 @@ public class BrevoResilienceTests
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         services.AddLogging();
         services.AddSingleton<IWebHostEnvironment>(new TestWebHostEnvironment());
+        services.AddSingleton<IRuntimeSettingsProvider>(new StubRuntimeSettingsProvider());
         services.Configure<BrevoOptions>(o =>
         {
             o.Enabled = true;
@@ -102,5 +105,34 @@ public class BrevoResilienceTests
         public string EnvironmentName { get; set; } = Environments.Production;
         public string WebRootPath { get; set; } = AppContext.BaseDirectory;
         public IFileProvider WebRootFileProvider { get; set; } = new Microsoft.Extensions.FileProviders.NullFileProvider();
+    }
+
+    private sealed class StubRuntimeSettingsProvider : IRuntimeSettingsProvider
+    {
+        private static readonly EffectiveSettings _settings = new(
+            Email: new EmailSettings(
+                BrevoApiKey: "test-key",
+                BrevoEmailVerificationTemplateId: null,
+                BrevoPasswordResetTemplateId: null,
+                SmtpHost: null,
+                SmtpPort: null,
+                SmtpUsername: null,
+                SmtpPassword: null,
+                SmtpFromAddress: "noreply@example.test",
+                SmtpFromName: "OET Test"),
+            Billing: new BillingSettings(null, null, null, null, null),
+            Sentry: new SentrySettings(null, null, null),
+            Backup: new BackupSettings(null, null, null, null, null),
+            OAuth: new OAuthSettings(null, null, null, null, null, null, null, null),
+            Push: new PushSettings(null, null, null, null, null, null),
+            UpdatedByUserId: null,
+            UpdatedByUserName: null,
+            UpdatedAt: null);
+
+        public Task<EffectiveSettings> GetAsync(CancellationToken ct = default) => Task.FromResult(_settings);
+        public Task<RuntimeSettingsRow> GetRawAsync(CancellationToken ct = default) => Task.FromResult(new RuntimeSettingsRow());
+        public void Invalidate() { }
+        public string Protect(string plain) => plain;
+        public string? Unprotect(string? cipher) => cipher;
     }
 }
