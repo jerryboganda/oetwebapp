@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
@@ -20,6 +21,7 @@ namespace OetLearner.Api.Domain;
 /// — do not repurpose existing ones (their integer values are stored in
 /// the DB and are part of the audit trail).
 /// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum PaperAssetRole
 {
     /// <summary>Listening MP3 (the sole audio for the paper).</summary>
