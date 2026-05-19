@@ -16,6 +16,8 @@ import {
   fetchRecallsQueue,
   starRecall,
   fetchRecallsAudio,
+  fetchVocabularyCategories,
+  fetchVocabularyTerms,
   isApiError,
   type RecallsTodayResponse,
   type RecallsQueueItem,
@@ -23,6 +25,8 @@ import {
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { vocabularyProvenanceLabel } from '@/lib/vocabulary-provenance';
+import type { VocabularyCategoriesResponse, VocabularyTerm } from '@/lib/types/vocabulary';
 
 const STAR_REASONS: { key: RecallsStarReason; label: string }[] = [
   { key: 'spelling', label: 'Spelling' },
@@ -31,6 +35,31 @@ const STAR_REASONS: { key: RecallsStarReason; label: string }[] = [
   { key: 'hearing', label: 'Hearing' },
   { key: 'confused', label: 'Confused' },
 ];
+
+const SUBTEST_FILTERS = [
+  { key: 'all', label: 'All subtests' },
+  { key: 'listening_a', label: 'Listening A' },
+  { key: 'listening_b', label: 'Listening B' },
+  { key: 'listening_c', label: 'Listening C' },
+  { key: 'reading_a', label: 'Reading A' },
+  { key: 'reading_b', label: 'Reading B' },
+  { key: 'reading_c', label: 'Reading C' },
+  { key: 'writing', label: 'Writing' },
+  { key: 'speaking', label: 'Speaking' },
+];
+
+interface VocabularyTermsPage {
+  total: number;
+  terms?: VocabularyTerm[];
+  items?: VocabularyTerm[];
+}
+
+function formatCategoryLabel(category: string, count: number) {
+  const label = category
+    .replace(/[_-]/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+  return `${label} (${count})`;
+}
 
 /**
  * /recalls/words — vocabulary-side card list.
@@ -41,6 +70,13 @@ const STAR_REASONS: { key: RecallsStarReason; label: string }[] = [
 export default function RecallsWordsPage() {
   const [today, setToday] = useState<RecallsTodayResponse | null>(null);
   const [items, setItems] = useState<RecallsQueueItem[] | null>(null);
+  const [catalogTerms, setCatalogTerms] = useState<VocabularyTerm[]>([]);
+  const [catalogTotal, setCatalogTotal] = useState(0);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [categoryFilters, setCategoryFilters] = useState([{ key: 'all', label: 'All categories' }]);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedSubtest, setSelectedSubtest] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starOpenFor, setStarOpenFor] = useState<string | null>(null);
@@ -58,7 +94,66 @@ export default function RecallsWordsPage() {
       })
       .catch(() => setError('Could not load your recalls list.'))
       .finally(() => setLoading(false));
+
+    fetchVocabularyCategories({ examTypeCode: 'oet' })
+      .then((categories) => {
+        const categoryPage = categories as VocabularyCategoriesResponse;
+        setCategoryFilters([
+          { key: 'all', label: 'All categories' },
+          ...(categoryPage.categories ?? []).map((item) => ({
+            key: item.category,
+            label: formatCategoryLabel(item.category, item.termCount),
+          })),
+        ]);
+      })
+      .catch(() => {
+        // Non-fatal: the matrix still works with the all-categories fallback.
+      });
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetchVocabularyTerms({
+      examTypeCode: 'oet',
+      category: selectedCategory === 'all' ? undefined : selectedCategory,
+      oetSubtestTag: selectedSubtest === 'all' ? undefined : selectedSubtest,
+      page: 1,
+      pageSize: 24,
+    })
+      .then((response) => {
+        if (!active) return;
+        const page = response as VocabularyTermsPage;
+        setCatalogTerms(page.terms ?? page.items ?? []);
+        setCatalogTotal(page.total ?? 0);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCatalogTerms([]);
+        setCatalogTotal(0);
+        setCatalogError('Could not load the vocabulary matrix.');
+      })
+      .finally(() => {
+        if (active) setCatalogLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedCategory, selectedSubtest]);
+
+  function handleCategoryChange(nextCategory: string) {
+    if (nextCategory === selectedCategory) return;
+    setCatalogLoading(true);
+    setCatalogError(null);
+    setSelectedCategory(nextCategory);
+  }
+
+  function handleSubtestChange(nextSubtest: string) {
+    if (nextSubtest === selectedSubtest) return;
+    setCatalogLoading(true);
+    setCatalogError(null);
+    setSelectedSubtest(nextSubtest);
+  }
 
   async function handleStar(it: RecallsQueueItem, reason: RecallsStarReason) {
     setStarOpenFor(null);
@@ -121,6 +216,103 @@ export default function RecallsWordsPage() {
         {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 
         <LearnerSurfaceSectionHeader
+          eyebrow="Catalog matrix"
+          title="Browse active vocabulary by category and OET subtest"
+          description="Use the functional category × OET subtest filters to inspect the active recall vocabulary catalog."
+        />
+
+        <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
+          <div className="space-y-3">
+            <fieldset>
+              <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Functional category</legend>
+              <div className="flex flex-wrap gap-2">
+                {categoryFilters.map((filter) => (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    aria-pressed={selectedCategory === filter.key}
+                    onClick={() => handleCategoryChange(filter.key)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                      selectedCategory === filter.key
+                        ? 'border-primary bg-primary text-white'
+                        : 'border-border text-muted hover:border-primary hover:text-primary'
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">OET subtest</legend>
+              <div className="flex flex-wrap gap-2">
+                {SUBTEST_FILTERS.map((filter) => (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    aria-pressed={selectedSubtest === filter.key}
+                    onClick={() => handleSubtestChange(filter.key)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                      selectedSubtest === filter.key
+                        ? 'border-info bg-info text-white'
+                        : 'border-border text-muted hover:border-info hover:text-info'
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+
+          {catalogError && <InlineAlert variant="warning">{catalogError}</InlineAlert>}
+
+          {catalogLoading ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-24 rounded-xl" />
+              ))}
+            </div>
+          ) : catalogTerms.length > 0 ? (
+            <div className="space-y-3">
+              <div className="text-sm text-muted">
+                Showing {catalogTerms.length} of {catalogTotal} active terms for this matrix slice.
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {catalogTerms.map((term) => {
+                  const provenanceLabel = vocabularyProvenanceLabel(term.sourceProvenance);
+                  return (
+                    <article key={term.id} className="rounded-xl border border-border bg-background/70 p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-semibold text-navy">{term.term}</h3>
+                        <Badge variant="info">{term.category}</Badge>
+                        <Badge variant="default">{term.difficulty}</Badge>
+                        {provenanceLabel && <Badge variant="warning">{provenanceLabel}</Badge>}
+                      </div>
+                      <p className="mt-2 text-sm text-muted">{term.definition}</p>
+                      <p className="mt-2 text-xs italic text-muted">{term.exampleSentence}</p>
+                      {term.oetSubtestTags && term.oetSubtestTags.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1">
+                          {term.oetSubtestTags.map((tag) => (
+                            <Badge key={tag} variant="warning">
+                              {tag.replace('_', ' ')}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">
+              No active terms match this category and subtest combination yet.
+            </div>
+          )}
+        </section>
+
+        <LearnerSurfaceSectionHeader
           eyebrow="Queue"
           title="Today's recall queue"
           description="Starred cards float to the top. Click play to hear the British pronunciation."
@@ -148,7 +340,7 @@ export default function RecallsWordsPage() {
                   </Button>
                 ) : (
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-info/10 text-info">
-                    <Star className="h-4 w-4" />
+                    <Star className="h-4 w-4" aria-hidden="true" />
                   </div>
                 )}
                 <div className="flex-1">
@@ -184,6 +376,12 @@ export default function RecallsWordsPage() {
                     <button
                       type="button"
                       onClick={() => setStarOpenFor((cur) => (cur === it.id ? null : it.id))}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') setStarOpenFor(null);
+                      }}
+                      aria-haspopup="menu"
+                      aria-expanded={starOpenFor === it.id}
+                      aria-controls={`star-reason-menu-${it.id}`}
                       className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted hover:border-warning hover:text-warning"
                     >
                       Star
@@ -193,12 +391,15 @@ export default function RecallsWordsPage() {
                     <motion.div
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
+                      id={`star-reason-menu-${it.id}`}
+                      role="menu"
                       className="absolute right-0 top-full z-10 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-surface shadow-lg"
                     >
                       {STAR_REASONS.map((r) => (
                         <button
                           key={r.key}
                           type="button"
+                          role="menuitem"
                           onClick={() => handleStar(it, r.key)}
                           className="block w-full px-3 py-2 text-left text-sm text-navy hover:bg-lavender/40"
                         >

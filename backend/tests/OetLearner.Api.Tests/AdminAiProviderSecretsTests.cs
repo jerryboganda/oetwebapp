@@ -163,6 +163,41 @@ public sealed class AdminAiProviderSecretsTests
     }
 
     [Fact]
+    public async Task PostProvider_WithUnsafeBaseUrl_ReturnsBadRequest()
+    {
+        using var env = DevAuthEnv.Enable();
+        using var factory = new TestWebApplicationFactory();
+        using var client = CreateAiConfigAdminClient(factory);
+
+        var response = await client.PostAsJsonAsync(
+            "/v1/admin/ai/providers",
+            BuildProviderUpsert(SyntheticProviderKey, baseUrl: "http://127.0.0.1:11434/v1"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("https", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PutProvider_WithUnsafeBaseUrl_ReturnsBadRequest()
+    {
+        using var env = DevAuthEnv.Enable();
+        using var factory = new TestWebApplicationFactory();
+        using var client = CreateAiConfigAdminClient(factory);
+
+        var create = await client.PostAsJsonAsync("/v1/admin/ai/providers", BuildProviderUpsert(SyntheticProviderKey));
+        create.EnsureSuccessStatusCode();
+        using var createDoc = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
+        var providerId = createDoc.RootElement.GetProperty("id").GetString()!;
+
+        var response = await client.PutAsJsonAsync(
+            $"/v1/admin/ai/providers/{providerId}",
+            BuildProviderUpsert(SyntheticProviderKey, baseUrl: "https://localhost/v1"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("not allowed", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task PostProviderAccount_DoesNotReturnRawOrEncryptedKey_AndPersistsEncryptedOnly()
     {
         using var env = DevAuthEnv.Enable();
@@ -274,13 +309,13 @@ public sealed class AdminAiProviderSecretsTests
         return client;
     }
 
-    private static object BuildProviderUpsert(string apiKey) => new
+    private static object BuildProviderUpsert(string apiKey, string baseUrl = "https://example.test/inference") => new
     {
         code = "secret-leak-probe",
         name = "Secret Leak Probe Provider",
         dialect = AiProviderDialect.Copilot,
         category = AiProviderCategory.TextChat,
-        baseUrl = "https://example.test/inference",
+        baseUrl,
         apiKey,
         defaultModel = "openai/gpt-4o-mini",
         reasoningEffort = (string?)null,

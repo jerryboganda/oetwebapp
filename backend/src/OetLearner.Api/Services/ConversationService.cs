@@ -241,6 +241,8 @@ public class ConversationService(
             .Where(t => t.SessionId == sessionId)
             .OrderBy(t => t.TurnNumber).ToListAsync(ct);
 
+        var speaking = OetScoring.GradeSpeaking(evaluation.OverallScaled);
+
         return new
         {
             sessionId,
@@ -248,9 +250,9 @@ public class ConversationService(
             ready = true,
             scaledScore = evaluation.OverallScaled,
             scaledMax = 500,
-            passScaled = 350,
-            passed = evaluation.Passed,
-            overallGrade = evaluation.OverallGrade,
+            passScaled = speaking.RequiredScaled,
+            passed = speaking.Passed,
+            overallGrade = speaking.Grade,
             criteria = JsonSupport.Deserialize<object[]>(evaluation.CriteriaJson, Array.Empty<object>()),
             turnAnnotations = annotations.Select(a => new
             {

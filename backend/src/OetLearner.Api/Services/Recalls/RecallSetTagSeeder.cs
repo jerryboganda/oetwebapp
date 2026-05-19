@@ -7,7 +7,7 @@ using OetLearner.Api.Domain;
 namespace OetLearner.Api.Services.Recalls;
 
 /// <summary>
-/// Recall-set seeder (Recalls Year/Source Pack v1, 2026-05-05).
+/// Recall-set seeder (Recalls Practice Collection Pack v1, 2026-05-05).
 ///
 /// Reads packs from <c>Data/SeedData/recall-sets/*.json</c> and ensures every
 /// listed term exists as a <see cref="VocabularyTerm"/> row tagged with the
@@ -36,7 +36,7 @@ public static class RecallSetTagSeeder
     private const string CreatedCategory = "recall_term";
     private const string CreatedDefinitionPlaceholder = "(pending — admin to add definition)";
     private const string CreatedExamplePlaceholder = "(pending — admin to add example sentence)";
-    private const string ProvenancePrefix = "seed:recall-set-pack-v1";
+    private const string ProvenancePrefix = "generated:platform-authored:recall-set-label-pack-v1";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -117,7 +117,7 @@ public static class RecallSetTagSeeder
             return (0, 0);
         }
 
-        var examType = string.IsNullOrWhiteSpace(pack.ExamTypeCode) ? "OET" : pack.ExamTypeCode.Trim();
+        var examType = string.IsNullOrWhiteSpace(pack.ExamTypeCode) ? "oet" : pack.ExamTypeCode.Trim().ToLowerInvariant();
         var profession = string.IsNullOrWhiteSpace(pack.ProfessionId) ? null : pack.ProfessionId.Trim().ToLowerInvariant();
         var provenance = string.IsNullOrWhiteSpace(pack.SourceProvenance)
             ? $"{ProvenancePrefix}:{code}"
@@ -135,7 +135,7 @@ public static class RecallSetTagSeeder
         }
         if (wantedDisplay.Count == 0) return (0, 0);
 
-        var query = db.VocabularyTerms.Where(v => v.ExamTypeCode == examType);
+        var query = db.VocabularyTerms.Where(v => v.ExamTypeCode.ToLower() == examType);
         if (profession is null) query = query.Where(v => v.ProfessionId == null);
         else query = query.Where(v => v.ProfessionId == profession);
 

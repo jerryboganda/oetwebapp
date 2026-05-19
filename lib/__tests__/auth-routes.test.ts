@@ -1,16 +1,22 @@
 import { defaultRouteForRole, resolveAuthenticatedDestination, resolvePostAuthDestination } from '../auth-routes';
 
 describe('auth routes', () => {
+  beforeEach(() => {
+    delete process.env.NEXT_PUBLIC_SPONSOR_PORTAL_ENABLED;
+  });
+
   it('rejects scheme-relative next paths and falls back to the role default', () => {
     expect(resolvePostAuthDestination({ role: 'learner' } as never, '//evil.example.test')).toBe('/');
     expect(resolvePostAuthDestination({ role: 'expert' } as never, '//evil.example.test')).toBe('/expert');
     expect(resolvePostAuthDestination({ role: 'admin' } as never, '//evil.example.test')).toBe('/admin');
+    expect(resolvePostAuthDestination({ role: 'sponsor' } as never, '//evil.example.test')).toBe('/support');
   });
 
   it('still accepts safe role-scoped destinations', () => {
     expect(resolvePostAuthDestination({ role: 'expert' } as never, '/expert/queue')).toBe('/expert/queue');
     expect(resolveAuthenticatedDestination({ role: 'learner', requiresMfa: false, isAuthenticatorEnabled: false } as never, '/reading')).toBe('/reading');
     expect(defaultRouteForRole('admin')).toBe('/admin');
+    expect(defaultRouteForRole('sponsor')).toBe('/support');
   });
 
   it('does not force privileged users into MFA setup when the authenticator is not enrolled yet', () => {

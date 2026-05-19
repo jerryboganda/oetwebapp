@@ -251,6 +251,7 @@ public static class AiFeatureCodes
     public const string AdminVocabularyDraft = "admin.vocabulary_draft";
     public const string AdminConversationDraft = "admin.conversation_draft";
     public const string AdminListeningDraft = "admin.listening_draft";
+    public const string AdminReadingDraft = "admin.reading_draft";
     public const string AdminWritingDraft = "admin.writing_draft";
 
     // Listening V2 admin tooling (platform-only — admin authoring assist).

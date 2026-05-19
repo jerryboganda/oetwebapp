@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const { loadEnvConfig } = require('@next/env');
 const { loadCertificatePinningConfig, matchesPinnedHost } = require('../electron/security/certificate-pinning.cjs');
+const { validateRequiredDesktopApiBaseUrl } = require('../electron/runtime-config.cjs');
 
 const npmCommand = process.platform === 'win32' ? 'cmd.exe' : 'npm';
 const electronBuilderConfigPath = path.relative(process.cwd(), path.join(__dirname, '..', 'electron-builder.config.cjs'));
@@ -35,6 +36,7 @@ function collectRequiredPinnedHosts(environment) {
     environment.ELECTRON_UPDATES_URL,
     environment.NEXT_PUBLIC_API_BASE_URL,
     environment.PUBLIC_API_BASE_URL,
+    environment.API_PROXY_TARGET_URL,
   ];
 
   for (const value of candidateUrls) {
@@ -71,6 +73,13 @@ function hasWindowsSigningConfiguration(environment) {
 }
 
 function validateDesktopReleaseSecurity(environment) {
+  if (environment.ELECTRON_REQUIRE_REMOTE_API === 'true') {
+    validateRequiredDesktopApiBaseUrl(environment, {
+      allowLoopback: environment.ELECTRON_ALLOW_LOCAL_API_TARGET === 'true',
+      requireHttps: environment.ELECTRON_ALLOW_INSECURE_REMOTE_API_TARGET !== 'true',
+    });
+  }
+
   if (publishMode !== 'never' && !environment.ELECTRON_UPDATES_URL) {
     throw new Error('ELECTRON_UPDATES_URL is required when ELECTRON_PUBLISH_MODE is not "never".');
   }
@@ -140,7 +149,7 @@ function cleanupWorkspaceArtifacts(outputDir) {
       continue;
     }
 
-    if (!/\.(exe|yml|blockmap)$/i.test(entry.name)) {
+    if (!/\.(exe|dmg|zip|appimage|deb|rpm|snap|yml|yaml|blockmap)$/i.test(entry.name)) {
       continue;
     }
 
@@ -173,7 +182,7 @@ function copyBuildArtifacts(sourceDir, destinationDir) {
       continue;
     }
 
-    if (!/\.(exe|yml|blockmap)$/i.test(entry.name)) {
+    if (!/\.(exe|dmg|zip|appimage|deb|rpm|snap|yml|yaml|blockmap)$/i.test(entry.name)) {
       continue;
     }
 
@@ -182,11 +191,18 @@ function copyBuildArtifacts(sourceDir, destinationDir) {
 }
 
 function publishDesktopBackend(outputDir) {
+  const runtimeIdentifier = (() => {
+    if (process.platform === 'win32') return 'win-x64';
+    if (process.platform === 'darwin') return process.arch === 'arm64' ? 'osx-arm64' : 'osx-x64';
+    if (process.platform === 'linux') return 'linux-x64';
+    throw new Error(`Unsupported desktop backend runtime platform: ${process.platform}`);
+  })();
+
   return run('dotnet', [
     'publish',
     'backend/src/OetLearner.Api/OetLearner.Api.csproj',
     '-c', 'Release',
-    '-r', 'win-x64',
+    '-r', runtimeIdentifier,
     '--self-contained', 'true',
     '-o', outputDir,
   ]);

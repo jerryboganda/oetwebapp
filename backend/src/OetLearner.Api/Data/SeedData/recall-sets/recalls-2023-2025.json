@@ -3,7 +3,8 @@
   "recallSetCode": "2023-2025",
   "examTypeCode": "OET",
   "displayName": "January 2023 — End of 2025",
-  "sourceProvenance": "Extracted verbatim from 'RECENT UPDATED LISTENING Recalls From JANUARY 2023 Till The End of 2025.pdf' (164 pages). Numbering prefixes stripped, deduped lowercase. Some entries are short sentences/phrases captured as recall items; admin can refine via Content Hub.",
+  "sourceProvenance": "generated:platform-authored:recall-set-label-pack-v1:2023-2025;not-source-backed",
+  "_notes": "Tag-only practice collection pack. Entries are treated as original platform-authored practice labels unless a row has separate source-backed provenance. Some entries are short sentences/phrases; admin can refine via Content Hub.",
   "terms": [
     "16 mg",
     "16mg",

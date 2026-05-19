@@ -6,22 +6,23 @@
 #
 # Runtime: this script is designed to be invoked by the oet-db-backup sidecar
 # container defined in docker-compose.production.yml. The sidecar runs a cron
-# entry that calls this script at LOG_BACKUP_SCHEDULE (default 02:17 daily).
+# entry that calls this script at BACKUP_SCHEDULE (default 02:17 daily).
 #
 # Flow
 #   1. pg_dump --format=custom of $POSTGRES_DB  ---> /backups/oet-YYYYMMDD-HHMMSS.dump
-#   2. (optional) gpg --symmetric --cipher-algo AES256 using $BACKUP_GPG_PASSPHRASE
-#      ---> /backups/*.dump.gpg  and the plaintext .dump is shredded.
-#   3. (optional) aws s3 cp to $BACKUP_S3_URL (works against S3, Cloudflare R2,
+#   2. tar.gz of learner media storage ---> /backups/oet-media-YYYYMMDD-HHMMSS.tar.gz
+#   3. (optional) gpg --symmetric --cipher-algo AES256 using $BACKUP_GPG_PASSPHRASE
+#      ---> /backups/*.gpg and the plaintext artifact is shredded.
+#   4. (optional) aws s3 cp to $BACKUP_S3_URL (works against S3, Cloudflare R2,
 #      MinIO, Backblaze B2 via the S3-compatible endpoint).
-#   4. Prune local retention past $BACKUP_RETENTION_DAYS (default 14).
+#   5. Prune local retention past $BACKUP_RETENTION_DAYS (default 14).
 #
 # Fail-fast: the script exits non-zero on any error so cron logs surface the
 # failure. Partial dumps are removed. Do NOT soften error handling without a
 # dedicated runbook review.
 #
 # Restore
-#   See DEPLOYMENT.md §Disaster Recovery for the verified restore procedure.
+#   See DEPLOYMENT.md Disaster Recovery for the verified restore procedure.
 # -----------------------------------------------------------------------------
 
 set -eu
@@ -39,14 +40,18 @@ set -eu
 : "${BACKUP_S3_URL:=}"                  # e.g. s3://bucket/prefix/ ; empty = local only
 : "${BACKUP_S3_EXTRA_ARGS:=}"           # e.g. --endpoint-url https://... for R2
 : "${BACKUP_ALERT_WEBHOOK:=}"           # optional POSTed-to-on-failure URL
+: "${MEDIA_BACKUP_ENABLED:=true}"
+: "${MEDIA_BACKUP_SOURCE_DIR:=/media-storage}"
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 dump_path="${BACKUP_DIR}/oet-${stamp}.dump"
 final_path="${dump_path}"
+media_archive_path="${BACKUP_DIR}/oet-media-${stamp}.tar.gz"
+media_final_path="${media_archive_path}"
 
 cleanup_partial() {
     # On any failure, delete the in-flight files so cron doesn't inherit half-baked artifacts.
-    rm -f "${dump_path}" "${dump_path}.gpg" 2>/dev/null || true
+    rm -f "${dump_path}" "${dump_path}.gpg" "${media_archive_path}" "${media_archive_path}.gpg" 2>/dev/null || true
     if [ -n "${BACKUP_ALERT_WEBHOOK}" ]; then
         # Best-effort webhook; do NOT fail the cleanup path on webhook failure.
         curl -fsS -X POST -H 'Content-Type: application/json' \
@@ -56,6 +61,41 @@ cleanup_partial() {
 }
 
 mkdir -p "${BACKUP_DIR}"
+
+encrypt_artifact() {
+    artifact_path="$1"
+    if [ -n "${BACKUP_GPG_PASSPHRASE}" ]; then
+        echo "[backup] encrypting ${artifact_path} with gpg" >&2
+        if ! printf '%s' "${BACKUP_GPG_PASSPHRASE}" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+                --symmetric --cipher-algo AES256 \
+                --output "${artifact_path}.gpg" "${artifact_path}"
+        then
+            cleanup_partial "gpg_failed"
+            echo "[backup] gpg encryption failed for ${artifact_path}" >&2
+            exit 1
+        fi
+        shred -u "${artifact_path}" 2>/dev/null || rm -f "${artifact_path}"
+        printf '%s.gpg' "${artifact_path}"
+    else
+        echo "[backup] WARNING: BACKUP_GPG_PASSPHRASE is empty; ${artifact_path} stored in plaintext" >&2
+        printf '%s' "${artifact_path}"
+    fi
+}
+
+upload_artifact() {
+    artifact_path="$1"
+    if [ -n "${BACKUP_S3_URL}" ]; then
+        : "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID must be set when BACKUP_S3_URL is set}"
+        : "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY must be set when BACKUP_S3_URL is set}"
+        echo "[backup] uploading ${artifact_path} -> ${BACKUP_S3_URL}"
+        # shellcheck disable=SC2086  # we WANT word-splitting on BACKUP_S3_EXTRA_ARGS
+        if ! aws s3 cp "${artifact_path}" "${BACKUP_S3_URL}" ${BACKUP_S3_EXTRA_ARGS}; then
+            cleanup_partial "s3_upload_failed"
+            echo "[backup] s3 upload failed for ${artifact_path}" >&2
+            exit 1
+        fi
+    fi
+}
 
 # ── 1. pg_dump (custom format preserves roles/large objects/compression) ────
 echo "[backup] pg_dump -> ${dump_path}"
@@ -85,42 +125,35 @@ if [ "${dump_size}" -lt 1024 ]; then
     exit 1
 fi
 
-# ── 2. Optional GPG encryption ──────────────────────────────────────────────
-if [ -n "${BACKUP_GPG_PASSPHRASE}" ]; then
-    echo "[backup] encrypting with gpg"
-    if ! printf '%s' "${BACKUP_GPG_PASSPHRASE}" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
-            --symmetric --cipher-algo AES256 \
-            --output "${dump_path}.gpg" "${dump_path}"
-    then
-        cleanup_partial "gpg_failed"
-        echo "[backup] gpg encryption failed" >&2
+# 2. GPG encryption and offsite push for DB dump.
+final_path="$(encrypt_artifact "${dump_path}")"
+upload_artifact "${final_path}"
+
+# 3. Learner media archive, encryption, and offsite push.
+if [ "${MEDIA_BACKUP_ENABLED}" = "true" ]; then
+    if [ ! -d "${MEDIA_BACKUP_SOURCE_DIR}" ]; then
+        cleanup_partial "media_source_missing"
+        echo "[backup] media source directory missing: ${MEDIA_BACKUP_SOURCE_DIR}" >&2
         exit 1
     fi
-    # Shred plaintext. On tmpfs/overlayfs 'shred' won't actually erase the
-    # underlying block; the container image is expected to live on encrypted
-    # storage for this to be meaningful. We still rm immediately.
-    shred -u "${dump_path}" 2>/dev/null || rm -f "${dump_path}"
-    final_path="${dump_path}.gpg"
-else
-    echo "[backup] WARNING: BACKUP_GPG_PASSPHRASE is empty; dump stored in plaintext"
-fi
-
-# ── 3. Optional offsite push (S3-compatible) ────────────────────────────────
-if [ -n "${BACKUP_S3_URL}" ]; then
-    : "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID must be set when BACKUP_S3_URL is set}"
-    : "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY must be set when BACKUP_S3_URL is set}"
-    echo "[backup] uploading ${final_path} -> ${BACKUP_S3_URL}"
-    # shellcheck disable=SC2086  # we WANT word-splitting on BACKUP_S3_EXTRA_ARGS
-    if ! aws s3 cp "${final_path}" "${BACKUP_S3_URL}" ${BACKUP_S3_EXTRA_ARGS}; then
-        cleanup_partial "s3_upload_failed"
-        echo "[backup] s3 upload failed" >&2
+    echo "[backup] learner media archive -> ${media_archive_path}"
+    if ! tar -C "${MEDIA_BACKUP_SOURCE_DIR}" -czf "${media_archive_path}" .; then
+        cleanup_partial "media_tar_failed"
+        echo "[backup] learner media archive failed" >&2
         exit 1
     fi
+    media_size="$(stat -c%s "${media_archive_path}" 2>/dev/null || wc -c < "${media_archive_path}")"
+    echo "[backup] learner media archive size: ${media_size} bytes"
+    media_final_path="$(encrypt_artifact "${media_archive_path}")"
+    upload_artifact "${media_final_path}"
 fi
 
-# ── 4. Retention prune (local) ──────────────────────────────────────────────
+# 4. Retention prune (local).
 echo "[backup] pruning local backups older than ${BACKUP_RETENTION_DAYS} days"
-find "${BACKUP_DIR}" -type f \( -name 'oet-*.dump' -o -name 'oet-*.dump.gpg' \) \
+find "${BACKUP_DIR}" -type f \( -name 'oet-*.dump' -o -name 'oet-*.dump.gpg' -o -name 'oet-media-*.tar.gz' -o -name 'oet-media-*.tar.gz.gpg' \) \
     -mtime "+${BACKUP_RETENTION_DAYS}" -print -delete || true
 
 echo "[backup] ok: ${final_path}"
+if [ "${MEDIA_BACKUP_ENABLED}" = "true" ]; then
+    echo "[backup] media ok: ${media_final_path}"
+fi

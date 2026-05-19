@@ -26,10 +26,12 @@ RUN apk add --no-cache \
 
 COPY scripts/backup/postgres-backup.sh  /usr/local/bin/postgres-backup.sh
 COPY scripts/backup/postgres-restore.sh /usr/local/bin/postgres-restore.sh
+COPY scripts/backup/media-restore-verify.sh /usr/local/bin/media-restore-verify.sh
 COPY scripts/backup/entrypoint.sh       /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/postgres-backup.sh \
              /usr/local/bin/postgres-restore.sh \
+             /usr/local/bin/media-restore-verify.sh \
              /usr/local/bin/entrypoint.sh
 
 # The cron daemon needs to run as root, but pg_dump inherits BACKUP_USER from

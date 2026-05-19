@@ -176,6 +176,7 @@ builder.Services.AddSignalR(options =>
         OetLearner.Api.Services.Conversation.ConversationRealtimeTransportLimits.MaximumReceiveMessageBytes;
 });
 builder.Services.AddSingleton<IWebPushDispatcher, WebPushDispatcher>();
+builder.Services.AddHttpClient<IMobilePushDispatcher, MobilePushDispatcher>();
 builder.Services.AddSingleton<IPasswordHasher<ApplicationUserAccount>, PasswordHasher<ApplicationUserAccount>>();
 builder.Services.AddSingleton<AuthTokenService>();
 builder.Services.AddHttpClient<IExternalIdentityProviderClient, ExternalIdentityProviderClient>();
@@ -505,7 +506,7 @@ builder.Services.AddAuthorization(options =>
         .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
     options.AddPolicy("TeachingStaffOnly", policy => policy
         .RequireAuthenticatedUser()
-        .RequireRole(ApplicationUserRoles.Expert, ApplicationUserRoles.Sponsor, ApplicationUserRoles.Admin)
+        .RequireRole(ApplicationUserRoles.Expert, ApplicationUserRoles.Admin)
         .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
     options.AddPolicy("RulebookReader", policy => policy
         .RequireAuthenticatedUser()
@@ -607,6 +608,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.IMockReportAggr
 // "Body was inferred but the method does not allow inferred body parameters".
 builder.Services.AddScoped<RemediationPlanService>();
 builder.Services.AddScoped<AdminWalletTierService>();
+builder.Services.AddScoped<NativeIapService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.MediaAssetAccessService>();
 builder.Services.AddScoped<MockDiagnosticEntitlementService>();
 builder.Services.AddScoped<MockItemAnalysisService>();
@@ -642,14 +644,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningPathwayPro
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.TeacherClassService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningV2BackfillService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAnalyticsService, OetLearner.Api.Services.Reading.ReadingAnalyticsService>();
-if (builder.Environment.IsDevelopment())
-{
-    builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.StubReadingExtractionAi>();
-}
-else
-{
-    builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.DisabledReadingExtractionAi>();
-}
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.GroundedReadingExtractionAi>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionService, OetLearner.Api.Services.Reading.ReadingExtractionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPathwayService, OetLearner.Api.Services.Reading.ReadingPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService, OetLearner.Api.Services.Reading.ReadingReviewService>();
@@ -680,7 +675,6 @@ builder.Services.AddScoped<NotificationService>();
 builder.Services.AddSingleton<OetLearner.Api.Services.DevicePairing.IDevicePairingCodeService, OetLearner.Api.Services.DevicePairing.InMemoryDevicePairingCodeService>();
 builder.Services.AddScoped<AnalyticsIngestionService>();
 builder.Services.AddSingleton<PlatformLinkService>();
-builder.Services.AddSingleton<MediaStorageService>();
 builder.Services.AddHttpClient<StripeGateway>();
 builder.Services.AddHttpClient<PayPalGateway>();
 builder.Services.AddScoped<PaymentGatewayService>();
@@ -871,7 +865,7 @@ builder.Services.AddHttpClient("AiOpenAiCompatible", client =>
     {
         client.BaseAddress = new Uri(aiProviderOptions.BaseUrl.TrimEnd('/') + "/");
     }
-});
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.MockAiProvider>();
 // Config-based OpenAI-compatible provider reads AI__* env vars directly.
@@ -900,7 +894,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCredentialVau
     OetLearner.Api.Services.AiManagement.AiCredentialVault>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCredentialResolver,
     OetLearner.Api.Services.AiManagement.AiCredentialResolver>();
-builder.Services.AddHttpClient("AiRegistryClient", c => c.Timeout = TimeSpan.FromMinutes(30));
+builder.Services.AddHttpClient("AiRegistryClient", c => c.Timeout = TimeSpan.FromMinutes(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiProviderRegistry,
     OetLearner.Api.Services.Rulebook.AiProviderRegistry>();
 // Multi-account pool registry — siblings of AiProviderRegistry, used by
@@ -915,7 +910,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiFeatureRouteResol
     OetLearner.Api.Services.Rulebook.AiFeatureRouteResolver>();
 // Phase 4: admin connectivity probe. Bypasses gateway grounding +
 // quota on purpose — see AiProviderConnectionTester XML doc.
-builder.Services.AddHttpClient(nameof(OetLearner.Api.Services.Rulebook.AiProviderConnectionTester));
+builder.Services.AddHttpClient(nameof(OetLearner.Api.Services.Rulebook.AiProviderConnectionTester))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiProviderConnectionTester,
     OetLearner.Api.Services.Rulebook.AiProviderConnectionTester>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
@@ -944,24 +940,12 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Content.IFileStorage,
     OetLearner.Api.Services.Content.LocalFileStorage>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Content.IUploadContentValidator,
     OetLearner.Api.Services.Content.MagicByteValidator>();
-// Upload antivirus scanner. Provider is chosen via UploadScanner:Provider
-// configuration. In production we REFUSE to boot on NoOp — see the fail-fast
-// check below that runs after builder.Build().
+// Upload antivirus scanner. Effective provider is runtime-admin configurable
+// with env/appsettings fallback. In production we REFUSE to boot unless the
+// effective provider is a real scanner — see the fail-fast check below.
 builder.Services.Configure<UploadScannerOptions>(builder.Configuration.GetSection("UploadScanner"));
-{
-    var scannerSection = builder.Configuration.GetSection("UploadScanner");
-    var provider = (scannerSection["Provider"] ?? "noop").Trim().ToLowerInvariant();
-    if (string.Equals(provider, "clamav", StringComparison.Ordinal))
-    {
-        builder.Services.AddSingleton<OetLearner.Api.Services.Content.IUploadScanner,
-            OetLearner.Api.Services.Content.ClamAvUploadScanner>();
-    }
-    else
-    {
-        builder.Services.AddSingleton<OetLearner.Api.Services.Content.IUploadScanner,
-            OetLearner.Api.Services.Content.NoOpUploadScanner>();
-    }
-}
+builder.Services.AddSingleton<OetLearner.Api.Services.Content.IUploadScanner,
+    OetLearner.Api.Services.Content.ClamAvUploadScanner>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.IChunkedUploadService,
     OetLearner.Api.Services.Content.ChunkedUploadService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentPaperService,
@@ -1103,14 +1087,35 @@ var app = builder.Build();
 // and make the operator look at the config than to silently become a vector.
 // Dev/test explicitly opt in via the default UploadScanner:Provider=noop.
 {
-    var scanner = app.Services.GetRequiredService<OetLearner.Api.Services.Content.IUploadScanner>();
+    var runtimeSettings = app.Services.GetRequiredService<OetLearner.Api.Services.Settings.IRuntimeSettingsProvider>();
+    var scannerSettings = runtimeSettings.GetAsync().GetAwaiter().GetResult().UploadScanner;
+    var scannerProvider = scannerSettings.Provider;
     if (app.Environment.IsProduction()
-        && scanner is OetLearner.Api.Services.Content.NoOpUploadScanner)
+        && !string.Equals(scannerProvider, "clamav", StringComparison.OrdinalIgnoreCase))
     {
         throw new InvalidOperationException(
-            "UploadScanner:Provider is 'noop' in Production. Configure UploadScanner:Provider=clamav "
-            + "(or another real scanner) and set UploadScanner:Host / UploadScanner:Port. See "
+            $"UploadScanner provider is '{scannerProvider}' in Production. Configure UploadScanner:Provider=clamav "
+            + "(or set it through /admin/settings) and set UploadScanner:Host / UploadScanner:Port. See "
             + "Configuration/UploadScannerOptions.cs for the full option surface.");
+    }
+    if (app.Environment.IsProduction())
+    {
+        if (!scannerSettings.FailClosedOnError)
+        {
+            throw new InvalidOperationException("UploadScanner:FailClosedOnError must be true in Production.");
+        }
+
+        var scannerOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.UploadScannerOptions>>().Value;
+        var endpointReason = OetLearner.Api.Services.Content.UploadScannerEndpointGuard.GetUnsafeEndpointReason(
+            scannerSettings.Host,
+            scannerSettings.Port,
+            scannerOptions.Host,
+            scannerOptions.Port,
+            requireDeploymentEndpoint: true);
+        if (endpointReason is not null)
+        {
+            throw new InvalidOperationException($"UploadScanner endpoint is unsafe in Production: {endpointReason}");
+        }
     }
 }
 
@@ -1449,7 +1454,10 @@ app.MapWritingPdfEndpoints();
 app.MapMarketplaceEndpoints();
 
 // ── Sponsor Dashboard ──
-app.MapSponsorEndpoints();
+if (app.Configuration.GetValue<bool>("Features:SponsorPortalEnabled"))
+{
+    app.MapSponsorEndpoints();
+}
 
 // ── Private Speaking Sessions ──
 app.MapPrivateSpeakingEndpoints();

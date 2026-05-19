@@ -4,7 +4,7 @@ namespace OetLearner.Api.Domain;
 
 /// <summary>
 /// Runtime overrides for cross-cutting infrastructure secrets and tunables
-/// (Brevo / SMTP, Stripe, Sentry, Backup S3, OAuth providers, Push). Singleton
+/// (Brevo / SMTP, Stripe, Sentry, Backup S3, OAuth providers, Push, Upload scanner). Singleton
 /// row keyed on <c>Id == "default"</c> — admins edit this via
 /// <c>PUT /v1/admin/runtime-settings</c>. At request time, the
 /// <see cref="OetLearner.Api.Services.Settings.IRuntimeSettingsProvider"/>
@@ -44,6 +44,11 @@ public class RuntimeSettingsRow
     public string? StripeWebhookSecretEncrypted { get; set; }
     [MaxLength(1024)] public string? StripeSuccessUrl { get; set; }
     [MaxLength(1024)] public string? StripeCancelUrl { get; set; }
+    [MaxLength(256)] public string? PayPalClientId { get; set; }
+    public string? PayPalClientSecretEncrypted { get; set; }
+    public string? PayPalWebhookIdEncrypted { get; set; }
+    [MaxLength(1024)] public string? PayPalSuccessUrl { get; set; }
+    [MaxLength(1024)] public string? PayPalCancelUrl { get; set; }
 
     // ── Sentry ─────────────────────────────────────────────────────
     [MaxLength(512)] public string? SentryDsn { get; set; }
@@ -76,6 +81,16 @@ public class RuntimeSettingsRow
     public string? ApnsAuthKeyEncrypted { get; set; }
     public string? FcmServerKeyEncrypted { get; set; }
     [MaxLength(256)] public string? FcmProjectId { get; set; }
+    [MaxLength(256)] public string? VapidSubject { get; set; }
+    [MaxLength(512)] public string? VapidPublicKey { get; set; }
+    public string? VapidPrivateKeyEncrypted { get; set; }
+
+    // ── Upload scanner / ClamAV ────────────────────────────────────
+    [MaxLength(32)] public string? UploadScannerProvider { get; set; }
+    [MaxLength(256)] public string? UploadScannerHost { get; set; }
+    public int? UploadScannerPort { get; set; }
+    public int? UploadScannerTimeoutSeconds { get; set; }
+    public bool? UploadScannerFailClosedOnError { get; set; }
 
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]

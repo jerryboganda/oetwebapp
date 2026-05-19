@@ -13,6 +13,7 @@ import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { ReadingStructureEditor } from '@/components/domain/ReadingStructureEditor';
+import { ReadingExtractionPanel } from '@/components/domain/ReadingExtractionPanel';
 import { ListeningStructureEditor } from '@/components/domain/ListeningStructureEditor';
 import { ListeningExtractMetadataEditor } from '@/components/domain/ListeningExtractMetadataEditor';
 import { ListeningExtractionPanel } from '@/components/domain/ListeningExtractionPanel';
@@ -100,6 +101,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
   const [uploadRole, setUploadRole] = useState<PaperAssetRole>('QuestionPaper');
   const [uploadPart, setUploadPart] = useState('');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [readingStructureVersion, setReadingStructureVersion] = useState(0);
   const [listeningStructureVersion, setListeningStructureVersion] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -328,7 +330,13 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
             </AdminRoutePanel>
 
             {canWriteContent && paper.subtestCode === 'reading' && (
-              <ReadingStructureEditor paperId={paper.id} />
+              <>
+                <ReadingExtractionPanel
+                  paperId={paper.id}
+                  onApplied={() => setReadingStructureVersion((value) => value + 1)}
+                />
+                <ReadingStructureEditor key={readingStructureVersion} paperId={paper.id} />
+              </>
             )}
 
             {canWriteContent && paper.subtestCode === 'listening' && (

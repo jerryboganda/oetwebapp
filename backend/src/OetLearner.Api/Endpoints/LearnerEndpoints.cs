@@ -264,6 +264,7 @@ public static class LearnerEndpoints
         reviews.MapGet("/requests/{reviewRequestId}/voice-notes", async (HttpContext http, string reviewRequestId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewVoiceNotesAsync(http.UserId(), reviewRequestId, ct)));
 
         var billing = v1.MapGroup("/billing");
+        billing.MapLearnerNativeIapEndpoints();
         billing.MapGet("/summary", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingSummaryAsync(http.UserId(), ct)));
         billing.MapGet("/plans", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingPlansAsync(http.UserId(), ct)));
         billing.MapGet("/change-preview", async (HttpContext http, [FromQuery] string targetPlanId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingChangePreviewAsync(http.UserId(), targetPlanId, ct)));

@@ -100,6 +100,29 @@ public class AiGatewayRoutingTests
     }
 
     [Fact]
+    public async Task CompleteAsync_RefusesProviderCall_WhenCredentialResolverReturnsNone()
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var credentialResolver = new CapturingCredentialResolver(AiKeySource.None);
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { registryProvider },
+            credentialResolver: credentialResolver,
+            providerRegistry: new FakeProviderRegistry("openai-platform", AiProviderDialect.OpenAiCompatible),
+            featureRouteResolver: new FakeFeatureRouteResolver(AiFeatureCodes.ConversationReply, "openai-platform", null));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = BuildWritingPrompt(gateway),
+                FeatureCode = AiFeatureCodes.ConversationReply,
+                UserId = "learner-1",
+            }));
+
+        Assert.Null(registryProvider.LastRequest);
+    }
+
+    [Fact]
     public async Task CompleteAsync_FallbackRegistrySelection_IgnoresHigherPriorityVoiceRows()
     {
         var registryProvider = new CapturingProvider("registry");
@@ -164,7 +187,7 @@ public class AiGatewayRoutingTests
             _loader,
             new IAiModelProvider[] { mockProvider, registryProvider },
             providerRegistry: new FakeProviderRegistry(uncredentialedTextProvider),
-            environment: new FakeHostEnvironment(Environments.Production));
+            hostEnvironment: new FakeHostEnvironment(Environments.Production));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.CompleteAsync(new AiGatewayRequest
         {
@@ -175,6 +198,48 @@ public class AiGatewayRoutingTests
         Assert.Contains("mock AI provider", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Null(mockProvider.LastRequest);
         Assert.Null(registryProvider.LastRequest);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_InProduction_FailsClosedWhenFeatureRouteResolutionThrows()
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { mockProvider, registryProvider },
+            featureRouteResolver: new ThrowingFeatureRouteResolver(),
+            providerRegistry: new FakeProviderRegistry("openai-platform", AiProviderDialect.OpenAiCompatible),
+            hostEnvironment: new TestHostEnvironment("Production"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = BuildWritingPrompt(gateway),
+                FeatureCode = AiFeatureCodes.AdminWritingDraft,
+            }));
+
+        Assert.Null(mockProvider.LastRequest);
+        Assert.Null(registryProvider.LastRequest);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_InProduction_ForbidsMockFallback()
+    {
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { mockProvider },
+            hostEnvironment: new TestHostEnvironment("Production"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = BuildWritingPrompt(gateway),
+                FeatureCode = AiFeatureCodes.WritingGrade,
+            }));
+
+        Assert.Null(mockProvider.LastRequest);
     }
 
     private static AiGroundedPrompt BuildWritingPrompt(IAiGatewayService gateway)
@@ -202,7 +267,7 @@ public class AiGatewayRoutingTests
         }
     }
 
-    private sealed class CapturingCredentialResolver : IAiCredentialResolver
+    private sealed class CapturingCredentialResolver(AiKeySource keySource = AiKeySource.Platform) : IAiCredentialResolver
     {
         public string? LastUserId { get; private set; }
         public string? LastFeatureCode { get; private set; }
@@ -218,7 +283,7 @@ public class AiGatewayRoutingTests
             LastFeatureCode = featureCode;
             LastProviderCode = callerRequestedProviderCode;
             return Task.FromResult(new AiCredentialResolution(
-                AiKeySource.Platform,
+                keySource,
                 callerRequestedProviderCode ?? "platform-default",
                 ApiKeyPlaintext: null,
                 BaseUrlOverride: null,
@@ -237,6 +302,22 @@ public class AiGatewayRoutingTests
 
         public bool IsKnownFeatureCode(string requestedFeatureCode)
             => string.Equals(requestedFeatureCode, featureCode, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class ThrowingFeatureRouteResolver : IAiFeatureRouteResolver
+    {
+        public Task<AiFeatureRouteResolution?> ResolveAsync(string requestedFeatureCode, CancellationToken ct)
+            => throw new InvalidOperationException("route resolver unavailable");
+
+        public bool IsKnownFeatureCode(string requestedFeatureCode) => true;
+    }
+
+    private sealed class TestHostEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "OetLearner.Api.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private static AiProvider ProviderRow(

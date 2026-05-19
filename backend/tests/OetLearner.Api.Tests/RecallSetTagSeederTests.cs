@@ -1,7 +1,6 @@
-using Microsoft.AspNetCore.Hosting;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -9,91 +8,161 @@ using OetLearner.Api.Services.Recalls;
 
 namespace OetLearner.Api.Tests;
 
-public sealed class RecallSetTagSeederTests
+public class RecallSetTagSeederTests
 {
     [Fact]
-    public async Task Production_DoesNotCreatePlaceholderVocabularyRowsForMissingTerms()
+    public async Task EnsureAsync_creates_missing_terms_as_draft_with_generated_provenance()
     {
-        await using var db = NewDb();
-        using var tempRoot = new TempSeedRoot("2023-2025", "Unseeded clinical term");
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"recall-set-seed-{Guid.NewGuid():N}");
+        var seedFolder = Path.Combine(tempRoot, "Data", "SeedData", "recall-sets");
+        Directory.CreateDirectory(seedFolder);
+        await File.WriteAllTextAsync(
+            Path.Combine(seedFolder, "sample.json"),
+            """
+            {
+              "schemaVersion": 1,
+              "recallSetCode": "2026",
+              "examTypeCode": "OET",
+              "sourceProvenance": "generated:platform-authored:recall-set-label-pack-v1:2026;not-source-backed",
+              "terms": ["dizziness"]
+            }
+            """);
 
-        await RecallSetTagSeeder.EnsureAsync(
-            db,
-            new FakeWebHostEnvironment(Environments.Production, tempRoot.Path),
-            NullLogger.Instance);
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
 
-        Assert.Empty(db.VocabularyTerms);
+        await using var db = new LearnerDbContext(options);
+        try
+        {
+            await RecallSetTagSeeder.EnsureAsync(
+                db,
+                new TestWebHostEnvironment(tempRoot),
+                NullLogger.Instance,
+                CancellationToken.None);
+
+            var term = await db.VocabularyTerms.SingleAsync();
+            Assert.Equal("draft", term.Status);
+            Assert.Equal("""["2026"]""", term.RecallSetCodesJson);
+            Assert.NotNull(term.SourceProvenance);
+            Assert.StartsWith("generated:platform-authored:recall-set-label-pack-v1", term.SourceProvenance);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
     }
 
     [Fact]
-    public async Task Production_TagsExistingTermsWithoutCreatingPlaceholderRows()
+    public async Task EnsureAsync_tags_existing_lowercase_oet_term_without_duplicate_placeholder()
     {
-        await using var db = NewDb();
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"recall-set-seed-{Guid.NewGuid():N}");
+        var seedFolder = Path.Combine(tempRoot, "Data", "SeedData", "recall-sets");
+        Directory.CreateDirectory(seedFolder);
+        await File.WriteAllTextAsync(
+            Path.Combine(seedFolder, "sample.json"),
+            """
+            {
+              "schemaVersion": 1,
+              "recallSetCode": "2026",
+              "examTypeCode": "OET",
+              "sourceProvenance": "generated:platform-authored:recall-set-label-pack-v1:2026;not-source-backed",
+              "terms": ["dizziness"]
+            }
+            """);
+
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+
+        await using var db = new LearnerDbContext(options);
         db.VocabularyTerms.Add(new VocabularyTerm
         {
             Id = "vt-existing",
-            Term = "Existing clinical term",
-            Definition = "A curated definition.",
-            ExampleSentence = "A curated example sentence.",
-            ExamTypeCode = "OET",
-            ProfessionId = null,
-            Category = "clinical",
+            Term = "dizziness",
+            Definition = "A sensation of light-headedness.",
+            ExampleSentence = "The patient reported dizziness.",
+            ExamTypeCode = "oet",
+            Category = "symptom",
             Difficulty = "medium",
-            SourceProvenance = "curated:test",
             Status = "active",
+            RecallSetCodesJson = "[]",
         });
         await db.SaveChangesAsync();
-        using var tempRoot = new TempSeedRoot("2023-2025", "Existing clinical term", "Missing clinical term");
 
-        await RecallSetTagSeeder.EnsureAsync(
-            db,
-            new FakeWebHostEnvironment(Environments.Production, tempRoot.Path),
-            NullLogger.Instance);
-
-        var terms = await db.VocabularyTerms.OrderBy(t => t.Term).ToListAsync();
-        Assert.Single(terms);
-        Assert.Equal("Existing clinical term", terms[0].Term);
-        Assert.Contains("2023-2025", terms[0].RecallSetCodesJson, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static LearnerDbContext NewDb() =>
-        new(new DbContextOptionsBuilder<LearnerDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
-            .Options);
-
-    private sealed class TempSeedRoot : IDisposable
-    {
-        public TempSeedRoot(string recallSetCode, params string[] terms)
+        try
         {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"oet-recall-tags-{Guid.NewGuid():N}");
-            var seedFolder = System.IO.Path.Combine(Path, "Data", "SeedData", "recall-sets");
-            Directory.CreateDirectory(seedFolder);
-            var termsJson = string.Join(",", terms.Select(term => $"\"{term}\""));
-            File.WriteAllText(System.IO.Path.Combine(seedFolder, "pack.json"), $$"""
-                {
-                  "schemaVersion": 1,
-                  "recallSetCode": "{{recallSetCode}}",
-                  "examTypeCode": "OET",
-                  "sourceProvenance": "test-pack",
-                  "terms": [{{termsJson}}]
-                }
-                """);
+            await RecallSetTagSeeder.EnsureAsync(
+                db,
+                new TestWebHostEnvironment(tempRoot),
+                NullLogger.Instance,
+                CancellationToken.None);
+
+            Assert.Equal(1, await db.VocabularyTerms.CountAsync());
+            var term = await db.VocabularyTerms.SingleAsync();
+            Assert.Equal("active", term.Status);
+            Assert.Equal("""["2026"]""", term.RecallSetCodesJson);
         }
-
-        public string Path { get; }
-
-        public void Dispose()
+        finally
         {
-            if (Directory.Exists(Path)) Directory.Delete(Path, recursive: true);
+            Directory.Delete(tempRoot, recursive: true);
         }
     }
 
-    private sealed class FakeWebHostEnvironment(string environmentName, string contentRootPath) : IWebHostEnvironment
+    [Fact]
+    public void Repository_recall_set_packs_do_not_claim_source_backed_provenance()
     {
-        public string EnvironmentName { get; set; } = environmentName;
+        var seedFolder = Path.Combine(FindApiProjectRoot(), "Data", "SeedData", "recall-sets");
+        var banned = new[] { "pdf", "verbatim", "extracted", "dr hesham" };
+
+        foreach (var file in Directory.GetFiles(seedFolder, "*.json", SearchOption.TopDirectoryOnly))
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(file));
+            var root = doc.RootElement;
+            var provenance = root.TryGetProperty("sourceProvenance", out var provenanceElement)
+                ? provenanceElement.GetString()
+                : null;
+            var notes = root.TryGetProperty("_notes", out var notesElement) ? notesElement.GetString() : null;
+
+            Assert.NotNull(provenance);
+            Assert.StartsWith("generated:platform-authored:recall-set-label-pack-v1", provenance);
+            var combined = $"{provenance} {notes}".ToLowerInvariant();
+            foreach (var bannedTerm in banned)
+            {
+                Assert.DoesNotContain(bannedTerm, combined);
+            }
+        }
+    }
+
+    private static string FindApiProjectRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            var direct = Path.Combine(current.FullName, "Data", "SeedData", "recall-sets");
+            if (Directory.Exists(direct))
+            {
+                return current.FullName;
+            }
+
+            var repoRelative = Path.Combine(current.FullName, "backend", "src", "OetLearner.Api", "Data", "SeedData", "recall-sets");
+            if (Directory.Exists(repoRelative))
+            {
+                return Path.Combine(current.FullName, "backend", "src", "OetLearner.Api");
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate OetLearner.Api recall-set seed folder.");
+    }
+
+    private sealed class TestWebHostEnvironment(string contentRootPath) : Microsoft.AspNetCore.Hosting.IWebHostEnvironment
+    {
         public string ApplicationName { get; set; } = "OetLearner.Api.Tests";
-        public string WebRootPath { get; set; } = contentRootPath;
         public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = string.Empty;
+        public string EnvironmentName { get; set; } = "Development";
         public string ContentRootPath { get; set; } = contentRootPath;
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }

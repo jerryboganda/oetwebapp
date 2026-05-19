@@ -2315,7 +2315,7 @@ public class ReadingAuthoringTests
     // ════════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task Extraction_create_then_approve_imports_manifest_and_blocks_publish_until_review()
+    public async Task Extraction_create_then_approve_imports_non_stub_manifest_and_blocks_publish_until_review()
     {
         var (db, structure, policy, _, _) = Build();
         await SeedPaperAsync(db, "p1", ContentStatus.Draft);
@@ -2391,6 +2391,31 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Extraction_reject_requires_reason_and_caps_length()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
+
+        var ai = new OetLearner.Api.Services.Reading.StubReadingExtractionAi();
+        var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
+
+        var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await svc.RejectDraftAsync(draft.Id, "admin", "   ", default));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await svc.RejectDraftAsync(draft.Id, "admin", new string('x', 501), default));
+
+        var rejected = await svc.RejectDraftAsync(draft.Id, "admin", new string('x', 500), default);
+
+        Assert.Equal(OetLearner.Api.Domain.ReadingExtractionStatus.Rejected, rejected.Status);
+        Assert.NotNull(rejected.Notes);
+        Assert.Equal(500, rejected.Notes.Length);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Extraction_respects_kill_switch_when_policy_disables_ai()
     {
         var (db, structure, policy, _, _) = Build();
@@ -2407,6 +2432,61 @@ public class ReadingAuthoringTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Reading_policy_forces_ai_extraction_human_approval()
+    {
+        var (db, _, policy, _, _) = Build();
+        var current = await policy.GetGlobalAsync(default);
+        current.AiExtractionRequireHumanApproval = false;
+
+        var updated = await policy.UpsertGlobalAsync(current, "admin", default);
+
+        Assert.True(updated.AiExtractionRequireHumanApproval);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extraction_retains_response_metadata_not_raw_provider_body()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
+
+        var svc = new ReadingExtractionService(db, new RawPayloadReadingExtractionAi(), structure, policy);
+
+        var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
+
+        Assert.Equal(ReadingExtractionStatus.Pending, draft.Status);
+        Assert.NotNull(draft.RawAiResponseJson);
+        Assert.DoesNotContain("provider-secret", draft.RawAiResponseJson);
+        using var metadata = JsonDocument.Parse(draft.RawAiResponseJson!);
+        Assert.False(metadata.RootElement.GetProperty("rawBodyStored").GetBoolean());
+        Assert.True(metadata.RootElement.GetProperty("responseLength").GetInt32() > 0);
+        Assert.Equal(64, metadata.RootElement.GetProperty("responseSha256").GetString()?.Length);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extraction_failure_does_not_persist_raw_provider_exception()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
+
+        var svc = new ReadingExtractionService(db, new ThrowingReadingExtractionAi(), structure, policy);
+
+        var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
+        var audit = await db.AuditEvents.SingleAsync(e => e.Action == "ReadingExtractionFailed");
+
+        Assert.Equal(ReadingExtractionStatus.Failed, draft.Status);
+        Assert.DoesNotContain("provider-secret", draft.Notes);
+        Assert.DoesNotContain("provider-secret", audit.Details);
+        Assert.Contains("READING_EXTRACTION_FAILED", audit.Details);
         await db.DisposeAsync();
     }
 
@@ -2531,6 +2611,26 @@ public class ReadingAuthoringTests
 
             return new ReadingStructureManifest(new[] { partA, partB, partC });
         }
+    }
+
+    private sealed class RawPayloadReadingExtractionAi : IReadingExtractionAi
+    {
+        public async Task<ReadingExtractionAiResult> ExtractAsync(string paperId, string? mediaAssetId, CancellationToken ct)
+        {
+            var stub = await new StubReadingExtractionAi().ExtractAsync(paperId, mediaAssetId, ct);
+            return stub with
+            {
+                RawResponseJson = "{\"secret\":\"provider-secret\",\"ok\":true}",
+                IsStub = false,
+                StubReason = null,
+            };
+        }
+    }
+
+    private sealed class ThrowingReadingExtractionAi : IReadingExtractionAi
+    {
+        public Task<ReadingExtractionAiResult> ExtractAsync(string paperId, string? mediaAssetId, CancellationToken ct)
+            => throw new InvalidOperationException("provider-secret stack detail");
     }
 }
 

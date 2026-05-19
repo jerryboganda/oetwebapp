@@ -2,6 +2,10 @@
 set -euo pipefail
 
 OUT_DIR="${EVIDENCE_DIR:-release-evidence}"
+EVIDENCE_ENV="${EVIDENCE_ENV:-local}"
+ACCESSIBILITY_SIGNOFF_PATH="${ACCESSIBILITY_SIGNOFF_PATH:-}"
+ACCESSIBILITY_SIGNOFF_CONTENT="${ACCESSIBILITY_SIGNOFF_CONTENT:-}"
+ACCESSIBILITY_SIGNOFF_BASE64="${ACCESSIBILITY_SIGNOFF_BASE64:-}"
 SYFT_IMAGE="${SYFT_IMAGE:-anchore/syft:v1.20.0}"
 GRYPE_IMAGE="${GRYPE_IMAGE:-anchore/grype:v0.85.0}"
 mkdir -p "$OUT_DIR"
@@ -39,6 +43,51 @@ echo "sca_exit_code=$sca_exit_code" >> "$OUT_DIR/release-metadata.env"
 if [ ! -s "$OUT_DIR/sca.json" ]; then
   echo "SCA report was not produced; cannot build a verifiable evidence bundle." >&2
   exit 1
+fi
+
+accessibility_signoff_sources=0
+for source in "$ACCESSIBILITY_SIGNOFF_PATH" "$ACCESSIBILITY_SIGNOFF_CONTENT" "$ACCESSIBILITY_SIGNOFF_BASE64"; do
+  if [ -n "$source" ]; then
+    accessibility_signoff_sources=$((accessibility_signoff_sources + 1))
+  fi
+done
+
+if [ "$accessibility_signoff_sources" -gt 1 ]; then
+  echo "Provide at most one accessibility signoff source: ACCESSIBILITY_SIGNOFF_PATH, ACCESSIBILITY_SIGNOFF_CONTENT, or ACCESSIBILITY_SIGNOFF_BASE64." >&2
+  exit 1
+fi
+
+if [ "$EVIDENCE_ENV" = "production" ] && [ "$accessibility_signoff_sources" -ne 1 ]; then
+  echo "Production evidence requires exactly one accessibility signoff source." >&2
+  exit 1
+fi
+
+if [ -n "$ACCESSIBILITY_SIGNOFF_PATH" ]; then
+  if [ ! -s "$ACCESSIBILITY_SIGNOFF_PATH" ]; then
+    echo "ACCESSIBILITY_SIGNOFF_PATH does not point to a readable signoff file: $ACCESSIBILITY_SIGNOFF_PATH" >&2
+    exit 1
+  fi
+  cp "$ACCESSIBILITY_SIGNOFF_PATH" "$OUT_DIR/accessibility-signoff.env"
+fi
+
+if [ -n "$ACCESSIBILITY_SIGNOFF_CONTENT" ]; then
+  printf '%s\n' "$ACCESSIBILITY_SIGNOFF_CONTENT" > "$OUT_DIR/accessibility-signoff.env"
+fi
+
+if [ -n "$ACCESSIBILITY_SIGNOFF_BASE64" ]; then
+  if ! printf '%s' "$ACCESSIBILITY_SIGNOFF_BASE64" | base64 -d > "$OUT_DIR/accessibility-signoff.env"; then
+    echo "ACCESSIBILITY_SIGNOFF_BASE64 could not be decoded." >&2
+    exit 1
+  fi
+fi
+
+if [ "$EVIDENCE_ENV" = "production" ] && [ ! -s "$OUT_DIR/accessibility-signoff.env" ]; then
+  echo "Production evidence requires accessibility-signoff.env with automated axe and manual assistive-technology signoff." >&2
+  exit 1
+fi
+
+if [ -s "$OUT_DIR/accessibility-signoff.env" ]; then
+  node scripts/qa/validate-accessibility-signoff.mjs "$OUT_DIR/accessibility-signoff.env"
 fi
 
 (

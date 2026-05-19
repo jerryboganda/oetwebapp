@@ -69,6 +69,25 @@ function selectConfiguredDesktopApiBaseUrl(environment = process.env, options = 
   return null;
 }
 
+function validateRequiredDesktopApiBaseUrl(environment = process.env, options = {}) {
+  const resolvedUrl = selectConfiguredDesktopApiBaseUrl(environment, options);
+  if (!resolvedUrl) {
+    throw new Error(
+      'Desktop release packaging requires a non-loopback API URL. Set PUBLIC_API_BASE_URL, API_PROXY_TARGET_URL, or NEXT_PUBLIC_API_BASE_URL to the production API, or set ELECTRON_ALLOW_LOCAL_API_TARGET=true only for local/dev builds.',
+    );
+  }
+
+  const parsedUrl = new URL(resolvedUrl);
+  const allowLoopbackHttp = options.allowLoopback === true && isLoopbackHostname(parsedUrl.hostname);
+  if (options.requireHttps === true && parsedUrl.protocol !== 'https:' && !allowLoopbackHttp) {
+    throw new Error(
+      `Desktop release API URL must use HTTPS. Received ${resolvedUrl}. Use ELECTRON_ALLOW_INSECURE_REMOTE_API_TARGET=true only for controlled non-production smoke runs.`,
+    );
+  }
+
+  return resolvedUrl;
+}
+
 function createDesktopRuntimeConfig(environment = process.env, options = {}) {
   const publicApiBaseUrl = selectConfiguredDesktopApiBaseUrl(environment, options);
 
@@ -135,4 +154,5 @@ module.exports = {
   normalizeAbsoluteHttpUrl,
   resolveDesktopApiBaseUrl,
   selectConfiguredDesktopApiBaseUrl,
+  validateRequiredDesktopApiBaseUrl,
 };

@@ -22,14 +22,22 @@ namespace OetLearner.Api.Services.Recalls;
 ///   changed since last seed; skips identical rows.
 /// - <b>Never deletes.</b> If a term is removed from JSON, the DB row stays
 ///   (admins archive via <c>/admin/content/vocabulary</c>).
-/// - Default <c>Status='draft'</c>. Admin promotes to <c>'active'</c> after
-///   review (zero-hallucination contract — see docs/RECALLS-DATA-ENTRY-PLAN.md §4).
+/// - Default <c>Status</c> comes from the pack. Current product policy allows
+///   active visibility for platform-authored seed content when explicitly set.
 /// - Skips files that fail JSON schema validation (logged warning, never throws).
 /// - Skips when DB is in-memory and there are no JSON files (test mode).
 /// </summary>
 public static class RecallsContentSeeder
 {
     private const string SeedFolderRelative = "Data/SeedData/recalls";
+    private static readonly string[] ListeningTags = ["listening_a", "listening_b", "listening_c"];
+    private static readonly string[] ReadingTags = ["reading_a", "reading_b", "reading_c"];
+    private static readonly HashSet<string> AllowedOetSubtestTags = new(StringComparer.Ordinal)
+    {
+        "listening_a", "listening_b", "listening_c",
+        "reading_a", "reading_b", "reading_c",
+        "writing", "speaking",
+    };
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -98,16 +106,16 @@ public static class RecallsContentSeeder
         }
 
         var profession = (pack.ProfessionId ?? Path.GetFileNameWithoutExtension(path)).Trim().ToLowerInvariant();
-        var examType = string.IsNullOrWhiteSpace(pack.ExamTypeCode) ? "OET" : pack.ExamTypeCode.Trim();
+        var examType = string.IsNullOrWhiteSpace(pack.ExamTypeCode) ? "oet" : pack.ExamTypeCode.Trim().ToLowerInvariant();
         var defaultStatus = string.IsNullOrWhiteSpace(pack.DefaultStatus) ? "draft" : pack.DefaultStatus.Trim();
         var baseProvenance = string.IsNullOrWhiteSpace(pack.SourceProvenance)
-            ? "seed:recalls-content-pack-v1"
+            ? "generated:platform-authored:recalls-content-pack-v1"
             : pack.SourceProvenance.Trim();
 
         // Pre-load existing terms for this (profession, examType) so we hash-compare
         // without re-querying per row.
         var existing = await db.VocabularyTerms
-            .Where(t => t.ProfessionId == profession && t.ExamTypeCode == examType)
+            .Where(t => t.ProfessionId == profession && t.ExamTypeCode.ToLower() == examType)
             .ToDictionaryAsync(
                 t => Normalise(t.Term),
                 t => t,
@@ -157,13 +165,14 @@ public static class RecallsContentSeeder
                     continue;
                 }
 
-                if (current.SourceProvenance == $"{rowProvenance}#{hash}")
+                if (current.SourceProvenance == $"{rowProvenance}#{hash}"
+                    && string.Equals(current.ExamTypeCode, examType, StringComparison.Ordinal))
                 {
                     skipped++;
                     continue;
                 }
 
-                ApplyTo(current, raw, profession, examType, defaultStatus, $"{rowProvenance}#{hash}");
+                ApplyTo(current, raw, profession, examType, defaultStatus, $"{rowProvenance}#{hash}", isInsert: false);
                 current.UpdatedAt = DateTimeOffset.UtcNow;
                 updated++;
             }
@@ -178,7 +187,7 @@ public static class RecallsContentSeeder
                     CreatedAt = DateTimeOffset.UtcNow,
                     UpdatedAt = DateTimeOffset.UtcNow,
                 };
-                ApplyTo(entity, raw, profession, examType, defaultStatus, $"{rowProvenance}#{hash}");
+                ApplyTo(entity, raw, profession, examType, defaultStatus, $"{rowProvenance}#{hash}", isInsert: true);
                 db.VocabularyTerms.Add(entity);
                 added++;
             }
@@ -197,16 +206,13 @@ public static class RecallsContentSeeder
         string profession,
         string examType,
         string defaultStatus,
-        string provenance)
+        string provenance,
+        bool isInsert)
     {
         e.Definition = Truncate(raw.Definition!.Trim(), 1024);
         e.ExampleSentence = Truncate(raw.ExampleSentence!.Trim(), 2048);
         e.Category = Truncate((raw.Category ?? "general").Trim().ToLowerInvariant(), 64);
-        e.Difficulty = (raw.Difficulty ?? "medium").Trim().ToLowerInvariant() switch
-        {
-            "easy" or "medium" or "hard" => raw.Difficulty!.Trim().ToLowerInvariant(),
-            _ => "medium",
-        };
+        e.Difficulty = NormaliseDifficulty(raw.Difficulty) ?? "medium";
         e.IpaPronunciation = Truncate(raw.Ipa, 64);
         e.AmericanSpelling = Truncate(raw.AmericanSpelling, 128);
         e.ContextNotes = Truncate(raw.ContextNotes, 1024);
@@ -215,13 +221,15 @@ public static class RecallsContentSeeder
         e.RelatedTermsJson = SerialiseList(raw.RelatedTerms);
         e.CommonMistakesJson = SerialiseList(raw.CommonMistakes);
         e.SimilarSoundingJson = SerialiseList(raw.SimilarSounding);
-        e.OetSubtestTagsJson = SerialiseList(raw.OetSubtestTags?.Select(t => t.Trim().ToLowerInvariant()).ToList());
+        e.OetSubtestTagsJson = SerialiseList(NormaliseOetSubtestTags(raw.OetSubtestTags, out _).ToList());
         e.SourceProvenance = Truncate(provenance, 512);
-        // Only set Status on insert; preserve admin-promoted status on update.
-        if (string.IsNullOrWhiteSpace(e.Status) || e.Status == "active" || e.Status == "archived")
+        if (isInsert || string.IsNullOrWhiteSpace(e.Status))
+        {
+            e.Status = defaultStatus;
+        }
+        else if (e.Status == "active" || e.Status == "archived")
         {
             // already promoted or archived — keep as-is on update
-            if (string.IsNullOrWhiteSpace(e.Status)) e.Status = defaultStatus;
         }
         else
         {
@@ -251,7 +259,55 @@ public static class RecallsContentSeeder
         if (string.IsNullOrWhiteSpace(t.ExampleSentence)) return "exampleSentence required";
         if (string.IsNullOrWhiteSpace(t.Category)) return "category required";
         if (t.OetSubtestTags is null || t.OetSubtestTags.Count == 0) return "oetSubtestTags required (≥1)";
+        var normalisedTags = NormaliseOetSubtestTags(t.OetSubtestTags, out var invalidTags);
+        if (invalidTags.Count > 0) return $"unsupported oetSubtestTags: {string.Join(", ", invalidTags)}";
+        if (normalisedTags.Count == 0) return "oetSubtestTags required (≥1)";
+        if (NormaliseDifficulty(t.Difficulty) is null) return $"unsupported difficulty: {t.Difficulty}";
         return null;
+    }
+
+    private static string? NormaliseDifficulty(string? difficulty)
+        => (difficulty ?? "medium").Trim().ToLowerInvariant() switch
+        {
+            "easy" or "beginner" => "easy",
+            "basic" => "easy",
+            "medium" or "intermediate" => "medium",
+            "hard" or "advanced" => "hard",
+            _ => null,
+        };
+
+    private static IReadOnlyList<string> NormaliseOetSubtestTags(List<string>? tags, out List<string> invalidTags)
+    {
+        invalidTags = [];
+        if (tags is null || tags.Count == 0) return [];
+
+        var result = new List<string>();
+        foreach (var raw in tags)
+        {
+            var normalised = raw.Trim().ToLowerInvariant();
+            if (normalised == "listening")
+            {
+                result.AddRange(ListeningTags);
+            }
+            else if (normalised == "reading")
+            {
+                result.AddRange(ReadingTags);
+            }
+            else if (normalised == "professional_communication")
+            {
+                result.AddRange(["speaking", "writing"]);
+            }
+            else if (AllowedOetSubtestTags.Contains(normalised))
+            {
+                result.Add(normalised);
+            }
+            else
+            {
+                invalidTags.Add(raw);
+            }
+        }
+
+        return result.Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
     }
 
     private static string Normalise(string s) => s.Trim().ToLowerInvariant();
@@ -283,8 +339,8 @@ public static class RecallsContentSeeder
             d = raw.Definition?.Trim(),
             e = raw.ExampleSentence?.Trim(),
             c = raw.Category?.Trim().ToLowerInvariant(),
-            tags = raw.OetSubtestTags?.Select(s => s.Trim().ToLowerInvariant()).OrderBy(s => s, StringComparer.Ordinal).ToList(),
-            diff = raw.Difficulty?.Trim().ToLowerInvariant(),
+            tags = NormaliseOetSubtestTags(raw.OetSubtestTags, out _),
+            diff = NormaliseDifficulty(raw.Difficulty),
             ipa = raw.Ipa?.Trim(),
             us = raw.AmericanSpelling?.Trim(),
             syn = raw.Synonyms?.OrderBy(s => s, StringComparer.Ordinal).ToList(),

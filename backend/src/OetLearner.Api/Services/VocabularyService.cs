@@ -29,11 +29,12 @@ public class VocabularyService(
         int page,
         int pageSize,
         CancellationToken ct,
-        string? recallSet = null)
+        string? recallSet = null,
+        string? oetSubtestTag = null)
     {
         examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
-        if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
+        query = ApplyExamTypeFilter(query, examTypeCode);
         if (!string.IsNullOrEmpty(category)) query = query.Where(t => t.Category == category);
         if (!string.IsNullOrEmpty(profession)) query = query.Where(t => t.ProfessionId == profession);
         if (!string.IsNullOrEmpty(search))
@@ -49,6 +50,13 @@ public class VocabularyService(
         {
             var needle = $"\"{normalisedSet}\"";
             query = query.Where(t => t.RecallSetCodesJson.Contains(needle));
+        }
+
+        var normalisedSubtestTag = NormaliseOetSubtestTag(oetSubtestTag);
+        if (normalisedSubtestTag is not null)
+        {
+            var needle = $"\"{normalisedSubtestTag}\"";
+            query = query.Where(t => t.OetSubtestTagsJson.Contains(needle));
         }
 
         var total = await query.CountAsync(ct);
@@ -74,7 +82,7 @@ public class VocabularyService(
         var resolvedExam = examTypeCode ?? ExamCodes.DefaultCode;
 
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
-        if (!string.IsNullOrWhiteSpace(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
+        query = ApplyExamTypeFilter(query, examTypeCode);
         if (!string.IsNullOrWhiteSpace(profession)) query = query.Where(t => t.ProfessionId == profession);
 
         // Pull only the JSON column for cheap in-memory tally.
@@ -128,7 +136,7 @@ public class VocabularyService(
         var normalised = query.Trim().ToLowerInvariant();
         examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var baseQuery = db.VocabularyTerms.Where(t => t.Status == "active");
-        if (!string.IsNullOrEmpty(examTypeCode)) baseQuery = baseQuery.Where(t => t.ExamTypeCode == examTypeCode);
+        baseQuery = ApplyExamTypeFilter(baseQuery, examTypeCode);
 
         // Exact match first (case-insensitive).
         var exact = await baseQuery.FirstOrDefaultAsync(t => t.Term.ToLower() == normalised, ct);
@@ -155,7 +163,7 @@ public class VocabularyService(
     {
         examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
-        if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
+        query = ApplyExamTypeFilter(query, examTypeCode);
         if (!string.IsNullOrEmpty(profession)) query = query.Where(t => t.ProfessionId == profession);
 
         // Use a two-step query to stay compatible with EF InMemory provider in tests.
@@ -759,7 +767,32 @@ public class VocabularyService(
         RelatedTerms: ParseStringArray(t.RelatedTermsJson).ToArray(),
         SourceProvenance: t.SourceProvenance,
         Status: t.Status,
+        OetSubtestTags: ParseStringArray(t.OetSubtestTagsJson).ToArray(),
         RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray());
+
+    private static IQueryable<VocabularyTerm> ApplyExamTypeFilter(IQueryable<VocabularyTerm> query, string? examTypeCode)
+    {
+        var normalised = NormaliseExamTypeCode(examTypeCode);
+        return normalised is null
+            ? query
+            : query.Where(t => t.ExamTypeCode.ToLower() == normalised);
+    }
+
+    private static string? NormaliseExamTypeCode(string? examTypeCode)
+        => string.IsNullOrWhiteSpace(examTypeCode)
+            ? null
+            : examTypeCode.Trim().ToLowerInvariant();
+
+    private static string? NormaliseOetSubtestTag(string? tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return null;
+        var normalised = tag.Trim().ToLowerInvariant();
+        return normalised is "listening_a" or "listening_b" or "listening_c"
+            or "reading_a" or "reading_b" or "reading_c"
+            or "writing" or "speaking"
+            ? normalised
+            : null;
+    }
 
     private static VocabularyTermSummary MapSummary(VocabularyTerm t) => new(
         Id: t.Id,

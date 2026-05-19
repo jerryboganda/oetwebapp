@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
@@ -15,13 +16,15 @@ public interface IExternalIdentityProviderClient
 
 public sealed class ExternalIdentityProviderClient(
     HttpClient httpClient,
-    IOptions<ExternalAuthOptions> optionsAccessor) : IExternalIdentityProviderClient
+    IOptions<ExternalAuthOptions> optionsAccessor,
+    IRuntimeSettingsProvider? runtimeSettings = null) : IExternalIdentityProviderClient
 {
     private readonly ExternalAuthOptions _options = optionsAccessor.Value;
+    private readonly IRuntimeSettingsProvider? _runtimeSettings = runtimeSettings;
 
     public Uri BuildAuthorizationUri(string provider, string state, string redirectUri)
     {
-        var configuration = GetProviderConfiguration(provider);
+        var configuration = GetProviderConfigurationAsync(provider, CancellationToken.None).GetAwaiter().GetResult();
         var parameters = provider switch
         {
             ExternalAuthProviders.Google => new Dictionary<string, string?>
@@ -62,7 +65,7 @@ public sealed class ExternalIdentityProviderClient(
             throw ApiException.Validation("external_auth_code_required", "The external sign-in code is missing.");
         }
 
-        var configuration = GetProviderConfiguration(provider);
+        var configuration = await GetProviderConfigurationAsync(provider, cancellationToken);
         var tokenPayload = await ExchangeAuthorizationCodeAsync(provider, configuration, code, redirectUri, cancellationToken);
         var accessToken = tokenPayload.GetProperty("access_token").GetString();
         if (string.IsNullOrWhiteSpace(accessToken))
@@ -185,7 +188,7 @@ public sealed class ExternalIdentityProviderClient(
             profile.EmailVerified ?? false);
     }
 
-    private ExternalAuthProviderOptions GetProviderConfiguration(string provider)
+    private async Task<ExternalAuthProviderOptions> GetProviderConfigurationAsync(string provider, CancellationToken ct)
     {
         if (!ExternalAuthProviders.All.Contains(provider, StringComparer.OrdinalIgnoreCase))
         {
@@ -193,6 +196,33 @@ public sealed class ExternalIdentityProviderClient(
         }
 
         var configuration = _options.GetProvider(provider);
+        if (_runtimeSettings is not null
+            && (provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase)
+                || provider.Equals(ExternalAuthProviders.Facebook, StringComparison.OrdinalIgnoreCase)))
+        {
+            var raw = await _runtimeSettings.GetRawAsync(ct);
+            var hasRuntimeOverride = provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase)
+                ? !string.IsNullOrWhiteSpace(raw.GoogleClientId) && !string.IsNullOrWhiteSpace(raw.GoogleClientSecretEncrypted)
+                : !string.IsNullOrWhiteSpace(raw.FacebookAppId) && !string.IsNullOrWhiteSpace(raw.FacebookAppSecretEncrypted);
+            if (configuration.Enabled || hasRuntimeOverride)
+            {
+                var effective = (await _runtimeSettings.GetAsync(ct)).OAuth;
+                configuration = provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase)
+                    ? new ExternalAuthProviderOptions
+                    {
+                        Enabled = true,
+                        ClientId = effective.GoogleClientId,
+                        ClientSecret = effective.GoogleClientSecret,
+                    }
+                    : new ExternalAuthProviderOptions
+                    {
+                        Enabled = true,
+                        ClientId = effective.FacebookAppId,
+                        ClientSecret = effective.FacebookAppSecret,
+                    };
+            }
+        }
+
         if (!configuration.Enabled
             || string.IsNullOrWhiteSpace(configuration.ClientId)
             || string.IsNullOrWhiteSpace(configuration.ClientSecret))

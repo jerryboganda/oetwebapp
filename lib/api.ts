@@ -5331,13 +5331,14 @@ export async function fetchRecallsRevisionPlan() {
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────
 
-export async function fetchVocabularyTerms(params?: { examTypeCode?: string; category?: string; profession?: string; search?: string; recallSet?: string; page?: number; pageSize?: number }) {
+export async function fetchVocabularyTerms(params?: { examTypeCode?: string; category?: string; profession?: string; search?: string; recallSet?: string; oetSubtestTag?: string; page?: number; pageSize?: number }) {
   const p = new URLSearchParams();
   if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
   if (params?.category) p.set('category', params.category);
   if (params?.profession) p.set('profession', params.profession);
   if (params?.search) p.set('search', params.search);
   if (params?.recallSet) p.set('recallSet', params.recallSet);
+  if (params?.oetSubtestTag) p.set('oetSubtestTag', params.oetSubtestTag);
   if (params?.page) p.set('page', String(params.page));
   if (params?.pageSize) p.set('pageSize', String(params.pageSize));
   return apiRequest(`/v1/vocabulary/terms?${p}`);

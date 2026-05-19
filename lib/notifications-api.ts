@@ -15,9 +15,12 @@ import type {
   NotificationConsentUpdateRequest,
   NotificationDeliveryAttemptResponse,
   NotificationFeedResponse,
+  NativePushTokenRegistrationRequest,
+  NativePushTokenRegistrationResponse,
   NotificationPreferencePatchRequest,
   NotificationPreferencePayload,
   NotificationSuppressibleChannel,
+  PushConfigurationResponse,
   PushSubscriptionPayload,
   PushSubscriptionRegistrationResponse,
 } from './types/notifications';
@@ -93,6 +96,12 @@ export async function updateNotificationPreferences(
   });
 }
 
+export async function fetchPushConfiguration(): Promise<PushConfigurationResponse> {
+  return requestJson<PushConfigurationResponse>('/v1/notifications/push-config', {
+    method: 'GET',
+  });
+}
+
 export async function createPushSubscription(
   payload: PushSubscriptionPayload,
 ): Promise<PushSubscriptionRegistrationResponse> {
@@ -105,6 +114,15 @@ export async function createPushSubscription(
 export async function deletePushSubscription(subscriptionId: string): Promise<void> {
   await requestJson(`/v1/notifications/push-subscriptions/${encodeURIComponent(subscriptionId)}`, {
     method: 'DELETE',
+  });
+}
+
+export async function registerNativePushToken(
+  payload: NativePushTokenRegistrationRequest,
+): Promise<NativePushTokenRegistrationResponse> {
+  return requestJson<NativePushTokenRegistrationResponse>('/v1/notifications/push-token', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 

@@ -50,6 +50,7 @@ public sealed record EffectiveSettings(
     BackupSettings Backup,
     OAuthSettings OAuth,
     PushSettings Push,
+    UploadScannerSettings UploadScanner,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
     DateTimeOffset? UpdatedAt);
@@ -70,7 +71,12 @@ public sealed record BillingSettings(
     string? StripePublishableKey,
     string? StripeWebhookSecret,
     string? StripeSuccessUrl,
-    string? StripeCancelUrl);
+    string? StripeCancelUrl,
+    string? PayPalClientId,
+    string? PayPalClientSecret,
+    string? PayPalWebhookId,
+    string? PayPalSuccessUrl,
+    string? PayPalCancelUrl);
 
 public sealed record SentrySettings(
     string? Dsn,
@@ -100,4 +106,14 @@ public sealed record PushSettings(
     string? ApnsBundleId,
     string? ApnsAuthKey,
     string? FcmServerKey,
-    string? FcmProjectId);
+    string? FcmProjectId,
+    string? VapidSubject = null,
+    string? VapidPublicKey = null,
+    string? VapidPrivateKey = null);
+
+public sealed record UploadScannerSettings(
+    string Provider,
+    string Host,
+    int Port,
+    int TimeoutSeconds,
+    bool FailClosedOnError);

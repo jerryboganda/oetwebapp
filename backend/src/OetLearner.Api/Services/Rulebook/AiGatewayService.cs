@@ -55,12 +55,12 @@ public sealed class AiGatewayService(
     IAiToolRegistry? toolRegistry = null,
     IAiToolInvoker? toolInvoker = null,
     Microsoft.Extensions.Options.IOptions<AiToolOptions>? toolOptions = null,
-    IHostEnvironment? environment = null)
+    Microsoft.Extensions.Hosting.IHostEnvironment? hostEnvironment = null)
     : IAiGatewayService
 {
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
-    private readonly bool _allowMockProvider = environment is null
-        || environment.IsDevelopment();
+    private readonly bool _allowMockProvider = hostEnvironment is null
+        || hostEnvironment.IsDevelopment();
 
     public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
         => _promptBuilder.Build(context);
@@ -144,10 +144,16 @@ public sealed class AiGatewayService(
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Route resolution failure must not block the call — fall back
-                // to the registry-default path immediately below.
+                if (hostEnvironment?.IsProduction() == true)
+                {
+                    await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                        errorCode: "provider_route_resolution_failed",
+                        errorMessage: "AI provider route resolution failed.",
+                        ct);
+                    throw new InvalidOperationException("AI provider route resolution failed.", ex);
+                }
             }
         }
 
@@ -177,10 +183,16 @@ public sealed class AiGatewayService(
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Registry lookup failure must not block the call — fall back
-                // to the legacy first-non-mock selection below.
+                if (hostEnvironment?.IsProduction() == true)
+                {
+                    await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                        errorCode: "provider_registry_resolution_failed",
+                        errorMessage: "AI provider registry resolution failed.",
+                        ct);
+                    throw new InvalidOperationException("AI provider registry resolution failed.", ex);
+                }
             }
         }
 
@@ -190,7 +202,17 @@ public sealed class AiGatewayService(
         // Production startup validation rejects missing provider credentials
         // before learner-visible traffic can reach this path.
         if (provider is null && string.IsNullOrWhiteSpace(request.Provider) && selectedProviderCode is null)
+        {
+            if (hostEnvironment?.IsProduction() == true)
+            {
+                await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                    errorCode: "mock_provider_fallback_forbidden",
+                    errorMessage: "Mock AI provider fallback is forbidden in production.",
+                    ct);
+                throw new InvalidOperationException("Mock AI provider fallback is forbidden in production.");
+            }
             provider = providers.FirstOrDefault(p => string.Equals(p.Name, "mock", StringComparison.OrdinalIgnoreCase));
+        }
 
         // Otherwise prefer the first real provider over the mock fallback so
         // configured production deployments use the actual model path by default.
@@ -203,6 +225,15 @@ public sealed class AiGatewayService(
                 errorMessage: "No AI model provider registered.",
                 ct);
             throw new InvalidOperationException("No AI model provider registered.");
+        }
+        if (hostEnvironment?.IsProduction() == true
+            && string.Equals(provider.Name, "mock", StringComparison.OrdinalIgnoreCase))
+        {
+            await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                errorCode: "mock_provider_forbidden",
+                errorMessage: "Mock AI provider is forbidden in production.",
+                ct);
+            throw new InvalidOperationException("Mock AI provider is forbidden in production.");
         }
 
         if (!_allowMockProvider && string.Equals(provider.Name, "mock", StringComparison.OrdinalIgnoreCase))
@@ -230,6 +261,14 @@ public sealed class AiGatewayService(
                 request.UserId, featureCode, selectedProviderCode ?? request.Provider, ct);
         }
         var prospectiveKeySource = resolution?.KeySource ?? AiKeySource.Platform;
+        if (prospectiveKeySource == AiKeySource.None)
+        {
+            await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                errorCode: "byok_key_required",
+                errorMessage: "BYOK-only AI access requires a saved key for this feature.",
+                ct);
+            throw new InvalidOperationException("BYOK-only AI access requires a saved provider key before this feature can call an AI provider.");
+        }
 
         // ── Quota / policy enforcement (Slice 2) ─────────────────────────────
         // Skipped when the gateway is constructed without a quota service
@@ -1130,6 +1169,39 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("```");
                 sb.AppendLine("Hard requirements: exactly 42 questions, contiguous numbers 1..42, exactly 24 in Part A (12 in A1 + 12 in A2), exactly 6 in Part B, exactly 12 in Part C (6 in C1 + 6 in C2), every MCQ has exactly 3 options + correctAnswer in {A,B,C}, every appliedRuleIds value exists in the rulebook above. No answer keys outside the structure above.");
                 break;
+            case AiTaskMode.GenerateReadingStructure:
+                sb.AppendLine("Return a SINGLE JSON object in the exact ReadingStructureManifest shape. Canonical Reading shape: Part A 20 items across 4 texts, Part B 6 three-option MCQ items across 6 texts, Part C 16 four-option MCQ items across 2 texts. Every question MUST cite ≥1 reading rule ID in `skillTag` or explanation text. Never invent a rule ID.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"parts\": [");
+                sb.AppendLine("    {");
+                sb.AppendLine("      \"partCode\": \"A|B|C\",");
+                sb.AppendLine("      \"timeLimitMinutes\": 15,");
+                sb.AppendLine("      \"instructions\": \"...\"," );
+                sb.AppendLine("      \"texts\": [ { \"displayOrder\": 1, \"title\": \"...\", \"source\": \"...\", \"bodyHtml\": \"<p>...</p>\", \"wordCount\": 120, \"topicTag\": \"...\" } ],");
+                sb.AppendLine("      \"questions\": [");
+                sb.AppendLine("        {");
+                sb.AppendLine("          \"displayOrder\": 1,");
+                sb.AppendLine("          \"points\": 1,");
+                sb.AppendLine("          \"questionType\": \"MatchingTextReference|ShortAnswer|SentenceCompletion|MultipleChoice3|MultipleChoice4\",");
+                sb.AppendLine("          \"stem\": \"...\"," );
+                sb.AppendLine("          \"optionsJson\": \"[]\",");
+                sb.AppendLine("          \"correctAnswerJson\": \"\\\"A\\\"\",");
+                sb.AppendLine("          \"acceptedSynonymsJson\": null,");
+                sb.AppendLine("          \"caseSensitive\": false,");
+                sb.AppendLine("          \"explanationMarkdown\": \"Cite reading rule IDs such as R01.1.\",");
+                sb.AppendLine("          \"skillTag\": \"R01.1\",");
+                sb.AppendLine("          \"readingTextDisplayOrder\": 1,");
+                sb.AppendLine("          \"optionDistractorsJson\": null,");
+                sb.AppendLine("          \"reviewState\": \"Draft\"");
+                sb.AppendLine("        }");
+                sb.AppendLine("      ]");
+                sb.AppendLine("    }");
+                sb.AppendLine("  ]");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                sb.AppendLine("Hard requirements: exactly 3 parts A/B/C; Part A has 4 texts and 20 questions; Part B has 6 texts and 6 questions with MultipleChoice3; Part C has 2 texts and 16 questions with MultipleChoice4; every correctAnswerJson/optionsJson field must itself be valid JSON text.");
+                break;
             default:
                 sb.AppendLine("Plain text, concise, ≤ 200 words. Cite rule IDs in parentheses when invoking rules.");
                 break;
@@ -1197,6 +1269,11 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 AiTaskMode.GenerateListeningStructure => "Task: extract the 42-item OET Listening authored structure (Part A 24 short-answer + Part B 6 MCQ + Part C 12 MCQ) from the supplied Question-Paper text + Audio-Script + Answer-Key. Every question must cite ≥1 listening rule ID. Never invent rule IDs. Validate the canonical shape before responding.",
                 _ => "Task: respond according to the reply format above."
             },
+            RuleKind.Reading => ctx.Task switch
+            {
+                AiTaskMode.GenerateReadingStructure => "Task: extract the 42-item OET Reading authored structure (Part A 20 + Part B 6 + Part C 16) from the supplied Reading source text and answer key. Every question must cite ≥1 reading rule ID. Never invent rule IDs. Validate the canonical shape before responding.",
+                _ => "Task: respond according to the reply format above."
+            },
             _ => "Task: respond according to the reply format above."
         };
         if (ctx.Kind == RuleKind.Grammar)
@@ -1209,6 +1286,8 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             return $"{baseText} Respond strictly in the reply format above.";
         if (ctx.Kind == RuleKind.Listening)
             return $"{baseText} Respond strictly in the reply format above.";
+        if (ctx.Kind == RuleKind.Reading)
+            return $"{baseText} Respond strictly in the reply format above.";
         return $"{baseText} Apply the {passMark}/500 (Grade {passGrade}) pass mark for this {ctx.Kind.ToString().ToLowerInvariant()} call. Respond strictly in the reply format above.";
     }
 }
@@ -1217,7 +1296,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 // Types
 // ---------------------------------------------------------------------------
 
-public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure }
+public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure, GenerateReadingStructure }
 
 public sealed class AiGroundingContext
 {

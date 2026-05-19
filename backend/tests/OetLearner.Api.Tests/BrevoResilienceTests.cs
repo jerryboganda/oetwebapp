@@ -120,11 +120,12 @@ public class BrevoResilienceTests
                 SmtpPassword: null,
                 SmtpFromAddress: "noreply@example.test",
                 SmtpFromName: "OET Test"),
-            Billing: new BillingSettings(null, null, null, null, null),
+            Billing: new BillingSettings(null, null, null, null, null, null, null, null, null, null),
             Sentry: new SentrySettings(null, null, null),
             Backup: new BackupSettings(null, null, null, null, null),
             OAuth: new OAuthSettings(null, null, null, null, null, null, null, null),
             Push: new PushSettings(null, null, null, null, null, null),
+            UploadScanner: new UploadScannerSettings("noop", "127.0.0.1", 3310, 30, true),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null);

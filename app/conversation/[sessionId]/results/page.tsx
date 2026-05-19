@@ -17,7 +17,13 @@ import { analytics } from '@/lib/analytics';
 import { downloadConversationTranscript, getConversationEvaluation } from '@/lib/api';
 import { resolveApiMediaUrl } from '@/lib/media-url';
 import type { ConversationEvaluationResponse } from '@/lib/types/conversation';
-import { formatScaledScore, oetGradeLabel, type OetGrade } from '@/lib/scoring';
+import {
+  conversationProjectedScaled,
+  formatScaledScore,
+  gradeSpeaking,
+  oetGradeLabel,
+  type OetGrade,
+} from '@/lib/scoring';
 
 const GRADE_COLORS: Record<string, string> = {
   A: 'from-emerald-400 to-green-500',
@@ -127,6 +133,7 @@ export default function ConversationResultsPage() {
   const annotations = evaluation.turnAnnotations ?? [];
   const turns = evaluation.turns ?? [];
   const appliedRuleIds = evaluation.appliedRuleIds ?? [];
+  const passScaled = evaluation.passScaled ?? gradeSpeaking(scaled).requiredScaled;
 
   return (
     <LearnerDashboardShell>
@@ -147,9 +154,9 @@ export default function ConversationResultsPage() {
           </div>
           <div className="mb-3 flex items-center justify-center gap-2 text-sm">
             {evaluation.passed ? (
-              <Badge variant="success">Above pass mark (350/500)</Badge>
+              <Badge variant="success">Above pass mark ({formatScaledScore(passScaled)})</Badge>
             ) : (
-              <Badge variant="warning">Below pass mark (350/500)</Badge>
+              <Badge variant="warning">Below pass mark ({formatScaledScore(passScaled)})</Badge>
             )}
           </div>
           <div className="flex items-center justify-center gap-4 text-sm text-muted">
@@ -170,6 +177,7 @@ export default function ConversationResultsPage() {
               {criteria.map((criterion, i) => {
                 const max = criterion.maxScore || 6;
                 const pct = (criterion.score06 / max) * 100;
+                const criterionPassed = gradeSpeaking(conversationProjectedScaled(criterion.score06)).passed;
                 return (
                   <MotionItem key={criterion.id} delayIndex={i}>
                     <div className="mb-1 flex items-center justify-between">
@@ -180,7 +188,7 @@ export default function ConversationResultsPage() {
                     </div>
                     <div className="mb-1.5 h-2.5 w-full rounded-full bg-background-light">
                       <div className={`h-2.5 rounded-full transition-all duration-700 ${
-                        pct >= 70 ? 'bg-success' : pct >= 50 ? 'bg-warning' : 'bg-danger'}`}
+                        criterionPassed ? 'bg-success' : pct >= 50 ? 'bg-warning' : 'bg-danger'}`}
                         style={{ width: `${pct}%` }} />
                     </div>
                     {criterion.evidence && (<p className="text-xs text-muted">{criterion.evidence}</p>)}

@@ -53,7 +53,6 @@ public sealed record PaymentWebhookRetryResult(
 
 public partial class LearnerService(
     LearnerDbContext db,
-    MediaStorageService mediaStorage,
     IFileStorage fileStorage,
     IPdfTextExtractor pdfTextExtractor,
     PlatformLinkService platformLinks,
@@ -62,12 +61,14 @@ public partial class LearnerService(
     PaymentGatewayService paymentGateways,
     DisputeService? disputeService = null,
     IOptions<BillingOptions>? billingOptions = null,
+    IOptions<StorageOptions>? storageOptions = null,
     global::OetLearner.Api.Services.IWritingEntitlementService? writingEntitlement = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
     private static readonly TimeSpan PaymentWebhookProcessingLease = TimeSpan.FromMinutes(5);
     private static readonly Regex PaymentIdempotencyKeyRegex = new("^[A-Za-z0-9._:-]+$", RegexOptions.Compiled);
+    private readonly StorageOptions storageSettings = storageOptions?.Value ?? new StorageOptions();
 
     private static List<DiagnosticSubtestStatus> ActiveDiagnosticSubtests(List<DiagnosticSubtestStatus> subtests)
         => subtests
@@ -2571,7 +2572,7 @@ public partial class LearnerService(
                 [new ApiFieldError("uploadSessionId", "expired", "Request a new upload session before uploading audio.")]);
         }
 
-        if (!mediaStorage.IsAllowedAudioContentType(contentType))
+        if (!MediaStoragePolicy.IsAllowedAudioContentType(contentType, storageSettings))
         {
             throw ApiException.Validation(
                 "unsupported_audio_content_type",
@@ -2579,7 +2580,7 @@ public partial class LearnerService(
                 [new ApiFieldError("audio", "unsupported_content_type", "Upload a browser-recorded WebM or another supported audio format.")]);
         }
 
-        var bytesWritten = await mediaStorage.SaveAsync(upload.StorageKey, content, cancellationToken);
+        var bytesWritten = await WriteAudioToStorageAsync(upload.StorageKey, content, cancellationToken);
         if (bytesWritten == 0)
         {
             throw ApiException.Validation(
@@ -2621,7 +2622,7 @@ public partial class LearnerService(
                 "Confirm recording consent before uploading speaking audio.",
                 [new ApiFieldError("consent", "required", "Accept the speaking recording consent before submitting audio.")]);
         }
-        if (upload.State != UploadState.Uploaded || !mediaStorage.Exists(upload.StorageKey))
+        if (upload.State != UploadState.Uploaded || !fileStorage.Exists(upload.StorageKey))
         {
             throw ApiException.Validation(
                 "upload_binary_missing",
@@ -2630,7 +2631,7 @@ public partial class LearnerService(
         }
 
         var resolvedContentType = string.IsNullOrWhiteSpace(request.ContentType) ? null : request.ContentType;
-        var storedLength = mediaStorage.GetLength(upload.StorageKey);
+        var storedLength = fileStorage.Length(upload.StorageKey);
         attempt.AudioUploadState = UploadState.Uploaded;
         attempt.AudioObjectKey = upload.StorageKey;
         attempt.AudioMetadataJson = JsonSupport.Serialize(new
@@ -2935,7 +2936,45 @@ public partial class LearnerService(
 
         var metadata = JsonSupport.Deserialize(attempt.AudioMetadataJson, new Dictionary<string, object?>());
         var contentType = metadata.TryGetValue("contentType", out var value) ? value?.ToString() : null;
-        return mediaStorage.OpenRead(attempt.AudioObjectKey, contentType);
+        return await fileStorage.OpenStoredMediaFileAsync(attempt.AudioObjectKey, contentType, cancellationToken);
+    }
+
+    private async Task<long> WriteAudioToStorageAsync(string storageKey, Stream source, CancellationToken cancellationToken)
+    {
+        var maxBytes = storageSettings.MaxUploadBytes > 0 ? storageSettings.MaxUploadBytes : 25L * 1024 * 1024;
+        var buffer = new byte[81920];
+        long totalBytes = 0;
+
+        try
+        {
+            await using var destination = await fileStorage.OpenWriteAsync(storageKey, cancellationToken);
+            while (true)
+            {
+                var read = await source.ReadAsync(buffer, cancellationToken);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                totalBytes += read;
+                if (totalBytes > maxBytes)
+                {
+                    throw ApiException.Validation(
+                        "audio_file_too_large",
+                        $"Audio uploads must be {maxBytes / (1024 * 1024)} MB or smaller.",
+                        [new ApiFieldError("audio", "too_large", "Record a shorter file or increase the configured upload limit.")]);
+                }
+
+                await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            }
+        }
+        catch
+        {
+            fileStorage.Delete(storageKey);
+            throw;
+        }
+
+        return totalBytes;
     }
 
     public async Task<object> SaveDeviceCheckAsync(string userId, DeviceCheckRequest request, CancellationToken cancellationToken)

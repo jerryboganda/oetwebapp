@@ -74,6 +74,22 @@ export interface PushSubscriptionRegistrationResponse {
   subscriptionId: string;
 }
 
+export interface PushConfigurationResponse {
+  enabled: boolean;
+  publicKey: string;
+}
+
+export type NativePushPlatform = 'android' | 'ios' | 'web';
+
+export interface NativePushTokenRegistrationRequest {
+  token: string;
+  platform: NativePushPlatform;
+}
+
+export interface NativePushTokenRegistrationResponse {
+  tokenId: string;
+}
+
 export interface NotificationConsentItem {
   authAccountId: string;
   channel: NotificationConsentChannel;

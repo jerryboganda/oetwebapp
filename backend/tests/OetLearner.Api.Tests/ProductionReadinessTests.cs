@@ -481,7 +481,7 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
             // override, so use a non-noop stub provider keyword that passes the validator.
             // None of these tests exercise actual uploads, so the host never resolves a scanner.
             ["UploadScanner:Provider"] = "clamav",
-            ["UploadScanner:Host"] = "localhost",
+            ["UploadScanner:Host"] = "clamav",
             ["UploadScanner:Port"] = "3310",
             ["AI:ProviderId"] = "digitalocean-serverless",
             ["AI:DefaultModel"] = "glm-5",

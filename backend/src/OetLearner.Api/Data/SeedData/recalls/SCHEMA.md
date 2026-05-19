@@ -30,7 +30,7 @@ One JSON file per OET profession. The filename (without `.json`) is the canonica
   "schemaVersion": 1,
   "professionId": "medicine",                     // REQUIRED, must match filename
   "examTypeCode": "OET",                          // REQUIRED
-  "sourceProvenance": "ai-author:claude-opus-4.7:v1",  // stamped onto every row + per-row suffix
+  "sourceProvenance": "generated:platform-authored:recalls-content-pack-v1",  // stamped onto every row + per-row suffix
   "defaultStatus": "draft",                       // 'draft' default; admin promotes to 'active'
   "terms": [
     {
@@ -107,7 +107,7 @@ The seeder:
 - **Never deletes** rows. If you remove a term from the JSON, the DB row stays (admins can archive via `/admin/content/vocabulary`).
 - Skips files that fail JSON schema validation (logged as warning).
 - Default `Status='draft'`. Admin promotes to `'active'` via existing flow.
-- Stamps `SourceProvenance = "ai-author:claude-opus-4.7:v1:<profession>:<term-slug>"`.
+- Stamps `SourceProvenance = "generated:platform-authored:recalls-content-pack-v1:<profession>:<term-slug>"`.
 
 ## Promotion to active
 
