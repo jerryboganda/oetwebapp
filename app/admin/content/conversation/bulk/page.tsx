@@ -20,7 +20,7 @@ import {
   createAdminConversationTemplate,
   publishAdminConversationTemplate,
 } from '@/lib/api';
-import { buildConversationCreatePayload } from '../ai-draft/page';
+import { buildConversationCreatePayload } from '@/lib/admin/conversation-payload';
 
 const PROFESSIONS = [
   'medicine',
