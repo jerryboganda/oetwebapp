@@ -13,6 +13,7 @@ dist/
 desktop-backend-runtime/
 output/
 output/playwright/
+copilot-worktrees/
 .tmp-*.png
 .agents/
 .claude/
@@ -25,6 +26,7 @@ output/playwright/
 !.kilo/skills/
 !.kilo/skills/**
 backend/**/bin/
+backend/src/OetLearner.Api/bin-verify/
 backend/**/obj/
 backend/src/OetLearner.Api/App_Data/
 backend/oet_learner_dev.sqlite
@@ -112,3 +114,6 @@ repomix-output*.txt
 
 # Storybook
 storybook-static/
+
+scripts/admin/.envrc
+

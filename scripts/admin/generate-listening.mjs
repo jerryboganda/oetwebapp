@@ -595,9 +595,10 @@ async function generateOnePaper({ index, total, profession, difficulty }) {
   // structure JSON, leaving DifficultyRating/DifficultyLevel NULL which breaks
   // the publish gate. Set sane default 3 for any remaining NULL on this paper.
   try {
-    const { execSync } = await import('node:child_process');
+    const { execFileSync } = await import('node:child_process');
+    // Use execFileSync with arg array to avoid shell quoting of "..." SQL identifiers.
     const sql = `UPDATE "ListeningExtracts" SET "DifficultyRating"=3 WHERE "DifficultyRating" IS NULL AND "ListeningPartId" IN (SELECT "Id" FROM "ListeningParts" WHERE "PaperId"='${paperId}'); UPDATE "ListeningQuestions" SET "DifficultyLevel"=3 WHERE "DifficultyLevel" IS NULL AND "PaperId"='${paperId}';`;
-    execSync(`docker exec oet-postgres psql -U oet_learner -d oet_learner -c "${sql}"`, { stdio: 'pipe' });
+    execFileSync('docker', ['exec', 'oet-postgres', 'psql', '-U', 'oet_learner', '-d', 'oet_learner', '-c', sql], { stdio: 'pipe' });
     console.log(`  ✓ difficulty fallback applied`);
   } catch (e) {
     console.log(`  ⚠ difficulty fallback failed: ${String(e?.message || e).slice(0,200)}`);

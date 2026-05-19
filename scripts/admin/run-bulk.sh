@@ -5,6 +5,13 @@
 set -euo pipefail
 cd /opt/oetwebapp
 
+# Load secrets from gitignored env file if present (production deploys put
+# secrets in /opt/oetwebapp/scripts/admin/.envrc, never committed to git).
+if [ -f scripts/admin/.envrc ]; then
+  # shellcheck disable=SC1091
+  source scripts/admin/.envrc
+fi
+
 export API_BASE='https://api.oetwithdrhesham.co.uk'
 export ADMIN_EMAIL='manwara575@gmail.com'
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:?ADMIN_PASSWORD env var required}"
