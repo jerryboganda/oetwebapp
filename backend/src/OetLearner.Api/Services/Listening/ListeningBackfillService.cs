@@ -197,6 +197,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 SpeakersJson = JsonSerializer.Serialize(meta?.Speakers ?? new List<JsonElement>()),
                 AudioStartMs = meta?.AudioStartMs,
                 AudioEndMs = meta?.AudioEndMs,
+                DifficultyRating = meta?.DifficultyRating,
                 ReplayInLearningOnly = true,
                 TranscriptSegmentsJson = JsonSerializer.Serialize(partSegments),
                 CreatedAt = now,
@@ -240,6 +241,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 TranscriptEvidenceText = q.TranscriptExcerpt,
                 TranscriptEvidenceStartMs = q.TranscriptEvidenceStartMs,
                 TranscriptEvidenceEndMs = q.TranscriptEvidenceEndMs,
+                DifficultyLevel = q.DifficultyLevel,
                 SpeakerAttitude = ParseSpeakerAttitude(q.SpeakerAttitude),
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -324,6 +326,12 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         {
             root = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(extractedTextJson)
                    ?? new Dictionary<string, JsonElement>();
+            // Normalize keys to camelCase so downstream lookups are stable
+            // regardless of whether the upstream writer used PascalCase.
+            root = new Dictionary<string, JsonElement>(
+                root.Select(kv => new KeyValuePair<string, JsonElement>(
+                    char.ToLowerInvariant(kv.Key[0]) + kv.Key.Substring(1), kv.Value)),
+                StringComparer.OrdinalIgnoreCase);
         }
         catch (JsonException) { return ([], [], []); }
 
@@ -347,16 +355,16 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
             var number = GetInt(item, "number") ?? 0;
             var points = GetInt(item, "points") ?? 1;
 
-            var options = item.TryGetProperty("options", out var optsEl) && optsEl.ValueKind == JsonValueKind.Array
+            var options = TryGetCI(item, "options", out var optsEl) && optsEl.ValueKind == JsonValueKind.Array
                 ? optsEl.EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToList()
                 : new List<string>();
-            var accepted = item.TryGetProperty("acceptedAnswers", out var accEl) && accEl.ValueKind == JsonValueKind.Array
+            var accepted = TryGetCI(item, "acceptedAnswers", out var accEl) && accEl.ValueKind == JsonValueKind.Array
                 ? accEl.EnumerateArray().Select(e => e.GetString() ?? string.Empty).Where(s => s.Length > 0).ToList()
                 : new List<string>();
-            var optionDistractorCategory = item.TryGetProperty("optionDistractorCategory", out var odcEl) && odcEl.ValueKind == JsonValueKind.Array
+            var optionDistractorCategory = TryGetCI(item, "optionDistractorCategory", out var odcEl) && odcEl.ValueKind == JsonValueKind.Array
                 ? odcEl.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : null).ToList()
                 : new List<string?>();
-            var optionDistractorWhy = item.TryGetProperty("optionDistractorWhy", out var odwEl) && odwEl.ValueKind == JsonValueKind.Array
+            var optionDistractorWhy = TryGetCI(item, "optionDistractorWhy", out var odwEl) && odwEl.ValueKind == JsonValueKind.Array
                 ? odwEl.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : null).ToList()
                 : new List<string?>();
 
@@ -376,7 +384,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 OptionDistractorWhy: optionDistractorWhy,
                 SpeakerAttitude: GetString(item, "speakerAttitude"),
                 TranscriptEvidenceStartMs: GetInt(item, "transcriptEvidenceStartMs"),
-                TranscriptEvidenceEndMs: GetInt(item, "transcriptEvidenceEndMs")));
+                TranscriptEvidenceEndMs: GetInt(item, "transcriptEvidenceEndMs"),
+                DifficultyLevel: GetInt(item, "difficultyLevel") ?? GetInt(item, "difficultyRating")));
         }
         return output;
     }
@@ -388,7 +397,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         foreach (var item in raw.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object) continue;
-            var speakers = item.TryGetProperty("speakers", out var spEl) && spEl.ValueKind == JsonValueKind.Array
+            var speakers = TryGetCI(item, "speakers", out var spEl) && spEl.ValueKind == JsonValueKind.Array
                 ? spEl.EnumerateArray().Select(e => e.Clone()).ToList()
                 : new List<JsonElement>();
             output.Add(new AuthoredExtract(
@@ -398,6 +407,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 AccentCode: GetString(item, "accentCode"),
                 AudioStartMs: GetInt(item, "audioStartMs"),
                 AudioEndMs: GetInt(item, "audioEndMs"),
+                DifficultyRating: GetInt(item, "difficultyRating") ?? GetInt(item, "difficultyLevel"),
                 Speakers: speakers));
         }
         return output;
@@ -424,12 +434,31 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         return output;
     }
 
+    // Case-insensitive property lookup. Authored JSON written by .NET default
+    // serialization uses PascalCase ("Number", "PartCode", ...); orchestrator
+    // / earlier authoring paths may use camelCase. We accept either.
+    private static bool TryGetCI(JsonElement el, string name, out JsonElement value)
+    {
+        if (el.ValueKind != JsonValueKind.Object) { value = default; return false; }
+        if (el.TryGetProperty(name, out value)) return true;
+        foreach (var p in el.EnumerateObject())
+        {
+            if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = p.Value;
+                return true;
+            }
+        }
+        value = default;
+        return false;
+    }
+
     private static string? GetString(JsonElement el, string key)
-        => el.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        => TryGetCI(el, key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
     private static int? GetInt(JsonElement el, string key)
     {
-        if (!el.TryGetProperty(key, out var v)) return null;
+        if (!TryGetCI(el, key, out var v)) return null;
         return v.ValueKind switch
         {
             JsonValueKind.Number => v.TryGetInt32(out var i) ? i : (int?)null,
@@ -541,7 +570,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         IReadOnlyList<string?> OptionDistractorWhy,
         string? SpeakerAttitude,
         int? TranscriptEvidenceStartMs,
-        int? TranscriptEvidenceEndMs);
+        int? TranscriptEvidenceEndMs,
+        int? DifficultyLevel);
 
     private sealed record AuthoredExtract(
         string PartCode,
@@ -550,6 +580,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         string? AccentCode,
         int? AudioStartMs,
         int? AudioEndMs,
+        int? DifficultyRating,
         IReadOnlyList<JsonElement> Speakers);
 
     private sealed record AuthoredSegment(

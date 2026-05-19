@@ -1,9 +1,12 @@
 using System.Net.WebSockets;
 using System.Reflection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Conversation.Asr;
+using OetLearner.Api.Services.Conversation.Tts;
 
 namespace OetLearner.Api.Tests;
 
@@ -32,6 +35,50 @@ public sealed class ConversationRealtimeSttTests
 
         Assert.NotNull(provider);
         Assert.Equal("mock", provider.Name);
+    }
+
+    [Fact]
+    public async Task Selector_ProductionAutoThrowsInsteadOfFallingBackToMock()
+    {
+        var selector = BuildSelector(new ConversationOptions { AsrProvider = "auto" }, new FakeHostEnvironment(Environments.Production));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => selector.SelectAsync());
+
+        Assert.Contains("real provider", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RealtimeSelector_ProductionExplicitMockThrows()
+    {
+        var selector = BuildSelector(new ConversationOptions
+        {
+            RealtimeSttEnabled = true,
+            RealtimeAsrProvider = "mock",
+        }, new FakeHostEnvironment(Environments.Production));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => selector.TrySelectRealtimeAsync());
+
+        Assert.Contains("mock provider", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task TtsSelector_ProductionAutoReturnsNullInsteadOfFallingBackToMock()
+    {
+        var selector = BuildTtsSelector(new ConversationOptions { TtsProvider = "auto" }, new FakeHostEnvironment(Environments.Production));
+
+        var provider = await selector.TrySelectAsync();
+
+        Assert.Null(provider);
+    }
+
+    [Fact]
+    public async Task TtsSelector_ProductionExplicitMockThrows()
+    {
+        var selector = BuildTtsSelector(new ConversationOptions { TtsProvider = "mock" }, new FakeHostEnvironment(Environments.Production));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => selector.TrySelectAsync());
+
+        Assert.Contains("mock provider", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -497,16 +544,35 @@ public sealed class ConversationRealtimeSttTests
     }
 
     private static ConversationAsrProviderSelector BuildSelector(ConversationOptions options)
+        => BuildSelector(options, environment: null);
+
+    private static ConversationAsrProviderSelector BuildSelector(ConversationOptions options, IHostEnvironment? environment)
         => new(
             [new MockConversationAsrProvider()],
             [new MockConversationRealtimeAsrProvider()],
             new StubConversationOptionsProvider(options),
-            NullLogger<ConversationAsrProviderSelector>.Instance);
+            NullLogger<ConversationAsrProviderSelector>.Instance,
+            environment);
+
+    private static ConversationTtsProviderSelector BuildTtsSelector(ConversationOptions options, IHostEnvironment? environment)
+        => new(
+            [new MockConversationTtsProvider()],
+            new StubConversationOptionsProvider(options),
+            NullLogger<ConversationTtsProviderSelector>.Instance,
+            environment);
 
     private sealed class StubConversationOptionsProvider(ConversationOptions options) : IConversationOptionsProvider
     {
         public Task<ConversationOptions> GetAsync(CancellationToken ct = default) => Task.FromResult(options);
         public void Invalidate() { }
+    }
+
+    private sealed class FakeHostEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "OetLearner.Api.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private sealed class NoopRealtimeSession : IConversationRealtimeAsrSession

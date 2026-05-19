@@ -11,10 +11,8 @@ namespace OetLearner.Api.Services.Reading;
 // AI-assisted PDF → ReadingStructureManifest pipeline:
 //   1. Admin uploads a PDF (via the existing MediaAsset slice).
 //   2. CreateDraftAsync(paperId, mediaAssetId) calls IReadingExtractionAi
-//      which is the swappable AI seam. When the gateway is unavailable
-//      (no AI:BaseUrl configured, network failure, refusal), we fall back
-//      to a deterministic stub so the admin UI still has something to act
-//      on — the draft is flagged IsStub=true.
+//      which is the swappable AI seam. Provider failures are persisted as
+//      failed drafts; placeholder manifests are not approvable.
 //   3. ApproveDraftAsync(draftId) re-uses ImportManifestAsync to apply the
 //      manifest to the paper (replaces existing structure).
 //   4. RejectDraftAsync(draftId, reason) records the rejection with audit.
@@ -198,6 +196,8 @@ public sealed class ReadingExtractionService(
             ?? throw new InvalidOperationException("Extraction draft not found.");
         if (draft.Status != ReadingExtractionStatus.Pending)
             throw new InvalidOperationException($"Draft is already {draft.Status}.");
+        if (draft.IsStub)
+            throw new InvalidOperationException("Stub Reading extraction drafts cannot be approved. Re-run extraction after a real provider is configured.");
         if (string.IsNullOrWhiteSpace(draft.ExtractedManifestJson))
             throw new InvalidOperationException("Draft has no manifest to apply.");
 
@@ -267,11 +267,8 @@ public sealed class ReadingExtractionService(
 }
 
 /// <summary>
-/// Default AI implementation. Today this is a deterministic stub: it
-/// returns a canonical 20+6+16 placeholder manifest so the admin UI works
-/// end-to-end without needing AI configured. Swap with a real
-/// <c>IAiGatewayService</c>-backed implementation when the PDF parsing
-/// pipeline lands (Reading kind/task in the gateway).
+/// Development placeholder implementation. It fails closed so no generated
+/// placeholder Reading manifest can be approved into authored content.
 /// </summary>
 public sealed class StubReadingExtractionAi : IReadingExtractionAi
 {
@@ -280,75 +277,7 @@ public sealed class StubReadingExtractionAi : IReadingExtractionAi
         string? mediaAssetId,
         CancellationToken ct)
     {
-        var partA = new ReadingPartManifest(
-            ReadingPartCode.A, 15, "Match each item to the correct text.",
-            new[]
-            {
-                new ReadingTextManifest(1, "Text A1 (extracted placeholder)", "Placeholder source",
-                    "<p>Extraction placeholder. Replace with real content.</p>", 80, "general"),
-            },
-            Enumerable.Range(1, 20).Select(i =>
-                new ReadingQuestionManifest(
-                    DisplayOrder: i,
-                    Points: 1,
-                    QuestionType: ReadingQuestionType.ShortAnswer,
-                    Stem: $"Short-answer item {i}",
-                    OptionsJson: "[]",
-                    CorrectAnswerJson: $"\"placeholder-{i}\"",
-                    AcceptedSynonymsJson: null,
-                    CaseSensitive: false,
-                    ExplanationMarkdown: null,
-                    SkillTag: "scan",
-                    ReadingTextDisplayOrder: 1)).ToList());
-
-        var partB = new ReadingPartManifest(
-            ReadingPartCode.B, null, "Choose the option that best matches the text.",
-            new[]
-            {
-                new ReadingTextManifest(1, "Text B1 (extracted placeholder)", "Placeholder source",
-                    "<p>Extraction placeholder. Replace with real content.</p>", 100, "workplace"),
-            },
-            Enumerable.Range(1, 6).Select(i =>
-                new ReadingQuestionManifest(
-                    DisplayOrder: i,
-                    Points: 1,
-                    QuestionType: ReadingQuestionType.MultipleChoice3,
-                    Stem: $"MCQ3 item {i}",
-                    OptionsJson: "[\"A option\",\"B option\",\"C option\"]",
-                    CorrectAnswerJson: "\"A\"",
-                    AcceptedSynonymsJson: null,
-                    CaseSensitive: false,
-                    ExplanationMarkdown: null,
-                    SkillTag: "purpose",
-                    ReadingTextDisplayOrder: 1)).ToList());
-
-        var partC = new ReadingPartManifest(
-            ReadingPartCode.C, null, "Choose the option that best answers the question.",
-            new[]
-            {
-                new ReadingTextManifest(1, "Text C1 (extracted placeholder)", "Placeholder source",
-                    "<p>Extraction placeholder. Replace with real content.</p>", 600, "research"),
-            },
-            Enumerable.Range(1, 16).Select(i =>
-                new ReadingQuestionManifest(
-                    DisplayOrder: i,
-                    Points: 1,
-                    QuestionType: ReadingQuestionType.MultipleChoice4,
-                    Stem: $"MCQ4 item {i}",
-                    OptionsJson: "[\"A option\",\"B option\",\"C option\",\"D option\"]",
-                    CorrectAnswerJson: "\"A\"",
-                    AcceptedSynonymsJson: null,
-                    CaseSensitive: false,
-                    ExplanationMarkdown: null,
-                    SkillTag: "inference",
-                    ReadingTextDisplayOrder: 1)).ToList());
-
-        var manifest = new ReadingStructureManifest(new[] { partA, partB, partC });
-        return Task.FromResult(new ReadingExtractionAiResult(
-            Manifest: manifest,
-            RawResponseJson: null,
-            IsStub: true,
-            StubReason: "AI gateway not configured for Reading extraction; returning deterministic placeholder structure."));
+        throw new InvalidOperationException("Reading AI extraction provider is not configured.");
     }
 }
 

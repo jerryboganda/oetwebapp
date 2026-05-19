@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services.Pronunciation;
 
@@ -13,12 +15,19 @@ public class PronunciationAsrProviderSelectorTests
     private static PronunciationAsrProviderSelector Build(
         string providerPreference,
         params IPronunciationAsrProvider[] providers)
+        => Build(providerPreference, environment: null, providers);
+
+    private static PronunciationAsrProviderSelector Build(
+        string providerPreference,
+        IHostEnvironment? environment,
+        params IPronunciationAsrProvider[] providers)
     {
         var opts = Options.Create(new PronunciationOptions { Provider = providerPreference });
         return new PronunciationAsrProviderSelector(
             providers,
             opts,
-            NullLogger<PronunciationAsrProviderSelector>.Instance);
+            NullLogger<PronunciationAsrProviderSelector>.Instance,
+            environment);
     }
 
     private sealed class FakeProvider(string name, bool configured) : IPronunciationAsrProvider
@@ -84,5 +93,36 @@ public class PronunciationAsrProviderSelectorTests
             new FakeProvider("azure", configured: true),
             new FakeProvider("mock", configured: true));
         Assert.Equal("mock", sel.Select().Name);
+    }
+
+    [Fact]
+    public void Production_Auto_Throws_Instead_Of_Falling_Back_To_Mock()
+    {
+        var sel = Build("auto",
+            new FakeHostEnvironment(Environments.Production),
+            new FakeProvider("azure", configured: false),
+            new FakeProvider("whisper", configured: false),
+            new FakeProvider("mock", configured: true));
+
+        Assert.Throws<InvalidOperationException>(() => sel.Select());
+    }
+
+    [Fact]
+    public void Production_Explicit_Mock_Throws()
+    {
+        var sel = Build("mock",
+            new FakeHostEnvironment(Environments.Production),
+            new FakeProvider("mock", configured: true));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => sel.Select());
+        Assert.Contains("mock provider", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class FakeHostEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "OetLearner.Api.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

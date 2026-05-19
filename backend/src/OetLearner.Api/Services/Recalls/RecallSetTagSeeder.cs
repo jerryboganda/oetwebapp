@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
@@ -16,11 +17,13 @@ namespace OetLearner.Api.Services.Recalls;
 /// <list type="bullet">
 ///   <item>Term EXISTS (any provenance): tag is added if missing. Other fields
 ///         are NOT touched — admin curation is preserved.</item>
-///   <item>Term MISSING: a new row is INSERTED with <c>Status=draft</c>,
-///         <c>Category=recall_term</c>, ProfessionId=null (general),
-///         placeholder Definition/ExampleSentence, and the recall-set code
-///         applied. Admin enriches via the existing CRUD pages at
-///         <c>/admin/content/vocabulary/{id}</c> and promotes to <c>active</c>.</item>
+///   <item>Term MISSING in Development: a new row is INSERTED with
+///         <c>Status=draft</c>, <c>Category=recall_term</c>, ProfessionId=null
+///         (general), placeholder Definition/ExampleSentence, and the
+///         recall-set code applied. Admin enriches via the existing CRUD pages
+///         at <c>/admin/content/vocabulary/{id}</c> and promotes to
+///         <c>active</c>. Outside Development, missing terms are logged and not
+///         created so production is never polluted with placeholders.</item>
 ///   <item>Multi-tag: a term in several packs (e.g. "headaches" in old +
 ///         2023-2025 + 2026) ends up with all codes in
 ///         <c>RecallSetCodesJson</c>.</item>
@@ -64,12 +67,13 @@ public static class RecallSetTagSeeder
 
         var totalCreated = 0;
         var totalTagged = 0;
+        var allowCreateMissingTerms = environment.IsDevelopment();
 
         foreach (var file in files.OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
         {
             try
             {
-                var (created, tagged) = await SeedFileAsync(db, file, logger, cancellationToken);
+            var (created, tagged) = await SeedFileAsync(db, file, allowCreateMissingTerms, logger, cancellationToken);
                 totalCreated += created;
                 totalTagged += tagged;
             }
@@ -87,6 +91,7 @@ public static class RecallSetTagSeeder
     private static async Task<(int created, int tagged)> SeedFileAsync(
         LearnerDbContext db,
         string path,
+        bool allowCreateMissingTerms,
         ILogger logger,
         CancellationToken ct)
     {
@@ -159,6 +164,15 @@ public static class RecallSetTagSeeder
                         changed = true;
                     }
                 }
+                continue;
+            }
+
+            if (!allowCreateMissingTerms)
+            {
+                logger.LogWarning(
+                    "RecallSetTagSeeder: term '{Term}' from {File} does not exist; not creating a placeholder row outside Development.",
+                    display,
+                    Path.GetFileName(path));
                 continue;
             }
 

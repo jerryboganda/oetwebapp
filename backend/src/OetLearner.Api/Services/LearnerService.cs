@@ -31,6 +31,16 @@ public sealed record WritingEntitlement(
 
 public sealed record GeneratedDownloadFile(Stream Stream, string ContentType, string FileName);
 
+public sealed record WritingWeaknessAnalyticsDto(
+    DateTimeOffset GeneratedAt,
+    int WindowDays,
+    IReadOnlyList<WritingWeaknessDataPointDto> Points);
+
+public sealed record WritingWeaknessDataPointDto(
+    DateTimeOffset OccurredAt,
+    string Tag,
+    string? Criterion);
+
 public sealed record PaymentWebhookRetryResult(
     string EventId,
     string Status,
@@ -1391,6 +1401,90 @@ public partial class LearnerService(
     }
 
     public async Task<List<object>> GetWritingTasksAsync(CancellationToken cancellationToken) => await GetTasksBySubtestAsync("writing", cancellationToken);
+
+    public async Task<WritingWeaknessAnalyticsDto> GetWritingWeaknessAnalyticsAsync(string userId, int? days, CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
+
+        var generatedAt = DateTimeOffset.UtcNow;
+        var windowDays = Math.Clamp(days ?? 90, 1, 365);
+        var since = generatedAt.AddDays(-windowDays);
+
+        var rows = await db.WritingRuleViolations.AsNoTracking()
+            .Where(v => v.UserId == userId && v.GeneratedAt >= since)
+            .OrderBy(v => v.GeneratedAt)
+            .Select(v => new { v.GeneratedAt, v.RuleId, v.Message })
+            .ToListAsync(cancellationToken);
+
+        var points = rows
+            .Select(row => new WritingWeaknessDataPointDto(
+                row.GeneratedAt,
+                WritingWeaknessTagFor(row.RuleId, row.Message),
+                WritingWeaknessCriterionFor(row.RuleId, row.Message)))
+            .ToList();
+
+        return new WritingWeaknessAnalyticsDto(generatedAt, windowDays, points);
+    }
+
+    private static string WritingWeaknessTagFor(string ruleId, string? message)
+    {
+        var text = $"{ruleId} {message}".ToLowerInvariant();
+
+        if (text.Contains("missing_key_content")) return "missing_key_content";
+        if (text.Contains("irrelevant_content")) return "irrelevant_content";
+        if (text.Contains("unclear_purpose")) return "unclear_purpose";
+        if (text.Contains("informal_tone")) return "informal_tone";
+        if (text.Contains("abbreviation_issue")) return "abbreviation_issue";
+        if (text.Contains("poor_paragraphing")) return "poor_paragraphing";
+        if (text.Contains("inaccurate_transfer")) return "inaccurate_transfer";
+        if (text.Contains("grammar_articles")) return "grammar_articles";
+
+        if (text.Contains("missing") || text.Contains("omit") || text.Contains("incomplete") || text.Contains("key content")) return "missing_key_content";
+        if (text.Contains("irrelevant") || text.Contains("unnecessary") || text.Contains("redundant")) return "irrelevant_content";
+        if (text.Contains("purpose") || text.Contains("reader") || text.Contains("request") || text.Contains("action")) return "unclear_purpose";
+        if (text.Contains("tone") || text.Contains("register") || text.Contains("informal") || text.Contains("jargon") || text.Contains("style")) return "informal_tone";
+        if (text.Contains("abbrev") || text.Contains("acronym")) return "abbreviation_issue";
+        if (text.Contains("paragraph") || text.Contains("layout") || text.Contains("structure") || text.Contains("salutation") || text.Contains("signature")) return "poor_paragraphing";
+        if (text.Contains("inaccurate") || text.Contains("transfer") || text.Contains("fact") || text.Contains("dose") || text.Contains("medication")) return "inaccurate_transfer";
+        if (text.Contains("grammar") || text.Contains("article") || text.Contains("tense") || text.Contains("punctuation") || text.Contains("spelling") || text.Contains("language")) return "grammar_articles";
+
+        return "other_rulebook_issue";
+    }
+
+    private static string? WritingWeaknessCriterionFor(string ruleId, string? message)
+    {
+        var text = $"{ruleId} {message}".ToLowerInvariant();
+
+        if (text.Contains("purpose") || text.Contains("intro_contains_purpose")) return "purpose";
+        if (text.Contains("salutation") || text.Contains("yours") || text.Contains("address")
+            || text.Contains("layout") || text.Contains("blank_line") || text.Contains("structure")
+            || text.Contains("paragraph"))
+        {
+            return "organization";
+        }
+
+        if (text.Contains("conciseness") || text.Contains("concise") || text.Contains("length")
+            || text.Contains("clarity") || text.Contains("priorit"))
+        {
+            return "conciseness";
+        }
+
+        if (text.Contains("genre") || text.Contains("register") || text.Contains("tone")
+            || text.Contains("non_medical") || text.Contains("jargon") || text.Contains("style"))
+        {
+            return "genre";
+        }
+
+        if (text.Contains("grammar") || text.Contains("contraction") || text.Contains("present_perfect")
+            || text.Contains("past_simple") || text.Contains("punctuation") || text.Contains("language")
+            || text.Contains("date_format") || text.Contains("year") || text.Contains("abbrev"))
+        {
+            return "language";
+        }
+
+        if (text.Contains("content") || text.Contains("fact") || text.Contains("transfer") || text.Contains("relevant")) return "content";
+        return null;
+    }
 
     public async Task<object> GetWritingTaskAsync(string contentId, CancellationToken cancellationToken)
     {

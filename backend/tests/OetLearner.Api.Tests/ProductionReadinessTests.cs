@@ -200,6 +200,18 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public void App_FailsFastInProduction_WhenPayPalSandboxIsEnabled()
+    {
+        using var factory = CreateProductionFactory(settings =>
+        {
+            settings["Billing:PayPal:UseSandbox"] = "true";
+        });
+
+        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("Billing:PayPal:UseSandbox", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SpeakingUploadPipeline_StoresBinary_AndStreamsItToExperts()
     {
         using var learner = await CreateLearnerClientAsync("audio-owner");

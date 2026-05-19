@@ -102,6 +102,7 @@ import type {
   SpeakingAuditInput,
   WritingLintInput,
 } from './rulebook';
+import type { WeaknessDataPoint } from './writing-analytics/types';
 import type {
   VideoLessonDetail,
   VideoLessonListItem,
@@ -1320,6 +1321,21 @@ export interface WritingHomeResponse {
 export async function fetchWritingHome(): Promise<WritingHomeResponse> {
   const data = await apiRequest<WritingHomeResponse>('/v1/writing/home');
   return normalizeRouteValues(data) as WritingHomeResponse;
+}
+
+export interface WritingWeaknessAnalyticsResponse {
+  generatedAt: string;
+  windowDays: number;
+  points: WeaknessDataPoint[];
+}
+
+export async function fetchWritingWeaknessData(options: { days?: number } = {}): Promise<WritingWeaknessAnalyticsResponse> {
+  const params = new URLSearchParams();
+  if (options.days !== undefined) {
+    params.set('days', String(options.days));
+  }
+
+  return apiRequest<WritingWeaknessAnalyticsResponse>(`/v1/writing/analytics/weaknesses${params.size ? `?${params}` : ''}`);
 }
 
 export async function fetchSpeakingHome(): Promise<SpeakingHome> {
@@ -7374,170 +7390,29 @@ export async function adminEvaluateGrammarPublishGate(lessonId: string) {
   };
 }
 
-function makeGrammarExercise(type: GrammarExerciseAuthoring['type'], index: number, topicLabel: string): GrammarExerciseAuthoring {
-  if (type === 'mcq') {
-    return {
-      id: `exercise-${index + 1}`,
-      sortOrder: index + 1,
-      type,
-      promptMarkdown: `Which option is correct for the ${topicLabel.toLowerCase()} pattern?`,
-      options: [
-        { id: 'a', label: 'Incorrect option' },
-        { id: 'b', label: 'Correct option' },
-        { id: 'c', label: 'Distractor' },
-      ],
-      correctAnswer: 'b',
-      acceptedAnswers: [],
-      explanationMarkdown: 'The middle option follows the target structure.',
-      difficulty: 'intermediate',
-      points: 1,
-    };
-  }
-
-  if (type === 'matching') {
-    return {
-      id: `exercise-${index + 1}`,
-      sortOrder: index + 1,
-      type,
-      promptMarkdown: 'Match the sentence fragment to the best ending.',
-      options: [
-        { left: 'The patient was admitted', right: 'after the assessment' },
-        { left: 'The results were discussed', right: 'with the consultant' },
-      ],
-      correctAnswer: [
-        { left: 'The patient was admitted', right: 'after the assessment' },
-        { left: 'The results were discussed', right: 'with the consultant' },
-      ],
-      acceptedAnswers: [],
-      explanationMarkdown: 'Keep the time relationship and clinical reference in order.',
-      difficulty: 'intermediate',
-      points: 2,
-    };
-  }
-
-  if (type === 'error_correction') {
-    return {
-      id: `exercise-${index + 1}`,
-      sortOrder: index + 1,
-      type,
-      promptMarkdown: 'Correct the grammar error in the sentence: "The nurse explain the procedure."',
-      options: [],
-      correctAnswer: 'The nurse explains the procedure.',
-      acceptedAnswers: ['The nurse explains the procedure'],
-      explanationMarkdown: 'Subject-verb agreement requires explain -> explains.',
-      difficulty: 'beginner',
-      points: 1,
-    };
-  }
-
-  if (type === 'sentence_transformation') {
-    return {
-      id: `exercise-${index + 1}`,
-      sortOrder: index + 1,
-      type,
-      promptMarkdown: 'Rewrite the sentence using a passive structure.',
-      options: [],
-      correctAnswer: 'The medication was prescribed by the doctor.',
-      acceptedAnswers: ['The medication was prescribed by the doctor'],
-      explanationMarkdown: 'Use the passive voice to emphasise the action rather than the agent.',
-      difficulty: 'intermediate',
-      points: 2,
-    };
-  }
-
-  return {
-    id: `exercise-${index + 1}`,
-    sortOrder: index + 1,
-    type: 'fill_blank',
-    promptMarkdown: `Fill the blank: "The ${topicLabel.toLowerCase()} approach is ___."`,
-    options: [],
-    correctAnswer: 'appropriate',
-    acceptedAnswers: ['appropriate'],
-    explanationMarkdown: 'Use a simple adjective that matches the context.',
-    difficulty: 'beginner',
-    points: 1,
-  };
-}
-
-function buildGrammarDraftFromPrompt(params: { examTypeCode: string; topicSlug?: string; level: string; targetExerciseCount: number; prompt: string; }) {
-  const topicSlug = normalizeGrammarTopicSlug(params.topicSlug ?? params.prompt.split(/\s+/).slice(0, 3).join('-'));
-  const topicLabel = titleCase(topicSlug);
-  const title = `${topicLabel} practice`;
-  const contentBlocks: GrammarContentBlockLearner[] = [
-    { id: 'intro', sortOrder: 1, type: 'callout', contentMarkdown: `Focus on **${topicLabel.toLowerCase()}** in a clinical context.` },
-    { id: 'example', sortOrder: 2, type: 'example', contentMarkdown: 'Example: The patient **has been reviewed** by the team.' },
-    { id: 'note', sortOrder: 3, type: 'note', contentMarkdown: 'Watch article use, agreement, and the level of formality.' },
-  ];
-
-  const exerciseTypes: GrammarExerciseAuthoring['type'][] = ['mcq', 'fill_blank', 'error_correction', 'sentence_transformation', 'matching'];
-  const exercises: GrammarExerciseAuthoring[] = [];
-  for (let index = 0; index < Math.max(3, params.targetExerciseCount); index += 1) {
-    exercises.push(makeGrammarExercise(exerciseTypes[index % exerciseTypes.length], index, topicLabel));
-  }
-
-  return {
-    lesson: {
-      examTypeCode: params.examTypeCode,
-      topicId: topicSlug,
-      title,
-      description: `Starter lesson created from the prompt: ${params.prompt}`,
-      level: params.level,
-      category: topicSlug,
-      estimatedMinutes: Math.max(8, exercises.length * 2),
-      sortOrder: 0,
-      sourceProvenance: `Starter draft generated from: ${params.prompt}`,
-      prerequisiteLessonIds: [],
-      contentBlocks,
-      exercises,
-    } satisfies GrammarLessonUpsertPayload,
-    warning: 'Grounded AI generation is not wired yet. A starter draft was created for editing.',
-  };
-}
-
 export async function adminGenerateGrammarAiDraft(params: { examTypeCode: string; topicSlug?: string; prompt: string; level: string; targetExerciseCount: number; profession?: string; }) {
   // Grounded, platform-only. The backend builds the AI prompt via
-  // IAiGatewayService and refuses ungrounded prompts. On AI-parse failure
-  // the server returns a deterministic starter template + `warning`.
-  try {
-    const response = await apiRequest<{
-      lessonId: string;
-      title: string;
-      contentBlockCount: number;
-      exerciseCount: number;
-      rulebookVersion: string;
-      appliedRuleIds: string[];
-      warning: string | null;
-    }>('/v1/admin/grammar/ai-draft', {
-      method: 'POST',
-      body: JSON.stringify({
-        examTypeCode: params.examTypeCode,
-        topicSlug: params.topicSlug ?? null,
-        prompt: params.prompt,
-        level: params.level,
-        targetExerciseCount: params.targetExerciseCount,
-        profession: params.profession ?? 'medicine',
-      }),
-    });
-    return response;
-  } catch (err) {
-    // Last-resort fallback: the backend is unreachable or rejected. Surface
-    // the error up; also produce a local starter draft so the admin can
-    // continue offline. Matches the "always produce a usable draft" decision.
-    if (err instanceof Error && err.message.toLowerCase().includes('network')) {
-      const draft = buildGrammarDraftFromPrompt(params);
-      const created = await adminCreateGrammarLessonV2(draft.lesson);
-      return {
-        lessonId: created.id,
-        title: draft.lesson.title,
-        contentBlockCount: draft.lesson.contentBlocks.length,
-        exerciseCount: draft.lesson.exercises.length,
-        rulebookVersion: '1.0.0',
-        appliedRuleIds: [] as string[],
-        warning: `Backend unreachable — a local starter template was created. ${draft.warning ?? ''}`.trim(),
-      };
-    }
-    throw err;
-  }
+  // IAiGatewayService and refuses ungrounded prompts. The client must not
+  // create local lesson content when the backend is unavailable.
+  return apiRequest<{
+    lessonId: string;
+    title: string;
+    contentBlockCount: number;
+    exerciseCount: number;
+    rulebookVersion: string;
+    appliedRuleIds: string[];
+    warning: string | null;
+  }>('/v1/admin/grammar/ai-draft', {
+    method: 'POST',
+    body: JSON.stringify({
+      examTypeCode: params.examTypeCode,
+      topicSlug: params.topicSlug ?? null,
+      prompt: params.prompt,
+      level: params.level,
+      targetExerciseCount: params.targetExerciseCount,
+      profession: params.profession ?? 'medicine',
+    }),
+  });
 }
 
 export interface GrammarEntitlement {

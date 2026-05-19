@@ -218,14 +218,20 @@ export default function SpeakingHome() {
             <MotionSection delayIndex={1}>
               <LearnerSurfaceCard card={drillFocusCard}>
                 <div className="space-y-2.5">
-                  {(home?.commonIssuesToImprove ?? ['Build smoother openings for role plays.', 'Keep the professional tone consistent.']).slice(0, 3).map((issue) => (
-                    <div
-                      key={issue}
-                      className="rounded-2xl border !border-amber-300 !bg-white px-3 py-2 text-sm font-bold !text-slate-950 shadow-sm shadow-amber-950/5 dark:!border-amber-300/30 dark:!bg-slate-950 dark:!text-amber-50 dark:shadow-none"
-                    >
-                      {issue}
-                    </div>
-                  ))}
+                  {(home?.commonIssuesToImprove ?? []).length > 0 ? (
+                    (home?.commonIssuesToImprove ?? []).slice(0, 3).map((issue) => (
+                      <div
+                        key={issue}
+                        className="rounded-2xl border !border-amber-300 !bg-white px-3 py-2 text-sm font-bold !text-slate-950 shadow-sm shadow-amber-950/5 dark:!border-amber-300/30 dark:!bg-slate-950 dark:!text-amber-50 dark:shadow-none"
+                      >
+                        {issue}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-2xl border !border-amber-300 !bg-white px-3 py-2 text-sm font-bold !text-slate-950 shadow-sm shadow-amber-950/5 dark:!border-amber-300/30 dark:!bg-slate-950 dark:!text-amber-50 dark:shadow-none">
+                      Complete a speaking attempt to populate this focus list.
+                    </p>
+                  )}
                 </div>
               </LearnerSurfaceCard>
             </MotionSection>

@@ -2322,12 +2322,12 @@ public class ReadingAuthoringTests
         await structure.EnsureCanonicalPartsAsync("p1", default);
         await EnableReadingAiExtractionAsync(policy);
 
-        var ai = new OetLearner.Api.Services.Reading.StubReadingExtractionAi();
+        var ai = new SuccessfulReadingExtractionAi();
         var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
 
         var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
         Assert.Equal(OetLearner.Api.Domain.ReadingExtractionStatus.Pending, draft.Status);
-        Assert.True(draft.IsStub);
+        Assert.False(draft.IsStub);
         Assert.False(string.IsNullOrEmpty(draft.ExtractedManifestJson));
 
         // Approve — the manifest is applied to the paper.
@@ -2343,7 +2343,7 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
-    public async Task Extraction_reject_marks_draft_and_does_not_apply_manifest()
+    public async Task Extraction_unconfigured_provider_records_failed_draft_without_manifest()
     {
         var (db, structure, policy, _, _) = Build();
         await SeedPaperAsync(db, "p1", ContentStatus.Draft);
@@ -2351,6 +2351,27 @@ public class ReadingAuthoringTests
         await EnableReadingAiExtractionAsync(policy);
 
         var ai = new OetLearner.Api.Services.Reading.StubReadingExtractionAi();
+        var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
+
+        var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
+
+        Assert.Equal(OetLearner.Api.Domain.ReadingExtractionStatus.Failed, draft.Status);
+        Assert.False(draft.IsStub);
+        Assert.True(string.IsNullOrWhiteSpace(draft.ExtractedManifestJson));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await svc.ApproveDraftAsync(draft.Id, "admin", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extraction_reject_marks_draft_and_does_not_apply_manifest()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
+
+        var ai = new SuccessfulReadingExtractionAi();
         var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
 
         var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
@@ -2436,6 +2457,80 @@ public class ReadingAuthoringTests
         Assert.True(s2.SubmittedExamAttempts >= 1);
 
         await db.DisposeAsync();
+    }
+
+    private sealed class SuccessfulReadingExtractionAi : IReadingExtractionAi
+    {
+        public Task<ReadingExtractionAiResult> ExtractAsync(string paperId, string? mediaAssetId, CancellationToken ct)
+            => Task.FromResult(new ReadingExtractionAiResult(BuildManifest(), "{}", IsStub: false, StubReason: null));
+
+        private static ReadingStructureManifest BuildManifest()
+        {
+            var partA = new ReadingPartManifest(
+                ReadingPartCode.A, 15, "Match each item to the correct text.",
+                new[]
+                {
+                    new ReadingTextManifest(1, "Text A1", "Clinic notice",
+                        "<p>Patients should bring an updated medication list to their appointment.</p>", 80, "general"),
+                },
+                Enumerable.Range(1, 20).Select(i =>
+                    new ReadingQuestionManifest(
+                        DisplayOrder: i,
+                        Points: 1,
+                        QuestionType: ReadingQuestionType.ShortAnswer,
+                        Stem: $"Short-answer item {i}",
+                        OptionsJson: "[]",
+                        CorrectAnswerJson: $"\"answer-{i}\"",
+                        AcceptedSynonymsJson: null,
+                        CaseSensitive: false,
+                        ExplanationMarkdown: null,
+                        SkillTag: "scan",
+                        ReadingTextDisplayOrder: 1)).ToList());
+
+            var partB = new ReadingPartManifest(
+                ReadingPartCode.B, null, "Choose the option that best matches the text.",
+                new[]
+                {
+                    new ReadingTextManifest(1, "Text B1", "Workplace memo",
+                        "<p>Staff must document medicine reconciliation before discharge.</p>", 100, "workplace"),
+                },
+                Enumerable.Range(1, 6).Select(i =>
+                    new ReadingQuestionManifest(
+                        DisplayOrder: i,
+                        Points: 1,
+                        QuestionType: ReadingQuestionType.MultipleChoice3,
+                        Stem: $"MCQ3 item {i}",
+                        OptionsJson: "[\"A option\",\"B option\",\"C option\"]",
+                        CorrectAnswerJson: "\"A\"",
+                        AcceptedSynonymsJson: null,
+                        CaseSensitive: false,
+                        ExplanationMarkdown: null,
+                        SkillTag: "purpose",
+                        ReadingTextDisplayOrder: 1)).ToList());
+
+            var partC = new ReadingPartManifest(
+                ReadingPartCode.C, null, "Choose the option that best answers the question.",
+                new[]
+                {
+                    new ReadingTextManifest(1, "Text C1", "Research extract",
+                        "<p>The study compared patient outcomes after two follow-up pathways.</p>", 600, "research"),
+                },
+                Enumerable.Range(1, 16).Select(i =>
+                    new ReadingQuestionManifest(
+                        DisplayOrder: i,
+                        Points: 1,
+                        QuestionType: ReadingQuestionType.MultipleChoice4,
+                        Stem: $"MCQ4 item {i}",
+                        OptionsJson: "[\"A option\",\"B option\",\"C option\",\"D option\"]",
+                        CorrectAnswerJson: "\"A\"",
+                        AcceptedSynonymsJson: null,
+                        CaseSensitive: false,
+                        ExplanationMarkdown: null,
+                        SkillTag: "inference",
+                        ReadingTextDisplayOrder: 1)).ToList());
+
+            return new ReadingStructureManifest(new[] { partA, partB, partC });
+        }
     }
 }
 

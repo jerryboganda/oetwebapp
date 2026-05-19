@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 
@@ -22,9 +23,11 @@ public interface IPronunciationAsrProviderSelector
 public sealed class PronunciationAsrProviderSelector(
     IEnumerable<IPronunciationAsrProvider> providers,
     IOptions<PronunciationOptions> options,
-    ILogger<PronunciationAsrProviderSelector> logger) : IPronunciationAsrProviderSelector
+    ILogger<PronunciationAsrProviderSelector> logger,
+    IHostEnvironment? environment = null) : IPronunciationAsrProviderSelector
 {
     private readonly PronunciationOptions _options = options.Value;
+    private readonly bool _allowMockProvider = environment is null || environment.IsDevelopment();
 
     public IPronunciationAsrProvider Select()
     {
@@ -34,7 +37,11 @@ public sealed class PronunciationAsrProviderSelector(
         IPronunciationAsrProvider? FindByName(string name) =>
             all.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
 
-        if (requested == "mock") return FindByName("mock") ?? throw Unconfigured("mock");
+        if (requested == "mock")
+        {
+            if (!_allowMockProvider) throw MockNotAllowed();
+            return FindByName("mock") ?? throw Unconfigured("mock");
+        }
 
         if (requested == "azure")
         {
@@ -66,6 +73,7 @@ public sealed class PronunciationAsrProviderSelector(
         var mock = FindByName("mock");
         if (mock is not null)
         {
+            if (!_allowMockProvider) throw Unconfigured("auto");
             logger.LogWarning("Pronunciation ASR: falling back to mock provider — no real ASR credentials configured.");
             return mock;
         }
@@ -74,4 +82,7 @@ public sealed class PronunciationAsrProviderSelector(
 
     private static InvalidOperationException Unconfigured(string name) =>
         new($"Pronunciation ASR provider '{name}' is not configured. Set Pronunciation:AzureSpeechKey or Pronunciation:WhisperApiKey in configuration.");
+
+    private static InvalidOperationException MockNotAllowed() =>
+        new("Pronunciation ASR cannot use the mock provider outside the Development environment.");
 }

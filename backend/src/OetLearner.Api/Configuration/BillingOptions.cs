@@ -69,7 +69,7 @@ public sealed class StripeBillingOptions
 
 public sealed class PayPalBillingOptions
 {
-    public bool UseSandbox { get; set; } = true;
+    public bool UseSandbox { get; set; } = false;
     public string ApiBaseUrl { get; set; } = "https://api-m.paypal.com";
     public string? ClientId { get; set; }
     public string? ClientSecret { get; set; }

@@ -20,6 +20,11 @@ public static class DatabaseBootstrapper
         var autoMigrate = options.AutoMigrate ?? environment.IsDevelopment();
         var seedDemoData = options.SeedDemoData ?? environment.IsDevelopment();
 
+        if (!environment.IsDevelopment() && seedDemoData)
+        {
+            throw new InvalidOperationException("Bootstrap:SeedDemoData must be false outside the Development environment.");
+        }
+
         if (db.Database.IsInMemory() || db.Database.IsSqlite())
         {
             await db.Database.EnsureCreatedAsync(cancellationToken);

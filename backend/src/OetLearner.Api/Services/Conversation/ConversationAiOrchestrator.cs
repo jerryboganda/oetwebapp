@@ -82,9 +82,7 @@ public sealed class ConversationAiOrchestrator(
 
         var (text, emotion, shouldEnd, rules) = ParseReply(result.Completion, prompt.Metadata.AppliedRuleIds);
         if (string.IsNullOrWhiteSpace(text))
-            text = task == AiTaskMode.GenerateConversationOpening
-                ? "Hello. How can I help you today?"
-                : "Could you tell me a little more about that, please?";
+            throw new InvalidOperationException("Conversation AI response did not contain reply text.");
         return new ConversationAiReply(text, emotion, shouldEnd, rules, result.RulebookVersion);
     }
 
@@ -162,9 +160,11 @@ public sealed class ConversationAiOrchestrator(
                     criteria.Add(new ConversationAiCriterion(id, Math.Clamp(score, 0, 6), evidence, quotes));
                 }
             }
-            foreach (var need in new[] { "intelligibility", "fluency", "appropriateness", "grammar_expression" })
-                if (!criteria.Any(x => string.Equals(x.Id, need, StringComparison.OrdinalIgnoreCase)))
-                    criteria.Add(new ConversationAiCriterion(need, 0, "no evidence", Array.Empty<string>()));
+            var missingCriteria = new[] { "intelligibility", "fluency", "appropriateness", "grammar_expression" }
+                .Where(need => !criteria.Any(x => string.Equals(x.Id, need, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+            if (missingCriteria.Length > 0)
+                throw new InvalidOperationException($"Conversation AI evaluation missing criteria: {string.Join(", ", missingCriteria)}.");
 
             var annotations = new List<ConversationAiAnnotation>();
             if (root.TryGetProperty("turnAnnotations", out var tas) && tas.ValueKind == JsonValueKind.Array)
@@ -195,20 +195,8 @@ public sealed class ConversationAiOrchestrator(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to parse evaluation; returning minimum.");
-            return new ConversationAiEvaluation(
-                new[]
-                {
-                    new ConversationAiCriterion("intelligibility", 0, "parse error", Array.Empty<string>()),
-                    new ConversationAiCriterion("fluency", 0, "parse error", Array.Empty<string>()),
-                    new ConversationAiCriterion("appropriateness", 0, "parse error", Array.Empty<string>()),
-                    new ConversationAiCriterion("grammar_expression", 0, "parse error", Array.Empty<string>()),
-                },
-                Array.Empty<ConversationAiAnnotation>(),
-                Array.Empty<string>(),
-                new[] { "AI evaluator could not parse the response. Please try again." },
-                Array.Empty<string>(), Array.Empty<string>(),
-                "AI-generated — parse error, scores set to 0.", rulebookVersion);
+            logger.LogWarning(ex, "Failed to parse conversation evaluation.");
+            throw new InvalidOperationException("Conversation AI evaluation response was not usable.", ex);
         }
     }
 

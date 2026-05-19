@@ -39,6 +39,12 @@ public class ConversationService(
         var template = sourceContent is null
             ? await PickTemplateAsync(userId, taskType, profession, ct)
             : null;
+        if (sourceContent is null && template is null)
+        {
+            throw ApiException.Conflict(
+                "CONVERSATION_TEMPLATE_REQUIRED",
+                "No published conversation scenario is available for this task type and profession.");
+        }
         _ = difficulty;
 
         var sessionId = $"cs-{Guid.NewGuid():N}";
@@ -56,9 +62,7 @@ public class ConversationService(
             Profession = profession,
             ScenarioJson = sourceContent is not null
                 ? BuildScenarioJsonFromSpeakingContent(sourceContent, taskType, profession, difficulty)
-                : template is not null
-                ? BuildScenarioJsonFromTemplate(template)
-                : BuildFallbackScenarioJson(taskType, profession, options),
+                : BuildScenarioJsonFromTemplate(template!),
             State = "preparing",
             TurnCount = 0,
             DurationSeconds = 0,
@@ -455,27 +459,6 @@ public class ConversationService(
 
     private static List<string> FirstNonEmptyList(params List<string>[] lists)
         => lists.FirstOrDefault(list => list.Count > 0) ?? [];
-
-    private static string BuildFallbackScenarioJson(string taskType, string profession, ConversationOptions options)
-    {
-        var title = taskType == "oet-handover" ? "Shift Handover" : "Clinical Role Play";
-        return JsonSupport.Serialize(new
-        {
-            title, taskTypeCode = taskType, profession, difficulty = "medium",
-            setting = "Clinical setting",
-            patientRole = "A patient presenting with a common clinical complaint.",
-            clinicianRole = "You are the clinician seeing the patient.",
-            context = "No CMS template is currently published for this combination. Practise with a generic brief.",
-            objectives = new[]
-            {
-                "Greet the patient professionally.",
-                "Elicit history using open questions.",
-                "Explain the plan in plain English.",
-                "Offer safety-netting and close the encounter.",
-            },
-            timeLimitSeconds = options.MaxSessionDurationSeconds,
-        });
-    }
 
     private async Task<List<ConversationTurn>> GetTurnsAsync(string sessionId, CancellationToken ct)
         => await db.ConversationTurns.AsNoTracking()

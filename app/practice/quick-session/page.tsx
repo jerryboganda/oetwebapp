@@ -33,24 +33,6 @@ interface SessionConfig {
 /* ── api helper ───────────────────────────────── */
 const apiRequest = apiClient.request;
 
-/* ── fallback question bank (used when /v1/learner/quick-session is unavailable) ── */
-function generateFallbackSession(): SessionConfig {
-  const vocabWords = [
-    { prompt: 'The patient presented with acute ___ in the lower abdomen.', options: ['pain', 'pane', 'bane', 'gain'], correctIndex: 0, explanation: '"Pain" is the correct medical term for physical discomfort.' },
-    { prompt: 'Select the word that means "difficulty breathing":', options: ['Dysphagia', 'Dyspnoea', 'Dysuria', 'Dystonia'], correctIndex: 1, explanation: 'Dyspnoea refers to difficulty or laboured breathing.' },
-    { prompt: 'The nurse should ___ the wound twice daily.', options: ['dress', 'address', 'distress', 'compress'], correctIndex: 0, explanation: '"Dress" means to clean and apply a covering to a wound.' },
-    { prompt: 'Which term describes a slow heart rate?', options: ['Tachycardia', 'Arrhythmia', 'Bradycardia', 'Fibrillation'], correctIndex: 2, explanation: 'Bradycardia = heart rate below 60 bpm.' },
-    { prompt: 'A medication taken ___ means "by mouth".', options: ['parenterally', 'orally', 'topically', 'rectally'], correctIndex: 1, explanation: 'Orally (per os / PO) means taken by mouth.' },
-    { prompt: 'The patient was ___ to the recovery ward.', options: ['transferred', 'transformed', 'transposed', 'transmitted'], correctIndex: 0, explanation: '"Transferred" means moved from one place to another.' },
-    { prompt: '"PRN" in prescriptions means:', options: ['Every 4 hours', 'As needed', 'Before meals', 'At bedtime'], correctIndex: 1, explanation: 'PRN = pro re nata = "as the situation demands" / as needed.' },
-    { prompt: 'Which describes inflammation of the liver?', options: ['Nephritis', 'Hepatitis', 'Arthritis', 'Dermatitis'], correctIndex: 1, explanation: 'Hepatitis = inflammation of the liver (hepat- = liver, -itis = inflammation).' },
-  ];
-  const questions: QuickQuestion[] = vocabWords.slice(0, 8).map((q, i) => ({
-    id: `q-${i}`, type: 'vocab' as const, ...q,
-  }));
-  return { questions, sessionId: `qs-${Date.now()}`, timeLimit: 300 };
-}
-
 /* ── page component ──────────────────────────── */
 type QuickStep = 'menu' | 'session' | 'results';
 
@@ -62,7 +44,7 @@ export default function MobileQuickSessionPage() {
   const [revealed, setRevealed] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [, setUsingFallback] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   /* timer */
   useEffect(() => {
@@ -74,15 +56,12 @@ export default function MobileQuickSessionPage() {
   /* start a session */
   const startSession = useCallback(async (mode: string) => {
     setLoading(true);
+    setSessionError(null);
     analytics.track('quick_session_started', { mode });
     try {
-      let data: SessionConfig;
-      try {
-        data = await apiRequest<SessionConfig>(`/v1/learner/quick-session?mode=${mode}`);
-        setUsingFallback(false);
-      } catch {
-        data = generateFallbackSession();
-        setUsingFallback(true);
+      const data = await apiRequest<SessionConfig>(`/v1/learner/quick-session?mode=${encodeURIComponent(mode)}`);
+      if (!Array.isArray(data.questions) || data.questions.length === 0) {
+        throw new Error('Quick session returned no questions.');
       }
       setConfig(data);
       setAnswers(new Array(data.questions.length).fill(null));
@@ -91,13 +70,11 @@ export default function MobileQuickSessionPage() {
       setRevealed(false);
       setStep('session');
     } catch {
-      const fallback = generateFallbackSession();
-      setConfig(fallback);
-      setUsingFallback(true);
-      setAnswers(new Array(fallback.questions.length).fill(null));
-      setStep('session');
+      setConfig(null);
+      setSessionError('Quick practice is temporarily unavailable because no live session could be loaded.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   /* answer a question */
@@ -173,6 +150,12 @@ export default function MobileQuickSessionPage() {
             </MotionSection>
 
             {loading && <div className="flex justify-center mt-6"><Skeleton className="h-6 w-32" /></div>}
+
+            {sessionError && (
+              <Card className="border-danger/30 bg-danger/5 p-4 text-sm text-danger shadow-sm">
+                {sessionError}
+              </Card>
+            )}
           </>
         )}
 

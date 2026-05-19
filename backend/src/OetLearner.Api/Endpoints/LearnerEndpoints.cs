@@ -76,6 +76,7 @@ public static class LearnerEndpoints
 
         var writing = v1.MapGroup("/writing");
         writing.MapGet("/home", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingHomeAsync(http.UserId(), ct)));
+        writing.MapGet("/analytics/weaknesses", async (HttpContext http, [FromQuery] int? days, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingWeaknessAnalyticsAsync(http.UserId(), days, ct)));
         writing.MapGet("/entitlement", async (
             HttpContext http,
             IWritingEntitlementService entitlement,

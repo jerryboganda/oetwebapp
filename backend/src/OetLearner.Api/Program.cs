@@ -33,6 +33,7 @@ var bootstrapOptions = builder.Configuration.GetSection("Bootstrap").Get<Bootstr
 var storageOptions = builder.Configuration.GetSection("Storage").Get<StorageOptions>() ?? new StorageOptions();
 var platformOptions = builder.Configuration.GetSection("Platform").Get<PlatformOptions>() ?? new PlatformOptions();
 var billingOptions = builder.Configuration.GetSection("Billing").Get<BillingOptions>() ?? new BillingOptions();
+var zoomOptions = builder.Configuration.GetSection(ZoomOptions.SectionName).Get<ZoomOptions>() ?? new ZoomOptions();
 var externalAuthOptions = builder.Configuration.GetSection(ExternalAuthOptions.SectionName).Get<ExternalAuthOptions>() ?? new ExternalAuthOptions();
 var aiProviderOptions = builder.Configuration.GetSection(AiProviderOptions.SectionName).Get<AiProviderOptions>() ?? new AiProviderOptions();
 var useDevelopmentAuth = authOptions.UseDevelopmentAuth && builder.Environment.IsDevelopment();
@@ -103,6 +104,21 @@ if (!builder.Environment.IsDevelopment())
     if (billingOptions.AllowSandboxFallbacks)
     {
         throw new InvalidOperationException("Billing:AllowSandboxFallbacks must be false outside the Development environment.");
+    }
+
+    if (billingOptions.PayPal.UseSandbox)
+    {
+        throw new InvalidOperationException("Billing:PayPal:UseSandbox must be false outside the Development environment.");
+    }
+
+    if (bootstrapOptions.SeedDemoData == true)
+    {
+        throw new InvalidOperationException("Bootstrap:SeedDemoData must be false outside the Development environment.");
+    }
+
+    if (zoomOptions.AllowSandboxFallback)
+    {
+        throw new InvalidOperationException("Zoom:AllowSandboxFallback must be false outside the Development environment.");
     }
 
     // Stripe secret/webhook/success/cancel values are runtime-rotatable. They
@@ -228,8 +244,16 @@ builder.Services.AddRateLimiter(options =>
     // The desktop smoke suite reuses seeded accounts across many browser projects in parallel.
     // Keep production protections tight, but give development/test runs enough headroom to avoid
     // false-positive 429s from shared-session traffic bursts.
-    var perUserPermitLimit = builder.Environment.IsDevelopment() ? 5000 : 100;
-    var perUserWritePermitLimit = builder.Environment.IsDevelopment() ? 300 : 30;
+    // Operators can override production limits via env vars RateLimit__PerUserPermitLimit and
+    // RateLimit__PerUserWritePermitLimit (e.g. during bulk content backfills).
+    var perUserPermitLimitDefault = builder.Environment.IsDevelopment() ? 5000 : 100;
+    var perUserWritePermitLimitDefault = builder.Environment.IsDevelopment() ? 300 : 30;
+    var perUserPermitLimit = int.TryParse(builder.Configuration["RateLimit:PerUserPermitLimit"], out var puLim) && puLim > 0
+        ? puLim
+        : perUserPermitLimitDefault;
+    var perUserWritePermitLimit = int.TryParse(builder.Configuration["RateLimit:PerUserWritePermitLimit"], out var puwLim) && puwLim > 0
+        ? puwLim
+        : perUserWritePermitLimitDefault;
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = async (context, ct) =>
     {

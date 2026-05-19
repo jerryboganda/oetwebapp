@@ -29,5 +29,5 @@ public sealed class ZoomOptions
     public string? WebhookVerificationToken { get; set; }
 
     /// <summary>Allow sandbox/mock responses when credentials are not configured.</summary>
-    public bool AllowSandboxFallback { get; set; } = true;
+    public bool AllowSandboxFallback { get; set; } = false;
 }

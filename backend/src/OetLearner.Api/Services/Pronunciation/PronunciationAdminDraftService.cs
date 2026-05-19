@@ -16,8 +16,8 @@ namespace OetLearner.Api.Services.Pronunciation;
 ///   2. Forces platform credentials via
 ///      <c>FeatureCode = AiFeatureCodes.AdminPronunciationDraft</c>.
 ///   3. Validates the reply against the loaded pronunciation rulebook — every
-///      <c>appliedRuleIds</c> value must exist in the rulebook or the draft is
-///      rejected and a deterministic fallback template is returned.
+///      <c>appliedRuleIds</c> value must exist in the rulebook or the draft
+///      fails closed.
 ///   4. NEVER persists directly; returns a populated DTO that the admin can
 ///      edit and save via the regular create endpoint.
 /// </summary>
@@ -87,21 +87,27 @@ public sealed class PronunciationAdminDraftService(
             }, ct);
 
             parsed = ParseDraft(result.Completion, request, prompt.Metadata.RulebookVersion);
-            if (parsed is null) warning = "AI response could not be parsed — using deterministic fallback template.";
+            if (parsed is null)
+            {
+                throw ApiException.ServiceUnavailable(
+                    "PRONUNCIATION_AI_DRAFT_UNUSABLE",
+                    "Pronunciation AI draft response was not usable. Please try again.");
+            }
         }
         catch (PromptNotGroundedException)
         {
             throw;
         }
+        catch (ApiException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Pronunciation AI draft failed — using deterministic fallback.");
-            warning = "AI provider error: draft generation failed; using deterministic fallback template.";
-        }
-
-        if (parsed is null)
-        {
-            parsed = FallbackDraft(request);
+            logger.LogWarning(ex, "Pronunciation AI draft provider error.");
+            throw ApiException.ServiceUnavailable(
+                "PRONUNCIATION_AI_DRAFT_UNAVAILABLE",
+                "Pronunciation AI draft generation is unavailable right now. Please try again.");
         }
 
         // Validate appliedRuleIds against the rulebook.
@@ -124,8 +130,16 @@ public sealed class PronunciationAdminDraftService(
         }
         catch (RulebookNotFoundException)
         {
-            warning = (warning is null ? "" : warning + " ") +
-                      $"No pronunciation rulebook found for profession '{profession}' — applied rule IDs not validated.";
+            throw ApiException.ServiceUnavailable(
+                "PRONUNCIATION_RULEBOOK_NOT_AVAILABLE",
+                $"No pronunciation rulebook found for profession '{profession}'.");
+        }
+
+        if (parsed.AppliedRuleIds.Count == 0)
+        {
+            throw ApiException.ServiceUnavailable(
+                "PRONUNCIATION_AI_DRAFT_UNUSABLE",
+                "Pronunciation AI draft did not cite any valid rulebook rules. Please try again.");
         }
 
         return parsed with { Warning = warning };
@@ -200,31 +214,6 @@ public sealed class PronunciationAdminDraftService(
         {
             return null;
         }
-    }
-
-    private static PronunciationDrillDraftResult FallbackDraft(AdminPronunciationDrillAiDraftRequest r)
-    {
-        var phoneme = string.IsNullOrWhiteSpace(r.Phoneme) ? "θ" : r.Phoneme!;
-        var focus = string.IsNullOrWhiteSpace(r.Focus) ? "phoneme" : r.Focus!;
-        return new PronunciationDrillDraftResult(
-            TargetPhoneme: phoneme,
-            Label: $"Drill — /{phoneme}/",
-            Difficulty: string.IsNullOrWhiteSpace(r.Difficulty) ? "medium" : r.Difficulty!,
-            Focus: focus,
-            ExampleWords: new[] { "patient", "therapy", "method" },
-            MinimalPairs: Array.Empty<MinimalPairDto>(),
-            Sentences: new[]
-            {
-                "Please describe any symptoms you have noticed recently.",
-                "The patient was referred for further assessment.",
-            },
-            TipsHtml: "<p>AI draft unavailable. Edit this draft before publishing.</p>",
-            AppliedRuleIds: string.IsNullOrWhiteSpace(r.PrimaryRuleId)
-                ? Array.Empty<string>()
-                : new[] { r.PrimaryRuleId! },
-            PrimaryRuleId: r.PrimaryRuleId,
-            Warning: "Deterministic fallback used — AI draft was not available.",
-            SelfCheckNotes: null);
     }
 
     private static string? S(JsonElement el, string name)

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Grammar;
 using OetLearner.Api.Services.Rulebook;
@@ -15,7 +16,7 @@ namespace OetLearner.Api.Tests;
 /// Coverage:
 ///   1. DraftService always builds a grounded prompt (rulebook header).
 ///   2. Validates appliedRuleIds against the loaded grammar rulebook; drops unknown IDs.
-///   3. On ungrounded / malformed reply, falls back to deterministic starter template.
+///   3. On malformed AI replies, fails closed without persisting content.
 ///   4. PublishGate refuses when required fields missing.
 ///   5. EntitlementService enforces 3 lessons / 7 days for free tier; unlimited for paid.
 /// </summary>
@@ -47,10 +48,10 @@ public class GrammarServiceTests
         Assert.StartsWith("G", prompt.Metadata.AppliedRuleIds[0]);
     }
 
-    // ── Draft fallback template ─────────────────────────────────────────
+    // ── Draft fail-closed behavior ──────────────────────────────────────
 
     [Fact]
-    public async Task DraftService_FallsBackToStarterTemplate_WhenAiReplyUnusable()
+    public async Task DraftService_FailsClosed_WhenAiReplyUnusable()
     {
         var options = NewInMemoryOptions();
         await using var db = new LearnerDbContext(options);
@@ -59,24 +60,16 @@ public class GrammarServiceTests
         var gateway = new AiGatewayService(loader, new IAiModelProvider[] { new MockAiProvider() });
         var service = new GrammarDraftService(db, loader, gateway, NullLogger<GrammarDraftService>.Instance);
 
-        var result = await service.GenerateAsync(
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.GenerateAsync(
             new GrammarDraftRequest("oet", "tenses", "Drill tenses", "intermediate", 4, "medicine"),
             adminId: "admin-001",
             adminName: "Admin",
             authAccountId: "auth-001",
-            default);
+            default));
 
-        Assert.NotNull(result.Warning);
-        Assert.True(result.ExerciseCount >= 3, "Fallback must include at least 3 exercises.");
-        Assert.NotEmpty(result.AppliedRuleIds);
-
-        // Persisted as draft
-        var saved = await db.GrammarLessons.FirstAsync(x => x.Id == result.LessonId);
-        Assert.Equal("draft", saved.Status);
-
-        // Audit event recorded
-        var audits = await db.AuditEvents.Where(a => a.ResourceId == result.LessonId).ToListAsync();
-        Assert.Contains(audits, a => a.Action == "GrammarAiDraftFallback" || a.Action == "GrammarAiDraftCreated");
+        Assert.Equal("GRAMMAR_AI_DRAFT_UNUSABLE", ex.ErrorCode);
+        Assert.Empty(await db.GrammarLessons.ToListAsync());
+        Assert.Empty(await db.AuditEvents.ToListAsync());
     }
 
     // ── Publish gate ────────────────────────────────────────────────────

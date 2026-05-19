@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Rulebook;
@@ -148,6 +151,34 @@ public class AiGatewayRoutingTests
         Assert.Null(registryProvider.LastRequest);
     }
 
+    [Fact]
+    public async Task CompleteAsync_ProductionRefusesMock_WhenTextProviderHasNoPlatformKey()
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var mockProvider = new CapturingProvider("mock");
+        var uncredentialedTextProvider = ProviderRow(
+            "openai-platform",
+            AiProviderDialect.OpenAiCompatible,
+            AiProviderCategory.TextChat,
+            encryptedApiKey: string.Empty);
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { mockProvider, registryProvider },
+            providerRegistry: new FakeProviderRegistry(uncredentialedTextProvider),
+            configuration: new ConfigurationBuilder().Build(),
+            environment: new FakeHostEnvironment(Environments.Production));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        }));
+
+        Assert.Contains("mock AI provider", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(mockProvider.LastRequest);
+        Assert.Null(registryProvider.LastRequest);
+    }
+
     private static AiGroundedPrompt BuildWritingPrompt(IAiGatewayService gateway)
         => gateway.BuildGroundedPrompt(new AiGroundingContext
         {
@@ -263,5 +294,13 @@ public class AiGatewayRoutingTests
 
         public Task<string?> GetPlatformKeyAsync(string providerCode, CancellationToken ct)
             => Task.FromResult<string?>(null);
+    }
+
+    private sealed class FakeHostEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "OetLearner.Api.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

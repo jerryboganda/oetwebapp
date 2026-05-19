@@ -131,6 +131,35 @@ public sealed class MagicByteValidator : IUploadContentValidator
         if (header[0] == 0x50 && header[1] == 0x4B && (header[2] == 0x03 || header[2] == 0x05 || header[2] == 0x07))
             return ext == "zip" ? new(true, "application/zip", "zip", null) : new(false, "application/zip", "zip", $"Declared .{ext} but file is a ZIP container.");
 
+        // Plain text (.txt) / Markdown (.md) / JSON (.json):
+        // No magic bytes — detect by absence of NUL and overwhelmingly printable
+        // bytes (or UTF-8 BOM). Conservative: must match the declared extension.
+        if (ext == "txt" || ext == "md" || ext == "json")
+        {
+            bool hasUtf8Bom = read >= 3 && header[0] == 0xEF && header[1] == 0xBB && header[2] == 0xBF;
+            int sniffStart = hasUtf8Bom ? 3 : 0;
+            bool hasNul = false;
+            int printable = 0, total = 0;
+            for (int i = sniffStart; i < read; i++)
+            {
+                byte b = header[i];
+                if (b == 0x00) { hasNul = true; break; }
+                total++;
+                // ASCII printable, tab/lf/cr, or high-bit (likely UTF-8 multibyte)
+                if ((b >= 0x20 && b <= 0x7E) || b == 0x09 || b == 0x0A || b == 0x0D || b >= 0x80) printable++;
+            }
+            if (!hasNul && total > 0 && printable * 100 / total >= 90)
+            {
+                var mime = ext switch
+                {
+                    "md" => "text/markdown",
+                    "json" => "application/json",
+                    _ => "text/plain",
+                };
+                return new(true, mime, ext, null);
+            }
+        }
+
         return new(false, null, null, "Unrecognised file format.");
     }
 }

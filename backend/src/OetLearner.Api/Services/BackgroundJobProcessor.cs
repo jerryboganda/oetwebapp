@@ -1104,19 +1104,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         {
             var logger = services.GetService<ILogger<BackgroundJobProcessor>>();
             logger?.LogError(ex, "Conversation AI evaluation failed for {SessionId}", session.Id);
-            aiEval = new Conversation.ConversationAiEvaluation(
-                new[]
-                {
-                    new Conversation.ConversationAiCriterion("intelligibility", 0, "evaluation error", Array.Empty<string>()),
-                    new Conversation.ConversationAiCriterion("fluency", 0, "evaluation error", Array.Empty<string>()),
-                    new Conversation.ConversationAiCriterion("appropriateness", 0, "evaluation error", Array.Empty<string>()),
-                    new Conversation.ConversationAiCriterion("grammar_expression", 0, "evaluation error", Array.Empty<string>()),
-                },
-                Array.Empty<Conversation.ConversationAiAnnotation>(),
-                Array.Empty<string>(),
-                new[] { "The AI evaluator could not complete. Try the session again." },
-                Array.Empty<string>(), Array.Empty<string>(),
-                "AI evaluation failed.", "");
+            throw;
         }
 
         var intelligibility = aiEval.Criteria.FirstOrDefault(c => c.Id.Equals("intelligibility", StringComparison.OrdinalIgnoreCase))?.Score06 ?? 0;

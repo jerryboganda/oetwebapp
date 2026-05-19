@@ -1,7 +1,10 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.AiTools;
 
@@ -51,10 +54,15 @@ public sealed class AiGatewayService(
     IAiFeatureRouteResolver? featureRouteResolver = null,
     IAiToolRegistry? toolRegistry = null,
     IAiToolInvoker? toolInvoker = null,
-    Microsoft.Extensions.Options.IOptions<AiToolOptions>? toolOptions = null)
+    Microsoft.Extensions.Options.IOptions<AiToolOptions>? toolOptions = null,
+    IConfiguration? configuration = null,
+    IHostEnvironment? environment = null)
     : IAiGatewayService
 {
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
+    private readonly bool _allowMockProvider = environment is null
+        || environment.IsDevelopment()
+        || configuration?.GetValue<bool>(ProductionProviderSafetyValidator.AllowMockProvidersKey) == true;
 
     public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
         => _promptBuilder.Build(context);
@@ -197,6 +205,15 @@ public sealed class AiGatewayService(
                 errorMessage: "No AI model provider registered.",
                 ct);
             throw new InvalidOperationException("No AI model provider registered.");
+        }
+
+        if (!_allowMockProvider && string.Equals(provider.Name, "mock", StringComparison.OrdinalIgnoreCase))
+        {
+            await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                errorCode: "mock_provider_forbidden",
+                errorMessage: "The deterministic mock AI provider is not allowed outside the Development environment.",
+                ct);
+            throw new InvalidOperationException("The deterministic mock AI provider is not allowed outside the Development environment.");
         }
 
         var effectiveModel = !string.IsNullOrWhiteSpace(request.Model)

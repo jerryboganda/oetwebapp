@@ -174,7 +174,7 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
                 ProviderId = providerId,
                 Model = model,
                 KeySource = keySource,
-                RulebookVersion = context.RulebookVersion,
+                RulebookVersion = Truncate(context.RulebookVersion, 32),
                 PromptTemplateId = context.PromptTemplateId,
                 SystemPromptHash = HashOrNull(context.SystemPrompt),
                 UserPromptHash = HashOrNull(context.UserPrompt),

@@ -46,4 +46,7 @@ public sealed class ApiException : Exception
 
     public static ApiException TooManyRequests(string errorCode, string message)
         => new(StatusCodes.Status429TooManyRequests, errorCode, message);
+
+    public static ApiException ServiceUnavailable(string errorCode, string message, bool retryable = true, string? supportHint = null)
+        => new(StatusCodes.Status503ServiceUnavailable, errorCode, message, retryable: retryable, supportHint: supportHint);
 }

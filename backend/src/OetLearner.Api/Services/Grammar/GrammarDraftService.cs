@@ -21,13 +21,12 @@ namespace OetLearner.Api.Services.Grammar;
 ///      <see cref="RuleKind.Grammar"/> + <see cref="AiTaskMode.GenerateGrammarLesson"/>.
 ///   2. Platform-only credential: feature code <see cref="AiFeatureCodes.AdminGrammarDraft"/>.
 ///   3. Validated output: every <c>appliedRuleIds</c> value must exist in the
-///      loaded grammar rulebook. Unknown rule IDs are dropped; if fewer than
-///      two remain, the draft is rejected and a deterministic fallback template
-///      is used instead (warning surfaced to the admin).
-///   4. Persistence: always inserted as <c>status = "draft"</c>. Admin edits
-///      and publishes via the existing admin flow.
-///   5. Audit: one <see cref="AuditEvent"/> row per draft, regardless of
-///      whether AI succeeded or the template was used.
+///      loaded grammar rulebook. Unusable replies fail closed rather than
+///      creating template content.
+///   4. Persistence: only usable grounded AI output is inserted as
+///      <c>status = "draft"</c>. Admin edits and publishes via the existing
+///      admin flow.
+///   5. Audit: one <see cref="AuditEvent"/> row per persisted draft.
 /// ============================================================================
 /// </summary>
 public interface IGrammarDraftService
@@ -95,13 +94,11 @@ public sealed class GrammarDraftService(
 
         var userMessage = BuildUserMessage(request);
 
-        AiGatewayResult? aiResult = null;
         ParsedLessonDraft? parsed = null;
-        string? warning = null;
 
         try
         {
-            aiResult = await gateway.CompleteAsync(new AiGatewayRequest
+            var aiResult = await gateway.CompleteAsync(new AiGatewayRequest
             {
                 Prompt = prompt,
                 UserInput = userMessage,
@@ -115,7 +112,9 @@ public sealed class GrammarDraftService(
             parsed = TryParseLesson(aiResult.Completion, ruleIds);
             if (parsed is null)
             {
-                warning = "AI reply could not be parsed as a grammar lesson. A deterministic starter template was used instead. Edit before publishing.";
+                throw ApiException.ServiceUnavailable(
+                    "GRAMMAR_AI_DRAFT_UNUSABLE",
+                    "Grammar AI draft response was not usable. Please try again.");
             }
         }
         catch (PromptNotGroundedException pex)
@@ -124,13 +123,17 @@ public sealed class GrammarDraftService(
             logger.LogError(pex, "Grammar AI draft refused — ungrounded prompt.");
             throw;
         }
+        catch (ApiException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Grammar AI draft — provider error; using deterministic fallback.");
-            warning = "AI provider error. A deterministic starter template was used instead. Edit before publishing.";
+            logger.LogWarning(ex, "Grammar AI draft provider error.");
+            throw ApiException.ServiceUnavailable(
+                "GRAMMAR_AI_DRAFT_UNAVAILABLE",
+                "Grammar AI draft generation is unavailable right now. Please try again.");
         }
-
-        parsed ??= BuildFallbackDraft(request, rulebook);
 
         // Persist
         var lessonId = $"GRM-{Guid.NewGuid():N}"[..12];
@@ -138,9 +141,7 @@ public sealed class GrammarDraftService(
         {
             topicId = parsed.TopicSlug,
             category = parsed.TopicSlug,
-            sourceProvenance = warning is null
-                ? $"Grounded AI draft (grammar rulebook v{rulebook.Version}). appliedRuleIds={string.Join(",", parsed.AppliedRuleIds)}"
-                : $"Starter template fallback ({warning}). Rulebook v{rulebook.Version}.",
+            sourceProvenance = $"Grounded AI draft (grammar rulebook v{rulebook.Version}). appliedRuleIds={string.Join(",", parsed.AppliedRuleIds)}",
             prerequisiteLessonIds = Array.Empty<string>(),
             contentBlocks = parsed.ContentBlocks,
             exercises = parsed.Exercises,
@@ -152,10 +153,11 @@ public sealed class GrammarDraftService(
         var entity = new GrammarLesson
         {
             Id = lessonId,
-            Title = parsed.Title,
+            Title = parsed.Title.Length > 128 ? parsed.Title[..128] : parsed.Title,
             ExamTypeCode = request.ExamTypeCode,
-            Category = parsed.TopicSlug,
-            Description = parsed.Description ?? $"Auto-drafted grammar lesson on {parsed.TopicSlug.Replace('_', ' ')}.",
+            // GrammarLessons.Category is varchar(32); truncate to fit.
+            Category = parsed.TopicSlug.Length > 32 ? parsed.TopicSlug[..32] : parsed.TopicSlug,
+            Description = Truncate(parsed.Description ?? $"Auto-drafted grammar lesson on {parsed.TopicSlug.Replace('_', ' ')}.", 512),
             ContentHtml = docJson,
             ExercisesJson = JsonSerializer.Serialize(parsed.Exercises, JsonOpts),
             Level = parsed.Level,
@@ -170,10 +172,10 @@ public sealed class GrammarDraftService(
             Id = Guid.NewGuid().ToString("N"),
             ActorId = adminId ?? "system",
             ActorName = adminName ?? "system",
-            Action = warning is null ? "GrammarAiDraftCreated" : "GrammarAiDraftFallback",
+            Action = "GrammarAiDraftCreated",
             ResourceType = "GrammarLesson",
             ResourceId = lessonId,
-            Details = $"Grammar lesson AI draft created. Title=\"{parsed.Title}\" rulebook=v{rulebook.Version} appliedRuleIds=[{string.Join(",", parsed.AppliedRuleIds)}]" + (warning is null ? "" : $" warning=\"{warning}\""),
+            Details = $"Grammar lesson AI draft created. Title=\"{parsed.Title}\" rulebook=v{rulebook.Version} appliedRuleIds=[{string.Join(",", parsed.AppliedRuleIds)}]",
             OccurredAt = DateTimeOffset.UtcNow,
         });
 
@@ -186,7 +188,7 @@ public sealed class GrammarDraftService(
             ExerciseCount: parsed.Exercises.Count,
             RulebookVersion: rulebook.Version,
             AppliedRuleIds: parsed.AppliedRuleIds,
-            Warning: warning);
+            Warning: null);
     }
 
     // ---------------------------------------------------------------------
@@ -397,7 +399,11 @@ public sealed class GrammarDraftService(
             else if (ch is ' ' or '-' or '_') sb.Append('_');
         }
         var slug = sb.ToString().Trim('_');
-        return string.IsNullOrEmpty(slug) ? "grammar_topic" : slug;
+        if (string.IsNullOrEmpty(slug)) slug = "grammar_topic";
+        // GrammarLessons.Category column is varchar(32). Keep slugs ≤ 32 chars
+        // so downstream persistence cannot overflow.
+        if (slug.Length > 32) slug = slug[..32].TrimEnd('_');
+        return slug;
     }
 
     private static ExamProfession ParseProfession(string? raw)
@@ -406,150 +412,6 @@ public sealed class GrammarDraftService(
         return Enum.TryParse<ExamProfession>(raw.Replace("-", ""), ignoreCase: true, out var p)
             ? p
             : ExamProfession.Medicine;
-    }
-
-    // ---------------------------------------------------------------------
-    // Fallback template — deterministic starter lesson grounded in the rulebook
-    // ---------------------------------------------------------------------
-
-    private static ParsedLessonDraft BuildFallbackDraft(GrammarDraftRequest request, OetRulebook rulebook)
-    {
-        var slug = Slugify(request.TopicSlug ?? DeriveSlug(request.Prompt));
-        var topicLabel = TitleCase(slug.Replace('_', ' '));
-        var level = NormaliseLevel(request.Level);
-
-        // Pick up to 3 rules from the rulebook to anchor the fallback lesson.
-        // Bias towards critical + major severities.
-        var anchorRules = rulebook.Rules
-            .OrderBy(r => r.Severity switch
-            {
-                RuleSeverity.Critical => 0,
-                RuleSeverity.Major => 1,
-                RuleSeverity.Minor => 2,
-                _ => 3,
-            })
-            .Take(3)
-            .ToList();
-
-        var appliedIds = anchorRules.Select(r => r.Id).ToList();
-
-        var contentBlocks = new List<LessonContentBlock>
-        {
-            new("cb-1", 1, "callout", $"Focus on **{topicLabel.ToLowerInvariant()}** patterns in a clinical context.", null),
-            new("cb-2", 2, "example", anchorRules.Count > 0
-                ? $"Example (cite {anchorRules[0].Id}): {(anchorRules[0].ExemplarPhrases is { Count: > 0 } ? anchorRules[0].ExemplarPhrases![0] : "The patient was reviewed by the team.")}"
-                : "Example: The patient was reviewed by the team.",
-                null),
-            new("cb-3", 3, "note", "Watch tense choice, article use, and formal register.", null),
-        };
-
-        var targetCount = Math.Clamp(request.TargetExerciseCount, 3, 12);
-        var exercises = new List<LessonExercise>();
-        var types = new[] { "mcq", "fill_blank", "error_correction", "sentence_transformation", "matching" };
-        for (var i = 0; i < targetCount; i++)
-        {
-            var t = types[i % types.Length];
-            var rule = anchorRules[i % Math.Max(1, anchorRules.Count)];
-            exercises.Add(MakeFallbackExercise(t, i + 1, rule));
-        }
-
-        return new ParsedLessonDraft(
-            Title: $"{topicLabel} practice",
-            TopicSlug: slug,
-            Level: level,
-            EstimatedMinutes: Math.Max(8, targetCount * 2),
-            Description: $"Starter lesson drafted from the admin prompt: {Truncate(request.Prompt, 200)}",
-            ContentBlocks: contentBlocks,
-            Exercises: exercises,
-            AppliedRuleIds: appliedIds);
-    }
-
-    private static LessonExercise MakeFallbackExercise(string type, int index, OetRule rule)
-    {
-        var applied = new List<string> { rule.Id };
-        var exemplar = rule.ExemplarPhrases is { Count: > 0 } ? rule.ExemplarPhrases![0] : "The patient was admitted for further management.";
-
-        return type switch
-        {
-            "mcq" => new LessonExercise(
-                Id: $"ex-{index}", SortOrder: index, Type: "mcq",
-                PromptMarkdown: $"Which sentence best follows {rule.Id} — {rule.Title}?",
-                Options: new[]
-                {
-                    new { id = "a", label = "The patient has presented three weeks ago." },
-                    new { id = "b", label = exemplar },
-                    new { id = "c", label = "The patient presents three weeks ago." },
-                },
-                CorrectAnswer: "b",
-                AcceptedAnswers: new List<string>(),
-                ExplanationMarkdown: $"Option b follows {rule.Id}. See the rulebook body for the full guidance.",
-                Difficulty: "intermediate",
-                Points: 1,
-                AppliedRuleIds: applied),
-            "fill_blank" => new LessonExercise(
-                Id: $"ex-{index}", SortOrder: index, Type: "fill_blank",
-                PromptMarkdown: $"Fill the blank so the sentence follows {rule.Id}: '{exemplar.Replace("was", "___")}'",
-                Options: Array.Empty<object>(),
-                CorrectAnswer: "was",
-                AcceptedAnswers: new List<string> { "was" },
-                ExplanationMarkdown: $"'was' keeps the sentence in past simple, as required by {rule.Id}.",
-                Difficulty: "beginner",
-                Points: 1,
-                AppliedRuleIds: applied),
-            "error_correction" => new LessonExercise(
-                Id: $"ex-{index}", SortOrder: index, Type: "error_correction",
-                PromptMarkdown: $"Correct the sentence so it follows {rule.Id}: 'The nurse explain the procedure.'",
-                Options: Array.Empty<object>(),
-                CorrectAnswer: "The nurse explains the procedure.",
-                AcceptedAnswers: new List<string> { "The nurse explains the procedure" },
-                ExplanationMarkdown: $"Subject–verb agreement: explain → explains. Cite {rule.Id}.",
-                Difficulty: "beginner",
-                Points: 1,
-                AppliedRuleIds: applied),
-            "sentence_transformation" => new LessonExercise(
-                Id: $"ex-{index}", SortOrder: index, Type: "sentence_transformation",
-                PromptMarkdown: $"Rewrite so the sentence uses passive voice and follows {rule.Id}: 'The doctor prescribed the medication.'",
-                Options: Array.Empty<object>(),
-                CorrectAnswer: "The medication was prescribed by the doctor.",
-                AcceptedAnswers: new List<string> { "The medication was prescribed by the doctor" },
-                ExplanationMarkdown: $"Use passive voice to keep focus on the patient or the action per {rule.Id}.",
-                Difficulty: "intermediate",
-                Points: 2,
-                AppliedRuleIds: applied),
-            _ => new LessonExercise(
-                Id: $"ex-{index}", SortOrder: index, Type: "matching",
-                PromptMarkdown: $"Match each fragment to the best completion (cite {rule.Id}).",
-                Options: new[]
-                {
-                    new { left = "The patient was admitted", right = "after the assessment" },
-                    new { left = "The results were discussed", right = "with the consultant" },
-                },
-                CorrectAnswer: new[]
-                {
-                    new { left = "The patient was admitted", right = "after the assessment" },
-                    new { left = "The results were discussed", right = "with the consultant" },
-                },
-                AcceptedAnswers: new List<string>(),
-                ExplanationMarkdown: $"Preserve the time relationship and clinical reference per {rule.Id}.",
-                Difficulty: "intermediate",
-                Points: 2,
-                AppliedRuleIds: applied),
-        };
-    }
-
-    private static string TitleCase(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return "Grammar";
-        var parts = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        return string.Join(' ', parts.Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
-    }
-
-    private static string DeriveSlug(string prompt)
-    {
-        var words = prompt.Split(new[] { ' ', '\n', '\r', '\t', '.', ',', ';', ':' }, StringSplitOptions.RemoveEmptyEntries)
-            .Where(w => w.Length > 2)
-            .Take(3);
-        return Slugify(string.Join('_', words));
     }
 
     private static string Truncate(string raw, int max)

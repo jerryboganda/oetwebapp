@@ -21,6 +21,7 @@ export const WRITING_ERROR_TAGS = [
   'poor_paragraphing',
   'inaccurate_transfer',
   'grammar_articles',
+  'other_rulebook_issue',
 ] as const;
 
 export type WritingErrorTag = (typeof WRITING_ERROR_TAGS)[number];
@@ -34,6 +35,7 @@ export const WRITING_ERROR_TAG_LABELS: Record<WritingErrorTag, string> = {
   poor_paragraphing: 'Poor paragraphing',
   inaccurate_transfer: 'Inaccurate transfer of facts',
   grammar_articles: 'Grammar / articles',
+  other_rulebook_issue: 'Other rulebook issue',
 };
 
 /**

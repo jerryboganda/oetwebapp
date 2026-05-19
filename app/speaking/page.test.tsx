@@ -134,4 +134,28 @@ describe('Speaking page', () => {
     expect(screen.getByText(/Mar\s+24,\s+2026/i)).toBeInTheDocument();
     expect(screen.queryByText('2026-03-24T18:03:24.830217+00:00')).not.toBeInTheDocument();
   });
+
+  it('does not render hardcoded common issue fallbacks when the backend returns no issues', async () => {
+    mockFetchSpeakingHome.mockResolvedValueOnce({
+      recommendedRolePlay: {
+        id: 'sp-1',
+        contentId: 'sp-1',
+        title: 'Breaking Bad News - Cancer Diagnosis',
+        criteriaFocus: 'appropriateness, grammar expression',
+        profession: 'Clinical role play',
+        duration: '20 mins',
+        estimatedDurationMinutes: 20,
+      },
+      featuredTasks: [],
+      drillGroups: [],
+      commonIssuesToImprove: [],
+      reviewCredits: { available: 3, route: '/reviews' },
+    });
+
+    render(<SpeakingPage />);
+
+    expect(await screen.findByText('Complete a speaking attempt to populate this focus list.')).toBeInTheDocument();
+    expect(screen.queryByText('Build smoother openings for role plays.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Keep the professional tone consistent.')).not.toBeInTheDocument();
+  });
 });

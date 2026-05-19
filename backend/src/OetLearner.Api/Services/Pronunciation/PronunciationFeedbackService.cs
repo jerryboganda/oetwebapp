@@ -79,7 +79,7 @@ public sealed class PronunciationFeedbackService(
             }, ct);
 
             return ParseFeedback(result.Completion, drill)
-                   ?? FallbackFeedback(assessment, drill);
+                   ?? throw new InvalidOperationException("Pronunciation feedback response was not usable.");
         }
         catch (PromptNotGroundedException)
         {
@@ -87,8 +87,8 @@ public sealed class PronunciationFeedbackService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Pronunciation feedback AI call failed — using deterministic fallback.");
-            return FallbackFeedback(assessment, drill);
+            logger.LogWarning(ex, "Pronunciation feedback AI call failed.");
+            throw;
         }
     }
 
@@ -160,31 +160,6 @@ public sealed class PronunciationFeedbackService(
         {
             return null;
         }
-    }
-
-    private static PronunciationFeedback FallbackFeedback(PronunciationAssessment a, PronunciationDrill d)
-    {
-        var summary = a.OverallScore >= 80
-            ? "Strong attempt — clear articulation across most of the reference."
-            : a.OverallScore >= 65
-                ? "Good progress — most of the target phoneme lands clearly but a few words need more shaping."
-                : "Keep practising — the target phoneme is not yet consistent. Slow down and exaggerate the articulation.";
-        var strengths = new List<string>();
-        if (a.CompletenessScore >= 85) strengths.Add("You read every word of the reference text.");
-        if (a.FluencyScore >= 80) strengths.Add("Pacing is natural.");
-        if (a.AccuracyScore >= 80) strengths.Add("Most phonemes are well articulated.");
-        if (strengths.Count == 0) strengths.Add("You attempted the drill and produced a scoreable recording.");
-
-        var improvements = new List<PronunciationImprovement>();
-        var primary = string.IsNullOrWhiteSpace(d.PrimaryRuleId) ? "P01.1" : d.PrimaryRuleId!;
-        improvements.Add(new PronunciationImprovement(
-            primary,
-            $"Focus on the {d.TargetPhoneme} phoneme — re-record slowly and compare with the model audio.",
-            DrillSuggestion: "Try the same drill again after 10 minutes of targeted practice."));
-
-        return new PronunciationFeedback(summary, strengths, improvements,
-            AppliedRuleIds: new[] { primary },
-            NextDrillTargetPhoneme: d.TargetPhoneme);
     }
 
     private static string? ExtractJsonObject(string completion)

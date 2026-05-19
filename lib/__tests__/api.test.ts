@@ -107,6 +107,67 @@ describe('learner route normalization', () => {
   });
 });
 
+describe('writing analytics API helpers', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.useRealTimers();
+    vi.resetModules();
+  });
+
+  it('fetches learner weakness analytics with the requested day window', async () => {
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify({
+        generatedAt: '2026-05-18T12:00:00Z',
+        windowDays: 14,
+        points: [
+          { occurredAt: '2026-05-17T12:00:00Z', tag: 'poor_paragraphing', criterion: 'organization' },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const { fetchWritingWeaknessData } = await import('../api');
+    const payload = await fetchWritingWeaknessData({ days: 14 });
+
+    expect(calls[0]).toContain('/v1/writing/analytics/weaknesses?days=14');
+    expect(payload.windowDays).toBe(14);
+    expect(payload.points).toEqual([
+      { occurredAt: '2026-05-17T12:00:00Z', tag: 'poor_paragraphing', criterion: 'organization' },
+    ]);
+  });
+
+  it('does not create a local grammar draft when the AI draft request has a network failure', async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      throw new TypeError('Network failure');
+    });
+
+    const { adminGenerateGrammarAiDraft } = await import('../api');
+    const request = adminGenerateGrammarAiDraft({
+      examTypeCode: 'oet',
+      topicSlug: 'articles',
+      prompt: 'Create an articles lesson',
+      level: 'beginner',
+      targetExerciseCount: 3,
+      profession: 'medicine',
+    });
+    const assertion = expect(request).rejects.toMatchObject({ code: 'network_error' });
+    await vi.advanceTimersByTimeAsync(4000);
+
+    await assertion;
+    expect(calls).toHaveLength(3);
+    expect(calls.every(call => call.includes('/v1/admin/grammar/ai-draft'))).toBe(true);
+  });
+});
+
 describe('mock booking API helpers', () => {
   const originalFetch = globalThis.fetch;
 

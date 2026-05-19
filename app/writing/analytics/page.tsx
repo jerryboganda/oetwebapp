@@ -9,10 +9,6 @@
  *   • Top weakness tags (count + share)
  *   • Per-criterion breakdown (colour-coded)
  *   • 14-day trend
- *
- * Uses deterministic seed data while the backend endpoint is being built.
- * The render path is identical once the data source moves to the API — only
- * `useWeaknessData()` needs to change.
  * ============================================================================
  */
 
@@ -25,24 +21,39 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { aggregateWeaknesses } from '@/lib/writing-analytics/aggregate';
-import {
-  SAMPLE_WEAKNESS_OBSERVATIONS,
-  SAMPLE_WEAKNESS_REFERENCE_DATE,
-} from '@/lib/writing-analytics/mock';
 import { paletteFor } from '@/lib/writing-criterion-colors';
 import type { WeaknessDataPoint } from '@/lib/writing-analytics/types';
 import { analytics } from '@/lib/analytics';
+import { fetchWritingWeaknessData } from '@/lib/api';
+
+interface WeaknessDataState {
+  points: WeaknessDataPoint[] | null;
+  generatedAt: string | null;
+  error: string | null;
+}
 
 function useWeaknessData() {
-  const [points, setPoints] = useState<WeaknessDataPoint[] | null>(null);
+  const [state, setState] = useState<WeaknessDataState>({ points: null, generatedAt: null, error: null });
 
   useEffect(() => {
-    // Deterministic seed; swap to API call when /v1/writing/analytics/weaknesses ships.
-    const handle = setTimeout(() => setPoints(SAMPLE_WEAKNESS_OBSERVATIONS), 250);
-    return () => clearTimeout(handle);
+    let cancelled = false;
+
+    fetchWritingWeaknessData({ days: 90 })
+      .then((data) => {
+        if (cancelled) return;
+        setState({ points: data.points, generatedAt: data.generatedAt, error: null });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setState({ points: [], generatedAt: new Date().toISOString(), error: 'Writing analytics are temporarily unavailable.' });
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  return points;
+  return state;
 }
 
 function pct(n: number): string {
@@ -50,16 +61,16 @@ function pct(n: number): string {
 }
 
 export default function WritingAnalyticsPage() {
-  const points = useWeaknessData();
+  const { points, generatedAt, error } = useWeaknessData();
 
   const summary = useMemo(() => {
     if (!points) return null;
     return aggregateWeaknesses(points, {
-      endDate: new Date(SAMPLE_WEAKNESS_REFERENCE_DATE),
+      endDate: new Date(generatedAt ?? Date.now()),
       trendDays: 14,
       topN: 5,
     });
-  }, [points]);
+  }, [generatedAt, points]);
 
   useEffect(() => {
     if (!summary) return;
@@ -107,7 +118,12 @@ export default function WritingAnalyticsPage() {
           }
         />
 
-        {!summary ? (
+        {error ? (
+          <Card className="border-danger/30 bg-danger/5 p-8 text-center">
+            <h2 className="text-lg font-semibold text-navy">Analytics unavailable</h2>
+            <p className="mt-2 text-sm text-muted">{error}</p>
+          </Card>
+        ) : !summary ? (
           <div className="space-y-6">
             <Skeleton className="h-44 rounded-2xl" />
             <Skeleton className="h-64 rounded-2xl" />

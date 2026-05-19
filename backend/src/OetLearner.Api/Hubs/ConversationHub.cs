@@ -147,21 +147,7 @@ public class ConversationHub(
         catch (Exception ex)
         {
             logger.LogError(ex, "Conversation opening failed");
-            var fallback = "Hello — thank you for coming in today. How can I help you?";
-            session.TurnCount++;
-            db.ConversationTurns.Add(new ConversationTurn
-            {
-                Id = Guid.NewGuid(), SessionId = sessionId, TurnNumber = session.TurnCount,
-                Role = "ai", Content = fallback, DurationMs = 3000, TimestampMs = 0,
-                ConfidenceScore = 1.0, AnalysisJson = JsonSupport.Serialize(new { fallback = true }),
-                AiFeatureCode = AiFeatureCodes.ConversationOpening,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-            await db.SaveChangesAsync(Context.ConnectionAborted);
-            session.TranscriptJson = await BuildTranscriptJsonAsync(db, sessionId, Context.ConnectionAborted);
-            await db.SaveChangesAsync(Context.ConnectionAborted);
-            await Clients.Caller.SendAsync("ReceiveAIResponse", session.TurnCount, fallback,
-                new { audioUrl = (string?)null, emotionHint = "neutral", appliedRuleIds = Array.Empty<string>() });
+            await Clients.Caller.SendAsync("ConversationError", "AI_ERROR", "AI partner could not start the conversation.");
         }
     }
 

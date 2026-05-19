@@ -105,8 +105,8 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         if (args.AppliesToAllProfessions && !string.IsNullOrWhiteSpace(args.ProfessionId))
             throw new ArgumentException("A paper is either profession-scoped or applies-to-all; pick one.");
 
-        var slug = NormalizeSlug(args.Slug ?? args.Title);
-        await EnsureSlugUnique(slug, ct);
+        var baseSlug = NormalizeSlug(args.Slug ?? args.Title);
+        var slug = await ResolveUniqueSlugAsync(baseSlug, ct);
 
         var now = DateTimeOffset.UtcNow;
         var paper = new ContentPaper
@@ -380,6 +380,21 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
     {
         if (await db.ContentPapers.AnyAsync(p => p.Slug == slug, ct))
             throw new InvalidOperationException($"Slug '{slug}' already exists.");
+    }
+
+    private async Task<string> ResolveUniqueSlugAsync(string baseSlug, CancellationToken ct)
+    {
+        // Try the base slug first; on collision, append -2, -3, ... up to -999.
+        // Keeps bulk orchestrators idempotent across crashes/resumes without 500ing.
+        if (!await db.ContentPapers.AnyAsync(p => p.Slug == baseSlug, ct))
+            return baseSlug;
+        for (var i = 2; i <= 999; i++)
+        {
+            var candidate = $"{baseSlug}-{i}";
+            if (!await db.ContentPapers.AnyAsync(p => p.Slug == candidate, ct))
+                return candidate;
+        }
+        throw new InvalidOperationException($"Could not allocate unique slug for base '{baseSlug}'.");
     }
 
     private async Task UpsertSpeakingContentItemAsync(ContentPaper paper, string adminId, DateTimeOffset now, CancellationToken ct)

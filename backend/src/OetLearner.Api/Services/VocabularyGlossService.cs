@@ -94,23 +94,24 @@ public sealed class VocabularyGlossService(
         {
             throw;
         }
+        catch (ApiException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Vocabulary gloss — provider error; returning deterministic fallback.");
+            logger.LogWarning(ex, "Vocabulary gloss provider error.");
+            throw ApiException.ServiceUnavailable(
+                "VOCABULARY_GLOSS_UNAVAILABLE",
+                "Vocabulary gloss is unavailable right now. Please try again.");
         }
 
-        parsed ??= new VocabularyGlossResponse(
-            Term: word,
-            IpaPronunciation: null,
-            ShortDefinition: $"{word}: concise medical definition unavailable from the AI provider right now.",
-            ExampleSentence: $"The patient's notes referenced {word}.",
-            ContextNotes: string.IsNullOrWhiteSpace(request.Context) ? null : $"Requested with context: {Truncate(request.Context!, 160)}",
-            Synonyms: Array.Empty<string>(),
-            Register: "clinical",
-            AppliedRuleIds: Array.Empty<string>(),
-            RulebookVersion: rulebook.Version,
-            MatchedExistingTerm: false,
-            ExistingTermId: null);
+        if (parsed is null)
+        {
+            throw ApiException.ServiceUnavailable(
+                "VOCABULARY_GLOSS_UNAVAILABLE",
+                "Vocabulary gloss is unavailable right now. Please try again.");
+        }
 
         return parsed;
     }

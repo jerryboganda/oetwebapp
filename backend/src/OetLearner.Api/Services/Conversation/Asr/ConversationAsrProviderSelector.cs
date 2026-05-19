@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Conversation.Asr;
@@ -13,8 +14,11 @@ public sealed class ConversationAsrProviderSelector(
     IEnumerable<IConversationAsrProvider> providers,
     IEnumerable<IConversationRealtimeAsrProvider> realtimeProviders,
     IConversationOptionsProvider optionsProvider,
-    ILogger<ConversationAsrProviderSelector> logger) : IConversationAsrProviderSelector
+    ILogger<ConversationAsrProviderSelector> logger,
+    IHostEnvironment? environment = null) : IConversationAsrProviderSelector
 {
+    private readonly bool _allowMockProvider = environment is null || environment.IsDevelopment();
+
     public async Task<IConversationAsrProvider> SelectAsync(CancellationToken ct = default)
     {
         var options = await optionsProvider.GetAsync(ct);
@@ -25,6 +29,7 @@ public sealed class ConversationAsrProviderSelector(
 
         if (requested is "azure" or "whisper" or "deepgram" or "mock")
         {
+            if (requested == "mock" && !_allowMockProvider) throw MockNotAllowed("Conversation ASR");
             var p = Find(requested);
             if (p is null) throw new InvalidOperationException($"ASR provider '{requested}' not registered.");
             if (!p.IsConfigured && requested != "mock")
@@ -44,6 +49,7 @@ public sealed class ConversationAsrProviderSelector(
         var mock = Find("mock");
         if (mock is not null)
         {
+            if (!_allowMockProvider) throw new InvalidOperationException("Conversation ASR provider 'auto' is not configured with a real provider outside the Development environment.");
             logger.LogWarning("Conversation ASR: falling back to mock.");
             return mock;
         }
@@ -63,6 +69,7 @@ public sealed class ConversationAsrProviderSelector(
         if (requested is "mock" or "elevenlabs" or "elevenlabs-stt" or "elevenlabs-scribe")
         {
             var lookup = requested.StartsWith("elevenlabs", StringComparison.Ordinal) ? "elevenlabs-stt" : requested;
+            if (lookup == "mock" && !_allowMockProvider) throw MockNotAllowed("Conversation realtime ASR");
             if (lookup != "mock" && !CanUseRealProvider(options, lookup))
             {
                 logger.LogWarning("Conversation realtime ASR provider {Provider} is configured but real-provider readiness gates are incomplete.", lookup);
@@ -91,6 +98,9 @@ public sealed class ConversationAsrProviderSelector(
 
     private static bool IsMockProvider(string providerName)
         => string.Equals(providerName, "mock", StringComparison.OrdinalIgnoreCase);
+
+    private static InvalidOperationException MockNotAllowed(string subsystem)
+        => new($"{subsystem} cannot use the mock provider outside the Development environment.");
 
     private static bool CanUseRealProvider(ConversationOptions options, string providerName)
     {

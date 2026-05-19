@@ -20,12 +20,12 @@ namespace OetLearner.Api.Services.Writing;
 ///      <see cref="RuleKind.Writing"/> + <see cref="AiTaskMode.GenerateContent"/>.
 ///   2. Platform-only credential: feature code <see cref="AiFeatureCodes.AdminWritingDraft"/>.
 ///   3. Validated output: every <c>appliedRuleIds</c> value must exist in the
-///      loaded writing rulebook for the requested profession. Unknown rule
-///      IDs are silently dropped.
-///   4. Persistence: always inserted as <see cref="ContentStatus.Draft"/>.
-///      Admin edits and publishes via the existing content CMS flow.
-///   5. Audit: one <see cref="AuditEvent"/> row per draft, regardless of
-///      whether AI succeeded or the deterministic template was used.
+///      loaded writing rulebook for the requested profession. Unusable replies
+///      fail closed rather than creating template content.
+///   4. Persistence: only usable grounded AI output is inserted as
+///      <see cref="ContentStatus.Draft"/>. Admin edits and publishes via the
+///      existing content CMS flow.
+///   5. Audit: one <see cref="AuditEvent"/> row per persisted draft.
 /// ============================================================================
 /// </summary>
 public interface IWritingDraftService
@@ -109,13 +109,11 @@ public sealed class WritingDraftService(
 
         var userMessage = BuildUserMessage(request, letterType, difficulty);
 
-        AiGatewayResult? aiResult = null;
         ParsedWritingDraft? parsed = null;
-        string? warning = null;
 
         try
         {
-            aiResult = await gateway.CompleteAsync(new AiGatewayRequest
+            var aiResult = await gateway.CompleteAsync(new AiGatewayRequest
             {
                 Prompt = prompt,
                 UserInput = userMessage,
@@ -128,7 +126,9 @@ public sealed class WritingDraftService(
             parsed = TryParseDraft(aiResult.Completion, ruleIds);
             if (parsed is null)
             {
-                warning = "AI reply could not be parsed as a writing draft. A deterministic starter template was used instead. Edit before publishing.";
+                throw ApiException.ServiceUnavailable(
+                    "WRITING_AI_DRAFT_UNUSABLE",
+                    "Writing AI draft response was not usable. Please try again.");
             }
         }
         catch (PromptNotGroundedException pex)
@@ -137,22 +137,24 @@ public sealed class WritingDraftService(
             logger.LogError(pex, "Writing AI draft refused — ungrounded prompt.");
             throw;
         }
+        catch (ApiException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Writing AI draft — provider error; using deterministic fallback.");
-            warning = "AI provider error. A deterministic starter template was used instead. Edit before publishing.";
+            logger.LogWarning(ex, "Writing AI draft provider error.");
+            throw ApiException.ServiceUnavailable(
+                "WRITING_AI_DRAFT_UNAVAILABLE",
+                "Writing AI draft generation is unavailable right now. Please try again.");
         }
-
-        parsed ??= BuildFallbackDraft(request, letterType, difficulty, rulebook);
 
         // Persist as ContentItem with Status = Draft.
         var contentId = $"ci-{Guid.NewGuid():N}";
         var detailJson = JsonSerializer.Serialize(new
         {
             generatedBy = "AI",
-            sourceProvenance = warning is null
-                ? $"Grounded AI draft (writing rulebook v{rulebook.Version}). appliedRuleIds={string.Join(",", parsed.AppliedRuleIds)}"
-                : $"Starter template fallback ({warning}). Rulebook v{rulebook.Version}.",
+            sourceProvenance = $"Grounded AI draft (writing rulebook v{rulebook.Version}). appliedRuleIds={string.Join(",", parsed.AppliedRuleIds)}",
             profession = request.Profession,
             letterType = parsed.LetterType,
             recipientSpecialty = request.RecipientSpecialty,
@@ -194,7 +196,7 @@ public sealed class WritingDraftService(
             UpdatedAt = DateTimeOffset.UtcNow,
             ExamFamilyCode = "oet",
             ExamTypeCode = OetLearner.Api.Services.Common.ExamCodes.DefaultCode,
-            SourceType = warning is null ? "ai_generated" : "ai_generated_fallback",
+            SourceType = "ai_generated",
             QaStatus = "pending",
         };
         db.ContentItems.Add(entity);
@@ -207,7 +209,7 @@ public sealed class WritingDraftService(
             Action = "writing.ai_draft_generated",
             ResourceType = "ContentItem",
             ResourceId = contentId,
-            Details = $"Writing AI draft created. Title=\"{parsed.Title}\" letterType={parsed.LetterType} profession={request.Profession} rulebook=v{rulebook.Version} appliedRuleIds=[{string.Join(",", parsed.AppliedRuleIds)}]" + (warning is null ? "" : $" warning=\"{warning}\""),
+            Details = $"Writing AI draft created. Title=\"{parsed.Title}\" letterType={parsed.LetterType} profession={request.Profession} rulebook=v{rulebook.Version} appliedRuleIds=[{string.Join(",", parsed.AppliedRuleIds)}]",
             OccurredAt = DateTimeOffset.UtcNow,
         });
 
@@ -220,7 +222,7 @@ public sealed class WritingDraftService(
             ModelLetterWordCount: parsed.EstimatedWordCount,
             RulebookVersion: rulebook.Version,
             AppliedRuleIds: parsed.AppliedRuleIds,
-            Warning: warning);
+            Warning: null);
     }
 
     // ---------------------------------------------------------------------
@@ -378,113 +380,6 @@ public sealed class WritingDraftService(
             if (trimmed.StartsWith("- ") || trimmed.StartsWith("* ")) count++;
         }
         return count;
-    }
-
-    private static string Truncate(string raw, int max)
-        => string.IsNullOrEmpty(raw) ? "" : (raw.Length <= max ? raw : raw[..max].TrimEnd() + "…");
-
-    // ---------------------------------------------------------------------
-    // Fallback template — deterministic starter draft grounded in the rulebook
-    // ---------------------------------------------------------------------
-
-    private static ParsedWritingDraft BuildFallbackDraft(
-        WritingDraftRequest request,
-        string letterType,
-        string difficulty,
-        OetRulebook rulebook)
-    {
-        // Pick up to 3 rules to anchor the fallback. Bias toward critical/major.
-        var anchorRules = rulebook.Rules
-            .OrderBy(r => r.Severity switch
-            {
-                RuleSeverity.Critical => 0,
-                RuleSeverity.Major => 1,
-                RuleSeverity.Minor => 2,
-                _ => 3,
-            })
-            .Take(3)
-            .ToList();
-
-        var appliedIds = anchorRules.Select(r => r.Id).ToList();
-
-        var noteCount = Math.Clamp(request.TargetCaseNoteCount, 8, 20);
-        var caseNotes = BuildFallbackCaseNotes(letterType, request.RecipientSpecialty, request.Prompt, noteCount);
-        var modelLetter = BuildFallbackModelLetter(letterType, request.RecipientSpecialty);
-
-        var titleSpecialty = string.IsNullOrWhiteSpace(request.RecipientSpecialty)
-            ? letterType.Replace('_', ' ')
-            : request.RecipientSpecialty;
-        var title = $"DRAFT — {TitleCase(titleSpecialty)} ({letterType.Replace('_', ' ')})";
-
-        return new ParsedWritingDraft(
-            Title: title,
-            LetterType: letterType,
-            CaseNotes: caseNotes,
-            ModelLetterMarkdown: modelLetter,
-            Difficulty: difficulty,
-            EstimatedWordCount: EstimateWordCount(modelLetter),
-            AppliedRuleIds: appliedIds);
-    }
-
-    private static string BuildFallbackCaseNotes(string letterType, string? specialty, string adminPrompt, int noteCount)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("> DRAFT — needs admin completion");
-        sb.AppendLine();
-        sb.AppendLine($"Letter type: {letterType.Replace('_', ' ')}");
-        if (!string.IsNullOrWhiteSpace(specialty))
-            sb.AppendLine($"Recipient: {specialty}");
-        sb.AppendLine();
-        sb.AppendLine("## Patient");
-        sb.AppendLine("- Name: <add>");
-        sb.AppendLine("- Age: <add>");
-        sb.AppendLine("- Date of admission/visit: <add>");
-        sb.AppendLine();
-        sb.AppendLine("## Today's visit / Reason for letter");
-        sb.AppendLine($"- {Truncate(adminPrompt, 160)}");
-        sb.AppendLine("- Examination findings: <add>");
-        sb.AppendLine("- Plan: <add>");
-        sb.AppendLine();
-        sb.AppendLine("## History");
-        var remaining = Math.Max(3, noteCount - 6);
-        for (var i = 0; i < remaining; i++)
-            sb.AppendLine($"- <add history note {i + 1}>");
-        return sb.ToString().TrimEnd();
-    }
-
-    private static string BuildFallbackModelLetter(string letterType, string? specialty)
-    {
-        var greeting = string.IsNullOrWhiteSpace(specialty)
-            ? "Dear Doctor,"
-            : $"Dear {TitleCase(specialty!)} Specialist,";
-        var sb = new StringBuilder();
-        sb.AppendLine("[DRAFT — admin must complete recipient block, salutation, and content]");
-        sb.AppendLine();
-        sb.AppendLine("<Recipient name>");
-        sb.AppendLine("<Recipient address>");
-        sb.AppendLine();
-        sb.AppendLine("<Date>");
-        sb.AppendLine();
-        sb.AppendLine(greeting);
-        sb.AppendLine();
-        sb.AppendLine($"Re: <Patient name>");
-        sb.AppendLine();
-        sb.AppendLine($"I am writing to {(letterType.Contains("urgent") ? "urgently refer" : letterType.Contains("discharge") ? "update you on the discharge of" : letterType.Contains("transfer") ? "transfer the care of" : "refer")} <patient> for your further assessment and management.");
-        sb.AppendLine();
-        sb.AppendLine("<Body — fill from case notes; respect rulebook on tense, register, and structure.>");
-        sb.AppendLine();
-        sb.AppendLine("Thank you for your assistance.");
-        sb.AppendLine();
-        sb.AppendLine("Yours sincerely,");
-        sb.AppendLine("<Sender>");
-        return sb.ToString().TrimEnd();
-    }
-
-    private static string TitleCase(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return "";
-        var parts = raw.Split(new[] { ' ', '_', '-' }, StringSplitOptions.RemoveEmptyEntries);
-        return string.Join(' ', parts.Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
     }
 
     // ---------------------------------------------------------------------

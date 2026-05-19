@@ -20,8 +20,7 @@ namespace OetLearner.Api.Services;
 ///      <see cref="RuleKind.Vocabulary"/> + <see cref="AiTaskMode.GenerateVocabularyTerm"/>.
 ///   2. Platform-only credential: <see cref="AiFeatureCodes.AdminVocabularyDraft"/>.
 ///   3. Validated output: every <c>appliedRuleIds</c> value must exist in the
-///      loaded vocabulary rulebook. Invalid IDs are dropped; a draft with zero
-///      valid rule IDs is rejected and replaced with a deterministic template.
+///      loaded vocabulary rulebook. Invalid or unusable output fails closed.
 ///   4. Persistence: admins review drafts in the admin UI before acceptance.
 ///      Accepted drafts are inserted as <c>Status="draft"</c>; admins promote to
 ///      active via the normal update flow.
@@ -74,7 +73,6 @@ public sealed class VocabularyDraftService(
 
         var userMessage = BuildUserMessage(request, profession);
 
-        string? warning = null;
         List<AdminVocabularyDraftTerm> drafts = new();
 
         try
@@ -93,7 +91,9 @@ public sealed class VocabularyDraftService(
             drafts = ParseDrafts(aiResult.Completion, ruleIds, request.Category, request.Difficulty);
             if (drafts.Count == 0)
             {
-                warning = "AI reply could not be parsed. Deterministic starter templates were used instead. Edit before publishing.";
+                throw ApiException.ServiceUnavailable(
+                    "VOCABULARY_AI_DRAFT_UNUSABLE",
+                    "Vocabulary AI draft response was not usable. Please try again.");
             }
         }
         catch (PromptNotGroundedException pex)
@@ -101,25 +101,27 @@ public sealed class VocabularyDraftService(
             logger.LogError(pex, "Vocabulary AI draft refused — ungrounded prompt.");
             throw;
         }
+        catch (ApiException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Vocabulary AI draft — provider error; using deterministic fallback.");
-            warning = "AI provider error. Deterministic starter templates were used instead. Edit before publishing.";
+            logger.LogWarning(ex, "Vocabulary AI draft provider error.");
+            throw ApiException.ServiceUnavailable(
+                "VOCABULARY_AI_DRAFT_UNAVAILABLE",
+                "Vocabulary AI draft generation is unavailable right now. Please try again.");
         }
-
-        if (drafts.Count == 0)
-            drafts = BuildFallbackDrafts(request, rulebook);
 
         db.AuditEvents.Add(new AuditEvent
         {
             Id = Guid.NewGuid().ToString("N"),
             ActorId = adminId ?? "system",
             ActorName = adminName ?? "system",
-            Action = warning is null ? "VocabularyAiDraftGenerated" : "VocabularyAiDraftFallback",
+            Action = "VocabularyAiDraftGenerated",
             ResourceType = "VocabularyTerm",
             ResourceId = $"vocab-draft-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}",
-            Details = Truncate($"Vocabulary AI draft batch: count={request.Count} category={request.Category} profession={request.ProfessionId} rulebook=v{rulebook.Version}"
-                + (warning is null ? "" : $" warning=\"{warning}\""), 1000),
+            Details = Truncate($"Vocabulary AI draft batch: count={request.Count} category={request.Category} profession={request.ProfessionId} rulebook=v{rulebook.Version}", 1000),
             OccurredAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync(ct);
@@ -127,7 +129,7 @@ public sealed class VocabularyDraftService(
         return new AdminVocabularyAiDraftResponse(
             RulebookVersion: rulebook.Version,
             Drafts: drafts,
-            Warning: warning);
+            Warning: null);
     }
 
     public async Task<IReadOnlyList<string>> AcceptAsync(
@@ -337,65 +339,6 @@ public sealed class VocabularyDraftService(
         return sb.ToString();
     }
 
-    // ── Deterministic fallback ────────────────────────────────────────────
-
-    private static List<AdminVocabularyDraftTerm> BuildFallbackDrafts(
-        AdminVocabularyAiDraftRequest request,
-        OetRulebook rulebook)
-    {
-        var anchorRuleIds = rulebook.Rules
-            .OrderBy(r => r.Severity)
-            .Select(r => r.Id)
-            .Take(2)
-            .ToList();
-        if (anchorRuleIds.Count == 0) anchorRuleIds.Add("V01.1");
-
-        var pool = SeedLexicon(request.Category).Take(Math.Max(1, request.Count)).ToList();
-        return pool.Select(entry => new AdminVocabularyDraftTerm(
-            Term: entry.Term,
-            Definition: entry.Definition,
-            ExampleSentence: entry.Example,
-            ContextNotes: null,
-            Category: request.Category,
-            Difficulty: NormaliseDifficulty(request.Difficulty),
-            IpaPronunciation: null,
-            Synonyms: entry.Synonyms,
-            Collocations: Array.Empty<string>(),
-            RelatedTerms: Array.Empty<string>(),
-            AppliedRuleIds: anchorRuleIds)).ToList();
-    }
-
-    private sealed record LexEntry(string Term, string Definition, string Example, IReadOnlyList<string> Synonyms);
-
     private static string Truncate(string raw, int max)
         => string.IsNullOrEmpty(raw) ? "" : (raw.Length <= max ? raw : raw[..max].TrimEnd() + "…");
-
-    private static IEnumerable<LexEntry> SeedLexicon(string category)
-    {
-        // Small deterministic lexicon used only when the AI provider errors out.
-        // Content is intentionally generic and flagged as fallback via
-        // SourceProvenance when admins accept the batch.
-        var medical = new[]
-        {
-            new LexEntry("dyspnoea", "Difficulty in breathing reported by the patient.", "She presented with dyspnoea on exertion for two weeks.", new[] { "shortness of breath" }),
-            new LexEntry("anorexia", "Loss of appetite in a clinical setting.", "He reported anorexia and weight loss over the past month.", new[] { "loss of appetite" }),
-            new LexEntry("palpitations", "An awareness of the heart beating irregularly, rapidly, or forcefully.", "She complained of palpitations after climbing stairs.", new[] { "rapid heartbeat" }),
-            new LexEntry("lethargy", "A state of sluggishness or reduced energy.", "The child was noted to be lethargic on examination.", new[] { "tiredness" }),
-            new LexEntry("oedema", "Accumulation of fluid in body tissues, causing swelling.", "Bilateral ankle oedema was evident on admission.", new[] { "swelling" }),
-            new LexEntry("dysuria", "Painful or difficult urination.", "She reported dysuria and urinary frequency.", new[] { "painful urination" }),
-            new LexEntry("hypertension", "Persistently elevated arterial blood pressure.", "He has a long-standing history of hypertension.", new[] { "high blood pressure" }),
-            new LexEntry("tachycardia", "An elevated heart rate above the normal resting range.", "The patient developed tachycardia during the episode.", new[] { "fast heart rate" }),
-        };
-        var clinical = new[]
-        {
-            new LexEntry("counsel", "To provide professional guidance to a patient on their condition or treatment.", "She was counselled regarding the side effects of metformin.", new[] { "advise" }),
-            new LexEntry("adhere", "To follow a treatment or management plan consistently.", "He has struggled to adhere to the antihypertensive regimen.", new[] { "comply" }),
-            new LexEntry("reassure", "To offer comfort and confidence to a patient.", "She was reassured that the symptoms were self-limiting.", new[] { "comfort" }),
-        };
-        return category switch
-        {
-            "clinical_communication" => clinical,
-            _ => medical,
-        };
-    }
 }
