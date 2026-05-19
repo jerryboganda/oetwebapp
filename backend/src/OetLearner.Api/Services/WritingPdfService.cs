@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -46,6 +47,7 @@ public sealed class WritingPdfService : IWritingPdfService
 
     private readonly LearnerDbContext _db;
     private readonly IConfiguration _config;
+    private readonly IHostEnvironment _environment;
     private readonly ILogger<WritingPdfService> _logger;
     private readonly TimeProvider _clock;
 
@@ -60,11 +62,13 @@ public sealed class WritingPdfService : IWritingPdfService
     public WritingPdfService(
         LearnerDbContext db,
         IConfiguration config,
+        IHostEnvironment environment,
         ILogger<WritingPdfService> logger,
         TimeProvider? clock = null)
     {
         _db = db;
         _config = config;
+        _environment = environment;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
     }
@@ -266,9 +270,16 @@ public sealed class WritingPdfService : IWritingPdfService
         var secret = _config[WatermarkHmacConfigKey];
         if (string.IsNullOrWhiteSpace(secret))
         {
+            if (_environment.IsProduction())
+            {
+                throw ApiException.ServiceUnavailable(
+                    "watermark_secret_missing",
+                    "Watermark__HmacSecret must be configured before writing PDFs can be generated in production.");
+            }
+
             // First-run safety: log a warning but still produce a deterministic
             // (per-process) token so generation does not break. Operators are
-            // expected to set Watermark__HmacSecret in production.
+            // expected to set Watermark__HmacSecret before production use.
             _logger.LogWarning(
                 "Watermark__HmacSecret is not configured. Falling back to a process-local secret. Set the value in production for forensic verification.");
             secret = ProcessLocalFallbackSecret;

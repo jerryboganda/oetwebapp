@@ -90,6 +90,63 @@ public sealed class AiContentFallbackEradicationTests
         Assert.True(ex.Retryable);
     }
 
+    [Fact]
+    public async Task SpeakingTranscription_ThrowsWhenTranscriptMissingInsteadOfCreatingMockEvidence()
+    {
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+        db.ContentItems.Add(new ContentItem
+        {
+            Id = "speaking-content-1",
+            ContentType = "practice",
+            SubtestCode = "speaking",
+            ProfessionId = "medicine",
+            Title = "Speaking roleplay",
+            Difficulty = "medium",
+            EstimatedDurationMinutes = 5,
+            PublishedRevisionId = "rev-1",
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.Attempts.Add(new Attempt
+        {
+            Id = "speaking-attempt-1",
+            UserId = "learner-1",
+            ContentId = "speaking-content-1",
+            SubtestCode = "speaking",
+            Context = "practice",
+            Mode = "practice",
+            State = AttemptState.Evaluating,
+            StartedAt = now,
+            TranscriptJson = "[]",
+        });
+        await db.SaveChangesAsync();
+
+        var pipeline = new SpeakingEvaluationPipeline(
+            db,
+            new StubAiGateway("{}"),
+            new SpeakingRuleEngine(new StubRulebookLoader()),
+            NullLogger<SpeakingEvaluationPipeline>.Instance);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            pipeline.CompleteTranscriptionAsync(new BackgroundJobItem
+            {
+                Id = "speaking-job-1",
+                Type = JobType.SpeakingTranscription,
+                State = AsyncState.Queued,
+                AttemptId = "speaking-attempt-1",
+                CreatedAt = now,
+                AvailableAt = now,
+                LastTransitionAt = now,
+            }, CancellationToken.None));
+
+        Assert.Contains("transcription evidence is missing", ex.Message);
+        var persisted = await db.Attempts.SingleAsync(a => a.Id == "speaking-attempt-1");
+        Assert.Equal("[]", persisted.TranscriptJson);
+        Assert.DoesNotContain("mock-dev", persisted.AnalysisJson, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ConversationAiContext NewConversationContext() => new(
         SessionId: "cs-1",
         UserId: "learner-1",

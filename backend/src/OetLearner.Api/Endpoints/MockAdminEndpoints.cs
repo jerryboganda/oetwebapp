@@ -51,6 +51,14 @@ public static class MockAdminEndpoints
             Results.Ok(await service.ArchiveBundleAsync(id, AdminId(http), ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        group.MapPost("/{id}/unarchive", async (
+            string id,
+            MockService service,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.UnarchiveBundleAsync(id, AdminId(http), ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         group.MapPost("/{id}/sections", async (
             string id,
             AdminMockBundleSectionRequest request,

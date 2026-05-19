@@ -622,6 +622,33 @@ public record AdminPronunciationDrillAiDraftRequest(
     string? Prompt,
     string? PrimaryRuleId);
 
+// ── Pronunciation Drill Admin: Generate Model Reference Audio (TTS) ──
+public record AdminPronunciationGenerateAudioRequest(
+    string Text,
+    string? VoiceId);
+
+public record AdminPronunciationGenerateAudioResponse(
+    string MediaAssetId,
+    string Sha256,
+    int DurationMs,
+    int Bytes,
+    string ProviderName,
+    string MimeType,
+    string StorageKey,
+    string Url);
+
+// ── Conversation Template Admin: AI Draft ──
+public record AdminConversationTemplateAiDraftRequest(
+    string Profession,
+    string? Topic,
+    string? Scenario,
+    int? DurationSeconds,
+    string? TaskType);
+
+// ── Bulk Paper Admin ──
+public record BulkPaperPublishRequest(List<string> PaperIds);
+public record BulkPaperStatusRequest(List<string> PaperIds, string TargetStatus);
+
 // ── Notification Template Admin ──
 
 public record AdminNotificationTemplateCreateRequest(

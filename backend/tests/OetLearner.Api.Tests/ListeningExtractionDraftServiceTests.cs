@@ -17,14 +17,14 @@ public class ListeningExtractionDraftServiceTests
 {
     private static (LearnerDbContext db,
         ListeningExtractionDraftService svc,
-        ListeningAuthoringService authoring) Build(bool useStubAi = true)
+        ListeningAuthoringService authoring) Build(bool useStubAi = false)
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
         var authoring = new ListeningAuthoringService(db);
-        var extraction = new ListeningExtractionService(useStubAi ? new StubListeningExtractionAi() : new ValidListeningExtractionAi());
+        var extraction = new ListeningExtractionService(useStubAi ? new StubResultListeningExtractionAi() : new ValidListeningExtractionAi());
         var svc = new ListeningExtractionDraftService(db, extraction, authoring);
         return (db, svc, authoring);
     }
@@ -61,7 +61,7 @@ public class ListeningExtractionDraftServiceTests
         Assert.Equal(paper.Id, draft.PaperId);
         Assert.Equal(ListeningExtractionDraftStatus.Pending, draft.Status);
         Assert.Equal("admin-1", draft.ProposedByUserId);
-        Assert.True(draft.IsStub, "Stub AI is expected in the test harness.");
+        Assert.False(draft.IsStub);
         Assert.False(string.IsNullOrWhiteSpace(draft.Summary));
         Assert.False(string.IsNullOrWhiteSpace(draft.ProposedQuestionsJson));
         Assert.NotEqual("[]", draft.ProposedQuestionsJson);
@@ -128,7 +128,7 @@ public class ListeningExtractionDraftServiceTests
     [Fact]
     public async Task Approve_RejectsStubDraft_With400()
     {
-        var (db, svc, authoring) = Build();
+        var (db, svc, authoring) = Build(useStubAi: true);
         var paper = await SeedListeningPaperAsync(db);
         var draft = await svc.ProposeAsync(paper.Id, "admin-1", default);
 
@@ -240,6 +240,19 @@ public class ListeningExtractionDraftServiceTests
             Points: 1,
             OptionDistractorWhy: [null, null, null],
             OptionDistractorCategory: [null, null, null]);
+    }
+
+    private sealed class StubResultListeningExtractionAi : IListeningExtractionAi
+    {
+        public Task<ListeningExtractionAiResult> ExtractAsync(string paperId, string? mediaAssetId, CancellationToken ct)
+        {
+            var valid = new ValidListeningExtractionAi();
+            return valid.ExtractAsync(paperId, mediaAssetId, ct).ContinueWith(task =>
+            {
+                var result = task.Result;
+                return result with { IsStub = true, StubReason = "Test-only non-approvable extraction result." };
+            }, ct);
+        }
     }
 
     private sealed class InvalidShapeListeningExtractionAi : IListeningExtractionAi

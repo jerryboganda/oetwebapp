@@ -809,6 +809,13 @@ builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationE
     OetLearner.Api.Services.Pronunciation.PronunciationEntitlementService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAdminDraftService,
     OetLearner.Api.Services.Pronunciation.PronunciationAdminDraftService>();
+// Admin-side TTS helper for generating per-drill model reference audio.
+// Routes through IConversationTtsProviderSelector (no new provider interface);
+// persists via IFileStorage + dedups MediaAsset by SHA-256.
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationTtsService,
+    OetLearner.Api.Services.Pronunciation.PronunciationTtsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationAdminDraftService,
+    OetLearner.Api.Services.Conversation.ConversationAdminDraftService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Pronunciation.PronunciationAudioRetentionWorker>();
 
 // Retention sweeper for auth-layer rows (expired OTPs, revoked refresh tokens)

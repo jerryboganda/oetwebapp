@@ -5,7 +5,6 @@ namespace OetLearner.Api.Security;
 
 public static class ProductionProviderSafetyValidator
 {
-    public const string AllowMockProvidersKey = "Features:AllowProductionMockProviders";
     private static readonly HashSet<string> AllowedRealtimeTopologies = new(StringComparer.OrdinalIgnoreCase)
     {
         "single-instance",
@@ -16,7 +15,6 @@ public static class ProductionProviderSafetyValidator
     public static void Validate(IConfiguration configuration, bool isDevelopment)
     {
         if (isDevelopment) return;
-        if (configuration.GetValue<bool>(AllowMockProvidersKey)) return;
 
         ValidateOptions(
             configuration.GetSection(PronunciationOptions.SectionName).Get<PronunciationOptions>() ?? new PronunciationOptions(),
@@ -48,7 +46,7 @@ public static class ProductionProviderSafetyValidator
             || IsMock(aiProvider.DefaultModel))
         {
             throw new InvalidOperationException(
-                $"Production cannot use the mock AI provider or mock AI model. Configure {AiProviderOptions.SectionName}:ProviderId/{AiProviderOptions.SectionName}:DefaultModel with a real provider, or set {AllowMockProvidersKey}=true only for an approved emergency.");
+                $"Production cannot use the mock AI provider or mock AI model. Configure {AiProviderOptions.SectionName}:ProviderId/{AiProviderOptions.SectionName}:DefaultModel with a real provider.");
         }
 
         // ApiKey + BaseUrl are admin-configurable post-boot via /admin/settings (Phase 2 Runtime Settings).
@@ -177,7 +175,7 @@ public static class ProductionProviderSafetyValidator
     }
 
     private static InvalidOperationException MockNotAllowed(string subsystem, string configKey)
-        => new($"{subsystem} cannot use mock provider in production. Configure a real provider for {configKey}, or set {AllowMockProvidersKey}=true only for an approved emergency.");
+        => new($"{subsystem} cannot use mock provider in production. Configure a real provider for {configKey}.");
 
     private static string Normalize(string? value, string fallback)
         => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim().ToLowerInvariant();

@@ -3,8 +3,8 @@
  *
  * For every Listening ContentPaper in Status=Draft (0):
  *   1. GET /v1/admin/papers/{id} → enumerate assets
- *   2. If AudioScript text asset is present, read its bytes from the API
- *      container's local filesystem via `docker exec`, parse the
+ *   2. If AudioScript text asset is present, read its bytes through the
+ *      authenticated media endpoint, parse the
  *      `[PART <code>] ... ---- <transcript>` blocks emitted by
  *      generate-listening.mjs::renderAudioScript().
  *   3. For each canonical part (A1, A2, B, C1, C2) that does NOT already have
@@ -15,16 +15,14 @@
  *           else MP3) and upload as a MediaAsset via the chunked uploader.
  *        c. POST /v1/admin/papers/{id}/assets with role=Audio.
  *   4. POST /v1/admin/papers/{id}/listening/backfill {}
- *   5. SQL fallback to fill DifficultyRating/DifficultyLevel = 3 where NULL.
- *   6. POST /v1/admin/papers/{id}/publish {}
+ *   5. POST /v1/admin/papers/{id}/publish {}
  *
  * The script is idempotent — re-running it skips parts already attached and
  * skips papers that have no AudioScript text asset (those are skeletons that
  * the orch died before adding text — they need to be regenerated, not retried).
  *
- * Designed to run on the VPS (alongside generate-listening.mjs --skip-tts)
- * because it shells out to `docker exec` for both file reads and the
- * difficulty-fallback SQL.
+ * Uses only authenticated backend APIs; direct Docker/SQL repair paths are
+ * intentionally disabled.
  *
  * Flags:
  *   --poll-seconds N   loop forever, sleeping N seconds between sweeps
@@ -39,9 +37,8 @@
  *   --paper-id ID      process only one paper id (debug).
  */
 
-import { execFileSync } from 'node:child_process';
 import {
-  CONFIG, parseFlags, startRun, endRun, adminFetch, aiTts,
+  parseFlags, startRun, endRun, adminFetch, aiTts,
   uploadMediaAsset, logFailure, sleep,
 } from './_lib.mjs';
 
@@ -58,36 +55,10 @@ const ONLY_PAPER = typeof flags['paper-id'] === 'string' ? flags['paper-id'] : n
 const PAPER_AUDIO_ROLE = 'Audio';
 const PAPER_AUDIOSCRIPT_ROLE = 'AudioScript';
 const PART_ORDER = ['A1', 'A2', 'B', 'C1', 'C2'];
-const STORAGE_ROOT_IN_CONTAINER = '/var/opt/oet-learner/storage';
-const API_CONTAINER = process.env.API_CONTAINER || 'oet-api-green';
-const PG_CONTAINER = process.env.PG_CONTAINER || 'oet-postgres';
-const PG_USER = process.env.PG_USER || 'oet_learner';
-const PG_DB = process.env.PG_DB || 'oet_learner';
 
 // -----------------------------------------------------------------------------
 // helpers
 // -----------------------------------------------------------------------------
-
-function psqlExec(sql) {
-  const out = execFileSync(
-    'docker',
-    ['exec', PG_CONTAINER, 'psql', '-U', PG_USER, '-d', PG_DB, '-P', 'pager=off', '-tA', '-c', sql],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
-  );
-  return out.trim();
-}
-
-function readStorageFile(storagePath) {
-  // storagePath is a relative key like "published/ab/cd/abcd...txt".
-  // The API container mounts the storage root at STORAGE_ROOT_IN_CONTAINER.
-  if (!storagePath || storagePath.includes('..')) throw new Error(`invalid storagePath: ${storagePath}`);
-  const full = `${STORAGE_ROOT_IN_CONTAINER}/${storagePath}`;
-  return execFileSync(
-    'docker',
-    ['exec', API_CONTAINER, 'cat', full],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 16 * 1024 * 1024 }
-  );
-}
 
 /**
  * Split AudioScript text emitted by renderAudioScript() into part→transcript.
@@ -145,12 +116,19 @@ async function listDraftListeningPapers() {
   return all;
 }
 
-function audioScriptStoragePathForPaper(paperId) {
-  // Pull the AudioScript asset's StoragePath in one SQL call.
-  // role=2 is AudioScript per PaperAssetRole enum.
-  const sql = `SELECT ma."StoragePath" FROM "ContentPaperAssets" pa JOIN "MediaAssets" ma ON ma."Id"=pa."MediaAssetId" WHERE pa."PaperId"='${paperId}' AND pa."Role"=2 LIMIT 1;`;
-  const out = psqlExec(sql);
-  return out || null;
+function audioScriptMediaAssetIdForPaper(paper) {
+  const assets = Array.isArray(paper?.assets) ? paper.assets : [];
+  const asset = assets.find(a => a?.role === PAPER_AUDIOSCRIPT_ROLE || a?.role === 2);
+  return asset?.mediaAssetId || asset?.media?.id || null;
+}
+
+async function readMediaText(mediaAssetId) {
+  const r = await adminFetch(`/v1/media/${encodeURIComponent(mediaAssetId)}/content`, {
+    headers: { Accept: 'text/plain,*/*' },
+    timeoutMs: 120_000,
+  });
+  if (!r.ok) throw new Error(`media download ${mediaAssetId} failed: ${r.status}`);
+  return typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
 }
 
 async function getPaperDetail(paperId) {
@@ -191,16 +169,6 @@ async function backfillRelational(paperId) {
   return r.ok;
 }
 
-function difficultyFallback(paperId) {
-  try {
-    const sql = `UPDATE "ListeningExtracts" SET "DifficultyRating"=3 WHERE "DifficultyRating" IS NULL AND "ListeningPartId" IN (SELECT "Id" FROM "ListeningParts" WHERE "PaperId"='${paperId}'); UPDATE "ListeningQuestions" SET "DifficultyLevel"=3 WHERE "DifficultyLevel" IS NULL AND "PaperId"='${paperId}';`;
-    execFileSync('docker', ['exec', PG_CONTAINER, 'psql', '-U', PG_USER, '-d', PG_DB, '-P', 'pager=off', '-c', sql], { stdio: 'pipe' });
-    console.log(`  ✓ difficulty fallback applied`);
-  } catch (e) {
-    console.log(`  ⚠ difficulty fallback failed: ${String(e?.message || e).slice(0, 200)}`);
-  }
-}
-
 async function publishPaper(paperId) {
   const r = await adminFetch(`/v1/admin/papers/${paperId}/publish`, { method: 'POST', body: {} });
   if (!r.ok) {
@@ -235,7 +203,6 @@ async function processPaper(paperListItem) {
     console.log(`  ✓ all 5 parts already attached — running publish path only`);
     if (!DRY_RUN) {
       await backfillRelational(paperId);
-      difficultyFallback(paperId);
       await publishPaper(paperId);
     }
     return { ok: true, reason: 'already-complete' };
@@ -243,24 +210,18 @@ async function processPaper(paperListItem) {
   console.log(`  parts attached: [${[...attached].sort().join(',') || 'none'}]`);
   console.log(`  parts missing : [${missing.join(',')}]`);
 
-  // Load AudioScript text.
-  let storagePath;
-  try {
-    storagePath = audioScriptStoragePathForPaper(paperId);
-  } catch (e) {
-    console.log(`  ⚠ SQL lookup failed: ${String(e?.message || e).slice(0, 200)}`);
-    return { ok: false, reason: 'sql-lookup-failed' };
-  }
-  if (!storagePath) {
+  // Load AudioScript text through the backend media endpoint.
+  const audioScriptMediaAssetId = audioScriptMediaAssetIdForPaper(detail);
+  if (!audioScriptMediaAssetId) {
     console.log(`  ⊘ skip: no AudioScript asset on this paper`);
     return { ok: false, reason: 'no-audioscript' };
   }
 
   let scriptText;
   try {
-    scriptText = readStorageFile(storagePath);
+    scriptText = await readMediaText(audioScriptMediaAssetId);
   } catch (e) {
-    console.log(`  ⚠ read storage failed: ${String(e?.message || e).slice(0, 200)}`);
+    console.log(`  ⚠ media download failed: ${String(e?.message || e).slice(0, 200)}`);
     return { ok: false, reason: 'read-failed' };
   }
 
@@ -285,7 +246,16 @@ async function processPaper(paperListItem) {
     console.log(`  → TTS ${p} (${transcript.length} chars, displayOrder=${displayOrder})`);
     let buf;
     try {
-      buf = await aiTts(transcript, { retries: TTS_RETRIES, format: 'mp3' });
+      // Voice gender hint per part code (ElevenLabs only; DO TTS ignores).
+      const partGender = (
+        p === 'A1' ? 'female' :
+        p === 'A2' ? 'male' :
+        p === 'B'  ? 'neutral' :
+        p === 'C1' ? 'female' :
+        p === 'C2' ? 'male' :
+        'neutral'
+      );
+      buf = await aiTts(transcript, { retries: TTS_RETRIES, format: 'mp3', gender: partGender });
     } catch (e) {
       logFailure('retry-tts', { paperId, part: p }, e);
       console.log(`  ⚠ TTS ${p} failed: ${String(e?.message || e).slice(0, 200)}`);
@@ -336,7 +306,6 @@ async function processPaper(paperListItem) {
   }
 
   await backfillRelational(paperId);
-  difficultyFallback(paperId);
   const published = await publishPaper(paperId);
   return { ok: published, reason: published ? 'published' : 'publish-failed', attachedNow };
 }

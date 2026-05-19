@@ -836,6 +836,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.ArchiveGrammarLessonAsync(http.AdminId(), http.AdminName(), lessonId, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/grammar/lessons/{lessonId}/unarchive", async (string lessonId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UnarchiveGrammarLessonAsync(http.AdminId(), http.AdminName(), lessonId, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         // ── Grammar Publish Gate + AI Draft (Grounded) ────────────────
 
         admin.MapGet("/grammar/lessons/{lessonId}/publish-gate",
@@ -852,9 +856,7 @@ public static class AdminEndpoints
             =>
             {
                 var result = await gate.PublishAsync(lessonId, http.AdminId(), http.AdminName(), ct);
-                return result.CanPublish
-                    ? Results.Ok(new { published = true, status = "active", errors = Array.Empty<string>() })
-                    : Results.Json(new { published = false, errors = result.Errors }, statusCode: 422);
+                return Results.Ok(new { published = result.CanPublish, status = "active", warnings = result.Errors });
             })
             .WithAdminWrite("AdminContentPublish");
 
@@ -1113,8 +1115,27 @@ public static class AdminEndpoints
             => Results.Ok(await service.ArchiveConversationTemplateAsync(http.AdminId(), http.AdminName(), templateId, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/conversation/templates/{templateId}/unarchive", async (string templateId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UnarchiveConversationTemplateAsync(http.AdminId(), http.AdminName(), templateId, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         admin.MapPost("/conversation/templates/{templateId}/publish", async (string templateId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.PublishConversationTemplateAsync(http.AdminId(), http.AdminName(), templateId, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        // AI-assisted draft of a conversation template. Routes through the
+        // grounded gateway (Kind=Conversation, Task=GenerateConversationScenario,
+        // FeatureCode=AdminConversationDraft). Returns a DTO; admin still
+        // explicitly creates the template via the standard POST endpoint.
+        admin.MapPost("/conversation/templates/ai-draft", async (
+            HttpContext http,
+            AdminConversationTemplateAiDraftRequest body,
+            OetLearner.Api.Services.Conversation.IConversationAdminDraftService draft,
+            CancellationToken ct) =>
+        {
+            var result = await draft.DraftAsync(body, http.AdminId(), http.AdminName(), ct);
+            return Results.Ok(result);
+        })
             .WithAdminWrite("AdminContentWrite");
 
         admin.MapGet("/conversation/settings", async (
@@ -1457,6 +1478,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.ArchivePronunciationDrillAsync(http.AdminId(), http.AdminName(), drillId, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/pronunciation/drills/{drillId}/unarchive", async (string drillId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UnarchivePronunciationDrillAsync(http.AdminId(), http.AdminName(), drillId, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         // AI-assisted draft of a pronunciation drill. Routes through the
         // grounded gateway (Kind=Pronunciation, Task=GeneratePronunciationDrill,
         // FeatureCode=admin.pronunciation_draft). Platform-only by policy.
@@ -1467,6 +1492,64 @@ public static class AdminEndpoints
             CancellationToken ct)
             => Results.Ok(await draftService.GenerateDraftAsync(request, http.AdminId(), ct)))
             .WithAdminWrite("AdminContentWrite");
+
+        // Generate model reference audio for a drill via the configured TTS
+        // provider (IConversationTtsProviderSelector). Writes the audio via
+        // IFileStorage, dedups MediaAsset by SHA-256, and points the drill's
+        // AudioModelAssetId at the new asset. Refuses to fall back to mock TTS.
+        admin.MapPost("/pronunciation/drills/{drillId}/generate-model-audio", async (
+            string drillId,
+            HttpContext http,
+            AdminPronunciationGenerateAudioRequest request,
+            OetLearner.Api.Services.Pronunciation.IPronunciationTtsService ttsService,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var result = await ttsService.GenerateModelAudioAsync(
+                    drillId, request.Text, request.VoiceId, ct);
+
+                db.AuditEvents.Add(new AuditEvent
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ActorId = http.AdminId(),
+                    ActorName = http.AdminName(),
+                    Action = "PronunciationModelAudioGenerated",
+                    ResourceType = "PronunciationDrill",
+                    ResourceId = drillId,
+                    Details = JsonSupport.Serialize(new
+                    {
+                        result.ProviderName,
+                        result.Sha256,
+                        result.Bytes,
+                        result.DurationMs,
+                        voiceId = request.VoiceId,
+                        textLength = request.Text?.Length ?? 0,
+                    }),
+                });
+                await db.SaveChangesAsync(ct);
+
+                return Results.Ok(new AdminPronunciationGenerateAudioResponse(
+                    MediaAssetId: result.MediaAssetId,
+                    Sha256: result.Sha256,
+                    DurationMs: result.DurationMs,
+                    Bytes: result.Bytes,
+                    ProviderName: result.ProviderName,
+                    MimeType: result.MimeType,
+                    StorageKey: result.StorageKey,
+                    Url: $"/v1/media/{result.MediaAssetId}/content"));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = "INVALID_INPUT", message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = "TTS_UNAVAILABLE", message = ex.Message },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+        }).WithAdminWrite("AdminContentWrite");
 
         // ── Notification Template Admin CRUD ────────────────
 

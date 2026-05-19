@@ -12,14 +12,29 @@ if [ -f scripts/admin/.envrc ]; then
   source scripts/admin/.envrc
 fi
 
-export API_BASE='https://api.oetwithdrhesham.co.uk'
-export ADMIN_EMAIL='manwara575@gmail.com'
+export API_BASE="${API_BASE:?API_BASE env var required}"
+export ADMIN_EMAIL="${ADMIN_EMAIL:?ADMIN_EMAIL env var required}"
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:?ADMIN_PASSWORD env var required}"
 export AI__ApiKey="${AI__ApiKey:?AI__ApiKey env var required (DigitalOcean inference token)}"
 export AI__BaseUrl='https://inference.do-ai.run/v1'
 export AI__ChatModel='anthropic-claude-opus-4.7'
 export AI__TtsModel='qwen3-tts-voicedesign'
 export AI__TtsBaseUrl='https://inference.do-ai.run/v1'
+
+# ElevenLabs is the PRIMARY TTS provider. DO Qwen3-TTS remains as automatic
+# fallback inside _lib.mjs when the key is unset or the call fails. The key is
+# NOT required (no `:?`) so existing DO-only environments keep working.
+export ELEVENLABS__ApiKey="${ELEVENLABS__ApiKey:-${ELEVENLABS_API_KEY:-}}"
+export ELEVENLABS__BaseUrl="${ELEVENLABS__BaseUrl:-https://api.elevenlabs.io/v1}"
+export ELEVENLABS__Model="${ELEVENLABS__Model:-eleven_multilingual_v2}"
+export ELEVENLABS__DefaultVoiceId="${ELEVENLABS__DefaultVoiceId:-EXAVITQu4vr4xnSDxMaL}"
+export ELEVENLABS__VoiceMaleId="${ELEVENLABS__VoiceMaleId:-pNInz6obpgDQGcFmaJgB}"
+export ELEVENLABS__VoiceFemaleId="${ELEVENLABS__VoiceFemaleId:-EXAVITQu4vr4xnSDxMaL}"
+
+if [ "${RUN_BULK_CONFIRM:-}" != "live-admin-bulk" ]; then
+  echo "RUN_BULK_CONFIRM=live-admin-bulk is required before running admin bulk scripts."
+  exit 2
+fi
 
 SCRIPT="${1:-}"
 if [ -z "$SCRIPT" ]; then

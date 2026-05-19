@@ -133,6 +133,19 @@ public partial class AdminService
         return new { id = lessonId, status = "archived" };
     }
 
+    public async Task<object> UnarchiveGrammarLessonAsync(
+        string adminId, string adminName, string lessonId, CancellationToken ct)
+    {
+        var entity = await db.GrammarLessons.FirstOrDefaultAsync(x => x.Id == lessonId, ct)
+            ?? throw ApiException.NotFound("GRAMMAR_NOT_FOUND", $"Grammar lesson '{lessonId}' not found.");
+
+        entity.Status = "active";
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Unarchived", "GrammarLesson", lessonId, $"Unarchived grammar lesson: {entity.Title}", ct);
+
+        return new { id = lessonId, status = "active" };
+    }
+
     // ════════════════════════════════════════════
     //  Vocabulary Items
     // ════════════════════════════════════════════
@@ -224,7 +237,7 @@ public partial class AdminService
     {
         await using var tx = await BeginTransactionIfNeededAsync(ct);
         ValidateVocabularyPayload(request.Term, request.Definition, request.ExampleSentence, request.Category,
-            request.Status, request.SourceProvenance, request.IpaPronunciation, request.AudioUrl);
+            request.Status, request.SourceProvenance, request.IpaPronunciation, request.AudioUrl, request.AudioMediaAssetId);
 
         var id = $"VOC-{Guid.NewGuid():N}"[..12];
         var entity = new VocabularyTerm
@@ -314,7 +327,7 @@ public partial class AdminService
 
     private static void ValidateVocabularyPayload(
         string term, string definition, string example, string category,
-        string? status, string? sourceProvenance, string? ipa, string? audioUrl)
+        string? status, string? sourceProvenance, string? ipa, string? audioUrl, string? audioMediaAssetId)
     {
         if (string.IsNullOrWhiteSpace(term))
             throw ApiException.Validation("VOCAB_TERM_REQUIRED", "Term is required.");
@@ -327,12 +340,12 @@ public partial class AdminService
 
         if (status == "active")
         {
-            EnforceVocabularyPublishGate(term, definition, example, category, sourceProvenance, ipa, audioUrl);
+            EnforceVocabularyPublishGate(term, definition, example, category, sourceProvenance, ipa, audioUrl, audioMediaAssetId);
         }
     }
 
     private static void EnforceVocabularyPublishGate(VocabularyTerm e)
-        => EnforceVocabularyPublishGate(e.Term, e.Definition, e.ExampleSentence, e.Category, e.SourceProvenance, e.IpaPronunciation, e.AudioUrl);
+        => EnforceVocabularyPublishGate(e.Term, e.Definition, e.ExampleSentence, e.Category, e.SourceProvenance, e.IpaPronunciation, e.AudioUrl, e.AudioMediaAssetId);
 
     /// <summary>
     /// Allowed OET subtest tags. Mirrors the canonical question-set vocabulary
@@ -381,29 +394,15 @@ public partial class AdminService
 
     private static void EnforceVocabularyPublishGate(
         string term, string definition, string example, string category,
-        string? sourceProvenance, string? ipa, string? audioUrl)
+        string? sourceProvenance, string? ipa, string? audioUrl, string? audioMediaAssetId)
     {
-        var missing = new List<ApiFieldError>();
-        if (string.IsNullOrWhiteSpace(term)) missing.Add(new ApiFieldError("term", "REQUIRED", "Term is required."));
-        if (string.IsNullOrWhiteSpace(definition)) missing.Add(new ApiFieldError("definition", "REQUIRED", "Definition is required."));
-        if (string.IsNullOrWhiteSpace(example)) missing.Add(new ApiFieldError("exampleSentence", "REQUIRED", "Example sentence is required."));
-        if (string.IsNullOrWhiteSpace(category)) missing.Add(new ApiFieldError("category", "REQUIRED", "Category is required."));
-        if (string.IsNullOrWhiteSpace(sourceProvenance)) missing.Add(new ApiFieldError("sourceProvenance", "REQUIRED", "Source provenance is required before publishing."));
-
-        var medicalCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "medical", "anatomy", "pharmacology", "procedures", "symptoms", "conditions", "diagnostics"
-        };
-        if (!string.IsNullOrWhiteSpace(category) && medicalCategories.Contains(category)
-            && string.IsNullOrWhiteSpace(ipa) && string.IsNullOrWhiteSpace(audioUrl))
-        {
-            missing.Add(new ApiFieldError("pronunciation", "REQUIRED_EITHER",
-                "Medical categories require either ipaPronunciation or audioUrl before publishing."));
-        }
-
-        if (missing.Count > 0)
-            throw ApiException.Validation("VOCAB_PUBLISH_GATE",
-                "Cannot publish: vocabulary term is missing required fields.", missing);
+        _ = term; _ = definition; _ = example; _ = category;
+        if (string.IsNullOrWhiteSpace(sourceProvenance))
+            throw ApiException.Validation("VOCAB_SOURCE_PROVENANCE_REQUIRED", "Source provenance is required before publishing vocabulary.");
+        if (string.IsNullOrWhiteSpace(ipa))
+            throw ApiException.Validation("VOCAB_IPA_REQUIRED", "IPA pronunciation is required before publishing vocabulary.");
+        if (string.IsNullOrWhiteSpace(audioUrl) && string.IsNullOrWhiteSpace(audioMediaAssetId))
+            throw ApiException.Validation("VOCAB_AUDIO_REQUIRED", "Audio URL or media asset is required before publishing vocabulary.");
     }
 
     public async Task<object> GetVocabularyCategoriesAdminAsync(
@@ -1682,6 +1681,21 @@ public partial class AdminService
         return new { id = templateId, status = "archived" };
     }
 
+    public async Task<object> UnarchiveConversationTemplateAsync(
+        string adminId, string adminName, string templateId, CancellationToken ct)
+    {
+        var entity = await db.ConversationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("CONVERSATION_TEMPLATE_NOT_FOUND", $"Conversation template '{templateId}' not found.");
+
+        entity.Status = "active";
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedByUserId = adminId;
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Unarchived", "ConversationTemplate", templateId, $"Unarchived conversation template: {entity.Title}", ct);
+
+        return new { id = templateId, status = "active" };
+    }
+
     // ════════════════════════════════════════════
     //  Pronunciation Drills
     // ════════════════════════════════════════════
@@ -1783,6 +1797,8 @@ public partial class AdminService
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
+        if (string.Equals(entity.Status, "active", StringComparison.OrdinalIgnoreCase))
+            EnforcePronunciationPublishGate(entity);
         db.PronunciationDrills.Add(entity);
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Created", "PronunciationDrill", id, $"Created pronunciation drill: {request.Word}", ct);
@@ -1811,19 +1827,8 @@ public partial class AdminService
         if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
         if (request.Status is not null)
         {
-            if (request.Status == "active")
-            {
-                // Publish gate: require minimum content.
-                if (string.IsNullOrWhiteSpace(entity.TargetPhoneme)
-                    || string.IsNullOrWhiteSpace(entity.Label)
-                    || string.IsNullOrWhiteSpace(entity.TipsHtml)
-                    || JsonSupport.Deserialize(entity.ExampleWordsJson, new List<string>()).Count < 3
-                    || JsonSupport.Deserialize(entity.SentencesJson, new List<string>()).Count < 1)
-                {
-                    throw ApiException.Validation("DRILL_PUBLISH_GATE",
-                        "Cannot publish: drill requires phoneme, label, tips, at least 3 example words, and at least 1 sentence.");
-                }
-            }
+            if (string.Equals(request.Status, "active", StringComparison.OrdinalIgnoreCase))
+                EnforcePronunciationPublishGate(entity);
             entity.Status = request.Status;
         }
         if (request.OrderIndex.HasValue) entity.OrderIndex = request.OrderIndex.Value;
@@ -1833,6 +1838,30 @@ public partial class AdminService
         await LogAuditAsync(adminId, adminName, "Updated", "PronunciationDrill", drillId, $"Updated pronunciation drill: {entity.Label}", ct);
 
         return new { id = drillId, entity.Status };
+    }
+
+    private static void EnforcePronunciationPublishGate(PronunciationDrill drill)
+    {
+        if (string.IsNullOrWhiteSpace(drill.Label))
+            throw ApiException.Validation("PRONUNCIATION_LABEL_REQUIRED", "Label is required before publishing a pronunciation drill.");
+        if (string.IsNullOrWhiteSpace(drill.TargetPhoneme))
+            throw ApiException.Validation("PRONUNCIATION_PHONEME_REQUIRED", "Target phoneme is required before publishing a pronunciation drill.");
+        if (string.IsNullOrWhiteSpace(drill.PrimaryRuleId))
+            throw ApiException.Validation("PRONUNCIATION_RULE_REQUIRED", "Primary rule id is required before publishing a pronunciation drill.");
+        if (string.IsNullOrWhiteSpace(drill.TipsHtml))
+            throw ApiException.Validation("PRONUNCIATION_TIPS_REQUIRED", "Tips are required before publishing a pronunciation drill.");
+
+        var examples = JsonSupport.Deserialize<string[]>(drill.ExampleWordsJson, Array.Empty<string>())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToArray();
+        if (examples.Length < 3)
+            throw ApiException.Validation("PRONUNCIATION_EXAMPLES_REQUIRED", "At least 3 example words are required before publishing a pronunciation drill.");
+
+        var sentences = JsonSupport.Deserialize<string[]>(drill.SentencesJson, Array.Empty<string>())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToArray();
+        if (sentences.Length == 0)
+            throw ApiException.Validation("PRONUNCIATION_SENTENCE_REQUIRED", "At least one practice sentence is required before publishing a pronunciation drill.");
     }
 
     public async Task<object> ArchivePronunciationDrillAsync(
@@ -1846,6 +1875,20 @@ public partial class AdminService
         await LogAuditAsync(adminId, adminName, "Archived", "PronunciationDrill", drillId, $"Archived pronunciation drill: {entity.Label}", ct);
 
         return new { id = drillId, status = "archived" };
+    }
+
+    public async Task<object> UnarchivePronunciationDrillAsync(
+        string adminId, string adminName, string drillId, CancellationToken ct)
+    {
+        var entity = await db.PronunciationDrills.FirstOrDefaultAsync(x => x.Id == drillId, ct)
+            ?? throw ApiException.NotFound("DRILL_NOT_FOUND", $"Pronunciation drill '{drillId}' not found.");
+
+        entity.Status = "active";
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Unarchived", "PronunciationDrill", drillId, $"Unarchived pronunciation drill: {entity.Label}", ct);
+
+        return new { id = drillId, status = "active" };
     }
 
     // ════════════════════════════════════════════

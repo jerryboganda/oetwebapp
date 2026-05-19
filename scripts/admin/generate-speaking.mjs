@@ -33,12 +33,11 @@
  *   --no-publish     Skip publish attempt.
  *   --healthcheck    Run shared healthcheck and exit.
  *
- * Required env: AI__ApiKey (DO Serverless). Defaults for API_BASE,
- * ADMIN_EMAIL, ADMIN_PASSWORD live in `_lib.mjs`.
+ * Required env: API_BASE, ADMIN_EMAIL, ADMIN_PASSWORD.
  */
 
 import {
-  CONFIG, parseFlags, startRun, endRun, adminFetch, aiChatJson, logFailure,
+  CONFIG, parseFlags, startRun, endRun, adminFetch, logFailure,
   healthcheck, progress, slugify, makeProvenance, abortIfFailureCascade, sleep,
 } from './_lib.mjs';
 
@@ -207,16 +206,7 @@ async function main() {
     // 1) AI-generate the speaking structure.
     let structure;
     try {
-      const reply = await aiChatJson({
-        system: SYSTEM_PROMPT(t.profession),
-        user: USER_PROMPT(t),
-        temperature: 0.7,
-        maxTokens: 4096,
-      });
-      structure = reply.json;
-      if (!structure || typeof structure !== 'object' || !structure.candidateCard) {
-        throw new Error(`AI returned malformed structure (no candidateCard)`);
-      }
+      throw new Error('Direct speaking AI authoring is disabled. Use backend grounded speaking/rulebook services or import curated speaking content.');
     } catch (e) {
       logFailure('speaking-ai', label, e);
       failed++; consecutiveFailures++;

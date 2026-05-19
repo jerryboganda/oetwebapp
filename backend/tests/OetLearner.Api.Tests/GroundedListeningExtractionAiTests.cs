@@ -11,7 +11,7 @@ namespace OetLearner.Api.Tests;
 public class GroundedListeningExtractionAiTests
 {
     [Fact]
-    public async Task ExtractAsync_ReturnsStub_WhenPaperHasNoUsableExtractedSourceText()
+    public async Task ExtractAsync_Throws_WhenPaperHasNoUsableExtractedSourceText()
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -47,10 +47,10 @@ public class GroundedListeningExtractionAiTests
 
         var ai = new GroundedListeningExtractionAi(db, new ThrowingAiGateway(), NullLogger<GroundedListeningExtractionAi>.Instance);
 
-        var result = await ai.ExtractAsync(paper.Id, mediaAssetId: null, default);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ai.ExtractAsync(paper.Id, mediaAssetId: null, default));
 
-        Assert.True(result.IsStub);
-        Assert.Contains("No extracted text", result.StubReason);
+        Assert.Contains("No extracted text", ex.Message);
     }
 
     private sealed class ThrowingAiGateway : IAiGatewayService

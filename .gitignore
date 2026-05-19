@@ -144,3 +144,17 @@ storybook-static/
 scripts/admin/.envrc
 !scripts/admin/.envrc.example
 
+
+# stray external files (paranoia)
+radiopad_secrets.env
+opt_git.tar.gz
+*.tar.gz
+
+# local-only dotnet verify output (apphost PID lock workaround)
+bin-verify/
+
+# transient prod hand-edit patch staging file
+prod-handedits.patch
+
+# admin script python caches
+scripts/admin/__pycache__/

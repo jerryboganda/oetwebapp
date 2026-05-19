@@ -12,7 +12,7 @@ namespace OetLearner.Api.Services.Reading;
 //   1. Admin uploads a PDF (via the existing MediaAsset slice).
 //   2. CreateDraftAsync(paperId, mediaAssetId) calls IReadingExtractionAi
 //      which is the swappable AI seam. Provider failures are persisted as
-//      failed drafts; placeholder manifests are not approvable.
+//      failed drafts without generated manifests.
 //   3. ApproveDraftAsync(draftId) re-uses ImportManifestAsync to apply the
 //      manifest to the paper (replaces existing structure).
 //   4. RejectDraftAsync(draftId, reason) records the rejection with audit.

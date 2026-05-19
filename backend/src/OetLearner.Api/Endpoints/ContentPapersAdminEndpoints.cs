@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
@@ -78,12 +79,68 @@ public static class ContentPapersAdminEndpoints
             string id, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            try { await svc.PublishAsync(id, adminId, ct); }
-            catch (InvalidOperationException ex)
+            await svc.PublishAsync(id, adminId, ct);
+            return Results.Ok(new { published = true });
+        })
+        .RequireAuthorization("AdminContentPublish")
+        .RequireRateLimiting("PerUserWrite");
+
+        // ── Unarchive (Task 4) ────────────────────────────────────────────
+        group.MapPost("/{id}/unarchive", async (
+            string id, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            await svc.UnarchiveAsync(id, adminId, ct);
+            return Results.Ok(new { unarchived = true, id });
+        })
+        .RequireAuthorization("AdminContentWrite")
+        .RequireRateLimiting("PerUserWrite");
+
+        // ── Bulk publish (Task 7) ─────────────────────────────────────────
+        group.MapPost("/bulk-publish", async (
+            BulkPaperPublishRequest body, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var results = new List<object>();
+            foreach (var paperId in body.PaperIds ?? new List<string>())
             {
-                return Results.BadRequest(new { error = ex.Message });
+                try
+                {
+                    await svc.PublishAsync(paperId, adminId, ct);
+                    results.Add(new { paperId, published = true });
+                }
+                catch (Exception ex)
+                {
+                    results.Add(new { paperId, published = false, error = ex.Message });
+                }
             }
-            return Results.NoContent();
+            return Results.Ok(new { count = results.Count, results });
+        })
+        .RequireAuthorization("AdminContentPublish")
+        .RequireRateLimiting("PerUserWrite");
+
+        // ── Bulk status (Task 8) ──────────────────────────────────────────
+        group.MapPost("/bulk-status", async (
+            BulkPaperStatusRequest body, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            if (!Enum.TryParse<ContentStatus>(body.TargetStatus, ignoreCase: true, out var status))
+                return Results.BadRequest(new { error = $"Unknown targetStatus '{body.TargetStatus}'. Use Draft | Published | Archived." });
+
+            var results = new List<object>();
+            foreach (var paperId in body.PaperIds ?? new List<string>())
+            {
+                try
+                {
+                    await svc.SetStatusAsync(paperId, status, adminId, ct);
+                    results.Add(new { paperId, status = status.ToString(), ok = true });
+                }
+                catch (Exception ex)
+                {
+                    results.Add(new { paperId, ok = false, error = ex.Message });
+                }
+            }
+            return Results.Ok(new { count = results.Count, results });
         })
         .RequireAuthorization("AdminContentPublish")
         .RequireRateLimiting("PerUserWrite");

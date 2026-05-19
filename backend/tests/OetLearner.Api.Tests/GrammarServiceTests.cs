@@ -107,6 +107,37 @@ public class GrammarServiceTests
     }
 
     [Fact]
+    public async Task PublishGate_Throws_WhenMissingRequiredFields()
+    {
+        var options = NewInMemoryOptions();
+        await using var db = new LearnerDbContext(options);
+        db.GrammarLessons.Add(new GrammarLesson
+        {
+            Id = "grm-incomplete-publish",
+            ExamTypeCode = "oet",
+            Title = "Incomplete",
+            Description = "",
+            Category = "tenses",
+            Level = "beginner",
+            EstimatedMinutes = 10,
+            SortOrder = 0,
+            ContentHtml = "{\"contentBlocks\":[],\"exercises\":[]}",
+            ExercisesJson = "[]",
+            Status = "draft",
+        });
+        await db.SaveChangesAsync();
+
+        var gate = new GrammarPublishGateService(db, NullLogger<GrammarPublishGateService>.Instance);
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            gate.PublishAsync("grm-incomplete-publish", "admin", "Admin", default));
+
+        Assert.Equal("GRAMMAR_PUBLISH_GATE_FAILED", ex.ErrorCode);
+        var entity = await db.GrammarLessons.SingleAsync(x => x.Id == "grm-incomplete-publish");
+        Assert.Equal("draft", entity.Status);
+        Assert.Empty(await db.AuditEvents.ToListAsync());
+    }
+
+    [Fact]
     public async Task PublishGate_AllowsWellFormedLesson()
     {
         var options = NewInMemoryOptions();

@@ -1626,6 +1626,18 @@ public sealed class MockService(LearnerDbContext db)
         return new { id = bundle.Id, status = bundle.Status.ToString().ToLowerInvariant() };
     }
 
+    public async Task<object> UnarchiveBundleAsync(string id, string adminId, CancellationToken ct)
+    {
+        var bundle = await GetBundleEntityAsync(id, track: true, ct);
+        bundle.Status = ContentStatus.Published;
+        bundle.ArchivedAt = null;
+        bundle.UpdatedAt = DateTimeOffset.UtcNow;
+        bundle.UpdatedByAdminId = adminId;
+        LogAudit(adminId, "Unarchived", "MockBundle", bundle.Id, $"Unarchived mock bundle {bundle.Title}.");
+        await db.SaveChangesAsync(ct);
+        return new { id = bundle.Id, status = bundle.Status.ToString().ToLowerInvariant() };
+    }
+
     public async Task<object> AddSectionAsync(string id, AdminMockBundleSectionRequest request, string adminId, CancellationToken ct)
     {
         var bundle = await GetBundleEntityAsync(id, track: true, ct);

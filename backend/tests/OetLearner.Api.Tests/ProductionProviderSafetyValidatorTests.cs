@@ -16,16 +16,21 @@ public sealed class ProductionProviderSafetyValidatorTests
     }
 
     [Fact]
-    public void Validate_AllowsExplicitEmergencyOverride()
+    public void Validate_RejectsMockProviderEvenWithLegacyEmergencyOverride()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                [ProductionProviderSafetyValidator.AllowMockProvidersKey] = "true"
+                ["Features:AllowProductionMockProviders"] = "true",
+                ["AI:ProviderId"] = "mock",
+                ["AI:DefaultModel"] = "mock"
             })
             .Build();
 
-        ProductionProviderSafetyValidator.Validate(config, isDevelopment: false);
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ProductionProviderSafetyValidator.Validate(config, isDevelopment: false));
+
+        Assert.Contains("Production cannot use the mock AI provider", ex.Message);
     }
 
     [Fact]

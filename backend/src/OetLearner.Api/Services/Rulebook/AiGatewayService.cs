@@ -55,14 +55,12 @@ public sealed class AiGatewayService(
     IAiToolRegistry? toolRegistry = null,
     IAiToolInvoker? toolInvoker = null,
     Microsoft.Extensions.Options.IOptions<AiToolOptions>? toolOptions = null,
-    IConfiguration? configuration = null,
     IHostEnvironment? environment = null)
     : IAiGatewayService
 {
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
     private readonly bool _allowMockProvider = environment is null
-        || environment.IsDevelopment()
-        || configuration?.GetValue<bool>(ProductionProviderSafetyValidator.AllowMockProvidersKey) == true;
+        || environment.IsDevelopment();
 
     public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
         => _promptBuilder.Build(context);

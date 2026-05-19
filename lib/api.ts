@@ -7916,6 +7916,30 @@ export async function adminPronunciationAiDraft(body: {
   });
 }
 
+export type AdminPronunciationGenerateAudioResponse = {
+  mediaAssetId: string;
+  sha256: string;
+  durationMs: number;
+  bytes: number;
+  providerName: string;
+  mimeType: string;
+  storageKey: string;
+  url: string;
+};
+
+export async function generateAdminPronunciationModelAudio(
+  drillId: string,
+  body: { text: string; voiceId?: string },
+): Promise<AdminPronunciationGenerateAudioResponse> {
+  return apiRequest(
+    `/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}/generate-model-audio`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+  ) as Promise<AdminPronunciationGenerateAudioResponse>;
+}
+
 // ── Certificates ──────────────────────────────────────────────────────────────
 
 export async function fetchMyCertificates() {
@@ -9311,3 +9335,884 @@ export async function adminImportRulebook(json: string, mode: 'create' | 'replac
     method: 'POST', body: JSON.stringify({ json, mode }),
   });
 }
+
+// === SUBAGENT_BACKEND: admin-content-management START ===
+// Wrappers for the soft-publish + unarchive + bulk endpoints added so the
+// admin web UI can manage every content type without server-side gate
+// restrictions. Publish endpoints now always succeed and surface any
+// rulebook/structural problems as `warnings` instead of throwing.
+
+export interface AdminPublishWithWarningsResponse {
+  published: boolean;
+  status?: string;
+  warnings?: string[];
+}
+
+export interface AdminBulkPaperPublishResult {
+  paperId: string;
+  ok: boolean;
+  warnings?: string[];
+  error?: string;
+}
+
+export interface AdminBulkPaperStatusResult {
+  paperId: string;
+  ok: boolean;
+  status?: string;
+  error?: string;
+}
+
+export async function adminPublishPaperWithWarnings(paperId: string) {
+  return apiRequest<AdminPublishWithWarningsResponse>(
+    `/v1/admin/papers/${encodeURIComponent(paperId)}/publish`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminUnarchivePaper(paperId: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/v1/admin/papers/${encodeURIComponent(paperId)}/unarchive`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminUnarchiveMockBundle(bundleId: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/unarchive`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminUnarchiveGrammarLesson(lessonId: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/v1/admin/grammar/lessons/${encodeURIComponent(lessonId)}/unarchive`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminUnarchiveConversationTemplate(templateId: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/unarchive`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminUnarchivePronunciationDrill(drillId: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}/unarchive`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminBulkPublishPapers(paperIds: string[]) {
+  return apiRequest<{ results: AdminBulkPaperPublishResult[] }>(
+    `/v1/admin/papers/bulk-publish`,
+    { method: 'POST', body: JSON.stringify({ paperIds }) },
+  );
+}
+
+export async function adminBulkSetPaperStatus(
+  paperIds: string[],
+  targetStatus: 'Draft' | 'Published' | 'Archived',
+) {
+  return apiRequest<{ results: AdminBulkPaperStatusResult[] }>(
+    `/v1/admin/papers/bulk-status`,
+    { method: 'POST', body: JSON.stringify({ paperIds, targetStatus }) },
+  );
+}
+
+export interface AdminConversationAiDraftPayload {
+  profession: string;
+  topic?: string;
+  scenario?: string;
+  durationSeconds?: number;
+  taskType?: 'oet-roleplay' | 'oet-handover';
+}
+
+export interface AdminConversationAiDraftResult {
+  title: string;
+  taskTypeCode: string;
+  profession: string;
+  scenario: string;
+  roleDescription: string;
+  patientContext: string;
+  expectedOutcomes: string;
+  difficulty: string;
+  estimatedDurationSeconds: number;
+  objectives: string[];
+  expectedRedFlags: string[];
+  keyVocabulary: string[];
+  warning?: string | null;
+}
+
+export async function adminConversationAiDraft(payload: AdminConversationAiDraftPayload) {
+  return apiRequest<AdminConversationAiDraftResult>(
+    `/v1/admin/conversation/templates/ai-draft`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+// === SUBAGENT_BACKEND: admin-content-management END ===
+
+// === SUBAGENT_B: listening-authoring START ===
+// Typed wrappers for the Listening authoring workspace.
+// Mirrors backend routes in:
+//   - Endpoints/ListeningAuthoringAdminEndpoints.cs
+//   - Endpoints/ListeningAdminAnalyticsEndpoints.cs
+// Canonical paper shape: A1=12, A2=12, B=6, C1=6, C2=6 → 42 items.
+
+import type {
+  ListeningAuthoredExtract,
+  ListeningAuthoredQuestion,
+  ListeningAuthoredQuestionList,
+  ListeningBackfillAllResponse,
+  ListeningBackfillReport,
+  ListeningExtractionDraft,
+  ListeningExtractionDraftStatus,
+  ListeningExtractPatch,
+  ListeningExtractProposalResponse,
+  ListeningExtractsResponse,
+  ListeningQuestionPatch,
+  ListeningValidationReport,
+} from '@/lib/types/admin/listening-authoring';
+
+const lap = (paperId: string) =>
+  `/v1/admin/papers/${encodeURIComponent(paperId)}/listening`;
+
+// ── Validate ────────────────────────────────────────────────────────────
+export async function adminListeningValidate(paperId: string) {
+  return apiRequest<ListeningValidationReport>(`${lap(paperId)}/validate`);
+}
+
+// ── Structure (42 items) ────────────────────────────────────────────────
+export async function adminListeningGetStructure(paperId: string) {
+  return apiRequest<ListeningAuthoredQuestionList>(`${lap(paperId)}/structure`);
+}
+
+export async function adminListeningReplaceStructure(
+  paperId: string,
+  questions: ListeningAuthoredQuestion[],
+) {
+  return apiRequest<ListeningAuthoredQuestionList>(`${lap(paperId)}/structure`, {
+    method: 'PUT',
+    body: JSON.stringify({ questions }),
+  });
+}
+
+export async function adminListeningPatchQuestion(
+  paperId: string,
+  questionId: string,
+  patch: ListeningQuestionPatch,
+) {
+  return apiRequest<ListeningAuthoredQuestionList>(
+    `${lap(paperId)}/structure/${encodeURIComponent(questionId)}`,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  );
+}
+
+// ── Extracts (5 per paper) ──────────────────────────────────────────────
+export async function adminListeningGetExtracts(paperId: string) {
+  return apiRequest<ListeningExtractsResponse>(`${lap(paperId)}/extracts`);
+}
+
+export async function adminListeningReplaceExtracts(
+  paperId: string,
+  extracts: ListeningAuthoredExtract[],
+) {
+  return apiRequest<ListeningExtractsResponse>(`${lap(paperId)}/extracts`, {
+    method: 'PUT',
+    body: JSON.stringify({ extracts }),
+  });
+}
+
+export async function adminListeningPatchExtract(
+  paperId: string,
+  extractCode: string,
+  patch: ListeningExtractPatch,
+) {
+  return apiRequest<ListeningExtractsResponse>(
+    `${lap(paperId)}/extracts/${encodeURIComponent(extractCode)}`,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  );
+}
+
+// ── AI extraction lifecycle ─────────────────────────────────────────────
+export async function adminListeningProposeExtraction(paperId: string) {
+  return apiRequest<ListeningExtractProposalResponse>(`${lap(paperId)}/extract`, {
+    method: 'POST',
+  });
+}
+
+export async function adminListeningListExtractions(
+  paperId: string,
+  status?: ListeningExtractionDraftStatus,
+) {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return apiRequest<ListeningExtractionDraft[]>(`${lap(paperId)}/extractions${qs}`);
+}
+
+export async function adminListeningGetExtraction(paperId: string, draftId: string) {
+  return apiRequest<ListeningExtractionDraft>(
+    `${lap(paperId)}/extractions/${encodeURIComponent(draftId)}`,
+  );
+}
+
+export async function adminListeningApproveExtraction(
+  paperId: string,
+  draftId: string,
+  reason?: string,
+) {
+  return apiRequest<ListeningExtractionDraft>(
+    `${lap(paperId)}/extractions/${encodeURIComponent(draftId)}/approve`,
+    { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
+  );
+}
+
+export async function adminListeningRejectExtraction(
+  paperId: string,
+  draftId: string,
+  reason: string,
+) {
+  return apiRequest<ListeningExtractionDraft>(
+    `${lap(paperId)}/extractions/${encodeURIComponent(draftId)}/reject`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+  );
+}
+
+// ── Per-paper backfill (JSON → relational, also covers TTS asset rewire) ─
+export async function adminListeningBackfillPaper(paperId: string) {
+  return apiRequest<ListeningBackfillReport>(`${lap(paperId)}/backfill`, {
+    method: 'POST',
+  });
+}
+
+// ── System-wide listening admin endpoints ───────────────────────────────
+export async function adminListeningBackfillAll() {
+  return apiRequest<ListeningBackfillAllResponse>(`/v1/admin/listening/backfill`, {
+    method: 'POST',
+  });
+}
+
+export async function adminListeningGetAnalytics(days?: number) {
+  const qs = typeof days === 'number' ? `?days=${days}` : '';
+  return apiRequest<unknown>(`/v1/admin/listening/analytics${qs}`);
+}
+
+export async function adminListeningExportAttempt(attemptId: string) {
+  return apiRequest<unknown>(
+    `/v1/admin/listening/attempts/${encodeURIComponent(attemptId)}/export`,
+  );
+}
+// === SUBAGENT_B: listening-authoring END ===
+
+// === SUBAGENT_C: bulk-import-and-generation START ===
+// Typed wrappers for the bulk-import (ZIP), rulebook-import, and
+// content-generation orchestration endpoints used by the Wave-2 admin UI
+// (`/admin/content/papers/import-zip`, `/admin/rulebooks/import`,
+// `/admin/content/generation/jobs`). Rulebook list/publish/import helpers
+// already exist above (`adminListRulebooks`, `adminImportRulebook`,
+// `adminPublishRulebook`) and are re-used by the new pages without
+// duplication.
+import type {
+  BulkImportApprovalInput,
+  BulkImportCommitResult,
+  BulkImportSessionResponse,
+  GenerationJobListResponse,
+  GenerationJobSummary,
+  QueueGenerationInput,
+} from '@/lib/types/admin/bulk-import';
+
+/**
+ * Stage a ZIP payload for bulk content import. The backend accepts a single
+ * `multipart/form-data` field named `file`; we drop the JSON Content-Type so
+ * the browser produces the correct boundary. Returns the parsed session +
+ * manifest so the UI can render an approval table before commit.
+ */
+export async function adminStartZipImport(
+  file: File,
+): Promise<BulkImportSessionResponse> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  return apiRequest<BulkImportSessionResponse>(
+    '/v1/admin/imports/zip',
+    { method: 'POST', body: form },
+    { json: false },
+  );
+}
+
+/**
+ * Commit a previously-staged ZIP import session with the admin's per-paper
+ * approval decisions. `approvals` MUST include one entry per proposalId
+ * returned by `adminStartZipImport`; the backend treats unknown ids as
+ * skipped and refuses unknown sessions / cross-admin commits.
+ */
+export async function adminCommitZipImport(
+  sessionId: string,
+  approvals: BulkImportApprovalInput[],
+): Promise<BulkImportCommitResult> {
+  return apiRequest<BulkImportCommitResult>(
+    `/v1/admin/imports/zip/${encodeURIComponent(sessionId)}/commit`,
+    { method: 'POST', body: JSON.stringify(approvals) },
+  );
+}
+
+/**
+ * Abort an in-flight chunked upload session. The dedicated ZIP-import flow
+ * does not use chunked uploads (the `/imports/zip` endpoint takes a single
+ * multipart payload directly), but this wrapper is exported so the UI can
+ * discard orphaned upload sessions if a different flow staged them.
+ */
+export async function adminDiscardUpload(uploadId: string): Promise<void> {
+  await apiRequest<void>(
+    `/v1/admin/uploads/${encodeURIComponent(uploadId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+/**
+ * Convenience wrapper that returns the strongly-typed jobs list. The
+ * underlying `fetchContentGenerationJobs(page, pageSize)` helper already
+ * exists above and is kept unchanged; this wrapper just narrows the return
+ * type so the new jobs page can avoid `unknown` casts.
+ */
+export async function adminListGenerationJobs(
+  page = 1,
+  pageSize = 20,
+): Promise<GenerationJobListResponse> {
+  return apiRequest<GenerationJobListResponse>(
+    `/v1/admin/content/generation-jobs?page=${page}&pageSize=${pageSize}`,
+  );
+}
+
+export async function adminGetGenerationJob(
+  jobId: string,
+): Promise<GenerationJobSummary> {
+  return apiRequest<GenerationJobSummary>(
+    `/v1/admin/content/generation-jobs/${encodeURIComponent(jobId)}`,
+  );
+}
+
+/**
+ * Strongly-typed wrapper around `POST /v1/admin/content/generate`. The
+ * existing `queueContentGeneration` helper above accepts the same shape but
+ * returns `unknown`; this wrapper documents the field set the new launcher
+ * UI uses and narrows the return type.
+ */
+export async function adminQueueContentGeneration(
+  payload: QueueGenerationInput,
+): Promise<{ jobId?: string } & Record<string, unknown>> {
+  return apiRequest<{ jobId?: string } & Record<string, unknown>>(
+    '/v1/admin/content/generate',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+// === SUBAGENT_C: bulk-import-and-generation END ===
+
+// === SUBAGENT_E: bulk-ops START ===
+// Typed helpers used by the Wave-2 bulk admin pages:
+//   - app/admin/content/mocks/bulk/page.tsx
+//   - app/admin/content/vocabulary/publish-batch/page.tsx
+//   - app/admin/content/papers/republish-drafts/page.tsx
+// These are thin re-exports / wrappers around endpoints that already exist
+// on the backend. They live behind the SUBAGENT_E marker so future merges
+// stay non-overlapping with SUBAGENT_B/C/D blocks.
+
+/** Minimal projection of /v1/admin/papers list rows used by the bulk pages. */
+export interface AdminBulkPaperRow {
+  id: string;
+  title: string;
+  subtestCode: string;
+  status: 'Draft' | 'InReview' | 'Published' | 'Archived';
+  professionId: string | null;
+  appliesToAllProfessions: boolean;
+  difficulty?: string | null;
+  sourceProvenance?: string | null;
+  updatedAt?: string | null;
+}
+
+/** Lightweight draft vocab row used by the publish-batch UI. */
+export interface AdminBulkVocabRow {
+  id: string;
+  term: string;
+  definition: string | null;
+  category: string;
+  professionId: string | null;
+  difficulty?: string | null;
+  exampleSentence: string | null;
+  status: 'draft' | 'active' | 'archived';
+}
+
+/** Full vocab item detail (subset of fields the publish-batch UI consumes). */
+export interface AdminBulkVocabDetail extends AdminBulkVocabRow {
+  ipaPronunciation: string | null;
+  audioUrl: string | null;
+  contextNotes: string | null;
+  sourceProvenance: string | null;
+}
+
+/** Minimal mock-bundle row used by the bulk page to count existing bundles. */
+export interface AdminBulkMockBundleRow {
+  id: string;
+  title: string;
+  mockType: string;
+  status: string;
+  professionId: string | null;
+}
+
+/** Bulk list papers (admin). Returns flat array — backend does not paginate. */
+export async function adminBulkListPapers(query: {
+  subtest?: string;
+  profession?: string;
+  status?: 'Draft' | 'Published' | 'Archived' | 'InReview';
+  pageSize?: number;
+}): Promise<AdminBulkPaperRow[]> {
+  const qs = new URLSearchParams();
+  if (query.subtest) qs.set('subtest', query.subtest);
+  if (query.profession) qs.set('profession', query.profession);
+  if (query.status) qs.set('status', query.status);
+  if (query.pageSize) qs.set('pageSize', String(query.pageSize));
+  const suffix = qs.toString();
+  return apiRequest<AdminBulkPaperRow[]>(
+    `/v1/admin/papers${suffix ? `?${suffix}` : ''}`,
+  );
+}
+
+/** Bulk list draft vocab items (paginated). */
+export async function adminBulkListDraftVocab(params: {
+  page?: number;
+  pageSize?: number;
+  profession?: string;
+  category?: string;
+  search?: string;
+}): Promise<{ total: number; page: number; pageSize: number; items: AdminBulkVocabRow[] }> {
+  const qs = new URLSearchParams();
+  qs.set('status', 'draft');
+  if (params.page) qs.set('page', String(params.page));
+  if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+  if (params.profession) qs.set('profession', params.profession);
+  if (params.category) qs.set('category', params.category);
+  if (params.search) qs.set('search', params.search);
+  return apiRequest(`/v1/admin/vocabulary/items?${qs.toString()}`);
+}
+
+/** Get one vocab item with full detail (includes IPA / provenance / audio). */
+export async function adminBulkGetVocabItem(itemId: string) {
+  return apiRequest<AdminBulkVocabDetail>(
+    `/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`,
+  );
+}
+
+/**
+ * Update one vocab item. Pass `{ status: 'active' }` to publish; the backend's
+ * EnforceVocabularyPublishGate validates required fields and may 4xx.
+ */
+export async function adminBulkUpdateVocabItem(
+  itemId: string,
+  body: Record<string, unknown>,
+) {
+  return apiRequest<AdminBulkVocabDetail>(
+    `/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`,
+    { method: 'PUT', body: JSON.stringify(body) },
+  );
+}
+
+/** List mock bundles (used by the bulk-mocks page to count existing rows). */
+export async function adminBulkListMockBundles(query: {
+  mockType?: string;
+  status?: string;
+} = {}) {
+  const qs = new URLSearchParams();
+  if (query.mockType) qs.set('mockType', query.mockType);
+  if (query.status) qs.set('status', query.status);
+  const suffix = qs.toString();
+  return apiRequest<AdminBulkMockBundleRow[]>(
+    `/v1/admin/mock-bundles${suffix ? `?${suffix}` : ''}`,
+  );
+}
+// === SUBAGENT_E: bulk-ops END ===
+
+// === SUBAGENT_D: speaking-conv-pron START ===
+// Typed helpers for the Wave-2 SUBAGENT D admin UI:
+//   - Speaking workspace + create + backfill pages
+//   - Conversation AI-draft + bulk-runner
+//   - Pronunciation bulk-runner + analytics
+//
+// Backend status notes (verified against backend/src/OetLearner.Api):
+//   * Speaking list / paper CRUD / chunked uploads / publish / unarchive
+//     are already exposed via /v1/admin/papers/* and consumed via the
+//     `lib/content-upload-api.ts` helpers. We re-export thin wrappers here
+//     so the new pages can stay self-contained.
+//   * `POST /v1/admin/conversation/templates/ai-draft` was added by
+//     SUBAGENT_BACKEND (see `adminConversationAiDraft` above).
+//   * `POST /v1/admin/pronunciation/drills/ai-draft` exists (see
+//     `adminPronunciationAiDraft` above).
+//   * NO speaking asset-backfill endpoint exists (the
+//     `scripts/admin/generate-speaking-assets.mjs` Node script is the
+//     only mechanism). Surface as "missing backend endpoint" in the UI.
+//   * NO pronunciation analytics endpoint exists. Surface the same way.
+
+export interface AdminSpeakingPaperRow {
+  id: string;
+  subtestCode: string;
+  title: string;
+  slug: string;
+  professionId: string | null;
+  appliesToAllProfessions: boolean;
+  difficulty: string;
+  status: 'Draft' | 'InReview' | 'Published' | 'Archived';
+  cardType: string | null;
+  tagsCsv: string;
+  updatedAt: string;
+  publishedAt: string | null;
+}
+
+export interface AdminSpeakingListResult {
+  items: AdminSpeakingPaperRow[];
+}
+
+export async function adminListSpeakingPapers(params?: {
+  status?: string;
+  profession?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<AdminSpeakingListResult> {
+  const qs = new URLSearchParams();
+  qs.set('subtest', 'speaking');
+  if (params?.status) qs.set('status', params.status);
+  if (params?.profession) qs.set('profession', params.profession);
+  if (params?.search) qs.set('search', params.search);
+  qs.set('page', String(params?.page ?? 1));
+  qs.set('pageSize', String(params?.pageSize ?? 100));
+  const data = await apiRequest<AdminSpeakingPaperRow[] | AdminSpeakingListResult>(
+    `/v1/admin/papers?${qs.toString()}`,
+  );
+  if (Array.isArray(data)) return { items: data };
+  return data;
+}
+
+export interface AdminSpeakingCreatePayload {
+  title: string;
+  professionId?: string | null;
+  appliesToAllProfessions?: boolean;
+  difficulty?: string;
+  examCode?: string | null;
+  estimatedDurationMinutes?: number;
+  sourceProvenance?: string;
+}
+
+export async function adminCreateSpeakingPaper(body: AdminSpeakingCreatePayload) {
+  const payload = {
+    subtestCode: 'speaking',
+    title: body.title,
+    professionId: body.appliesToAllProfessions === false ? body.professionId ?? null : null,
+    appliesToAllProfessions: body.appliesToAllProfessions ?? true,
+    difficulty: body.difficulty ?? 'standard',
+    estimatedDurationMinutes: body.estimatedDurationMinutes ?? 12,
+    priority: 0,
+    tagsCsv: body.examCode ? `exam:${body.examCode}` : null,
+    sourceProvenance:
+      body.sourceProvenance ?? 'admin-authored:speaking-workspace',
+  };
+  return apiRequest<{ id: string; title: string; slug: string }>(
+    '/v1/admin/papers',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export interface AdminSpeakingStructure {
+  candidateCard?: Record<string, unknown> | null;
+  interlocutorCard?: Record<string, unknown> | null;
+  warmUpQuestions?: string[];
+  prepTimeSeconds?: number;
+  roleplayTimeSeconds?: number;
+  patientEmotion?: string;
+  communicationGoal?: string;
+  clinicalTopic?: string;
+  criteriaFocus?: string[];
+  complianceNotes?: string;
+}
+
+export interface AdminSpeakingStructureResponse {
+  paperId: string;
+  structure: AdminSpeakingStructure;
+  validation?: {
+    isPublishReady?: boolean;
+    isValid?: boolean;
+    issues?: Array<{ code: string; severity: string; message: string }>;
+  };
+  updatedAt?: string;
+}
+
+export async function adminGetSpeakingStructure(paperId: string) {
+  return apiRequest<AdminSpeakingStructureResponse>(
+    `/v1/admin/papers/${encodeURIComponent(paperId)}/speaking-structure`,
+  );
+}
+
+export async function adminUpdateSpeakingStructure(
+  paperId: string,
+  structure: AdminSpeakingStructure,
+) {
+  return apiRequest<AdminSpeakingStructureResponse>(
+    `/v1/admin/papers/${encodeURIComponent(paperId)}/speaking-structure`,
+    { method: 'PUT', body: JSON.stringify({ structure }) },
+  );
+}
+
+export async function adminArchiveSpeakingPaper(paperId: string) {
+  return apiRequest<void>(
+    `/v1/admin/papers/${encodeURIComponent(paperId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+// Conversation bulk runner uses existing helpers. Re-export a small
+// typed orchestrator that the bulk page imports.
+
+export interface ConversationBulkCellInput {
+  profession: string;
+  taskType: 'oet-roleplay' | 'oet-handover';
+}
+
+// Pronunciation bulk runner orchestration result type (page-local helper).
+export interface PronunciationBulkResultRow {
+  topic: string;
+  profession: string;
+  ok: boolean;
+  drillId?: string;
+  status?: string;
+  error?: string;
+  warning?: string | null;
+}
+
+// Pronunciation analytics — endpoint NOT implemented yet on the backend.
+// The analytics page will catch the 404 and render TBD-state. We still
+// expose a typed helper so the call-site is small and easy to migrate
+// the moment the endpoint lands.
+export interface AdminPronunciationAnalytics {
+  totalAttempts: number;
+  averageScore: number | null;
+  topPhonemes: Array<{ phoneme: string; attempts: number; averageScore: number | null }>;
+  weakestPhonemes: Array<{ phoneme: string; attempts: number; averageScore: number | null }>;
+  source?: 'live' | 'tbd';
+}
+
+export async function adminFetchPronunciationAnalytics(params?: {
+  windowDays?: number;
+  profession?: string;
+}): Promise<AdminPronunciationAnalytics> {
+  const qs = new URLSearchParams();
+  if (params?.windowDays) qs.set('windowDays', String(params.windowDays));
+  if (params?.profession) qs.set('profession', params.profession);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return apiRequest<AdminPronunciationAnalytics>(
+    `/v1/admin/pronunciation/analytics${suffix}`,
+  );
+}
+// === SUBAGENT_D: speaking-conv-pron END ===
+
+// === SUBAGENT_A: reading-authoring START ===
+// Typed wrappers for the Reading Authoring admin surface backed by
+// `ReadingAuthoringAdminEndpoints` under `/v1/admin/papers/{paperId}/reading`.
+// All correct-answer / explanation / synonym fields here are intentionally
+// included — these helpers MUST only be called from admin UI behind
+// `AdminContentWrite`.
+import type {
+  ReadingDistractorsPayload,
+  ReadingExtractionDraft,
+  ReadingPartUpsertDto,
+  ReadingPartView,
+  ReadingQuestionDto,
+  ReadingQuestionReviewLogEntry,
+  ReadingQuestionUpsertDto,
+  ReadingReviewTransitionPayload,
+  ReadingStructure,
+  ReadingStructureImportResult,
+  ReadingStructureManifest,
+  ReadingStructureManifestImportPayload,
+  ReadingTextDto,
+  ReadingTextUpsertDto,
+  ReadingValidationReport,
+  ReorderDto,
+} from './types/admin/reading-authoring';
+
+const readingAdminBase = (paperId: string) =>
+  `/v1/admin/papers/${encodeURIComponent(paperId)}/reading`;
+
+export async function adminReadingGetStructure(paperId: string): Promise<ReadingStructure> {
+  return apiRequest<ReadingStructure>(`${readingAdminBase(paperId)}/structure`);
+}
+
+export async function adminReadingGetManifest(paperId: string): Promise<ReadingStructureManifest> {
+  return apiRequest<ReadingStructureManifest>(`${readingAdminBase(paperId)}/manifest`);
+}
+
+export async function adminReadingImportManifest(
+  paperId: string,
+  payload: ReadingStructureManifestImportPayload,
+): Promise<ReadingStructureImportResult> {
+  return apiRequest<ReadingStructureImportResult>(`${readingAdminBase(paperId)}/manifest`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function adminReadingEnsureCanonical(paperId: string): Promise<void> {
+  await apiRequest<void>(`${readingAdminBase(paperId)}/ensure-canonical`, {
+    method: 'POST',
+  });
+}
+
+export async function adminReadingUpsertPart(
+  paperId: string,
+  partCode: 'A' | 'B' | 'C',
+  dto: ReadingPartUpsertDto,
+): Promise<ReadingPartView> {
+  return apiRequest<ReadingPartView>(
+    `${readingAdminBase(paperId)}/parts/${encodeURIComponent(partCode)}`,
+    { method: 'PUT', body: JSON.stringify(dto) },
+  );
+}
+
+export async function adminReadingUpsertText(
+  paperId: string,
+  dto: ReadingTextUpsertDto,
+): Promise<ReadingTextDto> {
+  return apiRequest<ReadingTextDto>(`${readingAdminBase(paperId)}/texts`, {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function adminReadingDeleteText(paperId: string, textId: string): Promise<void> {
+  await apiRequest<void>(
+    `${readingAdminBase(paperId)}/texts/${encodeURIComponent(textId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function adminReadingUpsertQuestion(
+  paperId: string,
+  dto: ReadingQuestionUpsertDto,
+): Promise<ReadingQuestionDto> {
+  return apiRequest<ReadingQuestionDto>(`${readingAdminBase(paperId)}/questions`, {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function adminReadingDeleteQuestion(paperId: string, questionId: string): Promise<void> {
+  await apiRequest<void>(
+    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function adminReadingReorderTexts(
+  paperId: string,
+  partId: string,
+  orderedIds: string[],
+): Promise<void> {
+  const body: ReorderDto = { orderedIds };
+  await apiRequest<void>(
+    `${readingAdminBase(paperId)}/parts/${encodeURIComponent(partId)}/reorder-texts`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export async function adminReadingReorderQuestions(
+  paperId: string,
+  partId: string,
+  orderedIds: string[],
+): Promise<void> {
+  const body: ReorderDto = { orderedIds };
+  await apiRequest<void>(
+    `${readingAdminBase(paperId)}/parts/${encodeURIComponent(partId)}/reorder-questions`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export async function adminReadingValidate(paperId: string): Promise<ReadingValidationReport> {
+  return apiRequest<ReadingValidationReport>(`${readingAdminBase(paperId)}/validate`);
+}
+
+export async function adminReadingSetDistractors(
+  paperId: string,
+  questionId: string,
+  payload: ReadingDistractorsPayload,
+): Promise<{ id: string; optionDistractorsJson: string | null }> {
+  return apiRequest<{ id: string; optionDistractorsJson: string | null }>(
+    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}/distractors`,
+    { method: 'PUT', body: JSON.stringify(payload) },
+  );
+}
+
+export async function adminReadingGetReviewHistory(
+  paperId: string,
+  questionId: string,
+): Promise<ReadingQuestionReviewLogEntry[]> {
+  return apiRequest<ReadingQuestionReviewLogEntry[]>(
+    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}/review-history`,
+  );
+}
+
+export async function adminReadingTransitionReview(
+  paperId: string,
+  questionId: string,
+  payload: ReadingReviewTransitionPayload,
+): Promise<unknown> {
+  return apiRequest<unknown>(
+    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}/review-transition`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export async function adminReadingGetAnalytics(paperId: string): Promise<unknown> {
+  return apiRequest<unknown>(`${readingAdminBase(paperId)}/analytics`);
+}
+
+export async function adminReadingCreateExtraction(
+  paperId: string,
+  mediaAssetId?: string | null,
+): Promise<ReadingExtractionDraft> {
+  return apiRequest<ReadingExtractionDraft>(
+    `${readingAdminBase(paperId)}/extractions`,
+    { method: 'POST', body: JSON.stringify({ mediaAssetId: mediaAssetId ?? null }) },
+  );
+}
+
+export async function adminReadingListExtractions(paperId: string): Promise<ReadingExtractionDraft[]> {
+  return apiRequest<ReadingExtractionDraft[]>(`${readingAdminBase(paperId)}/extractions`);
+}
+
+export async function adminReadingGetExtraction(
+  paperId: string,
+  draftId: string,
+): Promise<ReadingExtractionDraft> {
+  return apiRequest<ReadingExtractionDraft>(
+    `${readingAdminBase(paperId)}/extractions/${encodeURIComponent(draftId)}`,
+  );
+}
+
+export async function adminReadingApproveExtraction(
+  paperId: string,
+  draftId: string,
+): Promise<ReadingExtractionDraft> {
+  return apiRequest<ReadingExtractionDraft>(
+    `${readingAdminBase(paperId)}/extractions/${encodeURIComponent(draftId)}/approve`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminReadingRejectExtraction(
+  paperId: string,
+  draftId: string,
+  reason?: string,
+): Promise<ReadingExtractionDraft> {
+  return apiRequest<ReadingExtractionDraft>(
+    `${readingAdminBase(paperId)}/extractions/${encodeURIComponent(draftId)}/reject`,
+    { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
+  );
+}
+// === SUBAGENT_A: reading-authoring END ===
+

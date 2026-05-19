@@ -95,6 +95,14 @@ export default function AdminConversationSettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [elevenLabsTestUrl, setElevenLabsTestUrl] = useState<string | null>(null);
+  const [elevenLabsTestBusy, setElevenLabsTestBusy] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (elevenLabsTestUrl) URL.revokeObjectURL(elevenLabsTestUrl);
+    };
+  }, [elevenLabsTestUrl]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -146,6 +154,29 @@ export default function AdminConversationSettingsPage() {
       setToast({ variant: 'success', message: 'Playing TTS sample…' });
     } catch {
       setToast({ variant: 'error', message: 'TTS preview failed (check the configured provider + key).' });
+    }
+  }
+
+  async function handleElevenLabsTest() {
+    setElevenLabsTestBusy(true);
+    if (elevenLabsTestUrl) {
+      URL.revokeObjectURL(elevenLabsTestUrl);
+      setElevenLabsTestUrl(null);
+    }
+    try {
+      const blob = await adminConversationTtsPreview({
+        voice: (draft.elevenLabsDefaultVoiceId as string) ?? settings?.elevenLabsDefaultVoiceId ?? '',
+        locale: 'en-GB',
+        text: 'Good morning. Thank you for coming in today. How can I help you?',
+      });
+      const url = URL.createObjectURL(blob);
+      setElevenLabsTestUrl(url);
+      setToast({ variant: 'success', message: 'ElevenLabs sample synthesized.' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'ElevenLabs test failed.';
+      setToast({ variant: 'error', message: `ElevenLabs test failed: ${msg}. Save settings first if you just changed the provider or key.` });
+    } finally {
+      setElevenLabsTestBusy(false);
     }
   }
 
@@ -392,13 +423,32 @@ export default function AdminConversationSettingsPage() {
                     <option value="mock">Mock</option>
                     <option value="off">Off (text-only)</option>
                   </select>
+                  <p className="mt-1 text-xs text-muted">auto = walks Azure → ElevenLabs → CosyVoice → ChatTTS → GPT-SoVITS. Changes take effect within 30 s of Save.</p>
                 </label>
                 <Grid>
                   <Input label="Azure TTS Default Voice" value={String(v('azureTtsDefaultVoice') ?? '')}
                     onChange={(e) => setField('azureTtsDefaultVoice', e.target.value)} placeholder="en-GB-SoniaNeural" />
-                  <KeyInput label="ElevenLabs API Key" present={settings.elevenLabsApiKeyPresent} draftKey="elevenLabsApiKey" draft={draft} set={setSecret} />
-                  <Input label="ElevenLabs Voice ID" value={String(v('elevenLabsDefaultVoiceId') ?? '')} onChange={(e) => setField('elevenLabsDefaultVoiceId', e.target.value)} />
-                  <Input label="ElevenLabs Model" value={String(v('elevenLabsModel') ?? '')} onChange={(e) => setField('elevenLabsModel', e.target.value)} placeholder="eleven_multilingual_v2" />
+                  <KeyInput
+                    label="ElevenLabs API Key"
+                    present={settings.elevenLabsApiKeyPresent}
+                    draftKey="elevenLabsApiKey"
+                    draft={draft}
+                    set={setSecret}
+                    hint="ElevenLabs xi-api-key. Premium plan recommended for production. Leave blank to keep the current key; submit an empty value with Save to clear."
+                  />
+                  <div>
+                    <Input
+                      label="ElevenLabs Voice ID"
+                      value={String(v('elevenLabsDefaultVoiceId') ?? '')}
+                      onChange={(e) => setField('elevenLabsDefaultVoiceId', e.target.value)}
+                      placeholder="EXAVITQu4vr4xnSDxMaL"
+                    />
+                    <p className="mt-1 text-xs text-muted">Pick from the <a href="https://elevenlabs.io/app/voice-library" target="_blank" rel="noopener noreferrer" className="underline">ElevenLabs voice library</a>.</p>
+                  </div>
+                  <div>
+                    <Input label="ElevenLabs Model" value={String(v('elevenLabsModel') ?? '')} onChange={(e) => setField('elevenLabsModel', e.target.value)} placeholder="eleven_multilingual_v2" />
+                    <p className="mt-1 text-xs text-muted">Common: <code>eleven_multilingual_v2</code> (balanced), <code>eleven_turbo_v2_5</code> (low-latency), <code>eleven_v3</code> (newest).</p>
+                  </div>
                   <KeyInput label="CosyVoice API Key" present={settings.cosyVoiceApiKeyPresent} draftKey="cosyVoiceApiKey" draft={draft} set={setSecret} />
                   <Input label="CosyVoice Base URL" value={String(v('cosyVoiceBaseUrl') ?? '')} onChange={(e) => setField('cosyVoiceBaseUrl', e.target.value)} />
                   <Input label="CosyVoice Default Voice" value={String(v('cosyVoiceDefaultVoice') ?? '')} onChange={(e) => setField('cosyVoiceDefaultVoice', e.target.value)} />
@@ -409,6 +459,20 @@ export default function AdminConversationSettingsPage() {
                   <Input label="GPT-SoVITS Base URL" value={String(v('gptSoVitsBaseUrl') ?? '')} onChange={(e) => setField('gptSoVitsBaseUrl', e.target.value)} />
                   <Input label="GPT-SoVITS Default Voice" value={String(v('gptSoVitsDefaultVoice') ?? '')} onChange={(e) => setField('gptSoVitsDefaultVoice', e.target.value)} />
                 </Grid>
+                <div className="mt-2 rounded-xl border border-border bg-surface/50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">Test ElevenLabs TTS</p>
+                      <p className="text-xs text-muted">Synthesizes a short sample with the currently-selected TTS provider and the ElevenLabs Voice ID above. Save first so the new provider/key/voice are in effect.</p>
+                    </div>
+                    <Button variant="primary" onClick={handleElevenLabsTest} disabled={elevenLabsTestBusy}>
+                      <Volume2 className="mr-1 h-4 w-4" /> {elevenLabsTestBusy ? 'Testing…' : 'Test TTS'}
+                    </Button>
+                  </div>
+                  {elevenLabsTestUrl && (
+                    <audio controls src={elevenLabsTestUrl} className="mt-3 w-full" />
+                  )}
+                </div>
               </Section>
             </div>
           )}
@@ -439,12 +503,14 @@ function KeyInput({
   draftKey,
   draft,
   set,
+  hint,
 }: {
   label: string;
   present?: boolean;
   draftKey: string;
   draft: Record<string, unknown>;
   set: (k: string, v: string) => void;
+  hint?: string;
 }) {
   return (
     <div>
@@ -459,6 +525,7 @@ function KeyInput({
         onChange={(e) => set(draftKey, e.target.value)}
         className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
       />
+      {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
     </div>
   );
 }

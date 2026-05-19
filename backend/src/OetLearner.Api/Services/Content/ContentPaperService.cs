@@ -22,7 +22,13 @@ public interface IContentPaperService
     Task<ContentPaper?> GetAsync(string paperId, CancellationToken ct);
     Task<IReadOnlyList<ContentPaper>> ListAsync(ContentPaperQuery query, CancellationToken ct);
     Task ArchiveAsync(string paperId, string adminId, CancellationToken ct);
+    Task UnarchiveAsync(string paperId, string adminId, CancellationToken ct);
     Task PublishAsync(string paperId, string adminId, CancellationToken ct);
+    /// <summary>
+    /// Force-set the paper status (Draft / Published / Archived) without
+    /// running the publish gate. Used by the admin bulk-status endpoint.
+    /// </summary>
+    Task SetStatusAsync(string paperId, ContentStatus status, string adminId, CancellationToken ct);
 
     Task<ContentPaperAsset> AttachAssetAsync(
         string paperId, ContentPaperAssetAttach args, string adminId, CancellationToken ct);
@@ -227,6 +233,61 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
     }
 
     public async Task PublishAsync(string paperId, string adminId, CancellationToken ct)
+    {
+        await _legacyPublishAsync(paperId, adminId, ct);
+    }
+
+    public async Task SetStatusAsync(string paperId, ContentStatus status, string adminId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId, ct)
+            ?? throw new InvalidOperationException("Paper not found.");
+        var now = DateTimeOffset.UtcNow;
+        paper.Status = status;
+        paper.UpdatedAt = now;
+        if (status == ContentStatus.Published)
+        {
+            paper.PublishedAt = now;
+            paper.ArchivedAt = null;
+        }
+        else if (status == ContentStatus.Archived)
+        {
+            paper.ArchivedAt = now;
+        }
+        else
+        {
+            // Draft: clear archive timestamp so it doesn't look archived in lists.
+            paper.ArchivedAt = null;
+        }
+        await WriteAuditAsync("ContentPaperStatusSet", paper.Id, $"{paper.Title} -> {status}", adminId, ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UnarchiveAsync(string paperId, string adminId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId, ct)
+            ?? throw new InvalidOperationException("Paper not found.");
+        var now = DateTimeOffset.UtcNow;
+        paper.Status = ContentStatus.Published;
+        paper.ArchivedAt = null;
+        paper.PublishedAt ??= now;
+        paper.UpdatedAt = now;
+        if (string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == paper.Id, ct);
+            if (content is not null)
+            {
+                content.Status = ContentStatus.Published;
+                content.ArchivedAt = null;
+                content.UpdatedAt = now;
+            }
+        }
+        await WriteAuditAsync("Unarchived", paper.Id, paper.Title, adminId, ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    // Original (pre-soften) publish body, kept inline above for reference only.
+    private async Task _legacyPublishAsync(string paperId, string adminId, CancellationToken ct)
     {
         var paper = await db.ContentPapers
             .Include(p => p.Assets)

@@ -3,9 +3,8 @@
  *
  * Activates draft VocabularyTerm rows in the backend by promoting status
  * "draft" → "active" via the admin CRUD endpoint. When required fields are
- * missing/sparse, calls the DO Serverless chat model (Opus 4.7 by default,
- * via aiChatJson) to backfill IPA, definition, example sentence, etc., then
- * PUTs the merged payload. The backend's publish gate
+ * missing/sparse, refuses to publish so admins can use backend grounded
+ * vocabulary services or curate the fields manually. The backend's publish gate
  * (EnforceVocabularyPublishGate) does the final validation.
  *
  * Backend contract (verified against VocabularyEndpoints.cs / AdminEndpoints.cs
@@ -35,7 +34,7 @@
  *   node scripts/admin/publish-vocab.mjs --healthcheck
  *
  * Notes:
- *   - Uses ONLY the foundation lib exports (adminFetch / aiChatJson / startRun
+ *   - Uses ONLY the foundation lib exports (adminFetch / startRun
  *     / endRun / logFailure / progress / makeProvenance / abortIfFailureCascade).
  *   - No direct fetch(), no hard-coded endpoint base, no node-fetch.
  *   - Auto-retries 429/5xx via adminFetch; auto-refreshes JWT on 401.
@@ -45,7 +44,7 @@
 import { readFileSync, appendFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  CONFIG, parseFlags, startRun, endRun, adminFetch, aiChatJson,
+  CONFIG, parseFlags, startRun, endRun, adminFetch,
   logFailure, progress, healthcheck, makeProvenance,
   abortIfFailureCascade, sleep,
 } from './_lib.mjs';
@@ -139,43 +138,7 @@ function diagnoseSparse(detail) {
  * as a non-fatal skip for that term.
  */
 async function aiBackfill(detail) {
-  const term = String(detail.term || '').trim();
-  const profession = detail.professionId || 'all healthcare professionals';
-  const category = detail.category || 'general';
-
-  const system =
-    'You are an OET (Occupational English Test) vocabulary editor. ' +
-    'You write concise, clinically accurate, learner-facing entries. ' +
-    'Output STRICT JSON only — no prose, no markdown fences. ' +
-    'IPA must use International Phonetic Alphabet symbols inside / / ' +
-    '(British English). Definitions are one sentence, plain language, ' +
-    'no circular references. Example sentences are one realistic clinical ' +
-    'utterance that uses the term naturally.';
-
-  const user =
-    `Backfill the following OET vocabulary term for ${profession} ` +
-    `(category: ${category}). Preserve any fields that are already provided; ` +
-    `only fill what is empty.\n\n` +
-    `Term: ${term}\n` +
-    `Current definition: ${detail.definition || '(empty)'}\n` +
-    `Current IPA: ${detail.ipaPronunciation || '(empty)'}\n` +
-    `Current example: ${detail.exampleSentence || '(empty)'}\n\n` +
-    `Return JSON with this exact shape (omit any key you cannot confidently fill):\n` +
-    `{\n` +
-    `  "ipa": "/.../",\n` +
-    `  "definition": "one-sentence learner definition",\n` +
-    `  "exampleSentence": "one realistic clinical sentence using the term",\n` +
-    `  "partOfSpeech": "noun|verb|adjective|adverb",\n` +
-    `  "professionRelevance": "1-sentence note on why this matters for ${profession}"\n` +
-    `}`;
-
-  const { json } = await aiChatJson({
-    system,
-    user,
-    temperature: 0.3,
-    maxTokens: 600,
-  });
-  return json || {};
+  throw new Error(`Direct vocabulary AI backfill is disabled for ${detail.term || 'unknown term'}. Use backend grounded vocabulary services or curate missing fields manually.`);
 }
 
 /**

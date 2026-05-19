@@ -69,35 +69,14 @@ async function listPublishedPapers({ subtest, profession }) {
 }
 
 /**
- * Pick a published paper matching subtest+profession. Falls back to
- * appliesToAllProfessions, then to any-profession papers, then null.
- * `used` is a Set of paperIds already consumed by this run.
+ * Pick an unused published paper matching subtest+profession. The backend
+ * query also returns all-profession papers. Cross-profession substitution and
+ * reuse are intentionally disabled so mock bundles never mask content gaps.
  */
 async function pickPaper({ subtest, profession, used }) {
-  // First try strict profession match.
-  const strict = await listPublishedPapers({ subtest, profession });
-  let pick = strict.find(p => !used.has(p.id));
-  if (pick) return { paper: pick, fallback: false };
-
-  // Fallback: list anything published for this subtest, any profession.
-  const any = await listPublishedPapers({ subtest, profession: undefined });
-  pick = any.find(p =>
-    !used.has(p.id) &&
-    (p.appliesToAllProfessions || p.professionId === profession || !p.professionId)
-  );
-  if (pick) return { paper: pick, fallback: true };
-
-  // Last resort: any unused paper of this subtest, even other-profession.
-  pick = any.find(p => !used.has(p.id));
-  if (pick) return { paper: pick, fallback: true };
-
-  // Reuse fallback: pool exhausted, reuse a profession-compatible paper.
-  // Backend allows the same paper in multiple bundles; we prefer spreading
-  // for learner variety but never block a bundle when reuse is the only path.
-  pick = strict[0]
-    ?? any.find(p => p.appliesToAllProfessions || p.professionId === profession || !p.professionId)
-    ?? any[0];
-  return pick ? { paper: pick, fallback: true } : { paper: null, fallback: false };
+  const candidates = await listPublishedPapers({ subtest, profession });
+  const pick = candidates.find(p => !used.has(p.id));
+  return pick ? { paper: pick } : { paper: null };
 }
 
 async function countExistingFullBundles() {
@@ -207,18 +186,14 @@ async function main() {
     let skip = false;
     for (const subtest of SUBTESTS) {
       try {
-        const { paper, fallback } = await pickPaper({ subtest, profession, used });
+        const { paper } = await pickPaper({ subtest, profession, used });
         if (!paper) {
-          console.log(`    ⚠ no published ${subtest} paper available for ${profession} (or any profession) — skipping bundle.`);
-          logFailure('mocks', { title, subtest, profession }, new Error(`no published ${subtest} paper available`));
+          console.log(`    ⚠ no unused published ${subtest} paper available for ${profession} or all-profession — skipping bundle.`);
+          logFailure('mocks', { title, subtest, profession }, new Error(`no unused published ${subtest} paper available for ${profession}`));
           skip = true;
           break;
         }
-        if (fallback) {
-          console.log(`    · ${subtest}: fallback to ${paper.title} (profession=${paper.professionId ?? 'all'})`);
-        } else {
-          console.log(`    · ${subtest}: ${paper.title} (${paper.id})`);
-        }
+        console.log(`    · ${subtest}: ${paper.title} (${paper.id})`);
         picks[subtest] = paper;
       } catch (e) {
         logFailure('mocks', { title, subtest }, e);

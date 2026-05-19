@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using OetLearner.Api.Domain;
@@ -165,7 +164,6 @@ public class AiGatewayRoutingTests
             _loader,
             new IAiModelProvider[] { mockProvider, registryProvider },
             providerRegistry: new FakeProviderRegistry(uncredentialedTextProvider),
-            configuration: new ConfigurationBuilder().Build(),
             environment: new FakeHostEnvironment(Environments.Production));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.CompleteAsync(new AiGatewayRequest

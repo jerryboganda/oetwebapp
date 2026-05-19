@@ -226,7 +226,7 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
-    public async Task Create_generates_slug_and_rejects_duplicates()
+    public async Task Create_generates_slug_and_allocates_unique_suffix_for_duplicates()
     {
         var (db, svc) = Build();
         var p = await svc.CreateAsync(new ContentPaperCreate(
@@ -241,10 +241,11 @@ public class ContentPaperServiceTests
             SourceProvenance: DefaultSourceProvenance), "admin-1", default);
         Assert.Equal("listening-sample-1", p.Slug);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.CreateAsync(new ContentPaperCreate(
-                "listening", "Listening Sample 1", null, null, true,
-                null, 40, null, null, 0, null, "A"), "admin-1", default));
+        var duplicate = await svc.CreateAsync(new ContentPaperCreate(
+            "listening", "Listening Sample 1", null, null, true,
+            null, 40, null, null, 0, null, DefaultSourceProvenance), "admin-1", default);
+
+        Assert.Equal("listening-sample-1-2", duplicate.Slug);
         await db.DisposeAsync();
     }
 

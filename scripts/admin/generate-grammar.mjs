@@ -10,10 +10,9 @@
  *        → server creates the lesson server-side via the grounded
  *          AiGatewayService (Kind=Grammar) and returns:
  *            { lessonId, title, contentBlockCount, exerciseCount,
- *              rulebookVersion, appliedRuleIds, warning? }
- *        → "warning" indicates the grounded reply was unusable and the
- *          backend fell back to a deterministic starter template; we log
- *          it but proceed to publish so the lesson is still visible.
+ *              rulebookVersion, appliedRuleIds }
+ *        → any warning/unusable draft is treated as a hard failure; scripts
+ *          must never publish deterministic starter-template lessons.
  *   2. POST /v1/admin/grammar/lessons/{lessonId}/publish
  *
  * Each generated draft is dumped (full response JSON) to
@@ -213,7 +212,7 @@ async function generateOne({ profession, topic, runId, dryRun, doPublish }) {
   } catch {}
 
   if (draft.data?.warning) {
-    console.log(`  ⚠ fallback template: ${String(draft.data.warning).slice(0, 200)}`);
+    throw new Error(`ai-draft returned warning; refusing to publish fallback/starter content: ${String(draft.data.warning).slice(0, 300)}`);
   }
 
   const applied = Array.isArray(draft.data?.appliedRuleIds) ? draft.data.appliedRuleIds.length : 0;

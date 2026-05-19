@@ -47,7 +47,12 @@ public sealed class GrammarPublishGateService(
             ?? throw ApiException.NotFound("GRAMMAR_NOT_FOUND", $"Grammar lesson '{lessonId}' not found.");
 
         var verdict = EvaluateEntity(entity);
-        if (!verdict.CanPublish) return verdict;
+        if (!verdict.CanPublish)
+        {
+            throw ApiException.Validation(
+                "GRAMMAR_PUBLISH_GATE_FAILED",
+                $"Grammar lesson is not publish-ready: {string.Join("; ", verdict.Errors)}");
+        }
 
         entity.Status = "active";
         db.AuditEvents.Add(new AuditEvent
@@ -63,7 +68,7 @@ public sealed class GrammarPublishGateService(
         });
         await db.SaveChangesAsync(ct);
         logger.LogInformation("Grammar lesson {LessonId} published by {AdminId}", lessonId, adminId);
-        return verdict;
+        return new GrammarPublishGateResult(CanPublish: true, Errors: Array.Empty<string>());
     }
 
     public async Task<object> UnpublishAsync(string lessonId, string? adminId, string? adminName, CancellationToken ct)

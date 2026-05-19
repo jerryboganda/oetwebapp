@@ -252,6 +252,8 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         });
         uploadCompleteResponse.EnsureSuccessStatusCode();
 
+        await SeedSpeakingTranscriptEvidenceAsync(attemptId);
+
         var submitResponse = await learner.PostAsync($"/v1/speaking/attempts/{attemptId}/submit", content: null);
         submitResponse.EnsureSuccessStatusCode();
         using var submitJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
@@ -411,6 +413,33 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId);
         wallet.CreditBalance = credits;
         wallet.LastUpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedSpeakingTranscriptEvidenceAsync(string attemptId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var attempt = await db.Attempts.FirstAsync(x => x.Id == attemptId);
+        attempt.TranscriptJson = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                id = "turn-1",
+                speaker = "candidate",
+                text = "Good morning. I can see you are worried, so I will explain the inhaler steps clearly and check what concerns you most.",
+                startTime = 0,
+                endTime = 8
+            },
+            new
+            {
+                id = "turn-2",
+                speaker = "candidate",
+                text = "Please shake the inhaler, breathe out gently, seal your lips around the spacer, press once, and take slow breaths. If symptoms get worse, seek urgent help.",
+                startTime = 8,
+                endTime = 22
+            }
+        });
         await db.SaveChangesAsync();
     }
 

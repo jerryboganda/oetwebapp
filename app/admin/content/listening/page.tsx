@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, Archive as ArchiveIcon, CheckCircle2, XCircle } from 'lucide-react';
+import { Headphones, Plus, Archive as ArchiveIcon, ArchiveRestore, CheckCircle2, XCircle, Send, ExternalLink } from 'lucide-react';
 import {
   AdminRoutePanel,
   AdminRouteSectionHeader,
@@ -23,6 +23,7 @@ import {
   type ContentPaperDto,
   type PaperAssetRole,
 } from '@/lib/content-upload-api';
+import { adminBulkPublishPapers, adminUnarchivePaper } from '@/lib/api';
 
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -74,6 +75,8 @@ export default function AdminListeningPapersPage() {
 
   const [filterStatus, setFilterStatus] = useState('');
   const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!isAuthenticated || role !== 'admin') return;
@@ -110,6 +113,47 @@ export default function AdminListeningPapersPage() {
     }
   }, [canWriteContent, load]);
 
+  const unarchive = useCallback(async (id: string) => {
+    if (!canWriteContent) return;
+    try {
+      await adminUnarchivePaper(id);
+      setToast({ variant: 'success', message: 'Paper unarchived.' });
+      await load();
+    } catch (e) {
+      setToast({ variant: 'error', message: `Unarchive failed: ${(e as Error).message}` });
+    }
+  }, [canWriteContent, load]);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const bulkPublish = useCallback(async () => {
+    if (!canWriteContent || selectedIds.size === 0) return;
+    if (!confirm(`Publish ${selectedIds.size} draft paper(s) (with warnings)?`)) return;
+    setBulkBusy(true);
+    try {
+      const res = await adminBulkPublishPapers(Array.from(selectedIds));
+      const okCount = res.results.filter((r) => r.ok).length;
+      const failCount = res.results.length - okCount;
+      setToast({
+        variant: failCount === 0 ? 'success' : 'error',
+        message: `Bulk publish: ${okCount} ok, ${failCount} failed.`,
+      });
+      setSelectedIds(new Set());
+      await load();
+    } catch (e) {
+      setToast({ variant: 'error', message: `Bulk publish failed: ${(e as Error).message}` });
+    } finally {
+      setBulkBusy(false);
+    }
+  }, [canWriteContent, load, selectedIds]);
+
   const stats = useMemo(() => {
     let published = 0;
     let draft = 0;
@@ -126,10 +170,22 @@ export default function AdminListeningPapersPage() {
 
   const columns: Column<ContentPaperDto>[] = useMemo(() => [
     {
+      key: 'select',
+      header: '',
+      render: (p) => canWriteContent && p.status === 'Draft' ? (
+        <input
+          type="checkbox"
+          aria-label={`Select ${p.title}`}
+          checked={selectedIds.has(p.id)}
+          onChange={() => toggleSelect(p.id)}
+        />
+      ) : null,
+    },
+    {
       key: 'title',
       header: 'Title',
       render: (p) => canWriteContent ? (
-        <Link href={`/admin/content/papers/${p.id}`} className="font-medium hover:text-primary">
+        <Link href={`/admin/content/listening/${p.id}`} className="font-medium hover:text-primary">
           {p.title}
         </Link>
       ) : <span className="font-medium">{p.title}</span>,
@@ -176,22 +232,27 @@ export default function AdminListeningPapersPage() {
       key: 'actions',
       header: 'Actions',
       render: (p) => canWriteContent ? (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link
-            href={`/admin/content/papers/${p.id}`}
-            className="inline-flex min-h-9 items-center rounded px-3 py-2 text-sm font-semibold text-navy hover:bg-background-light"
+            href={`/admin/content/listening/${p.id}`}
+            className="inline-flex min-h-9 items-center gap-1 rounded px-3 py-2 text-sm font-semibold text-primary hover:bg-background-light"
           >
-            Edit
+            <ExternalLink className="w-3 h-3" /> Open Workspace
           </Link>
           {p.status !== 'Archived' && (
             <Button variant="ghost" size="sm" onClick={() => void archive(p.id)}>
               <ArchiveIcon className="w-4 h-4" /> Archive
             </Button>
           )}
+          {p.status === 'Archived' && (
+            <Button variant="ghost" size="sm" onClick={() => void unarchive(p.id)}>
+              <ArchiveRestore className="w-4 h-4" /> Unarchive
+            </Button>
+          )}
         </div>
       ) : <span className="text-xs text-muted">Read only</span>,
     },
-  ], [archive, canWriteContent]);
+  ], [archive, canWriteContent, selectedIds, toggleSelect, unarchive]);
 
   if (!isAuthenticated || role !== 'admin') {
     return (
@@ -214,12 +275,24 @@ export default function AdminListeningPapersPage() {
           <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
           <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
           {canWriteContent ? (
-            <div className="flex items-end gap-2 md:col-span-2">
+            <div className="flex flex-wrap items-end gap-2 md:col-span-2">
               <Link
-                href="/admin/content/papers?subtest=listening"
+                href="/admin/content/listening/new"
                 className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-primary/90"
               >
                 <Plus className="w-4 h-4 mr-1" /> Create Listening paper
+              </Link>
+              <Link
+                href="/admin/content/listening/extractions"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy transition hover:bg-background-light"
+              >
+                AI Extractions queue
+              </Link>
+              <Link
+                href="/admin/content/listening/backfill"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy transition hover:bg-background-light"
+              >
+                Backfill dashboard
               </Link>
               <Link
                 href="/admin/content/papers/import"
@@ -241,6 +314,27 @@ export default function AdminListeningPapersPage() {
           <StatTile label="Missing assets" value={stats.missing} tone="danger" />
         </div>
       </AdminRoutePanel>
+
+      {canWriteContent && (
+        <AdminRoutePanel title={`Bulk actions (${selectedIds.size} selected)`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={bulkBusy || selectedIds.size === 0}
+              onClick={() => void bulkPublish()}
+            >
+              <Send className="w-3 h-3" /> Bulk publish drafts
+            </Button>
+            {selectedIds.size > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                Clear selection
+              </Button>
+            )}
+            <p className="text-xs text-muted">Only draft papers can be selected for bulk publish.</p>
+          </div>
+        </AdminRoutePanel>
+      )}
 
       <AsyncStateWrapper status={status}>
         <AdminRoutePanel title={`Listening papers (${rows.length})`}>

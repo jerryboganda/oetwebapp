@@ -46,7 +46,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  CONFIG, parseFlags, startRun, endRun, adminFetch, aiChatJson, aiTts,
+  CONFIG, parseFlags, startRun, endRun, adminFetch, aiTts,
   uploadMediaAsset, logFailure, healthcheck, progress, sleep, slugify,
   makeProvenance,
 } from './_lib.mjs';
@@ -373,18 +373,7 @@ async function generateOnePaper({ index, total, profession, difficulty }) {
   while (aiAttempt < aiMaxAttempts) {
     aiAttempt++;
     try {
-      const sys = buildSystemPrompt(profession);
-      const usr = buildUserPrompt(profession, title);
-      const r = await aiChatJson({
-        system: sys,
-        user: usr,
-        maxTokens: 32000,
-        temperature: difficulty === 'hard' ? 0.7 : 0.55,
-        retries: 1,
-      });
-      const errs = validateAiPaper(r.json);
-      if (errs.length === 0) { ai = r.json; break; }
-      console.log(`  ✗ AI attempt ${aiAttempt}/${aiMaxAttempts} failed validation: ${errs.slice(0, 3).join('; ')}${errs.length > 3 ? ` (+${errs.length - 3} more)` : ''}`);
+      throw new Error('Direct listening AI authoring is disabled. Use backend grounded listening extraction/draft services or import curated content.');
     } catch (e) {
       const m = e.message || '';
       const lenMatch = m.match(/--- content ---\n([\s\S]*)$/);
@@ -478,9 +467,21 @@ async function generateOnePaper({ index, total, profession, difficulty }) {
         prefix + sanitizeForTts(rawTtsText).slice(0, 1800),
       ];
       let buf = null;
+      // Per-part voice gender hint for ElevenLabs (DO TTS ignores it).
+      // A1 = clinician female, A2 = clinician male (vary across the two
+      // Part-A dialogs), B = neutral workplace excerpt, C1 = female monologue,
+      // C2 = male monologue.
+      const partGender = (
+        part.code === 'A1' ? 'female' :
+        part.code === 'A2' ? 'male' :
+        part.code === 'B'  ? 'neutral' :
+        part.code === 'C1' ? 'female' :
+        part.code === 'C2' ? 'male' :
+        'neutral'
+      );
       for (let attempt = 1; attempt <= variants.length; attempt++) {
         try {
-          buf = await aiTts(variants[attempt - 1], { format: 'mp3' });
+          buf = await aiTts(variants[attempt - 1], { format: 'mp3', gender: partGender });
           if (attempt > 1) console.log(`  ↻ TTS ${part.code} succeeded on retry ${attempt}/${variants.length}`);
           break;
         } catch (e) {
@@ -591,18 +592,8 @@ async function generateOnePaper({ index, total, profession, difficulty }) {
     console.log(`  ✓ relational backfill projected`);
   }
 
-  // ── 6c. Difficulty fallback: backfill service doesn't copy difficulty from
-  // structure JSON, leaving DifficultyRating/DifficultyLevel NULL which breaks
-  // the publish gate. Set sane default 3 for any remaining NULL on this paper.
-  try {
-    const { execFileSync } = await import('node:child_process');
-    // Use execFileSync with arg array to avoid shell quoting of "..." SQL identifiers.
-    const sql = `UPDATE "ListeningExtracts" SET "DifficultyRating"=3 WHERE "DifficultyRating" IS NULL AND "ListeningPartId" IN (SELECT "Id" FROM "ListeningParts" WHERE "PaperId"='${paperId}'); UPDATE "ListeningQuestions" SET "DifficultyLevel"=3 WHERE "DifficultyLevel" IS NULL AND "PaperId"='${paperId}';`;
-    execFileSync('docker', ['exec', 'oet-postgres', 'psql', '-U', 'oet_learner', '-d', 'oet_learner', '-c', sql], { stdio: 'pipe' });
-    console.log(`  ✓ difficulty fallback applied`);
-  } catch (e) {
-    console.log(`  ⚠ difficulty fallback failed: ${String(e?.message || e).slice(0,200)}`);
-  }
+  // Difficulty is now part of the authored listening structure/backfill
+  // contract. Do not patch it with direct SQL from an operator script.
 
   // ── 7. Publish ─────────────────────────────────────────────────────────────
   let publishedAt = null;

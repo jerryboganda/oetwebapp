@@ -578,8 +578,8 @@ public sealed class RecallsService(
 
     /// <summary>
     /// AI-generated personal revision plan (spec §12). Routes through the AI
-    /// gateway with <see cref="AiFeatureCodes.RecallsRevisionPlan"/>. Falls
-    /// back to a deterministic plan if AI is unavailable.
+    /// gateway with <see cref="AiFeatureCodes.RecallsRevisionPlan"/> and fails
+    /// closed when the provider is unavailable.
     /// </summary>
     public async Task<RecallsRevisionPlanResponse> GetRevisionPlanAsync(string userId, CancellationToken ct)
     {
@@ -589,7 +589,8 @@ public sealed class RecallsService(
             ? "no specific weak topic yet"
             : string.Join(", ", weak.Select(w => $"{w.Topic} ({w.WeakCount}/{w.Total} weak)"));
 
-        // Deterministic plan we can always return (also acts as the AI fallback).
+        // Deterministic context from real learner data; AI unavailability below
+        // is not converted into publishable guidance.
         var deterministic = new RecallsRevisionPlanResponse(
             DueToday: today.DueToday,
             Mastered: today.Mastered,
@@ -620,15 +621,27 @@ public sealed class RecallsService(
                 FeatureCode = AiFeatureCodes.RecallsRevisionPlan,
                 UserId = userId,
             }, ct);
+            if (string.IsNullOrWhiteSpace(ai.Completion))
+            {
+                throw ApiException.ServiceUnavailable(
+                    "RECALLS_REVISION_PLAN_UNAVAILABLE",
+                    "The recalls revision plan could not be generated right now.");
+            }
             return deterministic with { AiNarrative = ai.Completion?.Trim() };
         }
         catch (PromptNotGroundedException)
         {
             throw;
         }
+        catch (ApiException)
+        {
+            throw;
+        }
         catch
         {
-            return deterministic;
+            throw ApiException.ServiceUnavailable(
+                "RECALLS_REVISION_PLAN_UNAVAILABLE",
+                "The recalls revision plan could not be generated right now.");
         }
     }
 

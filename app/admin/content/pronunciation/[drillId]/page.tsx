@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Archive, Rocket, Undo2, Mic } from 'lucide-react';
+import { ArrowLeft, Save, Archive, Rocket, Undo2, Mic, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Toast } from '@/components/ui/alert';
@@ -16,6 +16,8 @@ import {
   fetchAdminPronunciationDrill,
   updateAdminPronunciationDrill,
   archiveAdminPronunciationDrill,
+  generateAdminPronunciationModelAudio,
+  type AdminPronunciationGenerateAudioResponse,
 } from '@/lib/api';
 import {
   PronunciationDrillForm,
@@ -30,6 +32,7 @@ type FullDrill = {
   focus: string;
   primaryRuleId: string | null;
   audioModelUrl: string | null;
+  audioModelAssetId: string | null;
   exampleWordsJson: string;
   minimalPairsJson: string;
   sentencesJson: string;
@@ -59,6 +62,13 @@ export default function EditPronunciationDrillPage() {
   });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+
+  // ── Generate model reference audio (TTS) state ────────────────────────────
+  const [generating, setGenerating] = useState(false);
+  const [generateText, setGenerateText] = useState('');
+  const [generateVoiceId, setGenerateVoiceId] = useState('');
+  const [generatedAudio, setGeneratedAudio] =
+    useState<AdminPronunciationGenerateAudioResponse | null>(null);
 
   const load = useCallback(async () => {
     if (!drillId) return;
@@ -113,6 +123,38 @@ export default function EditPronunciationDrillPage() {
       router.push('/admin/content/pronunciation');
     } catch (err) {
       setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Archive failed' });
+    }
+  }
+
+  async function doGenerateAudio() {
+    if (!drill) return;
+    const text = generateText.trim();
+    if (!text) {
+      setToast({ variant: 'error', message: 'Enter the text the model voice should read.' });
+      return;
+    }
+    setGenerating(true);
+    try {
+      const res = await generateAdminPronunciationModelAudio(drill.id, {
+        text,
+        voiceId: generateVoiceId.trim() || undefined,
+      });
+      setGeneratedAudio(res);
+      // Persist the new media-asset URL into the editable audioUrl field so the
+      // next "Save drill" survives reload even if the backend FK write is rolled
+      // back. The backend service already wrote AudioModelAssetId server-side.
+      setForm((prev) => ({ ...prev, audioUrl: res.url }));
+      setToast({
+        variant: 'success',
+        message: `Generated ${Math.round(res.bytes / 1024)} KB via ${res.providerName} — save to keep the URL.`,
+      });
+    } catch (err) {
+      setToast({
+        variant: 'error',
+        message: err instanceof Error ? err.message : 'Failed to generate model audio',
+      });
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -180,6 +222,81 @@ export default function EditPronunciationDrillPage() {
       />
 
       <PronunciationDrillForm form={form} onChange={setForm} />
+
+      <section
+        aria-label="Generate model reference audio"
+        className="rounded-2xl border border-border bg-background-light p-5 shadow-sm"
+      >
+        <header className="mb-3 flex items-center gap-2">
+          <Wand2 className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-muted">
+            Generate model reference audio
+          </h2>
+        </header>
+        <p className="mb-3 text-sm text-muted">
+          Synthesises the audio learners mimic via the configured TTS provider
+          (Azure / ElevenLabs / CosyVoice / ChatTTS / GPT-SoVITS). Falls back to
+          a clear error if only mock TTS is available — never publishes a silent
+          file. The new asset is linked to this drill automatically.
+        </p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px]">
+          <label className="block">
+            <span className="text-sm text-navy dark:text-white">
+              Text to read <span className="text-rose-500">*</span>
+            </span>
+            <textarea
+              value={generateText}
+              onChange={(e) => setGenerateText(e.target.value)}
+              rows={3}
+              maxLength={5000}
+              placeholder={
+                drill.label
+                  ? `e.g. ${drill.label} — please breathe deeply through the mouth.`
+                  : 'e.g. think, therapy, three.'
+              }
+              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm text-navy dark:text-white">Voice ID (optional)</span>
+            <input
+              type="text"
+              value={generateVoiceId}
+              onChange={(e) => setGenerateVoiceId(e.target.value)}
+              placeholder="provider default"
+              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button
+            variant="primary"
+            onClick={doGenerateAudio}
+            loading={generating}
+            disabled={generating || !generateText.trim()}
+            className="gap-2"
+          >
+            <Wand2 className="h-4 w-4" /> Generate audio
+          </Button>
+          {generatedAudio && (
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+              <Badge variant="success">{generatedAudio.providerName}</Badge>
+              <span>{Math.round(generatedAudio.bytes / 1024)} KB</span>
+              <span>{(generatedAudio.durationMs / 1000).toFixed(1)}s</span>
+              <span className="font-mono">{generatedAudio.sha256.slice(0, 12)}…</span>
+            </div>
+          )}
+        </div>
+        {generatedAudio && (
+          <audio
+            controls
+            preload="metadata"
+            src={generatedAudio.url}
+            className="mt-3 w-full"
+            aria-label="Generated model reference audio preview"
+          />
+        )}
+      </section>
 
       {toast && (
         <Toast variant={toast.variant === 'error' ? 'error' : 'success'} message={toast.message} onClose={() => setToast(null)} />

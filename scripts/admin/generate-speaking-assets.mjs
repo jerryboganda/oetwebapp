@@ -2,10 +2,8 @@
 /**
  * generate-speaking-assets.mjs
  *
- * For every Draft speaking ContentPaper, AI-generates the three primary
- * assets the publish-gate requires — RoleCard, AssessmentCriteria,
- * WarmUpQuestions — uploads them as MediaAssets, attaches them, and
- * publishes the paper.
+ * This legacy direct-AI asset generator is disabled. Speaking assets must be
+ * authored/imported through backend grounded services or curated upload flows.
  *
  * Publish-gate per IContentPaperService.RequiredRolesFor("speaking"):
  *   { RoleCard, AssessmentCriteria, WarmUpQuestions }  (all must be primary)
@@ -18,7 +16,7 @@
  */
 
 import {
-  parseFlags, startRun, endRun, adminFetch, aiChat, logFailure,
+  parseFlags, startRun, endRun, adminFetch, logFailure,
   uploadMediaAsset, progress, sleep,
 } from './_lib.mjs';
 
@@ -66,13 +64,7 @@ function warmUpPrompt({ title, profession, topic }) {
 }
 
 async function genMarkdown({ system, user, label }) {
-  // aiChat returns { content, finishReason, usage, model, raw }
-  const r = await aiChat({ system, user, temperature: 0.7, maxTokens: 2400 });
-  let md = String(r?.content || '').trim();
-  // Strip leading/trailing ```markdown fences if the model added them.
-  md = md.replace(/^```(?:markdown|md)?\s*\n?/i, '').replace(/\n?```\s*$/, '').trim();
-  if (md.length < 200) throw new Error(`${label}: too short (${md.length} chars) — finish=${r?.finishReason}`);
-  return md;
+  throw new Error(`Direct speaking asset AI authoring is disabled for ${label}. Use backend grounded speaking draft/import flows instead.`);
 }
 
 async function uploadAndAttach({ paperId, role, filename, body, title, displayOrder }) {
@@ -118,6 +110,7 @@ async function listDraftSpeakingPapers() {
 
 async function main() {
   startRun('generate-speaking-assets');
+  throw new Error('Direct speaking asset AI authoring is disabled. Use backend grounded speaking draft/import flows instead.');
 
   const drafts = await listDraftSpeakingPapers();
   console.log(`  Found ${drafts.length} Draft speaking paper(s)`);

@@ -1,12 +1,10 @@
 /**
  * generate-conversation.mjs
  *
- * Bulk-generate AI-authored ConversationTemplate rows and publish them.
+ * Bulk-generate ConversationTemplate rows and publish them.
  *
- * Per AGENTS.md memory: there is NO admin AI-draft endpoint for conversation
- * (unlike grammar/pronunciation). Direct ungrounded LLM is therefore OK here —
- * the gateway grounding requirement applies to *runtime* learner-facing AI
- * calls (opening/reply/evaluation), not to admin-time template authoring.
+ * Direct local LLM authoring is disabled. Conversation template drafting must
+ * route through the backend grounded AI draft endpoint before publication.
  *
  * We stamp provenance into `patientVoice._provenance` so it is preserved on
  * the entity and visible in `/v1/admin/conversation/templates/{id}` detail.
@@ -39,7 +37,7 @@
  */
 
 import {
-  CONFIG, parseFlags, startRun, endRun, adminFetch, aiChatJson, logFailure,
+  CONFIG, parseFlags, startRun, endRun, adminFetch, logFailure,
   healthcheck, progress, sleep, slugify,
 } from './_lib.mjs';
 
@@ -186,48 +184,7 @@ const TOPIC_BANK = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function aiGenerateTemplate({ profession, taskType, topic, difficulty }) {
-  const taskTypeNote = taskType === 'oet-handover'
-    ? 'OET handover: short clinician-to-clinician handover (SBAR-style). The "role" is the receiving clinician; "patientContext" describes the case being handed over.'
-    : 'OET roleplay: clinician-patient interaction (~5 min). The "role" is the clinician; the patient is simulated by the platform via patientContext + patientVoice.';
-
-  const system = [
-    `You design OET (Occupational English Test) conversation practice templates for ${profession}.`,
-    'Output STRICT JSON only — no prose, no markdown, no code fences.',
-    'Use professional, neutral, OET-test-realistic language.',
-    'Objectives are concrete communication tasks (e.g. "Elicit chief complaint using open questions", "Check understanding using teach-back").',
-    'Never include patient-identifying details or copyrighted exam material.',
-  ].join(' ');
-
-  const user = [
-    `Generate ONE ${taskType} ConversationTemplate for the ${profession} profession.`,
-    `Topic: ${topic}`,
-    `Difficulty: ${difficulty}`,
-    `Notes: ${taskTypeNote}`,
-    '',
-    'Return JSON with exactly these keys:',
-    '{',
-    '  "title": string (≤100 chars, descriptive, profession-prefixed e.g. "Medicine – Asthma exacerbation"),',
-    '  "scenario": string (2–4 sentences setting the scene),',
-    '  "roleDescription": string (1–2 sentences describing the candidate\'s clinical role and immediate task),',
-    '  "patientContext": string (3–6 sentences of clinical context: age/sex if relevant, presenting complaint, key history, current concerns — for handover use the receiving clinician context),',
-    '  "expectedOutcomes": string (1–3 sentences on what a successful conversation achieves),',
-    '  "objectives": string[] (at least 4 concrete communication objectives — required ≥3 by publish gate, give 4 for safety),',
-    '  "expectedRedFlags": string[] (2–4 clinical red flags the candidate should recognise/escalate),',
-    '  "keyVocabulary": string[] (6–12 profession-relevant terms),',
-    '  "estimatedDurationSeconds": number (240–360 for roleplay; 120–240 for handover),',
-    '  "patientVoice": { "tone": string, "emotionalState": string, "openingLine": string, "concerns": string[] }',
-    '}',
-    '',
-    'Output the JSON object only.',
-  ].join('\n');
-
-  const r = await aiChatJson({
-    system,
-    user,
-    temperature: 0.7,
-    maxTokens: 2000,
-  });
-  return r.json;
+  throw new Error(`Direct conversation AI authoring is disabled for ${profession}/${taskType}/${topic}/${difficulty}. Use the backend grounded conversation template draft endpoint.`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -320,7 +277,7 @@ async function main() {
       console.log(progress(pi * countPerProfession + i + 1, professions.length * countPerProfession, label));
 
       if (dryRun) {
-        console.log(`  (dry-run) would aiChatJson → POST /v1/admin/conversation/templates${noPublish ? '' : ' → POST .../publish'}`);
+        console.log(`  (dry-run) would call backend grounded draft endpoint → POST /v1/admin/conversation/templates${noPublish ? '' : ' → POST .../publish'}`);
         skipped++;
         continue;
       }

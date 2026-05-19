@@ -32,10 +32,7 @@ public sealed class SpeakingEvaluationPipeline(
             return;
         }
 
-        var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == attempt.ContentId, cancellationToken);
-        var transcript = BuildMockDevelopmentTranscript(attempt, content);
-        attempt.TranscriptJson = JsonSupport.Serialize(transcript);
-        MarkTranscriptionProvenance(attempt, provider: "mock-dev", mock: true);
+        throw new InvalidOperationException("Speaking transcription evidence is missing. Configure a real ASR provider or supply transcript evidence before evaluation.");
     }
 
     public async Task CompleteEvaluationAsync(BackgroundJobItem job, CancellationToken cancellationToken)
@@ -51,6 +48,10 @@ public sealed class SpeakingEvaluationPipeline(
         {
             await CompleteTranscriptionAsync(job, cancellationToken);
             transcript = JsonSupport.Deserialize<List<SpeakingTranscriptLine>>(attempt.TranscriptJson, []);
+            if (transcript.Count == 0)
+            {
+                throw new InvalidOperationException("Speaking evaluation cannot continue without transcription evidence.");
+            }
         }
 
         var profession = ParseProfession(content.ProfessionId);
@@ -206,27 +207,6 @@ public sealed class SpeakingEvaluationPipeline(
         evaluation.Retryable = false;
         evaluation.RetryAfterMs = null;
         evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
-    }
-
-    private static List<SpeakingTranscriptLine> BuildMockDevelopmentTranscript(Attempt attempt, ContentItem? content)
-    {
-        var durationSeconds = ReadDurationSeconds(attempt.AudioMetadataJson);
-        var title = content?.Title ?? "speaking role play";
-        var setting = ReadString(content?.DetailJson, "setting") ?? "clinical setting";
-        var end = Math.Max(6, Math.Min(durationSeconds ?? 18, 45));
-
-        return
-        [
-            new SpeakingTranscriptLine
-            {
-                Id = "t1",
-                Speaker = "candidate",
-                Text = $"Mock development ASR transcript for {title} in a {setting}. Configure a production ASR provider before using transcript text as final learner evidence.",
-                StartTime = 0,
-                EndTime = end,
-                Markers = []
-            }
-        ];
     }
 
     private void MarkTranscriptionProvenance(Attempt attempt, string provider, bool mock)

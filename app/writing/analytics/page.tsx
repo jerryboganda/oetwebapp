@@ -63,14 +63,16 @@ function pct(n: number): string {
 export default function WritingAnalyticsPage() {
   const { points, generatedAt, error } = useWeaknessData();
 
+  // Capture mount-time clock once so memoization stays pure.
+  const [mountNow] = useState(() => Date.now());
   const summary = useMemo(() => {
     if (!points) return null;
     return aggregateWeaknesses(points, {
-      endDate: new Date(generatedAt ?? Date.now()),
+      endDate: new Date(generatedAt ?? mountNow),
       trendDays: 14,
       topN: 5,
     });
-  }, [generatedAt, points]);
+  }, [generatedAt, mountNow, points]);
 
   useEffect(() => {
     if (!summary) return;

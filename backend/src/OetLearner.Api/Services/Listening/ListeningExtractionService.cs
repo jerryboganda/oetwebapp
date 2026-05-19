@@ -10,13 +10,11 @@ namespace OetLearner.Api.Services.Listening;
 // expected to call the AI gateway with `Kind = Listening` to propose a 42-item
 // authored structure ready for a human admin to review and publish.
 //
-// Today the default `IListeningExtractionAi` implementation is the
-// deterministic `StubListeningExtractionAi` — same shape Reading shipped — so
-// the admin UI works end-to-end without AI configured. A real grounded
-// implementation lands in a follow-up commit and MUST go through
+// The production `IListeningExtractionAi` implementation goes through
 // `IAiGatewayService.BuildGroundedPrompt(...)` (see docs/AI-USAGE-POLICY.md)
 // with feature code `admin.listening_draft` (platform-only). The gateway
-// physically refuses ungrounded prompts via `PromptNotGroundedException`.
+// physically refuses ungrounded prompts via `PromptNotGroundedException`, and
+// unavailable providers are reported as failed drafts without invented items.
 // ═════════════════════════════════════════════════════════════════════════════
 
 public enum ListeningExtractionStatus
@@ -34,10 +32,8 @@ public sealed record ListeningExtractionDraft(
     string? RawResponseJson = null);
 
 /// <summary>
-/// AI seam for the actual Listening structure extraction. The default
-/// implementation is the stub below; tests substitute a fake that returns a
-/// known authored question list, and a future grounded-gateway impl plugs in
-/// here without service changes.
+/// AI seam for the actual Listening structure extraction. Tests substitute a
+/// fake that returns a known authored question list.
 /// </summary>
 public interface IListeningExtractionAi
 {
@@ -57,9 +53,8 @@ public interface IListeningExtractionService
 {
     /// <summary>
     /// Propose a 42-item authored Listening structure for the supplied paper.
-    /// Today this delegates to <see cref="IListeningExtractionAi"/>; the
-    /// default ai impl returns a deterministic placeholder so admins can
-    /// iterate. Replace with a grounded-gateway impl in a follow-up.
+    /// Delegates to <see cref="IListeningExtractionAi"/> and reports provider
+    /// failures as failed drafts instead of generating replacement content.
     /// </summary>
     Task<ListeningExtractionDraft> ProposeStructureAsync(string paperId, CancellationToken ct);
 }
@@ -74,7 +69,7 @@ public sealed class ListeningExtractionService(IListeningExtractionAi ai) : ILis
             return new ListeningExtractionDraft(
                 Status: ListeningExtractionStatus.Ready,
                 Message: result.IsStub
-                    ? (result.StubReason ?? "Stub extraction returned a placeholder 42-item structure.")
+                    ? (result.StubReason ?? "AI extraction returned a non-approvable draft.")
                     : "AI extraction returned a 42-item Listening structure.",
                 Questions: result.Questions,
                 IsStub: result.IsStub,
@@ -91,11 +86,6 @@ public sealed class ListeningExtractionService(IListeningExtractionAi ai) : ILis
     }
 }
 
-/// <summary>
-/// Default deterministic AI implementation. Returns a canonical 24/6/12
-/// placeholder authored list so the admin UI works end-to-end without an AI
-/// gateway configured.
-/// </summary>
 public sealed class StubListeningExtractionAi : IListeningExtractionAi
 {
     public Task<ListeningExtractionAiResult> ExtractAsync(
@@ -103,51 +93,6 @@ public sealed class StubListeningExtractionAi : IListeningExtractionAi
         string? mediaAssetId,
         CancellationToken ct)
     {
-        var items = new List<ListeningAuthoredQuestion>(42);
-        for (var n = 1; n <= 12; n++) items.Add(BlankShortAnswer(n, "A1"));
-        for (var n = 13; n <= 24; n++) items.Add(BlankShortAnswer(n, "A2"));
-        for (var n = 25; n <= 30; n++) items.Add(BlankMcq(n, "B"));
-        for (var n = 31; n <= 36; n++) items.Add(BlankMcq(n, "C1"));
-        for (var n = 37; n <= 42; n++) items.Add(BlankMcq(n, "C2"));
-
-        return Task.FromResult(new ListeningExtractionAiResult(
-            Questions: items,
-            RawResponseJson: null,
-            IsStub: true,
-            StubReason: "AI gateway not configured for Listening extraction; returning deterministic 24/6/12 placeholder."));
+        throw new InvalidOperationException("Listening AI extraction provider is not configured.");
     }
-
-    private static ListeningAuthoredQuestion BlankShortAnswer(int number, string partCode) =>
-        new(
-            Id: $"lq-{number}",
-            Number: number,
-            PartCode: partCode,
-            Type: "short_answer",
-            Stem: string.Empty,
-            Options: [],
-            CorrectAnswer: string.Empty,
-            AcceptedAnswers: [],
-            Explanation: null,
-            SkillTag: null,
-            TranscriptExcerpt: null,
-            DistractorExplanation: null,
-            Points: 1);
-
-    private static ListeningAuthoredQuestion BlankMcq(int number, string partCode) =>
-        new(
-            Id: $"lq-{number}",
-            Number: number,
-            PartCode: partCode,
-            Type: "multiple_choice_3",
-            Stem: string.Empty,
-            Options: ["", "", ""],
-            CorrectAnswer: string.Empty,
-            AcceptedAnswers: [],
-            Explanation: null,
-            SkillTag: null,
-            TranscriptExcerpt: null,
-            DistractorExplanation: null,
-            Points: 1,
-            OptionDistractorWhy: [null, null, null],
-            OptionDistractorCategory: [null, null, null]);
 }

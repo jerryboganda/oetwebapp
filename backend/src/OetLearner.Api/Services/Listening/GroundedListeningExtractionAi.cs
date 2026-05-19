@@ -24,10 +24,8 @@ namespace OetLearner.Api.Services.Listening;
 //    24/6/12 split — see rulebooks/listening/<profession>/rulebook.v1.json).
 //  • Parses the JSON reply, validates the 24/6/12 split, maps each item into
 //    `ListeningAuthoredQuestion`.
-//  • Any failure (gateway refusal, parse error, shape violation) falls back
-//    to a deterministic placeholder structure with `IsStub = true` and a
-//    stub-reason explaining what went wrong, so the admin UI never gets a
-//    hard 500 from this seam.
+//  • Any failure (gateway refusal, parse error, shape violation) throws so
+//    the caller can persist a failed draft without inventing authored items.
 // ═════════════════════════════════════════════════════════════════════════════
 
 public sealed class GroundedListeningExtractionAi(
@@ -53,12 +51,12 @@ public sealed class GroundedListeningExtractionAi(
             .FirstOrDefaultAsync(p => p.Id == paperId, ct);
 
         if (paper is null)
-            return Stub("ContentPaper not found.");
+            throw new InvalidOperationException("ContentPaper not found.");
 
         var profession = ResolveProfession(paper);
         var sourceBundle = BuildSourceMessage(paper);
         if (!sourceBundle.HasExtractedText)
-            return Stub("No extracted text was found on the paper. Run the PDF extraction worker first.");
+            throw new InvalidOperationException("No extracted text was found on the paper. Run the PDF extraction worker first.");
 
         AiGroundedPrompt prompt;
         try
@@ -72,13 +70,13 @@ public sealed class GroundedListeningExtractionAi(
         }
         catch (RulebookNotFoundException ex)
         {
-            logger.LogInformation(ex, "Listening rulebook missing for {Profession}; falling back to stub.", profession);
-            return Stub($"No listening rulebook for profession {profession} yet; admin must select medicine or nursing source profession.");
+            logger.LogInformation(ex, "Listening rulebook missing for {Profession}.", profession);
+            throw new InvalidOperationException($"No listening rulebook for profession {profession} yet; admin must select medicine or nursing source profession.", ex);
         }
         catch (PromptNotGroundedException ex)
         {
             logger.LogError(ex, "Grounded prompt build failed for paper {PaperId}", paperId);
-            return Stub("Grounded prompt build failed: " + ex.Message);
+            throw;
         }
 
         AiGatewayResult result;
@@ -96,14 +94,14 @@ public sealed class GroundedListeningExtractionAi(
         catch (Exception ex)
         {
             logger.LogError(ex, "AI gateway call failed for paper {PaperId}", paperId);
-            return Stub("AI gateway call failed: " + ex.Message);
+            throw new InvalidOperationException("AI gateway call failed: " + ex.Message, ex);
         }
 
         var (questions, error) = ParseAndValidate(result.Completion);
         if (error is not null || questions is null)
         {
             logger.LogWarning("Grounded listening extraction parse failed for paper {PaperId}: {Error}", paperId, error);
-            return Stub("AI reply could not be parsed: " + (error ?? "unknown error"));
+            throw new InvalidOperationException("AI reply could not be parsed: " + (error ?? "unknown error"));
         }
 
         return new ListeningExtractionAiResult(
@@ -281,51 +279,6 @@ public sealed class GroundedListeningExtractionAi(
         }
         return t.Trim();
     }
-
-    private static ListeningExtractionAiResult Stub(string reason)
-    {
-        var items = new List<ListeningAuthoredQuestion>(42);
-        for (var n = 1; n <= 12; n++) items.Add(BlankShortAnswer(n, "A1"));
-        for (var n = 13; n <= 24; n++) items.Add(BlankShortAnswer(n, "A2"));
-        for (var n = 25; n <= 30; n++) items.Add(BlankMcq(n, "B"));
-        for (var n = 31; n <= 36; n++) items.Add(BlankMcq(n, "C1"));
-        for (var n = 37; n <= 42; n++) items.Add(BlankMcq(n, "C2"));
-        return new ListeningExtractionAiResult(items, RawResponseJson: null, IsStub: true, StubReason: reason);
-    }
-
-    private static ListeningAuthoredQuestion BlankShortAnswer(int number, string partCode) =>
-        new(
-            Id: $"lq-{number}",
-            Number: number,
-            PartCode: partCode,
-            Type: "short_answer",
-            Stem: string.Empty,
-            Options: [],
-            CorrectAnswer: string.Empty,
-            AcceptedAnswers: [],
-            Explanation: null,
-            SkillTag: null,
-            TranscriptExcerpt: null,
-            DistractorExplanation: null,
-            Points: 1);
-
-    private static ListeningAuthoredQuestion BlankMcq(int number, string partCode) =>
-        new(
-            Id: $"lq-{number}",
-            Number: number,
-            PartCode: partCode,
-            Type: "multiple_choice_3",
-            Stem: string.Empty,
-            Options: ["", "", ""],
-            CorrectAnswer: string.Empty,
-            AcceptedAnswers: [],
-            Explanation: null,
-            SkillTag: null,
-            TranscriptExcerpt: null,
-            DistractorExplanation: null,
-            Points: 1,
-            OptionDistractorWhy: [null, null, null],
-            OptionDistractorCategory: [null, null, null]);
 
     private sealed class ListeningExtractionReply
     {

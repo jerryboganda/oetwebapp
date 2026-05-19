@@ -43,7 +43,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   CONFIG, parseFlags, startRun, endRun, adminFetch, logFailure,
-  healthcheck, progress, sleep, aiChatJson, uploadMediaAsset,
+  healthcheck, progress, sleep, uploadMediaAsset,
   makeProvenance, slugify,
 } from './_lib.mjs';
 
@@ -256,26 +256,7 @@ function validatePaperShape(p) {
 // ── AI generation with retry ────────────────────────────────────────────────
 
 async function generatePaperJson({ profession, topic, paperNumber }) {
-  let lastError = null;
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    try {
-      const r = await aiChatJson({
-        system: SYSTEM_PROMPT,
-        user: userPrompt({ profession, topic, paperNumber }),
-        model: CONFIG.ai.chatModel,
-        temperature: 0.55,
-        maxTokens: 16000,
-        retries: 2,
-      });
-      validatePaperShape(r.json);
-      return r.json;
-    } catch (e) {
-      lastError = e;
-      console.log(`    AI attempt ${attempt}/5 failed: ${String(e.message).slice(0, 200)}`);
-      await sleep(1500 * attempt);
-    }
-  }
-  throw new Error(`AI failed after 5 attempts: ${lastError?.message || 'unknown'}`);
+  throw new Error(`Direct reading AI authoring is disabled for ${profession}/${topic}/${paperNumber}. Use backend grounded reading extraction/draft services or import curated content.`);
 }
 
 // ── Synthesise plain-text Question Paper + Answer Key assets ────────────────

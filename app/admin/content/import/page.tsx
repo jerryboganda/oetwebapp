@@ -9,6 +9,8 @@ import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination';
+import { Tabs, TabPanel } from '@/components/ui/tabs';
+import { ZipBulkImportPanel } from '@/components/admin/import/ZipBulkImportPanel';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   fetchAdminContentInventory,
@@ -19,7 +21,7 @@ import type {
   ImportResult,
   PaginatedResponse,
 } from '@/lib/types/content-hierarchy';
-import { Upload, RefreshCw, Package } from 'lucide-react';
+import { Upload, RefreshCw, Package, FileArchive, FileJson } from 'lucide-react';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 
@@ -34,6 +36,9 @@ export default function AdminContentImportPage() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  // SUBAGENT_C: tab selection — keeps the existing JSON Inventory flow as the
+  // default tab and adds a second tab that embeds the shared ZIP panel.
+  const [activeTab, setActiveTab] = useState<'inventory' | 'zip'>('inventory');
 
   useEffect(() => {
     let cancelled = false;
@@ -99,7 +104,18 @@ export default function AdminContentImportPage() {
         description="Bulk import content and manage the content inventory."
       />
 
-      <AdminRoutePanel title="Content Inventory">
+      <Tabs
+        tabs={[
+          { id: 'inventory', label: 'JSON Inventory', icon: <FileJson className="w-4 h-4" /> },
+          { id: 'zip', label: 'ZIP Bulk Upload', icon: <FileArchive className="w-4 h-4" /> },
+        ]}
+        activeTab={activeTab}
+        onChange={(id) => setActiveTab(id as 'inventory' | 'zip')}
+        className="mb-4"
+      />
+
+      <TabPanel id="inventory" activeTab={activeTab}>
+        <AdminRoutePanel title="Content Inventory">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <label className="cursor-pointer">
@@ -154,7 +170,19 @@ export default function AdminContentImportPage() {
             itemLabelPlural="items"
           />
         </div>
-      </AdminRoutePanel>
+        </AdminRoutePanel>
+      </TabPanel>
+
+      <TabPanel id="zip" activeTab={activeTab}>
+        <AdminRoutePanel title="ZIP bulk upload">
+          <p className="mb-3 text-xs text-muted">
+            Prefer the dedicated page at{' '}
+            <a className="underline" href="/admin/content/papers/import-zip">/admin/content/papers/import-zip</a>{' '}
+            for a focused workflow.
+          </p>
+          <ZipBulkImportPanel onCommitted={() => setReloadNonce((n) => n + 1)} />
+        </AdminRoutePanel>
+      </TabPanel>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
     </AdminRouteWorkspace>

@@ -23,8 +23,8 @@
  *   --resume                           Skip professions whose target count was
  *                                      already met in a previous run (uses
  *                                      output/admin-bulk/pronunciation-progress.json).
- *   --no-ai-draft                      Skip the admin /ai-draft endpoint and build
- *                                      the draft locally via aiChatJson.
+ *   --no-ai-draft                      Disabled. Pronunciation generation must use
+ *                                      the backend grounded /ai-draft endpoint.
  *   --healthcheck                      Run lib healthcheck and exit.
  *
  *   --chat-model <id>                  Override CONFIG.ai.chatModel.
@@ -34,7 +34,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  CONFIG, parseFlags, startRun, endRun, adminFetch, aiChatJson, logFailure,
+  CONFIG, parseFlags, startRun, endRun, adminFetch, logFailure,
   healthcheck, progress, sleep, makeProvenance,
 } from './_lib.mjs';
 
@@ -114,7 +114,8 @@ async function probeAiDraftEndpoint() {
     retries: 0,
   });
   // 200 → works.  4xx (other than 404/405) likely means validation/policy issue
-  // but the route exists. 404/405 → fall back to local AI generation.
+  // but the route exists. 404/405 means this script must stop; local AI
+  // generation is intentionally disabled to preserve grounded gateway rules.
   if (r.ok) return { available: true, sample: r.data };
   if (r.status === 404 || r.status === 405) return { available: false, sample: null };
   // Any other status — assume the route exists; we may still use it for real calls.
@@ -140,38 +141,6 @@ async function generateDraftViaAdminEndpoint(profession, slot) {
   // The .NET draft DTO uses PascalCase; ASP.NET serialises as camelCase by default.
   const d = r.data || {};
   return normalizeDraft(d, slot);
-}
-
-async function generateDraftViaLocalAi(profession, slot) {
-  const system = `You are an OET pronunciation drill author. Produce a single drill targeting the given phoneme/feature for the named profession. Use profession-appropriate medical vocabulary. Reply with strict JSON only (no markdown fences) matching the schema in the user message.`;
-  const user = [
-    `Target phoneme or feature: /${slot.phoneme}/`,
-    `Focus category: ${slot.focus}`,
-    `Profession: ${profession} — ${PROFESSION_HINT[profession] || ''}`,
-    `Difficulty: ${slot.difficulty || 'medium'}`,
-    `Hint: ${slot.hint}`,
-    '',
-    'Reply with JSON of this exact shape:',
-    '{',
-    '  "targetPhoneme": "<IPA symbol or feature name>",',
-    '  "label": "<short title for the drill, e.g. \\"Voiceless TH — /θ/\\">",',
-    '  "difficulty": "easy" | "medium" | "hard",',
-    '  "focus": "phoneme" | "stress" | "intonation",',
-    '  "exampleWords": ["word1", "word2", "word3", ...]  (at least 6 words, profession-appropriate),',
-    '  "minimalPairs": [{"a": "word", "b": "minimal-pair-word"}, ...] (2-4 pairs),',
-    '  "sentences": ["full clinical sentence with several target sounds", ...] (at least 2),',
-    '  "tipsHtml": "<p>One short HTML paragraph (use <p>, <strong>, <em>, <ul>, <li> only) explaining articulation and a common mistake.</p>",',
-    '  "appliedRuleIds": [] (leave empty — we cannot validate without the rulebook here)',
-    '}',
-  ].join('\n');
-
-  const r = await aiChatJson({
-    system,
-    user,
-    temperature: 0.6,
-    maxTokens: 1200,
-  });
-  return normalizeDraft(r.json, slot);
 }
 
 function normalizeDraft(raw, slot) {
@@ -290,6 +259,10 @@ async function main() {
   const dryRun = !!flags['dry-run'];
   const resume = !!flags.resume;
   const noAiDraft = !!flags['no-ai-draft'];
+  if (noAiDraft) {
+    console.error('--no-ai-draft is disabled. Pronunciation generation must use the backend grounded /ai-draft endpoint.');
+    process.exit(2);
+  }
   const countPerProfession = Math.max(
     1, parseInt(flags['count-per-profession'] || '5', 10) || 5,
   );
@@ -306,19 +279,17 @@ async function main() {
   startRun('generate-pronunciation');
   const state = resume ? loadState() : { perProfession: {} };
 
-  // Endpoint discovery (skipped on dry-run / --no-ai-draft).
+  // Endpoint discovery (skipped on dry-run).
   let useAdminDraft = false;
-  if (!dryRun && !noAiDraft) {
+  if (!dryRun) {
     try {
       const probe = await probeAiDraftEndpoint();
       useAdminDraft = probe.available;
-      console.log(`  AI draft endpoint: ${useAdminDraft ? 'available — using /v1/admin/pronunciation/drills/ai-draft' : 'unavailable — falling back to local aiChatJson'}`);
+      console.log(`  AI draft endpoint: ${useAdminDraft ? 'available; using /v1/admin/pronunciation/drills/ai-draft' : 'unavailable'}`);
+      if (!useAdminDraft) throw new Error('Pronunciation AI draft endpoint is unavailable.');
     } catch (e) {
-      console.log(`  AI draft probe failed (${e.message}) — falling back to local aiChatJson`);
-      useAdminDraft = false;
+      throw new Error(`Pronunciation AI draft probe failed: ${e.message}`);
     }
-  } else if (noAiDraft) {
-    console.log('  --no-ai-draft set — using local aiChatJson for all drills');
   }
 
   const totalTarget = professions.length * countPerProfession;
@@ -358,9 +329,8 @@ async function main() {
 
       let draft;
       try {
-        draft = useAdminDraft
-          ? await generateDraftViaAdminEndpoint(profession, slot)
-          : await generateDraftViaLocalAi(profession, slot);
+        if (!useAdminDraft) throw new Error('Pronunciation AI draft endpoint was not confirmed available.');
+        draft = await generateDraftViaAdminEndpoint(profession, slot);
       } catch (e) {
         logFailure('pronunciation-draft', { profession, slot }, e);
         totalFailed++;

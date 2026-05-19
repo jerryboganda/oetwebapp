@@ -20,6 +20,18 @@
  *   AI__TtsBaseUrl  — TTS base URL (default same as AI__BaseUrl)
  *   AI__TtsModel    — TTS model id (default qwen3-tts-voicedesign; CLI --tts-model overrides)
  *
+ * TTS provider policy:
+ *   ElevenLabs is the PRIMARY TTS provider. DigitalOcean Qwen3-TTS is the
+ *   automatic fallback when ElevenLabs is missing, fails, or throttles.
+ *   Callers use aiTts(text, opts) — opts may include:
+ *     { gender: 'male'|'female'|'neutral', voice: <id>, provider: 'digitalocean' }.
+ *
+ * ElevenLabs configuration (env vars):
+ *   ELEVENLABS__ApiKey        — REQUIRED to enable ElevenLabs (else falls back to DO)
+ *   ELEVENLABS__BaseUrl       — default https://api.elevenlabs.io/v1
+ *   ELEVENLABS__Model         — default eleven_multilingual_v2
+ *   ELEVENLABS__DefaultVoiceId, ELEVENLABS__VoiceMaleId, ELEVENLABS__VoiceFemaleId, ELEVENLABS__VoiceNeutralId
+ *
  * No dependencies — pure Node 20+ standard library only.
  */
 
@@ -45,6 +57,22 @@ export const CONFIG = (() => {
       ttsBaseUrl: env.AI__TtsBaseUrl || env.AI__BaseUrl || env.AI_BASE_URL || 'https://inference.do-ai.run/v1',
       ttsModel: env.AI__TtsModel || env.AI_TTS_MODEL || 'qwen3-tts-voicedesign',
       ttsVoice: env.AI__TtsVoice || 'female-pleasant',
+    },
+
+    // Primary TTS provider. Falls back to `ai` (DigitalOcean Qwen3-TTS) when
+    // apiKey is unset or any call throws. See _aiTtsRaw dispatcher.
+    elevenlabs: {
+      apiKey:         env.ELEVENLABS__ApiKey || env.ELEVENLABS_API_KEY || '',
+      baseUrl:        env.ELEVENLABS__BaseUrl || 'https://api.elevenlabs.io/v1',
+      model:          env.ELEVENLABS__Model || 'eleven_multilingual_v2',
+      defaultVoiceId: env.ELEVENLABS__DefaultVoiceId || 'EXAVITQu4vr4xnSDxMaL',
+      voiceMaleId:    env.ELEVENLABS__VoiceMaleId   || 'pNInz6obpgDQGcFmaJgB',
+      voiceFemaleId:  env.ELEVENLABS__VoiceFemaleId || 'EXAVITQu4vr4xnSDxMaL',
+      voiceNeutralId: env.ELEVENLABS__VoiceNeutralId|| 'EXAVITQu4vr4xnSDxMaL',
+      stability: 0.5,
+      similarityBoost: 0.75,
+      style: 0.0,
+      useSpeakerBoost: true,
     },
 
     // Throttle: maximum requests per second to backend admin endpoints.
@@ -449,19 +477,98 @@ export function extractJson(content) {
 }
 
 // -----------------------------------------------------------------------------
-// DO Serverless TTS client
+// TTS clients: ElevenLabs (primary) + DigitalOcean Qwen3-TTS (fallback)
 // -----------------------------------------------------------------------------
 
 let _totalTtsChars = 0;
 let _totalTtsCalls = 0;
 
-/**
- * Synthesize text to MP3 audio via DO Serverless TTS (OpenAI-compatible /audio/speech).
- * @param {string} text - input text (≤ 4096 chars per call recommended)
- * @param {object} [opts] - { model, voice, retries }
- * @returns {Promise<Buffer>} - MP3 binary
- */
-async function _aiTtsRaw(text, opts = {}) {
+// Per-run provider usage counters. Exposed via getTtsStats().
+const _ttsProviderUsedCounter = { elevenlabs: 0, digitalocean: 0, fallbacks: 0 };
+
+export function getTtsStats() {
+  return {
+    totalChars: _totalTtsChars,
+    totalCalls: _totalTtsCalls,
+    providers: { ..._ttsProviderUsedCounter },
+  };
+}
+
+function _pickElevenLabsVoice(opts) {
+  if (opts && opts.voice) return String(opts.voice);
+  const g = opts && opts.gender ? String(opts.gender).toLowerCase() : '';
+  if (g === 'male') return CONFIG.elevenlabs.voiceMaleId;
+  if (g === 'female') return CONFIG.elevenlabs.voiceFemaleId;
+  if (g === 'neutral') return CONFIG.elevenlabs.voiceNeutralId;
+  return CONFIG.elevenlabs.defaultVoiceId;
+}
+
+async function _elevenLabsTtsRaw(text, opts = {}) {
+  const { retries = 3, signal = null } = opts;
+  if (!CONFIG.elevenlabs.apiKey) throw new Error('ELEVENLABS__ApiKey not set');
+  if (!text || !text.trim()) throw new Error('aiTts: empty text');
+  const voice = _pickElevenLabsVoice(opts);
+  const url = `${CONFIG.elevenlabs.baseUrl.replace(/\/$/, '')}/text-to-speech/${encodeURIComponent(voice)}`;
+  const body = {
+    text,
+    model_id: CONFIG.elevenlabs.model,
+    voice_settings: {
+      stability: CONFIG.elevenlabs.stability,
+      similarity_boost: CONFIG.elevenlabs.similarityBoost,
+      style: CONFIG.elevenlabs.style,
+      use_speaker_boost: CONFIG.elevenlabs.useSpeakerBoost,
+    },
+  };
+  let attempt = 0, lastError = null;
+  while (attempt <= retries) {
+    attempt++;
+    await aiBucket.take();
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 240_000);
+    const onAbort = () => ctrl.abort();
+    if (signal) {
+      if (signal.aborted) { clearTimeout(tid); throw new Error('aborted'); }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'xi-api-key': CONFIG.elevenlabs.apiKey, 'Accept': 'audio/mpeg', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      clearTimeout(tid);
+      if (signal) signal.removeEventListener('abort', onAbort);
+      lastError = e;
+      if (attempt > retries) break;
+      await sleep(Math.min(30_000, 2000 * attempt));
+      continue;
+    }
+    clearTimeout(tid);
+    if (signal) signal.removeEventListener('abort', onAbort);
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      lastError = new Error(`elevenlabs http ${res.status}: ${t.slice(0, 400)}`);
+      if ((res.status === 429 || res.status >= 500) && attempt <= retries) {
+        const retryAfter = parseInt(res.headers.get('retry-after') || '0', 10);
+        const waitMs = retryAfter > 0 ? Math.min(30_000, retryAfter * 1000) : Math.min(30_000, 2000 * attempt);
+        await sleep(waitMs);
+        continue;
+      }
+      break;
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    _totalTtsChars += text.length;
+    _totalTtsCalls++;
+    _ttsProviderUsedCounter.elevenlabs++;
+    return buf;
+  }
+  throw lastError || new Error('elevenlabs TTS failed');
+}
+
+async function _digitalOceanTtsRaw(text, opts = {}) {
   const {
     model = CONFIG.ai.ttsModel,
     voice = CONFIG.ai.ttsVoice,
@@ -471,15 +578,9 @@ async function _aiTtsRaw(text, opts = {}) {
   } = opts;
   if (!CONFIG.ai.apiKey) throw new Error('AI__ApiKey not set');
   if (!text || !text.trim()) throw new Error('aiTts: empty text');
-
-  // Qwen3 voice-design accepts ONLY {model, input, voice, instructions}.
-  // Adding response_format/speed/stream -> HTTP 400. Missing instructions -> 400.
-  // Output is always WAV PCM 16-bit mono 24kHz; orchestrator sniffs container.
   const body = { model, input: text, voice, instructions };
   void format;
-  let attempt = 0;
-  let lastError = null;
-
+  let attempt = 0, lastError = null;
   while (attempt <= retries) {
     attempt++;
     await aiBucket.take();
@@ -489,10 +590,7 @@ async function _aiTtsRaw(text, opts = {}) {
     try {
       res = await fetch(`${CONFIG.ai.ttsBaseUrl.replace(/\/$/, '')}/audio/speech`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${CONFIG.ai.apiKey}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CONFIG.ai.apiKey}` },
         body: JSON.stringify(body),
         signal: ctrl.signal,
       });
@@ -516,10 +614,37 @@ async function _aiTtsRaw(text, opts = {}) {
     const buf = Buffer.from(await res.arrayBuffer());
     _totalTtsChars += text.length;
     _totalTtsCalls++;
+    _ttsProviderUsedCounter.digitalocean++;
     return buf;
   }
   throw lastError || new Error('TTS failed');
 }
+
+// TTS dispatcher (ElevenLabs primary, DigitalOcean fallback)
+async function _aiTtsRaw(text, opts = {}) {
+  const pinned = opts && opts.provider ? String(opts.provider).toLowerCase() : '';
+  const hasEleven = !!CONFIG.elevenlabs.apiKey;
+  if (pinned === 'digitalocean') return _digitalOceanTtsRaw(text, opts);
+  if (pinned === 'elevenlabs') return _elevenLabsTtsRaw(text, opts);
+  if (!hasEleven) return _digitalOceanTtsRaw(text, opts);
+  try {
+    return await _elevenLabsTtsRaw(text, opts);
+  } catch (elErr) {
+    _ttsProviderUsedCounter.fallbacks++;
+    try {
+      // eslint-disable-next-line no-console
+      console.error(`tts: ElevenLabs failed (${(elErr && elErr.message) || elErr}); falling back to DO`);
+    } catch { /* noop */ }
+    try {
+      return await _digitalOceanTtsRaw(text, opts);
+    } catch (doErr) {
+      const combined = new Error(`elevenlabs+do failed. eleven=${elErr && elErr.message}; do=${doErr && doErr.message}`);
+      combined.cause = elErr;
+      throw combined;
+    }
+  }
+}
+
 
 
 // -----------------------------------------------------------------------------

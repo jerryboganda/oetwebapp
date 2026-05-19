@@ -4,6 +4,11 @@
 set -u
 cd /opt/oetwebapp || exit 2
 
+if [ "${RUN_BULK_CONFIRM:-}" != "live-admin-bulk" ]; then
+  echo "RUN_BULK_CONFIRM=live-admin-bulk is required before launching live generators."
+  exit 2
+fi
+
 mkdir -p /tmp
 
 SCRIPTS=(
