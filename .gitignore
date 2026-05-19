@@ -56,6 +56,32 @@ _previous_chat_history/
 dmb_*.py
 n u l  
 
+# Throwaway diagnostic / patch artifacts (operator-only, do not version)
+scripts/_*.sh
+scripts/_*.sql
+scripts/_*.ps1
+scripts/_*.py
+scripts/_*.rendered
+scripts/admin/_*.sh
+scripts/admin/_*.py
+scripts/admin/_*.sql
+scripts/admin/_lib.mjs.*
+scripts/admin/dryrun-all.sh
+scripts/admin/describe.sql
+scripts/admin/inventory.sql
+!scripts/_deploy_envrc.sh
+!scripts/_rescue_listening.sh
+!scripts/_relaunch_listening_fixed.sh
+!scripts/_orch_status.sh
+!scripts/_orch_status_v2.sh
+!scripts/_inspect_archived.sh
+!scripts/_launch_mocks.sh
+VPS All in One File.md
+
+# Local build verification (sidestep of apphost.exe lock)
+bin-verify/
+**/bin-verify/
+
 # Local test/build/audit output (never commit)
 nul
 *_out.txt
@@ -116,4 +142,5 @@ repomix-output*.txt
 storybook-static/
 
 scripts/admin/.envrc
+!scripts/admin/.envrc.example
 

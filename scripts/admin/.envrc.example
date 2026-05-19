@@ -1,0 +1,6 @@
+# Example env file for scripts/admin/run-bulk.sh
+# Copy to scripts/admin/.envrc on the host that runs orchestrators.
+# NEVER commit the real .envrc (already gitignored).
+
+export ADMIN_PASSWORD='REPLACE_WITH_ADMIN_PASSWORD'
+export AI__ApiKey='REPLACE_WITH_DIGITALOCEAN_INFERENCE_TOKEN'
