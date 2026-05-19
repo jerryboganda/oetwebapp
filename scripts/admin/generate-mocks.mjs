@@ -89,6 +89,14 @@ async function pickPaper({ subtest, profession, used }) {
 
   // Last resort: any unused paper of this subtest, even other-profession.
   pick = any.find(p => !used.has(p.id));
+  if (pick) return { paper: pick, fallback: true };
+
+  // Reuse fallback: pool exhausted, reuse a profession-compatible paper.
+  // Backend allows the same paper in multiple bundles; we prefer spreading
+  // for learner variety but never block a bundle when reuse is the only path.
+  pick = strict[0]
+    ?? any.find(p => p.appliesToAllProfessions || p.professionId === profession || !p.professionId)
+    ?? any[0];
   return pick ? { paper: pick, fallback: true } : { paper: null, fallback: false };
 }
 

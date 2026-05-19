@@ -351,7 +351,7 @@ async function createPaperShell({ paper, profession }) {
     Title: paper.title,
     Slug: slugify(paper.title),
     ProfessionId: profession,
-    AppliesToAllProfessions: false,
+    AppliesToAllProfessions: true,  // mark as cross-profession so MockBundles can reuse across all professions
     Difficulty: 'B2',
     EstimatedDurationMinutes: 60,
     CardType: null,

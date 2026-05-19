@@ -234,7 +234,7 @@ async function main() {
       title: `${capitalize(t.profession)} Speaking — ${t.topic}`,
       slug: `speaking-${t.profession}-${slugify(t.topic)}-${shortId()}`,
       professionId: t.profession,
-      appliesToAllProfessions: false,
+      appliesToAllProfessions: true,
       difficulty: 'standard',
       estimatedDurationMinutes: 12,
       cardType: t.clinical || null,
