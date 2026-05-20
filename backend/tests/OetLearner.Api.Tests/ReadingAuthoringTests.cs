@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.IO.Compression;
 using System.Reflection;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -45,6 +47,29 @@ public class ReadingAuthoringTests
         var entitlements = new ContentEntitlementService(db, new EffectiveEntitlementResolver(db));
         var attempt = new ReadingAttemptService(db, policy, grader, entitlements, NullLogger<ReadingAttemptService>.Instance);
         return (db, structure, policy, grader, attempt);
+    }
+
+    private static async Task WriteStorageBytesAsync(IFileStorage storage, string key, byte[] bytes)
+    {
+        await using var stream = await storage.OpenWriteAsync(key, CancellationToken.None);
+        await stream.WriteAsync(bytes, CancellationToken.None);
+    }
+
+    private static MemoryStream CreateZip(params (string Path, byte[] Bytes)[] entries)
+    {
+        var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in entries)
+            {
+                var zipEntry = archive.CreateEntry(entry.Path);
+                using var entryStream = zipEntry.Open();
+                entryStream.Write(entry.Bytes, 0, entry.Bytes.Length);
+            }
+        }
+
+        stream.Position = 0;
+        return stream;
     }
 
     private static async Task EnableReadingAiExtractionAsync(ReadingPolicyService policy)
@@ -598,6 +623,446 @@ public class ReadingAuthoringTests
 
         Assert.False(await access.CanAccessAsync(principal, "media-non-primary-question-paper", default));
         Assert.False(await access.CanAccessAsync(principal, "media-answer-key-preview", default));
+    }
+
+    [Fact]
+    public async Task Media_access_allows_published_recall_documents_for_matching_learner_profession()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        db.MediaAssets.AddRange(
+            new MediaAsset
+            {
+                Id = "media-recall-all",
+                OriginalFilename = "all-recalls.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "recalls/all.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-recall-medicine",
+                OriginalFilename = "medicine-recalls.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "recalls/medicine.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-recall-nursing",
+                OriginalFilename = "nursing-recalls.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "recalls/nursing.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            });
+        db.RecallDocuments.AddRange(
+            new RecallDocument
+            {
+                Id = "recall-all",
+                Title = "All recalls",
+                SubtestCode = "reading",
+                PeriodLabel = "2026 Q1",
+                MediaAssetId = "media-recall-all",
+                Status = ContentStatus.Published,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now,
+            },
+            new RecallDocument
+            {
+                Id = "recall-medicine",
+                Title = "Medicine recalls",
+                SubtestCode = "reading",
+                PeriodLabel = "2026 Q1",
+                ProfessionId = "medicine",
+                MediaAssetId = "media-recall-medicine",
+                Status = ContentStatus.Published,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now,
+            },
+            new RecallDocument
+            {
+                Id = "recall-nursing",
+                Title = "Nursing recalls",
+                SubtestCode = "reading",
+                PeriodLabel = "2026 Q1",
+                ProfessionId = "nursing",
+                MediaAssetId = "media-recall-nursing",
+                Status = ContentStatus.Published,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now,
+            });
+        await db.SaveChangesAsync();
+
+        var access = scope.ServiceProvider.GetRequiredService<MediaAssetAccessService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "mock-user-001"),
+            new Claim(ClaimTypes.Role, ApplicationUserRoles.Learner),
+            new Claim("prof", "medicine"),
+        }, "Test"));
+
+        Assert.True(await access.CanAccessAsync(principal, "media-recall-all", default));
+        Assert.True(await access.CanAccessAsync(principal, "media-recall-medicine", default));
+        Assert.False(await access.CanAccessAsync(principal, "media-recall-nursing", default));
+    }
+
+    [Fact]
+    public async Task Media_access_allows_published_rulebook_reference_pdf_for_matching_learner_profession()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        db.MediaAssets.AddRange(
+            new MediaAsset
+            {
+                Id = "media-rulebook-medicine",
+                OriginalFilename = "medicine-rulebook.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "rulebooks/medicine.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-rulebook-nursing",
+                OriginalFilename = "nursing-rulebook.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "rulebooks/nursing.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            });
+        db.RulebookVersions.AddRange(
+            new RulebookVersion
+            {
+                Id = "rulebook-medicine",
+                Kind = "writing",
+                Profession = "medicine",
+                Version = "1.0.0",
+                Status = RulebookStatus.Published,
+                ReferencePdfAssetId = "media-rulebook-medicine",
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now,
+            },
+            new RulebookVersion
+            {
+                Id = "rulebook-nursing",
+                Kind = "writing",
+                Profession = "nursing",
+                Version = "1.0.0",
+                Status = RulebookStatus.Published,
+                ReferencePdfAssetId = "media-rulebook-nursing",
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now,
+            });
+        await db.SaveChangesAsync();
+
+        var access = scope.ServiceProvider.GetRequiredService<MediaAssetAccessService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "mock-user-001"),
+            new Claim(ClaimTypes.Role, ApplicationUserRoles.Learner),
+            new Claim("prof", "medicine"),
+        }, "Test"));
+
+        Assert.True(await access.CanAccessAsync(principal, "media-rulebook-medicine", default));
+        Assert.False(await access.CanAccessAsync(principal, "media-rulebook-nursing", default));
+    }
+
+    [Fact]
+    public async Task Media_delete_rejects_recall_document_and_rulebook_reference_pdf_assets()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        db.MediaAssets.AddRange(
+            new MediaAsset
+            {
+                Id = "media-recall-delete",
+                OriginalFilename = "recall.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "content/recall.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedBy = "admin-delete",
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-rulebook-delete",
+                OriginalFilename = "rulebook.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "content/rulebook.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedBy = "admin-delete",
+                UploadedAt = now,
+            });
+        db.RecallDocuments.Add(new RecallDocument
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Title = "Recall",
+            SubtestCode = "reading",
+            PeriodLabel = "2026 Q1",
+            ProfessionId = null,
+            MediaAssetId = "media-recall-delete",
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = "rulebook-delete-guard",
+            Kind = "writing",
+            Profession = "medicine",
+            Version = "1.0.0",
+            Status = RulebookStatus.Published,
+            ReferencePdfAssetId = "media-rulebook-delete",
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-delete");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
+
+        using var recallResponse = await client.DeleteAsync("/v1/media/media-recall-delete");
+        using var rulebookResponse = await client.DeleteAsync("/v1/media/media-rulebook-delete");
+
+        Assert.Equal(HttpStatusCode.Conflict, recallResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, rulebookResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_scoring_policy_rejects_json_that_breaks_canonical_oet_anchors()
+    {
+        using var factory = new TestWebApplicationFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-scoring");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
+        client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", "content:read,content:write");
+
+        const string invalidPolicyJson = """
+        {
+          "listening": { "passing": { "default": 300 }, "rawToScaled": [{ "raw": 30, "scaled": 350 }] },
+          "reading": { "passing": { "default": 350 }, "rawToScaled": [{ "raw": 30, "scaled": 350 }] },
+          "writing": { "passing": { "gb": 350, "ie": 350, "au": 350, "nz": 350, "ca": 350, "us": 300, "qa": 300 } },
+          "speaking": { "passing": { "default": 350 } }
+        }
+        """;
+
+        using var response = await client.PutAsJsonAsync(
+            "/v1/admin/scoring-policy",
+            new { bodyMarkdown = "Invalid", policyJson = invalidPolicyJson });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("canonical OET scoring", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Admin_rulebook_reference_pdf_rejects_pdf_extension_with_non_pdf_bytes()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = "rulebook-pdf-validation",
+            Kind = "writing",
+            Profession = "medicine",
+            Version = "1.0.0-draft",
+            Status = RulebookStatus.Draft,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-rulebook");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
+        client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", "content:write");
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("not a pdf")), "file", "reference.pdf");
+
+        using var response = await client.PostAsync("/v1/admin/rulebooks/rulebook-pdf-validation/reference-pdf", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid_file_content", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Admin_rulebook_reference_pdf_requires_publish_permission_for_published_rulebooks()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = "rulebook-pdf-published",
+            Kind = "writing",
+            Profession = "medicine",
+            Version = "1.0.0",
+            Status = RulebookStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-rulebook");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
+        client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", "content:write");
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF")), "file", "reference.pdf");
+
+        using var response = await client.PostAsync("/v1/admin/rulebooks/rulebook-pdf-published/reference-pdf", form);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Real_content_import_rejects_non_pdf_recall_bytes_before_media_promotion()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var importer = scope.ServiceProvider.GetRequiredService<RealContentFolderImporter>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        await WriteStorageBytesAsync(storage, "staging/import/bad-recall.pdf", Encoding.UTF8.GetBytes("not a pdf"));
+
+        var proposal = new RealContentProposal
+        {
+            Target = RealContentTarget.RecallDocument,
+            Title = "Bad Recall",
+            Subtest = "reading",
+            SourcePath = "Recalls/bad-recall.pdf",
+            StagedStorageKey = "staging/import/bad-recall.pdf",
+        };
+
+        var result = await importer.CommitAsync("admin-import", new[] { proposal }, canPublishContent: false, CancellationToken.None);
+
+        Assert.Empty(result.Created);
+        Assert.Contains(result.Errors, error => error.Contains("Unrecognised file format", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Real_content_stage_routes_top_level_scoring_file_to_root_parser()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var importer = scope.ServiceProvider.GetRequiredService<RealContentFolderImporter>();
+        await using var zip = CreateZip(("Scoring System.txt", Encoding.UTF8.GetBytes("# Scoring\n")));
+
+        var staged = await importer.StageAsync("admin-import", zip, "real-content.zip", CancellationToken.None);
+
+        Assert.Contains(staged.Proposals, proposal => proposal.Target == RealContentTarget.ScoringPolicyBody);
+    }
+
+    [Fact]
+    public async Task Real_content_import_requires_publish_permission_for_published_rulebook_pdf_attachment()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var importer = scope.ServiceProvider.GetRequiredService<RealContentFolderImporter>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = "rulebook-import-published",
+            Kind = "writing",
+            Profession = "medicine",
+            Version = "1.0.0",
+            Status = RulebookStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        await db.SaveChangesAsync();
+        await WriteStorageBytesAsync(storage, "staging/import/rulebook.pdf", Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF"));
+
+        var proposal = new RealContentProposal
+        {
+            Target = RealContentTarget.RulebookReferencePdf,
+            Title = "Writing Rulebook",
+            RulebookKind = "writing",
+            RulebookProfession = "medicine",
+            SourcePath = "Writing/Rulebook/rulebook.pdf",
+            StagedStorageKey = "staging/import/rulebook.pdf",
+        };
+
+        var result = await importer.CommitAsync("admin-import", new[] { proposal }, canPublishContent: false, CancellationToken.None);
+
+        Assert.Empty(result.Created);
+        Assert.Contains(result.Errors, error => error.Contains("requires content publish permission", StringComparison.OrdinalIgnoreCase));
+        Assert.Null(await db.RulebookVersions.Where(x => x.Id == "rulebook-import-published").Select(x => x.ReferencePdfAssetId).FirstAsync());
+    }
+
+    [Fact]
+    public async Task Real_content_import_scoring_policy_uses_canonical_policy_json()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var importer = scope.ServiceProvider.GetRequiredService<RealContentFolderImporter>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        await db.Database.EnsureCreatedAsync();
+        await WriteStorageBytesAsync(storage, "staging/import/scoring.txt", Encoding.UTF8.GetBytes("# Scoring\n"));
+
+        var proposal = new RealContentProposal
+        {
+            Target = RealContentTarget.ScoringPolicyBody,
+            Title = "Scoring System",
+            SourcePath = "Scoring System.txt",
+            StagedStorageKey = "staging/import/scoring.txt",
+        };
+
+        var result = await importer.CommitAsync("admin-import", new[] { proposal }, canPublishContent: false, CancellationToken.None);
+        var policy = await db.ScoringPolicies.SingleAsync(x => x.IsActive);
+
+        Assert.Empty(result.Errors);
+        Assert.Null(ScoringPolicyValidation.ValidateCanonicalPolicyJson(policy.PolicyJson));
+        Assert.Contains("rawToScaled", policy.PolicyJson);
     }
 
     [Fact]

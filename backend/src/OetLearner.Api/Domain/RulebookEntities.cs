@@ -36,6 +36,15 @@ public class RulebookVersion
     /// <summary>Admin user id that last edited this version.</summary>
     public string? UpdatedByUserId { get; set; }
 
+    /// <summary>
+    /// Optional FK to <see cref="MediaAsset"/> — a human-readable PDF
+    /// rulebook attached for admin/learner reference. Grading still uses
+    /// the JSON rule rows; the PDF is for humans only.
+    /// </summary>
+    public string? ReferencePdfAssetId { get; set; }
+
+    public MediaAsset? ReferencePdfAsset { get; set; }
+
     public List<RulebookSectionRow> Sections { get; set; } = new();
     public List<RulebookRuleRow> Rules { get; set; } = new();
 }
