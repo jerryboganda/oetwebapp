@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { useProfessions } from '@/lib/hooks/use-professions';
 import { fetchAdminVocabularyRecallSets } from '@/lib/api';
 import { vocabularyProvenanceLabel } from '@/lib/vocabulary-provenance';
 
@@ -58,14 +57,10 @@ const CATEGORIES = [
   'dispensing', 'counselling',
 ];
 
-const PROFESSIONS_FALLBACK_HEAD = [{ value: '', label: 'General (all)' }] as const;
-
 type RecallSetOption = { code: string; displayName: string };
 
 export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: Props) {
   const router = useRouter();
-  const { options: professionOptions } = useProfessions();
-  const PROFESSIONS = [...PROFESSIONS_FALLBACK_HEAD, ...professionOptions];
   const [recallSetOptions, setRecallSetOptions] = useState<RecallSetOption[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -202,21 +197,8 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
               <p className="mt-1 text-xs text-muted">{v.definition.length}/25 words recommended · {v.definition.length}/1024 chars</p>
             </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-navy">Example sentence <span className="text-danger">*</span></label>
-              <textarea
-                required
-                aria-label="Example sentence"
-                value={v.exampleSentence}
-                onChange={(e) => setV({ ...v, exampleSentence: e.target.value })}
-                maxLength={2048}
-                rows={2}
-                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
-              />
-            </div>
-
-            {/* Taxonomy */}
-            <div className="grid gap-4 md:grid-cols-4">
+            {/* Taxonomy — Exam + Category only (Profession and Difficulty removed per admin request) */}
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Exam</label>
                 <select aria-label="Exam" value={v.examTypeCode} onChange={(e) => setV({ ...v, examTypeCode: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
@@ -226,23 +208,9 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Profession</label>
-                <select aria-label="Profession" value={v.professionId} onChange={(e) => setV({ ...v, professionId: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
-                  {PROFESSIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                </select>
-              </div>
-              <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Category <span className="text-danger">*</span></label>
                 <select required aria-label="Category" value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
                   {CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Difficulty</label>
-                <select aria-label="Difficulty" value={v.difficulty} onChange={(e) => setV({ ...v, difficulty: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
                 </select>
               </div>
             </div>
