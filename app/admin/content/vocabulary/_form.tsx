@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Plus, Save, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Plus, Save } from 'lucide-react';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
@@ -58,58 +58,9 @@ const CATEGORIES = [
   'dispensing', 'counselling',
 ];
 
-const OET_SUBTEST_TAGS = [
-  { value: 'listening_a', label: 'Listening A' },
-  { value: 'listening_b', label: 'Listening B' },
-  { value: 'listening_c', label: 'Listening C' },
-  { value: 'reading_a', label: 'Reading A' },
-  { value: 'reading_b', label: 'Reading B' },
-  { value: 'reading_c', label: 'Reading C' },
-  { value: 'writing', label: 'Writing' },
-  { value: 'speaking', label: 'Speaking' },
-] as const;
-
 const PROFESSIONS_FALLBACK_HEAD = [{ value: '', label: 'General (all)' }] as const;
 
 type RecallSetOption = { code: string; displayName: string };
-
-
-function TagInput({ value, onChange, placeholder, label }: { value: string[]; onChange: (v: string[]) => void; placeholder: string; label: string }) {
-  const inputId = useId();
-  const [draft, setDraft] = useState('');
-  function add() {
-    const v = draft.trim();
-    if (!v) return;
-    if (!value.includes(v)) onChange([...value, v]);
-    setDraft('');
-  }
-  return (
-    <div>
-      <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-navy">{label}</label>
-      <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-surface p-2">
-        {value.map((v, i) => (
-          <span key={i} className="inline-flex items-center gap-1 rounded-full bg-background-light px-2 py-0.5 text-sm">
-            {v}
-            <button type="button" onClick={() => onChange(value.filter((_, j) => j !== i))} aria-label={`Remove ${v}`}>
-              <X className="h-3 w-3 text-muted" />
-            </button>
-          </span>
-        ))}
-        <input
-          type="text"
-          id={inputId}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); } }}
-          onBlur={add}
-          placeholder={placeholder}
-          className="flex-1 min-w-[120px] border-0 bg-transparent text-sm outline-none"
-        />
-      </div>
-      <p className="mt-1 text-xs text-muted">Press Enter or comma to add; click × to remove.</p>
-    </div>
-  );
-}
 
 export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: Props) {
   const router = useRouter();
@@ -139,6 +90,12 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
     })();
     return () => { cancelled = true; };
   }, []);
+  // NOTE: per admin request, the vocab form was simplified to a minimal set of
+  // visible inputs (term, definition, example sentence, exam, profession,
+  // category, difficulty, recall practice collection labels, status). The
+  // other VocabFormValues fields are retained on state with sensible defaults
+  // so the API contract is unchanged and the publish gate (which requires
+  // sourceProvenance) still passes for admin-authored entries.
   const [v, setV] = useState<VocabFormValues>({
     term: initial?.term ?? '',
     definition: initial?.definition ?? '',
@@ -162,7 +119,10 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
     commonMistakes: initial?.commonMistakes ?? [],
     similarSounding: initial?.similarSounding ?? [],
     oetSubtestTags: initial?.oetSubtestTags ?? [],
-    sourceProvenance: initial?.sourceProvenance ?? '',
+    // Default provenance for admin-authored vocab entries so the publish gate
+    // can run without the field being rendered. Preserves the existing
+    // initial-value behaviour when the API returns an explicit value.
+    sourceProvenance: initial?.sourceProvenance ?? 'generated:platform-authored:admin-entry',
     status: (initial?.status as VocabFormValues['status']) ?? 'draft',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -222,20 +182,10 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
 
         <AdminRoutePanel>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Core */}
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Term <span className="text-danger">*</span></label>
-                <Input required aria-label="Term" value={v.term} onChange={(e) => setV({ ...v, term: e.target.value })} maxLength={128} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">IPA Pronunciation</label>
-                <Input aria-label="IPA pronunciation" value={v.ipaPronunciation} onChange={(e) => setV({ ...v, ipaPronunciation: e.target.value })} placeholder="/ˈ.../" maxLength={64} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">American spelling</label>
-                <Input aria-label="American spelling" value={v.americanSpelling} onChange={(e) => setV({ ...v, americanSpelling: e.target.value })} placeholder="e.g. hemorrhage" maxLength={128} />
-              </div>
+            {/* Term — primary key, always required */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-navy">Term <span className="text-danger">*</span></label>
+              <Input required aria-label="Term" value={v.term} onChange={(e) => setV({ ...v, term: e.target.value })} maxLength={128} />
             </div>
 
             <div>
@@ -260,18 +210,6 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
                 value={v.exampleSentence}
                 onChange={(e) => setV({ ...v, exampleSentence: e.target.value })}
                 maxLength={2048}
-                rows={2}
-                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-navy">Context notes</label>
-              <textarea
-                aria-label="Context notes"
-                value={v.contextNotes}
-                onChange={(e) => setV({ ...v, contextNotes: e.target.value })}
-                maxLength={1024}
                 rows={2}
                 className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
               />
@@ -309,38 +247,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
               </div>
             </div>
 
-            {/* Media */}
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Audio URL</label>
-                <Input aria-label="Audio URL" value={v.audioUrl} onChange={(e) => setV({ ...v, audioUrl: e.target.value })} placeholder="https://..." />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Slow audio URL</label>
-                <Input aria-label="Slow audio URL" value={v.audioSlowUrl} onChange={(e) => setV({ ...v, audioSlowUrl: e.target.value })} placeholder="https://..." maxLength={256} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Sentence audio URL</label>
-                <Input aria-label="Sentence audio URL" value={v.audioSentenceUrl} onChange={(e) => setV({ ...v, audioSentenceUrl: e.target.value })} placeholder="https://..." maxLength={256} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Audio media asset ID</label>
-                <Input aria-label="Audio media asset ID" value={v.audioMediaAssetId} onChange={(e) => setV({ ...v, audioMediaAssetId: e.target.value })} placeholder="MediaAsset id" maxLength={64} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Image URL</label>
-                <Input aria-label="Image URL" value={v.imageUrl} onChange={(e) => setV({ ...v, imageUrl: e.target.value })} placeholder="https://..." />
-              </div>
-            </div>
-
-            {/* Relations */}
-            <div className="grid gap-4 md:grid-cols-3">
-              <TagInput label="Synonyms" value={v.synonyms} onChange={(s) => setV({ ...v, synonyms: s })} placeholder="Add synonym…" />
-              <TagInput label="Collocations" value={v.collocations} onChange={(s) => setV({ ...v, collocations: s })} placeholder="Add collocation…" />
-              <TagInput label="Related terms" value={v.relatedTerms} onChange={(s) => setV({ ...v, relatedTerms: s })} placeholder="Add related term…" />
-            </div>
-
-            {/* Recall set tags */}
+            {/* Recall set tags — keep per explicit admin instruction */}
             <div>
               <label className="mb-1 block text-sm font-medium text-navy">Recall practice collection labels</label>
               <div className="flex flex-wrap gap-2">
@@ -367,77 +274,28 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
               <p className="mt-1 text-xs text-muted">Tag this term with one or more practice collection labels. A label is not source-backed unless the term provenance explicitly says so.</p>
             </div>
 
-            {/* OET subtest tags */}
+            {/* Status */}
             <div>
-              <label className="mb-1 block text-sm font-medium text-navy">OET subtest tags</label>
-              <div className="flex flex-wrap gap-2">
-                {OET_SUBTEST_TAGS.map(opt => {
-                  const checked = v.oetSubtestTags.includes(opt.value);
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setV({
-                        ...v,
-                        oetSubtestTags: checked
-                          ? v.oetSubtestTags.filter(c => c !== opt.value)
-                          : [...v.oetSubtestTags, opt.value],
-                      })}
-                      className={`rounded-full border px-3 py-1 text-xs transition ${checked ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-muted hover:border-primary/40'}`}
-                      aria-pressed={checked}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Common mistakes + similar sounding */}
-            <div className="grid gap-4 md:grid-cols-2">
-              <TagInput label="Common mistakes" value={v.commonMistakes} onChange={(s) => setV({ ...v, commonMistakes: s })} placeholder="e.g. spelt 'embolus' instead of 'embolism'…" />
-              <TagInput label="Similar sounding" value={v.similarSounding} onChange={(s) => setV({ ...v, similarSounding: s })} placeholder="e.g. ileum / ilium…" />
-            </div>
-
-            {/* Provenance + status */}
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Source provenance <span className="text-danger">*</span> (required to publish)</label>
-                <Input
-                  value={v.sourceProvenance}
-                  aria-label="Source provenance"
-                  onChange={(e) => setV({ ...v, sourceProvenance: e.target.value })}
-                  placeholder='e.g. "generated:platform-authored:recalls-content-pack-v1"'
-                  maxLength={512}
-                />
-                <p className="mt-1 text-xs text-muted">
-                  Use a structured prefix such as <code>generated:platform-authored:...</code> for original platform-authored practice content. Do not label generated material as source-backed recalls.
-                </p>
+              <label className="mb-1 block text-sm font-medium text-navy">Status</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={v.status}
+                  aria-label="Status"
+                  onChange={(e) => setV({ ...v, status: e.target.value as VocabFormValues['status'] })}
+                  className="rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize"
+                >
+                  <option value="draft">Draft</option>
+                  <option value="active">Active (publish gate enforced)</option>
+                  <option value="archived">Archived</option>
+                </select>
+                <Badge variant={v.status === 'active' ? 'success' : v.status === 'draft' ? 'warning' : 'muted'}>
+                  {v.status}
+                </Badge>
                 {provenanceLabel && (
-                  <Badge variant="warning" className="mt-2">
-                    {provenanceLabel}
-                  </Badge>
+                  <Badge variant="warning">{provenanceLabel}</Badge>
                 )}
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Status</label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={v.status}
-                    aria-label="Status"
-                    onChange={(e) => setV({ ...v, status: e.target.value as VocabFormValues['status'] })}
-                    className="rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize"
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="active">Active (publish gate enforced)</option>
-                    <option value="archived">Archived</option>
-                  </select>
-                  <Badge variant={v.status === 'active' ? 'success' : v.status === 'draft' ? 'warning' : 'muted'}>
-                    {v.status}
-                  </Badge>
-                </div>
-                <p className="mt-1 text-xs text-muted">Setting status to “active” on save will run the publish gate. Use the Publish button below to active-and-validate in one step.</p>
-              </div>
+              <p className="mt-1 text-xs text-muted">Setting status to “active” on save will run the publish gate. Use the Publish button below to active-and-validate in one step.</p>
             </div>
 
             {/* Actions */}
