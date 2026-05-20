@@ -3,18 +3,20 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
-import { Brain, Layers, BookOpen, HelpCircle, Headphones, Flame, Sparkles, ArrowRight } from 'lucide-react';
+import { Brain, Layers, BookOpen, HelpCircle, Headphones, Flame, Sparkles, ArrowRight, Calendar } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { RevisionPlanCard } from '@/components/domain/recalls/revision-plan-card';
 import { WeeklyReportCard } from '@/components/domain/recalls/weekly-report-card';
-import { fetchVocabularyStats, fetchReviewSummary } from '@/lib/api';
+import { fetchVocabularyStats, fetchReviewSummary, fetchVocabularyRecallSets } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { VocabularyStats } from '@/lib/types/vocabulary';
 
 type ReviewSummary = { due: number; total: number; dueToday: number; mastered: number; upcoming?: number };
+
+type RecallSetSummary = { code: string; label: string; count: number };
 
 /**
  * Recalls — unified home for vocabulary cards and spaced-repetition review.
@@ -27,6 +29,7 @@ type ReviewSummary = { due: number; total: number; dueToday: number; mastered: n
 export default function RecallsHomePage() {
   const [vocab, setVocab] = useState<VocabularyStats | null>(null);
   const [review, setReview] = useState<ReviewSummary | null>(null);
+  const [recallSets, setRecallSets] = useState<RecallSetSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +41,14 @@ export default function RecallsHomePage() {
       if (v.status === 'rejected' && r.status === 'rejected') setError('Could not load your recall queue.');
       setLoading(false);
     });
+    // Recall sets are a separate, non-critical fetch — failures degrade
+    // silently to "no chips" rather than blocking the whole page.
+    fetchVocabularyRecallSets({ examTypeCode: 'oet' })
+      .then((response) => {
+        const items = (response as { recallSets?: RecallSetSummary[] })?.recallSets ?? [];
+        setRecallSets(items.filter((s) => s.count > 0));
+      })
+      .catch(() => undefined);
   }, []);
 
   const dueToday = (vocab?.dueToday ?? 0) + (review?.dueToday ?? 0);
@@ -103,6 +114,33 @@ export default function RecallsHomePage() {
         />
 
         {error && <InlineAlert variant="warning">{error}</InlineAlert>}
+
+        {recallSets.length > 0 && (
+          <section
+            aria-label="Browse by recall set"
+            className="rounded-2xl border border-border bg-surface p-4"
+          >
+            <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
+              <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+              Browse by recall set
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {recallSets.map((set) => (
+                <Link
+                  key={set.code}
+                  href={`/recalls/words?recallSet=${encodeURIComponent(set.code)}#catalog`}
+                  className="group inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-navy transition-colors hover:border-warning hover:bg-warning/5 hover:text-warning"
+                  onClick={() => analytics.track('recalls_set_chip_clicked', { code: set.code, count: set.count })}
+                >
+                  <span>{set.label}</span>
+                  <span className="rounded-full bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-warning group-hover:bg-warning group-hover:text-white">
+                    {set.count}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         <LearnerSurfaceSectionHeader
           eyebrow="Today"

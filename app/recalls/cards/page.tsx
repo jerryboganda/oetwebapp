@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Brain } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { ListenAndType } from '@/components/domain/recalls/listen-and-type';
 import { QuizRunner } from '@/components/domain/recalls/quiz-runner';
 import { QuizModePicker, QUIZ_MODE_KEYS, type RecallQuizMode } from '@/components/domain/recalls/quiz-mode-picker';
@@ -48,7 +50,11 @@ export default function RecallsCardsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const current = queue && queue.length > 0 ? queue[Math.min(index, queue.length - 1)] : null;
+  // Use a strict bounds check so we can render a real "Session complete" state
+  // once the learner has worked through the whole queue, instead of clamping
+  // at the final card forever (which is what `Math.min(index, len - 1)` did).
+  const sessionComplete = !!queue && queue.length > 0 && index >= queue.length;
+  const current = queue && queue.length > 0 && !sessionComplete ? queue[index] : null;
 
   return (
     <LearnerDashboardShell>
@@ -77,9 +83,47 @@ export default function RecallsCardsPage() {
         <div className="rounded-2xl border border-border bg-background-light p-5">
           {loading ? (
             <Skeleton className="h-44 rounded-xl" />
+          ) : sessionComplete ? (
+            <div className="space-y-4 text-center">
+              <h3 className="text-lg font-semibold text-navy">Session complete</h3>
+              <p className="text-sm text-muted">
+                You&apos;ve worked through every due card in this queue. Come back tomorrow for the next batch, or add
+                more words to keep going.
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setIndex(0);
+                    analytics.track('recalls_cards_session_restart', { queueLength: queue?.length ?? 0 });
+                  }}
+                >
+                  Run again
+                </Button>
+                <Link
+                  href="/recalls/words#catalog"
+                  className="inline-flex h-9 items-center justify-center rounded-xl bg-primary px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+                >
+                  Add more words
+                </Link>
+                <Link
+                  href="/recalls"
+                  className="inline-flex h-9 items-center justify-center rounded-xl border border-border bg-surface px-4 text-sm font-medium text-navy transition-colors hover:bg-background"
+                >
+                  Back to Recalls
+                </Link>
+              </div>
+            </div>
           ) : !current ? (
-            <div className="text-center text-sm text-muted">
-              Nothing due. Visit <code className="rounded bg-background px-1 py-0.5">/recalls/words</code> to seed cards.
+            <div className="space-y-3 text-center text-sm text-muted">
+              <p>Nothing due right now.</p>
+              <Link
+                href="/recalls/words#catalog"
+                className="inline-flex h-9 items-center justify-center rounded-xl bg-primary px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+              >
+                Browse the vocabulary catalog
+              </Link>
             </div>
           ) : mode === 'listen_and_type' && current.kind === 'vocab' ? (
             current.termId ? (
@@ -88,7 +132,7 @@ export default function RecallsCardsPage() {
                 termId={current.termId}
                 termHint={current.subtitle ?? undefined}
                 onResult={() => {
-                  setTimeout(() => setIndex((i) => Math.min(i + 1, (queue?.length ?? 1) - 1)), 1200);
+                  setTimeout(() => setIndex((i) => i + 1), 1200);
                 }}
               />
             ) : (
@@ -98,7 +142,7 @@ export default function RecallsCardsPage() {
                 </InlineAlert>
                 <button
                   type="button"
-                  onClick={() => setIndex((i) => Math.min(i + 1, (queue?.length ?? 1) - 1))}
+                  onClick={() => setIndex((i) => i + 1)}
                   className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
                 >
                   Skip card
@@ -109,9 +153,9 @@ export default function RecallsCardsPage() {
             <QuizRunner mode={mode} limit={10} />
           )}
 
-          {queue && queue.length > 0 && mode === 'listen_and_type' && (
+          {queue && queue.length > 0 && mode === 'listen_and_type' && !sessionComplete && (
             <div className="mt-3 text-center text-xs text-muted">
-              Card {Math.min(index + 1, queue.length)} of {queue.length}
+              Card {index + 1} of {queue.length}
             </div>
           )}
         </div>

@@ -32,13 +32,15 @@ public static class RecallsEndpoints
             HttpContext http,
             RecallsStarRequest request,
             RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.StarAsync(http.UserId(), request, ct)));
+            Results.Ok(await svc.StarAsync(http.UserId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
 
         recalls.MapPost("/listen-type", async (
             HttpContext http,
             RecallsListenTypeRequest request,
             RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.ListenAndTypeAsync(http.UserId(), request, ct)));
+            Results.Ok(await svc.ListenAndTypeAsync(http.UserId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
 
         recalls.MapGet("/audio/{termId}", async (
             HttpContext http,
@@ -86,7 +88,8 @@ public static class RecallsEndpoints
             HttpContext http,
             RecallsExplainRequest request,
             RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.ExplainMistakeAsync(http.UserId(), request, ct)));
+            Results.Ok(await svc.ExplainMistakeAsync(http.UserId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
 
         recalls.MapGet("/quiz", async (
             HttpContext http,
