@@ -10402,6 +10402,13 @@ export async function adminListScoringPolicyHistory(): Promise<ScoringPolicyDto[
   return apiRequest<ScoringPolicyDto[]>('/v1/admin/scoring-policy/history');
 }
 
+export async function adminActivateScoringPolicy(id: string): Promise<ScoringPolicyDto> {
+  return apiRequest<ScoringPolicyDto>(`/v1/admin/scoring-policy/${encodeURIComponent(id)}/activate`, {
+    method: 'POST',
+    body: '{}',
+  });
+}
+
 export async function learnerGetScoringPolicy(): Promise<ScoringPolicyLearnerDto | null> {
   return apiRequest<ScoringPolicyLearnerDto | null>('/v1/scoring-policy');
 }
@@ -10646,6 +10653,18 @@ export async function adminDeleteSpeakingSharedResource(id: string): Promise<voi
 
 export async function learnerListSpeakingSharedResources(): Promise<SpeakingSharedResourceLearnerDto[]> {
   return apiRequest<SpeakingSharedResourceLearnerDto[]>('/v1/speaking/shared-resources');
+}
+
+export async function downloadSpeakingSharedResourceMedia(assetId: string): Promise<Blob> {
+  const path = `/v1/media/${encodeURIComponent(assetId)}/content`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path, undefined, { json: false }),
+  }, 120_000);
+  if (!response.ok) {
+    throw new ApiError(response.status, 'speaking_shared_resource_download_failed', `Speaking resource download failed: ${response.status}`, isRetryable(response.status));
+  }
+  return response.blob();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

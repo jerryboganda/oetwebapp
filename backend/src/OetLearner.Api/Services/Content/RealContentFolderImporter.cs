@@ -544,8 +544,16 @@ public sealed class RealContentFolderImporter
         }
     }
 
-    private static string NormalizePath(string p) =>
-        p.Replace('\\', '/').Trim().TrimStart('/');
+    private static string NormalizePath(string p)
+    {
+        var normalized = p.Replace('\\', '/').Trim().TrimStart('/');
+        var slash = normalized.IndexOf('/');
+        if (slash <= 0) return normalized;
+
+        var firstSegment = normalized[..slash];
+        var compact = Regex.Replace(firstSegment, "[^a-zA-Z0-9]", string.Empty).ToLowerInvariant();
+        return compact is "projectrealcontent" ? normalized[(slash + 1)..] : normalized;
+    }
 
     private async Task<string?> ValidateEntryBeforeStagingAsync(ZipArchiveEntry entry, string sourcePath, CancellationToken ct)
     {
@@ -644,10 +652,10 @@ public sealed class RealContentFolderImporter
                         await CommitSpeakingSharedAsync(adminId, p, now, created, errors, ct);
                         break;
                     case RealContentTarget.RulebookReferencePdf:
-                        await CommitRulebookPdfAsync(adminId, p, canPublishContent, created, errors, ct);
+                        await CommitRulebookPdfAsync(adminId, p, now, created, errors, ct);
                         break;
                     case RealContentTarget.ScoringPolicyBody:
-                        await CommitScoringPolicyAsync(adminId, p, canPublishContent, now, created, errors, ct);
+                        await CommitScoringPolicyAsync(adminId, p, now, created, errors, ct);
                         break;
                     default:
                         errors.Add($"Unknown target {p.Target}");
@@ -842,7 +850,7 @@ public sealed class RealContentFolderImporter
         created.Add(new RealContentCreatedRow { Target = p.Target, Id = id, Title = p.Title });
     }
 
-    private async Task CommitRulebookPdfAsync(string adminId, RealContentProposal p, bool canPublishContent,
+    private async Task CommitRulebookPdfAsync(string adminId, RealContentProposal p, DateTimeOffset now,
         List<RealContentCreatedRow> created, List<string> errors, CancellationToken ct)
     {
         if (p.StagedStorageKey is null) { errors.Add($"Rulebook PDF not staged: {p.SourcePath}"); return; }
@@ -852,6 +860,8 @@ public sealed class RealContentFolderImporter
             return;
         }
         var rb = await _db.Set<RulebookVersion>()
+            .Include(x => x.Sections)
+            .Include(x => x.Rules)
             .Where(x => x.Kind == p.RulebookKind && x.Profession == p.RulebookProfession && x.Status == RulebookStatus.Published)
             .OrderByDescending(x => x.PublishedAt)
             .FirstOrDefaultAsync(ct);
@@ -860,40 +870,59 @@ public sealed class RealContentFolderImporter
             errors.Add($"No published rulebook found for {p.RulebookKind}/{p.RulebookProfession}");
             return;
         }
-        if (!canPublishContent)
-        {
-            errors.Add($"Rulebook PDF attachment for published {p.RulebookKind}/{p.RulebookProfession} requires content publish permission");
-            return;
-        }
         var (mediaId, _, _) = await EnsureMediaAssetAsync(adminId, p, p.StagedStorageKey, ct);
-        rb.ReferencePdfAssetId = mediaId;
-        rb.UpdatedAt = DateTimeOffset.UtcNow;
-        rb.UpdatedByUserId = adminId;
-        AddAuditEvent(adminId, "RealContentRulebookReferencePdfImported", "RulebookVersion", rb.Id, $"media={mediaId}");
-        created.Add(new RealContentCreatedRow { Target = p.Target, Id = rb.Id, Title = $"PDF attached to {p.RulebookKind}/{p.RulebookProfession}" });
+        var draftId = $"rb_{p.RulebookKind}_{p.RulebookProfession}_{Guid.NewGuid():N}";
+        var draft = new RulebookVersion
+        {
+            Id = draftId,
+            Kind = rb.Kind,
+            Profession = rb.Profession,
+            Version = $"{rb.Version}-pdf-draft-{now:yyyyMMddHHmmss}",
+            Status = RulebookStatus.Draft,
+            AuthoritySource = rb.AuthoritySource,
+            ReferencePdfAssetId = mediaId,
+            CreatedAt = now,
+            UpdatedAt = now,
+            UpdatedByUserId = adminId,
+            Sections = rb.Sections.Select(section => new RulebookSectionRow
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                RulebookVersionId = draftId,
+                Code = section.Code,
+                Title = section.Title,
+                OrderIndex = section.OrderIndex,
+            }).ToList(),
+            Rules = rb.Rules.Select(rule => new RulebookRuleRow
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                RulebookVersionId = draftId,
+                Code = rule.Code,
+                SectionCode = rule.SectionCode,
+                Title = rule.Title,
+                Body = rule.Body,
+                Severity = rule.Severity,
+                AppliesToJson = rule.AppliesToJson,
+                TurnStage = rule.TurnStage,
+                ExemplarPhrasesJson = rule.ExemplarPhrasesJson,
+                ForbiddenPatternsJson = rule.ForbiddenPatternsJson,
+                CheckId = rule.CheckId,
+                ParamsJson = rule.ParamsJson,
+                ExamplesJson = rule.ExamplesJson,
+                OrderIndex = rule.OrderIndex,
+            }).ToList(),
+        };
+        _db.Set<RulebookVersion>().Add(draft);
+        AddAuditEvent(adminId, "RealContentRulebookReferencePdfDraftImported", "RulebookVersion", draft.Id, $"source={rb.Id};media={mediaId}");
+        created.Add(new RealContentCreatedRow { Target = p.Target, Id = draft.Id, Title = $"Draft PDF rulebook for {p.RulebookKind}/{p.RulebookProfession}" });
     }
 
-    private async Task CommitScoringPolicyAsync(string adminId, RealContentProposal p, bool canPublishContent, DateTimeOffset now,
+    private async Task CommitScoringPolicyAsync(string adminId, RealContentProposal p, DateTimeOffset now,
         List<RealContentCreatedRow> created, List<string> errors, CancellationToken ct)
     {
         if (p.StagedStorageKey is null) { errors.Add($"Scoring policy not staged: {p.SourcePath}"); return; }
-        if (!canPublishContent)
-        {
-            errors.Add("Scoring policy activation requires content publish permission");
-            return;
-        }
-
         await using var stream = await _storage.OpenReadAsync(p.StagedStorageKey, ct);
         using var reader = new StreamReader(stream);
         var bodyMarkdown = await reader.ReadToEndAsync(ct);
-
-        var existingActive = await _db.Set<ScoringPolicy>().Where(x => x.IsActive).ToListAsync(ct);
-        foreach (var r in existingActive) r.IsActive = false;
-
-        if (existingActive.Count > 0)
-        {
-            await _db.SaveChangesAsync(ct);
-        }
 
         var id = $"scr_{Guid.NewGuid():N}";
         var policyJson = ScoringPolicyValidation.CanonicalDefaultPolicyJson;
@@ -908,14 +937,13 @@ public sealed class RealContentFolderImporter
             Id = id,
             BodyMarkdown = bodyMarkdown,
             PolicyJson = policyJson,
-            IsActive = true,
+            IsActive = false,
             UpdatedByUserId = adminId,
             CreatedAt = now,
             UpdatedAt = now,
         });
-        AddAuditEvent(adminId, "RealContentScoringPolicyImported", "ScoringPolicy", id, "Active scoring policy imported from Project Real Content folder");
-        await _db.SaveChangesAsync(ct);
-        created.Add(new RealContentCreatedRow { Target = p.Target, Id = id, Title = "Scoring policy" });
+        AddAuditEvent(adminId, "RealContentScoringPolicyDraftImported", "ScoringPolicy", id, "Inactive scoring policy draft imported from Project Real Content folder");
+        created.Add(new RealContentCreatedRow { Target = p.Target, Id = id, Title = "Draft scoring policy" });
     }
 
     private void AddAuditEvent(string actorId, string action, string resourceType, string? resourceId, string? details)

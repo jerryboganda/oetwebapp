@@ -107,10 +107,19 @@ public static class RealContentFolderImportEndpoints
             if (!_sessions.TryGetValue(sessionId, out var staged))
                 return Results.NotFound(new { error = "session not found or expired" });
 
-            var approvedSet = new HashSet<string>(body?.ApprovedSourcePaths ?? Array.Empty<string>());
-            var approved = approvedSet.Count == 0
-                ? staged.Proposals
-                : staged.Proposals.Where(p => approvedSet.Contains(p.SourcePath)).ToList();
+            if (body?.ApprovedSourcePaths is null || body.ApprovedSourcePaths.Count == 0)
+            {
+                return Results.BadRequest(new { error = "At least one reviewed proposal source path must be approved explicitly." });
+            }
+
+            var approvedSet = new HashSet<string>(body.ApprovedSourcePaths, StringComparer.OrdinalIgnoreCase);
+            var approved = staged.Proposals.Where(p => approvedSet.Contains(p.SourcePath)).ToList();
+            if (approved.Count != approvedSet.Count)
+            {
+                var known = staged.Proposals.Select(p => p.SourcePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var unknown = approvedSet.Where(path => !known.Contains(path)).ToArray();
+                return Results.BadRequest(new { error = "Unknown approved source paths.", unknown });
+            }
 
             // Wire staged storage keys onto asset entries (needed by the
             // commit path because we stored the file once per source path).

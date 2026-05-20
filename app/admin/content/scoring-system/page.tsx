@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Calculator, History, Save } from 'lucide-react';
+import { Calculator, CheckCircle2, History, Save } from 'lucide-react';
 import {
   AdminRouteHero,
   AdminRoutePanel,
@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   adminGetScoringPolicy,
   adminUpdateScoringPolicy,
+  adminActivateScoringPolicy,
   adminListScoringPolicyHistory,
   type ScoringPolicyDto,
 } from '@/lib/api';
@@ -104,6 +105,22 @@ export default function AdminScoringSystemPage() {
     }
   }
 
+  async function activateHistoryRow(id: string) {
+    setSaving(true);
+    try {
+      const updated = await adminActivateScoringPolicy(id);
+      setCurrent(updated);
+      setBody(updated.bodyMarkdown);
+      setPolicyJson(updated.policyJson);
+      setHistory((rows) => rows.map((row) => ({ ...row, isActive: row.id === id })));
+      setToast({ variant: 'success', message: 'Scoring policy activated.' });
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <AdminRouteWorkspace role="main" aria-label="Scoring System">
       <AdminRouteHero
@@ -185,7 +202,14 @@ export default function AdminScoringSystemPage() {
               {history.map((row) => (
                 <li key={row.id} className="text-sm flex items-center justify-between">
                   <span><code className="font-mono">{row.id.slice(0, 12)}...</code> - updated {new Date(row.updatedAt).toLocaleString()}</span>
-                  {row.isActive ? <Badge variant="success">active</Badge> : <Badge variant="outline">archived</Badge>}
+                  <div className="flex items-center gap-2">
+                    {row.isActive ? <Badge variant="success">active</Badge> : <Badge variant="outline">draft</Badge>}
+                    {!row.isActive ? (
+                      <Button size="sm" variant="outline" onClick={() => void activateHistoryRow(row.id)} disabled={saving}>
+                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Activate
+                      </Button>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>

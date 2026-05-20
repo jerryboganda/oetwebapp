@@ -32,9 +32,10 @@ public static class SpeakingSharedResourcesEndpoints
 
         admin.MapGet("", async (LearnerDbContext db, string? kind, string? profession, CancellationToken ct) =>
         {
+            var normalizedProfession = NormalizeProfessionId(profession);
             var q = db.SpeakingSharedResources.AsNoTracking().Include(x => x.MediaAsset).AsQueryable();
             if (!string.IsNullOrWhiteSpace(kind)) q = q.Where(x => x.Kind == kind);
-            if (!string.IsNullOrWhiteSpace(profession)) q = q.Where(x => x.ProfessionId == profession);
+            if (!string.IsNullOrWhiteSpace(normalizedProfession)) q = q.Where(x => x.ProfessionId != null && x.ProfessionId.ToLower() == normalizedProfession);
             var rows = await q.OrderByDescending(x => x.UpdatedAt).ToListAsync(ct);
             return Results.Ok(rows.Select(Project));
         });
@@ -139,7 +140,7 @@ public static class SpeakingSharedResourcesEndpoints
                 Id = $"sss_{Guid.NewGuid():N}",
                 Kind = kind,
                 Title = title.Trim(),
-                ProfessionId = string.IsNullOrWhiteSpace(professionId) ? null : professionId,
+                ProfessionId = NormalizeProfessionId(professionId),
                 MediaAssetId = mediaId,
                 Status = ContentStatus.Draft,
                 UploadedByUserId = adminId,
@@ -205,14 +206,21 @@ public static class SpeakingSharedResourcesEndpoints
             if (!string.IsNullOrEmpty(userId))
             {
                 var learnerRow = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
-                activeProfession = learnerRow?.ActiveProfessionId;
+                activeProfession = NormalizeProfessionId(learnerRow?.ActiveProfessionId);
             }
-            var rows = await db.SpeakingSharedResources.AsNoTracking().Include(x => x.MediaAsset)
+            var candidates = await db.SpeakingSharedResources.AsNoTracking().Include(x => x.MediaAsset)
                 .Where(x => x.Status == ContentStatus.Published)
                 .Where(x => x.ProfessionId == null
-                            || (activeProfession != null && x.ProfessionId == activeProfession))
+                            || (activeProfession != null && x.ProfessionId != null && x.ProfessionId.ToLower() == activeProfession))
                 .OrderByDescending(x => x.EffectiveFrom)
                 .ToListAsync(ct);
+            var rows = candidates
+                .GroupBy(x => x.Kind, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group
+                    .OrderByDescending(x => activeProfession != null && string.Equals(x.ProfessionId, activeProfession, StringComparison.OrdinalIgnoreCase))
+                    .ThenByDescending(x => x.EffectiveFrom ?? x.PublishedAt ?? x.UpdatedAt)
+                    .First())
+                .ToList();
             return Results.Ok(rows.Select(ProjectLearner));
         });
 
@@ -278,4 +286,7 @@ public static class SpeakingSharedResourcesEndpoints
             Details = details,
         });
     }
+
+    private static string? NormalizeProfessionId(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
 }

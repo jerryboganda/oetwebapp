@@ -97,6 +97,55 @@ public static class ScoringPolicyEndpoints
             return Results.Ok(rows.Select(Project));
         });
 
+        admin.MapPost("/{id}/activate", async (
+            string id,
+            HttpContext http,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var policy = await db.ScoringPolicies.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (policy is null) return Results.NotFound();
+
+            var validationError = ScoringPolicyValidation.ValidateCanonicalPolicyJson(policy.PolicyJson);
+            if (validationError is not null)
+            {
+                return Results.BadRequest(new { error = validationError });
+            }
+
+            var supportsTransactions = !string.Equals(
+                db.Database.ProviderName,
+                "Microsoft.EntityFrameworkCore.InMemory",
+                StringComparison.Ordinal);
+            await using var transaction = supportsTransactions ? await db.Database.BeginTransactionAsync(ct) : null;
+
+            var existing = await db.ScoringPolicies.Where(x => x.IsActive).ToListAsync(ct);
+            foreach (var row in existing) row.IsActive = false;
+
+            var now = DateTimeOffset.UtcNow;
+            policy.IsActive = true;
+            policy.UpdatedAt = now;
+            policy.UpdatedByUserId = actorId;
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = $"audit-{Guid.NewGuid():N}",
+                OccurredAt = now,
+                ActorId = actorId,
+                ActorName = http.User.Identity?.Name ?? actorId,
+                Action = "ScoringPolicyActivated",
+                ResourceType = "ScoringPolicy",
+                ResourceId = policy.Id,
+                Details = "Inactive scoring policy activated",
+            });
+            await db.SaveChangesAsync(ct);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(ct);
+            }
+            return Results.Ok(Project(policy));
+        })
+        .RequireAuthorization("AdminContentPublish");
+
         // Learner (read-only).
         var learner = app.MapGroup("/v1/scoring-policy")
             .RequireAuthorization()

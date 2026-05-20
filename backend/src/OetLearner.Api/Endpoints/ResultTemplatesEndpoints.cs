@@ -27,8 +27,9 @@ public static class ResultTemplatesEndpoints
 
         admin.MapGet("", async (LearnerDbContext db, string? profession, CancellationToken ct) =>
         {
+            var normalizedProfession = NormalizeProfessionId(profession);
             var q = db.ResultTemplateAssets.AsNoTracking().Include(x => x.MediaAsset).AsQueryable();
-            if (!string.IsNullOrWhiteSpace(profession)) q = q.Where(x => x.ProfessionId == profession);
+            if (!string.IsNullOrWhiteSpace(normalizedProfession)) q = q.Where(x => x.ProfessionId != null && x.ProfessionId.ToLower() == normalizedProfession);
             var rows = await q.OrderBy(x => x.SortOrder).ThenByDescending(x => x.UpdatedAt).ToListAsync(ct);
             return Results.Ok(rows.Select(Project));
         });
@@ -154,7 +155,7 @@ public static class ResultTemplatesEndpoints
                 TemplateKey = normalizedKey,
                 Title = title.Trim(),
                 Description = description,
-                ProfessionId = string.IsNullOrWhiteSpace(professionId) ? null : professionId,
+                ProfessionId = NormalizeProfessionId(professionId),
                 MediaAssetId = mediaId,
                 IsActive = false,
                 SortOrder = sortOrder ?? 0,
@@ -182,7 +183,7 @@ public static class ResultTemplatesEndpoints
             if (row is null) return Results.NotFound();
             if (!string.IsNullOrWhiteSpace(dto.Title)) row.Title = dto.Title.Trim();
             if (dto.Description is not null) row.Description = dto.Description;
-            if (dto.ProfessionId is not null) row.ProfessionId = string.IsNullOrWhiteSpace(dto.ProfessionId) ? null : dto.ProfessionId;
+            if (dto.ProfessionId is not null) row.ProfessionId = NormalizeProfessionId(dto.ProfessionId);
             if (dto.SortOrder is not null) row.SortOrder = dto.SortOrder.Value;
             row.UpdatedAt = DateTimeOffset.UtcNow;
             AddAuditEvent(db, http, "ResultTemplateUpdated", "ResultTemplateAsset", row.Id, row.TemplateKey);
@@ -238,16 +239,16 @@ public static class ResultTemplatesEndpoints
             string? activeProfession = null;
             if (!string.IsNullOrEmpty(userId))
             {
-                activeProfession = await db.Users.AsNoTracking()
+                activeProfession = NormalizeProfessionId(await db.Users.AsNoTracking()
                     .Where(user => user.Id == userId)
                     .Select(user => user.ActiveProfessionId)
-                    .SingleOrDefaultAsync(ct);
+                    .SingleOrDefaultAsync(ct));
             }
 
             var candidates = await db.ResultTemplateAssets.AsNoTracking().Include(x => x.MediaAsset)
                 .Where(x => x.IsActive)
                 .Where(x => x.ProfessionId == null
-                    || (activeProfession != null && x.ProfessionId == activeProfession))
+                    || (activeProfession != null && x.ProfessionId != null && x.ProfessionId.ToLower() == activeProfession))
                 .ToListAsync(ct);
 
             var selected = candidates
@@ -326,6 +327,9 @@ public static class ResultTemplatesEndpoints
             Details = details,
         });
     }
+
+    private static string? NormalizeProfessionId(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
 }
 
 public sealed record ResultTemplateUpdate(
