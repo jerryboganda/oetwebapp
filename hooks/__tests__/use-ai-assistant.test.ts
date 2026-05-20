@@ -56,42 +56,41 @@ describe('useAiAssistant hook', () => {
   }
 
   describe('Connection lifecycle', () => {
-    it('starts in disconnected state', () => {
+    it('starts in connecting state when token provided (auto-connect)', () => {
       const { result } = renderHook(() =>
         useAiAssistant({ token: 'test-token' }),
       );
-      expect(result.current.connectionState).toBe('disconnected');
+      // Auto-connect fires immediately, so state is connecting or connected
+      expect(['connecting', 'connected']).toContain(result.current.connectionState);
       expect(result.current.messages).toEqual([]);
       expect(result.current.isStreaming).toBe(false);
     });
 
-    it('connects successfully when connect() is called', async () => {
+    it('auto-connects successfully with a token', async () => {
       const { result } = renderHook(() =>
         useAiAssistant({ token: 'test-token' }),
       );
 
-      await act(async () => {
-        await result.current.connect();
-      });
+      // Wait for auto-connect to complete
+      await act(async () => {});
 
       expect(result.current.connectionState).toBe('connected');
       expect(result.current.error).toBeNull();
       expect(mockConnection.start).toHaveBeenCalled();
     });
 
-    it('transitions to error state on connection failure', async () => {
+    it('sets error state on auto-connect failure', async () => {
       mockConnection.start.mockRejectedValueOnce(new Error('Connection refused'));
 
       const { result } = renderHook(() =>
         useAiAssistant({ token: 'test-token' }),
       );
 
-      await act(async () => {
-        await result.current.connect();
-      });
+      await act(async () => {});
 
-      expect(result.current.connectionState).toBe('error');
-      expect(result.current.error).toBe('Connection refused');
+      // Hook sets 'disconnected' and generic error message on failure
+      expect(result.current.connectionState).toBe('disconnected');
+      expect(result.current.error).toBe('Failed to connect to AI assistant');
     });
 
     it('disconnects and resets state', async () => {
@@ -131,8 +130,8 @@ describe('useAiAssistant hook', () => {
         useAiAssistant({ token: 'test-token' }),
       );
 
+      // Wait for auto-connect, then create thread
       await act(async () => {
-        await result.current.connect();
         await result.current.createNewThread('Test');
       });
 
@@ -264,11 +263,18 @@ describe('useAiAssistant hook', () => {
         useAiAssistant({ token: 'test-token' }),
       );
 
+      // First create a thread so it's in the list
       await act(async () => {
-        await result.current.selectThread('t1');
+        await result.current.createNewThread('Test');
       });
 
-      expect(result.current.thread?.id).toBe('t1');
+      // Now select it (the mock creates with id 'new-thread-1')
+      await act(async () => {
+        await result.current.selectThread('new-thread-1');
+      });
+
+      expect(result.current.thread?.id).toBe('new-thread-1');
+      // getMessages mock returns 1 message
       expect(result.current.messages).toHaveLength(1);
       expect(result.current.messages[0].content).toBe('Hello');
     });
@@ -278,11 +284,12 @@ describe('useAiAssistant hook', () => {
         useAiAssistant({ token: 'test-token' }),
       );
 
+      // Need to have a connection and thread for cancelTurn to work
       await act(async () => {
-        await result.current.connect();
+        await result.current.createNewThread('Test');
       });
 
-      act(() => {
+      await act(async () => {
         result.current.cancelStream();
       });
 

@@ -51,3 +51,25 @@ Before editing any of these, read the corresponding docs and nearest tests:
 - Content upload: content paper/upload endpoints and `docs/CONTENT-UPLOAD-PLAN.md`
 - Result card: `components/domain/OetStatementOfResultsCard.tsx`, `docs/OET-RESULT-CARD-SPEC.md`
 - Reading, grammar, pronunciation, conversation modules and their domain docs
+
+## Execution Locality (MISSION CRITICAL)
+
+The user's local machine is Windows and is **not** the build host. All
+CPU/RAM/disk/network-intensive work for this project runs on the VPS
+`oet-dev` (`68.183.32.122`) at `/opt/oetwebapp`. Do this automatically — do
+not ask the user every time.
+
+- Always remote (`ssh oet-dev "cd /opt/oetwebapp && <cmd>"`):
+  `npm install|ci|run build|dev|lint|test|test:e2e*`, `npx tsc --noEmit`,
+  `npm run backend:*`, `dotnet build|restore|test|publish|ef *`,
+  `npm run desktop:*`, `npm run mobile:*`, any `docker build|compose *`,
+  Capacitor / Gradle / Xcode tasks, Playwright installs, Repomix bundles,
+  repo-wide codemods or sweeps.
+- Local-only: file editing, navigation, single-file reads, and git plumbing
+  (`status`, `add`, `commit`, `push`, `pull`, `diff`, `log`).
+- Detach long jobs on the remote with
+  `nohup bash -lc '<cmd>' > /tmp/<tag>.log 2>&1 < /dev/null &` and tail the log
+  in a separate ssh call, because PowerShell collapsing the ssh pipe can kill
+  attached children.
+- If the VPS is unreachable, stop and report — never fall back to running heavy
+  work on the local Windows box.
