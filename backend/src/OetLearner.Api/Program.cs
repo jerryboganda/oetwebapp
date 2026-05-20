@@ -827,6 +827,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IRulebookLoader,
     OetLearner.Api.Services.Rulebook.DbBackedRulebookLoader>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.WritingRuleEngine>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.SpeakingRuleEngine>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiUsageRecorder,
+    OetLearner.Api.Services.Rulebook.AiUsageRecorder>();
 builder.Services.AddHttpClient("AiOpenAiCompatible", client =>
 {
     client.Timeout = TimeSpan.FromMinutes(30);
