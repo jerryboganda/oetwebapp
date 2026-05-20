@@ -27,13 +27,26 @@ public sealed class MediaUrlSigner
     private readonly byte[] _key;
     private readonly TimeProvider _clock;
 
-    public MediaUrlSigner(IOptions<AuthOptions> auth, TimeProvider clock)
+    public MediaUrlSigner(
+        IOptions<AuthOptions> auth,
+        IOptions<AuthTokenOptions> authTokens,
+        TimeProvider clock)
     {
+        // Prefer the legacy Auth:SigningKey (used by tests and older deploys),
+        // but fall back to AuthTokens:AccessTokenSigningKey which is what the
+        // production environment binds. Both are HMAC-suitable secrets and
+        // the signer just needs a single stable key.
         var signingKey = auth?.Value?.SigningKey;
         if (string.IsNullOrWhiteSpace(signingKey))
         {
+            signingKey = authTokens?.Value?.AccessTokenSigningKey;
+        }
+
+        if (string.IsNullOrWhiteSpace(signingKey))
+        {
             throw new InvalidOperationException(
-                "Auth:SigningKey is required to mint signed media URLs.");
+                "A signing key (Auth:SigningKey or AuthTokens:AccessTokenSigningKey) "
+                + "is required to mint signed media URLs.");
         }
 
         _key = Encoding.UTF8.GetBytes(signingKey);

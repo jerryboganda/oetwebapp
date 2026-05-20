@@ -30,7 +30,8 @@ public class ListeningRelationalRuntimeTests
             .Options;
         var db = new LearnerDbContext(options);
         var authOpts = Options.Create(new AuthOptions { SigningKey = "test-signing-key-do-not-use-in-prod-0123456789abcdef" });
-        var signer = new MediaUrlSigner(authOpts, TimeProvider.System);
+        var authTokenOpts = Options.Create(new AuthTokenOptions());
+        var signer = new MediaUrlSigner(authOpts, authTokenOpts, TimeProvider.System);
         return (db, new ListeningLearnerService(db, new AllowAllContentEntitlementService(), signer));
     }
 
