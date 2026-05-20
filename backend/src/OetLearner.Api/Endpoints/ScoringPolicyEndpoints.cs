@@ -86,7 +86,7 @@ public static class ScoringPolicyEndpoints
             }
             return Results.Ok(Project(policy));
         })
-        .RequireAuthorization("AdminContentWrite");
+        .RequireAuthorization("AdminContentPublish");
 
         admin.MapGet("/history", async (LearnerDbContext db, CancellationToken ct) =>
         {

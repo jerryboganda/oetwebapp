@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -25,6 +26,10 @@ namespace OetLearner.Api.Services.Content;
 /// </summary>
 public sealed class RealContentFolderImporter
 {
+    private const long MaxEntryBytes = 200L * 1024 * 1024;
+    private const long MaxTextEntryBytes = 2L * 1024 * 1024;
+    private const long MaxUncompressedBytes = 2L * 1024 * 1024 * 1024;
+    private const int MaxEntryCount = 2_000;
     private readonly LearnerDbContext _db;
     private readonly IFileStorage _storage;
     private readonly IUploadContentValidator _validator;
@@ -61,6 +66,22 @@ public sealed class RealContentFolderImporter
             .Where(e => !string.IsNullOrEmpty(e.Name) && e.Length > 0)
             .Select(e => new { Entry = e, NormPath = NormalizePath(e.FullName) })
             .ToList();
+
+        if (entries.Count > MaxEntryCount)
+        {
+            throw new InvalidOperationException($"ZIP contains too many files (max {MaxEntryCount}).");
+        }
+
+        var totalUncompressedBytes = entries.Sum(e => e.Entry.Length);
+        if (totalUncompressedBytes > MaxUncompressedBytes)
+        {
+            throw new InvalidOperationException($"ZIP uncompressed size is too large (max {MaxUncompressedBytes} bytes).");
+        }
+
+        if (entries.Any(e => e.Entry.Length > MaxEntryBytes))
+        {
+            throw new InvalidOperationException($"ZIP contains a file larger than {MaxEntryBytes} bytes.");
+        }
 
         // Group by top-level segment
         var groups = entries
@@ -113,21 +134,56 @@ public sealed class RealContentFolderImporter
             }
         }
 
-        // Stage each proposal's source file under a session-scoped key. The
-        // commit step re-reads + hashes + content-addresses on demand.
-        foreach (var p in proposals)
+        // Stage every source file under a session-scoped key. Paper proposals
+        // carry multiple asset files; each asset needs its own staged key for
+        // the commit step's validation/hash/content-address flow.
+        var entryByPath = entries.ToDictionary(e => e.NormPath, e => e.Entry, StringComparer.OrdinalIgnoreCase);
+        var stagedByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var sourcePaths = proposals
+            .Select(p => p.SourcePath)
+            .Concat(proposals.SelectMany(p => p.Assets.Select(a => a.SourcePath)))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var sourcePath in sourcePaths)
         {
-            var key = $"{stagingPrefix}/{Guid.NewGuid():N}{Path.GetExtension(p.SourcePath)}";
-            var entry = zip.Entries.FirstOrDefault(z => NormalizePath(z.FullName) == p.SourcePath);
-            if (entry is null)
+            if (!entryByPath.TryGetValue(sourcePath, out var entry))
             {
-                issues.Add($"Missing source entry for proposal: {p.SourcePath}");
+                issues.Add($"Missing source entry for proposal: {sourcePath}");
                 continue;
             }
-            await using var entryStream = entry.Open();
-            await using var destStream = await _storage.OpenWriteAsync(key, ct);
-            await entryStream.CopyToAsync(destStream, ct);
-            p.StagedStorageKey = key;
+
+            var key = $"{stagingPrefix}/{Guid.NewGuid():N}{Path.GetExtension(sourcePath)}";
+            var entryValidationError = await ValidateEntryBeforeStagingAsync(entry, sourcePath, ct);
+            if (entryValidationError is not null)
+            {
+                issues.Add(entryValidationError);
+                continue;
+            }
+
+            await using (var entryStream = entry.Open())
+            await using (var destStream = await _storage.OpenWriteAsync(key, ct))
+            {
+                await entryStream.CopyToAsync(destStream, ct);
+            }
+            stagedByPath[sourcePath] = key;
+        }
+
+        foreach (var p in proposals)
+        {
+            if (stagedByPath.TryGetValue(p.SourcePath, out var key))
+            {
+                p.StagedStorageKey = key;
+            }
+
+            foreach (var asset in p.Assets)
+            {
+                if (stagedByPath.TryGetValue(asset.SourcePath, out var assetKey))
+                {
+                    asset.StagedStorageKey = assetKey;
+                }
+            }
         }
 
         return new RealContentImportStageResult
@@ -491,6 +547,51 @@ public sealed class RealContentFolderImporter
     private static string NormalizePath(string p) =>
         p.Replace('\\', '/').Trim().TrimStart('/');
 
+    private async Task<string?> ValidateEntryBeforeStagingAsync(ZipArchiveEntry entry, string sourcePath, CancellationToken ct)
+    {
+        var ext = (Path.GetExtension(sourcePath)?.TrimStart('.') ?? string.Empty).ToLowerInvariant();
+        var fileName = Path.GetFileName(sourcePath);
+
+        if (ext == "txt")
+        {
+            if (entry.Length > MaxTextEntryBytes)
+            {
+                return $"Text file too large: {sourcePath}";
+            }
+
+            try
+            {
+                await using var textStream = entry.Open();
+                using var reader = new StreamReader(
+                    textStream,
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
+                    detectEncodingFromByteOrderMarks: true);
+                _ = await reader.ReadToEndAsync(ct);
+            }
+            catch (DecoderFallbackException)
+            {
+                return $"Text file is not valid UTF-8: {sourcePath}";
+            }
+
+            await using var scanText = entry.Open();
+            var textScan = await _scanner.ScanAsync(scanText, fileName, ct);
+            return textScan.clean ? null : $"{sourcePath}: {textScan.reason ?? "file failed security scanning"}";
+        }
+
+        await using (var validationStream = entry.Open())
+        {
+            var validation = await _validator.ValidateAsync(validationStream, ext, ct);
+            if (!validation.Accepted)
+            {
+                return $"{sourcePath}: {validation.Reason ?? $"invalid .{ext} file content"}";
+            }
+        }
+
+        await using var scanStream = entry.Open();
+        var scan = await _scanner.ScanAsync(scanStream, fileName, ct);
+        return scan.clean ? null : $"{sourcePath}: {scan.reason ?? "file failed security scanning"}";
+    }
+
     private static string? SecondSegment(string p)
     {
         var parts = NormalizePath(p).Split('/');
@@ -546,7 +647,7 @@ public sealed class RealContentFolderImporter
                         await CommitRulebookPdfAsync(adminId, p, canPublishContent, created, errors, ct);
                         break;
                     case RealContentTarget.ScoringPolicyBody:
-                        await CommitScoringPolicyAsync(adminId, p, now, created, errors, ct);
+                        await CommitScoringPolicyAsync(adminId, p, canPublishContent, now, created, errors, ct);
                         break;
                     default:
                         errors.Add($"Unknown target {p.Target}");
@@ -648,6 +749,7 @@ public sealed class RealContentFolderImporter
             UpdatedAt = now,
         };
         _db.Set<ContentPaper>().Add(paper);
+        AddAuditEvent(adminId, "RealContentPaperImported", "ContentPaper", paperId, $"subtest={paper.SubtestCode};title={paper.Title}");
 
         var order = 0;
         foreach (var a in p.Assets)
@@ -688,6 +790,7 @@ public sealed class RealContentFolderImporter
             CreatedAt = now,
             UpdatedAt = now,
         });
+        AddAuditEvent(adminId, "RealContentRecallImported", "RecallDocument", id, p.Title);
         created.Add(new RealContentCreatedRow { Target = p.Target, Id = id, Title = p.Title });
     }
 
@@ -713,6 +816,7 @@ public sealed class RealContentFolderImporter
             CreatedAt = now,
             UpdatedAt = now,
         });
+        AddAuditEvent(adminId, "RealContentResultTemplateImported", "ResultTemplateAsset", id, key);
         created.Add(new RealContentCreatedRow { Target = p.Target, Id = id, Title = p.Title });
     }
 
@@ -734,6 +838,7 @@ public sealed class RealContentFolderImporter
             CreatedAt = now,
             UpdatedAt = now,
         });
+        AddAuditEvent(adminId, "RealContentSpeakingSharedResourceImported", "SpeakingSharedResource", id, p.Title);
         created.Add(new RealContentCreatedRow { Target = p.Target, Id = id, Title = p.Title });
     }
 
@@ -764,13 +869,20 @@ public sealed class RealContentFolderImporter
         rb.ReferencePdfAssetId = mediaId;
         rb.UpdatedAt = DateTimeOffset.UtcNow;
         rb.UpdatedByUserId = adminId;
+        AddAuditEvent(adminId, "RealContentRulebookReferencePdfImported", "RulebookVersion", rb.Id, $"media={mediaId}");
         created.Add(new RealContentCreatedRow { Target = p.Target, Id = rb.Id, Title = $"PDF attached to {p.RulebookKind}/{p.RulebookProfession}" });
     }
 
-    private async Task CommitScoringPolicyAsync(string adminId, RealContentProposal p, DateTimeOffset now,
+    private async Task CommitScoringPolicyAsync(string adminId, RealContentProposal p, bool canPublishContent, DateTimeOffset now,
         List<RealContentCreatedRow> created, List<string> errors, CancellationToken ct)
     {
         if (p.StagedStorageKey is null) { errors.Add($"Scoring policy not staged: {p.SourcePath}"); return; }
+        if (!canPublishContent)
+        {
+            errors.Add("Scoring policy activation requires content publish permission");
+            return;
+        }
+
         await using var stream = await _storage.OpenReadAsync(p.StagedStorageKey, ct);
         using var reader = new StreamReader(stream);
         var bodyMarkdown = await reader.ReadToEndAsync(ct);
@@ -801,8 +913,24 @@ public sealed class RealContentFolderImporter
             CreatedAt = now,
             UpdatedAt = now,
         });
+        AddAuditEvent(adminId, "RealContentScoringPolicyImported", "ScoringPolicy", id, "Active scoring policy imported from Project Real Content folder");
         await _db.SaveChangesAsync(ct);
         created.Add(new RealContentCreatedRow { Target = p.Target, Id = id, Title = "Scoring policy" });
+    }
+
+    private void AddAuditEvent(string actorId, string action, string resourceType, string? resourceId, string? details)
+    {
+        _db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit-{Guid.NewGuid():N}",
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = actorId,
+            ActorName = actorId,
+            Action = action,
+            ResourceType = resourceType,
+            ResourceId = resourceId,
+            Details = details,
+        });
     }
 }
 

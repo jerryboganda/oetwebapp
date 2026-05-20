@@ -794,7 +794,7 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
-    public async Task Media_delete_rejects_recall_document_and_rulebook_reference_pdf_assets()
+    public async Task Media_access_allows_published_speaking_shared_resources_and_active_result_templates()
     {
         using var factory = new TestWebApplicationFactory();
         await using var scope = factory.Services.CreateAsyncScope();
@@ -803,6 +803,113 @@ public class ReadingAuthoringTests
         var now = DateTimeOffset.UtcNow;
 
         db.MediaAssets.AddRange(
+            new MediaAsset
+            {
+                Id = "media-speaking-shared",
+                OriginalFilename = "warm-up.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "speaking/warm-up.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-result-template",
+                OriginalFilename = "template.jpg",
+                MimeType = "image/jpeg",
+                Format = "jpg",
+                SizeBytes = 1024,
+                StoragePath = "templates/template.jpg",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-result-template-nursing",
+                OriginalFilename = "template-nursing.jpg",
+                MimeType = "image/jpeg",
+                Format = "jpg",
+                SizeBytes = 1024,
+                StoragePath = "templates/template-nursing.jpg",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            });
+        db.SpeakingSharedResources.Add(new SpeakingSharedResource
+        {
+            Id = "shared-speaking-medicine",
+            Kind = SpeakingSharedResourceKinds.WarmUpQuestions,
+            Title = "Warm-up",
+            ProfessionId = "medicine",
+            MediaAssetId = "media-speaking-shared",
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        db.ResultTemplateAssets.AddRange(
+            new ResultTemplateAsset
+            {
+                Id = "template-medicine",
+                TemplateKey = "medicine-template",
+                Title = "Medicine template",
+                ProfessionId = "medicine",
+                MediaAssetId = "media-result-template",
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new ResultTemplateAsset
+            {
+                Id = "template-nursing",
+                TemplateKey = "nursing-template",
+                Title = "Nursing template",
+                ProfessionId = "nursing",
+                MediaAssetId = "media-result-template-nursing",
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        await db.SaveChangesAsync();
+
+        var access = scope.ServiceProvider.GetRequiredService<MediaAssetAccessService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "mock-user-001"),
+            new Claim(ClaimTypes.Role, ApplicationUserRoles.Learner),
+            new Claim("prof", "medicine"),
+        }, "Test"));
+
+        Assert.True(await access.CanAccessAsync(principal, "media-speaking-shared", default));
+        Assert.True(await access.CanAccessAsync(principal, "media-result-template", default));
+        Assert.False(await access.CanAccessAsync(principal, "media-result-template-nursing", default));
+    }
+
+    [Fact]
+    public async Task Media_delete_rejects_managed_content_assets()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+        await WriteStorageBytesAsync(storage, "content/paper.pdf", Encoding.UTF8.GetBytes("paper"));
+
+        db.MediaAssets.AddRange(
+            new MediaAsset
+            {
+                Id = "media-paper-delete",
+                OriginalFilename = "paper.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "content/paper.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedBy = "admin-delete",
+                UploadedAt = now,
+            },
             new MediaAsset
             {
                 Id = "media-recall-delete",
@@ -826,7 +933,55 @@ public class ReadingAuthoringTests
                 Status = MediaAssetStatus.Ready,
                 UploadedBy = "admin-delete",
                 UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-result-template-delete",
+                OriginalFilename = "template.jpg",
+                MimeType = "image/jpeg",
+                Format = "jpg",
+                SizeBytes = 1024,
+                StoragePath = "content/template.jpg",
+                Status = MediaAssetStatus.Ready,
+                UploadedBy = "admin-delete",
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-speaking-shared-delete",
+                OriginalFilename = "warm-up.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "content/warm-up.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedBy = "admin-delete",
+                UploadedAt = now,
             });
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = "paper-delete-guard",
+            SubtestCode = "reading",
+            Title = "Paper delete guard",
+            Slug = "paper-delete-guard",
+            AppliesToAllProfessions = true,
+            Difficulty = "standard",
+            EstimatedDurationMinutes = 60,
+            Status = ContentStatus.Published,
+            SourceProvenance = "Test",
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = "paper-asset-delete-guard",
+            PaperId = "paper-delete-guard",
+            Role = PaperAssetRole.QuestionPaper,
+            MediaAssetId = "media-paper-delete",
+            Title = "Question paper",
+            CreatedAt = now,
+        });
         db.RecallDocuments.Add(new RecallDocument
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -852,17 +1007,45 @@ public class ReadingAuthoringTests
             UpdatedAt = now,
             PublishedAt = now,
         });
+        db.ResultTemplateAssets.Add(new ResultTemplateAsset
+        {
+            Id = "template-delete-guard",
+            TemplateKey = "template-delete-guard",
+            Title = "Template",
+            MediaAssetId = "media-result-template-delete",
+            IsActive = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.SpeakingSharedResources.Add(new SpeakingSharedResource
+        {
+            Id = "shared-delete-guard",
+            Kind = SpeakingSharedResourceKinds.AssessmentCriteria,
+            Title = "Assessment Criteria",
+            MediaAssetId = "media-speaking-shared-delete",
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
         await db.SaveChangesAsync();
 
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-delete");
         client.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
 
+        using var paperResponse = await client.DeleteAsync("/v1/media/media-paper-delete");
         using var recallResponse = await client.DeleteAsync("/v1/media/media-recall-delete");
         using var rulebookResponse = await client.DeleteAsync("/v1/media/media-rulebook-delete");
+        using var resultTemplateResponse = await client.DeleteAsync("/v1/media/media-result-template-delete");
+        using var speakingSharedResponse = await client.DeleteAsync("/v1/media/media-speaking-shared-delete");
 
+        Assert.Equal(HttpStatusCode.Conflict, paperResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, recallResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, rulebookResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, resultTemplateResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, speakingSharedResponse.StatusCode);
+        Assert.True(storage.Exists("content/paper.pdf"));
     }
 
     [Fact]
@@ -872,7 +1055,7 @@ public class ReadingAuthoringTests
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-scoring");
         client.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
-        client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", "content:read,content:write");
+        client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", "content:read,content:write,content:publish");
 
         const string invalidPolicyJson = """
         {
@@ -997,6 +1180,25 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Real_content_stage_assigns_staged_keys_to_each_paper_asset()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var importer = scope.ServiceProvider.GetRequiredService<RealContentFolderImporter>();
+        await using var zip = CreateZip(
+            ("Listening ( IMPORTANT NOTE = Same for All Professions )/Listening Sample 1/Audio 1.mp3", Encoding.ASCII.GetBytes("ID3\0\0\0\0\0\0\0")),
+            ("Listening ( IMPORTANT NOTE = Same for All Professions )/Listening Sample 1/Listening Sample 1 Question-Paper.pdf", Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF")),
+            ("Listening ( IMPORTANT NOTE = Same for All Professions )/Listening Sample 1/Listening Sample 1 Audio-Script.pdf", Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF")),
+            ("Listening ( IMPORTANT NOTE = Same for All Professions )/Listening Sample 1/Listening Sample 1 Answer-Key.pdf", Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF")));
+
+        var staged = await importer.StageAsync("admin-import", zip, "real-content.zip", CancellationToken.None);
+        var proposal = Assert.Single(staged.Proposals.Where(p => p.Target == RealContentTarget.ListeningPaper));
+
+        Assert.Empty(staged.Issues);
+        Assert.All(proposal.Assets, asset => Assert.False(string.IsNullOrWhiteSpace(asset.StagedStorageKey)));
+    }
+
+    [Fact]
     public async Task Real_content_import_requires_publish_permission_for_published_rulebook_pdf_attachment()
     {
         using var factory = new TestWebApplicationFactory();
@@ -1057,7 +1259,7 @@ public class ReadingAuthoringTests
             StagedStorageKey = "staging/import/scoring.txt",
         };
 
-        var result = await importer.CommitAsync("admin-import", new[] { proposal }, canPublishContent: false, CancellationToken.None);
+        var result = await importer.CommitAsync("admin-import", new[] { proposal }, canPublishContent: true, CancellationToken.None);
         var policy = await db.ScoringPolicies.SingleAsync(x => x.IsActive);
 
         Assert.Empty(result.Errors);

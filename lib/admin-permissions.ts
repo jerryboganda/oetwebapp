@@ -54,8 +54,8 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/content/library': [AdminPermission.ContentRead],
   '/admin/content/new': [AdminPermission.ContentWrite],
   '/admin/content/mocks': [AdminPermission.ContentRead],
-  '/admin/content/recalls-library': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
-  '/admin/content/scoring-system': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
+  '/admin/content/recalls-library': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],
+  '/admin/content/scoring-system': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],
   '/admin/content/analytics': [AdminPermission.ContentRead],
   '/admin/content/quality': [AdminPermission.ContentRead],
   '/admin/content/papers': [AdminPermission.ContentRead],
@@ -181,11 +181,11 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/writing/ai-draft': [AdminPermission.ContentWrite],
   '/admin/writing/analytics': [AdminPermission.QualityAnalytics],
   '/admin/writing/options': [AdminPermission.AiConfig],
-  '/admin/content/recalls-library': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
-  '/admin/content/scoring-system': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
-  '/admin/content/result-templates': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
-  '/admin/content/speaking/shared-resources': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
-  '/admin/content/imports/real-content-folder': [AdminPermission.ContentWrite],
+  '/admin/content/recalls-library': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],
+  '/admin/content/scoring-system': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],
+  '/admin/content/result-templates': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],
+  '/admin/content/speaking/shared-resources': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],
+  '/admin/content/imports/real-content-folder': [AdminPermission.ContentWrite, AdminPermission.ContentPublish],
 };
 
 function normalizeAdminPath(pathname: string | null | undefined): string {

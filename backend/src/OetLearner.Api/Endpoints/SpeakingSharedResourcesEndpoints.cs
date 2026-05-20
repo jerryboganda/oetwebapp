@@ -44,6 +44,8 @@ public static class SpeakingSharedResourcesEndpoints
             LearnerDbContext db,
             IFileStorage storage,
             IOptions<StorageOptions> storageOptions,
+            IUploadContentValidator validator,
+            IUploadScanner scanner,
             IFormFile file,
             [FromForm] string kind,
             [FromForm] string title,
@@ -58,16 +60,45 @@ public static class SpeakingSharedResourcesEndpoints
             if (string.IsNullOrWhiteSpace(title) || title.Length > 200)
                 return Results.BadRequest(new { error = "title required (max 200 chars)" });
 
-            var ext = (Path.GetExtension(file.FileName)?.TrimStart('.') ?? "pdf").ToLowerInvariant();
+            var originalFileName = Path.GetFileName(file.FileName ?? "speaking-shared-resource.pdf");
+            if (string.IsNullOrWhiteSpace(originalFileName)) originalFileName = "speaking-shared-resource.pdf";
+            var ext = (Path.GetExtension(originalFileName)?.TrimStart('.') ?? "pdf").ToLowerInvariant();
             if (ext != "pdf") return Results.BadRequest(new { error = "only .pdf accepted" });
+
+            await using var buffer = new MemoryStream((int)Math.Min(file.Length, MaxPdfBytes));
+            await file.CopyToAsync(buffer, ct);
+            buffer.Position = 0;
+
+            var validation = await validator.ValidateAsync(buffer, ext, ct);
+            if (!validation.Accepted
+                || !string.Equals(validation.DetectedMime, "application/pdf", StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(validation.DetectedExtension, "pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(new
+                {
+                    code = "invalid_file_content",
+                    message = validation.Reason ?? "The uploaded file content does not match a PDF.",
+                });
+            }
+
+            buffer.Position = 0;
+            var scanResult = await scanner.ScanAsync(buffer, originalFileName, ct);
+            if (!scanResult.clean)
+            {
+                return Results.BadRequest(new
+                {
+                    code = "file_failed_security_scan",
+                    message = scanResult.reason ?? "The uploaded file failed security scanning.",
+                });
+            }
 
             var stagingKey = $"staging/speaking-shared/{adminId}/{Guid.NewGuid():N}.pdf";
             long bytes;
             string sha;
-            await using (var src = file.OpenReadStream())
+            buffer.Position = 0;
             await using (var dest = await storage.OpenWriteAsync(stagingKey, ct))
             {
-                (bytes, sha) = await StreamingSha256.ComputeAsync(new[] { src }, dest, ct);
+                (bytes, sha) = await StreamingSha256.ComputeAsync(new[] { buffer }, dest, ct);
             }
             var publishedKey = ContentAddressed.PublishedKey(
                 storageOptions.Value.ContentUpload.PublishedSubpath, sha, ext);
@@ -84,7 +115,7 @@ public static class SpeakingSharedResourcesEndpoints
                 db.MediaAssets.Add(new MediaAsset
                 {
                     Id = mediaId,
-                    OriginalFilename = file.FileName,
+                    OriginalFilename = originalFileName,
                     MimeType = "application/pdf",
                     Format = "pdf",
                     SizeBytes = bytes,
@@ -116,6 +147,7 @@ public static class SpeakingSharedResourcesEndpoints
                 UpdatedAt = now,
             };
             db.SpeakingSharedResources.Add(row);
+            AddAuditEvent(db, http, "SpeakingSharedResourceUploaded", "SpeakingSharedResource", row.Id, $"kind={row.Kind};media={mediaId}");
             await db.SaveChangesAsync(ct);
             await db.Entry(row).Reference(x => x.MediaAsset!).LoadAsync(ct);
             return Results.Ok(Project(row));
@@ -123,7 +155,7 @@ public static class SpeakingSharedResourcesEndpoints
         .DisableAntiforgery()
         .RequireAuthorization("AdminContentWrite");
 
-        admin.MapPost("/{id}/publish", async (string id, LearnerDbContext db, CancellationToken ct) =>
+        admin.MapPost("/{id}/publish", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
             var row = await db.SpeakingSharedResources.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (row is null) return Results.NotFound();
@@ -131,28 +163,31 @@ public static class SpeakingSharedResourcesEndpoints
             row.PublishedAt = DateTimeOffset.UtcNow;
             row.EffectiveFrom ??= DateTimeOffset.UtcNow;
             row.UpdatedAt = DateTimeOffset.UtcNow;
+            AddAuditEvent(db, http, "SpeakingSharedResourcePublished", "SpeakingSharedResource", row.Id, row.Title);
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { row.Id, status = row.Status.ToString() });
         })
         .RequireAuthorization("AdminContentPublish");
 
-        admin.MapPost("/{id}/archive", async (string id, LearnerDbContext db, CancellationToken ct) =>
+        admin.MapPost("/{id}/archive", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
             var row = await db.SpeakingSharedResources.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (row is null) return Results.NotFound();
             row.Status = ContentStatus.Archived;
             row.UpdatedAt = DateTimeOffset.UtcNow;
+            AddAuditEvent(db, http, "SpeakingSharedResourceArchived", "SpeakingSharedResource", row.Id, row.Title);
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { row.Id, status = row.Status.ToString() });
         })
         .RequireAuthorization("AdminContentWrite");
 
-        admin.MapDelete("/{id}", async (string id, LearnerDbContext db, CancellationToken ct) =>
+        admin.MapDelete("/{id}", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
             var row = await db.SpeakingSharedResources.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (row is null) return Results.NotFound();
             row.Status = ContentStatus.Archived;
             row.UpdatedAt = DateTimeOffset.UtcNow;
+            AddAuditEvent(db, http, "SpeakingSharedResourceDeleted", "SpeakingSharedResource", row.Id, row.Title);
             await db.SaveChangesAsync(ct);
             return Results.NoContent();
         })
@@ -221,4 +256,26 @@ public static class SpeakingSharedResourcesEndpoints
             r.MediaAsset.SizeBytes,
         },
     };
+
+    private static void AddAuditEvent(
+        LearnerDbContext db,
+        HttpContext http,
+        string action,
+        string resourceType,
+        string? resourceId,
+        string? details)
+    {
+        var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit-{Guid.NewGuid():N}",
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = actorId,
+            ActorName = http.User.Identity?.Name ?? actorId,
+            Action = action,
+            ResourceType = resourceType,
+            ResourceId = resourceId,
+            Details = details,
+        });
+    }
 }

@@ -63,6 +63,9 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         AiFeatureCodes.AdminListeningDraft,
         AiFeatureCodes.AdminReadingDraft,
         AiFeatureCodes.AdminWritingDraft,
+        AiFeatureCodes.AiAssistantAdmin,
+        AiFeatureCodes.AiAssistantExpert,
+        AiFeatureCodes.AiAssistantLearner,
     };
 
     /// <summary>Subset of <see cref="KnownFeatureCodes"/> the bulk-route

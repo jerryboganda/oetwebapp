@@ -14,7 +14,6 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { env } from '@/lib/env';
 import {
   adminListResultTemplates,
   adminUploadResultTemplate,
@@ -22,10 +21,38 @@ import {
   adminActivateResultTemplate,
   adminDeactivateResultTemplate,
   adminDeleteResultTemplate,
+  fetchAuthorizedObjectUrl,
   type ResultTemplateDto,
 } from '@/lib/api';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+function AuthorizedTemplateImage({ mediaId, title }: { mediaId: string; title: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    fetchAuthorizedObjectUrl(`/v1/media/${encodeURIComponent(mediaId)}/content`)
+      .then((nextUrl) => {
+        objectUrl = nextUrl;
+        if (!cancelled) setUrl(nextUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setUrl(null);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [mediaId]);
+
+  if (!url) return <ImageIcon className="h-10 w-10 opacity-30" />;
+
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={title} className="w-full h-full object-cover" loading="lazy" />;
+}
 
 export default function AdminResultTemplatesPage() {
   const [items, setItems] = useState<ResultTemplateDto[]>([]);
@@ -125,12 +152,6 @@ export default function AdminResultTemplatesPage() {
     }
   }
 
-  function previewUrl(row: ResultTemplateDto): string | null {
-    if (!row.media?.id) return null;
-    const apiBase = env.apiBaseUrl || '';
-    return `${apiBase}/v1/media/${encodeURIComponent(row.media.id)}`;
-  }
-
   return (
     <AdminRouteWorkspace role="main" aria-label="Result-table templates">
       <AdminRouteHero
@@ -174,13 +195,11 @@ export default function AdminResultTemplatesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {items.map((row) => {
-            const preview = previewUrl(row);
             return (
               <Card key={row.id} className="overflow-hidden">
                 <div className="aspect-[4/3] bg-surface flex items-center justify-center overflow-hidden">
-                  {preview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={preview} alt={row.title} className="w-full h-full object-cover" loading="lazy" />
+                  {row.media?.id ? (
+                    <AuthorizedTemplateImage mediaId={row.media.id} title={row.title} />
                   ) : (
                     <ImageIcon className="h-10 w-10 opacity-30" />
                   )}

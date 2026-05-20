@@ -164,11 +164,26 @@ public static class RulebookReferencePdfEndpoints
         learner.MapGet("/{kind}/{profession}/reference-pdf", async (
             string kind,
             string profession,
+            HttpContext http,
             LearnerDbContext db,
             CancellationToken ct) =>
         {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId)) return Results.NotFound();
+
+            var normalizedProfession = profession.ToLowerInvariant();
+            var activeProfession = await db.Users.AsNoTracking()
+                .Where(user => user.Id == userId)
+                .Select(user => user.ActiveProfessionId)
+                .SingleOrDefaultAsync(ct);
+
+            if (!string.Equals(activeProfession, normalizedProfession, StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.NotFound();
+            }
+
             var rb = await db.Set<RulebookVersion>().AsNoTracking()
-                .Where(x => x.Kind == kind.ToLowerInvariant() && x.Profession == profession.ToLowerInvariant() && x.Status == RulebookStatus.Published)
+                .Where(x => x.Kind == kind.ToLowerInvariant() && x.Profession == normalizedProfession && x.Status == RulebookStatus.Published)
                 .OrderByDescending(x => x.PublishedAt)
                 .FirstOrDefaultAsync(ct);
             if (rb is null || rb.ReferencePdfAssetId is null) return Results.NotFound();

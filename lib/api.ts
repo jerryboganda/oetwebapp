@@ -10478,6 +10478,23 @@ export interface ResultTemplateDto {
   } | null;
 }
 
+export interface LearnerResultTemplateDto {
+  id: string;
+  templateKey: string;
+  title: string;
+  description: string | null;
+  professionId: string | null;
+  mediaAssetId: string;
+  sortOrder: number;
+  updatedAt: string;
+  media: {
+    id: string;
+    originalFilename: string;
+    mimeType: string;
+    sizeBytes: number;
+  } | null;
+}
+
 export async function adminListResultTemplates(profession?: string): Promise<ResultTemplateDto[]> {
   const qs = profession ? `?profession=${encodeURIComponent(profession)}` : '';
   return apiRequest<ResultTemplateDto[]>(`/v1/admin/result-templates${qs}`);
@@ -10534,6 +10551,15 @@ export async function adminDeleteResultTemplate(id: string): Promise<void> {
   await apiRequest<void>(`/v1/admin/result-templates/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   }, { acceptedStatuses: [204] });
+}
+
+export async function learnerGetActiveResultTemplate(): Promise<LearnerResultTemplateDto | null> {
+  try {
+    return await apiRequest<LearnerResultTemplateDto>('/v1/result-templates/active');
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

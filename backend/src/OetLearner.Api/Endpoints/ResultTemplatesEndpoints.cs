@@ -45,6 +45,8 @@ public static class ResultTemplatesEndpoints
             LearnerDbContext db,
             IFileStorage storage,
             IOptions<StorageOptions> storageOptions,
+            IUploadContentValidator validator,
+            IUploadScanner scanner,
             IFormFile file,
             [FromForm] string templateKey,
             [FromForm] string title,
@@ -61,30 +63,65 @@ public static class ResultTemplatesEndpoints
             if (string.IsNullOrWhiteSpace(title) || title.Length > 200)
                 return Results.BadRequest(new { error = "title required (max 200 chars)" });
 
-            var ext = (Path.GetExtension(file.FileName)?.TrimStart('.') ?? "").ToLowerInvariant();
+            var originalFileName = Path.GetFileName(file.FileName ?? "result-template.jpg");
+            if (string.IsNullOrWhiteSpace(originalFileName)) originalFileName = "result-template.jpg";
+            var ext = (Path.GetExtension(originalFileName)?.TrimStart('.') ?? "").ToLowerInvariant();
             if (!AllowedExtensions.Contains(ext))
                 return Results.BadRequest(new { error = "only jpg / jpeg / png / webp accepted" });
 
+            await using var buffer = new MemoryStream((int)Math.Min(file.Length, MaxImageBytes));
+            await file.CopyToAsync(buffer, ct);
+            buffer.Position = 0;
+
+            var validation = await validator.ValidateAsync(buffer, ext, ct);
+            if (!validation.Accepted
+                || string.IsNullOrWhiteSpace(validation.DetectedMime)
+                || string.IsNullOrWhiteSpace(validation.DetectedExtension)
+                || !validation.DetectedMime.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                || !AllowedExtensions.Contains(validation.DetectedExtension))
+            {
+                return Results.BadRequest(new
+                {
+                    code = "invalid_file_content",
+                    message = validation.Reason ?? "The uploaded file content does not match a supported image type.",
+                });
+            }
+
+            buffer.Position = 0;
+            var scanResult = await scanner.ScanAsync(buffer, originalFileName, ct);
+            if (!scanResult.clean)
+            {
+                return Results.BadRequest(new
+                {
+                    code = "file_failed_security_scan",
+                    message = scanResult.reason ?? "The uploaded file failed security scanning.",
+                });
+            }
+
+            var detectedExt = validation.DetectedExtension.TrimStart('.').ToLowerInvariant();
+            if (detectedExt == "jpeg") detectedExt = "jpg";
+
             // Unique templateKey check
-            var keyExists = await db.ResultTemplateAssets.AnyAsync(x => x.TemplateKey == templateKey, ct);
+            var normalizedKey = templateKey.Trim();
+            var keyExists = await db.ResultTemplateAssets.AnyAsync(x => x.TemplateKey == normalizedKey, ct);
             if (keyExists) return Results.Conflict(new { error = "templateKey already used" });
 
-            var stagingKey = $"staging/result-template/{adminId}/{Guid.NewGuid():N}.{ext}";
+            var stagingKey = $"staging/result-template/{adminId}/{Guid.NewGuid():N}.{detectedExt}";
             long bytes;
             string sha;
-            await using (var src = file.OpenReadStream())
+            buffer.Position = 0;
             await using (var dest = await storage.OpenWriteAsync(stagingKey, ct))
             {
-                (bytes, sha) = await StreamingSha256.ComputeAsync(new[] { src }, dest, ct);
+                (bytes, sha) = await StreamingSha256.ComputeAsync(new[] { buffer }, dest, ct);
             }
             var publishedKey = ContentAddressed.PublishedKey(
-                storageOptions.Value.ContentUpload.PublishedSubpath, sha, ext);
+                storageOptions.Value.ContentUpload.PublishedSubpath, sha, detectedExt);
             if (!storage.Exists(publishedKey))
                 storage.Move(stagingKey, publishedKey, overwrite: false);
             else
                 storage.Delete(stagingKey);
 
-            var existingMedia = await db.MediaAssets.FirstOrDefaultAsync(m => m.Sha256 == sha && m.Format == ext, ct);
+            var existingMedia = await db.MediaAssets.FirstOrDefaultAsync(m => m.Sha256 == sha && m.Format == detectedExt, ct);
             string mediaId;
             if (existingMedia is null)
             {
@@ -92,9 +129,9 @@ public static class ResultTemplatesEndpoints
                 db.MediaAssets.Add(new MediaAsset
                 {
                     Id = mediaId,
-                    OriginalFilename = file.FileName,
-                    MimeType = ext == "png" ? "image/png" : ext == "webp" ? "image/webp" : "image/jpeg",
-                    Format = ext,
+                    OriginalFilename = originalFileName,
+                    MimeType = validation.DetectedMime,
+                    Format = detectedExt,
                     SizeBytes = bytes,
                     StoragePath = publishedKey,
                     Status = MediaAssetStatus.Ready,
@@ -114,7 +151,7 @@ public static class ResultTemplatesEndpoints
             var row = new ResultTemplateAsset
             {
                 Id = $"rtpl_{Guid.NewGuid():N}",
-                TemplateKey = templateKey.Trim(),
+                TemplateKey = normalizedKey,
                 Title = title.Trim(),
                 Description = description,
                 ProfessionId = string.IsNullOrWhiteSpace(professionId) ? null : professionId,
@@ -126,6 +163,7 @@ public static class ResultTemplatesEndpoints
                 UpdatedAt = now,
             };
             db.ResultTemplateAssets.Add(row);
+            AddAuditEvent(db, http, "ResultTemplateUploaded", "ResultTemplateAsset", row.Id, $"templateKey={row.TemplateKey};media={mediaId}");
             await db.SaveChangesAsync(ct);
             await db.Entry(row).Reference(x => x.MediaAsset!).LoadAsync(ct);
             return Results.Ok(Project(row));
@@ -135,6 +173,7 @@ public static class ResultTemplatesEndpoints
 
         admin.MapPut("/{id}", async (
             string id,
+            HttpContext http,
             LearnerDbContext db,
             ResultTemplateUpdate dto,
             CancellationToken ct) =>
@@ -146,44 +185,79 @@ public static class ResultTemplatesEndpoints
             if (dto.ProfessionId is not null) row.ProfessionId = string.IsNullOrWhiteSpace(dto.ProfessionId) ? null : dto.ProfessionId;
             if (dto.SortOrder is not null) row.SortOrder = dto.SortOrder.Value;
             row.UpdatedAt = DateTimeOffset.UtcNow;
+            AddAuditEvent(db, http, "ResultTemplateUpdated", "ResultTemplateAsset", row.Id, row.TemplateKey);
             await db.SaveChangesAsync(ct);
             await db.Entry(row).Reference(x => x.MediaAsset!).LoadAsync(ct);
             return Results.Ok(Project(row));
         })
         .RequireAuthorization("AdminContentWrite");
 
-        admin.MapPost("/{id}/activate", async (string id, LearnerDbContext db, CancellationToken ct) =>
+        admin.MapPost("/{id}/activate", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
             var row = await db.ResultTemplateAssets.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (row is null) return Results.NotFound();
             // Multiple templates can be active; admin chooses which one renders on result pages.
             row.IsActive = true;
             row.UpdatedAt = DateTimeOffset.UtcNow;
+            AddAuditEvent(db, http, "ResultTemplateActivated", "ResultTemplateAsset", row.Id, row.TemplateKey);
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { row.Id, row.IsActive });
         })
-        .RequireAuthorization("AdminContentWrite");
+        .RequireAuthorization("AdminContentPublish");
 
-        admin.MapPost("/{id}/deactivate", async (string id, LearnerDbContext db, CancellationToken ct) =>
+        admin.MapPost("/{id}/deactivate", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
             var row = await db.ResultTemplateAssets.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (row is null) return Results.NotFound();
             row.IsActive = false;
             row.UpdatedAt = DateTimeOffset.UtcNow;
+            AddAuditEvent(db, http, "ResultTemplateDeactivated", "ResultTemplateAsset", row.Id, row.TemplateKey);
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { row.Id, row.IsActive });
         })
-        .RequireAuthorization("AdminContentWrite");
+        .RequireAuthorization("AdminContentPublish");
 
-        admin.MapDelete("/{id}", async (string id, LearnerDbContext db, CancellationToken ct) =>
+        admin.MapDelete("/{id}", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
             var row = await db.ResultTemplateAssets.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (row is null) return Results.NotFound();
             db.ResultTemplateAssets.Remove(row);
+            AddAuditEvent(db, http, "ResultTemplateDeleted", "ResultTemplateAsset", row.Id, row.TemplateKey);
             await db.SaveChangesAsync(ct);
             return Results.NoContent();
         })
         .RequireAuthorization("AdminContentWrite");
+
+        var learner = app.MapGroup("/v1/result-templates")
+            .RequireAuthorization()
+            .RequireRateLimiting("PerUser");
+
+        learner.MapGet("/active", async (LearnerDbContext db, HttpContext http, CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            string? activeProfession = null;
+            if (!string.IsNullOrEmpty(userId))
+            {
+                activeProfession = await db.Users.AsNoTracking()
+                    .Where(user => user.Id == userId)
+                    .Select(user => user.ActiveProfessionId)
+                    .SingleOrDefaultAsync(ct);
+            }
+
+            var candidates = await db.ResultTemplateAssets.AsNoTracking().Include(x => x.MediaAsset)
+                .Where(x => x.IsActive)
+                .Where(x => x.ProfessionId == null
+                    || (activeProfession != null && x.ProfessionId == activeProfession))
+                .ToListAsync(ct);
+
+            var selected = candidates
+                .OrderByDescending(x => activeProfession != null && x.ProfessionId == activeProfession)
+                .ThenBy(x => x.SortOrder)
+                .ThenByDescending(x => x.UpdatedAt)
+                .FirstOrDefault();
+
+            return selected is null ? Results.NotFound() : Results.Ok(ProjectLearner(selected));
+        });
 
         return app;
     }
@@ -211,6 +285,47 @@ public static class ResultTemplatesEndpoints
             r.MediaAsset.Sha256,
         },
     };
+
+    private static object ProjectLearner(ResultTemplateAsset r) => new
+    {
+        r.Id,
+        r.TemplateKey,
+        r.Title,
+        r.Description,
+        r.ProfessionId,
+        r.MediaAssetId,
+        r.SortOrder,
+        r.UpdatedAt,
+        media = r.MediaAsset is null ? null : new
+        {
+            r.MediaAsset.Id,
+            r.MediaAsset.OriginalFilename,
+            r.MediaAsset.MimeType,
+            r.MediaAsset.SizeBytes,
+        },
+    };
+
+    private static void AddAuditEvent(
+        LearnerDbContext db,
+        HttpContext? http,
+        string action,
+        string resourceType,
+        string? resourceId,
+        string? details)
+    {
+        var actorId = http?.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit-{Guid.NewGuid():N}",
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = actorId,
+            ActorName = http?.User.Identity?.Name ?? actorId,
+            Action = action,
+            ResourceType = resourceType,
+            ResourceId = resourceId,
+            Details = details,
+        });
+    }
 }
 
 public sealed record ResultTemplateUpdate(

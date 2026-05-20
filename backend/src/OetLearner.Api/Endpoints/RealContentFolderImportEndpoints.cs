@@ -31,6 +31,8 @@ public static class RealContentFolderImportEndpoints
         group.MapPost("/stage", async (
             HttpContext http,
             RealContentFolderImporter importer,
+            IUploadContentValidator validator,
+            IUploadScanner scanner,
             IFormFile file,
             CancellationToken ct) =>
         {
@@ -41,6 +43,30 @@ public static class RealContentFolderImportEndpoints
             if (ext != "zip") return Results.BadRequest(new { error = "only .zip accepted (zip up your Project Real Content folder first)" });
 
             await using var stream = file.OpenReadStream();
+            var validation = await validator.ValidateAsync(stream, ext, ct);
+            if (!validation.Accepted
+                || !string.Equals(validation.DetectedMime, "application/zip", StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(validation.DetectedExtension, "zip", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(new
+                {
+                    code = "invalid_file_content",
+                    message = validation.Reason ?? "The uploaded file content does not match a ZIP archive.",
+                });
+            }
+
+            if (stream.CanSeek) stream.Position = 0;
+            var scanResult = await scanner.ScanAsync(stream, Path.GetFileName(file.FileName), ct);
+            if (!scanResult.clean)
+            {
+                return Results.BadRequest(new
+                {
+                    code = "file_failed_security_scan",
+                    message = scanResult.reason ?? "The uploaded ZIP failed security scanning.",
+                });
+            }
+
+            if (stream.CanSeek) stream.Position = 0;
             var result = await importer.StageAsync(adminId, stream, file.FileName, ct);
             _sessions[result.SessionId] = result;
             return Results.Ok(new

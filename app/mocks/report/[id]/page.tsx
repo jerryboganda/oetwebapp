@@ -32,7 +32,10 @@ import {
   generateRemediationPlan,
   completeRemediationTask,
   downloadMockWritingPdf,
+  learnerGetActiveResultTemplate,
+  fetchAuthorizedObjectUrl,
   type RemediationTask,
+  type LearnerResultTemplateDto,
 } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
@@ -76,6 +79,8 @@ function MockReportContent() {
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [pdfState, setPdfState] = useState<'idle' | 'downloading' | 'error'>('idle');
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [resultTemplate, setResultTemplate] = useState<LearnerResultTemplateDto | null>(null);
+  const [resultTemplateUrl, setResultTemplateUrl] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('evaluation_viewed', { type: 'mock_report', id });
@@ -83,6 +88,44 @@ function MockReportContent() {
       .then(setReport)
       .catch(() => setError('Could not load report.'));
   }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    learnerGetActiveResultTemplate()
+      .then((template) => {
+        if (!cancelled) setResultTemplate(template);
+      })
+      .catch(() => {
+        if (!cancelled) setResultTemplate(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const mediaId = resultTemplate?.media?.id;
+    if (!mediaId) {
+      setResultTemplateUrl(null);
+      return;
+    }
+
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    fetchAuthorizedObjectUrl(`/v1/media/${encodeURIComponent(mediaId)}/content`)
+      .then((nextUrl) => {
+        objectUrl = nextUrl;
+        if (!cancelled) setResultTemplateUrl(nextUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setResultTemplateUrl(null);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [resultTemplate?.media?.id]);
 
   useEffect(() => {
     if (!id) return;
@@ -147,7 +190,6 @@ function MockReportContent() {
     : report.subTests.filter((test) => test.reviewState && test.reviewState !== 'completed').length;
   const remediationPlan = report.remediationPlan?.length ? report.remediationPlan : buildMockRemediationPlan(report);
   const statementReady = isMockReportStatementOfResultsReady(report);
-
   const handleLeakReport = async () => {
     setLeakState('sending');
     try {
@@ -209,6 +251,24 @@ function MockReportContent() {
             </InlineAlert>
           )}
         </MotionSection>
+
+        {resultTemplateUrl ? (
+          <MotionSection delayIndex={1} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-black uppercase tracking-widest text-muted">Result-table reference</h2>
+                <p className="mt-1 text-xs text-muted">{resultTemplate?.title}</p>
+              </div>
+              <Badge variant="outline">OET style</Badge>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={resultTemplateUrl}
+              alt={resultTemplate?.title ?? 'OET result table reference'}
+              className="max-h-[520px] w-full rounded-xl border border-border object-contain"
+            />
+          </MotionSection>
+        ) : null}
 
         {/* 1. Overall Score */}
         <MotionSection
