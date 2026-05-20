@@ -1072,12 +1072,14 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetRecallSetsAdminAsync(examTypeCode, professionId, ct)))
             .WithAdminRead("AdminContentRead");
 
-        admin.MapPost("/vocabulary/import/preview", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct, [FromQuery] string? importBatchId)
-            => Results.Ok(await service.PreviewVocabularyImportAsync(file, importBatchId, ct)))
+        admin.MapPost("/vocabulary/import/preview", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct,
+                [FromQuery] string? importBatchId, [FromQuery] string? recallSetCode)
+            => Results.Ok(await service.PreviewVocabularyImportAsync(file, importBatchId, recallSetCode, ct)))
             .RequireRateLimiting("PerUserWrite").DisableAntiforgery().WithAdminRead("AdminContentRead");
 
-        admin.MapPost("/vocabulary/import", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct, [FromQuery] bool? dryRun, [FromQuery] string? importBatchId)
-            => Results.Ok(await service.BulkImportVocabularyV2Async(http.AdminId(), http.AdminName(), file, dryRun ?? true, importBatchId, ct)))
+        admin.MapPost("/vocabulary/import", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct,
+                [FromQuery] bool? dryRun, [FromQuery] string? importBatchId, [FromQuery] string? recallSetCode)
+            => Results.Ok(await service.BulkImportVocabularyV2Async(http.AdminId(), http.AdminName(), file, dryRun ?? true, importBatchId, recallSetCode, ct)))
             .RequireRateLimiting("PerUserWrite").DisableAntiforgery().WithAdminRead("AdminContentWrite");
 
         admin.MapGet("/vocabulary/import/batches/{importBatchId}", async (string importBatchId, AdminService service, CancellationToken ct)

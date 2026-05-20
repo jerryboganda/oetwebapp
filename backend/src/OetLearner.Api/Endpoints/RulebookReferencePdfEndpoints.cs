@@ -131,7 +131,8 @@ public static class RulebookReferencePdfEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { rb.Id, referencePdfAssetId = mediaId, originalFilename = originalFileName, sizeBytes = bytes });
         })
-        .DisableAntiforgery();
+        .DisableAntiforgery()
+        .WithAdminWrite("AdminContentWrite");
 
         group.MapDelete("/{id}/reference-pdf", async (
             string id,
@@ -154,7 +155,8 @@ public static class RulebookReferencePdfEndpoints
             AddAuditEvent(db, http, "RulebookReferencePdfDetached", "RulebookVersion", rb.Id, null);
             await db.SaveChangesAsync(ct);
             return Results.NoContent();
-        });
+        })
+        .WithAdminWrite("AdminContentWrite");
 
         // Learner-visible probe: returns the asset id of the active published version's PDF (if any).
         var learner = app.MapGroup("/v1/rulebooks")

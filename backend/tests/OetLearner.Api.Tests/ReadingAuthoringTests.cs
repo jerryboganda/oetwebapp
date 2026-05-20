@@ -1192,14 +1192,14 @@ public class ReadingAuthoringTests
             ("Listening ( IMPORTANT NOTE = Same for All Professions )/Listening Sample 1/Listening Sample 1 Answer-Key.pdf", Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF")));
 
         var staged = await importer.StageAsync("admin-import", zip, "real-content.zip", CancellationToken.None);
-        var proposal = Assert.Single(staged.Proposals.Where(p => p.Target == RealContentTarget.ListeningPaper));
+        var proposal = Assert.Single(staged.Proposals, p => p.Target == RealContentTarget.ListeningPaper);
 
         Assert.Empty(staged.Issues);
         Assert.All(proposal.Assets, asset => Assert.False(string.IsNullOrWhiteSpace(asset.StagedStorageKey)));
     }
 
     [Fact]
-    public async Task Real_content_import_requires_publish_permission_for_published_rulebook_pdf_attachment()
+    public async Task Real_content_import_creates_draft_rulebook_pdf_copy_without_mutating_published_rulebook()
     {
         using var factory = new TestWebApplicationFactory();
         await using var scope = factory.Services.CreateAsyncScope();
@@ -1235,9 +1235,14 @@ public class ReadingAuthoringTests
 
         var result = await importer.CommitAsync("admin-import", new[] { proposal }, canPublishContent: false, CancellationToken.None);
 
-        Assert.Empty(result.Created);
-        Assert.Contains(result.Errors, error => error.Contains("requires content publish permission", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(result.Errors);
+        var created = Assert.Single(result.Created);
+        Assert.Equal(RealContentTarget.RulebookReferencePdf, created.Target);
         Assert.Null(await db.RulebookVersions.Where(x => x.Id == "rulebook-import-published").Select(x => x.ReferencePdfAssetId).FirstAsync());
+
+        var draft = await db.RulebookVersions.SingleAsync(x => x.Id == created.Id);
+        Assert.Equal(RulebookStatus.Draft, draft.Status);
+        Assert.NotNull(draft.ReferencePdfAssetId);
     }
 
     [Fact]
@@ -1260,9 +1265,10 @@ public class ReadingAuthoringTests
         };
 
         var result = await importer.CommitAsync("admin-import", new[] { proposal }, canPublishContent: true, CancellationToken.None);
-        var policy = await db.ScoringPolicies.SingleAsync(x => x.IsActive);
+        var policy = await db.ScoringPolicies.SingleAsync();
 
         Assert.Empty(result.Errors);
+        Assert.False(policy.IsActive);
         Assert.Null(ScoringPolicyValidation.ValidateCanonicalPolicyJson(policy.PolicyJson));
         Assert.Contains("rawToScaled", policy.PolicyJson);
     }

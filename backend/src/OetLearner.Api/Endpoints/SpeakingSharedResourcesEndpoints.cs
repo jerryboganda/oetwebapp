@@ -154,7 +154,7 @@ public static class SpeakingSharedResourcesEndpoints
             return Results.Ok(Project(row));
         })
         .DisableAntiforgery()
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/{id}/publish", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
@@ -168,7 +168,7 @@ public static class SpeakingSharedResourcesEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { row.Id, status = row.Status.ToString() });
         })
-        .RequireAuthorization("AdminContentPublish");
+        .WithAdminWrite("AdminContentPublish");
 
         admin.MapPost("/{id}/archive", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
@@ -180,7 +180,7 @@ public static class SpeakingSharedResourcesEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { row.Id, status = row.Status.ToString() });
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapDelete("/{id}", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
@@ -192,7 +192,7 @@ public static class SpeakingSharedResourcesEndpoints
             await db.SaveChangesAsync(ct);
             return Results.NoContent();
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         // ── Learner ────────────────────────────────────────────────────────
         var learner = app.MapGroup("/v1/speaking/shared-resources")

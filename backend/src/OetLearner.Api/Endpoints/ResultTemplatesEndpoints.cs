@@ -170,7 +170,7 @@ public static class ResultTemplatesEndpoints
             return Results.Ok(Project(row));
         })
         .DisableAntiforgery()
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapPut("/{id}", async (
             string id,
@@ -191,7 +191,7 @@ public static class ResultTemplatesEndpoints
             await db.Entry(row).Reference(x => x.MediaAsset!).LoadAsync(ct);
             return Results.Ok(Project(row));
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/{id}/activate", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
@@ -204,7 +204,7 @@ public static class ResultTemplatesEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { row.Id, row.IsActive });
         })
-        .RequireAuthorization("AdminContentPublish");
+        .WithAdminWrite("AdminContentPublish");
 
         admin.MapPost("/{id}/deactivate", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
@@ -216,7 +216,7 @@ public static class ResultTemplatesEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { row.Id, row.IsActive });
         })
-        .RequireAuthorization("AdminContentPublish");
+        .WithAdminWrite("AdminContentPublish");
 
         admin.MapDelete("/{id}", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
@@ -227,7 +227,7 @@ public static class ResultTemplatesEndpoints
             await db.SaveChangesAsync(ct);
             return Results.NoContent();
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         var learner = app.MapGroup("/v1/result-templates")
             .RequireAuthorization()

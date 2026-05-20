@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, Download, FileText, Copy, FileCheck2, SearchCheck } from 'lucide-react';
+import { ArrowLeft, Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, Download, FileText, Copy, FileCheck2, SearchCheck, Tag } from 'lucide-react';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
@@ -19,6 +19,8 @@ import {
   exportAdminVocabularyImportBatchCsv,
   reconcileAdminVocabularyImportBatch,
   rollbackAdminVocabularyImportBatch,
+  adminListRecallSetTags,
+  type RecallSetTagDto,
 } from '@/lib/api';
 
 type PreviewRow = {
@@ -118,8 +120,33 @@ export default function AdminVocabularyImportPage() {
   const fileInput = useRef<HTMLInputElement | null>(null);
   const manifestInput = useRef<HTMLInputElement | null>(null);
 
+  // Recall-set tag: required for the upload — every imported term is tagged
+  // with this practice-collection label so admins can filter/maintain them.
+  const [recallSetTags, setRecallSetTags] = useState<RecallSetTagDto[]>([]);
+  const [recallSetCode, setRecallSetCode] = useState<string>('');
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const tags = await adminListRecallSetTags();
+        if (cancelled) return;
+        setRecallSetTags(tags);
+        // Default to the highest-priority active tag (lowest sort order).
+        if (tags.length > 0 && !recallSetCode) setRecallSetCode(tags[0].code);
+      } catch {
+        // Non-blocking: user can still type a code manually if list fetch fails.
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handlePreview() {
     if (!file) return;
+    if (!recallSetCode) {
+      setToast({ variant: 'error', message: 'Pick a practice-collection (recall set) label before previewing — it is mandatory for the bulk upload.' });
+      return;
+    }
     const batchId = importBatchId.trim() || makeImportBatchId();
     setImportBatchId(batchId);
     setLoading(true);
@@ -127,7 +154,7 @@ export default function AdminVocabularyImportPage() {
     setDryRun(null);
     setBatchSummary(null);
     try {
-      const res = await previewAdminVocabularyImport(file, batchId);
+      const res = await previewAdminVocabularyImport(file, batchId, recallSetCode);
       const typed = res as PreviewResponse;
       setPreview(typed);
       setImportBatchId(typed.importBatchId);
@@ -167,7 +194,7 @@ export default function AdminVocabularyImportPage() {
     if (!file || !dryRun || dryRun.failedRows > 0 || dryRun.skipped > 0 || dryRun.imported !== preview?.validRows) return;
     setImporting(true);
     try {
-      const res = await bulkImportAdminVocabulary(file, false, importBatchId.trim());
+      const res = await bulkImportAdminVocabulary(file, false, importBatchId.trim(), recallSetCode);
       const r = res as ImportResponse;
       if (r.skipped > 0 || r.failedRows > 0 || r.imported !== dryRun.imported) {
         setToast({
@@ -199,7 +226,7 @@ export default function AdminVocabularyImportPage() {
     setDryRunning(true);
     setDryRun(null);
     try {
-      const res = await bulkImportAdminVocabulary(file, true, importBatchId.trim());
+      const res = await bulkImportAdminVocabulary(file, true, importBatchId.trim(), recallSetCode);
       const typed = res as ImportResponse;
       setDryRun(typed);
       setImportBatchId(typed.importBatchId);
@@ -309,6 +336,36 @@ export default function AdminVocabularyImportPage() {
 
         <AdminRoutePanel>
           <div className="space-y-4">
+            {/* Mandatory recall-set picker — every imported term inherits this label. */}
+            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-primary mb-2">
+                <Tag className="h-4 w-4" /> Practice-collection label (required)
+              </div>
+              <p className="text-xs text-muted mb-3">
+                Pick the practice-collection (recall set) every term in this CSV belongs to.
+                The upload is rejected if this is empty. Add or edit labels in{' '}
+                <Link href="/admin/content/vocabulary/recall-set-tags" className="text-primary underline">Recall set tags</Link>.
+              </p>
+              <select
+                value={recallSetCode}
+                onChange={(e) => setRecallSetCode(e.target.value)}
+                disabled={!!preview || dryRunning || importing}
+                required
+                aria-required="true"
+                className="w-full max-w-md rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-70"
+              >
+                <option value="" disabled>— Select a practice-collection label —</option>
+                {recallSetTags.map((t) => (
+                  <option key={t.code} value={t.code}>{t.displayName} ({t.code})</option>
+                ))}
+              </select>
+              {!recallSetCode ? (
+                <p className="mt-2 text-xs text-danger">
+                  Selection required. Upload + preview + dry-run + commit are all blocked until you pick a label.
+                </p>
+              ) : null}
+            </div>
+
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex min-w-64 flex-col gap-1 text-xs font-medium text-muted">
                 Import batch ID

@@ -185,7 +185,7 @@ public static class RecallDocumentsEndpoints
             return Results.Ok(Project(doc));
         })
         .DisableAntiforgery()
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapPut("/{id}", async (
             string id,
@@ -209,7 +209,7 @@ public static class RecallDocumentsEndpoints
             await db.Entry(doc).Reference(x => x.MediaAsset!).LoadAsync(ct);
             return Results.Ok(Project(doc));
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/{id}/publish", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
@@ -223,7 +223,7 @@ public static class RecallDocumentsEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { id = doc.Id, status = doc.Status.ToString() });
         })
-        .RequireAuthorization("AdminContentPublish");
+        .WithAdminWrite("AdminContentPublish");
 
         admin.MapPost("/{id}/archive", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
@@ -236,7 +236,7 @@ public static class RecallDocumentsEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { id = doc.Id, status = doc.Status.ToString() });
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/{id}/unarchive", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
@@ -249,7 +249,7 @@ public static class RecallDocumentsEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { id = doc.Id, status = doc.Status.ToString() });
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapDelete("/{id}", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
@@ -263,7 +263,7 @@ public static class RecallDocumentsEndpoints
             await db.SaveChangesAsync(ct);
             return Results.NoContent();
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         // Learner group.
         var learner = app.MapGroup("/v1/recall-documents")

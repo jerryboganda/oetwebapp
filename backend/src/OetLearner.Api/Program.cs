@@ -1427,6 +1427,7 @@ app.MapRealContentFolderImportEndpoints();
 app.MapGamificationEndpoints();
 app.MapReviewItemEndpoints();
 app.MapVocabularyEndpoints();
+app.MapRecallSetTagsEndpoints();
 app.MapAdaptiveEndpoints();
 
 // ── Phase 2 new endpoints ──
@@ -1484,6 +1485,19 @@ await using (var scope = app.Services.CreateAsyncScope())
         .GetRequiredService<Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.AiProviderOptions>>()
         .Value;
     await DatabaseBootstrapper.SynchroniseAiProviderFromEnvAsync(db, dp, aiOpts);
+
+    // Seed the RecallSetTags registry with the 3 canonical codes on first boot.
+    // Idempotent; existing admin-edited rows are preserved.
+    var seedLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("RecallSetTagRegistrySeeder");
+    try
+    {
+        await OetLearner.Api.Services.Recalls.RecallSetTagRegistrySeeder.EnsureAsync(db, seedLogger);
+    }
+    catch (Exception ex)
+    {
+        seedLogger.LogWarning(ex, "RecallSetTagRegistrySeeder failed at boot; continuing.");
+    }
 }
 
 // Listening sample ingester (Slice E of docs/LISTENING-INGESTION-PRD.md).

@@ -107,18 +107,40 @@ public class VocabularyService(
             catch { /* malformed row ignored */ }
         }
 
-        var sets = OetLearner.Api.Domain.RecallSetCodes.Metadata
-            .OrderBy(m => m.SortOrder)
-            .Select(m => new RecallSetSummaryResponse(
-                Code: m.Code,
-                DisplayName: m.DisplayName,
-                ShortLabel: m.ShortLabel,
-                Description: m.Description,
-                SortOrder: m.SortOrder,
-                TermCount: counts.TryGetValue(m.Code, out var n) ? n : 0))
-            .ToList();
+        // Read DB-managed tags (seeded with canonical codes on first boot;
+        // admins can add more from /admin/content/vocabulary/recall-set-tags).
+        // Fall back to the static metadata only if the table is empty.
+        var tagRows = await db.RecallSetTags.AsNoTracking()
+            .Where(t => t.IsActive)
+            .Where(t => t.ExamTypeCode == null || t.ExamTypeCode == resolvedExam)
+            .OrderBy(t => t.SortOrder).ThenBy(t => t.DisplayName)
+            .ToListAsync(ct);
 
-        return new RecallSetsListResponse(resolvedExam, profession, sets);
+        IEnumerable<RecallSetSummaryResponse> sets;
+        if (tagRows.Count > 0)
+        {
+            sets = tagRows.Select(t => new RecallSetSummaryResponse(
+                Code: t.Code,
+                DisplayName: t.DisplayName,
+                ShortLabel: t.ShortLabel ?? t.Code,
+                Description: t.Description ?? string.Empty,
+                SortOrder: t.SortOrder,
+                TermCount: counts.TryGetValue(t.Code, out var n) ? n : 0));
+        }
+        else
+        {
+            sets = OetLearner.Api.Domain.RecallSetCodes.Metadata
+                .OrderBy(m => m.SortOrder)
+                .Select(m => new RecallSetSummaryResponse(
+                    Code: m.Code,
+                    DisplayName: m.DisplayName,
+                    ShortLabel: m.ShortLabel,
+                    Description: m.Description,
+                    SortOrder: m.SortOrder,
+                    TermCount: counts.TryGetValue(m.Code, out var n) ? n : 0));
+        }
+
+        return new RecallSetsListResponse(resolvedExam, profession, sets.ToList());
     }
 
     public async Task<VocabularyTermResponse> GetTermAsync(string termId, CancellationToken ct)

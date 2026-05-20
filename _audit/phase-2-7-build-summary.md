@@ -92,16 +92,23 @@ All admin endpoints require `AdminContentWrite` or `AdminContentPublish` per exi
 
 ---
 
-## What's *not* yet done
+## Update — 20 May 2026 evening
 
-- **Production deploy** (Phase 8). All code is local. Migrations haven't been applied to prod yet.
-- **Phase 1 publish of 2 complete drafts** — classifier blocked autonomous publish despite user approval; bundle into post-deploy step.
-- **AI/TTS backfill of 4 incomplete Listening drafts** (DigitalOcean Claude + ElevenLabs) — needs to run after deploy so the existing `scripts/admin/retry-listening-tts.mjs` can hit the new prod endpoints.
-- **Manual content uploads** — the user uploads the Project Real Content folder via the new admin UIs after deploy.
+- VPS migrated from `185.252.233.186` (decommissioned) → `68.183.32.122` (`oet-dev`).
+- Phase 2-7 code already on the new VPS at commit `e3fa70dd "feat: Phase 2-7 — AI Assistant, Content Admin UIs, Production Readiness"` plus DI fix `b8025272` — but containers were running an older image (endpoints returned 404).
+- TTS swap commit `305d675d` (DO Qwen3 Voice Design British male) lives on `cleanup/remove-demo-dummy-seed-placeholder-data` and a clean cherry-pick on `deploy/phase-2-7` (pushed to origin).
+- Historical deploy attempt used `scripts/deploy/deploy-direct.sh`; current production deploys must use an immutable 40-character `DEPLOY_REF` SHA with release evidence. SSH alias is now `oet-dev`.
+- Local zip of `Project Real Content/` prepared at `_audit/Project-Real-Content.zip` (120 MB) — ready to drag-drop into the new importer wizard once endpoints are live. This is a local-only artifact and is ignored by git.
+
+## What's *not* yet done (post-deploy)
+
+- **Phase 1 publish** of complete Listening drafts — re-audit needed on the new VPS (paper IDs may differ from the original 185.x audit).
+- **AI/TTS backfill** of remaining incomplete Listening drafts via `TTS__ForceProvider=digitalocean node scripts/admin/retry-listening-tts.mjs --paper-id <id>` per Step 7 of `deployment-runbook.md`.
+- **Manual content uploads** — user uploads `_audit/Project-Real-Content.zip` via the new importer wizard at `/admin/content/imports/real-content-folder`, reviews proposals, and publishes drafts from each admin page.
 
 ## Verification still owed (after deploy)
 
-- Run prod EF migrations: `dotnet ef database update` inside `oet-api` container on VPS
+- Verify prod EF migrations were applied automatically by `DatabaseBootstrapper` inside the new API container; do not run ad hoc `dotnet ef database update` unless a rollback/repair plan explicitly calls for it.
 - Re-run Phase 0 audit script (`_audit/production-content-audit.md` instructions) to confirm new endpoints respond and don't break existing learner pages
 - Spot-check each new admin page renders for the admin user (`manwara575@gmail.com`)
 - Confirm learner (`mindreader420123@gmail.com`) sees `/recalls/documents` and the published scoring-policy card on dashboard

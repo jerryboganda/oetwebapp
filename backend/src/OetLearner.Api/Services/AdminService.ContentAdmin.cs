@@ -477,18 +477,48 @@ public partial class AdminService
             catch { /* malformed row ignored */ }
         }
 
-        var sets = OetLearner.Api.Domain.RecallSetCodes.Metadata
-            .OrderBy(m => m.SortOrder)
-            .Select(m =>
+        // Read tags from the DB-managed RecallSetTags table (seeded with the
+        // 3 canonical codes on first boot; admins can add/edit/archive more
+        // from /admin/content/vocabulary/recall-set-tags). Fall back to the
+        // static RecallSetCodes.Metadata only if the table is empty so the UI
+        // never appears blank in an unseeded test environment.
+        var tagRows = await db.RecallSetTags.AsNoTracking()
+            .Where(t => t.IsActive)
+            .Where(t => t.ExamTypeCode == null
+                        || examTypeCode == null
+                        || t.ExamTypeCode == examTypeCode)
+            .OrderBy(t => t.SortOrder).ThenBy(t => t.DisplayName)
+            .ToListAsync(ct);
+
+        var sets = (tagRows.Count > 0
+            ? tagRows.Select(t => new
             {
-                var (active, draft, archived) = counts.TryGetValue(m.Code, out var n) ? n : (0, 0, 0);
-                return new
+                code = t.Code,
+                displayName = t.DisplayName,
+                shortLabel = t.ShortLabel ?? t.Code,
+                description = t.Description ?? string.Empty,
+                sortOrder = t.SortOrder,
+            })
+            : OetLearner.Api.Domain.RecallSetCodes.Metadata
+                .OrderBy(m => m.SortOrder)
+                .Select(m => new
                 {
                     code = m.Code,
                     displayName = m.DisplayName,
-                    shortLabel = m.ShortLabel,
-                    description = m.Description,
+                    shortLabel = (string?)m.ShortLabel,
+                    description = (string?)m.Description ?? string.Empty,
                     sortOrder = m.SortOrder,
+                }))
+            .Select(s =>
+            {
+                var (active, draft, archived) = counts.TryGetValue(s.code, out var n) ? n : (0, 0, 0);
+                return new
+                {
+                    s.code,
+                    s.displayName,
+                    s.shortLabel,
+                    s.description,
+                    s.sortOrder,
                     active,
                     draft,
                     archived,
@@ -529,8 +559,14 @@ public partial class AdminService
     // ── CSV import (RFC-4180 aware) ─────────────────────────────────────
 
     public async Task<AdminVocabularyImportPreviewResponse> PreviewVocabularyImportAsync(
-        IFormFile file, string? importBatchId, CancellationToken ct)
+        IFormFile file, string? importBatchId, string? recallSetCode, CancellationToken ct)
     {
+        // Recall set tag is a required categorisation for the bulk upload —
+        // every imported row inherits this practice-collection label so the
+        // admin can filter/maintain them later. Validate that the chosen
+        // code corresponds to a known (active) row in RecallSetTags or one of
+        // the canonical static codes (in case the DB hasn't been seeded yet).
+        await EnsureRecallSetCodeOrThrowAsync(recallSetCode, ct);
         var batchId = NormalizeImportBatchId(importBatchId);
         var rows = await ParseCsvAsync(file, ct);
         var validation = await BuildVocabularyImportValidationContextAsync(ct);
@@ -588,8 +624,10 @@ public partial class AdminService
     }
 
     public async Task<AdminVocabularyImportResponse> BulkImportVocabularyV2Async(
-        string adminId, string adminName, IFormFile file, bool dryRun, string? importBatchId, CancellationToken ct)
+        string adminId, string adminName, IFormFile file, bool dryRun, string? importBatchId, string? recallSetCode, CancellationToken ct)
     {
+        // Mandatory recall set tag — see PreviewVocabularyImportAsync.
+        var normalisedRecallSetCode = await EnsureRecallSetCodeOrThrowAsync(recallSetCode, ct);
         var batchId = NormalizeImportBatchId(importBatchId);
         var fileSha256 = await ComputeFileSha256Async(file, ct);
         await using var tx = await BeginTransactionIfNeededAsync(ct);
@@ -657,7 +695,7 @@ public partial class AdminService
         foreach (var r in cleanRows)
         {
             var id = $"VOC-{Guid.NewGuid():N}"[..12];
-            db.VocabularyTerms.Add(CreateVocabularyTermFromCsvRow(r, id, batchId));
+            db.VocabularyTerms.Add(CreateVocabularyTermFromCsvRow(r, id, batchId, normalisedRecallSetCode));
             importedTermIds.Add(id);
         }
 
@@ -925,7 +963,8 @@ public partial class AdminService
     private static IReadOnlyList<string> SplitList(string raw)
         => raw.Split(new[] { '|', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    private static VocabularyTerm CreateVocabularyTermFromCsvRow(CsvVocabRow row, string id, string importBatchId)
+    private static VocabularyTerm CreateVocabularyTermFromCsvRow(
+        CsvVocabRow row, string id, string importBatchId, string recallSetCode)
     {
         var examType = ExamCodes.Normalize(row.ExamTypeCode);
         return new VocabularyTerm
@@ -948,11 +987,49 @@ public partial class AdminService
             SynonymsJson = string.IsNullOrWhiteSpace(row.SynonymsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.SynonymsRaw!)),
             CollocationsJson = string.IsNullOrWhiteSpace(row.CollocationsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.CollocationsRaw!)),
             RelatedTermsJson = string.IsNullOrWhiteSpace(row.RelatedTermsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.RelatedTermsRaw!)),
+            // Apply the chosen recall-set categorisation to every imported row
+            // so admins can filter/maintain the practice-collection later.
+            RecallSetCodesJson = System.Text.Json.JsonSerializer.Serialize(new[] { recallSetCode }),
             SourceProvenance = BuildBatchSourceProvenance(row.SourceProvenance, importBatchId),
             Status = "draft",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
+    }
+
+    private static string TryExtractRecallSetCodeFromStored(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "[]") return string.Empty;
+        try
+        {
+            var arr = System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+            return arr.FirstOrDefault() ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private async Task<string> EnsureRecallSetCodeOrThrowAsync(string? recallSetCode, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(recallSetCode))
+        {
+            throw ApiException.Validation(
+                "RECALL_SET_CODE_REQUIRED",
+                "A practice-collection (recall set) label is required for every bulk upload. Pick one of: " +
+                string.Join(", ", OetLearner.Api.Domain.RecallSetCodes.All) +
+                ", or any custom code created in /admin/content/vocabulary/recall-set-tags.");
+        }
+        var code = recallSetCode.Trim().ToLowerInvariant();
+        var inDb = await db.RecallSetTags.AsNoTracking()
+            .AnyAsync(t => t.Code == code && t.IsActive, ct);
+        if (inDb) return code;
+        if (OetLearner.Api.Domain.RecallSetCodes.IsKnown(code))
+            return OetLearner.Api.Domain.RecallSetCodes.Normalise(code)!;
+        throw ApiException.Validation(
+            "RECALL_SET_CODE_UNKNOWN",
+            $"Recall set code '{recallSetCode}' is not active. Create or unarchive it in /admin/content/vocabulary/recall-set-tags first.");
     }
 
     private static async Task<string> ComputeFileSha256Async(IFormFile file, CancellationToken ct)
@@ -1456,7 +1533,11 @@ public partial class AdminService
         VocabularyTerm storedRow,
         string importBatchId)
     {
-        var expected = CreateVocabularyTermFromCsvRow(manifestRow, "expected", importBatchId);
+        // Reconciliation uses the manifest's original recall set code if
+        // stored in the row, otherwise falls back to "" so the comparison
+        // doesn't accidentally introduce a tag where the source had none.
+        var expectedRecallSet = TryExtractRecallSetCodeFromStored(storedRow.RecallSetCodesJson);
+        var expected = CreateVocabularyTermFromCsvRow(manifestRow, "expected", importBatchId, expectedRecallSet);
         var mismatches = new List<AdminVocabularyImportReconciliationFieldMismatch>();
 
         void Compare(string field, string? expectedValue, string? actualValue)
@@ -1511,7 +1592,10 @@ public partial class AdminService
         string adminId, string adminName, IFormFile file, CancellationToken ct)
     {
         // Backward-compat thin wrapper: keep legacy callers non-committing.
-        var res = await BulkImportVocabularyV2Async(adminId, adminName, file, dryRun: true, importBatchId: null, ct);
+        // No recall set code on v1 (legacy callers don't supply one) — the v2
+        // validator throws RECALL_SET_CODE_REQUIRED, which legacy CLI/scripts
+        // can intercept and pass --recall-set-code instead.
+        var res = await BulkImportVocabularyV2Async(adminId, adminName, file, dryRun: true, importBatchId: null, recallSetCode: null, ct);
         return new
         {
             importBatchId = res.ImportBatchId,

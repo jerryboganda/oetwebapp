@@ -9,47 +9,51 @@
 
 ```bash
 # Confirm prod health
-ssh vps "docker ps --filter 'name=oet-' --format 'table {{.Names}}\t{{.Status}}'"
+ssh oet-dev "docker ps --filter 'name=oet-' --format 'table {{.Names}}\t{{.Status}}'"
 
 # Take a DB snapshot before applying migrations
-ssh vps "docker exec oet-postgres pg_dump -U postgres oet_learner | gzip > /opt/oetwebapp-backups/oet-learner-pre-phase-2-7-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
+ssh oet-dev "docker exec oet-postgres pg_dump -U postgres oet_learner | gzip > /opt/oetwebapp-backups/oet-learner-pre-phase-2-7-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
 ```
 
 ## Step 1 — Push to remote
 
 ```bash
 # Local
-git add -A backend/src/OetLearner.Api app/admin/content app/recalls/documents \
+git add backend/src/OetLearner.Api app/admin/content app/recalls/documents \
         lib/api.ts lib/admin-permissions.ts \
-        _audit/ backend/tests/OetLearner.Api.Tests/ReadingAuthoringTests.cs
-git status   # eyeball — make sure NO .secrets/ or backups/ slipped in
+  _audit/deployment-runbook.md _audit/phase-2-7-build-summary.md \
+  backend/tests/OetLearner.Api.Tests/ReadingAuthoringTests.cs
+git status   # eyeball — make sure NO .secrets/, backups/, or _audit/*.zip slipped in
 git commit -m "feat(content): Phase 2-7 admin UIs (recalls, scoring, rulebook PDFs, result templates, speaking shared, folder importer)"
 git push origin cleanup/remove-demo-dummy-seed-placeholder-data
 ```
 
-## Step 2 — Pull on VPS
+## Step 2 + 3 — Canonical blue/green deploy (use the project's deploy-direct.sh)
+
+The new VPS ships with the project's blue/green deploy script that handles
+fetch → checkout → build → health-check → router swap → rollback-on-failure.
+Do NOT run individual `docker compose` commands; use the script.
 
 ```bash
-ssh vps "cd /root/oetwebsite && git fetch && git checkout cleanup/remove-demo-dummy-seed-placeholder-data && git pull --ff-only"
+# DEPLOY_REF must be an immutable 40-character commit SHA with release evidence.
+DEPLOY_SHA=<40-character-sha>
+ssh oet-dev "cd /opt/oetwebapp && nohup bash -lc 'DEPLOY_REF=$DEPLOY_SHA bash scripts/deploy/deploy-direct.sh' > /tmp/deploy-$DEPLOY_SHA.log 2>&1 < /dev/null &"
+ssh oet-dev "tail -n 120 /tmp/deploy-$DEPLOY_SHA.log"
 ```
 
-## Step 3 — Rebuild containers (blue/green swap)
+Behavior:
+- Determines the idle slot (`.deploy/active-slot.env` → toggles blue/green).
+- Builds `learner-api-<slot>` + `web-<slot>` from source.
+- Starts the new slot with `--force-recreate` and waits for health checks on
+  `:8080/health/ready` (API) + `:3000/api/health` (web).
+- Switches the stable `learner-api` + `web` routers to the new slot.
+- Verifies public endpoints at `https://api.oetwithdrhesham.co.uk/health/ready`
+  + `https://app.oetwithdrhesham.co.uk/api/health`.
+- On health-check failure: the previous slot stays active (zero-impact).
 
-```bash
-# Rebuild API + Web for the green slot (idle one)
-ssh vps "cd /root/oetwebsite && docker compose -f docker-compose.production.yml build oet-api-green oet-web-green"
-
-# Migrations: apply on the live oet-postgres
-ssh vps "docker exec oet-api dotnet ef database update --no-build --context LearnerDbContext --project /app/OetLearner.Api"
-# (If --no-build fails because the image is the old build: instead run the new green container with a one-shot migration:
-ssh vps "docker compose -f docker-compose.production.yml run --rm oet-api-green dotnet ef database update --context LearnerDbContext"
-
-# Then start green, drain blue
-ssh vps "cd /root/oetwebsite && docker compose -f docker-compose.production.yml up -d oet-api-green oet-web-green"
-# Wait ~30s for health checks
-ssh vps "docker ps --filter 'name=oet-' --format 'table {{.Names}}\t{{.Status}}'"
-# Update NPM upstream / swap blue/green per existing procedure
-```
+EF migrations are applied automatically inside the new image at startup via
+the `DatabaseBootstrapper` service — no separate `dotnet ef database update`
+needed. (See `backend/src/OetLearner.Api/Services/DatabaseBootstrapper.cs`.)
 
 ## Step 4 — Sanity probe (immediate)
 
@@ -71,18 +75,15 @@ curl -s -H "Authorization: Bearer $TOK" \
 
 Expected: all return `200 OK` with empty arrays/null (no rows yet).
 
-## Step 5 — Activate deferred Phase 1 publishes
+## Step 5 — Review deferred Phase 1 publish candidates
 
-Two complete Listening drafts user approved earlier:
+Two complete Listening drafts were identified in the earlier audit:
 - `1322a10d2e4644378ffdb131c3c2cb71` — OET Listening Practice — speech-pathology Standard Set 011
 - `dabaf1c3067542168080c04587086a16` — OET Listening Practice — nursing Standard Set 026
 
-```bash
-curl -s -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' -d '{}' \
-  https://api.oetwithdrhesham.co.uk/v1/admin/papers/1322a10d2e4644378ffdb131c3c2cb71/publish
-curl -s -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' -d '{}' \
-  https://api.oetwithdrhesham.co.uk/v1/admin/papers/dabaf1c3067542168080c04587086a16/publish
-```
+Before publishing anything, re-run the production audit against the current VPS,
+confirm the paper IDs still match, review each draft in the admin UI, and record
+explicit owner approval. Do not run direct publish commands from this runbook.
 
 ## Step 6 — User uploads the Project Real Content folder
 
@@ -95,23 +96,35 @@ curl -s -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/js
 
 ## Step 7 — AI/TTS backfill for 4 incomplete listening drafts
 
+ElevenLabs credits exhausted May 2026 — route through DigitalOcean Qwen3-TTS
+Voice Design with British English male voice. The script supports a
+`TTS__ForceProvider=digitalocean` env var that bypasses ElevenLabs entirely.
+
 ```bash
-ssh vps "cd /opt/oetwebapp && node scripts/admin/retry-listening-tts.mjs --paper-id 06ed32dd4bce4800bbe84c16ec8507ca"
-ssh vps "cd /opt/oetwebapp && node scripts/admin/retry-listening-tts.mjs --paper-id 51900b7211b84a8dbeb1d336b6e7c14a"
-ssh vps "cd /opt/oetwebapp && node scripts/admin/retry-listening-tts.mjs --paper-id b8e0e9def00a4dd192beb08a5121deb9"
-ssh vps "cd /opt/oetwebapp && node scripts/admin/retry-listening-tts.mjs --paper-id 16203e2a53344e598c532d67bb8d4cb8"
+# Required env vars on the VPS shell (or .env.production):
+#   AI__ApiKey            – DigitalOcean Serverless Inference API key
+#   AI__BaseUrl           – default https://inference.do-ai.run/v1 (no need to set)
+#   AI__TtsMaleVoice      – default 'british-male' (override if DO uses different seed)
+#   TTS__ForceProvider    – 'digitalocean' to bypass ElevenLabs
+
+ssh oet-dev "cd /opt/oetwebapp && TTS__ForceProvider=digitalocean node scripts/admin/retry-listening-tts.mjs --paper-id 06ed32dd4bce4800bbe84c16ec8507ca"
+ssh oet-dev "cd /opt/oetwebapp && TTS__ForceProvider=digitalocean node scripts/admin/retry-listening-tts.mjs --paper-id 51900b7211b84a8dbeb1d336b6e7c14a"
+ssh oet-dev "cd /opt/oetwebapp && TTS__ForceProvider=digitalocean node scripts/admin/retry-listening-tts.mjs --paper-id b8e0e9def00a4dd192beb08a5121deb9"
+ssh oet-dev "cd /opt/oetwebapp && TTS__ForceProvider=digitalocean node scripts/admin/retry-listening-tts.mjs --paper-id 16203e2a53344e598c532d67bb8d4cb8"
 ```
 
-The 3 with no assets at all will need first an initial `generate-listening.mjs` pass (which requires DO Claude config) before retry-tts can fill in audio.
+The 3 with no AudioScript at all will need first an initial
+`generate-listening.mjs` pass (Claude Opus 4.7 via DO Serverless Inference)
+before retry-tts can fill in audio.
 
 ## Rollback
 
 ```bash
 # If something breaks, swap blue back live and restore DB snapshot
-ssh vps "cd /root/oetwebsite && docker compose -f docker-compose.production.yml up -d oet-api oet-web"
-ssh vps "docker compose -f docker-compose.production.yml stop oet-api-green oet-web-green"
+ssh oet-dev "cd /root/oetwebsite && docker compose -f docker-compose.production.yml up -d oet-api oet-web"
+ssh oet-dev "docker compose -f docker-compose.production.yml stop oet-api-green oet-web-green"
 # Roll back migrations (only if data corruption — usually unnecessary):
-ssh vps "docker exec oet-api dotnet ef database update PreviousMigrationName --context LearnerDbContext"
+ssh oet-dev "docker exec oet-api dotnet ef database update PreviousMigrationName --context LearnerDbContext"
 ```
 
 ---

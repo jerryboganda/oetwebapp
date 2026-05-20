@@ -956,6 +956,15 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
 
         // Speaking Shared Resources table (partial; see LearnerDbContext.SpeakingSharedResources.cs).
         OnModelCreatingSpeakingSharedResources(modelBuilder);
+
+        // Role-Play Cards + Interlocutor Scripts (partial; see LearnerDbContext.RolePlayCards.cs).
+        OnModelCreatingRolePlayCards(modelBuilder);
+
+        // Speaking Sessions / Recordings / Transcripts (partial; see LearnerDbContext.SpeakingSessions.cs).
+        OnModelCreatingSpeakingSessions(modelBuilder);
+
+        // Recall Set Tags table (partial; see LearnerDbContext.RecallSetTags.cs).
+        OnModelCreatingRecallSetTags(modelBuilder);
     }
 
     /// <summary>
@@ -977,6 +986,21 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.SpeakingSharedResources.cs (partial).
     /// </summary>
     partial void OnModelCreatingSpeakingSharedResources(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.RolePlayCards.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingRolePlayCards(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.SpeakingSessions.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingSpeakingSessions(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.RecallSetTags.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingRecallSetTags(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Configures the Postgres system column <c>xmin</c> as an optimistic

@@ -6325,11 +6325,14 @@ export async function fetchAdminVocabularyCategories(params?: { examTypeCode?: s
   return apiRequest(`/v1/admin/vocabulary/categories${qs ? `?${qs}` : ''}`);
 }
 
-export async function previewAdminVocabularyImport(file: File, importBatchId?: string) {
+export async function previewAdminVocabularyImport(file: File, importBatchId?: string, recallSetCode?: string) {
   const formData = new FormData();
   formData.append('file', file);
-  const qs = importBatchId ? `?importBatchId=${encodeURIComponent(importBatchId)}` : '';
-  const response = await fetchWithTimeout(resolveApiUrl(`/v1/admin/vocabulary/import/preview${qs}`), {
+  const params = new URLSearchParams();
+  if (importBatchId) params.set('importBatchId', importBatchId);
+  if (recallSetCode) params.set('recallSetCode', recallSetCode);
+  const qs = params.toString();
+  const response = await fetchWithTimeout(resolveApiUrl(`/v1/admin/vocabulary/import/preview${qs ? `?${qs}` : ''}`), {
     method: 'POST',
     headers: await getHeaders('/v1/admin/vocabulary/import/preview', undefined, { json: false }),
     body: formData,
@@ -6347,11 +6350,12 @@ export async function previewAdminVocabularyImport(file: File, importBatchId?: s
   return response.json();
 }
 
-export async function bulkImportAdminVocabulary(file: File, dryRun = true, importBatchId?: string) {
+export async function bulkImportAdminVocabulary(file: File, dryRun = true, importBatchId?: string, recallSetCode?: string) {
   const formData = new FormData();
   formData.append('file', file);
   const params = new URLSearchParams({ dryRun: String(dryRun) });
   if (importBatchId) params.set('importBatchId', importBatchId);
+  if (recallSetCode) params.set('recallSetCode', recallSetCode);
   const response = await fetchWithTimeout(resolveApiUrl(`/v1/admin/vocabulary/import?${params.toString()}`), {
     method: 'POST',
     headers: await getHeaders('/v1/admin/vocabulary/import', undefined, { json: false }),
@@ -10457,6 +10461,83 @@ export async function learnerGetRulebookReferencePdf(kind: string, profession: s
     if (e instanceof ApiError && e.status === 404) return null;
     throw e;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Recall set tags (practice-collection labels) — admin CRUD
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RecallSetTagDto {
+  code: string;
+  displayName: string;
+  shortLabel: string | null;
+  description: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  examTypeCode: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  canonical: boolean;
+}
+
+export async function adminListRecallSetTags(params: { includeArchived?: boolean; examTypeCode?: string } = {}): Promise<RecallSetTagDto[]> {
+  const qs = new URLSearchParams();
+  if (params.includeArchived) qs.set('includeArchived', 'true');
+  if (params.examTypeCode) qs.set('examTypeCode', params.examTypeCode);
+  const q = qs.toString();
+  return apiRequest<RecallSetTagDto[]>(`/v1/admin/recall-set-tags${q ? `?${q}` : ''}`);
+}
+
+export async function adminGetRecallSetTag(code: string): Promise<RecallSetTagDto> {
+  return apiRequest<RecallSetTagDto>(`/v1/admin/recall-set-tags/${encodeURIComponent(code)}`);
+}
+
+export async function adminCreateRecallSetTag(payload: {
+  code: string;
+  displayName: string;
+  shortLabel?: string | null;
+  description?: string | null;
+  sortOrder?: number;
+  isActive?: boolean;
+  examTypeCode?: string | null;
+}): Promise<RecallSetTagDto> {
+  return apiRequest<RecallSetTagDto>('/v1/admin/recall-set-tags', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function adminUpdateRecallSetTag(code: string, patch: {
+  displayName?: string;
+  shortLabel?: string | null;
+  description?: string | null;
+  sortOrder?: number;
+  isActive?: boolean;
+  examTypeCode?: string | null;
+}): Promise<RecallSetTagDto> {
+  return apiRequest<RecallSetTagDto>(`/v1/admin/recall-set-tags/${encodeURIComponent(code)}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function adminArchiveRecallSetTag(code: string): Promise<RecallSetTagDto> {
+  return apiRequest<RecallSetTagDto>(`/v1/admin/recall-set-tags/${encodeURIComponent(code)}/archive`, {
+    method: 'POST', body: '{}',
+  });
+}
+
+export async function adminUnarchiveRecallSetTag(code: string): Promise<RecallSetTagDto> {
+  return apiRequest<RecallSetTagDto>(`/v1/admin/recall-set-tags/${encodeURIComponent(code)}/unarchive`, {
+    method: 'POST', body: '{}',
+  });
+}
+
+export async function adminDeleteRecallSetTag(code: string): Promise<{ archived: boolean; code: string; hardDelete: boolean; reason?: string }> {
+  return apiRequest(`/v1/admin/recall-set-tags/${encodeURIComponent(code)}`, {
+    method: 'DELETE',
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
