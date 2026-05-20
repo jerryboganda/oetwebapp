@@ -3,7 +3,7 @@ using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Data;
 
-public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbContext(options)
+public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbContext(options)
 {
     public DbSet<LearnerUser> Users => Set<LearnerUser>();
     public DbSet<LearnerGoal> Goals => Set<LearnerGoal>();
@@ -223,6 +223,12 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<AiTool> AiTools => Set<AiTool>();
     public DbSet<AiFeatureToolGrant> AiFeatureToolGrants => Set<AiFeatureToolGrant>();
     public DbSet<AiToolInvocation> AiToolInvocations => Set<AiToolInvocation>();
+
+    // AI Assistant (Phase A–H). Conversational multi-role chat.
+    public DbSet<AiAssistantThread> AiAssistantThreads => Set<AiAssistantThread>();
+    public DbSet<AiAssistantMessage> AiAssistantMessages => Set<AiAssistantMessage>();
+    public DbSet<AiFileBackup> AiFileBackups => Set<AiFileBackup>();
+    public DbSet<AiCodebaseChunk> AiCodebaseChunks => Set<AiCodebaseChunk>();
 
     // User-scoped items written by the two write-category tools (Phase 5).
     public DbSet<UserNote> UserNotes => Set<UserNote>();

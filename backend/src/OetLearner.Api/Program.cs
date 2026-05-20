@@ -1023,11 +1023,23 @@ builder.Services.AddHttpClient(
 // Catalog seeder — one-shot at startup, idempotent. Mirrors the
 // WritingSampleSeeder pattern: hosted service that opens its own scope.
 builder.Services.AddHostedService<OetLearner.Api.Services.AiTools.AiToolCatalogSeederHostedService>();
+
+// AI Assistant orchestrator (Phase A–H). Multi-role conversational agent.
+builder.Services.Configure<OetLearner.Api.Services.AiAssistant.AiAssistantOptions>(
+    builder.Configuration.GetSection("AiAssistant"));
+builder.Services.AddSingleton<OetLearner.Api.Services.AiAssistant.SystemPrompts.ISystemPromptProvider,
+    OetLearner.Api.Services.AiAssistant.SystemPrompts.SystemPromptProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiAssistant.IAiAssistantOrchestrator,
+    OetLearner.Api.Services.AiAssistant.AiAssistantOrchestrator>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiAssistant.IAiAssistantGateway,
+    OetLearner.Api.Services.AiAssistant.AiAssistantGateway>();
+
 // Phase 6b — backfill voice provider rows (TTS/ASR/Phoneme) into the
 // AiProviders registry so admins see them in /admin/ai-providers.
 // Strictly additive: never overwrites existing rows; selectors still
 // read credentials from existing options sources.
 builder.Services.AddHostedService<OetLearner.Api.Services.Voice.AiVoiceProviderSeeder>();
+builder.Services.AddHostedService<OetLearner.Api.Services.AiAssistant.AiAssistantFeatureRouteSeeder>();
 builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarDraftService,
     OetLearner.Api.Services.Grammar.GrammarDraftService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDraftService,
@@ -1386,6 +1398,7 @@ app.MapAiUsageAdminEndpoints();
 app.MapAiEscalationAdminEndpoints();
 app.MapAiToolsAdminEndpoints();
 app.MapAiMeEndpoints();
+OetLearner.Api.Endpoints.AiAssistantEndpoints.MapAiAssistantEndpoints(app);
 app.MapContentPapersAdminEndpoints();
 app.MapContentStalenessEndpoints();
 app.MapMockAdminEndpoints();
@@ -1451,6 +1464,7 @@ app.MapDevicePairingEndpoints();
 
 app.MapHub<NotificationHub>("/v1/notifications/hub").RequireAuthorization();
 app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization();
+app.MapHub<OetLearner.Api.Hubs.AiAssistantHub>("/v1/ai-assistant/hub").RequireAuthorization();
 app.MapHub<OetLearner.Api.Services.Mocks.MockLiveRoomHub>("/v1/mocks/live-room/hub").RequireAuthorization();
 
 await using (var scope = app.Services.CreateAsyncScope())
