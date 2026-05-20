@@ -22,6 +22,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_BUILD_WORKERS=1
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
+# Ensure .env exists for Next.js build (real values come from Docker build args above)
+RUN touch .env
+
 RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 FROM node:20-alpine AS runner
