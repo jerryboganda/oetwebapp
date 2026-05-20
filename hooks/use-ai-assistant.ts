@@ -65,7 +65,7 @@ export interface UseAiAssistantReturn {
   /** @deprecated Use cancelTurn */
   cancelStream: () => void;
   selectThread: (threadId: string) => Promise<void>;
-  createNewThread: () => Promise<void>;
+  createNewThread: (title?: string) => Promise<AiAssistantThread | undefined>;
   archiveThread: (threadId: string) => Promise<void>;
   refreshThreads: () => Promise<void>;
 
@@ -257,9 +257,9 @@ export function useAiAssistant(
     }
   }, [threads]);
 
-  const createNewThread = useCallback(async () => {
+  const createNewThread = useCallback(async (title?: string): Promise<AiAssistantThread | undefined> => {
     try {
-      const thread = await apiCreateThread(assistantRole);
+      const thread = await apiCreateThread(assistantRole, title);
       setThreads((prev) => [thread, ...prev]);
       setActiveThread(thread);
       setMessages([]);
@@ -267,9 +267,11 @@ export function useAiAssistant(
       setStreamingStatus('idle');
       setActiveToolCalls([]);
       setError(null);
+      return thread;
     } catch (err) {
       console.error('[AI Assistant] Failed to create thread:', err);
       setError('Failed to create thread');
+      return undefined;
     }
   }, [assistantRole]);
 

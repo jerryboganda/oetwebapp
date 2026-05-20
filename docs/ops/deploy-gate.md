@@ -40,7 +40,7 @@ download artifact `release-evidence-<sha>` from the successful
 `verify-release-artifacts.yml` run for the same SHA, then run:
 
 ```bash
-ssh root@185.252.233.186
+ssh root@68.183.32.122
 cd /opt/oetwebapp
 DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
 ```
@@ -86,7 +86,7 @@ windows above at the approver's discretion.
 ## Rollback Procedure
 
 ```bash
-ssh root@185.252.233.186
+ssh root@68.183.32.122
 cd /opt/oetwebapp
 # Identify the previous-good SHA/evidence/slot from .deploy/previous-good.env,
 # .deploy/active-slot.env, or the release record. The evidence bundle must be

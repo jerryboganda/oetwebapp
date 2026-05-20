@@ -1,5 +1,9 @@
 # VPS All in One File
 
+> **⚠️ DECOMMISSIONED — 185.252.233.186 IS NO LONGER IN USE (since 20 May 2026).**
+> **Active production VPS is `oet-dev` at `68.183.32.122`.** All references below to
+> `185.252.233.186` are historical and must NOT be used for SSH, deploys, or DNS.
+>
 > **Production VPS — Complete Environment, Services & Projects Inventory**
 > Captured by live SSH audit on **22 Apr 2026**.
 

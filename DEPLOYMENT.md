@@ -319,7 +319,7 @@ storage via BACKUP_S3_URL.
 ### Run a backup immediately
 
 ```bash
-ssh root@185.252.233.186
+ssh root@68.183.32.122
 cd /opt/oetwebapp
 docker compose --env-file .env.production -f docker-compose.production.yml exec \
   -e RUN_ONCE_NOW=YES \

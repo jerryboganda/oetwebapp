@@ -1,6 +1,6 @@
 # Deployment runbook — Phases 2-7
 
-**Target**: `vps` (185.252.233.186) — `/root/oetwebsite`, `/opt/oetwebapp`
+**Target**: `vps` (~~185.252.233.186 — DECOMMISSIONED 20 May 2026~~ → now `68.183.32.122` `oet-dev`) — `/root/oetwebsite`, `/opt/oetwebapp`
 **Containers**: `oet-api` + `oet-api-green` (blue/green), `oet-web` + `oet-web-green`, `oet-postgres` (pg17), `oet-db-backup`, `oet-clamav`
 
 ---

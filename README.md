@@ -13,7 +13,7 @@ OET preparation platform with a Next.js 15 web app, ASP.NET Core 10 API, Electro
 
 - Frontend URL: `http://localhost:3000`
 - Backend URL: `http://localhost:5198`
-- .NET SDK: `10.0.201`
+- .NET SDK: `10.0.300`
 
 ## Quick Start
 

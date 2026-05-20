@@ -2,15 +2,13 @@
 set -eo pipefail
 cd /opt/oetwebapp
 echo "=== Building OetLearner.Api via SDK container ==="
-# global.json pins 10.0.201; the sdk:10.0 image has 10.0.300. Move it aside during build.
-[ -f global.json ] && mv global.json global.json.tmp || true
+# global.json pins 10.0.300, matching mcr.microsoft.com/dotnet/sdk:10.0. No move-aside needed.
 docker run --rm \
   -v /opt/oetwebapp:/src \
   -w /src/backend/src/OetLearner.Api \
   mcr.microsoft.com/dotnet/sdk:10.0 \
   bash -c "dotnet publish -c Release -o /tmp/out --nologo -v q /p:UseAppHost=false && cp /tmp/out/OetLearner.Api.dll /src/_build_out.dll"
 RC=$?
-[ -f global.json.tmp ] && mv global.json.tmp global.json || true
 [ "$RC" != "0" ] && { echo "BUILD FAILED rc=$RC"; exit $RC; }
 
 ls -la /opt/oetwebapp/_build_out.dll

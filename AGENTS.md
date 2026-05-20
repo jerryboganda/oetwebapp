@@ -215,7 +215,7 @@ tests/e2e/                    # Playwright E2E tests
 
 | Component | Detail |
 | ----------- | -------- |
-| VPS | `185.252.233.186`, `/opt/oetwebapp/` |
+| VPS | `68.183.32.122` (oet-dev), `/opt/oetwebapp/` |
 | Frontend | `app.oetwithdrhesham.co.uk` (port 3000) |
 | API | `api.oetwithdrhesham.co.uk` (port 8080) |
 | Database | PostgreSQL 17 (internal network) |
@@ -225,7 +225,7 @@ tests/e2e/                    # Playwright E2E tests
 ### Deploy Command
 
 ```bash
-ssh root@185.252.233.186
+ssh root@68.183.32.122
 cd /opt/oetwebapp
 DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
 ```
