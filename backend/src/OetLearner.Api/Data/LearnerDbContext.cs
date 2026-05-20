@@ -399,9 +399,16 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
 
         // Rulebook authoring (admin-managed)
         modelBuilder.Entity<RulebookVersion>().HasIndex(x => new { x.Kind, x.Profession, x.Status });
+        modelBuilder.Entity<RulebookVersion>().HasIndex(x => x.ReferencePdfAssetId);
         modelBuilder.Entity<RulebookVersion>().Property(x => x.Status).HasMaxLength(16);
         modelBuilder.Entity<RulebookVersion>().Property(x => x.Kind).HasMaxLength(32);
         modelBuilder.Entity<RulebookVersion>().Property(x => x.Profession).HasMaxLength(32);
+        modelBuilder.Entity<RulebookVersion>().Property(x => x.ReferencePdfAssetId).HasMaxLength(64);
+        modelBuilder.Entity<RulebookVersion>()
+            .HasOne(x => x.ReferencePdfAsset)
+            .WithMany()
+            .HasForeignKey(x => x.ReferencePdfAssetId)
+            .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<RulebookSectionRow>().HasIndex(x => new { x.RulebookVersionId, x.Code }).IsUnique();
         modelBuilder.Entity<RulebookRuleRow>().HasIndex(x => new { x.RulebookVersionId, x.Code }).IsUnique();
         modelBuilder.Entity<RulebookRuleRow>().HasIndex(x => new { x.RulebookVersionId, x.SectionCode });
@@ -934,6 +941,18 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
 
         // AI Assistant tables (partial; see LearnerDbContext.AiAssistant.cs).
         OnModelCreatingAiAssistant(modelBuilder);
+
+        // Recall PDF library tables (partial; see LearnerDbContext.RecallDocuments.cs).
+        OnModelCreatingRecallDocuments(modelBuilder);
+
+        // Scoring Policy table (partial; see LearnerDbContext.ScoringPolicy.cs).
+        OnModelCreatingScoringPolicy(modelBuilder);
+
+        // Result Template Assets table (partial; see LearnerDbContext.ResultTemplates.cs).
+        OnModelCreatingResultTemplates(modelBuilder);
+
+        // Speaking Shared Resources table (partial; see LearnerDbContext.SpeakingSharedResources.cs).
+        OnModelCreatingSpeakingSharedResources(modelBuilder);
     }
 
     /// <summary>
@@ -941,6 +960,26 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Configures indexes + column types for the AI Assistant entity set.
     /// </summary>
     partial void OnModelCreatingAiAssistant(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.RecallDocuments.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingRecallDocuments(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.ScoringPolicy.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingScoringPolicy(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.ResultTemplates.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingResultTemplates(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.SpeakingSharedResources.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingSpeakingSharedResources(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Configures the Postgres system column <c>xmin</c> as an optimistic

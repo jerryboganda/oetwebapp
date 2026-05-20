@@ -7,6 +7,7 @@ import {
   ArrowRight,
   BarChart3,
   BookOpenText,
+  Calculator,
   Copy,
   FileSearch,
   FileCheck2,
@@ -97,6 +98,12 @@ const hubSections: HubSection[] = [
         label: 'Full Mocks',
         description: 'Bundle Listening + Reading + Writing + Speaking into a complete OET mock paper.',
         icon: <ScrollText className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/content/recalls-library',
+        label: 'Recalls Library',
+        description: 'Upload and publish admin-curated recall PDF digests for learner revision.',
+        icon: <Library className="h-5 w-5" />,
       },
       {
         href: '/admin/content/analytics',
@@ -209,6 +216,12 @@ const hubSections: HubSection[] = [
         label: 'Rulebooks',
         description: 'The single source of truth that grounds every grade and AI prompt.',
         icon: <BookOpenText className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/content/scoring-system',
+        label: 'Scoring System',
+        description: 'Edit the learner-facing scoring policy reference and structured threshold document.',
+        icon: <Calculator className="h-5 w-5" />,
       },
       {
         href: '/admin/criteria',

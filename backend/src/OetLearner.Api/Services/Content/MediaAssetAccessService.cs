@@ -64,6 +64,17 @@ public sealed class MediaAssetAccessService(
         }
 
         var normalizedProfession = profession?.Trim().ToLowerInvariant();
+
+        if (await CanLearnerAccessRecallDocumentAsync(media.Id, normalizedProfession, ct))
+        {
+            return true;
+        }
+
+        if (await CanLearnerAccessPublishedRulebookReferencePdfAsync(media.Id, normalizedProfession, ct))
+        {
+            return true;
+        }
+
         var learnerVisibleRoles = LearnerVisiblePaperAssetRoles;
         var attachedPaperAssets = await db.ContentPaperAssets
             .AsNoTracking()
@@ -133,6 +144,25 @@ public sealed class MediaAssetAccessService(
             .AnyAsync(preview =>
                 preview.MediaAssetId == mediaAssetId
                 && preview.Status == ContentStatus.Published, ct);
+
+    private Task<bool> CanLearnerAccessRecallDocumentAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)
+        => db.RecallDocuments
+            .AsNoTracking()
+            .AnyAsync(document =>
+                document.MediaAssetId == mediaAssetId
+                && document.Status == ContentStatus.Published
+                && (document.ProfessionId == null
+                    || (!string.IsNullOrWhiteSpace(normalizedProfession)
+                        && document.ProfessionId == normalizedProfession)), ct);
+
+    private Task<bool> CanLearnerAccessPublishedRulebookReferencePdfAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)
+        => db.RulebookVersions
+            .AsNoTracking()
+            .AnyAsync(rulebook =>
+                rulebook.ReferencePdfAssetId == mediaAssetId
+                && rulebook.Status == RulebookStatus.Published
+                && !string.IsNullOrWhiteSpace(normalizedProfession)
+                && rulebook.Profession == normalizedProfession, ct);
 
     private Task<bool> CanAssignedExpertAccessWritingPaperAssetAsync(string expertId, string mediaAssetId, CancellationToken ct)
         => db.WritingAttemptAssets

@@ -980,6 +980,7 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Content.IContentConvention
     OetLearner.Api.Services.Content.ContentConventionParser>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentBulkImportService,
     OetLearner.Api.Services.Content.ContentBulkImportService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Content.RealContentFolderImporter>();
 builder.Services.Configure<PdfExtractionOptions>(
     builder.Configuration.GetSection(PdfExtractionOptions.SectionName));
 builder.Services.AddHttpClient("AzureDocIntel");
@@ -1459,6 +1460,12 @@ app.MapListeningV2Endpoints();
 app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
 app.MapRecallsEndpoints();
+app.MapRecallDocumentsEndpoints();
+app.MapScoringPolicyEndpoints();
+app.MapRulebookReferencePdfEndpoints();
+app.MapResultTemplatesEndpoints();
+app.MapSpeakingSharedResourcesEndpoints();
+app.MapRealContentFolderImportEndpoints();
 
 // ── Phase 1 new endpoints ──
 app.MapGamificationEndpoints();

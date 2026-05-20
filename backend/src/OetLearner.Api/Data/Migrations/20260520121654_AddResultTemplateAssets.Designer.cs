@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OetLearner.Api.Data;
@@ -11,9 +12,11 @@ using OetLearner.Api.Data;
 namespace OetLearner.Api.Data.Migrations
 {
     [DbContext(typeof(LearnerDbContext))]
-    partial class LearnerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260520121654_AddResultTemplateAssets")]
+    partial class AddResultTemplateAssets
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -12658,8 +12661,7 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ReferencePdfAssetId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -12679,8 +12681,6 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Kind", "Profession", "Status");
-
-                    b.HasIndex("ReferencePdfAssetId");
 
                     b.ToTable("RulebookVersions");
                 });
@@ -13015,9 +13015,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("IsActive")
-                        .IsUnique()
-                        .HasFilter("\"IsActive\" = TRUE");
+                    b.HasIndex("IsActive");
 
                     b.ToTable("ScoringPolicies");
                 });
@@ -13418,61 +13416,6 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("Status", "SortOrder");
 
                     b.ToTable("SpeakingMockSets");
-                });
-
-            modelBuilder.Entity("OetLearner.Api.Domain.SpeakingSharedResource", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset?>("EffectiveFrom")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("MediaAssetId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("ProfessionId")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<DateTimeOffset?>("PublishedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UploadedByUserId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MediaAssetId");
-
-                    b.HasIndex("Kind", "Status");
-
-                    b.HasIndex("ProfessionId", "Kind");
-
-                    b.ToTable("SpeakingSharedResources");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.SponsorAccount", b =>
@@ -15679,27 +15622,6 @@ namespace OetLearner.Api.Data.Migrations
                         .HasForeignKey("RulebookVersionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("OetLearner.Api.Domain.RulebookVersion", b =>
-                {
-                    b.HasOne("OetLearner.Api.Domain.MediaAsset", "ReferencePdfAsset")
-                        .WithMany()
-                        .HasForeignKey("ReferencePdfAssetId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("ReferencePdfAsset");
-                });
-
-            modelBuilder.Entity("OetLearner.Api.Domain.SpeakingSharedResource", b =>
-                {
-                    b.HasOne("OetLearner.Api.Domain.MediaAsset", "MediaAsset")
-                        .WithMany()
-                        .HasForeignKey("MediaAssetId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("MediaAsset");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.TeacherClassMember", b =>

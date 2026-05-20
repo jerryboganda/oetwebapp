@@ -9231,6 +9231,7 @@ export interface AdminRulebookSummary {
   version: string;
   status: string;
   authoritySource: string;
+  referencePdfAssetId: string | null;
   sectionCount: number;
   ruleCount: number;
   updatedByUserId: string | null;
@@ -10216,4 +10217,489 @@ export async function adminReadingRejectExtraction(
   );
 }
 // === SUBAGENT_A: reading-authoring END ===
+
+// Recall Documents (admin PDF library + learner read)
+
+export type RecallDocumentStatus = 'Draft' | 'Published' | 'Archived' | 'InReview' | 'EditorReview' | 'PublisherApproval' | 'Rejected';
+export type RecallSubtest = 'listening' | 'reading' | 'writing' | 'speaking' | 'cross';
+
+export interface RecallDocumentDto {
+  id: string;
+  title: string;
+  subtestCode: RecallSubtest;
+  periodLabel: string;
+  professionId: string | null;
+  mediaAssetId: string;
+  descriptionMarkdown: string | null;
+  sortOrder: number;
+  status: RecallDocumentStatus;
+  publishedAt: string | null;
+  uploadedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+  media: {
+    id: string;
+    originalFilename: string;
+    mimeType: string;
+    format: string;
+    sizeBytes: number;
+    sha256: string | null;
+  } | null;
+}
+
+export interface RecallDocumentLearnerDto {
+  id: string;
+  title: string;
+  subtestCode: RecallSubtest;
+  periodLabel: string;
+  professionId: string | null;
+  descriptionMarkdown: string | null;
+  publishedAt: string | null;
+  media: {
+    id: string;
+    originalFilename: string;
+    sizeBytes: number;
+  } | null;
+}
+
+export interface ListRecallDocumentsResult {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: RecallDocumentDto[];
+}
+
+export async function adminListRecallDocuments(params: {
+  subtest?: RecallSubtest;
+  status?: RecallDocumentStatus;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<ListRecallDocumentsResult> {
+  const qs = new URLSearchParams();
+  if (params.subtest) qs.set('subtest', params.subtest);
+  if (params.status) qs.set('status', params.status);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+  const q = qs.toString();
+  return apiRequest<ListRecallDocumentsResult>(`/v1/admin/recall-documents${q ? `?${q}` : ''}`);
+}
+
+export async function adminUploadRecallDocument(payload: {
+  file: File;
+  title: string;
+  subtestCode: RecallSubtest;
+  periodLabel: string;
+  professionId?: string | null;
+  descriptionMarkdown?: string | null;
+  sortOrder?: number;
+}): Promise<RecallDocumentDto> {
+  const form = new FormData();
+  form.append('file', payload.file);
+  form.append('title', payload.title);
+  form.append('subtestCode', payload.subtestCode);
+  form.append('periodLabel', payload.periodLabel);
+  if (payload.professionId) form.append('professionId', payload.professionId);
+  if (payload.descriptionMarkdown != null) form.append('descriptionMarkdown', payload.descriptionMarkdown);
+  if (payload.sortOrder != null) form.append('sortOrder', String(payload.sortOrder));
+  const token = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetchWithTimeout(resolveApiUrl('/v1/admin/recall-documents'), {
+    method: 'POST', headers, body: form,
+  }, 120_000);
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Upload failed: ${response.status} ${text}`);
+  }
+  return response.json() as Promise<RecallDocumentDto>;
+}
+
+export async function adminUpdateRecallDocument(id: string, patch: {
+  title?: string;
+  subtestCode?: RecallSubtest;
+  periodLabel?: string;
+  professionId?: string | null;
+  descriptionMarkdown?: string | null;
+  sortOrder?: number;
+}): Promise<RecallDocumentDto> {
+  return apiRequest<RecallDocumentDto>(`/v1/admin/recall-documents/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function adminPublishRecallDocument(id: string): Promise<{ id: string; status: string }> {
+  return apiRequest(`/v1/admin/recall-documents/${encodeURIComponent(id)}/publish`, { method: 'POST', body: '{}' });
+}
+
+export async function adminArchiveRecallDocument(id: string): Promise<{ id: string; status: string }> {
+  return apiRequest(`/v1/admin/recall-documents/${encodeURIComponent(id)}/archive`, { method: 'POST', body: '{}' });
+}
+
+export async function adminUnarchiveRecallDocument(id: string): Promise<{ id: string; status: string }> {
+  return apiRequest(`/v1/admin/recall-documents/${encodeURIComponent(id)}/unarchive`, { method: 'POST', body: '{}' });
+}
+
+export async function adminDeleteRecallDocument(id: string): Promise<void> {
+  await apiRequest<void>(`/v1/admin/recall-documents/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  }, { acceptedStatuses: [204] });
+}
+
+export async function learnerListRecallDocuments(subtest?: RecallSubtest): Promise<RecallDocumentLearnerDto[]> {
+  const qs = subtest ? `?subtest=${subtest}` : '';
+  return apiRequest<RecallDocumentLearnerDto[]>(`/v1/recall-documents${qs}`);
+}
+
+export async function downloadRecallDocumentMedia(assetId: string): Promise<Blob> {
+  const path = `/v1/media/${encodeURIComponent(assetId)}/content`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path, undefined, { json: false }),
+  }, 120_000);
+  if (!response.ok) {
+    throw new ApiError(response.status, 'recall_document_download_failed', `Recall document download failed: ${response.status}`, isRetryable(response.status));
+  }
+  return response.blob();
+}
+
+// -----------------------------------------------------------------------------
+// Scoring Policy (admin singleton document + learner read)
+// -----------------------------------------------------------------------------
+
+export interface ScoringPolicyDto {
+  id: string;
+  bodyMarkdown: string;
+  policyJson: string;
+  isActive: boolean;
+  updatedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScoringPolicyLearnerDto {
+  id: string;
+  bodyMarkdown: string;
+  policyJson: string;
+  updatedAt: string;
+}
+
+export async function adminGetScoringPolicy(): Promise<ScoringPolicyDto | null> {
+  return apiRequest<ScoringPolicyDto | null>('/v1/admin/scoring-policy');
+}
+
+export async function adminUpdateScoringPolicy(payload: {
+  bodyMarkdown: string;
+  policyJson: string;
+}): Promise<ScoringPolicyDto> {
+  return apiRequest<ScoringPolicyDto>('/v1/admin/scoring-policy', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function adminListScoringPolicyHistory(): Promise<ScoringPolicyDto[]> {
+  return apiRequest<ScoringPolicyDto[]>('/v1/admin/scoring-policy/history');
+}
+
+export async function learnerGetScoringPolicy(): Promise<ScoringPolicyLearnerDto | null> {
+  return apiRequest<ScoringPolicyLearnerDto | null>('/v1/scoring-policy');
+}
+
+// -----------------------------------------------------------------------------
+// Rulebook reference PDF (human-readable companion to the JSON rulebook)
+// -----------------------------------------------------------------------------
+
+export interface RulebookReferencePdfDto {
+  id: string;
+  referencePdfAssetId: string;
+  originalFilename: string;
+  sizeBytes: number;
+}
+
+export async function adminUploadRulebookReferencePdf(rulebookId: string, file: File): Promise<RulebookReferencePdfDto> {
+  const form = new FormData();
+  form.append('file', file);
+  const token = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetchWithTimeout(
+    resolveApiUrl(`/v1/admin/rulebooks/${encodeURIComponent(rulebookId)}/reference-pdf`),
+    { method: 'POST', headers, body: form },
+    120_000,
+  );
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Upload failed: ${response.status} ${text}`);
+  }
+  return response.json() as Promise<RulebookReferencePdfDto>;
+}
+
+export async function adminDeleteRulebookReferencePdf(rulebookId: string): Promise<void> {
+  await apiRequest<void>(
+    `/v1/admin/rulebooks/${encodeURIComponent(rulebookId)}/reference-pdf`,
+    { method: 'DELETE' },
+    { acceptedStatuses: [204] },
+  );
+}
+
+export async function learnerGetRulebookReferencePdf(kind: string, profession: string): Promise<{ rulebookId: string; referencePdfAssetId: string } | null> {
+  try {
+    return await apiRequest<{ rulebookId: string; referencePdfAssetId: string }>(`/v1/rulebooks/${encodeURIComponent(kind)}/${encodeURIComponent(profession)}/reference-pdf`);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Result-template gallery (images displayed on learner mock-result pages)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ResultTemplateDto {
+  id: string;
+  templateKey: string;
+  title: string;
+  description: string | null;
+  professionId: string | null;
+  mediaAssetId: string;
+  isActive: boolean;
+  sortOrder: number;
+  uploadedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  media: {
+    id: string;
+    originalFilename: string;
+    mimeType: string;
+    format: string;
+    sizeBytes: number;
+    sha256: string | null;
+  } | null;
+}
+
+export async function adminListResultTemplates(profession?: string): Promise<ResultTemplateDto[]> {
+  const qs = profession ? `?profession=${encodeURIComponent(profession)}` : '';
+  return apiRequest<ResultTemplateDto[]>(`/v1/admin/result-templates${qs}`);
+}
+
+export async function adminUploadResultTemplate(payload: {
+  file: File;
+  templateKey: string;
+  title: string;
+  description?: string | null;
+  professionId?: string | null;
+  sortOrder?: number;
+}): Promise<ResultTemplateDto> {
+  const form = new FormData();
+  form.append('file', payload.file);
+  form.append('templateKey', payload.templateKey);
+  form.append('title', payload.title);
+  if (payload.description != null) form.append('description', payload.description);
+  if (payload.professionId) form.append('professionId', payload.professionId);
+  if (payload.sortOrder != null) form.append('sortOrder', String(payload.sortOrder));
+  const token = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetchWithTimeout(resolveApiUrl('/v1/admin/result-templates'), {
+    method: 'POST', headers, body: form,
+  }, 120_000);
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Upload failed: ${response.status} ${text}`);
+  }
+  return response.json() as Promise<ResultTemplateDto>;
+}
+
+export async function adminUpdateResultTemplate(id: string, patch: {
+  title?: string;
+  description?: string | null;
+  professionId?: string | null;
+  sortOrder?: number;
+}): Promise<ResultTemplateDto> {
+  return apiRequest<ResultTemplateDto>(`/v1/admin/result-templates/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function adminActivateResultTemplate(id: string): Promise<{ id: string; isActive: boolean }> {
+  return apiRequest(`/v1/admin/result-templates/${encodeURIComponent(id)}/activate`, { method: 'POST', body: '{}' });
+}
+
+export async function adminDeactivateResultTemplate(id: string): Promise<{ id: string; isActive: boolean }> {
+  return apiRequest(`/v1/admin/result-templates/${encodeURIComponent(id)}/deactivate`, { method: 'POST', body: '{}' });
+}
+
+export async function adminDeleteResultTemplate(id: string): Promise<void> {
+  await apiRequest<void>(`/v1/admin/result-templates/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  }, { acceptedStatuses: [204] });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Speaking shared resources (Warm-up Questions + Assessment Criteria PDFs)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SpeakingSharedResourceKind = 'WarmUpQuestions' | 'AssessmentCriteria';
+
+export interface SpeakingSharedResourceDto {
+  id: string;
+  kind: SpeakingSharedResourceKind;
+  title: string;
+  professionId: string | null;
+  mediaAssetId: string;
+  status: 'Draft' | 'InReview' | 'EditorReview' | 'PublisherApproval' | 'Published' | 'Rejected' | 'Archived';
+  publishedAt: string | null;
+  effectiveFrom: string | null;
+  uploadedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  media: {
+    id: string;
+    originalFilename: string;
+    mimeType: string;
+    sizeBytes: number;
+    sha256: string | null;
+  } | null;
+}
+
+export interface SpeakingSharedResourceLearnerDto {
+  id: string;
+  kind: SpeakingSharedResourceKind;
+  title: string;
+  professionId: string | null;
+  publishedAt: string | null;
+  media: { id: string; originalFilename: string; sizeBytes: number } | null;
+}
+
+export async function adminListSpeakingSharedResources(params: { kind?: SpeakingSharedResourceKind; profession?: string } = {}): Promise<SpeakingSharedResourceDto[]> {
+  const qs = new URLSearchParams();
+  if (params.kind) qs.set('kind', params.kind);
+  if (params.profession) qs.set('profession', params.profession);
+  const q = qs.toString();
+  return apiRequest<SpeakingSharedResourceDto[]>(`/v1/admin/speaking/shared-resources${q ? `?${q}` : ''}`);
+}
+
+export async function adminUploadSpeakingSharedResource(payload: {
+  file: File;
+  kind: SpeakingSharedResourceKind;
+  title: string;
+  professionId?: string | null;
+}): Promise<SpeakingSharedResourceDto> {
+  const form = new FormData();
+  form.append('file', payload.file);
+  form.append('kind', payload.kind);
+  form.append('title', payload.title);
+  if (payload.professionId) form.append('professionId', payload.professionId);
+  const token = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetchWithTimeout(resolveApiUrl('/v1/admin/speaking/shared-resources'), {
+    method: 'POST', headers, body: form,
+  }, 120_000);
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Upload failed: ${response.status} ${text}`);
+  }
+  return response.json() as Promise<SpeakingSharedResourceDto>;
+}
+
+export async function adminPublishSpeakingSharedResource(id: string): Promise<{ id: string; status: string }> {
+  return apiRequest(`/v1/admin/speaking/shared-resources/${encodeURIComponent(id)}/publish`, { method: 'POST', body: '{}' });
+}
+
+export async function adminArchiveSpeakingSharedResource(id: string): Promise<{ id: string; status: string }> {
+  return apiRequest(`/v1/admin/speaking/shared-resources/${encodeURIComponent(id)}/archive`, { method: 'POST', body: '{}' });
+}
+
+export async function adminDeleteSpeakingSharedResource(id: string): Promise<void> {
+  await apiRequest<void>(`/v1/admin/speaking/shared-resources/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  }, { acceptedStatuses: [204] });
+}
+
+export async function learnerListSpeakingSharedResources(): Promise<SpeakingSharedResourceLearnerDto[]> {
+  return apiRequest<SpeakingSharedResourceLearnerDto[]>('/v1/speaking/shared-resources');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Real Content folder importer
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type RealContentTarget =
+  | 'ListeningPaper' | 'ReadingPaper' | 'WritingPaper' | 'SpeakingPaper'
+  | 'RecallDocument' | 'ResultTemplate' | 'SpeakingSharedResource'
+  | 'RulebookReferencePdf' | 'ScoringPolicyBody';
+
+export interface RealContentProposalDto {
+  target: RealContentTarget;
+  title: string;
+  subtest: string | null;
+  professionId: string | null;
+  cardType: string | null;
+  letterType: string | null;
+  periodLabel: string | null;
+  templateKey: string | null;
+  sharedResourceKind: string | null;
+  rulebookKind: string | null;
+  rulebookProfession: string | null;
+  sourcePath: string;
+  assets: Array<{ role: string; part: string | null; sourcePath: string; originalFilename: string | null }>;
+}
+
+export interface RealContentStageResultDto {
+  sessionId: string;
+  uploadedFilename: string;
+  stagedAt: string;
+  proposals: RealContentProposalDto[];
+  issues: string[];
+}
+
+export interface RealContentCommitResultDto {
+  created: Array<{ target: RealContentTarget; id: string; title: string }>;
+  errors: string[];
+}
+
+export async function adminStageRealContentFolder(file: File): Promise<RealContentStageResultDto> {
+  const form = new FormData();
+  form.append('file', file);
+  const token = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetchWithTimeout(
+    resolveApiUrl('/v1/admin/imports/real-content-folder/stage'),
+    { method: 'POST', headers, body: form },
+    600_000, // 10 min for large ZIPs
+  );
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Stage failed: ${response.status} ${text}`);
+  }
+  return response.json() as Promise<RealContentStageResultDto>;
+}
+
+export async function adminCommitRealContentFolder(
+  sessionId: string,
+  approvedSourcePaths?: string[],
+): Promise<RealContentCommitResultDto> {
+  return apiRequest<RealContentCommitResultDto>(
+    `/v1/admin/imports/real-content-folder/${encodeURIComponent(sessionId)}/commit`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ approvedSourcePaths: approvedSourcePaths ?? null }),
+    },
+  );
+}
+
+export async function downloadRulebookReferencePdfMedia(assetId: string): Promise<Blob> {
+  const path = `/v1/media/${encodeURIComponent(assetId)}/content`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path, undefined, { json: false }),
+  }, 120_000);
+  if (!response.ok) {
+    throw new ApiError(response.status, 'rulebook_reference_pdf_download_failed', `Rulebook reference PDF download failed: ${response.status}`, isRetryable(response.status));
+  }
+  return response.blob();
+}
 
