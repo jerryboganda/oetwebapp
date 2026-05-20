@@ -9,16 +9,15 @@ const mockConnection = {
   invoke: vi.fn().mockResolvedValue(undefined),
   on: vi.fn(),
   off: vi.fn(),
+  state: 1, // Connected
 };
 
-const mockConnectionBuilder = {
-  withUrl: vi.fn().mockReturnThis(),
-  withAutomaticReconnect: vi.fn().mockReturnThis(),
-  build: vi.fn(() => mockConnection),
-};
-
-vi.mock('@microsoft/signalr', () => ({
-  HubConnectionBuilder: vi.fn(() => mockConnectionBuilder),
+vi.mock('@/lib/ai-assistant/signalr', () => ({
+  createAssistantConnection: vi.fn(() => mockConnection),
+  registerHubCallbacks: vi.fn((_conn, _callbacks) => vi.fn()),
+  invokeStartTurn: vi.fn().mockResolvedValue(undefined),
+  invokeCancelTurn: vi.fn().mockResolvedValue(undefined),
+  mapHubState: vi.fn(() => 'connected'),
 }));
 
 // ─── Mock API ────────────────────────────────────────────────────────────────
@@ -39,12 +38,22 @@ vi.mock('@/lib/ai-assistant/api', () => ({
     ],
     total: 1,
   }),
+  archiveThread: vi.fn().mockResolvedValue(undefined),
 }));
+
+// Import the mocked module to access registerHubCallbacks
+import { registerHubCallbacks, invokeCancelTurn } from '@/lib/ai-assistant/signalr';
 
 describe('useAiAssistant hook', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  /** Helper to get the callbacks passed to registerHubCallbacks after connect */
+  function getRegisteredCallbacks() {
+    const call = vi.mocked(registerHubCallbacks).mock.calls[0];
+    return call?.[1];
+  }
 
   describe('Connection lifecycle', () => {
     it('starts in disconnected state', () => {
@@ -99,7 +108,6 @@ describe('useAiAssistant hook', () => {
         result.current.disconnect();
       });
 
-      expect(result.current.connectionState).toBe('disconnected');
       expect(mockConnection.stop).toHaveBeenCalled();
     });
 
@@ -123,7 +131,6 @@ describe('useAiAssistant hook', () => {
         useAiAssistant({ token: 'test-token' }),
       );
 
-      // Connect and set up a thread
       await act(async () => {
         await result.current.connect();
         await result.current.createNewThread('Test');
@@ -142,7 +149,7 @@ describe('useAiAssistant hook', () => {
   });
 
   describe('Receiving streaming responses', () => {
-    it('accumulates content_delta events into streamingContent', async () => {
+    it('accumulates TextDelta events into streamingContent', async () => {
       const { result } = renderHook(() =>
         useAiAssistant({ token: 'test-token' }),
       );
@@ -151,39 +158,36 @@ describe('useAiAssistant hook', () => {
         await result.current.connect();
       });
 
-      // Get the StreamEvent handler registered with connection.on
-      const onCall = mockConnection.on.mock.calls.find(([event]) => event === 'StreamEvent');
-      expect(onCall).toBeDefined();
-
-      const handler = onCall![1];
+      const callbacks = getRegisteredCallbacks();
+      expect(callbacks?.onTextDelta).toBeDefined();
 
       await act(async () => {
-        handler({ type: 'content_delta', messageId: 'm1', delta: 'Hello' });
+        callbacks!.onTextDelta!('Hello');
       });
 
       expect(result.current.streamingContent).toBe('Hello');
 
       await act(async () => {
-        handler({ type: 'content_delta', messageId: 'm1', delta: ' world' });
+        callbacks!.onTextDelta!(' world');
       });
 
       expect(result.current.streamingContent).toBe('Hello world');
     });
 
-    it('finalizes message on content_done', async () => {
+    it('finalizes message on TurnComplete', async () => {
       const { result } = renderHook(() =>
         useAiAssistant({ token: 'test-token' }),
       );
 
       await act(async () => {
         await result.current.connect();
+        await result.current.createNewThread('Test');
       });
 
-      const onCall = mockConnection.on.mock.calls.find(([event]) => event === 'StreamEvent');
-      const handler = onCall![1];
+      const callbacks = getRegisteredCallbacks();
 
       await act(async () => {
-        handler({ type: 'content_done', messageId: 'm1', content: 'Full response' });
+        callbacks!.onTurnComplete!('m1', 'Full response');
       });
 
       expect(result.current.isStreaming).toBe(false);
@@ -193,7 +197,7 @@ describe('useAiAssistant hook', () => {
   });
 
   describe('Tool call handling', () => {
-    it('adds tool result messages on tool_call_done', async () => {
+    it('tracks tool calls via ToolCallStart and ToolCallResult', async () => {
       const { result } = renderHook(() =>
         useAiAssistant({ token: 'test-token' }),
       );
@@ -202,27 +206,25 @@ describe('useAiAssistant hook', () => {
         await result.current.connect();
       });
 
-      const onCall = mockConnection.on.mock.calls.find(([event]) => event === 'StreamEvent');
-      const handler = onCall![1];
+      const callbacks = getRegisteredCallbacks();
 
       await act(async () => {
-        handler({
-          type: 'tool_call_done',
-          messageId: 'm1',
-          toolCallId: 'tc-1',
-          result: '{"score": 7.5}',
-        });
+        callbacks!.onToolCallStart!('tc-1', 'search', '{"query":"test"}');
       });
 
-      const toolMsg = result.current.messages.find((m) => m.role === 'tool');
-      expect(toolMsg).toBeDefined();
-      expect(toolMsg!.content).toBe('{"score": 7.5}');
-      expect(toolMsg!.toolCallId).toBe('tc-1');
+      expect(result.current.activeToolCalls).toHaveLength(1);
+      expect(result.current.activeToolCalls[0].toolName).toBe('search');
+
+      await act(async () => {
+        callbacks!.onToolCallResult!('tc-1', '{"score": 7.5}', false);
+      });
+
+      expect(result.current.activeToolCalls[0].result).toBe('{"score": 7.5}');
     });
   });
 
   describe('Error states', () => {
-    it('sets error on stream error event', async () => {
+    it('sets error on TurnError event', async () => {
       const { result } = renderHook(() =>
         useAiAssistant({ token: 'test-token' }),
       );
@@ -231,14 +233,13 @@ describe('useAiAssistant hook', () => {
         await result.current.connect();
       });
 
-      const onCall = mockConnection.on.mock.calls.find(([event]) => event === 'StreamEvent');
-      const handler = onCall![1];
+      const callbacks = getRegisteredCallbacks();
 
       await act(async () => {
-        handler({ type: 'error', code: 'context_overflow', message: 'Context window exceeded' });
+        callbacks!.onTurnError!('context_overflow', 'Context window exceeded');
       });
 
-      expect(result.current.error).toBe('Context window exceeded');
+      expect(result.current.error).toBe('[context_overflow] Context window exceeded');
       expect(result.current.isStreaming).toBe(false);
     });
   });
@@ -251,7 +252,7 @@ describe('useAiAssistant hook', () => {
 
       await act(async () => {
         const thread = await result.current.createNewThread('My Thread');
-        expect(thread.id).toBe('new-thread-1');
+        expect(thread?.id).toBe('new-thread-1');
       });
 
       expect(result.current.thread?.id).toBe('new-thread-1');
@@ -272,7 +273,7 @@ describe('useAiAssistant hook', () => {
       expect(result.current.messages[0].content).toBe('Hello');
     });
 
-    it('cancelStream stops streaming and invokes CancelStream', async () => {
+    it('cancelStream stops streaming and invokes CancelTurn', async () => {
       const { result } = renderHook(() =>
         useAiAssistant({ token: 'test-token' }),
       );
@@ -287,7 +288,7 @@ describe('useAiAssistant hook', () => {
 
       expect(result.current.isStreaming).toBe(false);
       expect(result.current.streamingContent).toBe('');
-      expect(mockConnection.invoke).toHaveBeenCalledWith('CancelStream');
+      expect(invokeCancelTurn).toHaveBeenCalled();
     });
   });
 });

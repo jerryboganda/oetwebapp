@@ -120,5 +120,6 @@ export interface ReadingValidationReport {
 }
 
 export interface ReorderDto {
-  items: Array<{ id: string; sortOrder: number }>;
+  items?: Array<{ id: string; sortOrder: number }>;
+  orderedIds?: string[];
 }
