@@ -52,7 +52,7 @@ public static class CommunityEndpoints
             return Results.Ok(new { id = thread.Id, categoryId = thread.CategoryId, authorUserId = thread.AuthorUserId, authorDisplayName = thread.AuthorDisplayName, authorRole = thread.AuthorRole, title = thread.Title, body = thread.Body, isPinned = thread.IsPinned, isLocked = thread.IsLocked, replyCount = thread.ReplyCount, viewCount = thread.ViewCount, likeCount = thread.LikeCount, createdAt = thread.CreatedAt, lastActivityAt = thread.LastActivityAt });
         });
 
-        community.MapPost("/threads", async (HttpContext http, CreateThreadRequest req, LearnerDbContext db, CancellationToken ct) =>
+        community.MapPost("/threads", async (HttpContext http, CreateCommunityThreadRequest req, LearnerDbContext db, CancellationToken ct) =>
         {
             var user = await db.Users.FindAsync([http.UserId()], ct);
             var thread = new ForumThread
@@ -175,7 +175,7 @@ public static class CommunityEndpoints
     }
 }
 
-public record CreateThreadRequest(string CategoryId, string Title, string Body);
+public record CreateCommunityThreadRequest(string CategoryId, string Title, string Body);
 public record CreateReplyRequest(string Body);
 public record CreateStudyGroupRequest(string Name, string Description, string ExamTypeCode, bool IsPublic);
 

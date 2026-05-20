@@ -1,0 +1,13 @@
+{
+  "name": "@oet/copilot-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@octokit/webhooks": "^13.0.0"
+  }
+}

@@ -12,7 +12,7 @@
 ## 1. SSH into the VPS
 
 ```powershell
-ssh root@185.252.233.186
+ssh root@68.183.32.122
 ```
 
 ---

@@ -10,6 +10,7 @@ public sealed record RulebookSummaryDto(
     string Version,
     string Status,
     string? AuthoritySource,
+    string? ReferencePdfAssetId,
     int SectionCount,
     int RuleCount,
     string? UpdatedByUserId,
@@ -25,6 +26,7 @@ public sealed record RulebookDetailDto(
     string Version,
     string Status,
     string? AuthoritySource,
+    string? ReferencePdfAssetId,
     string CreatedAt,
     string UpdatedAt,
     string? PublishedAt,
@@ -53,7 +55,7 @@ public sealed record RulebookRuleDto(
     string? ExamplesJson,
     int OrderIndex);
 
-// ── Mutation requests ────────────────────────────────────────────────────
+// Mutation requests.
 
 public sealed record UpdateRulebookMetaRequest(
     string? Version,

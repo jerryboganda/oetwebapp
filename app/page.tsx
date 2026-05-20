@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import { MotionItem } from '@/components/ui/motion-primitives';
@@ -35,8 +36,10 @@ import { LearnerFreshnessIndicator } from '@/components/domain/learner-freshness
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { PronunciationDashboardTile } from '@/components/domain/pronunciation';
+import { SafeRichText } from '@/components/domain/grammar/grammar-content-renderer';
 import { AsyncStateWrapper } from '@/components/state';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
+import { learnerGetScoringPolicy, type ScoringPolicyLearnerDto } from '@/lib/api';
 import type { SubTest } from '@/lib/mock-data';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
@@ -69,6 +72,8 @@ export default function Dashboard() {
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
   const { data, error, reload, status } = useDashboardHome();
+  const [scoringPolicy, setScoringPolicy] = useState<ScoringPolicyLearnerDto | null>(null);
+  const [scoringExpanded, setScoringExpanded] = useState(false);
   const { home, profile, readiness, tasks, engagement, loadedAt } = data;
   const freeze = home?.freeze?.currentFreeze ?? null;
 
@@ -84,6 +89,18 @@ export default function Dashboard() {
     : 0;
   const readinessRecentTrend = liveReadiness?.evidence?.recentTrend ?? 'Trend data will appear after more practice.';
   const readinessUpdatedAt = liveReadiness?.evidence?.lastUpdated ?? loadedAt;
+
+  useEffect(() => {
+    let cancelled = false;
+    learnerGetScoringPolicy()
+      .then((policy) => {
+        if (!cancelled) setScoringPolicy(policy);
+      })
+      .catch(() => {
+        if (!cancelled) setScoringPolicy(null);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const dashboardHeroHighlights = [
     {
@@ -404,6 +421,28 @@ export default function Dashboard() {
               <AiUsageWidget />
 
               <PronunciationDashboardTile />
+
+              {scoringPolicy ? (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-3">
+                      <CardTitle>
+                        <BookOpen className="mr-1.5 inline-block h-4.5 w-4.5 text-primary" />
+                        How am I graded?
+                      </CardTitle>
+                      <Button variant="ghost" size="sm" onClick={() => setScoringExpanded((value) => !value)}>
+                        {scoringExpanded ? 'Hide' : 'Show'}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  {scoringExpanded ? (
+                    <CardContent className="space-y-3 text-sm text-muted">
+                      <SafeRichText markdown={scoringPolicy.bodyMarkdown} className="text-muted" />
+                      <p className="text-xs text-muted">Updated {new Date(scoringPolicy.updatedAt).toLocaleDateString()}</p>
+                    </CardContent>
+                  ) : null}
+                </Card>
+              ) : null}
 
               {engagement ? (
                 <Card>

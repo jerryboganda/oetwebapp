@@ -178,18 +178,24 @@ public static class MediaEndpoints
         if (!isAdmin && !isOwner)
             return Results.Json(new { code = "forbidden", message = "You can only delete your own media." }, statusCode: StatusCodes.Status403Forbidden);
 
-        var isInUse = await db.WritingAttemptAssets.AnyAsync(link => link.MediaAssetId == asset.Id, ct)
-            || await db.ReviewVoiceNotes.AnyAsync(note => note.MediaAssetId == asset.Id, ct);
+        var isInUse = await db.ContentPaperAssets.AnyAsync(link => link.MediaAssetId == asset.Id, ct)
+            || await db.WritingAttemptAssets.AnyAsync(link => link.MediaAssetId == asset.Id, ct)
+            || await db.ReviewVoiceNotes.AnyAsync(note => note.MediaAssetId == asset.Id, ct)
+            || await db.RecallDocuments.AnyAsync(document => document.MediaAssetId == asset.Id, ct)
+            || await db.RulebookVersions.AnyAsync(rulebook => rulebook.ReferencePdfAssetId == asset.Id, ct)
+            || await db.ResultTemplateAssets.AnyAsync(template => template.MediaAssetId == asset.Id, ct)
+            || await db.SpeakingSharedResources.AnyAsync(resource => resource.MediaAssetId == asset.Id, ct);
         if (isInUse)
         {
             return Results.Json(
-                new { code = "media_in_use", message = "This media file is attached to a writing attempt or review and cannot be deleted." },
+                new { code = "media_in_use", message = "This media file is attached to learner content or review records and cannot be deleted." },
                 statusCode: StatusCodes.Status409Conflict);
         }
 
-        storage.Delete(asset.StoragePath);
+        var storagePath = asset.StoragePath;
         db.MediaAssets.Remove(asset);
         await db.SaveChangesAsync(ct);
+        storage.Delete(storagePath);
 
         return Results.Ok(new { deleted = true, id = asset.Id });
     }

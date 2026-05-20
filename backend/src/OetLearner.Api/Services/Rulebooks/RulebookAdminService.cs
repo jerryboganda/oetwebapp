@@ -37,12 +37,12 @@ public sealed class RulebookAdminService
     /// Drop the DbBackedRulebookLoader cache entry for this version's
     /// (kind, profession) pair so grading + linting picks up the change
     /// on the very next call. Safe even when the version is currently a
-    /// Draft — invalidating an unrelated cache key is a no-op.
+    /// Draft; invalidating an unrelated cache key is a no-op.
     /// </summary>
     private void InvalidateLoaderCache(RulebookVersion version)
         => DbBackedRulebookLoader.InvalidateCacheKey(_cache, version.Kind, version.Profession);
 
-    // ── Classification: canonical enums (proper classification on insert) ──
+    // Classification: canonical enums (proper classification on insert).
 
     public static readonly IReadOnlyList<string> ValidKinds = new[]
     {
@@ -84,7 +84,7 @@ public sealed class RulebookAdminService
         return v;
     }
 
-    // ── Read ─────────────────────────────────────────────────────────
+    // Read.
 
     public async Task<IReadOnlyList<RulebookSummaryDto>> ListAsync(string? kind, string? profession, CancellationToken ct)
     {
@@ -115,6 +115,7 @@ public sealed class RulebookAdminService
             v.Version,
             v.Status,
             v.AuthoritySource,
+            v.ReferencePdfAssetId,
             sectionCounts.GetValueOrDefault(v.Id, 0),
             ruleCounts.GetValueOrDefault(v.Id, 0),
             v.UpdatedByUserId,
@@ -143,11 +144,12 @@ public sealed class RulebookAdminService
 
         return new RulebookDetailDto(
             v.Id, v.Kind, v.Profession, v.Version, v.Status, v.AuthoritySource,
+            v.ReferencePdfAssetId,
             v.CreatedAt.ToString("o"), v.UpdatedAt.ToString("o"), v.PublishedAt?.ToString("o"),
             sections, rules);
     }
 
-    // ── Version-level mutations ──────────────────────────────────────
+    // Version-level mutations.
 
     public async Task<RulebookDetailDto> UpdateMetaAsync(string id, UpdateRulebookMetaRequest req, string adminId, CancellationToken ct)
     {
@@ -561,7 +563,7 @@ public sealed class RulebookAdminService
         }
     }
 
-    // ── Section CRUD ─────────────────────────────────────────────────
+    // Section CRUD.
 
     public async Task<RulebookSectionDto> CreateSectionAsync(string versionId, CreateSectionRequest req, string adminId, CancellationToken ct)
     {
@@ -613,7 +615,7 @@ public sealed class RulebookAdminService
         await StampVersionAsync(versionId, adminId, ct);
     }
 
-    // ── Rule CRUD ────────────────────────────────────────────────────
+    // Rule CRUD.
 
     public async Task<RulebookRuleDto> CreateRuleAsync(string versionId, CreateRuleRequest req, string adminId, CancellationToken ct)
     {
@@ -696,7 +698,7 @@ public sealed class RulebookAdminService
         await StampVersionAsync(versionId, adminId, ct);
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────
+    // Helpers.
 
     private static bool IsValidSeverity(string? s)
         => !string.IsNullOrWhiteSpace(s) && ValidSeverities.Contains(s.Trim().ToLowerInvariant());

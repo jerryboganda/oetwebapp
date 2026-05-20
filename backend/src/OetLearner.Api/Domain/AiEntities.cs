@@ -263,6 +263,11 @@ public static class AiFeatureCodes
     public const string AdminListeningSkillTag = "admin.listening.skill_tag";
     public const string AdminListeningTranscriptSegment = "admin.listening.transcript_segment";
 
+    // AI Assistant (multi-role conversational agent — Phases A–H)
+    public const string AiAssistantAdmin = "ai_assistant.admin";
+    public const string AiAssistantExpert = "ai_assistant.expert";
+    public const string AiAssistantLearner = "ai_assistant.learner";
+
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.
     public const string Unclassified = "unclassified";

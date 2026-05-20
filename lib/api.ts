@@ -102,6 +102,7 @@ import type {
   SpeakingAuditInput,
   WritingLintInput,
 } from './rulebook';
+import type { WeaknessDataPoint } from './writing-analytics/types';
 import type {
   VideoLessonDetail,
   VideoLessonListItem,
@@ -1320,6 +1321,21 @@ export interface WritingHomeResponse {
 export async function fetchWritingHome(): Promise<WritingHomeResponse> {
   const data = await apiRequest<WritingHomeResponse>('/v1/writing/home');
   return normalizeRouteValues(data) as WritingHomeResponse;
+}
+
+export interface WritingWeaknessAnalyticsResponse {
+  generatedAt: string;
+  windowDays: number;
+  points: WeaknessDataPoint[];
+}
+
+export async function fetchWritingWeaknessData(options: { days?: number } = {}): Promise<WritingWeaknessAnalyticsResponse> {
+  const params = new URLSearchParams();
+  if (options.days !== undefined) {
+    params.set('days', String(options.days));
+  }
+
+  return apiRequest<WritingWeaknessAnalyticsResponse>(`/v1/writing/analytics/weaknesses${params.size ? `?${params}` : ''}`);
 }
 
 export async function fetchSpeakingHome(): Promise<SpeakingHome> {
@@ -7375,170 +7391,29 @@ export async function adminEvaluateGrammarPublishGate(lessonId: string) {
   };
 }
 
-function makeGrammarExercise(type: GrammarExerciseAuthoring['type'], index: number, topicLabel: string): GrammarExerciseAuthoring {
-  if (type === 'mcq') {
-    return {
-      id: `exercise-${index + 1}`,
-      sortOrder: index + 1,
-      type,
-      promptMarkdown: `Which option is correct for the ${topicLabel.toLowerCase()} pattern?`,
-      options: [
-        { id: 'a', label: 'Incorrect option' },
-        { id: 'b', label: 'Correct option' },
-        { id: 'c', label: 'Distractor' },
-      ],
-      correctAnswer: 'b',
-      acceptedAnswers: [],
-      explanationMarkdown: 'The middle option follows the target structure.',
-      difficulty: 'intermediate',
-      points: 1,
-    };
-  }
-
-  if (type === 'matching') {
-    return {
-      id: `exercise-${index + 1}`,
-      sortOrder: index + 1,
-      type,
-      promptMarkdown: 'Match the sentence fragment to the best ending.',
-      options: [
-        { left: 'The patient was admitted', right: 'after the assessment' },
-        { left: 'The results were discussed', right: 'with the consultant' },
-      ],
-      correctAnswer: [
-        { left: 'The patient was admitted', right: 'after the assessment' },
-        { left: 'The results were discussed', right: 'with the consultant' },
-      ],
-      acceptedAnswers: [],
-      explanationMarkdown: 'Keep the time relationship and clinical reference in order.',
-      difficulty: 'intermediate',
-      points: 2,
-    };
-  }
-
-  if (type === 'error_correction') {
-    return {
-      id: `exercise-${index + 1}`,
-      sortOrder: index + 1,
-      type,
-      promptMarkdown: 'Correct the grammar error in the sentence: "The nurse explain the procedure."',
-      options: [],
-      correctAnswer: 'The nurse explains the procedure.',
-      acceptedAnswers: ['The nurse explains the procedure'],
-      explanationMarkdown: 'Subject-verb agreement requires explain -> explains.',
-      difficulty: 'beginner',
-      points: 1,
-    };
-  }
-
-  if (type === 'sentence_transformation') {
-    return {
-      id: `exercise-${index + 1}`,
-      sortOrder: index + 1,
-      type,
-      promptMarkdown: 'Rewrite the sentence using a passive structure.',
-      options: [],
-      correctAnswer: 'The medication was prescribed by the doctor.',
-      acceptedAnswers: ['The medication was prescribed by the doctor'],
-      explanationMarkdown: 'Use the passive voice to emphasise the action rather than the agent.',
-      difficulty: 'intermediate',
-      points: 2,
-    };
-  }
-
-  return {
-    id: `exercise-${index + 1}`,
-    sortOrder: index + 1,
-    type: 'fill_blank',
-    promptMarkdown: `Fill the blank: "The ${topicLabel.toLowerCase()} approach is ___."`,
-    options: [],
-    correctAnswer: 'appropriate',
-    acceptedAnswers: ['appropriate'],
-    explanationMarkdown: 'Use a simple adjective that matches the context.',
-    difficulty: 'beginner',
-    points: 1,
-  };
-}
-
-function buildGrammarDraftFromPrompt(params: { examTypeCode: string; topicSlug?: string; level: string; targetExerciseCount: number; prompt: string; }) {
-  const topicSlug = normalizeGrammarTopicSlug(params.topicSlug ?? params.prompt.split(/\s+/).slice(0, 3).join('-'));
-  const topicLabel = titleCase(topicSlug);
-  const title = `${topicLabel} practice`;
-  const contentBlocks: GrammarContentBlockLearner[] = [
-    { id: 'intro', sortOrder: 1, type: 'callout', contentMarkdown: `Focus on **${topicLabel.toLowerCase()}** in a clinical context.` },
-    { id: 'example', sortOrder: 2, type: 'example', contentMarkdown: 'Example: The patient **has been reviewed** by the team.' },
-    { id: 'note', sortOrder: 3, type: 'note', contentMarkdown: 'Watch article use, agreement, and the level of formality.' },
-  ];
-
-  const exerciseTypes: GrammarExerciseAuthoring['type'][] = ['mcq', 'fill_blank', 'error_correction', 'sentence_transformation', 'matching'];
-  const exercises: GrammarExerciseAuthoring[] = [];
-  for (let index = 0; index < Math.max(3, params.targetExerciseCount); index += 1) {
-    exercises.push(makeGrammarExercise(exerciseTypes[index % exerciseTypes.length], index, topicLabel));
-  }
-
-  return {
-    lesson: {
-      examTypeCode: params.examTypeCode,
-      topicId: topicSlug,
-      title,
-      description: `Starter lesson created from the prompt: ${params.prompt}`,
-      level: params.level,
-      category: topicSlug,
-      estimatedMinutes: Math.max(8, exercises.length * 2),
-      sortOrder: 0,
-      sourceProvenance: `Starter draft generated from: ${params.prompt}`,
-      prerequisiteLessonIds: [],
-      contentBlocks,
-      exercises,
-    } satisfies GrammarLessonUpsertPayload,
-    warning: 'Grounded AI generation is not wired yet. A starter draft was created for editing.',
-  };
-}
-
 export async function adminGenerateGrammarAiDraft(params: { examTypeCode: string; topicSlug?: string; prompt: string; level: string; targetExerciseCount: number; profession?: string; }) {
   // Grounded, platform-only. The backend builds the AI prompt via
-  // IAiGatewayService and refuses ungrounded prompts. On AI-parse failure
-  // the server returns a deterministic starter template + `warning`.
-  try {
-    const response = await apiRequest<{
-      lessonId: string;
-      title: string;
-      contentBlockCount: number;
-      exerciseCount: number;
-      rulebookVersion: string;
-      appliedRuleIds: string[];
-      warning: string | null;
-    }>('/v1/admin/grammar/ai-draft', {
-      method: 'POST',
-      body: JSON.stringify({
-        examTypeCode: params.examTypeCode,
-        topicSlug: params.topicSlug ?? null,
-        prompt: params.prompt,
-        level: params.level,
-        targetExerciseCount: params.targetExerciseCount,
-        profession: params.profession ?? 'medicine',
-      }),
-    });
-    return response;
-  } catch (err) {
-    // Last-resort fallback: the backend is unreachable or rejected. Surface
-    // the error up; also produce a local starter draft so the admin can
-    // continue offline. Matches the "always produce a usable draft" decision.
-    if (err instanceof Error && err.message.toLowerCase().includes('network')) {
-      const draft = buildGrammarDraftFromPrompt(params);
-      const created = await adminCreateGrammarLessonV2(draft.lesson);
-      return {
-        lessonId: created.id,
-        title: draft.lesson.title,
-        contentBlockCount: draft.lesson.contentBlocks.length,
-        exerciseCount: draft.lesson.exercises.length,
-        rulebookVersion: '1.0.0',
-        appliedRuleIds: [] as string[],
-        warning: `Backend unreachable — a local starter template was created. ${draft.warning ?? ''}`.trim(),
-      };
-    }
-    throw err;
-  }
+  // IAiGatewayService and refuses ungrounded prompts. The client must not
+  // create local lesson content when the backend is unavailable.
+  return apiRequest<{
+    lessonId: string;
+    title: string;
+    contentBlockCount: number;
+    exerciseCount: number;
+    rulebookVersion: string;
+    appliedRuleIds: string[];
+    warning: string | null;
+  }>('/v1/admin/grammar/ai-draft', {
+    method: 'POST',
+    body: JSON.stringify({
+      examTypeCode: params.examTypeCode,
+      topicSlug: params.topicSlug ?? null,
+      prompt: params.prompt,
+      level: params.level,
+      targetExerciseCount: params.targetExerciseCount,
+      profession: params.profession ?? 'medicine',
+    }),
+  });
 }
 
 export interface GrammarEntitlement {
@@ -8040,6 +7915,30 @@ export async function adminPronunciationAiDraft(body: {
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+export type AdminPronunciationGenerateAudioResponse = {
+  mediaAssetId: string;
+  sha256: string;
+  durationMs: number;
+  bytes: number;
+  providerName: string;
+  mimeType: string;
+  storageKey: string;
+  url: string;
+};
+
+export async function generateAdminPronunciationModelAudio(
+  drillId: string,
+  body: { text: string; voiceId?: string },
+): Promise<AdminPronunciationGenerateAudioResponse> {
+  return apiRequest(
+    `/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}/generate-model-audio`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+  ) as Promise<AdminPronunciationGenerateAudioResponse>;
 }
 
 // ── Certificates ──────────────────────────────────────────────────────────────
@@ -9332,6 +9231,7 @@ export interface AdminRulebookSummary {
   version: string;
   status: string;
   authoritySource: string;
+  referencePdfAssetId: string | null;
   sectionCount: number;
   ruleCount: number;
   updatedByUserId: string | null;
@@ -9437,3 +9337,1414 @@ export async function adminImportRulebook(json: string, mode: 'create' | 'replac
     method: 'POST', body: JSON.stringify({ json, mode }),
   });
 }
+
+// === SUBAGENT_BACKEND: admin-content-management START ===
+// Wrappers for the soft-publish + unarchive + bulk endpoints added so the
+// admin web UI can manage every content type without server-side gate
+// restrictions. Publish endpoints now always succeed and surface any
+// rulebook/structural problems as `warnings` instead of throwing.
+
+export interface AdminPublishWithWarningsResponse {
+  published: boolean;
+  status?: string;
+  warnings?: string[];
+}
+
+export interface AdminBulkPaperPublishResult {
+  paperId: string;
+  ok: boolean;
+  warnings?: string[];
+  error?: string;
+}
+
+export interface AdminBulkPaperStatusResult {
+  paperId: string;
+  ok: boolean;
+  status?: string;
+  error?: string;
+}
+
+export async function adminPublishPaperWithWarnings(paperId: string) {
+  return apiRequest<AdminPublishWithWarningsResponse>(
+    `/v1/admin/papers/${encodeURIComponent(paperId)}/publish`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminUnarchivePaper(paperId: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/v1/admin/papers/${encodeURIComponent(paperId)}/unarchive`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminUnarchiveMockBundle(bundleId: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/unarchive`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminUnarchiveGrammarLesson(lessonId: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/v1/admin/grammar/lessons/${encodeURIComponent(lessonId)}/unarchive`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminUnarchiveConversationTemplate(templateId: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/unarchive`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminUnarchivePronunciationDrill(drillId: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}/unarchive`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminBulkPublishPapers(paperIds: string[]) {
+  return apiRequest<{ results: AdminBulkPaperPublishResult[] }>(
+    `/v1/admin/papers/bulk-publish`,
+    { method: 'POST', body: JSON.stringify({ paperIds }) },
+  );
+}
+
+export async function adminBulkSetPaperStatus(
+  paperIds: string[],
+  targetStatus: 'Draft' | 'Published' | 'Archived',
+) {
+  return apiRequest<{ results: AdminBulkPaperStatusResult[] }>(
+    `/v1/admin/papers/bulk-status`,
+    { method: 'POST', body: JSON.stringify({ paperIds, targetStatus }) },
+  );
+}
+
+export interface AdminConversationAiDraftPayload {
+  profession: string;
+  topic?: string;
+  scenario?: string;
+  durationSeconds?: number;
+  taskType?: 'oet-roleplay' | 'oet-handover';
+}
+
+export interface AdminConversationAiDraftResult {
+  title: string;
+  taskTypeCode: string;
+  profession: string;
+  scenario: string;
+  roleDescription: string;
+  patientContext: string;
+  expectedOutcomes: string;
+  difficulty: string;
+  estimatedDurationSeconds: number;
+  objectives: string[];
+  expectedRedFlags: string[];
+  keyVocabulary: string[];
+  warning?: string | null;
+}
+
+export async function adminConversationAiDraft(payload: AdminConversationAiDraftPayload) {
+  return apiRequest<AdminConversationAiDraftResult>(
+    `/v1/admin/conversation/templates/ai-draft`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+// === SUBAGENT_BACKEND: admin-content-management END ===
+
+// === SUBAGENT_B: listening-authoring START ===
+// Typed wrappers for the Listening authoring workspace.
+// Mirrors backend routes in:
+//   - Endpoints/ListeningAuthoringAdminEndpoints.cs
+//   - Endpoints/ListeningAdminAnalyticsEndpoints.cs
+// Canonical paper shape: A1=12, A2=12, B=6, C1=6, C2=6 → 42 items.
+
+import type {
+  ListeningAuthoredExtract,
+  ListeningAuthoredQuestion,
+  ListeningAuthoredQuestionList,
+  ListeningBackfillAllResponse,
+  ListeningBackfillReport,
+  ListeningExtractionDraft,
+  ListeningExtractionDraftStatus,
+  ListeningExtractPatch,
+  ListeningExtractProposalResponse,
+  ListeningExtractsResponse,
+  ListeningQuestionPatch,
+  ListeningValidationReport,
+} from '@/lib/types/admin/listening-authoring';
+
+const lap = (paperId: string) =>
+  `/v1/admin/papers/${encodeURIComponent(paperId)}/listening`;
+
+// ── Validate ────────────────────────────────────────────────────────────
+export async function adminListeningValidate(paperId: string) {
+  return apiRequest<ListeningValidationReport>(`${lap(paperId)}/validate`);
+}
+
+// ── Structure (42 items) ────────────────────────────────────────────────
+export async function adminListeningGetStructure(paperId: string) {
+  return apiRequest<ListeningAuthoredQuestionList>(`${lap(paperId)}/structure`);
+}
+
+export async function adminListeningReplaceStructure(
+  paperId: string,
+  questions: ListeningAuthoredQuestion[],
+) {
+  return apiRequest<ListeningAuthoredQuestionList>(`${lap(paperId)}/structure`, {
+    method: 'PUT',
+    body: JSON.stringify({ questions }),
+  });
+}
+
+export async function adminListeningPatchQuestion(
+  paperId: string,
+  questionId: string,
+  patch: ListeningQuestionPatch,
+) {
+  return apiRequest<ListeningAuthoredQuestionList>(
+    `${lap(paperId)}/structure/${encodeURIComponent(questionId)}`,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  );
+}
+
+// ── Extracts (5 per paper) ──────────────────────────────────────────────
+export async function adminListeningGetExtracts(paperId: string) {
+  return apiRequest<ListeningExtractsResponse>(`${lap(paperId)}/extracts`);
+}
+
+export async function adminListeningReplaceExtracts(
+  paperId: string,
+  extracts: ListeningAuthoredExtract[],
+) {
+  return apiRequest<ListeningExtractsResponse>(`${lap(paperId)}/extracts`, {
+    method: 'PUT',
+    body: JSON.stringify({ extracts }),
+  });
+}
+
+export async function adminListeningPatchExtract(
+  paperId: string,
+  extractCode: string,
+  patch: ListeningExtractPatch,
+) {
+  return apiRequest<ListeningExtractsResponse>(
+    `${lap(paperId)}/extracts/${encodeURIComponent(extractCode)}`,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  );
+}
+
+// ── AI extraction lifecycle ─────────────────────────────────────────────
+export async function adminListeningProposeExtraction(paperId: string) {
+  return apiRequest<ListeningExtractProposalResponse>(`${lap(paperId)}/extract`, {
+    method: 'POST',
+  });
+}
+
+export async function adminListeningListExtractions(
+  paperId: string,
+  status?: ListeningExtractionDraftStatus,
+) {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return apiRequest<ListeningExtractionDraft[]>(`${lap(paperId)}/extractions${qs}`);
+}
+
+export async function adminListeningGetExtraction(paperId: string, draftId: string) {
+  return apiRequest<ListeningExtractionDraft>(
+    `${lap(paperId)}/extractions/${encodeURIComponent(draftId)}`,
+  );
+}
+
+export async function adminListeningApproveExtraction(
+  paperId: string,
+  draftId: string,
+  reason?: string,
+) {
+  return apiRequest<ListeningExtractionDraft>(
+    `${lap(paperId)}/extractions/${encodeURIComponent(draftId)}/approve`,
+    { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
+  );
+}
+
+export async function adminListeningRejectExtraction(
+  paperId: string,
+  draftId: string,
+  reason: string,
+) {
+  return apiRequest<ListeningExtractionDraft>(
+    `${lap(paperId)}/extractions/${encodeURIComponent(draftId)}/reject`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+  );
+}
+
+// ── Per-paper backfill (JSON → relational, also covers TTS asset rewire) ─
+export async function adminListeningBackfillPaper(paperId: string) {
+  return apiRequest<ListeningBackfillReport>(`${lap(paperId)}/backfill`, {
+    method: 'POST',
+  });
+}
+
+// ── System-wide listening admin endpoints ───────────────────────────────
+export async function adminListeningBackfillAll() {
+  return apiRequest<ListeningBackfillAllResponse>(`/v1/admin/listening/backfill`, {
+    method: 'POST',
+  });
+}
+
+export async function adminListeningGetAnalytics(days?: number) {
+  const qs = typeof days === 'number' ? `?days=${days}` : '';
+  return apiRequest<unknown>(`/v1/admin/listening/analytics${qs}`);
+}
+
+export async function adminListeningExportAttempt(attemptId: string) {
+  return apiRequest<unknown>(
+    `/v1/admin/listening/attempts/${encodeURIComponent(attemptId)}/export`,
+  );
+}
+// === SUBAGENT_B: listening-authoring END ===
+
+// === SUBAGENT_C: bulk-import-and-generation START ===
+// Typed wrappers for the bulk-import (ZIP), rulebook-import, and
+// content-generation orchestration endpoints used by the Wave-2 admin UI
+// (`/admin/content/papers/import-zip`, `/admin/rulebooks/import`,
+// `/admin/content/generation/jobs`). Rulebook list/publish/import helpers
+// already exist above (`adminListRulebooks`, `adminImportRulebook`,
+// `adminPublishRulebook`) and are re-used by the new pages without
+// duplication.
+import type {
+  BulkImportApprovalInput,
+  BulkImportCommitResult,
+  BulkImportSessionResponse,
+  GenerationJobListResponse,
+  GenerationJobSummary,
+  QueueGenerationInput,
+} from '@/lib/types/admin/bulk-import';
+
+/**
+ * Stage a ZIP payload for bulk content import. The backend accepts a single
+ * `multipart/form-data` field named `file`; we drop the JSON Content-Type so
+ * the browser produces the correct boundary. Returns the parsed session +
+ * manifest so the UI can render an approval table before commit.
+ */
+export async function adminStartZipImport(
+  file: File,
+): Promise<BulkImportSessionResponse> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  return apiRequest<BulkImportSessionResponse>(
+    '/v1/admin/imports/zip',
+    { method: 'POST', body: form },
+    { json: false },
+  );
+}
+
+/**
+ * Commit a previously-staged ZIP import session with the admin's per-paper
+ * approval decisions. `approvals` MUST include one entry per proposalId
+ * returned by `adminStartZipImport`; the backend treats unknown ids as
+ * skipped and refuses unknown sessions / cross-admin commits.
+ */
+export async function adminCommitZipImport(
+  sessionId: string,
+  approvals: BulkImportApprovalInput[],
+): Promise<BulkImportCommitResult> {
+  return apiRequest<BulkImportCommitResult>(
+    `/v1/admin/imports/zip/${encodeURIComponent(sessionId)}/commit`,
+    { method: 'POST', body: JSON.stringify(approvals) },
+  );
+}
+
+/**
+ * Abort an in-flight chunked upload session. The dedicated ZIP-import flow
+ * does not use chunked uploads (the `/imports/zip` endpoint takes a single
+ * multipart payload directly), but this wrapper is exported so the UI can
+ * discard orphaned upload sessions if a different flow staged them.
+ */
+export async function adminDiscardUpload(uploadId: string): Promise<void> {
+  await apiRequest<void>(
+    `/v1/admin/uploads/${encodeURIComponent(uploadId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+/**
+ * Convenience wrapper that returns the strongly-typed jobs list. The
+ * underlying `fetchContentGenerationJobs(page, pageSize)` helper already
+ * exists above and is kept unchanged; this wrapper just narrows the return
+ * type so the new jobs page can avoid `unknown` casts.
+ */
+export async function adminListGenerationJobs(
+  page = 1,
+  pageSize = 20,
+): Promise<GenerationJobListResponse> {
+  return apiRequest<GenerationJobListResponse>(
+    `/v1/admin/content/generation-jobs?page=${page}&pageSize=${pageSize}`,
+  );
+}
+
+export async function adminGetGenerationJob(
+  jobId: string,
+): Promise<GenerationJobSummary> {
+  return apiRequest<GenerationJobSummary>(
+    `/v1/admin/content/generation-jobs/${encodeURIComponent(jobId)}`,
+  );
+}
+
+/**
+ * Strongly-typed wrapper around `POST /v1/admin/content/generate`. The
+ * existing `queueContentGeneration` helper above accepts the same shape but
+ * returns `unknown`; this wrapper documents the field set the new launcher
+ * UI uses and narrows the return type.
+ */
+export async function adminQueueContentGeneration(
+  payload: QueueGenerationInput,
+): Promise<{ jobId?: string } & Record<string, unknown>> {
+  return apiRequest<{ jobId?: string } & Record<string, unknown>>(
+    '/v1/admin/content/generate',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+// === SUBAGENT_C: bulk-import-and-generation END ===
+
+// === SUBAGENT_E: bulk-ops START ===
+// Typed helpers used by the Wave-2 bulk admin pages:
+//   - app/admin/content/mocks/bulk/page.tsx
+//   - app/admin/content/vocabulary/publish-batch/page.tsx
+//   - app/admin/content/papers/republish-drafts/page.tsx
+// These are thin re-exports / wrappers around endpoints that already exist
+// on the backend. They live behind the SUBAGENT_E marker so future merges
+// stay non-overlapping with SUBAGENT_B/C/D blocks.
+
+/** Minimal projection of /v1/admin/papers list rows used by the bulk pages. */
+export interface AdminBulkPaperRow {
+  id: string;
+  title: string;
+  subtestCode: string;
+  status: 'Draft' | 'InReview' | 'Published' | 'Archived';
+  professionId: string | null;
+  appliesToAllProfessions: boolean;
+  difficulty?: string | null;
+  sourceProvenance?: string | null;
+  updatedAt?: string | null;
+}
+
+/** Lightweight draft vocab row used by the publish-batch UI. */
+export interface AdminBulkVocabRow {
+  id: string;
+  term: string;
+  definition: string | null;
+  category: string;
+  professionId: string | null;
+  difficulty?: string | null;
+  exampleSentence: string | null;
+  status: 'draft' | 'active' | 'archived';
+}
+
+/** Full vocab item detail (subset of fields the publish-batch UI consumes). */
+export interface AdminBulkVocabDetail extends AdminBulkVocabRow {
+  ipaPronunciation: string | null;
+  audioUrl: string | null;
+  contextNotes: string | null;
+  sourceProvenance: string | null;
+}
+
+/** Minimal mock-bundle row used by the bulk page to count existing bundles. */
+export interface AdminBulkMockBundleRow {
+  id: string;
+  title: string;
+  mockType: string;
+  status: string;
+  professionId: string | null;
+}
+
+/** Bulk list papers (admin). Returns flat array — backend does not paginate. */
+export async function adminBulkListPapers(query: {
+  subtest?: string;
+  profession?: string;
+  status?: 'Draft' | 'Published' | 'Archived' | 'InReview';
+  pageSize?: number;
+}): Promise<AdminBulkPaperRow[]> {
+  const qs = new URLSearchParams();
+  if (query.subtest) qs.set('subtest', query.subtest);
+  if (query.profession) qs.set('profession', query.profession);
+  if (query.status) qs.set('status', query.status);
+  if (query.pageSize) qs.set('pageSize', String(query.pageSize));
+  const suffix = qs.toString();
+  return apiRequest<AdminBulkPaperRow[]>(
+    `/v1/admin/papers${suffix ? `?${suffix}` : ''}`,
+  );
+}
+
+/** Bulk list draft vocab items (paginated). */
+export async function adminBulkListDraftVocab(params: {
+  page?: number;
+  pageSize?: number;
+  profession?: string;
+  category?: string;
+  search?: string;
+}): Promise<{ total: number; page: number; pageSize: number; items: AdminBulkVocabRow[] }> {
+  const qs = new URLSearchParams();
+  qs.set('status', 'draft');
+  if (params.page) qs.set('page', String(params.page));
+  if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+  if (params.profession) qs.set('profession', params.profession);
+  if (params.category) qs.set('category', params.category);
+  if (params.search) qs.set('search', params.search);
+  return apiRequest(`/v1/admin/vocabulary/items?${qs.toString()}`);
+}
+
+/** Get one vocab item with full detail (includes IPA / provenance / audio). */
+export async function adminBulkGetVocabItem(itemId: string) {
+  return apiRequest<AdminBulkVocabDetail>(
+    `/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`,
+  );
+}
+
+/**
+ * Update one vocab item. Pass `{ status: 'active' }` to publish; the backend's
+ * EnforceVocabularyPublishGate validates required fields and may 4xx.
+ */
+export async function adminBulkUpdateVocabItem(
+  itemId: string,
+  body: Record<string, unknown>,
+) {
+  return apiRequest<AdminBulkVocabDetail>(
+    `/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`,
+    { method: 'PUT', body: JSON.stringify(body) },
+  );
+}
+
+/** List mock bundles (used by the bulk-mocks page to count existing rows). */
+export async function adminBulkListMockBundles(query: {
+  mockType?: string;
+  status?: string;
+} = {}) {
+  const qs = new URLSearchParams();
+  if (query.mockType) qs.set('mockType', query.mockType);
+  if (query.status) qs.set('status', query.status);
+  const suffix = qs.toString();
+  return apiRequest<AdminBulkMockBundleRow[]>(
+    `/v1/admin/mock-bundles${suffix ? `?${suffix}` : ''}`,
+  );
+}
+// === SUBAGENT_E: bulk-ops END ===
+
+// === SUBAGENT_D: speaking-conv-pron START ===
+// Typed helpers for the Wave-2 SUBAGENT D admin UI:
+//   - Speaking workspace + create + backfill pages
+//   - Conversation AI-draft + bulk-runner
+//   - Pronunciation bulk-runner + analytics
+//
+// Backend status notes (verified against backend/src/OetLearner.Api):
+//   * Speaking list / paper CRUD / chunked uploads / publish / unarchive
+//     are already exposed via /v1/admin/papers/* and consumed via the
+//     `lib/content-upload-api.ts` helpers. We re-export thin wrappers here
+//     so the new pages can stay self-contained.
+//   * `POST /v1/admin/conversation/templates/ai-draft` was added by
+//     SUBAGENT_BACKEND (see `adminConversationAiDraft` above).
+//   * `POST /v1/admin/pronunciation/drills/ai-draft` exists (see
+//     `adminPronunciationAiDraft` above).
+//   * NO speaking asset-backfill endpoint exists (the
+//     `scripts/admin/generate-speaking-assets.mjs` Node script is the
+//     only mechanism). Surface as "missing backend endpoint" in the UI.
+//   * NO pronunciation analytics endpoint exists. Surface the same way.
+
+export interface AdminSpeakingPaperRow {
+  id: string;
+  subtestCode: string;
+  title: string;
+  slug: string;
+  professionId: string | null;
+  appliesToAllProfessions: boolean;
+  difficulty: string;
+  status: 'Draft' | 'InReview' | 'Published' | 'Archived';
+  cardType: string | null;
+  tagsCsv: string;
+  updatedAt: string;
+  publishedAt: string | null;
+}
+
+export interface AdminSpeakingListResult {
+  items: AdminSpeakingPaperRow[];
+}
+
+export async function adminListSpeakingPapers(params?: {
+  status?: string;
+  profession?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<AdminSpeakingListResult> {
+  const qs = new URLSearchParams();
+  qs.set('subtest', 'speaking');
+  if (params?.status) qs.set('status', params.status);
+  if (params?.profession) qs.set('profession', params.profession);
+  if (params?.search) qs.set('search', params.search);
+  qs.set('page', String(params?.page ?? 1));
+  qs.set('pageSize', String(params?.pageSize ?? 100));
+  const data = await apiRequest<AdminSpeakingPaperRow[] | AdminSpeakingListResult>(
+    `/v1/admin/papers?${qs.toString()}`,
+  );
+  if (Array.isArray(data)) return { items: data };
+  return data;
+}
+
+export interface AdminSpeakingCreatePayload {
+  title: string;
+  professionId?: string | null;
+  appliesToAllProfessions?: boolean;
+  difficulty?: string;
+  examCode?: string | null;
+  estimatedDurationMinutes?: number;
+  sourceProvenance?: string;
+}
+
+export async function adminCreateSpeakingPaper(body: AdminSpeakingCreatePayload) {
+  const payload = {
+    subtestCode: 'speaking',
+    title: body.title,
+    professionId: body.appliesToAllProfessions === false ? body.professionId ?? null : null,
+    appliesToAllProfessions: body.appliesToAllProfessions ?? true,
+    difficulty: body.difficulty ?? 'standard',
+    estimatedDurationMinutes: body.estimatedDurationMinutes ?? 12,
+    priority: 0,
+    tagsCsv: body.examCode ? `exam:${body.examCode}` : null,
+    sourceProvenance:
+      body.sourceProvenance ?? 'admin-authored:speaking-workspace',
+  };
+  return apiRequest<{ id: string; title: string; slug: string }>(
+    '/v1/admin/papers',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export interface AdminSpeakingStructure {
+  candidateCard?: Record<string, unknown> | null;
+  interlocutorCard?: Record<string, unknown> | null;
+  warmUpQuestions?: string[];
+  prepTimeSeconds?: number;
+  roleplayTimeSeconds?: number;
+  patientEmotion?: string;
+  communicationGoal?: string;
+  clinicalTopic?: string;
+  criteriaFocus?: string[];
+  complianceNotes?: string;
+}
+
+export interface AdminSpeakingStructureResponse {
+  paperId: string;
+  structure: AdminSpeakingStructure;
+  validation?: {
+    isPublishReady?: boolean;
+    isValid?: boolean;
+    issues?: Array<{ code: string; severity: string; message: string }>;
+  };
+  updatedAt?: string;
+}
+
+export async function adminGetSpeakingStructure(paperId: string) {
+  return apiRequest<AdminSpeakingStructureResponse>(
+    `/v1/admin/papers/${encodeURIComponent(paperId)}/speaking-structure`,
+  );
+}
+
+export async function adminUpdateSpeakingStructure(
+  paperId: string,
+  structure: AdminSpeakingStructure,
+) {
+  return apiRequest<AdminSpeakingStructureResponse>(
+    `/v1/admin/papers/${encodeURIComponent(paperId)}/speaking-structure`,
+    { method: 'PUT', body: JSON.stringify({ structure }) },
+  );
+}
+
+export async function adminArchiveSpeakingPaper(paperId: string) {
+  return apiRequest<void>(
+    `/v1/admin/papers/${encodeURIComponent(paperId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+// Conversation bulk runner uses existing helpers. Re-export a small
+// typed orchestrator that the bulk page imports.
+
+export interface ConversationBulkCellInput {
+  profession: string;
+  taskType: 'oet-roleplay' | 'oet-handover';
+}
+
+// Pronunciation bulk runner orchestration result type (page-local helper).
+export interface PronunciationBulkResultRow {
+  topic: string;
+  profession: string;
+  ok: boolean;
+  drillId?: string;
+  status?: string;
+  error?: string;
+  warning?: string | null;
+}
+
+// Pronunciation analytics — endpoint NOT implemented yet on the backend.
+// The analytics page will catch the 404 and render TBD-state. We still
+// expose a typed helper so the call-site is small and easy to migrate
+// the moment the endpoint lands.
+export interface AdminPronunciationAnalytics {
+  totalAttempts: number;
+  averageScore: number | null;
+  topPhonemes: Array<{ phoneme: string; attempts: number; averageScore: number | null }>;
+  weakestPhonemes: Array<{ phoneme: string; attempts: number; averageScore: number | null }>;
+  source?: 'live' | 'tbd';
+}
+
+export async function adminFetchPronunciationAnalytics(params?: {
+  windowDays?: number;
+  profession?: string;
+}): Promise<AdminPronunciationAnalytics> {
+  const qs = new URLSearchParams();
+  if (params?.windowDays) qs.set('windowDays', String(params.windowDays));
+  if (params?.profession) qs.set('profession', params.profession);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return apiRequest<AdminPronunciationAnalytics>(
+    `/v1/admin/pronunciation/analytics${suffix}`,
+  );
+}
+// === SUBAGENT_D: speaking-conv-pron END ===
+
+// === SUBAGENT_A: reading-authoring START ===
+// Typed wrappers for the Reading Authoring admin surface backed by
+// `ReadingAuthoringAdminEndpoints` under `/v1/admin/papers/{paperId}/reading`.
+// All correct-answer / explanation / synonym fields here are intentionally
+// included — these helpers MUST only be called from admin UI behind
+// `AdminContentWrite`.
+import type {
+  ReadingDistractorsPayload,
+  ReadingExtractionDraft,
+  ReadingPartUpsertDto,
+  ReadingPartView,
+  ReadingQuestionDto,
+  ReadingQuestionReviewLogEntry,
+  ReadingQuestionUpsertDto,
+  ReadingReviewTransitionPayload,
+  ReadingStructure,
+  ReadingStructureImportResult,
+  ReadingStructureManifest,
+  ReadingStructureManifestImportPayload,
+  ReadingTextDto,
+  ReadingTextUpsertDto,
+  ReadingValidationReport,
+  ReorderDto,
+} from './types/admin/reading-authoring';
+
+const readingAdminBase = (paperId: string) =>
+  `/v1/admin/papers/${encodeURIComponent(paperId)}/reading`;
+
+export async function adminReadingGetStructure(paperId: string): Promise<ReadingStructure> {
+  return apiRequest<ReadingStructure>(`${readingAdminBase(paperId)}/structure`);
+}
+
+export async function adminReadingGetManifest(paperId: string): Promise<ReadingStructureManifest> {
+  return apiRequest<ReadingStructureManifest>(`${readingAdminBase(paperId)}/manifest`);
+}
+
+export async function adminReadingImportManifest(
+  paperId: string,
+  payload: ReadingStructureManifestImportPayload,
+): Promise<ReadingStructureImportResult> {
+  return apiRequest<ReadingStructureImportResult>(`${readingAdminBase(paperId)}/manifest`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function adminReadingEnsureCanonical(paperId: string): Promise<void> {
+  await apiRequest<void>(`${readingAdminBase(paperId)}/ensure-canonical`, {
+    method: 'POST',
+  });
+}
+
+export async function adminReadingUpsertPart(
+  paperId: string,
+  partCode: 'A' | 'B' | 'C',
+  dto: ReadingPartUpsertDto,
+): Promise<ReadingPartView> {
+  return apiRequest<ReadingPartView>(
+    `${readingAdminBase(paperId)}/parts/${encodeURIComponent(partCode)}`,
+    { method: 'PUT', body: JSON.stringify(dto) },
+  );
+}
+
+export async function adminReadingUpsertText(
+  paperId: string,
+  dto: ReadingTextUpsertDto,
+): Promise<ReadingTextDto> {
+  return apiRequest<ReadingTextDto>(`${readingAdminBase(paperId)}/texts`, {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function adminReadingDeleteText(paperId: string, textId: string): Promise<void> {
+  await apiRequest<void>(
+    `${readingAdminBase(paperId)}/texts/${encodeURIComponent(textId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function adminReadingUpsertQuestion(
+  paperId: string,
+  dto: ReadingQuestionUpsertDto,
+): Promise<ReadingQuestionDto> {
+  return apiRequest<ReadingQuestionDto>(`${readingAdminBase(paperId)}/questions`, {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function adminReadingDeleteQuestion(paperId: string, questionId: string): Promise<void> {
+  await apiRequest<void>(
+    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function adminReadingReorderTexts(
+  paperId: string,
+  partId: string,
+  orderedIds: string[],
+): Promise<void> {
+  const body: ReorderDto = { orderedIds };
+  await apiRequest<void>(
+    `${readingAdminBase(paperId)}/parts/${encodeURIComponent(partId)}/reorder-texts`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export async function adminReadingReorderQuestions(
+  paperId: string,
+  partId: string,
+  orderedIds: string[],
+): Promise<void> {
+  const body: ReorderDto = { orderedIds };
+  await apiRequest<void>(
+    `${readingAdminBase(paperId)}/parts/${encodeURIComponent(partId)}/reorder-questions`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export async function adminReadingValidate(paperId: string): Promise<ReadingValidationReport> {
+  return apiRequest<ReadingValidationReport>(`${readingAdminBase(paperId)}/validate`);
+}
+
+export async function adminReadingSetDistractors(
+  paperId: string,
+  questionId: string,
+  payload: ReadingDistractorsPayload,
+): Promise<{ id: string; optionDistractorsJson: string | null }> {
+  return apiRequest<{ id: string; optionDistractorsJson: string | null }>(
+    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}/distractors`,
+    { method: 'PUT', body: JSON.stringify(payload) },
+  );
+}
+
+export async function adminReadingGetReviewHistory(
+  paperId: string,
+  questionId: string,
+): Promise<ReadingQuestionReviewLogEntry[]> {
+  return apiRequest<ReadingQuestionReviewLogEntry[]>(
+    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}/review-history`,
+  );
+}
+
+export async function adminReadingTransitionReview(
+  paperId: string,
+  questionId: string,
+  payload: ReadingReviewTransitionPayload,
+): Promise<unknown> {
+  return apiRequest<unknown>(
+    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}/review-transition`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export async function adminReadingGetAnalytics(paperId: string): Promise<unknown> {
+  return apiRequest<unknown>(`${readingAdminBase(paperId)}/analytics`);
+}
+
+export async function adminReadingCreateExtraction(
+  paperId: string,
+  mediaAssetId?: string | null,
+): Promise<ReadingExtractionDraft> {
+  return apiRequest<ReadingExtractionDraft>(
+    `${readingAdminBase(paperId)}/extractions`,
+    { method: 'POST', body: JSON.stringify({ mediaAssetId: mediaAssetId ?? null }) },
+  );
+}
+
+export async function adminReadingListExtractions(paperId: string): Promise<ReadingExtractionDraft[]> {
+  return apiRequest<ReadingExtractionDraft[]>(`${readingAdminBase(paperId)}/extractions`);
+}
+
+export async function adminReadingGetExtraction(
+  paperId: string,
+  draftId: string,
+): Promise<ReadingExtractionDraft> {
+  return apiRequest<ReadingExtractionDraft>(
+    `${readingAdminBase(paperId)}/extractions/${encodeURIComponent(draftId)}`,
+  );
+}
+
+export async function adminReadingApproveExtraction(
+  paperId: string,
+  draftId: string,
+): Promise<ReadingExtractionDraft> {
+  return apiRequest<ReadingExtractionDraft>(
+    `${readingAdminBase(paperId)}/extractions/${encodeURIComponent(draftId)}/approve`,
+    { method: 'POST' },
+  );
+}
+
+export async function adminReadingRejectExtraction(
+  paperId: string,
+  draftId: string,
+  reason?: string,
+): Promise<ReadingExtractionDraft> {
+  return apiRequest<ReadingExtractionDraft>(
+    `${readingAdminBase(paperId)}/extractions/${encodeURIComponent(draftId)}/reject`,
+    { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
+  );
+}
+// === SUBAGENT_A: reading-authoring END ===
+
+// Recall Documents (admin PDF library + learner read)
+
+export type RecallDocumentStatus = 'Draft' | 'Published' | 'Archived' | 'InReview' | 'EditorReview' | 'PublisherApproval' | 'Rejected';
+export type RecallSubtest = 'listening' | 'reading' | 'writing' | 'speaking' | 'cross';
+
+export interface RecallDocumentDto {
+  id: string;
+  title: string;
+  subtestCode: RecallSubtest;
+  periodLabel: string;
+  professionId: string | null;
+  mediaAssetId: string;
+  descriptionMarkdown: string | null;
+  sortOrder: number;
+  status: RecallDocumentStatus;
+  publishedAt: string | null;
+  uploadedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+  media: {
+    id: string;
+    originalFilename: string;
+    mimeType: string;
+    format: string;
+    sizeBytes: number;
+    sha256: string | null;
+  } | null;
+}
+
+export interface RecallDocumentLearnerDto {
+  id: string;
+  title: string;
+  subtestCode: RecallSubtest;
+  periodLabel: string;
+  professionId: string | null;
+  descriptionMarkdown: string | null;
+  publishedAt: string | null;
+  media: {
+    id: string;
+    originalFilename: string;
+    sizeBytes: number;
+  } | null;
+}
+
+export interface ListRecallDocumentsResult {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: RecallDocumentDto[];
+}
+
+export async function adminListRecallDocuments(params: {
+  subtest?: RecallSubtest;
+  status?: RecallDocumentStatus;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<ListRecallDocumentsResult> {
+  const qs = new URLSearchParams();
+  if (params.subtest) qs.set('subtest', params.subtest);
+  if (params.status) qs.set('status', params.status);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+  const q = qs.toString();
+  return apiRequest<ListRecallDocumentsResult>(`/v1/admin/recall-documents${q ? `?${q}` : ''}`);
+}
+
+export async function adminUploadRecallDocument(payload: {
+  file: File;
+  title: string;
+  subtestCode: RecallSubtest;
+  periodLabel: string;
+  professionId?: string | null;
+  descriptionMarkdown?: string | null;
+  sortOrder?: number;
+}): Promise<RecallDocumentDto> {
+  const form = new FormData();
+  form.append('file', payload.file);
+  form.append('title', payload.title);
+  form.append('subtestCode', payload.subtestCode);
+  form.append('periodLabel', payload.periodLabel);
+  if (payload.professionId) form.append('professionId', payload.professionId);
+  if (payload.descriptionMarkdown != null) form.append('descriptionMarkdown', payload.descriptionMarkdown);
+  if (payload.sortOrder != null) form.append('sortOrder', String(payload.sortOrder));
+  const token = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetchWithTimeout(resolveApiUrl('/v1/admin/recall-documents'), {
+    method: 'POST', headers, body: form,
+  }, 120_000);
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Upload failed: ${response.status} ${text}`);
+  }
+  return response.json() as Promise<RecallDocumentDto>;
+}
+
+export async function adminUpdateRecallDocument(id: string, patch: {
+  title?: string;
+  subtestCode?: RecallSubtest;
+  periodLabel?: string;
+  professionId?: string | null;
+  descriptionMarkdown?: string | null;
+  sortOrder?: number;
+}): Promise<RecallDocumentDto> {
+  return apiRequest<RecallDocumentDto>(`/v1/admin/recall-documents/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function adminPublishRecallDocument(id: string): Promise<{ id: string; status: string }> {
+  return apiRequest(`/v1/admin/recall-documents/${encodeURIComponent(id)}/publish`, { method: 'POST', body: '{}' });
+}
+
+export async function adminArchiveRecallDocument(id: string): Promise<{ id: string; status: string }> {
+  return apiRequest(`/v1/admin/recall-documents/${encodeURIComponent(id)}/archive`, { method: 'POST', body: '{}' });
+}
+
+export async function adminUnarchiveRecallDocument(id: string): Promise<{ id: string; status: string }> {
+  return apiRequest(`/v1/admin/recall-documents/${encodeURIComponent(id)}/unarchive`, { method: 'POST', body: '{}' });
+}
+
+export async function adminDeleteRecallDocument(id: string): Promise<void> {
+  await apiRequest<void>(`/v1/admin/recall-documents/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  }, { acceptedStatuses: [204] });
+}
+
+export async function learnerListRecallDocuments(subtest?: RecallSubtest): Promise<RecallDocumentLearnerDto[]> {
+  const qs = subtest ? `?subtest=${subtest}` : '';
+  return apiRequest<RecallDocumentLearnerDto[]>(`/v1/recall-documents${qs}`);
+}
+
+export async function downloadRecallDocumentMedia(assetId: string): Promise<Blob> {
+  const path = `/v1/media/${encodeURIComponent(assetId)}/content`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path, undefined, { json: false }),
+  }, 120_000);
+  if (!response.ok) {
+    throw new ApiError(response.status, 'recall_document_download_failed', `Recall document download failed: ${response.status}`, isRetryable(response.status));
+  }
+  return response.blob();
+}
+
+// -----------------------------------------------------------------------------
+// Scoring Policy (admin singleton document + learner read)
+// -----------------------------------------------------------------------------
+
+export interface ScoringPolicyDto {
+  id: string;
+  bodyMarkdown: string;
+  policyJson: string;
+  isActive: boolean;
+  updatedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScoringPolicyLearnerDto {
+  id: string;
+  bodyMarkdown: string;
+  policyJson: string;
+  updatedAt: string;
+}
+
+export async function adminGetScoringPolicy(): Promise<ScoringPolicyDto | null> {
+  return apiRequest<ScoringPolicyDto | null>('/v1/admin/scoring-policy');
+}
+
+export async function adminUpdateScoringPolicy(payload: {
+  bodyMarkdown: string;
+  policyJson: string;
+}): Promise<ScoringPolicyDto> {
+  return apiRequest<ScoringPolicyDto>('/v1/admin/scoring-policy', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function adminListScoringPolicyHistory(): Promise<ScoringPolicyDto[]> {
+  return apiRequest<ScoringPolicyDto[]>('/v1/admin/scoring-policy/history');
+}
+
+export async function adminActivateScoringPolicy(id: string): Promise<ScoringPolicyDto> {
+  return apiRequest<ScoringPolicyDto>(`/v1/admin/scoring-policy/${encodeURIComponent(id)}/activate`, {
+    method: 'POST',
+    body: '{}',
+  });
+}
+
+export async function learnerGetScoringPolicy(): Promise<ScoringPolicyLearnerDto | null> {
+  return apiRequest<ScoringPolicyLearnerDto | null>('/v1/scoring-policy');
+}
+
+// -----------------------------------------------------------------------------
+// Rulebook reference PDF (human-readable companion to the JSON rulebook)
+// -----------------------------------------------------------------------------
+
+export interface RulebookReferencePdfDto {
+  id: string;
+  referencePdfAssetId: string;
+  originalFilename: string;
+  sizeBytes: number;
+}
+
+export async function adminUploadRulebookReferencePdf(rulebookId: string, file: File): Promise<RulebookReferencePdfDto> {
+  const form = new FormData();
+  form.append('file', file);
+  const token = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetchWithTimeout(
+    resolveApiUrl(`/v1/admin/rulebooks/${encodeURIComponent(rulebookId)}/reference-pdf`),
+    { method: 'POST', headers, body: form },
+    120_000,
+  );
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Upload failed: ${response.status} ${text}`);
+  }
+  return response.json() as Promise<RulebookReferencePdfDto>;
+}
+
+export async function adminDeleteRulebookReferencePdf(rulebookId: string): Promise<void> {
+  await apiRequest<void>(
+    `/v1/admin/rulebooks/${encodeURIComponent(rulebookId)}/reference-pdf`,
+    { method: 'DELETE' },
+    { acceptedStatuses: [204] },
+  );
+}
+
+export async function learnerGetRulebookReferencePdf(kind: string, profession: string): Promise<{ rulebookId: string; referencePdfAssetId: string } | null> {
+  try {
+    return await apiRequest<{ rulebookId: string; referencePdfAssetId: string }>(`/v1/rulebooks/${encodeURIComponent(kind)}/${encodeURIComponent(profession)}/reference-pdf`);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Result-template gallery (images displayed on learner mock-result pages)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ResultTemplateDto {
+  id: string;
+  templateKey: string;
+  title: string;
+  description: string | null;
+  professionId: string | null;
+  mediaAssetId: string;
+  isActive: boolean;
+  sortOrder: number;
+  uploadedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  media: {
+    id: string;
+    originalFilename: string;
+    mimeType: string;
+    format: string;
+    sizeBytes: number;
+    sha256: string | null;
+  } | null;
+}
+
+export interface LearnerResultTemplateDto {
+  id: string;
+  templateKey: string;
+  title: string;
+  description: string | null;
+  professionId: string | null;
+  mediaAssetId: string;
+  sortOrder: number;
+  updatedAt: string;
+  media: {
+    id: string;
+    originalFilename: string;
+    mimeType: string;
+    sizeBytes: number;
+  } | null;
+}
+
+export async function adminListResultTemplates(profession?: string): Promise<ResultTemplateDto[]> {
+  const qs = profession ? `?profession=${encodeURIComponent(profession)}` : '';
+  return apiRequest<ResultTemplateDto[]>(`/v1/admin/result-templates${qs}`);
+}
+
+export async function adminUploadResultTemplate(payload: {
+  file: File;
+  templateKey: string;
+  title: string;
+  description?: string | null;
+  professionId?: string | null;
+  sortOrder?: number;
+}): Promise<ResultTemplateDto> {
+  const form = new FormData();
+  form.append('file', payload.file);
+  form.append('templateKey', payload.templateKey);
+  form.append('title', payload.title);
+  if (payload.description != null) form.append('description', payload.description);
+  if (payload.professionId) form.append('professionId', payload.professionId);
+  if (payload.sortOrder != null) form.append('sortOrder', String(payload.sortOrder));
+  const token = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetchWithTimeout(resolveApiUrl('/v1/admin/result-templates'), {
+    method: 'POST', headers, body: form,
+  }, 120_000);
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Upload failed: ${response.status} ${text}`);
+  }
+  return response.json() as Promise<ResultTemplateDto>;
+}
+
+export async function adminUpdateResultTemplate(id: string, patch: {
+  title?: string;
+  description?: string | null;
+  professionId?: string | null;
+  sortOrder?: number;
+}): Promise<ResultTemplateDto> {
+  return apiRequest<ResultTemplateDto>(`/v1/admin/result-templates/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function adminActivateResultTemplate(id: string): Promise<{ id: string; isActive: boolean }> {
+  return apiRequest(`/v1/admin/result-templates/${encodeURIComponent(id)}/activate`, { method: 'POST', body: '{}' });
+}
+
+export async function adminDeactivateResultTemplate(id: string): Promise<{ id: string; isActive: boolean }> {
+  return apiRequest(`/v1/admin/result-templates/${encodeURIComponent(id)}/deactivate`, { method: 'POST', body: '{}' });
+}
+
+export async function adminDeleteResultTemplate(id: string): Promise<void> {
+  await apiRequest<void>(`/v1/admin/result-templates/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  }, { acceptedStatuses: [204] });
+}
+
+export async function learnerGetActiveResultTemplate(): Promise<LearnerResultTemplateDto | null> {
+  try {
+    return await apiRequest<LearnerResultTemplateDto>('/v1/result-templates/active');
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Speaking shared resources (Warm-up Questions + Assessment Criteria PDFs)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SpeakingSharedResourceKind = 'WarmUpQuestions' | 'AssessmentCriteria';
+
+export interface SpeakingSharedResourceDto {
+  id: string;
+  kind: SpeakingSharedResourceKind;
+  title: string;
+  professionId: string | null;
+  mediaAssetId: string;
+  status: 'Draft' | 'InReview' | 'EditorReview' | 'PublisherApproval' | 'Published' | 'Rejected' | 'Archived';
+  publishedAt: string | null;
+  effectiveFrom: string | null;
+  uploadedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  media: {
+    id: string;
+    originalFilename: string;
+    mimeType: string;
+    sizeBytes: number;
+    sha256: string | null;
+  } | null;
+}
+
+export interface SpeakingSharedResourceLearnerDto {
+  id: string;
+  kind: SpeakingSharedResourceKind;
+  title: string;
+  professionId: string | null;
+  publishedAt: string | null;
+  media: { id: string; originalFilename: string; sizeBytes: number } | null;
+}
+
+export async function adminListSpeakingSharedResources(params: { kind?: SpeakingSharedResourceKind; profession?: string } = {}): Promise<SpeakingSharedResourceDto[]> {
+  const qs = new URLSearchParams();
+  if (params.kind) qs.set('kind', params.kind);
+  if (params.profession) qs.set('profession', params.profession);
+  const q = qs.toString();
+  return apiRequest<SpeakingSharedResourceDto[]>(`/v1/admin/speaking/shared-resources${q ? `?${q}` : ''}`);
+}
+
+export async function adminUploadSpeakingSharedResource(payload: {
+  file: File;
+  kind: SpeakingSharedResourceKind;
+  title: string;
+  professionId?: string | null;
+}): Promise<SpeakingSharedResourceDto> {
+  const form = new FormData();
+  form.append('file', payload.file);
+  form.append('kind', payload.kind);
+  form.append('title', payload.title);
+  if (payload.professionId) form.append('professionId', payload.professionId);
+  const token = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetchWithTimeout(resolveApiUrl('/v1/admin/speaking/shared-resources'), {
+    method: 'POST', headers, body: form,
+  }, 120_000);
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Upload failed: ${response.status} ${text}`);
+  }
+  return response.json() as Promise<SpeakingSharedResourceDto>;
+}
+
+export async function adminPublishSpeakingSharedResource(id: string): Promise<{ id: string; status: string }> {
+  return apiRequest(`/v1/admin/speaking/shared-resources/${encodeURIComponent(id)}/publish`, { method: 'POST', body: '{}' });
+}
+
+export async function adminArchiveSpeakingSharedResource(id: string): Promise<{ id: string; status: string }> {
+  return apiRequest(`/v1/admin/speaking/shared-resources/${encodeURIComponent(id)}/archive`, { method: 'POST', body: '{}' });
+}
+
+export async function adminDeleteSpeakingSharedResource(id: string): Promise<void> {
+  await apiRequest<void>(`/v1/admin/speaking/shared-resources/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  }, { acceptedStatuses: [204] });
+}
+
+export async function learnerListSpeakingSharedResources(): Promise<SpeakingSharedResourceLearnerDto[]> {
+  return apiRequest<SpeakingSharedResourceLearnerDto[]>('/v1/speaking/shared-resources');
+}
+
+export async function downloadSpeakingSharedResourceMedia(assetId: string): Promise<Blob> {
+  const path = `/v1/media/${encodeURIComponent(assetId)}/content`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path, undefined, { json: false }),
+  }, 120_000);
+  if (!response.ok) {
+    throw new ApiError(response.status, 'speaking_shared_resource_download_failed', `Speaking resource download failed: ${response.status}`, isRetryable(response.status));
+  }
+  return response.blob();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Real Content folder importer
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type RealContentTarget =
+  | 'ListeningPaper' | 'ReadingPaper' | 'WritingPaper' | 'SpeakingPaper'
+  | 'RecallDocument' | 'ResultTemplate' | 'SpeakingSharedResource'
+  | 'RulebookReferencePdf' | 'ScoringPolicyBody';
+
+export interface RealContentProposalDto {
+  target: RealContentTarget;
+  title: string;
+  subtest: string | null;
+  professionId: string | null;
+  cardType: string | null;
+  letterType: string | null;
+  periodLabel: string | null;
+  templateKey: string | null;
+  sharedResourceKind: string | null;
+  rulebookKind: string | null;
+  rulebookProfession: string | null;
+  sourcePath: string;
+  assets: Array<{ role: string; part: string | null; sourcePath: string; originalFilename: string | null }>;
+}
+
+export interface RealContentStageResultDto {
+  sessionId: string;
+  uploadedFilename: string;
+  stagedAt: string;
+  proposals: RealContentProposalDto[];
+  issues: string[];
+}
+
+export interface RealContentCommitResultDto {
+  created: Array<{ target: RealContentTarget; id: string; title: string }>;
+  errors: string[];
+}
+
+export async function adminStageRealContentFolder(file: File): Promise<RealContentStageResultDto> {
+  const form = new FormData();
+  form.append('file', file);
+  const token = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetchWithTimeout(
+    resolveApiUrl('/v1/admin/imports/real-content-folder/stage'),
+    { method: 'POST', headers, body: form },
+    600_000, // 10 min for large ZIPs
+  );
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Stage failed: ${response.status} ${text}`);
+  }
+  return response.json() as Promise<RealContentStageResultDto>;
+}
+
+export async function adminCommitRealContentFolder(
+  sessionId: string,
+  approvedSourcePaths?: string[],
+): Promise<RealContentCommitResultDto> {
+  return apiRequest<RealContentCommitResultDto>(
+    `/v1/admin/imports/real-content-folder/${encodeURIComponent(sessionId)}/commit`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ approvedSourcePaths: approvedSourcePaths ?? null }),
+    },
+  );
+}
+
+export async function downloadRulebookReferencePdfMedia(assetId: string): Promise<Blob> {
+  const path = `/v1/media/${encodeURIComponent(assetId)}/content`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path, undefined, { json: false }),
+  }, 120_000);
+  if (!response.ok) {
+    throw new ApiError(response.status, 'rulebook_reference_pdf_download_failed', `Rulebook reference PDF download failed: ${response.status}`, isRetryable(response.status));
+  }
+  return response.blob();
+}
+

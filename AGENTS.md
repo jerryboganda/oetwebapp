@@ -48,26 +48,72 @@ npm run mobile:run:ios
 
 ## Build & Verification
 
+### MISSION CRITICAL — Heavy Tasks Run On `oet-dev` VPS, NEVER Locally
+
+**This rule is absolute and binding for every AI agent and contributor working in this repo. Do not ask the user where to run a heavy task — the answer is always the VPS.**
+
+All CPU-, RAM-, disk- or network-intensive operations MUST execute on the production VPS `oet-dev` (`68.183.32.122`) at `/opt/oetwebapp`, NOT on the user's local Windows workstation. The local machine is for source editing and lightweight reads only.
+
+**Always run remotely (over `ssh oet-dev`) — no exceptions:**
+
+- `npm install`, `npm ci`, `npm run build`, `npm run dev` (anything that boots Next.js or webpack)
+- `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run test:watch`
+- `npm run test:e2e*`, `npm run test:e2e:install` (Playwright browsers)
+- `npm run backend:build`, `npm run backend:run`, `npm run backend:watch`, `npm run backend:test`, `dotnet build`, `dotnet restore`, `dotnet test`, `dotnet publish`, `dotnet ef *`
+- `npm run desktop:*`, `npm run mobile:*`, Capacitor sync, Gradle, Xcode tasks
+- Any `docker build`, `docker compose build`, `docker compose up`, image pulls
+- Repomix bundle generation, large `rg` / search sweeps, codemods over the whole tree
+- Any script under `scripts/` that compiles, restores, packages, or hits the network at scale
+
+**Local-only operations (allowed on the user's Windows box):**
+
+- Reading individual files, navigating code, viewing diffs.
+- `git status`, `git add`, `git commit`, `git push`, `git pull`, `git log`, `git diff` against this workspace.
+- Single-file edits via the editor or this agent's edit tools.
+- Trivial one-shot greps over a small folder.
+
+**Standard remote-execution pattern** (PowerShell-safe, no piping inside the ssh-quoted string):
+
+```powershell
+ssh oet-dev "cd /opt/oetwebapp && <command>"
+```
+
+For long-running builds, detach so the ssh pipe collapsing does not kill the job:
+
+```powershell
+ssh oet-dev "cd /opt/oetwebapp && nohup bash -lc '<command>' > /tmp/<tag>.log 2>&1 < /dev/null &"
+ssh oet-dev "tail -n 80 /tmp/<tag>.log"   # poll separately
+```
+
+**The agent must:**
+
+1. Detect when a requested action is heavy (per the list above) and execute it on `oet-dev` automatically.
+2. Never spawn `npm`, `dotnet`, `docker`, Playwright, or build scripts in the local PowerShell terminal for this project.
+3. Stream/tail remote logs back to the user; do not silently block on local execution.
+4. If the VPS is unreachable, surface the error and stop — do NOT fall back to local execution as a "helpful" workaround.
+
+### Validation commands (run on `oet-dev`)
+
 Always validate before committing:
 
 ```bash
 # Type-check (must return 0 errors)
-npx tsc --noEmit
+ssh oet-dev "cd /opt/oetwebapp && npx tsc --noEmit"
 
 # Lint (must return 0 errors/warnings)
-npm run lint
+ssh oet-dev "cd /opt/oetwebapp && npm run lint"
 
 # Unit tests (must be 113/113 files, 675/675 tests)
-npm test
+ssh oet-dev "cd /opt/oetwebapp && npm test"
 
 # Production build (must compile 169+ pages)
-npm run build
+ssh oet-dev "cd /opt/oetwebapp && npm run build"
 
 # Backend build
-npm run backend:build
+ssh oet-dev "cd /opt/oetwebapp && npm run backend:build"
 
 # Backend tests
-npm run backend:test
+ssh oet-dev "cd /opt/oetwebapp && npm run backend:test"
 ```
 
 ### E2E Testing
@@ -215,7 +261,7 @@ tests/e2e/                    # Playwright E2E tests
 
 | Component | Detail |
 | ----------- | -------- |
-| VPS | `185.252.233.186`, `/opt/oetwebapp/` |
+| VPS | `68.183.32.122` (oet-dev), `/opt/oetwebapp/` |
 | Frontend | `app.oetwithdrhesham.co.uk` (port 3000) |
 | API | `api.oetwithdrhesham.co.uk` (port 8080) |
 | Database | PostgreSQL 17 (internal network) |
@@ -225,7 +271,7 @@ tests/e2e/                    # Playwright E2E tests
 ### Deploy Command
 
 ```bash
-ssh root@185.252.233.186
+ssh root@68.183.32.122
 cd /opt/oetwebapp
 DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
 ```

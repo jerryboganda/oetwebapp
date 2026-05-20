@@ -1,15 +1,24 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Award, BookOpen, Clock, FileText, Heart, Mic, RefreshCw, Star, Volume2 } from 'lucide-react';
+import { ArrowRight, Award, BookOpen, Clock, Download, FileText, Heart, Mic, RefreshCw, Star, Volume2 } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { fetchSpeakingHome, fetchSubmissions, fetchMockReports, type SpeakingHome } from '@/lib/api';
+import {
+  downloadSpeakingSharedResourceMedia,
+  fetchSpeakingHome,
+  fetchSubmissions,
+  fetchMockReports,
+  learnerListSpeakingSharedResources,
+  type SpeakingHome,
+  type SpeakingSharedResourceLearnerDto,
+} from '@/lib/api';
 import type { Submission, MockReport } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
@@ -37,16 +46,19 @@ export default function SpeakingHome() {
   const [home, setHome] = useState<SpeakingHome | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
+  const [sharedResources, setSharedResources] = useState<SpeakingSharedResourceLearnerDto[]>([]);
+  const [busyResourceId, setBusyResourceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('module_entry', { module: 'speaking' });
-    Promise.all([fetchSpeakingHome(), fetchSubmissions(), fetchMockReports()])
-      .then(([speakingHome, allSubmissions, reports]) => {
+    Promise.all([fetchSpeakingHome(), fetchSubmissions(), fetchMockReports(), learnerListSpeakingSharedResources()])
+      .then(([speakingHome, allSubmissions, reports, resources]) => {
         setHome(speakingHome);
         setSubmissions(allSubmissions.filter((sub) => sub.subTest === 'Speaking'));
         setMockReports(Array.isArray(reports) ? reports : []);
+        setSharedResources(Array.isArray(resources) ? resources : []);
       })
       .catch(() => setError('Failed to load speaking tasks. Please try again.'))
       .finally(() => setLoading(false));
@@ -99,6 +111,26 @@ export default function SpeakingHome() {
     recommended?.duration,
     '20 mins',
   );
+
+  async function downloadSharedResource(resource: SpeakingSharedResourceLearnerDto) {
+    if (!resource.media?.id) return;
+    setBusyResourceId(resource.id);
+    try {
+      const blob = await downloadSpeakingSharedResourceMedia(resource.media.id);
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = resource.media.originalFilename || `${resource.title}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      setError('Failed to download speaking resource. Please try again.');
+    } finally {
+      setBusyResourceId(null);
+    }
+  }
 
   const recommendedCard = recommended ? ({
     kind: 'task',
@@ -209,6 +241,43 @@ export default function SpeakingHome() {
             }}
           />
         </MotionSection>
+
+        {sharedResources.length > 0 ? (
+          <MotionSection delayIndex={2}>
+            <LearnerSurfaceSectionHeader
+              eyebrow="Shared Resources"
+              title="Download the current speaking PDFs"
+              description="Warm-up questions and assessment criteria stay attached here across all speaking cards."
+              className="mb-4"
+            />
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {sharedResources.map((resource) => (
+                <Card key={resource.id} className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <Badge variant="outline" size="sm">
+                        {resource.kind === 'WarmUpQuestions' ? 'Warm-up' : 'Assessment criteria'}
+                      </Badge>
+                      <h3 className="mt-2 text-sm font-bold text-navy">{resource.title}</h3>
+                      <p className="mt-1 text-xs text-muted">
+                        {resource.media?.sizeBytes ? `${(resource.media.sizeBytes / 1024 / 1024).toFixed(2)} MB` : 'PDF'}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void downloadSharedResource(resource)}
+                      disabled={busyResourceId === resource.id || !resource.media}
+                    >
+                      <Download className="mr-1 h-4 w-4" />
+                      {busyResourceId === resource.id ? 'Downloading...' : 'Download'}
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </MotionSection>
+        ) : null}
 
         {recommendedCard ? (
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">

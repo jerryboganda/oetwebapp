@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Plus, Trash2, Edit3, CheckCircle2, X, Copy, Download, Undo2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, Plus, Trash2, Edit3, CheckCircle2, X, Copy, Download, Undo2, Upload } from 'lucide-react';
 import {
   adminGetRulebook,
   adminUpdateRulebookMeta,
@@ -18,6 +18,9 @@ import {
   adminCreateRulebookRule,
   adminUpdateRulebookRule,
   adminDeleteRulebookRule,
+  adminUploadRulebookReferencePdf,
+  adminDeleteRulebookReferencePdf,
+  downloadRulebookReferencePdfMedia,
   type AdminRulebookDetail,
   type AdminRulebookRule,
   type AdminRulebookSection,
@@ -65,6 +68,8 @@ export default function AdminRulebookDetailPage() {
   const [data, setData] = useState<AdminRulebookDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<ToastState>(null);
+  const [referencePdfBusy, setReferencePdfBusy] = useState(false);
+  const referencePdfFileRef = useRef<HTMLInputElement>(null);
 
   // Section form
   const [newSection, setNewSection] = useState({ code: '', title: '' });
@@ -153,6 +158,55 @@ export default function AdminRulebookDetailPage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (e) { setToast({ variant: 'error', message: (e as Error).message }); }
+  }
+
+  async function handleReferencePdfUpload(file: File | undefined) {
+    if (!file) return;
+    setReferencePdfBusy(true);
+    try {
+      await adminUploadRulebookReferencePdf(id, file);
+      if (referencePdfFileRef.current) referencePdfFileRef.current.value = '';
+      await reload();
+      setToast({ variant: 'success', message: 'Reference PDF attached.' });
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message });
+    } finally {
+      setReferencePdfBusy(false);
+    }
+  }
+
+  async function handleReferencePdfDownload() {
+    if (!data?.referencePdfAssetId) return;
+    setReferencePdfBusy(true);
+    try {
+      const blob = await downloadRulebookReferencePdfMedia(data.referencePdfAssetId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${data.kind}-${data.profession}-rulebook-reference.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message });
+    } finally {
+      setReferencePdfBusy(false);
+    }
+  }
+
+  async function handleReferencePdfDetach() {
+    if (!confirm('Detach the reference PDF from this rulebook version?')) return;
+    setReferencePdfBusy(true);
+    try {
+      await adminDeleteRulebookReferencePdf(id);
+      await reload();
+      setToast({ variant: 'success', message: 'Reference PDF detached.' });
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message });
+    } finally {
+      setReferencePdfBusy(false);
+    }
   }
 
   async function handleVersionEdit() {
@@ -339,6 +393,41 @@ export default function AdminRulebookDetailPage() {
           </div>
         )}
       />
+
+      <AdminRoutePanel title="Reference PDF">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm">
+            <Badge variant={data.referencePdfAssetId ? 'success' : 'muted'}>
+              {data.referencePdfAssetId ? 'Attached' : 'No PDF'}
+            </Badge>
+            {data.referencePdfAssetId ? (
+              <code className="text-xs text-muted">{data.referencePdfAssetId}</code>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={referencePdfFileRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={(e) => void handleReferencePdfUpload(e.target.files?.[0])}
+            />
+            {data.referencePdfAssetId ? (
+              <Button variant="outline" onClick={() => void handleReferencePdfDownload()} disabled={referencePdfBusy}>
+                <Download className="h-4 w-4 mr-1" /> Download PDF
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => referencePdfFileRef.current?.click()} disabled={referencePdfBusy}>
+              <Upload className="h-4 w-4 mr-1" /> Upload PDF
+            </Button>
+            {data.referencePdfAssetId ? (
+              <Button variant="ghost" onClick={() => void handleReferencePdfDetach()} disabled={referencePdfBusy}>
+                Detach
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </AdminRoutePanel>
 
       {/* Sections */}
       <AdminRoutePanel title={`Sections (${data.sections.length})`}>

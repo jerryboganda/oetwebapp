@@ -66,6 +66,30 @@ describe('sidebarPermissionMap', () => {
     expect(sidebarPermissionMap['/admin/content/import']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/content/papers/import']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/content/generation']).toEqual([AdminPermission.ContentWrite]);
+    expect(sidebarPermissionMap['/admin/content/recalls-library']).toEqual([
+      AdminPermission.ContentRead,
+      AdminPermission.ContentWrite,
+      AdminPermission.ContentPublish,
+    ]);
+    expect(sidebarPermissionMap['/admin/content/scoring-system']).toEqual([
+      AdminPermission.ContentRead,
+      AdminPermission.ContentWrite,
+      AdminPermission.ContentPublish,
+    ]);
+    expect(sidebarPermissionMap['/admin/content/result-templates']).toEqual([
+      AdminPermission.ContentRead,
+      AdminPermission.ContentWrite,
+      AdminPermission.ContentPublish,
+    ]);
+    expect(sidebarPermissionMap['/admin/content/speaking/shared-resources']).toEqual([
+      AdminPermission.ContentRead,
+      AdminPermission.ContentWrite,
+      AdminPermission.ContentPublish,
+    ]);
+    expect(sidebarPermissionMap['/admin/content/imports/real-content-folder']).toEqual([
+      AdminPermission.ContentWrite,
+      AdminPermission.ContentPublish,
+    ]);
     expect(sidebarPermissionMap['/admin/content/dedup']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/content/analytics']).toEqual([AdminPermission.ContentRead]);
     expect(sidebarPermissionMap['/admin/content/quality']).toEqual([AdminPermission.ContentRead]);
