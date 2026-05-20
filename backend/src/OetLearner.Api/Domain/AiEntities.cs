@@ -263,6 +263,11 @@ public static class AiFeatureCodes
     public const string AdminListeningSkillTag = "admin.listening.skill_tag";
     public const string AdminListeningTranscriptSegment = "admin.listening.transcript_segment";
 
+    // Admin AI Assistant supervisor (platform-only). Every supervisor turn
+    // emits exactly one AiUsageRecord via IAiUsageRecorder so admin chat is
+    // visible in /admin/ai-usage and counts toward platform quota / budget.
+    public const string AdminAiChatbot = "admin.ai_chatbot";
+
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.
     public const string Unclassified = "unclassified";

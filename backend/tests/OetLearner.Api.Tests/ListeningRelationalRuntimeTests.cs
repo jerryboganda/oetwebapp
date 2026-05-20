@@ -1,9 +1,12 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
+using OetLearner.Api.Services.Media;
 
 namespace OetLearner.Api.Tests;
 
@@ -26,7 +29,9 @@ public class ListeningRelationalRuntimeTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
-        return (db, new ListeningLearnerService(db, new AllowAllContentEntitlementService()));
+        var authOpts = Options.Create(new AuthOptions { SigningKey = "test-signing-key-do-not-use-in-prod-0123456789abcdef" });
+        var signer = new MediaUrlSigner(authOpts, TimeProvider.System);
+        return (db, new ListeningLearnerService(db, new AllowAllContentEntitlementService(), signer));
     }
 
     private static async Task<(string userId, string paperId, string questionId)> SeedRelationalPaperAsync(LearnerDbContext db)

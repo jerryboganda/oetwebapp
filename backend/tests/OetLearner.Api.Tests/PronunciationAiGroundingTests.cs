@@ -216,11 +216,78 @@ public class PronunciationAiGroundingTests
         Assert.DoesNotContain("<script", result.Warning);
     }
 
+    [Fact]
+    public async Task AdminDraft_UnusableCompletion_ReturnsSanitizedFallback()
+    {
+        var loader = new RulebookLoader();
+        var gateway = new AiGatewayService(loader, new IAiModelProvider[] { new CompletingProvider("not-json") });
+        var service = new PronunciationAdminDraftService(
+            gateway,
+            loader,
+            NullLogger<PronunciationAdminDraftService>.Instance);
+
+        var result = await service.GenerateDraftAsync(new AdminPronunciationDrillAiDraftRequest(
+            Phoneme: "theta",
+            Focus: "phoneme",
+            Profession: "medicine",
+            Difficulty: "medium",
+            Prompt: null,
+            PrimaryRuleId: null), "admin-1", default);
+
+        Assert.Contains("not usable", result.Warning);
+        Assert.NotEmpty(result.ExampleWords);
+        Assert.NotEmpty(result.AppliedRuleIds);
+    }
+
+    [Fact]
+    public async Task AdminDraft_UnknownOnlyRuleIds_ReturnsSanitizedFallback()
+    {
+        const string completion = """
+            {
+                "targetPhoneme": "theta",
+                "label": "theta practice",
+                "difficulty": "medium",
+                "focus": "phoneme",
+                "exampleWords": ["therapy"],
+                "sentences": ["The therapist explained the therapy plan."],
+                "tipsHtml": "<p>Keep airflow steady.</p>",
+                "appliedRuleIds": ["UNKNOWN-RULE"],
+                "selfCheckNotes": "Review before publishing."
+            }
+            """;
+        var loader = new RulebookLoader();
+        var gateway = new AiGatewayService(loader, new IAiModelProvider[] { new CompletingProvider(completion) });
+        var service = new PronunciationAdminDraftService(
+            gateway,
+            loader,
+            NullLogger<PronunciationAdminDraftService>.Instance);
+
+        var result = await service.GenerateDraftAsync(new AdminPronunciationDrillAiDraftRequest(
+            Phoneme: "theta",
+            Focus: "phoneme",
+            Profession: "medicine",
+            Difficulty: "medium",
+            Prompt: null,
+            PrimaryRuleId: null), "admin-1", default);
+
+        Assert.Contains("valid pronunciation rulebook rules", result.Warning);
+        Assert.NotEmpty(result.AppliedRuleIds);
+        Assert.DoesNotContain("UNKNOWN-RULE", result.AppliedRuleIds);
+    }
+
     private sealed class ThrowingProvider(string message) : IAiModelProvider
     {
         public string Name => "throwing";
 
         public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
             => throw new InvalidOperationException(message);
+    }
+
+    private sealed class CompletingProvider(string completion) : IAiModelProvider
+    {
+        public string Name => "completing";
+
+        public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
+            => Task.FromResult(new AiProviderCompletion { Text = completion, Usage = new AiUsage() });
     }
 }

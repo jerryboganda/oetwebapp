@@ -1075,7 +1075,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             .Single(x => x.GetProperty("term").GetString() == term)
             .GetProperty("id").GetString()!;
 
-        var activate = await _client.PutAsJsonAsync($"/v1/admin/vocabulary/items/{id}", new { status = "active" });
+        var activate = await _client.PutAsJsonAsync($"/v1/admin/vocabulary/items/{id}", new { ipaPronunciation = "/ˈæktɪv/", audioUrl = "https://cdn.example/active.mp3", status = "active" });
         activate.EnsureSuccessStatusCode();
 
         var rollback = await _client.PostAsJsonAsync($"/v1/admin/vocabulary/import/batches/{Uri.EscapeDataString(batchId)}/rollback", new { deleteDraftRows = true });

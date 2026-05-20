@@ -191,6 +191,16 @@ public sealed class AiQuotaService(
                 TokensUsedThisPeriod: 0, TokensCapThisPeriod: 0);
         }
 
+            if (IsAdminSystemFeature(featureCode))
+            {
+                return new AiQuotaDecision(
+                Allowed: true,
+                ErrorCode: null, ErrorMessage: null,
+                PolicyTrace: $"admin_system.{featureCode}.unmetered",
+                GlobalPolicy: global, Plan: null, Override: userOverride,
+                TokensUsedThisPeriod: 0, TokensCapThisPeriod: int.MaxValue);
+            }
+
         // ── Resolve plan ─────────────────────────────────────────────────────
         var plan = await ResolvePlanAsync(userId, userOverride, ct);
         if (plan is null)
@@ -255,6 +265,9 @@ public sealed class AiQuotaService(
             TokensUsedThisPeriod: monthlyUsed,
             TokensCapThisPeriod: monthlyCap);
     }
+
+    private static bool IsAdminSystemFeature(string featureCode)
+        => string.Equals(featureCode, AiFeatureCodes.AdminAiChatbot, StringComparison.OrdinalIgnoreCase);
 
     public async Task CommitAsync(
         string? userId,

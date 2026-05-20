@@ -51,24 +51,24 @@ export const CONFIG = (() => {
     adminPassword: env.ADMIN_PASSWORD || '12345678',
 
     ai: {
-      apiKey: env.AI__ApiKey || env.AI_API_KEY || env.DO_AI_API_KEY || '',
-      baseUrl: env.AI__BaseUrl || env.AI_BASE_URL || 'https://inference.do-ai.run/v1',
-      chatModel: env.AI__ChatModel || env.AI_CHAT_MODEL || 'anthropic-claude-opus-4.7',
-      ttsBaseUrl: env.AI__TtsBaseUrl || env.AI__BaseUrl || env.AI_BASE_URL || 'https://inference.do-ai.run/v1',
-      ttsModel: env.AI__TtsModel || env.AI_TTS_MODEL || 'qwen3-tts-voicedesign',
-      ttsVoice: env.AI__TtsVoice || 'female-pleasant',
+      apiKey: env.AI__ApiKey || env.AI__APIKEY || env.AI_API_KEY || env.DO_AI_API_KEY || '',
+      baseUrl: env.AI__BaseUrl || env.AI__BASEURL || env.AI_BASE_URL || 'https://inference.do-ai.run/v1',
+      chatModel: env.AI__ChatModel || env.AI__CHATMODEL || env.AI__DEFAULTMODEL || env.AI_CHAT_MODEL || 'anthropic-claude-opus-4.7',
+      ttsBaseUrl: env.AI__TtsBaseUrl || env.AI__TTSBASEURL || env.AI__BaseUrl || env.AI__BASEURL || env.AI_BASE_URL || 'https://inference.do-ai.run/v1',
+      ttsModel: env.AI__TtsModel || env.AI__TTSMODEL || env.AI_TTS_MODEL || 'qwen3-tts-voicedesign',
+      ttsVoice: env.AI__TtsVoice || env.AI__TTSVOICE || 'female-pleasant',
     },
 
     // Primary TTS provider. Falls back to `ai` (DigitalOcean Qwen3-TTS) when
     // apiKey is unset or any call throws. See _aiTtsRaw dispatcher.
     elevenlabs: {
-      apiKey:         env.ELEVENLABS__ApiKey || env.ELEVENLABS_API_KEY || '',
-      baseUrl:        env.ELEVENLABS__BaseUrl || 'https://api.elevenlabs.io/v1',
-      model:          env.ELEVENLABS__Model || 'eleven_multilingual_v2',
-      defaultVoiceId: env.ELEVENLABS__DefaultVoiceId || 'EXAVITQu4vr4xnSDxMaL',
-      voiceMaleId:    env.ELEVENLABS__VoiceMaleId   || 'pNInz6obpgDQGcFmaJgB',
-      voiceFemaleId:  env.ELEVENLABS__VoiceFemaleId || 'EXAVITQu4vr4xnSDxMaL',
-      voiceNeutralId: env.ELEVENLABS__VoiceNeutralId|| 'EXAVITQu4vr4xnSDxMaL',
+      apiKey:         env.ELEVENLABS__ApiKey || env.ELEVENLABS__APIKEY || env.ELEVENLABS_API_KEY || '',
+      baseUrl:        env.ELEVENLABS__BaseUrl || env.ELEVENLABS__BASEURL || 'https://api.elevenlabs.io/v1',
+      model:          env.ELEVENLABS__Model || env.ELEVENLABS__MODEL || 'eleven_multilingual_v2',
+      defaultVoiceId: env.ELEVENLABS__DefaultVoiceId || env.ELEVENLABS__DEFAULTVOICEID || 'EXAVITQu4vr4xnSDxMaL',
+      voiceMaleId:    env.ELEVENLABS__VoiceMaleId   || env.ELEVENLABS__VOICEMALEID   || 'pNInz6obpgDQGcFmaJgB',
+      voiceFemaleId:  env.ELEVENLABS__VoiceFemaleId || env.ELEVENLABS__VOICEFEMALEID || 'EXAVITQu4vr4xnSDxMaL',
+      voiceNeutralId: env.ELEVENLABS__VoiceNeutralId|| env.ELEVENLABS__VOICENEUTRALID|| 'EXAVITQu4vr4xnSDxMaL',
       stability: 0.5,
       similarityBoost: 0.75,
       style: 0.0,
@@ -826,6 +826,8 @@ export function startRun(name) {
   console.log(`  API: ${CONFIG.apiBase}`);
   console.log(`  Admin: ${CONFIG.adminEmail}`);
   console.log(`  AI base: ${CONFIG.ai.baseUrl}  chat=${CONFIG.ai.chatModel}  tts=${CONFIG.ai.ttsModel}`);
+  const _elOn = !!CONFIG.elevenlabs.apiKey;
+  console.log(`  TTS provider: ${_elOn ? 'ElevenLabs (PRIMARY) ✓ key=' + CONFIG.elevenlabs.apiKey.slice(0,7) + '… model=' + CONFIG.elevenlabs.model : 'DigitalOcean Qwen3 (no ElevenLabs key)'}  fallback=DigitalOcean Qwen3`);
   console.log(`  Failure log: ${_failuresPath}`);
   console.log('═══════════════════════════════════════════════════════════════════');
   return _runId;
@@ -851,6 +853,7 @@ export function endRun(stats = {}) {
   for (const [k, v] of Object.entries(stats)) console.log(`    ${k}: ${v}`);
   console.log(`    AI chat: ${_totalChatCalls} calls, prompt=${_totalChatPromptTokens}, completion=${_totalChatCompletionTokens}`);
   console.log(`    AI TTS:  ${_totalTtsCalls} calls, ${_totalTtsChars} chars`);
+  console.log(`    TTS providers: ElevenLabs=${_ttsProviderUsedCounter.elevenlabs}  DigitalOcean=${_ttsProviderUsedCounter.digitalocean}  fallbacks=${_ttsProviderUsedCounter.fallbacks}`);
   console.log(`    Failures logged: ${_failuresPath}`);
   console.log('───────────────────────────────────────────────────────────────────');
 }

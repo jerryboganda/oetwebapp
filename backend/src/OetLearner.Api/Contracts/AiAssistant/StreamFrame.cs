@@ -7,6 +7,7 @@ namespace OetLearner.Api.Contracts.AiAssistant;
 public abstract class StreamFrame
 {
     public string Type { get; init; } = string.Empty;
+    public Guid ThreadId { get; init; }
     public Guid MessageId { get; init; }
 }
 

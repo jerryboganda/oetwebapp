@@ -192,6 +192,16 @@ public class AiQuotaServiceTests
     }
 
     [Fact]
+    public async Task AllowsAdminChatbot_WhenPlanAllowListExcludesIt()
+    {
+        var (db, quota) = Build(allowedFeatures: "conversation.reply,summarise.passage");
+        var decision = await quota.TryReserveAsync("user-001", AiFeatureCodes.AdminAiChatbot, AiKeySource.Platform, default);
+        Assert.True(decision.Allowed);
+        Assert.Contains("admin_system.admin.ai_chatbot.unmetered", decision.PolicyTrace);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task DeniesQuotaExhausted_WhenMonthlyCapReached_DenyPolicy()
     {
         var (db, quota) = Build(monthlyCap: 100, dailyCap: 0, overage: AiOveragePolicy.Deny);

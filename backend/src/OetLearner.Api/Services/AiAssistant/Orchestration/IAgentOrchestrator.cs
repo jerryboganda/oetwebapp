@@ -16,7 +16,5 @@ public sealed class AgentContext
 
 public interface IAgentOrchestrator
 {
-    // TODO: route via IAiGatewayService.BuildGroundedPrompt + CompleteAsync
-    // TODO: write AuditEvent on each completed turn.
     Task RunTurnAsync(AgentContext ctx, string userMessage, CancellationToken ct);
 }

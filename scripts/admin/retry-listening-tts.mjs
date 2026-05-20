@@ -52,8 +52,13 @@ const MAX_PAPERS = parseInt(flags['max-papers'], 10) || 0;
 const DRY_RUN = !!flags['dry-run'];
 const ONLY_PAPER = typeof flags['paper-id'] === 'string' ? flags['paper-id'] : null;
 
-const PAPER_AUDIO_ROLE = 'Audio';
-const PAPER_AUDIOSCRIPT_ROLE = 'AudioScript';
+// NOTE: deployed image's JSON serialization is ASYMMETRIC for PaperAssetRole —
+// GET responses serialize the enum as strings ('Audio','AudioScript',...) but POST
+// request binding refuses strings (returns 400 empty body). So read comparisons
+// use STRING constants; outgoing request bodies use NUMERIC constants.
+const PAPER_AUDIO_ROLE = 'Audio';            // GET response form
+const PAPER_AUDIOSCRIPT_ROLE = 'AudioScript';// GET response form
+const PAPER_AUDIO_ROLE_NUM = 0;              // POST body form (PaperAssetRole.Audio)
 const PART_ORDER = ['A1', 'A2', 'B', 'C1', 'C2'];
 
 // -----------------------------------------------------------------------------
@@ -151,7 +156,7 @@ function extractAttachedParts(paper) {
 
 async function attachAudio(paperId, mediaAssetId, partCode, displayOrder) {
   const body = {
-    role: PAPER_AUDIO_ROLE,
+    role: PAPER_AUDIO_ROLE_NUM, // numeric — deployed binding refuses strings
     mediaAssetId,
     part: partCode,
     title: `Listening Part ${partCode}`,
@@ -159,8 +164,23 @@ async function attachAudio(paperId, mediaAssetId, partCode, displayOrder) {
     makePrimary: true,
   };
   const r = await adminFetch(`/v1/admin/papers/${paperId}/assets`, { method: 'POST', body });
-  if (!r.ok) throw new Error(`attach ${partCode} failed: ${r.status} ${JSON.stringify(r.data).slice(0, 300)}`);
-  return r.data;
+  if (r.ok) return r.data;
+  // Backend returns 400 with empty body when the response serializer hits a
+  // navigation-cycle in the success DTO — the DB write actually committed.
+  // Verify by re-fetching the paper and looking for the (role,part,mediaAssetId) triple.
+  const bodyStr = typeof r.data === 'string' ? r.data : JSON.stringify(r.data ?? '');
+  const empty = !bodyStr || bodyStr === '""' || bodyStr === 'null' || bodyStr === '{}';
+  if (r.status === 400 && empty) {
+    const paper = await getPaperDetail(paperId);
+    const assets = Array.isArray(paper?.assets) ? paper.assets : [];
+    const hit = assets.find((a) =>
+      (a.role === PAPER_AUDIO_ROLE || a.role === 0) &&
+      String(a.part || '').toUpperCase() === String(partCode).toUpperCase() &&
+      a.mediaAssetId === mediaAssetId
+    );
+    if (hit) return hit;
+  }
+  throw new Error(`attach ${partCode} failed: ${r.status} ${bodyStr.slice(0, 300)}`);
 }
 
 async function backfillRelational(paperId) {

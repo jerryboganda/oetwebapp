@@ -14,6 +14,11 @@ vi.mock('@/components/auth/privileged-mfa-banner', () => ({
   PrivilegedMfaBanner: () => <div data-testid="mfa-banner">MFA banner</div>,
 }));
 
+vi.mock('@/contexts/ai-assistant-context', () => ({
+  AiAssistantProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
+  useAiAssistantContext: () => ({}),
+}));
+
 vi.mock('@/components/layout', () => ({
   AppShell: ({
     children,

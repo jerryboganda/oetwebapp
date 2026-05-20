@@ -3,7 +3,7 @@ using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Data;
 
-public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbContext(options)
+public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbContext(options)
 {
     public DbSet<LearnerUser> Users => Set<LearnerUser>();
     public DbSet<LearnerGoal> Goals => Set<LearnerGoal>();
@@ -931,7 +931,16 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         // matching the project-wide convention) — leaves cascade implicit and
         // safe under account-anonymisation. The unique (UserId, StageCode)
         // index already exists via the [Index] attribute on the entity.
+
+        // AI Assistant tables (partial; see LearnerDbContext.AiAssistant.cs).
+        OnModelCreatingAiAssistant(modelBuilder);
     }
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.AiAssistant.cs (partial).
+    /// Configures indexes + column types for the AI Assistant entity set.
+    /// </summary>
+    partial void OnModelCreatingAiAssistant(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Configures the Postgres system column <c>xmin</c> as an optimistic

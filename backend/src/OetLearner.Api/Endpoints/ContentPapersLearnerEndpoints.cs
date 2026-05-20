@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Media;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -94,6 +95,7 @@ public static class ContentPapersLearnerEndpoints
             HttpContext http,
             IContentEntitlementService entitlements,
             MediaAssetAccessService mediaAccess,
+            MediaUrlSigner mediaSigner,
             CancellationToken ct) =>
         {
             var paper = await db.ContentPapers.AsNoTracking()
@@ -167,9 +169,10 @@ public static class ContentPapersLearnerEndpoints
                         a.MediaAsset.Format,
                         a.MediaAsset.SizeBytes,
                         a.MediaAsset.Sha256,
-                        // Endpoint path the learner UI hits to stream the file
-                        // (proxied via the existing MediaEndpoints pipeline).
-                        downloadPath = $"/v1/media/{a.MediaAsset.Id}/content",
+                        // Endpoint path the learner UI hits to stream the file.
+                        // Signed so HTML5 <audio>/<embed> can fetch without
+                        // Authorization headers (see MediaUrlSigner).
+                        downloadPath = mediaSigner.SignDownloadPath(a.MediaAsset.Id),
                     },
                 }),
             });

@@ -89,13 +89,13 @@ public sealed class PronunciationAdminDraftService(
             parsed = ParseDraft(result.Completion, request, prompt.Metadata.RulebookVersion);
             if (parsed is null)
             {
-                throw ApiException.ServiceUnavailable(
-                    "PRONUNCIATION_AI_DRAFT_UNUSABLE",
-                    "Pronunciation AI draft response was not usable. Please try again.");
+                return BuildFallbackDraft(request, profession,
+                    "AI draft response was not usable; a deterministic starter template was returned. Please edit before saving.");
             }
         }
         catch (PromptNotGroundedException)
         {
+            // Grounding violations are architectural — never silently degrade.
             throw;
         }
         catch (ApiException)
@@ -104,10 +104,15 @@ public sealed class PronunciationAdminDraftService(
         }
         catch (Exception ex)
         {
+            // Per AGENTS.md "Pronunciation Module" contract:
+            //   "unusable replies fall back to a deterministic starter
+            //    template with a `warning` surfaced to the admin"
+            // We MUST NOT leak the raw provider error text to the admin (it
+            // can carry HTML, secrets, or stack traces). Log the detail
+            // server-side and return a sanitized fallback.
             logger.LogWarning(ex, "Pronunciation AI draft provider error.");
-            throw ApiException.ServiceUnavailable(
-                "PRONUNCIATION_AI_DRAFT_UNAVAILABLE",
-                "Pronunciation AI draft generation is unavailable right now. Please try again.");
+            return BuildFallbackDraft(request, profession,
+                "AI draft generation failed; a deterministic starter template was returned. Please edit before saving.");
         }
 
         // Validate appliedRuleIds against the rulebook.
@@ -137,9 +142,8 @@ public sealed class PronunciationAdminDraftService(
 
         if (parsed.AppliedRuleIds.Count == 0)
         {
-            throw ApiException.ServiceUnavailable(
-                "PRONUNCIATION_AI_DRAFT_UNUSABLE",
-                "Pronunciation AI draft did not cite any valid rulebook rules. Please try again.");
+            return BuildFallbackDraft(request, profession,
+                "AI draft did not cite any valid pronunciation rulebook rules; a deterministic starter template was returned. Please edit before saving.");
         }
 
         return parsed with { Warning = warning };
@@ -159,6 +163,54 @@ public sealed class PronunciationAdminDraftService(
         sb.AppendLine();
         sb.AppendLine("Generate a pronunciation drill that would help an OET candidate in this profession improve the target sound. Use profession-appropriate medical vocabulary. Respond strictly in the reply format above.");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Deterministic starter template returned when the AI provider errors
+    /// or returns an unusable response. Per AGENTS.md, the admin must
+    /// receive a populated, editable draft with a sanitized warning — the
+    /// raw provider error must NEVER reach the UI (it can carry HTML,
+    /// stack traces, or secrets). The first valid rulebook rule ID is
+    /// cited so the resulting drill survives the publish gate without
+    /// further admin work.
+    /// </summary>
+    private PronunciationDrillDraftResult BuildFallbackDraft(
+        AdminPronunciationDrillAiDraftRequest request,
+        ExamProfession profession,
+        string warning)
+    {
+        string? primaryRuleId = request.PrimaryRuleId;
+        try
+        {
+            var rb = loader.Load(RuleKind.Pronunciation, profession);
+            if (string.IsNullOrWhiteSpace(primaryRuleId))
+                primaryRuleId = rb.Rules.FirstOrDefault()?.Id;
+        }
+        catch (RulebookNotFoundException)
+        {
+            // Leave primaryRuleId null; admin will edit before saving.
+        }
+
+        var phoneme = string.IsNullOrWhiteSpace(request.Phoneme) ? "—" : request.Phoneme!;
+        var difficulty = string.IsNullOrWhiteSpace(request.Difficulty) ? "medium" : request.Difficulty!;
+        var focus = string.IsNullOrWhiteSpace(request.Focus) ? "phoneme" : request.Focus!;
+        var ruleIds = string.IsNullOrWhiteSpace(primaryRuleId)
+            ? Array.Empty<string>()
+            : new[] { primaryRuleId! };
+
+        return new PronunciationDrillDraftResult(
+            TargetPhoneme: phoneme,
+            Label: $"Drill — /{phoneme}/ (starter template)",
+            Difficulty: difficulty,
+            Focus: focus,
+            ExampleWords: new[] { "patient", "treatment", "diagnosis" },
+            MinimalPairs: Array.Empty<MinimalPairDto>(),
+            Sentences: new[] { "The patient requires immediate treatment." },
+            TipsHtml: "<p>Edit this starter template before saving. AI draft was unavailable.</p>",
+            AppliedRuleIds: ruleIds,
+            PrimaryRuleId: primaryRuleId,
+            Warning: warning,
+            SelfCheckNotes: null);
     }
 
     private static PronunciationDrillDraftResult? ParseDraft(

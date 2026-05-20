@@ -1,9 +1,11 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Media;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -13,18 +15,28 @@ public static class MediaEndpoints
 
     public static IEndpointRouteBuilder MapMediaEndpoints(this IEndpointRouteBuilder app)
     {
-        var media = app.MapGroup("/v1/media")
+        // Auth-required routes (Bearer JWT). Download is split off below so it
+        // can ALSO accept a signed query token (HTML5 <audio> can't send
+        // Authorization headers — see MediaUrlSigner).
+        var mediaAuth = app.MapGroup("/v1/media")
             .RequireAuthorization()
             .RequireRateLimiting("PerUser");
 
-        media.MapPost("/upload", HandleUploadAsync)
+        mediaAuth.MapPost("/upload", HandleUploadAsync)
             .DisableAntiforgery()
             .RequireRateLimiting("PerUserWrite");
 
-        media.MapGet("/{id}", HandleGetByIdAsync);
-        media.MapGet("/{id}/content", HandleDownloadAsync);
-        media.MapDelete("/{id}", HandleDeleteAsync).RequireRateLimiting("PerUserWrite");
-        media.MapGet("", HandleListAsync);
+        mediaAuth.MapGet("/{id}", HandleGetByIdAsync);
+        mediaAuth.MapDelete("/{id}", HandleDeleteAsync).RequireRateLimiting("PerUserWrite");
+        mediaAuth.MapGet("", HandleListAsync);
+
+        // Download accepts EITHER bearer auth (existing behaviour) OR a
+        // signed URL query token. Auth is enforced inside the handler.
+        var mediaDownload = app.MapGroup("/v1/media")
+            .RequireRateLimiting("PerUser")
+            .WithMetadata(new AllowAnonymousAttribute());
+
+        mediaDownload.MapGet("/{id}/content", HandleDownloadAsync);
 
         return app;
     }
@@ -230,10 +242,14 @@ public static class MediaEndpoints
     }
 
     /// <summary>
-    /// Stream a media asset to the client. Authenticated; authorised by the
-    /// containing <see cref="ContentPaper"/>'s status (published) and the
-    /// caller's profession scope. Uses <see cref="IFileStorage"/> so S3/R2
-    /// swaps later are a DI-only change.
+    /// Stream a media asset to the client. Accepts either authenticated
+    /// access (Bearer JWT, scoped by the containing <see cref="ContentPaper"/>'s
+    /// publish status + caller's profession) OR a short-lived signed URL token
+    /// (<see cref="MediaUrlSigner"/>) so HTML5 <c>&lt;audio&gt;</c> elements
+    /// can stream protected media without an Authorization header. A valid
+    /// signature is treated as proof of access because callers only mint
+    /// signed URLs after enforcing learner scope. Uses <see cref="IFileStorage"/>
+    /// so S3/R2 swaps later are a DI-only change.
     /// </summary>
     private static async Task<IResult> HandleDownloadAsync(
         string id,
@@ -241,13 +257,31 @@ public static class MediaEndpoints
         LearnerDbContext db,
         OetLearner.Api.Services.Content.IFileStorage storage,
         MediaAssetAccessService access,
+        MediaUrlSigner signer,
         CancellationToken ct)
     {
         var media = await db.MediaAssets.AsNoTracking().FirstOrDefaultAsync(m => m.Id == id, ct);
         if (media is null) return Results.NotFound();
         if (media.Status != MediaAssetStatus.Ready) return Results.NotFound();
         if (string.IsNullOrWhiteSpace(media.StoragePath)) return Results.NotFound();
-        if (!await access.CanAccessAsync(http.User, media, ct)) return Results.NotFound();
+
+        // Authorisation: signed URL token OR authenticated user with paper scope.
+        var expQuery = http.Request.Query[MediaUrlSigner.ExpiryParam].ToString();
+        var sigQuery = http.Request.Query[MediaUrlSigner.SignatureParam].ToString();
+        var hasSignedToken = !string.IsNullOrWhiteSpace(sigQuery);
+
+        bool authorised;
+        if (hasSignedToken)
+        {
+            authorised = signer.TryVerify(id, expQuery, sigQuery);
+        }
+        else
+        {
+            if (http.User?.Identity?.IsAuthenticated != true) return Results.NotFound();
+            authorised = await access.CanAccessAsync(http.User, media, ct);
+        }
+
+        if (!authorised) return Results.NotFound();
 
         if (!storage.Exists(media.StoragePath)) return Results.NotFound();
         var stream = await storage.OpenReadAsync(media.StoragePath, ct);

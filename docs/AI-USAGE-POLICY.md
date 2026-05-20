@@ -122,6 +122,7 @@ Every feature the gateway serves is classified. Defaults:
 | `admin.vocabulary_draft` | ❌ | ❌ | ✅ | Vocabulary term drafting (grounded), platform only |
 | `admin.listening_draft` | ❌ | ❌ | ✅ | Listening 42-item structure drafting from PDFs (grounded), platform only |
 | `admin.reading_draft` | ❌ | ❌ | ✅ | Reading extraction drafting, platform only; human approval required |
+| `admin.ai_chatbot` | ❌ | ❌ | ✅ | Admin AI Assistant chatbot turns (SupervisorAgent → `IAiUsageRecorder`). Platform-only; BYOK refused. No quota in V1 — kill-switch (`AiAssistant:GlobalEnabled`) is the only gate. Grounding-via-`IAiGatewayService` deferred (Phase 1.5b). |
 
 Admin can toggle the BYOK column per feature. `AllowByokOnScoringFeatures`
 global switch gates the scoring-critical rows.

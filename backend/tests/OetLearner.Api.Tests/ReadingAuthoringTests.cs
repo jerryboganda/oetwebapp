@@ -412,7 +412,10 @@ public class ReadingAuthoringTests
         var assets = paper.GetProperty("questionPaperAssets").EnumerateArray().ToList();
         var asset = Assert.Single(assets);
         Assert.Equal("A", asset.GetProperty("part").GetString());
-        Assert.Equal("/v1/media/media-redaction-paper/content", asset.GetProperty("downloadPath").GetString());
+        var downloadPath = asset.GetProperty("downloadPath").GetString();
+        Assert.NotNull(downloadPath);
+        Assert.StartsWith("/v1/media/media-redaction-paper/content?exp=", downloadPath);
+        Assert.Contains("&sig=", downloadPath);
     }
 
     [Fact]
@@ -2398,7 +2401,7 @@ public class ReadingAuthoringTests
         await structure.EnsureCanonicalPartsAsync("p1", default);
         await EnableReadingAiExtractionAsync(policy);
 
-        var ai = new OetLearner.Api.Services.Reading.StubReadingExtractionAi();
+        var ai = new SuccessfulReadingExtractionAi();
         var svc = new OetLearner.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
 
         var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
@@ -2617,7 +2620,7 @@ public class ReadingAuthoringTests
     {
         public async Task<ReadingExtractionAiResult> ExtractAsync(string paperId, string? mediaAssetId, CancellationToken ct)
         {
-            var stub = await new StubReadingExtractionAi().ExtractAsync(paperId, mediaAssetId, ct);
+            var stub = await new SuccessfulReadingExtractionAi().ExtractAsync(paperId, mediaAssetId, ct);
             return stub with
             {
                 RawResponseJson = "{\"secret\":\"provider-secret\",\"ok\":true}",

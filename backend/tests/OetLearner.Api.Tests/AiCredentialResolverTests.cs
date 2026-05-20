@@ -129,11 +129,13 @@ public class AiCredentialResolverTests
         await db.DisposeAsync();
     }
 
-    [Fact]
-    public async Task Resolves_Platform_ForAdminFeature_AlwaysRegardlessOfKey()
+    [Theory]
+    [InlineData(AiFeatureCodes.AdminContentGeneration)]
+    [InlineData(AiFeatureCodes.AdminAiChatbot)]
+    public async Task Resolves_Platform_ForAdminFeature_AlwaysRegardlessOfKey(string featureCode)
     {
         var (db, resolver, _) = await BuildAsync(mode: AiCredentialMode.ByokOnly, hasByokKey: true);
-        var r = await resolver.ResolveAsync("u1", AiFeatureCodes.AdminContentGeneration, null, default);
+        var r = await resolver.ResolveAsync("u1", featureCode, null, default);
         Assert.Equal(AiKeySource.Platform, r.KeySource);
         Assert.Contains("platform_only", r.PolicyTrace);
         await db.DisposeAsync();

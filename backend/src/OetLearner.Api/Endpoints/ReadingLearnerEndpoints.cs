@@ -5,6 +5,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Media;
 using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Endpoints;
@@ -50,6 +51,7 @@ public static class ReadingLearnerEndpoints
             LearnerDbContext db,
             IReadingPolicyService policyService,
             IContentEntitlementService entitlements,
+            MediaUrlSigner mediaSigner,
             CancellationToken ct) =>
         {
             var paper = await db.ContentPapers.AsNoTracking()
@@ -68,7 +70,7 @@ public static class ReadingLearnerEndpoints
             List<QuestionPaperAssetDto> questionPaperAssets = [];
             if (resolvedPolicy.AllowPaperReadingMode)
             {
-                questionPaperAssets = await db.ContentPaperAssets.AsNoTracking()
+                var rawAssets = await db.ContentPaperAssets.AsNoTracking()
                     .Where(a => a.PaperId == paperId
                         && a.Role == PaperAssetRole.QuestionPaper
                         && a.IsPrimary
@@ -77,12 +79,23 @@ public static class ReadingLearnerEndpoints
                     .Include(a => a.MediaAsset)
                     .OrderBy(a => a.DisplayOrder)
                     .ThenBy(a => a.Part)
+                    .Select(a => new
+                    {
+                        a.Id,
+                        a.Part,
+                        a.Title,
+                        a.MediaAssetId,
+                        OriginalFilename = a.MediaAsset!.OriginalFilename,
+                    })
+                    .ToListAsync(ct);
+
+                questionPaperAssets = rawAssets
                     .Select(a => new QuestionPaperAssetDto(
                         a.Id,
                         a.Part,
-                        a.Title ?? a.MediaAsset!.OriginalFilename,
-                        $"/v1/media/{a.MediaAssetId}/content"))
-                    .ToListAsync(ct);
+                        a.Title ?? a.OriginalFilename,
+                        mediaSigner.SignDownloadPath(a.MediaAssetId)))
+                    .ToList();
             }
 
             var parts = await db.ReadingParts.AsNoTracking()

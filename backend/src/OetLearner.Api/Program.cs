@@ -17,6 +17,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Endpoints;
 using OetLearner.Api.Hubs;
+using OetLearner.Api.Services.AiAssistant;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Observability;
@@ -141,6 +142,16 @@ builder.Services.AddDbContext<LearnerDbContext>((serviceProvider, options) =>
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddProblemDetails();
+
+// Minimal-API JSON: ignore reference cycles globally so accidental
+// EF-entity returns (e.g. Paper → Assets → Paper) don't 500/400 the
+// response after SaveChangesAsync has already committed. Endpoints
+// should still prefer flat DTOs; this is defense-in-depth.
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.ReferenceHandler =
+        System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+});
 var dataProtectionKeyPath = Path.IsPathRooted(storageOptions.LocalRootPath)
     ? Path.Combine(storageOptions.LocalRootPath, ".data-protection")
     : Path.Combine(builder.Environment.ContentRootPath, storageOptions.LocalRootPath, ".data-protection");
@@ -175,6 +186,11 @@ builder.Services.AddSignalR(options =>
     options.MaximumReceiveMessageSize =
         OetLearner.Api.Services.Conversation.ConversationRealtimeTransportLimits.MaximumReceiveMessageBytes;
 });
+
+// AI Assistant (chat widget for admins). Ships behind the in-memory global
+// kill-switch (AiAssistant:GlobalEnabled). Chatbot turns route through the
+// canonical IAiGatewayService using RuleKind.Chatbot and emit AiUsageRecord.
+builder.Services.AddAiAssistant();
 builder.Services.AddSingleton<IWebPushDispatcher, WebPushDispatcher>();
 builder.Services.AddHttpClient<IMobilePushDispatcher, MobilePushDispatcher>();
 builder.Services.AddSingleton<IPasswordHasher<ApplicationUserAccount>, PasswordHasher<ApplicationUserAccount>>();
@@ -394,7 +410,8 @@ void ConfigureJwtBearer(JwtBearerOptions options)
             if (!string.IsNullOrWhiteSpace(accessToken)
                 && (context.HttpContext.Request.Path.StartsWithSegments("/v1/notifications/hub")
                     || context.HttpContext.Request.Path.StartsWithSegments("/v1/conversations/hub")
-                    || context.HttpContext.Request.Path.StartsWithSegments("/v1/mocks/live-room/hub")))
+                    || context.HttpContext.Request.Path.StartsWithSegments("/v1/mocks/live-room/hub")
+                    || context.HttpContext.Request.Path.StartsWithSegments("/v1/ai-assistant/hub")))
             {
                 context.Token = accessToken;
             }
@@ -587,6 +604,14 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminSystemAdmin", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "system_admin")));
+
+    // AI Assistant — admin chat widget + admin management surfaces.
+    options.AddPolicy("AdminAiAssistantUse", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "ai_assistant:use", "system_admin")));
+    options.AddPolicy("AdminAiAssistantManage", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "ai_assistant:manage", "system_admin")));
 });
 
 builder.Services.AddScoped<LearnerService>();
@@ -610,6 +635,7 @@ builder.Services.AddScoped<RemediationPlanService>();
 builder.Services.AddScoped<AdminWalletTierService>();
 builder.Services.AddScoped<NativeIapService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.MediaAssetAccessService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Media.MediaUrlSigner>();
 builder.Services.AddScoped<MockDiagnosticEntitlementService>();
 builder.Services.AddScoped<MockItemAnalysisService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Recalls.RecallsService>();
@@ -1003,6 +1029,8 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningAtt
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
     OetLearner.Api.Services.Rulebook.AiGatewayService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiUsageRecorder,
+    OetLearner.Api.Services.Rulebook.AiUsageRecorder>();
 
 // ── Phase 5 — AI Tool Calling ──
 // All AI-tool services are Scoped so the registry, invoker, and executors
@@ -1476,6 +1504,9 @@ app.MapDevicePairingEndpoints();
 app.MapHub<NotificationHub>("/v1/notifications/hub").RequireAuthorization();
 app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization();
 app.MapHub<OetLearner.Api.Services.Mocks.MockLiveRoomHub>("/v1/mocks/live-room/hub").RequireAuthorization();
+app.MapHub<AiAssistantHub>(AiAssistantHub.HubPath).RequireAuthorization("AdminAiAssistantUse");
+app.MapAiAssistantChat();
+app.MapAiAssistantAdmin();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

@@ -53,6 +53,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         {
             ["ConnectionStrings:DefaultConnection"] = $"InMemory:{_databaseName}",
             ["Auth:UseDevelopmentAuth"] = "false",
+            ["Auth:SigningKey"] = "test-auth-signing-key-do-not-use-in-prod-0123456789",
             ["Bootstrap:AutoMigrate"] = "false",
             ["Bootstrap:SeedDemoData"] = "true",
             ["Platform:PublicApiBaseUrl"] = "http://localhost",
@@ -120,6 +121,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:DefaultConnection"] = $"InMemory:{_databaseName}",
                 ["Auth:UseDevelopmentAuth"] = "true",
+                ["Auth:SigningKey"] = "test-auth-signing-key-do-not-use-in-prod-0123456789",
                 ["Platform:PublicApiBaseUrl"] = "http://localhost",
                 ["Platform:PublicWebBaseUrl"] = "http://localhost",
                 ["Platform:FallbackEmailDomain"] = "example.test",

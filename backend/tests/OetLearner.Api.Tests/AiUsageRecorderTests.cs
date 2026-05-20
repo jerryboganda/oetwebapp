@@ -431,6 +431,38 @@ public class AiGatewayRecorderIntegrationTests
         Assert.False(string.IsNullOrWhiteSpace(result.Completion));
     }
 
+    [Fact]
+    public async Task Gateway_AcceptsGroundedAdminChatbotPrompt_AndRecordsSuccess()
+    {
+        var (gateway, db) = BuildGateway();
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Chatbot,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.AssistAdminCommand,
+        });
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = prompt,
+            UserInput = "Current admin message: summarize the status.",
+            UserId = "admin-007",
+            FeatureCode = AiFeatureCodes.AdminAiChatbot,
+            PromptTemplateId = "admin.ai_assistant.v1",
+        });
+
+        Assert.False(string.IsNullOrWhiteSpace(result.Completion));
+        Assert.Equal(RuleKind.Chatbot, result.Metadata.RulebookKind);
+        Assert.Equal("admin.ai_assistant.safety.v1", result.RulebookVersion);
+        Assert.Contains(AiFeatureCodes.AdminAiChatbot, AiFeatureRouteResolver.KnownFeatureCodes);
+
+        var row = Assert.Single(await db.AiUsageRecords.ToListAsync());
+        Assert.Equal(AiFeatureCodes.AdminAiChatbot, row.FeatureCode);
+        Assert.Equal(AiCallOutcome.Success, row.Outcome);
+        Assert.Equal("admin.ai_assistant.safety.v1", row.RulebookVersion);
+        await db.DisposeAsync();
+    }
+
     private sealed class ThrowingProvider(Exception ex) : IAiModelProvider
     {
         public string Name => "throwing";

@@ -2,6 +2,8 @@
 
 import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
 import { AdminDashboardShell, type MobileMenuSection } from '@/components/layout';
+import { AiAssistantWidgetMount } from '@/components/domain/ai-assistant/AiAssistantWidgetMount';
+import { AiAssistantProvider } from '@/contexts/ai-assistant-context';
 import type { NavGroup, NavItem } from '@/components/layout/sidebar';
 import {
   canAccessAdminRoute,
@@ -483,7 +485,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="admin-compact-theme text-sm leading-snug">
-      <AdminLayoutContent>{children}</AdminLayoutContent>
+      <AiAssistantProvider>
+        <AdminLayoutContent>{children}</AdminLayoutContent>
+        <AiAssistantWidgetMount />
+      </AiAssistantProvider>
     </div>
   );
 }

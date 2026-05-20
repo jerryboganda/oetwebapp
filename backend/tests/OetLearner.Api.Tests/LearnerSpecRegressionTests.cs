@@ -706,6 +706,8 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         });
         uploadComplete.EnsureSuccessStatusCode();
 
+        await SeedSpeakingTranscriptEvidenceAsync(speakingAttemptId);
+
         var speakingSubmit = await client.PostAsync($"/v1/speaking/attempts/{speakingAttemptId}/submit", content: null);
         speakingSubmit.EnsureSuccessStatusCode();
         using var speakingSubmitJson = JsonDocument.Parse(await speakingSubmit.Content.ReadAsStringAsync());
@@ -1291,5 +1293,18 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         }
 
         throw new TimeoutException($"Timed out waiting for {reason}.");
+    }
+
+    private async Task SeedSpeakingTranscriptEvidenceAsync(string attemptId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<OetLearner.Api.Data.LearnerDbContext>();
+        var attempt = await db.Attempts.FirstAsync(x => x.Id == attemptId);
+        attempt.TranscriptJson = System.Text.Json.JsonSerializer.Serialize(new[]
+        {
+            new { id = "turn-1", speaker = "candidate", text = "Good morning. I can see you are worried, so I will explain the inhaler steps clearly and check what concerns you most.", startTime = 0, endTime = 8 },
+            new { id = "turn-2", speaker = "candidate", text = "Please shake the inhaler, breathe out gently, seal your lips around the spacer, press once, and take slow breaths. If symptoms get worse, seek urgent help.", startTime = 8, endTime = 22 }
+        });
+        await db.SaveChangesAsync();
     }
 }

@@ -4,6 +4,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Media;
 using OetLearner.Api.Services.Recalls;
 
 namespace OetLearner.Api.Services.Listening;
@@ -11,6 +12,7 @@ namespace OetLearner.Api.Services.Listening;
 public sealed class ListeningLearnerService(
     LearnerDbContext db,
     IContentEntitlementService entitlements,
+    MediaUrlSigner mediaSigner,
     IRecallsAutoSeed? autoSeed = null)
 {
     private const string Subtest = "listening";
@@ -2392,8 +2394,8 @@ public sealed class ListeningLearnerService(
             : route;
     }
 
-    private static string? AssetDownloadPath(ContentPaperAsset? asset)
-        => asset?.MediaAsset is null ? null : $"/v1/media/{asset.MediaAsset.Id}/content";
+    private string? AssetDownloadPath(ContentPaperAsset? asset)
+        => asset?.MediaAsset is null ? null : mediaSigner.SignDownloadPath(asset.MediaAsset.Id);
 
     private static bool MatchesObjectiveAnswer(string? learnerAnswer, string? correctAnswer)
         => string.Equals(NormalizeObjectiveAnswer(learnerAnswer), NormalizeObjectiveAnswer(correctAnswer), StringComparison.OrdinalIgnoreCase);

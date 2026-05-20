@@ -23,6 +23,12 @@ export const AdminPermission = {
   AuditLogs: 'audit_logs',
   SystemAdmin: 'system_admin',
   ManagePermissions: 'manage_permissions',
+  /** AI Assistant — admin chat widget (use). */
+  UseAiAssistant: 'ai_assistant:use',
+  /** AI Assistant — admin management surfaces (providers, kill-switch, audit). */
+  ManageAiAssistant: 'ai_assistant:manage',
+  /** AI Assistant — skip approval prompts (system_admin only). */
+  UseAiAssistantUnrestricted: 'ai_assistant:unrestricted',
 } as const;
 
 /**
@@ -179,6 +185,13 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/writing/ai-draft': [AdminPermission.ContentWrite],
   '/admin/writing/analytics': [AdminPermission.QualityAnalytics],
   '/admin/writing/options': [AdminPermission.AiConfig],
+  '/admin/ai-assistant': [AdminPermission.UseAiAssistant],
+  '/admin/ai-assistant/audit': [AdminPermission.ManageAiAssistant],
+  '/admin/ai-assistant/indexing': [AdminPermission.ManageAiAssistant],
+  '/admin/ai-assistant/providers': [AdminPermission.ManageAiAssistant],
+  '/admin/ai-assistant/role-matrix': [AdminPermission.ManageAiAssistant],
+  '/admin/ai-assistant/test-console': [AdminPermission.ManageAiAssistant],
+  '/admin/ai-assistant/threads': [AdminPermission.ManageAiAssistant],
 };
 
 function normalizeAdminPath(pathname: string | null | undefined): string {

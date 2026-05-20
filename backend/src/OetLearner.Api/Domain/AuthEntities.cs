@@ -195,6 +195,16 @@ public static class AdminPermissions
     public const string SystemAdmin = "system_admin";
     public const string ManagePermissions = "manage_permissions";
 
+    /// <summary>Admin AI Assistant — chat with the in-app assistant.</summary>
+    public const string UseAiAssistant = "ai_assistant:use";
+
+    /// <summary>Admin AI Assistant — manage providers, kill-switch, audit.</summary>
+    public const string ManageAiAssistant = "ai_assistant:manage";
+
+    /// <summary>Admin AI Assistant — bypass per-action approval prompts.
+    /// system_admin only; granted explicitly per account.</summary>
+    public const string UseAiAssistantUnrestricted = "ai_assistant:unrestricted";
+
     /// <summary>Full permission set granted to system administrators.</summary>
     public static readonly string[] All =
     [
@@ -205,7 +215,8 @@ public static class AdminPermissions
         UsersRead, UsersWrite,
         ReviewOps, QualityAnalytics, AiConfig,
         FeatureFlags, AuditLogs, SystemAdmin,
-        ManagePermissions
+        ManagePermissions,
+        UseAiAssistant, ManageAiAssistant, UseAiAssistantUnrestricted
     ];
 }
 
