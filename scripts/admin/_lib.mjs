@@ -20,13 +20,30 @@
  *   AI__TtsBaseUrl  — TTS base URL (default same as AI__BaseUrl)
  *   AI__TtsModel    — TTS model id (default qwen3-tts-voicedesign; CLI --tts-model overrides)
  *
- * TTS provider policy:
- *   ElevenLabs is the PRIMARY TTS provider. DigitalOcean Qwen3-TTS is the
- *   automatic fallback when ElevenLabs is missing, fails, or throttles.
- *   Callers use aiTts(text, opts) — opts may include:
- *     { gender: 'male'|'female'|'neutral', voice: <id>, provider: 'digitalocean' }.
+ * TTS provider policy (May 2026 — ElevenLabs credits exhausted):
+ *   DigitalOcean Qwen3-TTS Voice Design is the active provider, with a
+ *   British English male voice as default.
+ *   - Default routing: ElevenLabs primary -> DO fallback.
+ *   - To FORCE DO and bypass ElevenLabs entirely, set
+ *       TTS__ForceProvider=digitalocean   (env var)
+ *     or pass `--tts-provider digitalocean` on the CLI, or pass
+ *     `{ provider: 'digitalocean' }` per call.
+ *   - Per-gender voice seeds and "instructions" prompts live on CONFIG.ai.
+ *     Callers use aiTts(text, opts); opts:
+ *       { gender: 'male'|'female'|'neutral',
+ *         voice: <DO seed>, instructions: <prompt>,
+ *         provider: 'digitalocean'|'elevenlabs' }
  *
- * ElevenLabs configuration (env vars):
+ * DigitalOcean Qwen3-TTS Voice Design (env vars):
+ *   AI__TtsVoice              — default seed (default british-male)
+ *   AI__TtsMaleVoice          — male seed   (default british-male)
+ *   AI__TtsFemaleVoice        — female seed (default british-female)
+ *   AI__TtsNeutralVoice       — neutral seed (default british-male)
+ *   AI__TtsMaleInstructions   — male voice description (British English by default)
+ *   AI__TtsFemaleInstructions — female voice description (British English by default)
+ *   AI__TtsNeutralInstructions — neutral voice description
+ *
+ * ElevenLabs configuration (env vars; only used if TTS__ForceProvider != digitalocean):
  *   ELEVENLABS__ApiKey        — REQUIRED to enable ElevenLabs (else falls back to DO)
  *   ELEVENLABS__BaseUrl       — default https://api.elevenlabs.io/v1
  *   ELEVENLABS__Model         — default eleven_multilingual_v2
@@ -56,8 +73,29 @@ export const CONFIG = (() => {
       chatModel: env.AI__ChatModel || env.AI__CHATMODEL || env.AI__DEFAULTMODEL || env.AI_CHAT_MODEL || 'anthropic-claude-opus-4.7',
       ttsBaseUrl: env.AI__TtsBaseUrl || env.AI__TTSBASEURL || env.AI__BaseUrl || env.AI__BASEURL || env.AI_BASE_URL || 'https://inference.do-ai.run/v1',
       ttsModel: env.AI__TtsModel || env.AI__TTSMODEL || env.AI_TTS_MODEL || 'qwen3-tts-voicedesign',
-      ttsVoice: env.AI__TtsVoice || env.AI__TTSVOICE || 'female-pleasant',
+      // Default DO Qwen3-TTS Voice Design voice. Override per-gender via the
+      // tts*Voice keys below or per-call via opts.voice. British English male
+      // is the production default since ElevenLabs credits ran out (May 2026).
+      ttsVoice:        env.AI__TtsVoice        || env.AI__TTSVOICE        || 'british-male',
+      ttsMaleVoice:    env.AI__TtsMaleVoice    || env.AI__TTSMALEVOICE    || 'british-male',
+      ttsFemaleVoice:  env.AI__TtsFemaleVoice  || env.AI__TTSFEMALEVOICE  || 'british-female',
+      ttsNeutralVoice: env.AI__TtsNeutralVoice || env.AI__TTSNEUTRALVOICE || 'british-male',
+      // Voice Design "instructions" prompt; controls accent, age, tone, pace.
+      // Qwen3-TTS voicedesign is generative — the voice field is a seed and
+      // these instructions do the real work. Per-gender variants below.
+      ttsMaleInstructions:    env.AI__TtsMaleInstructions    || env.AI__TTSMALEINSTRUCTIONS    ||
+        'British English male voice, mid-30s, RP accent, warm yet professional, calm and clear enunciation, measured natural pace suitable for OET healthcare listening practice. Do not add laughter or filler.',
+      ttsFemaleInstructions:  env.AI__TtsFemaleInstructions  || env.AI__TTSFEMALEINSTRUCTIONS  ||
+        'British English female voice, mid-30s, RP accent, warm and articulate, calm professional tone, measured natural pace suitable for OET healthcare listening practice. Do not add laughter or filler.',
+      ttsNeutralInstructions: env.AI__TtsNeutralInstructions || env.AI__TTSNEUTRALINSTRUCTIONS ||
+        'British English male voice, mid-30s, RP accent, neutral broadcaster tone, clear and even pace suitable for OET healthcare listening practice. Do not add laughter or filler.',
     },
+
+    // TTS provider routing. Defaults to ElevenLabs (with DO fallback on
+    // failure). Set TTS__ForceProvider=digitalocean to bypass ElevenLabs
+    // entirely (use when ElevenLabs credits are exhausted).
+    ttsForceProvider:
+      (env.TTS__ForceProvider || env.TTS__FORCEPROVIDER || env.TTS_FORCE_PROVIDER || '').toLowerCase(),
 
     // Primary TTS provider. Falls back to `ai` (DigitalOcean Qwen3-TTS) when
     // apiKey is unset or any call throws. See _aiTtsRaw dispatcher.
@@ -120,6 +158,12 @@ export function parseFlags(argv = process.argv.slice(2)) {
   // Apply common overrides to CONFIG.
   if (flags['chat-model']) CONFIG.ai.chatModel = flags['chat-model'];
   if (flags['tts-model']) CONFIG.ai.ttsModel = flags['tts-model'];
+  if (flags['tts-provider']) CONFIG.ttsForceProvider = String(flags['tts-provider']).toLowerCase();
+  if (flags['tts-voice']) CONFIG.ai.ttsVoice = flags['tts-voice'];
+  if (flags['tts-male-voice']) CONFIG.ai.ttsMaleVoice = flags['tts-male-voice'];
+  if (flags['tts-female-voice']) CONFIG.ai.ttsFemaleVoice = flags['tts-female-voice'];
+  if (flags['tts-male-instructions']) CONFIG.ai.ttsMaleInstructions = flags['tts-male-instructions'];
+  if (flags['tts-female-instructions']) CONFIG.ai.ttsFemaleInstructions = flags['tts-female-instructions'];
   if (flags['api-base']) CONFIG.apiBase = flags['api-base'];
   return flags;
 }
@@ -568,14 +612,32 @@ async function _elevenLabsTtsRaw(text, opts = {}) {
   throw lastError || new Error('elevenlabs TTS failed');
 }
 
+function _pickDigitalOceanVoice(opts) {
+  if (opts && opts.voice) return String(opts.voice);
+  const g = opts && opts.gender ? String(opts.gender).toLowerCase() : '';
+  if (g === 'male') return CONFIG.ai.ttsMaleVoice;
+  if (g === 'female') return CONFIG.ai.ttsFemaleVoice;
+  if (g === 'neutral') return CONFIG.ai.ttsNeutralVoice;
+  return CONFIG.ai.ttsVoice;
+}
+
+function _pickDigitalOceanInstructions(opts) {
+  if (opts && opts.instructions) return String(opts.instructions);
+  const g = opts && opts.gender ? String(opts.gender).toLowerCase() : '';
+  if (g === 'male') return CONFIG.ai.ttsMaleInstructions;
+  if (g === 'female') return CONFIG.ai.ttsFemaleInstructions;
+  if (g === 'neutral') return CONFIG.ai.ttsNeutralInstructions;
+  return CONFIG.ai.ttsMaleInstructions;
+}
+
 async function _digitalOceanTtsRaw(text, opts = {}) {
   const {
     model = CONFIG.ai.ttsModel,
-    voice = CONFIG.ai.ttsVoice,
     retries = 3,
     format = 'mp3',
-    instructions = 'A calm, clear, professional native English voice suitable for OET listening practice.',
   } = opts;
+  const voice = _pickDigitalOceanVoice(opts);
+  const instructions = _pickDigitalOceanInstructions(opts);
   if (!CONFIG.ai.apiKey) throw new Error('AI__ApiKey not set');
   if (!text || !text.trim()) throw new Error('aiTts: empty text');
   const body = { model, input: text, voice, instructions };
@@ -620,9 +682,13 @@ async function _digitalOceanTtsRaw(text, opts = {}) {
   throw lastError || new Error('TTS failed');
 }
 
-// TTS dispatcher (ElevenLabs primary, DigitalOcean fallback)
+// TTS dispatcher (ElevenLabs primary, DigitalOcean fallback).
+// Set TTS__ForceProvider=digitalocean to force DO Qwen3-TTS (used when
+// ElevenLabs credits are exhausted — May 2026 default).
 async function _aiTtsRaw(text, opts = {}) {
-  const pinned = opts && opts.provider ? String(opts.provider).toLowerCase() : '';
+  const pinned = (opts && opts.provider ? String(opts.provider).toLowerCase() : '')
+    || CONFIG.ttsForceProvider
+    || '';
   const hasEleven = !!CONFIG.elevenlabs.apiKey;
   if (pinned === 'digitalocean') return _digitalOceanTtsRaw(text, opts);
   if (pinned === 'elevenlabs') return _elevenLabsTtsRaw(text, opts);
