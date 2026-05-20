@@ -9,9 +9,9 @@
 | ID | Decision | Source |
 | --- | --- | --- |
 | L1 | All chatbot LLM calls route through `IAiGatewayService.BuildGroundedPrompt(...)` + `CompleteAsync(...)`. New `RuleKind.Chatbot` + `AiTaskMode.AssistAdminCommand` + `AiCallKind.ChatbotConversation`. | AGENTS.md "AI calls (MISSION CRITICAL)" |
-| L2 | Two new `AdminPermissions`: `ai_assistant:manage`, `ai_assistant:unrestricted`. Default off for all admins. | AGENTS.md "Security" |
-| L3 | Kill switch via `IRuntimeSettingsProvider` key `AiAssistant:GlobalEnabled` (env fallback `OET_AIASSISTANT_ENABLED`); 30s cache plus immediate `KILL` hub broadcast. Only `system_admin`+`ManageAiAssistant` may flip. Every flip writes `AuditEvent`. | AGENTS.md "Runtime Settings" |
-| L4 | SignalR hub `/v1/ai-assistant/hub` requires `Authorize(Roles="admin")` + `RequireAdminPermission("ai_assistant:can_chat")` + checks `GlobalEnabled` on connect and per turn. Browser clients using `/api/backend` must use long polling because the Next proxy is HTTP-only. | This repo's hub pattern |
+| L2 | Three assistant permissions exist in V1: `ai_assistant:use`, `ai_assistant:manage`, and `ai_assistant:unrestricted`. Default off for non-system admins. | AGENTS.md "Security" |
+| L3 | Target kill switch: `IRuntimeSettingsProvider` key `AiAssistant:GlobalEnabled`, env fallback, and immediate hub broadcast. Current Phase 1 implementation is narrower: `IConfiguration` plus a current-process in-memory override, with `AiAuditEvent` only. Durable runtime-settings persistence, global `AuditEvent`, and broadcast are future gates. | AGENTS.md "Runtime Settings" |
+| L4 | SignalR hub `/v1/ai-assistant/hub` requires `AdminAiAssistantUse` (`admin` role or `ai_assistant:use`) and checks `GlobalEnabled` on connect and per turn. Browser clients using `/api/backend` must use long polling because the Next proxy is HTTP-only. | This repo's hub pattern |
 | L5 | Indexing uses `AiCodebaseChunk` with pgvector `vector(1536)` HNSW. Extension installed via one-time DBA action, NOT in EF migration. Backup compat verified before Phase 2 ship. | DevOps plan |
 | L6 | Tool exec runs inside dedicated `oet-devbox` sidecar (option b), uid 10001, no Docker socket, no published ports, attached only to `oetwebsite_default`. Bind-mounts `/opt/oetwebapp`. | DevOps plan |
 | L7 | Two-tier RAG: trusted (curated repo paths only) and untrusted (learner essays, forum posts, recalls). When any untrusted chunk is in scope, all tool calls are disabled server-side. | Critic C1 |
@@ -25,7 +25,7 @@
 - Every chatbot LLM call writes exactly one `AiUsageRecord` via `IAiUsageRecorder` (success, provider error, refusal, cancel).
 - Chatbot never reads canonical rulebook JSON directly — always via `lib/rulebook`/`Services.Rulebook` engine.
 - All file I/O via `IFileStorage` (or devbox RPC); no `File.*` or `Path.*` direct.
-- Backend writes always emit `AuditEvent`; chatbot mutations also emit `AiAuditEvent` for diff.
+- Target production backend writes emit global `AuditEvent`; current Phase 1 assistant management writes emit `AiAuditEvent`, with global `AuditEvent` integration future-gated.
 - Docker volume `oetwebsite_oet_postgres_data` never recreated.
 - Production deploys are exact-SHA with signed `release-evidence-<sha>`; chatbot does not bypass.
 - Frontend: Next.js App Router, React 19, TypeScript strict, Tailwind 4, motion v12 from `motion/react`, `apiClient` from `lib/api.ts` for HTTP.
@@ -40,10 +40,10 @@
 ### Phase 0 Tasks
 
 1. EF migration creating the 8 tables defined in `AI-ASSISTANT-PLAN.md` §2.
-2. `AdminPermissions.All` extension with `ai_assistant:manage` + `ai_assistant:unrestricted`; mirror in `lib/admin-permissions.ts`; add `system_admin` implicit override.
-3. Settings keys in `IRuntimeSettingsProvider`: `AiAssistant:GlobalEnabled` (default `false`), `AiAssistant:RequireApprovalAlways` (`true`), `AiAssistant:DefaultProviderId` (`null`), `AiAssistant:DevboxRpcToken` (encrypted), `AiAssistant:GitHubDeployToken` (`null`).
+2. `AdminPermissions.All` extension with `ai_assistant:use`, `ai_assistant:manage`, and `ai_assistant:unrestricted`; mirror in `lib/admin-permissions.ts`; add `system_admin` implicit override.
+3. Target settings keys in `IRuntimeSettingsProvider`: `AiAssistant:GlobalEnabled` (default `false`), `AiAssistant:RequireApprovalAlways` (`true`), `AiAssistant:DefaultProviderId` (`null`), `AiAssistant:DevboxRpcToken` (encrypted), `AiAssistant:GitHubDeployToken` (`null`). Current Phase 1 uses `IConfiguration` plus an in-memory override.
 4. Seed `AiRolePermissionMatrix` with admin=true, others=false. Document that this is an upper bound only.
-5. Stub `RuleKind.Chatbot`, `AiTaskMode.AssistAdminCommand`, `AiCallKind.ChatbotConversation`, feature code `admin.chatbot` in `AiFeatureCodes`.
+5. Stub `RuleKind.Chatbot`, `AiTaskMode.AssistAdminCommand`, `AiCallKind.ChatbotConversation`, feature code `admin.ai_chatbot` in `AiFeatureCodes`.
 
 ### Phase 0 Acceptance Gates
 
@@ -82,7 +82,7 @@ Apply `down` migration. Remove permission entries. Remove runtime settings rows.
 - Unit: egress filter blocks a synthetic prompt containing `sk_live_test`, an email pattern, and a Stripe-shaped key.
 - `dotnet test`, `npm test`, `npx tsc --noEmit`, `npm run lint`, `npm run build` green.
 - Backend test: SignalR hub rejects connection when `GlobalEnabled=false` with code `kill_switch`.
-- Per-user daily token + turn quota enforced (M2) — synthetic test exceeds quota and gets `429`.
+- Future gate: per-user daily token + turn quota enforced (M2) — synthetic test exceeds quota and gets `429`. Current Phase 1 uses global budget kill and per-user admin disable for `admin.ai_chatbot`.
 
 ### Phase 1 Rollback
 
@@ -156,7 +156,7 @@ Disable tool registry (remove from DI). Devbox container left running but unused
 
 1. `run_command` tool: routes to devbox `/v1/devbox/exec`. Executable allowlist enforced server-side (not in prompt). Wall-clock + memory + PID caps per DevOps §2. Permanent denylist L8.
 2. `git` tool: ops `status`, `diff`, `log`, `branch`, `checkout`, `commit`. **No `push`, no `pr_create` in Phase 4.** Forced refs and `-f`/`--force` rejected even on allowed ops.
-3. `reindex_codebase` tool — `UnlessUnrestricted`. Triggers `ICodebaseIndexer` job.
+3. `reindex_codebase` tool — `Always` approval. Triggers `ICodebaseIndexer` job.
 4. `restart_service` tool — `Always` approval. Reads `/opt/oetwebapp/.deploy.lock`; refuses if deploy in flight (H11). Calls `docker compose restart <slot>` via a privileged helper (NOT through devbox shell — dedicated, audited path).
 5. `deploy_status` tool — `None`. Read-only.
 6. `ChatbotConversation` grounded prompt updated to enumerate available tools, trust tiers, approval policies, secret-redaction policy (per M7).
@@ -216,8 +216,8 @@ Phase-aware: provider rows can be disabled individually; UI features behind feat
 | Approval bypass on streaming | Per-call nonce; UI cannot batch-approve | 3 |
 | Chat history as long-lived secret store | At-rest encryption + retention worker | 5 |
 | pgvector backup loss | Verified round-trip + reindex idempotency | 2/4 |
-| Cost runaway | Per-admin daily quota + per-provider monthly cap + 80% soft warn | 1/4 |
-| Kill switch latency | Immediate hub `KILL` broadcast plus 30s cache TTL | 1 |
+| Cost runaway | Current Phase 1: global budget kill + per-user admin disable; future gate: per-admin daily quota + per-provider monthly cap + 80% soft warn | 1/4 |
+| Kill switch latency | Current Phase 1 checks configuration/in-memory state on connect and turn start; durable runtime settings and immediate hub broadcast are future hardening gates. | 1+ |
 | Multi-admin write race | Optimistic SHA lock + advisory PG lock | 3 |
 | Deploy-time collision | Pre-flip freeze + `.deploy.lock` respected | 4 |
 

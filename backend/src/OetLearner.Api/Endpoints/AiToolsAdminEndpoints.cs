@@ -86,12 +86,18 @@ public static class AiToolsAdminEndpoints
             if (string.IsNullOrWhiteSpace(dto.FeatureCode) || string.IsNullOrWhiteSpace(dto.ToolCode))
                 return Results.BadRequest(new { error = "featureCode and toolCode are required" });
 
-            if (!registry.IsKnownToolCode(dto.ToolCode))
-                return Results.BadRequest(new { error = $"unknown tool code: {dto.ToolCode}" });
+            var featureCode = dto.FeatureCode.Trim();
+            var toolCode = dto.ToolCode.Trim();
+
+            if (string.Equals(featureCode, AiFeatureCodes.AdminAiChatbot, StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = "admin.ai_chatbot is V1 read-only chat; tool grants are disabled until the approved tool phase." });
+
+            if (!registry.IsKnownToolCode(toolCode))
+                return Results.BadRequest(new { error = $"unknown tool code: {toolCode}" });
 
             // Idempotent upsert on (featureCode, toolCode) — re-activate if soft-disabled.
             var existing = await db.AiFeatureToolGrants
-                .FirstOrDefaultAsync(g => g.FeatureCode == dto.FeatureCode && g.ToolCode == dto.ToolCode, ct);
+                .FirstOrDefaultAsync(g => g.FeatureCode == featureCode && g.ToolCode == toolCode, ct);
 
             var now = DateTimeOffset.UtcNow;
             var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -103,8 +109,8 @@ public static class AiToolsAdminEndpoints
                 var row = new AiFeatureToolGrant
                 {
                     Id = Guid.NewGuid().ToString("N"),
-                    FeatureCode = dto.FeatureCode.Trim(),
-                    ToolCode = dto.ToolCode.Trim(),
+                    FeatureCode = featureCode,
+                    ToolCode = toolCode,
                     IsActive = dto.IsActive ?? true,
                     CreatedAt = now,
                     UpdatedAt = now,

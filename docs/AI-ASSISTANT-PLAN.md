@@ -22,7 +22,7 @@ A complete **Admin AI Assistant** subsystem target adds:
 Two new permissions extend the existing 19-entry `AdminPermissions` registry:
 
 - `ai_assistant:manage` — surfaced as `ManageAiAssistant`. Required for `/admin/settings/ai-assistant`, provider key CRUD, role matrix edits, kill-switch toggle.
-- `ai_assistant:unrestricted` — surfaced as `UseAiAssistantUnrestricted`. Bypasses **per-tool approval prompts** for `write_file`, `run_command`, and non-push `git` ops. **Never** bypasses `git push`, `restart_service`, or destructive migration confirmations.
+- `ai_assistant:unrestricted` — surfaced as `UseAiAssistantUnrestricted`. Future high-risk tool phases must keep this grant platform-owner-only. It may only skip approval for read-only tools after threat-acceptance gates pass; it must never skip approvals for `write_file`, `run_command`, `git`, restart/deploy, or destructive operations.
 
 ## 1. High-level architecture (ASCII)
 
@@ -95,7 +95,7 @@ Indexes: `IX_AiChatThread_OwnerUserId_CreatedAt DESC`, partial `WHERE archived_a
 
 ### 2.4 `AiRolePermissionMatrix` (future-proof, minimal seed)
 
-`Id`, `Role` (`admin|expert|learner|sponsor`), `Permission` (`can_chat|can_write_files|can_run_shell|can_git_push|can_restart`), `Allowed`. Unique `(Role, Permission)`. Seed = all `admin` rows true; all other roles seeded false. **Contract**: even if a row says `allowed=true` for a non-admin role, middleware/hub still rejects — table is only an upper bound.
+`Id`, `Role` (`admin|expert|learner|sponsor`), `Permission` (`ai_assistant:use|ai_assistant:manage|ai_assistant:unrestricted`), `Allowed`. Unique `(Role, Permission)`. Seed = `ai_assistant:use` true for admins, management/unrestricted false unless explicitly granted, and all non-admin roles false. **Contract**: even if a row says `allowed=true` for a non-admin role, middleware/hub still rejects — table is only an upper bound.
 
 ### 2.5 `AiCodebaseChunk`
 
@@ -109,7 +109,7 @@ Indexes:
 
 ### 2.6 `AiUsageLog` (chatbot-scoped — distinct from global `AiUsageRecord`)
 
-`Id`, `ThreadId`, `MessageId`, `ProviderId`, `ModelId`, `CallKind` (`ChatbotConversation`), `FeatureCode` (`admin.chatbot`), `PromptTokens`/`CompletionTokens`, `CostCents`, `LatencyMs`, `Status` (`ok|provider_error|refused_ungrounded|refused_quota|cancelled`), `ErrorClass?`, `CreatedAt`.
+`Id`, `ThreadId`, `MessageId`, `ProviderId`, `ModelId`, `CallKind` (`ChatbotConversation`), `FeatureCode` (`admin.ai_chatbot`), `PromptTokens`/`CompletionTokens`, `CostCents`, `LatencyMs`, `Status` (`ok|provider_error|refused_ungrounded|refused_quota|cancelled`), `ErrorClass?`, `CreatedAt`.
 
 > `IAiUsageRecorder` already writes the global `AiUsageRecord`. `AiUsageLog` is the chatbot-analytics overlay so the admin explorer can answer "tokens by thread / by tool-using turn" without scanning the global table.
 
@@ -215,7 +215,7 @@ public sealed record LlmProviderCredential(string ApiKey, string? OrganizationId
 ### 4.2 Adapter pattern
 
 ```text
-Orchestrator → AiGatewayRequest { Prompt=BuildGroundedPrompt(...), FeatureCode="admin.chatbot",
+Orchestrator → AiGatewayRequest { Prompt=BuildGroundedPrompt(...), FeatureCode="admin.ai_chatbot",
                                   CallKind=ChatbotConversation, Tools=registry.Specs }
             → IAiGatewayService.CompleteAsync [refuses if SystemPrompt missing rulebook header]
             → ChatbotProviderRouter : IAiModelProvider (wraps existing provider interface)
@@ -253,7 +253,7 @@ public interface IAgentTool
 public enum ToolApprovalPolicy
 {
     None,                  // read-only, never asks
-    UnlessUnrestricted,    // asks unless caller has UseAiAssistantUnrestricted
+    UnlessUnrestricted,    // limited read-only convenience only; never write/shell/git/deploy/destructive
     Always                 // asks even with unrestricted (push, restart, destructive)
 }
 ```
@@ -263,12 +263,12 @@ Full v1 surface. Every `arguments` payload is validated against its JSON schema 
 | Name | Params (sketch) | Returns | Approval | Audit `Action` |
 | --- | --- | --- | --- | --- |
 | `read_file` | `{ path (≤1024), startLine?, endLine?, maxBytes? (default 200_000) }` | `{ path, sha256, content, lineCount, truncated }` | `None` | `tool_invoke` |
-| `write_file` | `{ path, mode: rewrite\|append\|patch, content?, unifiedDiff? (required for patch), expectedSha256? }` | `{ path, sha256, bytesWritten, unifiedDiff }` | `UnlessUnrestricted` | `file_write` |
+| `write_file` | `{ path, mode: rewrite\|append\|patch, content?, unifiedDiff? (required for patch), expectedSha256? }` | `{ path, sha256, bytesWritten, unifiedDiff }` | **`Always`** | `file_write` |
 | `search_codebase` | `{ query (≤1024), kind: semantic\|grep\|symbol, limit? (1..50, default 12), pathGlob?, language? }` | `{ hits: [{path, startLine, endLine, score, snippet}] }` | `None` | `tool_invoke` |
 | `list_directory` | `{ path, recursive?, maxEntries? (1..2000, default 200), pattern? }` | `{ entries: [{path, kind, sizeBytes?, mtime}] }` | `None` | `tool_invoke` |
-| `run_command` | `{ cwd (under /opt/oetwebapp), command (≤4096), timeoutSec? (1..300, default 60), env? }` | `{ exitCode, stdout, stderr, durationMs, truncated }` | `UnlessUnrestricted` | `shell_exec` |
-| `git` | `{ op: status\|diff\|log\|branch\|checkout\|commit\|push\|pr_create, args? }` (per-op sub-schema) | op-specific `{ ok, summary, raw }` | `UnlessUnrestricted` for read/local; **`Always` for `push`/`pr_create`** | `git_op` |
-| `reindex_codebase` | `{ scope: all\|path, path? }` | `{ scheduled, jobId, estimatedChunks }` | `UnlessUnrestricted` | `tool_invoke` |
+| `run_command` | `{ cwd (under /opt/oetwebapp), command (≤4096), timeoutSec? (1..300, default 60), env? }` | `{ exitCode, stdout, stderr, durationMs, truncated }` | **`Always`** | `shell_exec` |
+| `git` | `{ op: status\|diff\|log\|branch\|checkout\|commit\|push\|pr_create, args? }` (per-op sub-schema) | op-specific `{ ok, summary, raw }` | `None` for `status`/`diff`/`log`; **`Always`** for `branch`/`checkout`/`commit`/`push`/`pr_create` | `git_op` |
+| `reindex_codebase` | `{ scope: all\|path, path? }` | `{ scheduled, jobId, estimatedChunks }` | **`Always`** | `tool_invoke` |
 | `deploy_status` | `{}` | `{ activeColor, lastDeployedSha, healthyContainers, postgresUp, npmConnected }` | `None` | `tool_invoke` |
 | `restart_service` | `{ name: oet-web\|oet-api\|web-blue\|web-green\|api-blue\|api-green }` | `{ name, restartedAt, healthAfter }` | **`Always`** | `tool_invoke` |
 
@@ -278,7 +278,7 @@ Full v1 surface. Every `arguments` payload is validated against its JSON schema 
 
 ### 5.2 Diff preview for `write_file`
 
-When `UnlessUnrestricted` triggers, orchestrator emits `ApprovalRequest { toolCallId, summary, unifiedDiff }` over SignalR **before** invocation. Executor blocks on `TaskCompletionSource<bool>` keyed by `toolCallId`; client posts `RespondToApproval(toolCallId, approve)`. Timeout = 5 min → auto-deny.
+When an approval policy triggers, orchestrator emits `ApprovalRequest { toolCallId, summary, unifiedDiff }` over SignalR **before** invocation. Executor blocks on `TaskCompletionSource<bool>` keyed by `toolCallId`; client posts `RespondToApproval(toolCallId, approve)`. Timeout = 5 min → auto-deny. `UseAiAssistantUnrestricted` may only bypass approval for explicitly allowed read-only tools; it never bypasses `write_file`, `run_command`, state-changing `git` operations, restart/deploy, or destructive actions.
 
 ### 5.3 `run_command` allowlist
 
@@ -335,7 +335,7 @@ No-op reindex on clean tree embeds zero chunks.
 
 ## 7. Streaming contract (SignalR hub)
 
-Path `/v1/ai-assistant/hub`. Auth: `[Authorize(Roles="admin")]` + `[RequireAdminPermission("ai_assistant:can_chat")]`. Connection rejected if `AiAssistant:GlobalEnabled` is false.
+Path `/v1/ai-assistant/hub`. Current V1 auth uses the `AdminAiAssistantUse` policy, backed by admin role or `ai_assistant:use`. Connection rejected if `AiAssistant:GlobalEnabled` is false.
 
 ### 7.1 Client → server
 
@@ -368,7 +368,7 @@ Frames persisted to per-thread in-memory ring (size 256) so reconnect within 60s
 | --- | --- | --- | --- |
 | 1 | Next.js middleware | `middleware.ts` | `/admin/ai-assistant/*` requires role `admin` + `ManageAiAssistant` for settings sub-paths. Non-admins → 404 (not 403) to avoid leakage. |
 | 2 | Backend REST endpoint auth | `Endpoints/AiAssistantEndpoints.cs` | `.RequireAuthorization("admin")` + `[RequireAdminPermission(...)]` filter. Settings additionally require `ManageAiAssistant`. |
-| 3 | SignalR hub auth | `Hubs/AiAssistantHub.cs` | `[Authorize(Roles="admin")]` + `OnConnectedAsync` validates `can_chat` perm + checks `GlobalEnabled`; closes connection with code `kill_switch`. |
+| 3 | SignalR hub auth | `Hubs/AiAssistantHub.cs` | `[Authorize(Roles="admin")]` + `AdminAiAssistantUse` / `ai_assistant:use` permission + checks `GlobalEnabled`; closes connection with code `kill_switch`. |
 | 4 | Hub method authorization | per hub method | `StartTurn` requires thread ownership (`thread.OwnerUserId == ctx.User.Id`). |
 | 5 | Frontend route guard | `app/admin/ai-assistant/layout.tsx` | Server component reads session; non-admin → `notFound()`. Pure UX layer. |
 | 6 | Frontend widget mount | `components/domain/ai-assistant/AiAssistantWidget.tsx` | `useCurrentUser()` → only renders if `role === 'admin'`. Non-admin sessions never download widget bundle. |
@@ -379,7 +379,7 @@ Frames persisted to per-thread in-memory ring (size 256) so reconnect within 60s
 
 ## 9. Kill switch
 
-Single source of truth: `IRuntimeSettingsProvider` key **`AiAssistant:GlobalEnabled`** (bool, default `true`; env fallback `OET_AIASSISTANT_ENABLED`). Written via `/v1/admin/ai-assistant/kill-switch` (requires both `ManageAiAssistant` + `SystemAdmin` to flip — defence in depth).
+Target production design: `IRuntimeSettingsProvider` key **`AiAssistant:GlobalEnabled`** with env fallback and durable audit. Current V1 implementation is narrower: `AiAssistantSettingsService` reads `IConfiguration`, defaults disabled, and `/v1/admin/ai-assistant/kill-switch` applies a current-process in-memory override.
 
 When `false`:
 
@@ -391,7 +391,7 @@ When `false`:
 | Indexing worker | Drains current batch, sleeps until re-enabled. |
 | Deploy reindex hook | Treats 503 as "skip"; no-op. |
 
-Propagation: 30s — acceptable per existing TTL contract. Audit: every flip writes both global `AuditEvent` (`Action="RuntimeSettingsUpdated"`, key name only) and `AiAuditEvent` (`Action="kill_switch_toggle"`, before/after bool).
+Current V1 propagation is immediate inside the current process because the admin endpoint updates in-memory state. Durable runtime-settings propagation, global `AuditEvent` writes, and hub-wide broadcast remain future production gates. V1 kill-switch flips write `AiAuditEvent`.
 
 ## 10. Threat surface (enumerated for critic / security review)
 

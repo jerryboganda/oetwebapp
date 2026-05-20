@@ -62,6 +62,9 @@ public sealed class AiGatewayService(
     private readonly bool _allowMockProvider = hostEnvironment is null
         || hostEnvironment.IsDevelopment();
 
+    private static bool AllowsToolResolution(string featureCode)
+        => !string.Equals(featureCode, AiFeatureCodes.AdminAiChatbot, StringComparison.OrdinalIgnoreCase);
+
     public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
         => _promptBuilder.Build(context);
 
@@ -319,7 +322,7 @@ public sealed class AiGatewayService(
         // across turns). The grounding header is verified once on turn 0;
         // once the system prompt is in the message list it is preserved.
         IReadOnlyList<AiToolDefinition> tools = Array.Empty<AiToolDefinition>();
-        if (toolRegistry is not null && toolInvoker is not null)
+        if (AllowsToolResolution(featureCode) && toolRegistry is not null && toolInvoker is not null)
         {
             try { tools = await toolRegistry.ResolveForFeatureAsync(featureCode, ct); }
             catch { tools = Array.Empty<AiToolDefinition>(); }

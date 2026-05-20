@@ -33,6 +33,13 @@ interface UsageRow {
   occurredAt?: string;
 }
 
+interface ChatbotProviderRoute {
+  displayName?: string;
+  code?: string;
+  defaultModel?: string;
+  isDefault?: boolean;
+}
+
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
@@ -41,6 +48,7 @@ const EMPTY_USAGE: UsageSummary = { total: 0, success: 0, errors: 0, promptToken
 export default function AiAssistantAdminDashboardPage(): JSX.Element {
   const [status, setStatus] = useState<PageStatus>('loading');
   const [settings, setSettings] = useState<SettingsState | null>(null);
+  const [chatbotRoute, setChatbotRoute] = useState<ChatbotProviderRoute | null>(null);
   const [usage, setUsage] = useState<UsageSummary>(EMPTY_USAGE);
   const [toggling, setToggling] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
@@ -48,11 +56,13 @@ export default function AiAssistantAdminDashboardPage(): JSX.Element {
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const [s, rows] = await Promise.all([
+      const [s, rows, providers] = await Promise.all([
         aiAssistantClient.getSettings(),
         aiAssistantClient.getUsage(200, 0),
+        aiAssistantClient.listProviders(),
       ]);
       setSettings(s);
+      setChatbotRoute((providers as ChatbotProviderRoute[]).find((provider) => provider.isDefault) ?? null);
       const summary = (rows as UsageRow[]).reduce<UsageSummary>((acc, r) => ({
         total: acc.total + 1,
         success: acc.success + (r.outcome === 'success' ? 1 : 0),
@@ -91,7 +101,7 @@ export default function AiAssistantAdminDashboardPage(): JSX.Element {
     <AdminRouteWorkspace>
       <AdminRouteSectionHeader
         title="AI Assistant"
-        description="Admin dashboard for the in-app agentic chatbot. Use the kill-switch to stop all calls immediately."
+        description="Admin dashboard for the in-app agentic chatbot. The kill switch stops new chat turns on this API process; in-flight turns still need cancellation."
       />
 
       {toast && (
@@ -113,9 +123,9 @@ export default function AiAssistantAdminDashboardPage(): JSX.Element {
               statusLabel={settings.lastKillSwitchAt ? `Toggled ${new Date(settings.lastKillSwitchAt).toLocaleString()}` : undefined}
             />
             <AdminRouteSummaryCard
-              label="Default provider"
-              value={settings.defaultProvider || '—'}
-              hint={settings.defaultModel || ''}
+              label="Chatbot route"
+              value={chatbotRoute?.displayName || chatbotRoute?.code || 'Unconfigured'}
+              hint={chatbotRoute?.defaultModel ? `admin.ai_chatbot · ${chatbotRoute.defaultModel}` : 'Canonical gateway feature route'}
               icon={Zap}
             />
             <AdminRouteSummaryCard
@@ -136,7 +146,7 @@ export default function AiAssistantAdminDashboardPage(): JSX.Element {
         {settings && (
           <AdminRoutePanel
             title="Kill switch"
-            description="Disabling the assistant stops all new chat turns immediately. Existing in-flight turns continue until they finish or are cancelled."
+            description="Disabling the assistant stops new chat turns on the current API process. Existing in-flight turns continue until they finish or are cancelled. Durable runtime-settings persistence and hub-wide KILL broadcast are future gates."
             actions={
               <Button
                 variant="primary"

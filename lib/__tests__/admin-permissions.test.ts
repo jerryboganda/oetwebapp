@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AdminPermission, hasPermission, sidebarPermissionMap } from '../admin-permissions';
+import { AdminPermission, canAccessAdminRoute, getAdminRoutePermissions, hasPermission, sidebarPermissionMap } from '../admin-permissions';
 
 describe('hasPermission', () => {
   it('returns false for null/undefined permissions', () => {
@@ -85,6 +85,12 @@ describe('sidebarPermissionMap', () => {
 
   it('requires system_admin for launch readiness', () => {
     expect(sidebarPermissionMap['/admin/launch-readiness']).toEqual([AdminPermission.SystemAdmin]);
+  });
+
+  it('requires manage permission for the AI Assistant dashboard because it exposes kill-switch controls', () => {
+    expect(getAdminRoutePermissions('/admin/ai-assistant')).toEqual([AdminPermission.ManageAiAssistant]);
+    expect(canAccessAdminRoute([AdminPermission.UseAiAssistant], '/admin/ai-assistant')).toBe(false);
+    expect(canAccessAdminRoute([AdminPermission.ManageAiAssistant], '/admin/ai-assistant')).toBe(true);
   });
 
   it('maps every sidebar entry to a known permission value', () => {

@@ -14,8 +14,8 @@ import { useAiAssistant, type UseAiAssistantResult } from '@/hooks/use-ai-assist
 
 const AiAssistantContext = createContext<UseAiAssistantResult | null>(null);
 
-export function AiAssistantProvider({ children }: { children: ReactNode }): JSX.Element {
-  const value = useAiAssistant();
+export function AiAssistantProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }): JSX.Element {
+  const value = useAiAssistant(enabled);
   return <AiAssistantContext.Provider value={value}>{children}</AiAssistantContext.Provider>;
 }
 

@@ -6,6 +6,7 @@ import { AiAssistantWidgetMount } from '@/components/domain/ai-assistant/AiAssis
 import { AiAssistantProvider } from '@/contexts/ai-assistant-context';
 import type { NavGroup, NavItem } from '@/components/layout/sidebar';
 import {
+  AdminPermission,
   canAccessAdminRoute,
   getAdminRoutePermissions,
   hasPermission,
@@ -458,37 +459,40 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const pageTitle = getAdminPageTitle(pathname);
   const requiredRoutePermissions = useMemo(() => getAdminRoutePermissions(pathname), [pathname]);
   const canAccessRoute = useMemo(() => canAccessAdminRoute(perms, pathname), [perms, pathname]);
+  const aiAssistantEnabled = !loading
+    && user?.role === 'admin'
+    && hasPermission(perms, AdminPermission.UseAiAssistant);
 
   return (
-    <AdminDashboardShell
-      pageTitle={pageTitle}
-      navItems={filteredNavItems}
-      navGroups={filteredNavGroups}
-      mobileNavItems={filteredMobileNavItems}
-      mobileMenuSections={filteredMobileMenuSections}
-      requiredRole="admin"
-    >
-      <PrivilegedMfaBanner key="privileged-mfa-banner" />
-      {loading ? (
-        <AdminPermissionChecking />
-      ) : canAccessRoute ? (
-        Children.map(children, (child, index) =>
-          isValidElement(child) ? cloneElement(child, { key: child.key ?? `admin-children-${index}` }) : child,
-        )
-      ) : (
-        <AdminPermissionDenied required={requiredRoutePermissions} />
-      )}
-    </AdminDashboardShell>
+    <AiAssistantProvider enabled={aiAssistantEnabled}>
+      <AdminDashboardShell
+        pageTitle={pageTitle}
+        navItems={filteredNavItems}
+        navGroups={filteredNavGroups}
+        mobileNavItems={filteredMobileNavItems}
+        mobileMenuSections={filteredMobileMenuSections}
+        requiredRole="admin"
+      >
+        <PrivilegedMfaBanner key="privileged-mfa-banner" />
+        {loading ? (
+          <AdminPermissionChecking />
+        ) : canAccessRoute ? (
+          Children.map(children, (child, index) =>
+            isValidElement(child) ? cloneElement(child, { key: child.key ?? `admin-children-${index}` }) : child,
+          )
+        ) : (
+          <AdminPermissionDenied required={requiredRoutePermissions} />
+        )}
+      </AdminDashboardShell>
+      {aiAssistantEnabled ? <AiAssistantWidgetMount /> : null}
+    </AiAssistantProvider>
   );
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="admin-compact-theme text-sm leading-snug">
-      <AiAssistantProvider>
-        <AdminLayoutContent>{children}</AdminLayoutContent>
-        <AiAssistantWidgetMount />
-      </AiAssistantProvider>
+      <AdminLayoutContent>{children}</AdminLayoutContent>
     </div>
   );
 }

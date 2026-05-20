@@ -82,7 +82,7 @@ AiAssistantProvider                              # contexts/ai-assistant-context
 ## 3. Message Types
 
 | Type | Visual | Key Props |
-|---|---|---|
+| --- | --- | --- |
 | **UserMessage** | Right-aligned, brand bg, white text, rounded-2xl, max-w 80% | content, timestamp, attachments[], status |
 | **AssistantMessage** | Left-aligned, surface bg, border, rounded-2xl, max-w 90% | content (streamed), tool calls[], model, tokens, cost, status |
 | **ToolCallCard** | Inline within assistant message, collapsible accordion | tool, args (formatted), result, status, approval status, duration |
@@ -124,7 +124,7 @@ AiAssistantProvider                              # contexts/ai-assistant-context
 ### 4.3 Slash Commands
 
 | Command | Action |
-|---|---|
+| --- | --- |
 | `/help` | Show all commands |
 | `/threads` | Open thread sidebar |
 | `/new` | Start fresh thread |
@@ -157,9 +157,10 @@ AiAssistantProvider                              # contexts/ai-assistant-context
 ## 7. Settings Quick Menu (top-right gear)
 
 Inline (not full settings page):
+
 - Provider/model preference
 - Mode default (Chat/Plan/Execute/Review)
-- Approval mode (Always / Unrestricted for write/shell)
+- Approval mode (Always / read-only speed mode; writes, shell, git changes, restarts, deploys, and destructive actions always require approval)
 - Token budget warning threshold
 - Theme (auto/light/dark — usually inherits)
 - Notifications (in-panel toast vs OS notification)
@@ -184,7 +185,7 @@ Inline (not full settings page):
 - **Network failure:** banner "Connection lost. Retrying..." with manual retry. SignalR auto-reconnect with exponential backoff (1s, 2s, 5s, 10s, 30s max).
 - **LLM provider error:** `ErrorBanner` "Provider unavailable. Try another?" with provider switcher inline.
 - **Approval denied:** ToolCallCard shows red border, "Denied by you" message, "Retry with different args" button.
-- **Quota exceeded:** banner "Daily token budget reached. Resets at 00:00 UTC." with admin link to budgets.
+- **Quota/budget exceeded:** banner reflects the active policy, e.g. "AI budget reached" or "AI access disabled for this admin." Per-admin daily budget copy is future-only until M2 ships.
 - **Kill switch active:** prominent banner "AI Assistant disabled by admin", composer disabled, panel still viewable for history.
 
 ### 8.4 Degraded
@@ -250,7 +251,7 @@ Inline (not full settings page):
 ## 12. State Management
 
 | State | Where |
-|---|---|
+| --- | --- |
 | Panel open/closed | Zustand store `useAiAssistantStore` |
 | Current thread ID | URL param `?aiThread=<id>` (deep-linkable) |
 | Panel width | `localStorage` |

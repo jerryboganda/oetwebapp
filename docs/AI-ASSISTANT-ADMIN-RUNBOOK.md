@@ -14,7 +14,7 @@ The Admin AI Assistant is an admin-only chatbot surface for the OET Prep Platfor
 - write canonical `AiUsageRecord` rows for successful and refused turns;
 - show read-only admin pages for settings, usage, providers, threads, audit, and indexing status.
 
-The feature remains kill-switch gated. The default safe posture is disabled unless the environment/runtime settings explicitly enable it.
+The feature remains kill-switch gated. The default safe posture is disabled unless configuration explicitly enables it. The admin kill-switch endpoint is an in-memory current-process override in V1; durable runtime-settings persistence is future work.
 
 ## 2. What Is Not Live
 
@@ -24,6 +24,7 @@ These capabilities are intentionally not part of the current shipped surface:
 - no pgvector index, embedding jobs, or working reindex endpoint;
 - no `oet-devbox` sidecar, shell commands, git operations, service restart, or deploy operations;
 - no write tools, patch application, approval nonce flow, or file editing from chat;
+- no canonical AI tool grants for `admin.ai_chatbot`; grant attempts are rejected in V1;
 - no provider secret entry in `/admin/ai-assistant/providers`;
 - no per-thread provider/model override. The chatbot uses the canonical gateway feature route for `admin.ai_chatbot`.
 
@@ -52,7 +53,7 @@ When the frontend API base URL is the same-origin `/api/backend` proxy, the brow
 
 1. Verify the canonical AI provider registry and feature route for `admin.ai_chatbot` in the main AI provider/admin surfaces.
 2. Keep provider secrets in the approved runtime settings/provider system. Do not paste API keys into `/admin/ai-assistant/providers`; that page is read-only for this module.
-3. Verify `AiAssistant:GlobalEnabled` is set only in the intended environment.
+3. Verify `AiAssistant:GlobalEnabled` is set only in the intended environment, or use the admin kill-switch endpoint as a current-process override during local validation.
 4. Open `/admin/ai-assistant` as a `system_admin` and confirm the settings card reflects the intended enabled/disabled state.
 5. Open an admin page, open the assistant widget, start a short conversation, and confirm a canonical usage row appears under `/admin/ai-assistant/usage`.
 
@@ -68,8 +69,8 @@ When the frontend API base URL is the same-origin `/api/backend` proxy, the brow
 
 If the assistant must be disabled:
 
-1. Set `AiAssistant:GlobalEnabled=false` through the approved runtime/environment path for the environment.
-2. Use the admin kill-switch endpoint or UI where available.
+1. Set `AiAssistant:GlobalEnabled=false` through the approved configuration path for the environment.
+2. Use the admin kill-switch endpoint or UI where available for an immediate current-process override.
 3. Confirm new hub connections are refused and the widget shows the disabled state.
 4. Review `AiUsageRecord` and `AiAuditEvent` rows for the suspect window.
 

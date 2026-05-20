@@ -93,7 +93,7 @@ export default function AiAssistantTestConsolePage(): JSX.Element {
                 {settings.globalEnabled ? 'ENABLED' : 'DISABLED'}
               </Badge>
               <p className="mt-2 text-xs text-admin-text-muted">
-                Default provider: <code>{settings.defaultProvider}</code> · Default model: <code>{settings.defaultModel}</code>
+                Settings snapshot: <code>{settings.defaultProvider}</code> · <code>{settings.defaultModel}</code>. Active chatbot routing uses the canonical <code>admin.ai_chatbot</code> feature route.
               </p>
             </AdminRoutePanel>
             <AdminRoutePanel

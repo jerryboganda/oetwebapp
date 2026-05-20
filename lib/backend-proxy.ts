@@ -39,9 +39,10 @@ function isAuthBootstrapRequest(request: Request): boolean {
  * x-csrf-token header. The hub connections are protected at the backend
  * level by [Authorize] — a valid JWT bearer token is required before any
  * data is exchanged. Blocking the negotiate step here would prevent real-
- * time notifications and conversation streaming from connecting at all.
+ * time notifications, AI Assistant chat, and conversation streaming from
+ * connecting at all.
  */
-const SIGNALR_HUB_PATH_PATTERN = /^\/?api\/backend\/v1\/(notifications|conversations)\/hub(\/|$|\?)/i;
+const SIGNALR_HUB_PATH_PATTERN = /^\/?api\/backend\/v1\/(notifications|conversations|ai-assistant)\/hub(\/|$|\?)/i;
 
 function isSignalRHubRequest(request: Request): boolean {
   try {
@@ -91,9 +92,9 @@ export function validateProxyCsrf(request: Request): boolean {
   // expired CSRF cookie must still be able to sign in.
   if (isAuthBootstrapRequest(request)) return true;
 
-  // SignalR hub endpoints (notifications, conversations) are exempt — the
-  // hub bearer JWT enforces auth at the backend; CSRF here would only break
-  // real-time connectivity without adding meaningful protection.
+  // SignalR hub endpoints are exempt — the hub bearer JWT enforces auth at
+  // the backend; CSRF here would only break real-time connectivity without
+  // adding meaningful protection.
   if (isSignalRHubRequest(request)) return true;
 
   const cookies = parseCookieHeader(request.headers.get('cookie'));

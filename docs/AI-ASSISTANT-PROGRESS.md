@@ -10,7 +10,7 @@ Status: **shipped behind a kill-switch (`AiAssistant:GlobalEnabled = false` by d
 - Domain entities under `Domain/AiAssistant/*`: `AiChatThread`, `AiChatMessage`, `AiProviderConfig`, `AiAssistantToolInvocation`, `AiAuditEvent`, `AiUsageLog`, `AiKnowledgeChunk`, `AiAssistantSettings`.
 - `Data/LearnerDbContext.AiAssistant.cs` — DbSets + Fluent mappings. `AiAssistantToolInvocations` `ToTable` chosen to avoid collision with canonical `AiToolInvocations`.
 - Services under `Services/AiAssistant/**`:
-  - `AiAssistantSettingsService` — kill-switch / global enabled with 30s in-memory cache, env-var fallback.
+  - `AiAssistantSettingsService` — kill-switch / global enabled from `IConfiguration`, plus current-process in-memory override from the admin kill-switch endpoint. Durable `IRuntimeSettingsProvider` persistence remains deferred.
   - `AiAssistantTurnRegistry` — in-flight turn cancellation.
   - `Permissions/*` — admin permission resolver bound to JWT `perm` claim.
   - `Providers/OpenAiProvider` — legacy SSE-capable provider path retained for compatibility; chatbot turns now dispatch through the canonical gateway.
@@ -91,8 +91,8 @@ Current accepted backend evidence is the focused validation matrix in the 2026-0
 
 1. Apply migration: `dotnet ef database update --project backend/src/OetLearner.Api`.
 2. Grant a user the `system_admin` role or `ai_assistant:use` admin permission.
-3. Set `AiAssistant:GlobalEnabled = true` in configuration (or via `/v1/admin/ai-assistant/kill-switch`).
-4. Configure `AiAssistant:OpenAi:ApiKey` (via runtime settings or env).
+3. Set `AiAssistant:GlobalEnabled = true` in configuration, or via `/v1/admin/ai-assistant/kill-switch` for a current-process override.
+4. Configure the canonical gateway provider/feature route for `admin.ai_chatbot` through the main AI provider/runtime settings surfaces.
 
 ---
 
@@ -116,6 +116,8 @@ Current accepted backend evidence is the focused validation matrix in the 2026-0
 | `dotnet test --filter FullyQualifiedName~DiagnosticFlow_CompletesAcrossAllSubtests_AndProducesScopedResults` | **1/1 pass** (20s) |
 | `dotnet test --filter FullyQualifiedName~ReadingAuthoringTests` | **74/74 pass** (51.4s) |
 | `npx vitest run lib/ai-assistant/signalr.test.ts` | **10/10 pass** (1.68s) |
+| `npx vitest run hooks/use-ai-assistant.test.tsx contexts/__tests__/ai-assistant-context.test.tsx components/domain/ai-assistant/AiAssistantWidget.test.tsx lib/__tests__/backend-proxy.test.ts lib/__tests__/admin-permissions.test.ts lib/ai-assistant/signalr.test.ts` | **51/51 pass** (3.47s) |
+| `dotnet test --filter "FullyQualifiedName~AiGatewayRoutingTests\|FullyQualifiedName~AiAssistantAdminEndpointStubTests"` | **19/19 pass** (23.5s) |
 
 ### V1 security and transport closure - 2026-05-20
 
@@ -124,6 +126,15 @@ Current accepted backend evidence is the focused validation matrix in the 2026-0
 - The hook unsubscribes from the previous thread group when switching threads or clearing the active thread.
 - Arbitrary per-thread provider/model selection is not persisted or sent to `StartTurn`; V1 uses the canonical gateway feature route only.
 - `AiAssistantTurnRegistry` binds cancellation to owner user id, and REST cancel verifies message ownership before cancelling.
+- The Next backend proxy exempts the AI Assistant SignalR hub from proxy CSRF for negotiate/polling requests, matching notifications and conversations.
+- The Stop action cancels live in-flight assistant turns through the SignalR hub first, then falls back to REST when the hub connection is missing or temporarily rejects during reconnect.
+- Current docs describe the V1 kill switch as `IConfiguration` plus current-process in-memory override; durable runtime-settings persistence and hub-wide broadcast remain future gates.
+- Widget rendering is covered for admin-with-permission, non-admin, and admin-without-permission cases.
+- V1 write-disabled management surfaces are locked by backend tests to remain `501 Not Implemented` for settings PUT, provider CRUD, and indexing reindex until those future phases are explicitly approved.
+- V1 no-tools behavior is now enforced in code: `admin.ai_chatbot` bypasses tool resolution in `AiGatewayService`, and the AI tool-grant admin endpoint rejects grants for that feature code.
+- The manage dashboard route now requires `ai_assistant:manage`; use-only admins can chat through the widget but cannot load kill-switch/provider management pages.
+- The shared AI Assistant React provider stays disabled until an admin has `ai_assistant:use`, preventing hidden hub/thread requests for admins without assistant access.
+- The kill-switch response now returns the full settings DTO shape expected by the frontend client.
 
 ### Resolved backend regressions
 

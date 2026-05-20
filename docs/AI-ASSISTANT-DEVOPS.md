@@ -1,6 +1,6 @@
 # Admin AI Assistant — DevOps & Release Plan
 
-**Current status:** This is a future devbox/pgvector deployment design. The shipped Phase 1 assistant does not deploy `oet-devbox`, does not run shell/git/restart tools, and does not require pgvector. Do not execute the production actions in this document without explicit owner approval and the normal OET production safety gates.
+**Current status:** This is a future devbox/pgvector/runtime-settings deployment design. The shipped Phase 1 assistant does not deploy `oet-devbox`, does not run shell/git/restart tools, does not require pgvector, and does not yet implement durable runtime-settings kill-switch persistence or hub-wide `KILL` broadcast. Do not execute the production actions in this document without explicit owner approval and the normal OET production safety gates.
 
 > Produced by the `agency-devops` subagent. **Plan only.** No code edits or deploy commands executed.
 > Cites `AGENTS.md` "Deployment", "Security Considerations", and the Runtime Settings gotcha.
@@ -186,7 +186,7 @@ Sentry tags: `feature=ai_assistant`, `conversation_id`, `tool`, `provider`, `mod
 
 ## 8. Kill Switch — instant propagation
 
-30s cache TTL is too slow for emergency. Two-layer kill:
+Future production design: 30s cache TTL is too slow for emergency. Two-layer kill:
 
 1. **Setting flip**: `AiAssistant:GlobalEnabled = false` → audited via `AuditEvent { Action="RuntimeSettingsUpdated" }`. Takes effect within 30s for NEW requests.
 2. **Hub `KILL` broadcast**: same admin action triggers SignalR broadcast on dedicated `aiAssistantControl` channel. Every connected client receives `{ type: "KILL", reason }`. Server-side hub:
@@ -210,9 +210,9 @@ Optimistic locking in `write_file` tool contract:
 
 ## 10. Blue/Green Collision
 
-Deploy script wraps blue/green flip with chatbot freeze:
+Future deployment design: deploy script wraps blue/green flip with chatbot freeze after durable runtime settings, hub-wide `KILL`, and global `AuditEvent` integration exist:
 
-1. **Pre-flip**: set `AiAssistant:GlobalEnabled = false` via signed system action, fire `KILL` broadcast. `AuditEvent { Action="DeployFreezeChatbot" }`.
+1. **Pre-flip**: set `AiAssistant:GlobalEnabled = false` via signed system action, fire `KILL` broadcast, and write `AuditEvent { Action="DeployFreezeChatbot" }`.
 2. **Standard blue/green deploy** proceeds.
 3. **Post-flip healthchecks + smoke test green**: deploy script restores `AiAssistant:GlobalEnabled` to previous value (captured at step 1). `AuditEvent { Action="DeployUnfreezeChatbot" }`.
 4. **On deploy failure / rollback**: leave `GlobalEnabled = false`, require explicit admin re-enable.
@@ -237,7 +237,7 @@ New required checks in `.github/workflows/`:
 
 Tiered, fastest first:
 
-1. **Soft kill (seconds)**: admin flips `AiAssistant:GlobalEnabled = false` + `KILL` broadcast. Feature off; data intact; no redeploy.
+1. **Soft kill (seconds, future design)**: admin flips durable `AiAssistant:GlobalEnabled = false` + hub-wide `KILL` broadcast. Feature off; data intact; no redeploy.
 2. **Provider rollback (minutes)**: switch `AiAssistant:DefaultProviderId` to known-good provider.
 3. **Slot rollback (minutes)**: standard blue/green re-flip to previous-good slot. New tables remain unused.
 4. **Full removal (owner-approved, scheduled)**:

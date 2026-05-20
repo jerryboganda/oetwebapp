@@ -27,7 +27,7 @@
 ## 1. Credential-source options
 
 | Option | Meaning | Default | Alternatives |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `AiCredentialMode` (per user) | Which source the resolver should prefer | `auto` | `byok-only`, `platform-only`, `auto` |
 | `AllowPlatformFallback` (per user) | If BYOK errors, may we transparently use platform credits? | `true` | `false` |
 | `AllowByokOnScoringFeatures` (global) | Admin switch: allow BYOK on score-affecting calls at all | `false` | `true` |
@@ -48,7 +48,7 @@ homogeneous.
 ## 2. Quota unit options
 
 | Option | Meaning | Default | Alternatives |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `QuotaUnit` (global) | What is metered | `tokens` | `requests`, `usd_estimate` |
 | `TokensPerCreditDisplay` (global) | How many raw tokens equal one learner-visible "AI credit" | `1000` | any integer ≥ 100 |
 | `CreditRoundingMode` (global) | Rounding for learner display | `ceil` | `floor`, `nearest` |
@@ -62,7 +62,7 @@ showing "3,413 credits" is not.
 ## 3. Period & reset-policy options
 
 | Option | Meaning | Default | Alternatives |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `QuotaPeriod` (per plan) | Length of the billing window | `monthly` | `daily`, `weekly`, `rolling_30d`, `never_expire` |
 | `QuotaResetAlignment` (per plan) | When the period ticks over | `calendar_month` | `subscription_anniversary`, `utc_midnight` |
 | `RolloverPolicy` (per plan) | What happens to unused credits at reset | `expire` | `rollover_capped`, `rollover_full` |
@@ -81,7 +81,7 @@ rather than period counters. Available when you're ready for that complexity.
 ## 4. Overage policy options
 
 | Option | Meaning | Default | Alternatives |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `OveragePolicy` (per plan) | What happens when quota is exhausted | `deny` | `allow_with_charge`, `auto_upgrade`, `degrade_to_smaller_model` |
 | `DenyMessage` (per plan) | Copy shown to learner on `deny` | localised default | any string |
 | `OverageRatePerCredit` (per plan) | Price per credit when `allow_with_charge` | `null` | decimal ≥ 0 |
@@ -100,7 +100,7 @@ others per plan when billing consent is wired.
 Every feature the gateway serves is classified. Defaults:
 
 | Feature code | Scoring-critical | BYOK default | Platform default | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `writing.grade` | ✅ | ❌ | ✅ | Mock / practice grading |
 | `writing.sample_score` | ✅ | ❌ | ✅ | Sample scoring |
 | `speaking.grade` | ✅ | ❌ | ✅ | Speaking evaluation |
@@ -122,7 +122,7 @@ Every feature the gateway serves is classified. Defaults:
 | `admin.vocabulary_draft` | ❌ | ❌ | ✅ | Vocabulary term drafting (grounded), platform only |
 | `admin.listening_draft` | ❌ | ❌ | ✅ | Listening 42-item structure drafting from PDFs (grounded), platform only |
 | `admin.reading_draft` | ❌ | ❌ | ✅ | Reading extraction drafting, platform only; human approval required |
-| `admin.ai_chatbot` | ❌ | ❌ | ✅ | Admin AI Assistant chatbot turns (SupervisorAgent → `IAiUsageRecorder`). Platform-only; BYOK refused. No quota in V1 — kill-switch (`AiAssistant:GlobalEnabled`) is the only gate. Grounding-via-`IAiGatewayService` deferred (Phase 1.5b). |
+| `admin.ai_chatbot` | ❌ | ❌ | ✅ | Admin AI Assistant chatbot turns through grounded `IAiGatewayService` + canonical `IAiUsageRecorder`. Platform-only; BYOK refused. Exempt from per-plan caps, but still respects feature disable, global budget kill, per-user admin disable, and the assistant kill-switch. |
 
 Admin can toggle the BYOK column per feature. `AllowByokOnScoringFeatures`
 global switch gates the scoring-critical rows.
@@ -132,7 +132,7 @@ global switch gates the scoring-critical rows.
 ## 6. Failure & fallback options
 
 | Option | Meaning | Default | Alternatives |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `ByokErrorCooldownHours` (global) | After a 401/403 on a user key, how long before we retry it | `24` | any integer hours |
 | `ByokTransientRetryCount` (global) | How many 429/5xx retries before falling through | `2` | 0–5 |
 | `ProviderRetryPolicy` (per provider) | Polly policy preset | `exponential_2_30s` | `none`, `linear_3_10s`, `aggressive_5_60s` |
@@ -145,7 +145,7 @@ global switch gates the scoring-critical rows.
 ## 7. Global safety controls
 
 | Option | Meaning | Default | Alternatives |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `AiGlobalKillSwitch` | Hard-disable all AI calls platform-wide | `false` | `true` |
 | `AiGlobalBudgetUsd` | Hard monthly USD cap across all platform-keyed calls | admin-supplied, no default | any decimal ≥ 0 |
 | `AiGlobalBudgetSoftWarnPct` | Email admins at this % of budget | `80` | 0–100 |
@@ -162,7 +162,7 @@ the platform budget, not learner sovereignty over their own key.
 ## 8. Custody & security options
 
 | Option | Meaning | Default | Alternatives |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `KeyEncryptionStrategy` | At-rest encryption for stored credentials | `aspnet_data_protection` | `aws_kms`, `azure_key_vault`, `hashicorp_vault` |
 | `KeyRingPersistencePath` | Filesystem path for Data Protection key ring | `/var/lib/oet/keyring` | any writable path or blob URL |
 | `RequireStepUpMfaForCredentialChange` | Force re-auth to add/rotate/revoke keys | `true` | `false` |
@@ -181,7 +181,7 @@ larger PII footprint. Enable only with sampling + consent wiring.
 ## 9. Observability & alerting
 
 | Option | Meaning | Default | Alternatives |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `UsageAggregationFrequency` | How often aggregation views refresh | `hourly` | `realtime`, `daily` |
 | `AlertEmailRecipients` | Who receives budget/anomaly emails | admins with `SystemAdmin` | explicit list |
 | `AlertChannels` | Where alerts go | `[email]` | `email`, `webhook`, `sms`, `slack` |
@@ -196,7 +196,7 @@ larger PII footprint. Enable only with sampling + consent wiring.
 ## 10. Learner-visible presentation
 
 | Option | Meaning | Default | Alternatives |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `ShowBYOKOption` (global) | Is BYOK visible in `/settings/ai`? | `true` | `false` (disables feature entirely) |
 | `ShowExactTokenCounts` | Show raw tokens in learner UI | `false` | `true` |
 | `ShowFallbackBanner` | Show banner when platform fallback engages | `true` | `false` (silent) |
@@ -244,7 +244,7 @@ API** — OpenAI-compatible chat-completions at
 `https://models.github.ai/inference/chat/completions`. Wired through the
 existing `IAiGatewayService` like any other provider; no policy bypass.
 
-**Setup**
+### Setup
 
 - Register at `/admin/ai-providers` → preset **GitHub Copilot / Models**
   (sets `Code = "copilot"`, `Dialect = Copilot`).
@@ -255,7 +255,7 @@ existing `IAiGatewayService` like any other provider; no policy bypass.
 - For org-attributed billing / higher rate limits, swap the base URL to
   `https://models.github.ai/orgs/{ORG_LOGIN}/inference`.
 
-**Auth modes**
+### Auth modes
 
 - **Platform PAT**: default. Per-feature platform-only allowlists in
   `IAiCredentialResolver` apply unchanged (scoring features refuse BYOK).
@@ -264,7 +264,7 @@ existing `IAiGatewayService` like any other provider; no policy bypass.
   to own Copilot subscriptions, and per-user GitHub identity would
   cross-contaminate `AiUsageRecord.UserId`.
 
-**Boundaries**
+### Boundaries
 
 - Text completions only. **Voice** (TTS / ASR) stays on
   `IConversationTtsProviderSelector`, `IConversationAsrProviderSelector`,

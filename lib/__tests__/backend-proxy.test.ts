@@ -8,6 +8,7 @@ import {
   validateRequestOrigin,
   validateProxyPathSegments,
 } from '../backend-proxy';
+import { POST as postBackendProxy } from '../../app/api/backend/[...path]/route';
 
 describe('backend proxy helpers', () => {
   it('builds a safe backend target for v1 paths', () => {
@@ -154,5 +155,65 @@ describe('backend proxy helpers', () => {
 
       expect(validateProxyCsrf(request)).toBe(false);
     }
+  });
+
+  it.each([
+    'v1/notifications/hub/negotiate?negotiateVersion=1',
+    'v1/conversations/hub/negotiate?negotiateVersion=1',
+    'v1/ai-assistant/hub/negotiate?negotiateVersion=1',
+    'v1/ai-assistant/hub?id=connection-1',
+  ])('exempts SignalR hub requests from proxy CSRF: %s', (hubPath) => {
+    const request = new Request(`https://app.example.com/api/backend/${hubPath}`, {
+      method: 'POST',
+      headers: {
+        Cookie: 'oet_rt=active-refresh',
+      },
+    });
+
+    expect(validateProxyCsrf(request)).toBe(true);
+  });
+
+  it('allows a full AI Assistant SignalR negotiate request through the Next proxy', async () => {
+    const fetchMock = vi.fn(async () => new Response('{"connectionId":"abc"}', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const response = await postBackendProxy(
+        new Request('https://app.example.com/api/backend/v1/ai-assistant/hub/negotiate?negotiateVersion=1', {
+          method: 'POST',
+          headers: {
+            Cookie: 'oet_rt=active-refresh',
+            Origin: 'https://app.example.com',
+          },
+        }),
+        { params: Promise.resolve({ path: ['v1', 'ai-assistant', 'hub', 'negotiate'] }) },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://127.0.0.1:5198/v1/ai-assistant/hub/negotiate?negotiateVersion=1',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects near-miss SignalR paths without a matching CSRF token', async () => {
+    const response = await postBackendProxy(
+      new Request('https://app.example.com/api/backend/v1/ai-assistant/hubx/negotiate', {
+        method: 'POST',
+        headers: {
+          Cookie: 'oet_rt=active-refresh',
+          Origin: 'https://app.example.com',
+        },
+      }),
+      { params: Promise.resolve({ path: ['v1', 'ai-assistant', 'hubx', 'negotiate'] }) },
+    );
+
+    expect(response.status).toBe(403);
   });
 });

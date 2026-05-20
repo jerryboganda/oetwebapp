@@ -33,7 +33,7 @@ const AI_ASSISTANT_ROWS: MatrixRow[] = [
     permission: 'ai_assistant:unrestricted',
     label: 'Unrestricted Tools',
     surface: 'Tool invocations (Phase 3+)',
-    description: 'Skip per-tool admin approval for write_file / run_command / git when invoked by the executor.',
+    description: 'Future owner-only grant for limited read-only approval bypass. It never skips write_file, run_command, git, restart, deploy, or destructive approvals.',
     required: false,
   },
 ];

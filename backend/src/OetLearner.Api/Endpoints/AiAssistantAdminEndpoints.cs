@@ -23,16 +23,7 @@ public static class AiAssistantAdminEndpoints
 
         g.MapGet("/settings", (IAiAssistantSettingsService settings) =>
         {
-            var s = settings.Current;
-            return Results.Ok(new
-            {
-                globalEnabled = s.GlobalEnabled,
-                requireApprovalAlways = s.RequireApprovalAlways,
-                defaultProvider = s.DefaultProvider,
-                defaultModel = s.DefaultModel,
-                lastKillSwitchAt = settings.LastKillSwitchAt,
-                lastKillSwitchActor = settings.LastKillSwitchActor,
-            });
+            return Results.Ok(ToSettingsDto(settings));
         });
 
         g.MapPost("/kill-switch", async (
@@ -53,7 +44,7 @@ public static class AiAssistantAdminEndpoints
                 OccurredAt = DateTimeOffset.UtcNow,
             });
             await db.SaveChangesAsync(http.RequestAborted);
-            return Results.Ok(new { globalEnabled = settings.Current.GlobalEnabled });
+            return Results.Ok(ToSettingsDto(settings));
         });
 
         g.MapGet("/threads", async (LearnerDbContext db, int? take, int? skip) =>
@@ -179,5 +170,19 @@ public static class AiAssistantAdminEndpoints
     public sealed class KillSwitchRequest
     {
         public bool Enabled { get; set; }
+    }
+
+    private static object ToSettingsDto(IAiAssistantSettingsService settings)
+    {
+        var s = settings.Current;
+        return new
+        {
+            globalEnabled = s.GlobalEnabled,
+            requireApprovalAlways = s.RequireApprovalAlways,
+            defaultProvider = s.DefaultProvider,
+            defaultModel = s.DefaultModel,
+            lastKillSwitchAt = settings.LastKillSwitchAt,
+            lastKillSwitchActor = settings.LastKillSwitchActor,
+        };
     }
 }

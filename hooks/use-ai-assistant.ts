@@ -36,7 +36,7 @@ export interface UseAiAssistantResult {
   reload: () => Promise<void>;
 }
 
-export function useAiAssistant(): UseAiAssistantResult {
+export function useAiAssistant(enabled = true): UseAiAssistantResult {
   const [threads, setThreads] = useState<ChatThreadDto[]>([]);
   const [activeThread, setActiveThread] = useState<ChatThreadDto | null>(null);
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
@@ -60,6 +60,8 @@ export function useAiAssistant(): UseAiAssistantResult {
 
   // Connect lazily on first mount.
   useEffect(() => {
+    if (!enabled) return;
+
     let cancelled = false;
     const conn = createAiAssistantConnection();
     connectionRef.current = conn;
@@ -89,7 +91,7 @@ export function useAiAssistant(): UseAiAssistantResult {
       connectionRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [enabled]);
 
   const applyFrame = useCallback((frame: StreamFrame) => {
     if (frame.type === 'MessageStart') {
@@ -129,6 +131,11 @@ export function useAiAssistant(): UseAiAssistantResult {
   }, []);
 
   const reload = useCallback(async () => {
+    if (!enabled) {
+      setThreads([]);
+      return;
+    }
+
     setError(null);
     try {
       const list = await aiAssistantClient.listThreads();
@@ -137,11 +144,25 @@ export function useAiAssistant(): UseAiAssistantResult {
       const message = err instanceof Error ? err.message : String(err);
       setError(`Failed to load conversations: ${message}`);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    if (enabled) {
+      void reload();
+      return;
+    }
+
+    setError(null);
+    setLiveFrames([]);
+    setIsConnected(false);
+    setIsStreaming(false);
+    streamingMessageIdRef.current = null;
+    activeThreadIdRef.current = null;
+    subscribedThreadIdRef.current = null;
+    setActiveThread(null);
+    setMessages([]);
+    setThreads([]);
+  }, [enabled, reload]);
 
   const selectThread = useCallback(async (threadId: string | null) => {
     setError(null);
@@ -158,22 +179,19 @@ export function useAiAssistant(): UseAiAssistantResult {
       setMessages([]);
       return;
     }
-    activeThreadIdRef.current = threadId;
     try {
-      if (conn && previousThreadId && previousThreadId !== threadId) {
-        try { await conn.unsubscribeThread(previousThreadId); } catch { /* best effort */ }
-      }
       const detail = await aiAssistantClient.getThread(threadId);
+      activeThreadIdRef.current = threadId;
       setActiveThread(detail.thread);
       setMessages(detail.messages);
       if (conn) {
+        if (previousThreadId && previousThreadId !== threadId) {
+          try { await conn.unsubscribeThread(previousThreadId); } catch { /* best effort */ }
+        }
         await conn.subscribeThread(threadId);
         subscribedThreadIdRef.current = threadId;
       }
     } catch (err) {
-      if (activeThreadIdRef.current === threadId) {
-        activeThreadIdRef.current = null;
-      }
       const message = err instanceof Error ? err.message : String(err);
       setError(`Failed to open conversation: ${message}`);
     }
@@ -268,6 +286,16 @@ export function useAiAssistant(): UseAiAssistantResult {
     const id = streamingMessageIdRef.current;
     if (!id) return;
     try {
+      const conn = connectionRef.current;
+      if (conn) {
+        try {
+          await conn.cancel(id);
+          return;
+        } catch {
+          // Fall through to REST fallback when the hub is reconnecting/stale.
+        }
+      }
+
       await aiAssistantClient.cancelMessage(id);
     } catch {
       // ignore — server may have already finished.

@@ -27,7 +27,7 @@ export const AdminPermission = {
   UseAiAssistant: 'ai_assistant:use',
   /** AI Assistant — admin management surfaces (providers, kill-switch, audit). */
   ManageAiAssistant: 'ai_assistant:manage',
-  /** AI Assistant — skip approval prompts (system_admin only). */
+  /** AI Assistant — limited read-only approval bypass; never for writes, shell, git, deploy, or destructive actions. */
   UseAiAssistantUnrestricted: 'ai_assistant:unrestricted',
 } as const;
 
@@ -185,7 +185,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/writing/ai-draft': [AdminPermission.ContentWrite],
   '/admin/writing/analytics': [AdminPermission.QualityAnalytics],
   '/admin/writing/options': [AdminPermission.AiConfig],
-  '/admin/ai-assistant': [AdminPermission.UseAiAssistant],
+  '/admin/ai-assistant': [AdminPermission.ManageAiAssistant],
   '/admin/ai-assistant/audit': [AdminPermission.ManageAiAssistant],
   '/admin/ai-assistant/indexing': [AdminPermission.ManageAiAssistant],
   '/admin/ai-assistant/providers': [AdminPermission.ManageAiAssistant],

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Rulebook;
 
@@ -242,6 +243,35 @@ public class AiGatewayRoutingTests
         Assert.Null(mockProvider.LastRequest);
     }
 
+    [Fact]
+    public async Task CompleteAsync_AdminAiChatbot_DoesNotExposeToolsEvenWhenRegistryReturnsGrants()
+    {
+        var provider = new CapturingProvider("mock");
+        var toolRegistry = new GrantingToolRegistry();
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { provider },
+            toolRegistry: toolRegistry,
+            toolInvoker: new ThrowingToolInvoker());
+
+        await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Chatbot,
+                Profession = ExamProfession.Medicine,
+                Task = AiTaskMode.AssistAdminCommand,
+            }),
+            FeatureCode = AiFeatureCodes.AdminAiChatbot,
+            UserId = "admin-user-1",
+        });
+
+        Assert.Equal(0, toolRegistry.ResolveCount);
+        Assert.NotNull(provider.LastRequest);
+        Assert.Null(provider.LastRequest!.Tools);
+        Assert.Null(provider.LastRequest.ToolChoice);
+    }
+
     private static AiGroundedPrompt BuildWritingPrompt(IAiGatewayService gateway)
         => gateway.BuildGroundedPrompt(new AiGroundingContext
         {
@@ -290,6 +320,38 @@ public class AiGatewayRoutingTests
                 CredentialId: null,
                 PolicyTrace: "test.platform"));
         }
+    }
+
+    private sealed class GrantingToolRegistry : IAiToolRegistry
+    {
+        public int ResolveCount { get; private set; }
+
+        public Task<IReadOnlyList<AiToolDefinition>> ResolveForFeatureAsync(string featureCode, CancellationToken ct)
+        {
+            ResolveCount++;
+            return Task.FromResult<IReadOnlyList<AiToolDefinition>>(new[]
+            {
+                new AiToolDefinition(
+                    "lookup_rulebook_rule",
+                    "Lookup rulebook rule",
+                    "Test tool that should never be exposed to admin.ai_chatbot in V1.",
+                    AiToolCategory.Read,
+                    "{}"),
+            });
+        }
+
+        public bool IsKnownToolCode(string toolCode) => true;
+        public void InvalidateFeature(string featureCode) { }
+        public Task SeedCatalogAsync(CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private sealed class ThrowingToolInvoker : IAiToolInvoker
+    {
+        public Task<AiToolExecutionResult> InvokeAsync(string toolCode, System.Text.Json.JsonElement argsJson, AiToolContext ctx, CancellationToken ct)
+            => throw new InvalidOperationException("admin.ai_chatbot must not invoke tools in V1");
+
+        public Task<AiToolExecutionResult> InvokeAsync(AiToolCall call, AiToolContext ctx, CancellationToken ct)
+            => throw new InvalidOperationException("admin.ai_chatbot must not invoke tools in V1");
     }
 
     private sealed class FakeFeatureRouteResolver(string featureCode, string providerCode, string? model) : IAiFeatureRouteResolver

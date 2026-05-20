@@ -201,7 +201,7 @@ public static class AdminPermissions
     /// <summary>Admin AI Assistant — manage providers, kill-switch, audit.</summary>
     public const string ManageAiAssistant = "ai_assistant:manage";
 
-    /// <summary>Admin AI Assistant — bypass per-action approval prompts.
+    /// <summary>Admin AI Assistant — limited read-only approval bypass; never for writes, shell, git, deploy, or destructive actions.
     /// system_admin only; granted explicitly per account.</summary>
     public const string UseAiAssistantUnrestricted = "ai_assistant:unrestricted";
 

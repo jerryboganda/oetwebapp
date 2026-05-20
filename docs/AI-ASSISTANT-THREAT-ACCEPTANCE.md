@@ -13,9 +13,9 @@ No phase may ship to production without an in-date signature in §6 correspondin
 By phase:
 
 | Phase | Capabilities |
-|---|---|
+| --- | --- |
 | 0 | Schema + permissions only. No user-visible surface. |
-| 1 | Streaming chat to LLM provider. **No tool calls.** Per-admin daily quota. Kill switch. |
+| 1 | Streaming chat to LLM provider. **No tool calls.** Kill switch, global budget kill, and per-user admin disable. Per-admin daily quota remains a future owner-signoff gate. |
 | 2 | + Grounded retrieval over allowlisted repo paths (pgvector). **No tool calls.** Trust-tier separation enforced; untrusted content not yet indexed. |
 | 3 | + Per-call approval flow. Tools: `read_file` (with secret scan), `list_directory`, `search_codebase`, `write_file` (writes only to devbox workspace, never `/opt/oetwebapp/` directly; mission-critical paths hard-denied). |
 | 4 | + `run_command` in `oet-devbox` sandbox (egress-denied, executable allowlist, no Docker socket, read-only rootfs, drop-all caps), `git` (status/diff/log/branch/checkout/commit — **no push, no pr_create, no force**), `reindex_codebase`, `restart_service` (always-approval, respects `.deploy.lock`), `deploy_status` (read-only). |
@@ -40,7 +40,7 @@ The AI Assistant is, by construction, **a high-privilege automated actor inside 
 2. The agent has read access to repo source and the indexed codebase. A compromise of the chatbot database tables compromises the codebase content (mitigated by per-path denylists + secret-scan, but the chat history table itself remains a sensitive long-lived store).
 3. The agent has WRITE access to a sandboxed workspace and (with admin approval) can run shell commands in `oet-devbox`. Compromise of admin credentials gives an attacker a much faster path to operational disruption than without the assistant.
 4. Third-party LLM providers see prompt content (subject to per-provider data-retention contracts). Secret/PII egress filter mitigates leakage of obvious patterns; it cannot guarantee zero exposure of contextual sensitive content.
-5. Cost runaway is bounded by per-admin daily quota and per-provider monthly cap, but unbounded by default if those caps are misconfigured.
+5. Current V1 cost runaway is bounded by global platform budget kill and per-user admin disable; per-admin daily quota and per-provider monthly cap remain future owner-signoff gates.
 
 ## 3. Mitigations enabled by default
 
@@ -51,7 +51,7 @@ The AI Assistant is, by construction, **a high-privilege automated actor inside 
 - `write_file` operates on devbox workspace only; mission-critical OET paths hard-denied.
 - Per-tool-call nonce approvals (server-side). `UseAiAssistantUnrestricted` cannot skip approvals for `write_file`, `run_command`, `git`, or `restart_service`.
 - Devbox sandbox: uid 10001, no Docker socket, no published ports, attached only to `oetwebsite_default`, read-only rootfs, drop-all caps, no-new-privileges, egress-denied except LLM provider + GitHub allowlist, executable allowlist (no docker/psql/ssh/rm/curl/sudo), wall-clock + memory + PID caps, permanent denylist L8.
-- Per-admin daily token + turn quota; per-provider monthly budget cap (80% soft / 100% hard).
+- Current V1: global platform budget kill and per-user admin disable apply to `admin.ai_chatbot`. Future phases add per-admin daily token + turn quota and per-provider monthly budget caps.
 - Kill switch via `IRuntimeSettingsProvider:AiAssistant:GlobalEnabled` + immediate hub `KILL` broadcast (≤2s effective).
 - All mutations write to `AuditEvent` + chatbot-specific `AiAuditEvent` with before/after JSON diffs.
 - Off-host append-only audit sink (S3 object-lock or syslog) — Phase 5; hash-chained rows for tamper detection.
@@ -66,7 +66,7 @@ The AI Assistant is, by construction, **a high-privilege automated actor inside 
 By signing this document for a given phase, owner acknowledges and accepts these residual risks for that phase:
 
 | ID | Residual risk | Mitigation | Phase |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | R1 | Prompt-injection-driven action against admin's intent, within the bounds of approved tools and per-call nonce constraints | Two-tier RAG, mission-critical write denylist, per-call approval, critic agent, off-host audit | 1+ |
 | R2 | LLM provider sees prompt content within their retention contract | Secret/PII egress filter, contractual data-retention review per provider | 1+ |
 | R3 | Cost overrun within configured per-admin daily and per-provider monthly caps | Quota + cap; alert at 80% | 1+ |
@@ -94,7 +94,7 @@ For each phase that ships, owner signs the block below. Signatures must be in-da
 ### Phase 0 — Schema & Permissions
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | Owner name | _________________________ |
 | Date | _________________________ |
 | Deploy SHA | _________________________ |
@@ -104,7 +104,7 @@ For each phase that ships, owner signs the block below. Signatures must be in-da
 ### Phase 1 — MVP Streaming Chat (no tools)
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | Owner name | _________________________ |
 | Date | _________________________ |
 | Deploy SHA | _________________________ |
@@ -118,7 +118,7 @@ For each phase that ships, owner signs the block below. Signatures must be in-da
 ### Phase 2 — Codebase RAG (read-only retrieval)
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | Owner name | _________________________ |
 | Date | _________________________ |
 | Deploy SHA | _________________________ |
@@ -132,7 +132,7 @@ For each phase that ships, owner signs the block below. Signatures must be in-da
 ### Phase 3 — Write Tools
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | Owner name | _________________________ |
 | Date | _________________________ |
 | Deploy SHA | _________________________ |
@@ -147,7 +147,7 @@ For each phase that ships, owner signs the block below. Signatures must be in-da
 ### Phase 4 — Shell, Git, Reindex, Restart
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | Owner name | _________________________ |
 | Date | _________________________ |
 | Deploy SHA | _________________________ |
@@ -162,7 +162,7 @@ For each phase that ships, owner signs the block below. Signatures must be in-da
 ### Phase 5 — Polish, Multi-provider, GA
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | Owner name | _________________________ |
 | Date | _________________________ |
 | Deploy SHA | _________________________ |
@@ -188,7 +188,7 @@ Owner re-signs this document annually (calendar year), or whenever any of the fo
 - Off-host audit sink reconfigured.
 
 | Year | Owner name | Date | Signature |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 2026 | _____________ | _____________ | _____________ |
 | 2027 | _____________ | _____________ | _____________ |
 | 2028 | _____________ | _____________ | _____________ |
