@@ -76,7 +76,7 @@ public static class RecallSetTagsEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(Project(row));
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapPut("/{code}", async (
             string code,
@@ -97,7 +97,7 @@ public static class RecallSetTagsEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(Project(row));
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/{code}/archive", async (string code, LearnerDbContext db, CancellationToken ct) =>
         {
@@ -108,7 +108,7 @@ public static class RecallSetTagsEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(Project(row));
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/{code}/unarchive", async (string code, LearnerDbContext db, CancellationToken ct) =>
         {
@@ -119,7 +119,7 @@ public static class RecallSetTagsEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(Project(row));
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         admin.MapDelete("/{code}", async (string code, LearnerDbContext db, CancellationToken ct) =>
         {
@@ -148,7 +148,7 @@ public static class RecallSetTagsEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { archived = false, code = row.Code, hardDelete = true });
         })
-        .RequireAuthorization("AdminContentWrite");
+        .WithAdminWrite("AdminContentWrite");
 
         return app;
     }

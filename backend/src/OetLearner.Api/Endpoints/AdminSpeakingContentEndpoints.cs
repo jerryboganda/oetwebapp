@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -90,6 +91,24 @@ public static class AdminSpeakingContentEndpoints
             CancellationToken ct) =>
             Results.Ok(await service.DuplicateSpeakingRolePlayCardAsync(
                 AdminId(http), AdminName(http), id, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        // ── Phase 11 (G.11) — AI-assisted draft ───────────────────────────
+        //
+        // Routes through the grounded gateway via
+        // `AdminService.AiDraftRolePlayCardAsync`. Persists a Draft card +
+        // hidden script atomically. Admin reviews + edits before
+        // publishing. Refuses ungrounded prompts at the gateway layer
+        // (PromptNotGroundedException), so callers cannot bypass the
+        // rulebook + scoring guardrails.
+        group.MapPost("/ai-draft", async (
+            AdminRolePlayCardAiDraftRequest request,
+            AdminService service,
+            IAiGatewayService gateway,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.AiDraftRolePlayCardAsync(
+                gateway, AdminId(http), AdminName(http), request, ct)))
             .WithAdminWrite("AdminContentWrite");
 
         // ── Hidden interlocutor script ────────────────────────────────────

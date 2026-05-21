@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Endpoints;
@@ -88,7 +89,7 @@ public static class SpeakingDrillEndpoints
                 file.Length,
                 ct);
             return Results.Ok(new { uploaded = true });
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().RequireRateLimiting("PerUserWrite");
 
         learner.MapPost("/attempts/{aid}/score", async (
             string aid,
@@ -161,6 +162,24 @@ public static class SpeakingDrillEndpoints
             CancellationToken ct) =>
             Results.Ok(await service.DeleteSpeakingDrillAsync(
                 AdminId(http), AdminName(http), id, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        // ── Phase 11 (G.11) — AI-assisted draft ─────────────────────────────
+        //
+        // Routes through the grounded gateway via
+        // `AdminService.AiDraftSpeakingDrillAsync`. Persists a Draft
+        // SpeakingDrillItem + ContentItem atomically and surfaces an
+        // optional `warning` when the AI reply could not be parsed and
+        // the deterministic fallback was used. Gateway refuses
+        // ungrounded prompts at construction time.
+        admin.MapPost("/ai-draft", async (
+            AdminSpeakingDrillAiDraftRequest request,
+            AdminService service,
+            IAiGatewayService gateway,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.AiDraftSpeakingDrillAsync(
+                gateway, AdminId(http), AdminName(http), request, ct)))
             .WithAdminWrite("AdminContentWrite");
 
         return app;

@@ -72,7 +72,7 @@ public static class AiAssistantEndpoints
 
         // Admin endpoints for thread monitoring
         var adminGroup = app.MapGroup("/v1/admin/ai-assistant")
-            .RequireAuthorization("AdminOnly")
+            .RequireAuthorization("AdminAiConfig")
             .WithTags("AI Assistant Admin");
 
         adminGroup.MapGet("/threads", async (
