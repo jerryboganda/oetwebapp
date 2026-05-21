@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import {
   advanceMockBundleReviewStage,
-  fetchMockBundleReviewStageSummary,
+  fetchMockBundleReviewStage,
   type MockBundleReviewStageEntry,
   type MockBundleReviewStageSummary,
 } from '@/lib/api';
@@ -52,20 +52,21 @@ interface StageHistoryRowProps {
 function StageHistoryRow({ entry, isCurrent }: StageHistoryRowProps) {
   const stageKey = entry.stage as MockReviewStage;
   const label = STAGE_LABELS[stageKey] ?? entry.stage;
+  const status = entry.resolvedAt ? 'approved' : 'pending';
   return (
     <li className="rounded-xl border border-border bg-background-light p-3">
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-semibold text-navy">{label}</p>
-        <Badge variant={isCurrent ? 'info' : entry.status === 'approved' ? 'success' : 'muted'} className="text-[10px] capitalize">
-          {entry.status}
+        <Badge variant={isCurrent ? 'info' : status === 'approved' ? 'success' : 'muted'} className="text-[10px] capitalize">
+          {status}
         </Badge>
-        {entry.reviewedAt ? (
+        {entry.resolvedAt ? (
           <span className="text-xs text-muted">
-            {new Date(entry.reviewedAt).toLocaleString()}
+            {new Date(entry.resolvedAt).toLocaleString()}
           </span>
         ) : null}
-        {entry.reviewedBy ? (
-          <span className="text-xs text-muted">by {entry.reviewedBy}</span>
+        {entry.resolvedByAdminId ? (
+          <span className="text-xs text-muted">by {entry.resolvedByAdminId}</span>
         ) : null}
       </div>
       {entry.notes ? (
@@ -91,7 +92,7 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
     setLoading(true);
     setError(null);
     try {
-      const next = await fetchMockBundleReviewStageSummary(bundleId);
+      const next = await fetchMockBundleReviewStage(bundleId);
       setSummary(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load review stage summary.');
@@ -118,7 +119,7 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
   // reviewed-at / reviewed-by metadata on each pill.
   const latestByStage = useMemo(() => {
     const map = new Map<string, MockBundleReviewStageEntry>();
-    for (const entry of summary?.stages ?? []) {
+    for (const entry of summary?.transitions ?? []) {
       map.set(entry.stage, entry);
     }
     return map;
@@ -130,7 +131,7 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
     setNotice(null);
     setError(null);
     try {
-      await advanceMockBundleReviewStage(bundleId, nextStage, notes.trim() ? notes.trim() : undefined);
+      await advanceMockBundleReviewStage(bundleId, { targetStage: nextStage, notes: notes.trim() ? notes.trim() : undefined });
       setNotes('');
       setNotice(`Advanced to ${STAGE_LABELS[nextStage]}.`);
       await load();
