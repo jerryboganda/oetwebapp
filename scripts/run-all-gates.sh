@@ -8,7 +8,7 @@ dotnet build backend/OetLearner.sln --nologo -v q > /tmp/g_build.log 2>&1
 echo "BUILD_EXIT=$?" >> /tmp/g_build.log
 
 echo "=== TEST ==="
-dotnet test backend/OetLearner.sln --no-build --nologo > /tmp/g_test.log 2>&1
+dotnet test backend/OetLearner.sln -c Debug --no-build -m:1 --nologo --logger "console;verbosity=normal" > /tmp/g_test.log 2>&1
 echo "TEST_EXIT=$?" >> /tmp/g_test.log
 
 echo "=== TSC ==="
