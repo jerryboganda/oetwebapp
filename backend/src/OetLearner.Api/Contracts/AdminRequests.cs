@@ -102,6 +102,26 @@ public record TutorSpeakingCalibrationSubmitRequest(
     SpeakingCriterionScoresPayload Scores,
     string? Notes = null);
 
+// Phase 7 — admin-side drift report. One row per tutor with at least
+// `MinSamples` published calibration submissions; `OverallMAE` is the
+// mean absolute error across all 9 OET speaking criteria, and
+// `CriterionMAE` is the per-criterion breakdown that drives the radar
+// chart in the admin drift tab.
+public record TutorCalibrationDriftRow(
+    string TutorId,
+    string DisplayName,
+    int Samples,
+    double OverallMAE,
+    string CriterionMAEJson,
+    IReadOnlyDictionary<string, double> CriterionMAE,
+    DateTimeOffset? LastSubmittedAt);
+
+public record TutorCalibrationDriftReport(
+    IReadOnlyList<TutorCalibrationDriftRow> Tutors,
+    int SampleSize,
+    int SamplesPublished,
+    int MinSamples);
+
 public record ExpertSpeakingFeedbackCommentRequest(
     int TranscriptLineIndex,
     string Body,
