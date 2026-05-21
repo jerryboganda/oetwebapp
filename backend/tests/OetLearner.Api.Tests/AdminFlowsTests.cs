@@ -707,7 +707,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var previewContent = CsvContent(csv, "recalls.csv"))
         {
-            var preview = await _client.PostAsync($"/v1/admin/vocabulary/import/preview?importBatchId={Uri.EscapeDataString(batchId)}", previewContent);
+            var preview = await _client.PostAsync($"/v1/admin/vocabulary/import/preview?recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", previewContent);
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(batchId, previewJson.RootElement.GetProperty("importBatchId").GetString());
@@ -718,7 +718,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var dryRunContent = CsvContent(csv, "recalls.csv"))
         {
-            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
             dryRun.EnsureSuccessStatusCode();
             using var dryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
             Assert.Equal(batchId, dryRunJson.RootElement.GetProperty("importBatchId").GetString());
@@ -729,7 +729,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var importContent = CsvContent(csv, "recalls.csv"))
         {
-            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
+            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
             import.EnsureSuccessStatusCode();
             using var importJson = JsonDocument.Parse(await import.Content.ReadAsStringAsync());
             Assert.Equal(batchId, importJson.RootElement.GetProperty("importBatchId").GetString());
@@ -760,7 +760,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var conflictPreviewContent = CsvContent(conflictCsv, "recalls-conflict.csv"))
         {
-            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", conflictPreviewContent);
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", conflictPreviewContent);
             preview.EnsureSuccessStatusCode();
             using var conflictJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(0, conflictJson.RootElement.GetProperty("validRows").GetInt32());
@@ -771,7 +771,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var conflictDryRunContent = CsvContent(conflictCsv, "recalls-conflict.csv"))
         {
-            var dryRun = await _client.PostAsync("/v1/admin/vocabulary/import?dryRun=true", conflictDryRunContent);
+            var dryRun = await _client.PostAsync("/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old", conflictDryRunContent);
             dryRun.EnsureSuccessStatusCode();
             using var conflictDryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
             Assert.Equal(0, conflictDryRunJson.RootElement.GetProperty("imported").GetInt32());
@@ -790,7 +790,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var previewContent = CsvContent(duplicateCsv, "recalls-duplicates.csv"))
         {
-            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", previewContent);
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(1, previewJson.RootElement.GetProperty("validRows").GetInt32());
@@ -800,7 +800,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var dryRunContent = CsvContent(duplicateCsv, "recalls-duplicates.csv"))
         {
-            var dryRun = await _client.PostAsync("/v1/admin/vocabulary/import?dryRun=true", dryRunContent);
+            var dryRun = await _client.PostAsync("/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old", dryRunContent);
             dryRun.EnsureSuccessStatusCode();
             using var dryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
             Assert.Equal(1, dryRunJson.RootElement.GetProperty("imported").GetInt32());
@@ -814,7 +814,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var previewContent = CsvContent(overLimitCsv, "recalls-over-limit.csv"))
         {
-            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", previewContent);
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
@@ -824,7 +824,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var dryRunContent = CsvContent(overLimitCsv, "recalls-over-limit.csv"))
         {
-            var dryRun = await _client.PostAsync("/v1/admin/vocabulary/import?dryRun=true", dryRunContent);
+            var dryRun = await _client.PostAsync("/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old", dryRunContent);
             dryRun.EnsureSuccessStatusCode();
             using var dryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
             Assert.Equal(0, dryRunJson.RootElement.GetProperty("imported").GetInt32());
@@ -841,7 +841,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var previewContent = CsvContent(multilineCsv, "recalls-multiline.csv"))
         {
-            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", previewContent);
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(1, previewJson.RootElement.GetProperty("validRows").GetInt32());
@@ -855,7 +855,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var previewContent = CsvContent(unknownTaxonomyCsv, "recalls-taxonomy.csv"))
         {
-            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", previewContent);
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
@@ -868,7 +868,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var previewContent = CsvContent(unknownDifficultyCsv, "recalls-difficulty.csv"))
         {
-            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", previewContent);
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
@@ -881,7 +881,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var previewContent = CsvContent(missingSourceCsv, "recalls-missing-source.csv"))
         {
-            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", previewContent);
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
@@ -894,7 +894,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var previewContent = CsvContent(batchOnlySourceCsv, "recalls-batch-only-source.csv"))
         {
-            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", previewContent);
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
@@ -908,7 +908,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
                 + $"generic-source-{Guid.NewGuid():N},\"Definition\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"{genericSource}\"\n";
 
             using var previewContent = CsvContent(genericSourceCsv, "recalls-generic-source.csv");
-            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview", previewContent);
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", previewContent);
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
@@ -927,13 +927,13 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var dryRunContent = CsvContent(csv, "recalls-batch.csv"))
         {
-            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
             dryRun.EnsureSuccessStatusCode();
         }
 
         using (var importContent = CsvContent(csv, "recalls-batch.csv"))
         {
-            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
+            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
             import.EnsureSuccessStatusCode();
             using var importJson = JsonDocument.Parse(await import.Content.ReadAsStringAsync());
             Assert.Equal(batchId, importJson.RootElement.GetProperty("importBatchId").GetString());
@@ -1001,13 +1001,13 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var secondDryRunContent = CsvContent(secondCsv, "recalls-batch-reuse.csv"))
         {
-            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&importBatchId={Uri.EscapeDataString(batchId)}", secondDryRunContent);
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", secondDryRunContent);
             dryRun.EnsureSuccessStatusCode();
         }
 
         using (var secondImportContent = CsvContent(secondCsv, "recalls-batch-reuse.csv"))
         {
-            var secondImport = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", secondImportContent);
+            var secondImport = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", secondImportContent);
             Assert.Equal(HttpStatusCode.BadRequest, secondImport.StatusCode);
         }
     }
@@ -1022,13 +1022,13 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var directCommitContent = CsvContent(csv, "recalls-direct.csv"))
         {
-            var directCommit = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", directCommitContent);
+            var directCommit = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", directCommitContent);
             Assert.Equal(HttpStatusCode.BadRequest, directCommit.StatusCode);
         }
 
         using (var omittedDryRunContent = CsvContent(csv, "recalls-default.csv"))
         {
-            var defaultDryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?importBatchId={Uri.EscapeDataString(batchId)}", omittedDryRunContent);
+            var defaultDryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", omittedDryRunContent);
             defaultDryRun.EnsureSuccessStatusCode();
             using var defaultJson = JsonDocument.Parse(await defaultDryRun.Content.ReadAsStringAsync());
             Assert.Equal(1, defaultJson.RootElement.GetProperty("imported").GetInt32());
@@ -1038,7 +1038,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             + $"{term},\"Changed definition\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=gate;p=1;row=1\"\n";
         using (var changedCommitContent = CsvContent(changedCsv, "recalls-changed.csv"))
         {
-            var changedCommit = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", changedCommitContent);
+            var changedCommit = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", changedCommitContent);
             Assert.Equal(HttpStatusCode.BadRequest, changedCommit.StatusCode);
         }
 
@@ -1058,13 +1058,13 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         using (var dryRunContent = CsvContent(csv, "recalls-active.csv"))
         {
-            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
             dryRun.EnsureSuccessStatusCode();
         }
 
         using (var importContent = CsvContent(csv, "recalls-active.csv"))
         {
-            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
+            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
             import.EnsureSuccessStatusCode();
         }
 
