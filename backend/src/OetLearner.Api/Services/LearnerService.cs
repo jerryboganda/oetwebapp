@@ -8556,6 +8556,26 @@ public partial class LearnerService(
                     CreatedAt = now,
                     UpdatedAt = now
                 });
+
+                // Mocks Module Phase 8b — record an audit + billing-event trail
+                // when an add-on whose GrantEntitlementsJson contains mock-type
+                // entitlements is first applied to the subscription. The existing
+                // `MockEntitlementService` already derives "granted" totals
+                // dynamically from active SubscriptionItems joined to the
+                // BillingAddOn catalog, so no separate ledger insert is needed
+                // for grants. The audit/event emission here gives ops a
+                // searchable trail of "mock_entitlements_granted" signals and is
+                // idempotent on (BillingAddOnId, UserId, paymentTransactionId)
+                // by virtue of running only inside this `existingItem == null`
+                // branch.
+                await RecordMockEntitlementGrantsAsync(
+                    transaction,
+                    quote,
+                    subscription.Id,
+                    addOn.Code,
+                    Math.Max(1, item.Quantity),
+                    now,
+                    ct);
             }
 
             if (addOn.GrantCredits > 0)
@@ -8744,6 +8764,140 @@ public partial class LearnerService(
                 ["message"] = "Your payment could not be processed. Update your billing details to avoid subscription interruption."
             },
             ct);
+    }
+
+    /// <summary>
+    /// Mocks Module Phase 8b — when a paid <see cref="BillingAddOn"/> grants
+    /// per-mock-type credits via its <see cref="BillingAddOn.GrantEntitlementsJson"/>
+    /// catalog field, emit one <see cref="AuditEvent"/> per mock-type bucket
+    /// (action <c>mock_entitlements_granted</c>) and one
+    /// <see cref="BillingEvent"/> aggregating all granted buckets. Both writes
+    /// are idempotent on (BillingAddOnId, UserId, paymentTransactionId) — the
+    /// audit guard checks for an existing row with the same resource id and
+    /// payload, and the billing-event guard piggybacks on
+    /// <see cref="AddBillingEventIfMissingAsync"/>.
+    /// </summary>
+    private async Task RecordMockEntitlementGrantsAsync(
+        PaymentTransaction transaction,
+        BillingQuote quote,
+        string subscriptionId,
+        string addOnCode,
+        int quantity,
+        DateTimeOffset occurredAt,
+        CancellationToken ct)
+    {
+        var liveAddOn = await FindBillingAddOnAsync(addOnCode, ct);
+        if (liveAddOn is null || string.IsNullOrWhiteSpace(liveAddOn.GrantEntitlementsJson))
+        {
+            return;
+        }
+
+        Dictionary<string, JsonElement>? grantMap;
+        try
+        {
+            grantMap = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                liveAddOn.GrantEntitlementsJson, JsonSupport.Options);
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+        if (grantMap is null || grantMap.Count == 0)
+        {
+            return;
+        }
+
+        var grantedBuckets = new List<(string MockType, int Count)>();
+        foreach (var (key, value) in grantMap)
+        {
+            var ledgerType = MockEntitlementKeys.LedgerTypeForGrantKey(key);
+            if (ledgerType is null) continue;
+            var perUnit = ReadGrantCount(value);
+            if (perUnit <= 0) continue;
+            grantedBuckets.Add((ledgerType, perUnit * Math.Max(1, quantity)));
+        }
+
+        if (grantedBuckets.Count == 0)
+        {
+            return;
+        }
+
+        // Idempotent audit emission — guard by checking for an existing
+        // (Action, ResourceId, ActorId) tuple recorded for this txn.
+        var paymentTxnId = transaction.GatewayTransactionId;
+        var alreadyAudited = await db.AuditEvents.AnyAsync(a =>
+            a.Action == "mock_entitlements_granted"
+            && a.ActorId == transaction.LearnerUserId
+            && a.ResourceType == "BillingAddOn"
+            && a.ResourceId == liveAddOn.Id
+            && a.Details != null
+            && a.Details.Contains(paymentTxnId), ct);
+
+        if (!alreadyAudited)
+        {
+            foreach (var bucket in grantedBuckets)
+            {
+                db.AuditEvents.Add(new AuditEvent
+                {
+                    Id = $"AUD-{Guid.NewGuid():N}",
+                    OccurredAt = occurredAt,
+                    ActorId = transaction.LearnerUserId,
+                    ActorName = $"system:billing:{transaction.Gateway}",
+                    Action = "mock_entitlements_granted",
+                    ResourceType = "BillingAddOn",
+                    ResourceId = liveAddOn.Id,
+                    Details = JsonSupport.Serialize(new
+                    {
+                        paymentTransactionId = paymentTxnId,
+                        mockType = bucket.MockType,
+                        count = bucket.Count,
+                        addOnId = liveAddOn.Id,
+                        addOnCode = liveAddOn.Code,
+                        quantity,
+                        subscriptionId,
+                        quoteId = quote.Id,
+                        gateway = transaction.Gateway
+                    })
+                });
+            }
+        }
+
+        await AddBillingEventIfMissingAsync(new BillingEvent
+        {
+            Id = $"bill-evt-{Guid.NewGuid():N}",
+            UserId = transaction.LearnerUserId,
+            SubscriptionId = subscriptionId,
+            QuoteId = quote.Id,
+            EventType = "mock_entitlements_granted",
+            EntityType = "BillingAddOn",
+            EntityId = liveAddOn.Id,
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                paymentTransactionId = paymentTxnId,
+                addOnId = liveAddOn.Id,
+                addOnCode = liveAddOn.Code,
+                quantity,
+                buckets = grantedBuckets.Select(b => new { mockType = b.MockType, count = b.Count }).ToArray()
+            }),
+            OccurredAt = occurredAt
+        }, ct);
+    }
+
+    /// <summary>
+    /// Reads a non-negative int count from a JSON element that may be a
+    /// number, numeric string, or boolean (true=1). Used by the Phase 8b
+    /// audit pipeline so it stays tolerant of the same loose JSON shapes
+    /// already accepted by <see cref="MockEntitlementService"/>.
+    /// </summary>
+    private static int ReadGrantCount(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.Number when element.TryGetInt32(out var i) => Math.Max(0, i),
+            JsonValueKind.String when int.TryParse(element.GetString(), out var s) => Math.Max(0, s),
+            JsonValueKind.True => 1,
+            _ => 0,
+        };
     }
 
     private async Task AddBillingEventIfMissingAsync(BillingEvent billingEvent, CancellationToken ct)

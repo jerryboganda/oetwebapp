@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
@@ -185,6 +186,17 @@ public sealed class ListeningGradingService
             .Include(q => q.Options)
             .ToListAsync(ct);
 
+        // Read the singleton policy once per grade pass. The grader honours
+        // ShortAnswerNormalisation (e.g. "fuzzy_levenshtein_1") so admins can
+        // tighten or loosen Part A matching paper-wide without code changes.
+        var normalisation = await ResolveNormalisationStrategyAsync(ct);
+
+        // Build a paper-wide map: normalisedAnswer → questionId. Powers the
+        // WrongSection heuristic — if a learner's answer matches another
+        // question's canonical/variant on the same paper, the miss class
+        // becomes WrongSection rather than Paraphrase.
+        var paperAnswerMap = BuildPaperAnswerMap(questions, normalisation);
+
         // Version-pin map: prefer the per-attempt snapshot; fall back to per-row.
         var versionMap = ParseVersionMap(attempt.LastQuestionVersionMapJson);
         var overrides = ParseOverrides(attempt.HumanScoreOverridesJson);
@@ -222,10 +234,11 @@ public sealed class ListeningGradingService
             // result so analytics can split it out.
             var drifted = pinnedVersion != q.Version;
 
-            var (isCorrect, distractor) = Evaluate(q, ans);
+            var (isCorrect, distractor, missReason) = Evaluate(q, ans, paperAnswerMap, normalisation);
             ans.IsCorrect = isCorrect;
             ans.PointsEarned = isCorrect ? q.Points : 0;
             ans.SelectedDistractorCategory = distractor;
+            ans.MissReason = missReason;
 
             // Expert / admin manual overrides take precedence (R-rulebook
             // does not forbid this; we surface as a distinct field so
@@ -302,48 +315,256 @@ public sealed class ListeningGradingService
     // Pure evaluation helpers — no DB access, fully unit-testable.
     // ─────────────────────────────────────────────────────────────────────
 
-    internal static (bool IsCorrect, ListeningDistractorCategory? Distractor) Evaluate(
-        ListeningQuestion q, ListeningAnswer ans)
+    public const string DefaultNormalisation = "trim_collapse_case_insensitive";
+
+    public static (bool IsCorrect, ListeningDistractorCategory? Distractor, ListeningMissReason? MissReason) Evaluate(
+        ListeningQuestion q,
+        ListeningAnswer ans,
+        IReadOnlyDictionary<string, string>? paperAnswerMap = null,
+        string normalisation = DefaultNormalisation)
     {
         switch (q.QuestionType)
         {
             case ListeningQuestionType.MultipleChoice3:
             {
                 var selected = TryReadString(ans.UserAnswerJson);
-                if (string.IsNullOrEmpty(selected)) return (false, null);
+                if (string.IsNullOrEmpty(selected)) return (false, null, null);
                 var opt = q.Options.FirstOrDefault(o =>
                     string.Equals(o.OptionKey, selected, StringComparison.OrdinalIgnoreCase));
-                if (opt is null) return (false, null);
-                return (opt.IsCorrect, opt.IsCorrect ? null : opt.DistractorCategory);
+                if (opt is null) return (false, null, null);
+                return (opt.IsCorrect, opt.IsCorrect ? null : opt.DistractorCategory, null);
             }
             case ListeningQuestionType.ShortAnswer:
             {
-                var user = TryReadString(ans.UserAnswerJson);
-                if (string.IsNullOrWhiteSpace(user)) return (false, null);
+                var user = TryReadString(ans.UserAnswerJson) ?? string.Empty;
                 var canonical = TryReadString(q.CorrectAnswerJson);
-                var accepted = ParseAccepted(q.AcceptedSynonymsJson);
+                var accepted = ParseAccepted(q.AcceptedSynonymsJson).ToList();
                 var candidates = (canonical is null ? Enumerable.Empty<string>() : new[] { canonical })
-                    .Concat(accepted);
+                    .Concat(accepted)
+                    .Where(c => !string.IsNullOrWhiteSpace(c))
+                    .ToList();
 
-                bool matches = candidates.Any(c => Compare(user, c, q.CaseSensitive));
-                return (matches, null);
+                bool matches = candidates.Any(c => StringsMatch(user, c, q.CaseSensitive, normalisation));
+                if (matches) return (true, null, ListeningMissReason.Match);
+
+                var miss = ClassifyMiss(user, candidates, q, paperAnswerMap, normalisation);
+                return (false, null, miss);
             }
             default:
-                return (false, null);
+                return (false, null, null);
         }
     }
 
-    private static bool Compare(string a, string b, bool caseSensitive)
+    // ─────────────────────────────────────────────────────────────────────
+    // Pure matching + classification — ported from ReadingGradingService so
+    // Reading and Listening Part A share a single accuracy floor. Future
+    // bumps to either grader should be mirrored across both modules.
+    // ─────────────────────────────────────────────────────────────────────
+
+    public static bool StringsMatch(string a, string b, bool caseSensitive, string normalisation)
     {
-        var na = Normalise(a);
-        var nb = Normalise(b);
+        if (a is null || b is null) return false;
+        var na = NormaliseFor(a, normalisation);
+        var nb = NormaliseFor(b, normalisation);
+
+        if (string.Equals(normalisation, "fuzzy_levenshtein_1", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!caseSensitive)
+            {
+                na = na.ToUpperInvariant();
+                nb = nb.ToUpperInvariant();
+            }
+            return LevenshteinDistanceAtMostOne(na, nb);
+        }
+
         return caseSensitive
             ? string.Equals(na, nb, StringComparison.Ordinal)
             : string.Equals(na, nb, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string Normalise(string s)
-        => System.Text.RegularExpressions.Regex.Replace(s.Trim(), @"\s+", " ");
+    private static string NormaliseFor(string s, string strategy) => strategy switch
+    {
+        "exact" => s,
+        "trim_only" => s.Trim(),
+        "fuzzy_levenshtein_1" => CollapseWhitespace(s.Trim()),
+        _ /* trim_collapse_case_insensitive */ => CollapseWhitespace(s.Trim()),
+    };
+
+    private static bool LevenshteinDistanceAtMostOne(string a, string b)
+    {
+        if (string.Equals(a, b, StringComparison.Ordinal)) return true;
+        if (Math.Abs(a.Length - b.Length) > 1) return false;
+
+        var edits = 0;
+        var i = 0;
+        var j = 0;
+        while (i < a.Length && j < b.Length)
+        {
+            if (a[i] == b[j]) { i++; j++; continue; }
+
+            edits++;
+            if (edits > 1) return false;
+
+            if (a.Length == b.Length) { i++; j++; }
+            else if (a.Length > b.Length) { i++; }
+            else { j++; }
+        }
+        if (i < a.Length || j < b.Length) edits++;
+        return edits <= 1;
+    }
+
+    private static int LevenshteinDistance(string a, string b, int cap)
+    {
+        if (string.Equals(a, b, StringComparison.Ordinal)) return 0;
+        if (Math.Abs(a.Length - b.Length) > cap) return cap + 1;
+        // Two-row DP, early-exit when min(row) > cap.
+        var prev = new int[b.Length + 1];
+        var curr = new int[b.Length + 1];
+        for (int j = 0; j <= b.Length; j++) prev[j] = j;
+        for (int i = 1; i <= a.Length; i++)
+        {
+            curr[0] = i;
+            int rowMin = curr[0];
+            for (int j = 1; j <= b.Length; j++)
+            {
+                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                curr[j] = Math.Min(Math.Min(curr[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+                if (curr[j] < rowMin) rowMin = curr[j];
+            }
+            if (rowMin > cap) return cap + 1;
+            (prev, curr) = (curr, prev);
+        }
+        return prev[b.Length];
+    }
+
+    private static string CollapseWhitespace(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        var sb = new StringBuilder(s.Length);
+        var prevSpace = false;
+        foreach (var ch in s)
+        {
+            if (char.IsWhiteSpace(ch))
+            {
+                if (!prevSpace) sb.Append(' ');
+                prevSpace = true;
+            }
+            else { sb.Append(ch); prevSpace = false; }
+        }
+        return sb.ToString();
+    }
+
+    private static IReadOnlyList<string> Tokens(string s)
+        => string.IsNullOrWhiteSpace(s)
+            ? Array.Empty<string>()
+            : s.Trim().Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+    private static bool HasDigits(string s)
+    {
+        for (int i = 0; i < s.Length; i++) if (char.IsDigit(s[i])) return true;
+        return false;
+    }
+
+    private static string DigitsOnly(string s)
+    {
+        var sb = new StringBuilder(s.Length);
+        for (int i = 0; i < s.Length; i++) if (char.IsDigit(s[i])) sb.Append(s[i]);
+        return sb.ToString();
+    }
+
+    public static ListeningMissReason ClassifyMiss(
+        string user,
+        IReadOnlyList<string> candidates,
+        ListeningQuestion q,
+        IReadOnlyDictionary<string, string>? paperAnswerMap,
+        string normalisation)
+    {
+        if (string.IsNullOrWhiteSpace(user)) return ListeningMissReason.Empty;
+        if (candidates.Count == 0) return ListeningMissReason.Other;
+
+        var nuser = NormaliseFor(user, normalisation);
+        var nuserCmp = q.CaseSensitive ? nuser : nuser.ToUpperInvariant();
+
+        // 1) WrongNumber — checked first so a digit-bearing candidate doesn't
+        //    fall into SpellingError via a small Levenshtein gap (e.g. "5"
+        //    vs "12" is only 2 edits but the real failure is a number swap).
+        var userDigits = DigitsOnly(nuser);
+        var anyCandidateHasDigits = false;
+        var anyDigitMatch = false;
+        foreach (var c in candidates)
+        {
+            var nc = NormaliseFor(c, normalisation);
+            if (!HasDigits(nc)) continue;
+            anyCandidateHasDigits = true;
+            if (DigitsOnly(nc) == userDigits) { anyDigitMatch = true; break; }
+        }
+        if (anyCandidateHasDigits && !anyDigitMatch)
+            return ListeningMissReason.WrongNumber;
+
+        // 2) Spelling — Levenshtein ≤2 to any candidate (wider than the
+        //    grader's pass threshold of 1 so authors don't have to add
+        //    every typo to AcceptedSynonymsJson).
+        foreach (var c in candidates)
+        {
+            var nc = NormaliseFor(c, normalisation);
+            var ncCmp = q.CaseSensitive ? nc : nc.ToUpperInvariant();
+            if (LevenshteinDistance(nuserCmp, ncCmp, cap: 2) <= 2)
+                return ListeningMissReason.SpellingError;
+        }
+
+        // 3) ExtraInfo — learner answer contains every token of some
+        //    candidate plus at least 2 extras.
+        var userTokens = Tokens(nuserCmp).ToHashSet();
+        foreach (var c in candidates)
+        {
+            var nc = NormaliseFor(c, normalisation);
+            var ncCmp = q.CaseSensitive ? nc : nc.ToUpperInvariant();
+            var candTokens = Tokens(ncCmp).ToHashSet();
+            if (candTokens.Count == 0) continue;
+            if (candTokens.IsSubsetOf(userTokens) && userTokens.Count - candTokens.Count >= 2)
+                return ListeningMissReason.ExtraInfo;
+        }
+
+        // 4) WrongSection — learner's normalised answer matches a canonical
+        //    or variant of a DIFFERENT question on the same paper.
+        if (paperAnswerMap is not null && paperAnswerMap.TryGetValue(nuserCmp, out var owner)
+            && !string.Equals(owner, q.Id, StringComparison.Ordinal))
+        {
+            return ListeningMissReason.WrongSection;
+        }
+
+        // 5) Paraphrase — none of the structural heuristics fired.
+        return ListeningMissReason.Paraphrase;
+    }
+
+    public static IReadOnlyDictionary<string, string> BuildPaperAnswerMap(
+        IEnumerable<ListeningQuestion> questions,
+        string normalisation)
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var q in questions)
+        {
+            if (q.QuestionType != ListeningQuestionType.ShortAnswer) continue;
+            var canonical = TryReadString(q.CorrectAnswerJson);
+            var accepted = ParseAccepted(q.AcceptedSynonymsJson);
+            foreach (var raw in (canonical is null ? Enumerable.Empty<string>() : new[] { canonical }).Concat(accepted))
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var norm = NormaliseFor(raw, normalisation);
+                var key = q.CaseSensitive ? norm : norm.ToUpperInvariant();
+                if (!map.ContainsKey(key)) map[key] = q.Id;
+            }
+        }
+        return map;
+    }
+
+    private async Task<string> ResolveNormalisationStrategyAsync(CancellationToken ct)
+    {
+        var policy = await _db.ListeningPolicies.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == "global", ct);
+        var s = policy?.ShortAnswerNormalisation;
+        return string.IsNullOrWhiteSpace(s) ? DefaultNormalisation : s!;
+    }
 
     private static string? TryReadString(string? json)
     {

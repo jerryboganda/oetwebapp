@@ -24,6 +24,12 @@ vi.mock('@/components/layout/app-shell', () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div data-testid="app-shell">{children}</div>,
 }));
 
+vi.mock('@/components/webcam-check-panel', () => ({
+  WebcamCheckPanel: ({ onPassed }: { onPassed: () => void }) => (
+    <button type="button" onClick={onPassed}>Test camera</button>
+  ),
+}));
+
 vi.mock('@/lib/analytics', () => ({
   analytics: {
     track: mockTrack,
@@ -114,6 +120,7 @@ describe('Mock player page', () => {
       router: { push: mockPush },
     });
 
+    await user.click(await screen.findByRole('button', { name: /test camera/i }));
     const launchButton = await screen.findByRole('button', { name: /launch section workspace/i });
     await user.click(launchButton);
 

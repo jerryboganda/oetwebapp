@@ -3,13 +3,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BarChart3, RefreshCw } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { MockItemAnalysisActions } from '@/components/domain/admin/MockItemAnalysisActions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchAdminMockItemAnalysis } from '@/lib/api';
+import { fetchAdminMockItemAnalysis, type MockItemRetireResponse } from '@/lib/api';
 
+/**
+ * Mocks Module Phase 6 — admin item-analysis dashboard row shape. Includes
+ * the new retire-tracking columns surfaced by the
+ * `/v1/admin/mocks/item-analysis` projection so the per-row action UI can
+ * disable + tombstone already-retired items.
+ */
 type ItemAnalysisRow = {
   id: string;
   bundleId?: string;
@@ -20,6 +27,9 @@ type ItemAnalysisRow = {
   difficulty: number;
   discriminationIndex?: number | null;
   flag?: string | null;
+  retiredAt?: string | null;
+  retiredReason?: string | null;
+  retiredByAdminId?: string | null;
 };
 
 export default function AdminMockItemAnalysisPage() {
@@ -51,6 +61,24 @@ export default function AdminMockItemAnalysisPage() {
   }, []);
 
   useEffect(() => { void load({}); }, [load]);
+
+  /**
+   * Mocks Module Phase 6 — when a retire transition succeeds, patch the row
+   * in-place so the UI shows the tombstone without a full reload. We still
+   * surface `Refresh` for a server-truth refetch if the admin wants it.
+   */
+  const handleRetired = useCallback((rowId: string, response: MockItemRetireResponse) => {
+    setItems((prev) => prev.map((row) => (
+      row.id === rowId
+        ? {
+            ...row,
+            retiredAt: response.retiredAt ?? new Date().toISOString(),
+            retiredReason: response.reason ?? null,
+            retiredByAdminId: response.retiredByAdminId ?? null,
+          }
+        : row
+    )));
+  }, []);
 
   return (
     <AdminRouteWorkspace>
@@ -86,6 +114,7 @@ export default function AdminMockItemAnalysisPage() {
                   <th className="px-4 py-3">Difficulty</th>
                   <th className="px-4 py-3">Discrimination</th>
                   <th className="px-4 py-3">Flag</th>
+                  <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -98,10 +127,21 @@ export default function AdminMockItemAnalysisPage() {
                     <td className="px-4 py-3 text-muted">{Math.round(item.difficulty * 100)}%</td>
                     <td className="px-4 py-3 text-muted">{typeof item.discriminationIndex === 'number' ? item.discriminationIndex.toFixed(2) : '—'}</td>
                     <td className="px-4 py-3">{item.flag ? <Badge variant="warning">{item.flag}</Badge> : <Badge variant="success">ok</Badge>}</td>
+                    <td className="px-4 py-3">
+                      <MockItemAnalysisActions
+                        itemId={item.id}
+                        itemLabel={item.label}
+                        bundleId={item.bundleId ?? null}
+                        retiredAt={item.retiredAt ?? null}
+                        retiredReason={item.retiredReason ?? null}
+                        retiredByAdminId={item.retiredByAdminId ?? null}
+                        onRetired={(response) => handleRetired(item.id, response)}
+                      />
+                    </td>
                   </tr>
                 ))}
                 {items.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">No item-analysis rows yet. Recompute from a bundle dashboard after attempts exist.</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-muted">No item-analysis rows yet. Recompute from a bundle dashboard after attempts exist.</td></tr>
                 ) : null}
               </tbody>
             </table>

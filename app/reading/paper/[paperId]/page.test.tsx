@@ -125,7 +125,7 @@ describe('Reading paper player page', () => {
     fireEvent.click(screen.getByRole('button', { name: /submit now/i }));
 
     await waitFor(() => {
-      expect(mockSaveReadingAnswer).toHaveBeenCalledWith('attempt-1', 'q-a-1', '"aspirin"');
+      expect(mockSaveReadingAnswer).toHaveBeenCalledWith('attempt-1', 'q-a-1', '"aspirin"', expect.any(Number));
       expect(mockSubmitReadingAttempt).toHaveBeenCalledWith('attempt-1');
       expect(mockPush).toHaveBeenCalledWith('/reading/paper/paper-1/results?attemptId=attempt-1');
     });

@@ -640,8 +640,27 @@ public sealed class MockService(LearnerDbContext db)
         }
     }
 
+    /// <summary>Phase 6 closure — kebab-case scope for the
+    /// IdempotencyRecord rows that cover mock-section completion. The
+    /// row prevents concurrent completes from two tabs double-writing
+    /// the analytics event or re-resolving canonical evidence.</summary>
+    private const string CompleteSectionIdempotencyScope = "mock-section-complete";
+
     public async Task<object> CompleteMockSectionAsync(string userId, string mockAttemptId, string sectionId, MockSectionCompleteRequest request, CancellationToken ct)
     {
+        // Phase 6 closure — fast-path: a previous successful complete
+        // already wrote an IdempotencyRecord. Return its cached projection
+        // verbatim so the second click / second-tab path is a no-op.
+        var idempotencyKey = $"{userId}:{mockAttemptId}:{sectionId}";
+        var existingRecord = await db.IdempotencyRecords.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Scope == CompleteSectionIdempotencyScope && r.Key == idempotencyKey, ct);
+        if (existingRecord is not null)
+        {
+            var cached = TryDeserializeCompleteSectionResult(existingRecord.ResponseJson);
+            if (cached is not null) return cached;
+            // Fall through to recompute when cached JSON is unreadable.
+        }
+
         var attempt = await GetMockAttemptOwnedByUserAsync(userId, mockAttemptId, ct);
         if (attempt.State is AttemptState.Completed or AttemptState.Abandoned)
         {
@@ -682,7 +701,57 @@ public sealed class MockService(LearnerDbContext db)
         await ConsumeReservationForSectionAsync(userId, attempt, section, request.ReviewTurnaroundOption, now, ct);
         RecordEvent(userId, "mock_section_completed", new { mockAttemptId = attempt.Id, sectionId = section.Id, subtest = section.SubtestCode, section.ScaledScore });
         await db.SaveChangesAsync(ct);
-        return ProjectSectionAttempt(section, bundleSection, attempt);
+        var projection = ProjectSectionAttempt(section, bundleSection, attempt);
+
+        // Cache the projection so a concurrent retry from another tab
+        // returns the same payload without re-running the write path.
+        var winner = await TryPersistCompleteSectionIdempotencyAsync(idempotencyKey, projection, ct);
+        return winner ?? projection;
+    }
+
+    private async Task<object?> TryPersistCompleteSectionIdempotencyAsync(
+        string key,
+        object projection,
+        CancellationToken ct)
+    {
+        var record = new IdempotencyRecord
+        {
+            Id = $"idem-{Guid.NewGuid():N}",
+            Scope = CompleteSectionIdempotencyScope,
+            Key = key,
+            ResponseJson = JsonSupport.Serialize(projection),
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.IdempotencyRecords.Add(record);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return null;
+        }
+        catch (DbUpdateException)
+        {
+            db.Entry(record).State = EntityState.Detached;
+            var winner = await db.IdempotencyRecords.AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Scope == CompleteSectionIdempotencyScope && r.Key == key, ct);
+            return winner is null ? null : TryDeserializeCompleteSectionResult(winner.ResponseJson);
+        }
+    }
+
+    private static object? TryDeserializeCompleteSectionResult(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            // The projection is an anonymous object on write; we return it
+            // as a Dictionary<string, object?> on read so the JSON shape
+            // is preserved verbatim by the JSON serializer at the API
+            // boundary.
+            return JsonSupport.Deserialize<Dictionary<string, object?>>(json, new Dictionary<string, object?>());
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task<CanonicalSectionEvidence?> ResolveCanonicalSectionEvidenceAsync(
@@ -2750,7 +2819,7 @@ public sealed class MockService(LearnerDbContext db)
         {
             "reading" => $"/reading/paper/{Uri.EscapeDataString(section.ContentPaperId)}?{query}",
             "listening" => $"/listening/player/{Uri.EscapeDataString(section.ContentPaperId)}?{query}",
-            "writing" => $"/writing/player?taskId={Uri.EscapeDataString(section.ContentPaperId)}&{query}",
+            "writing" => $"/mocks/writing/{Uri.EscapeDataString(sectionAttemptId ?? section.ContentPaperId)}?{query}",
             "speaking" => $"/speaking/task/{Uri.EscapeDataString(section.ContentPaperId)}?{query}",
             _ => $"/mocks/player/{Uri.EscapeDataString(attemptId)}"
         };

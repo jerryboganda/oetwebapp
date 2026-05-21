@@ -108,6 +108,10 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/private-speaking': [AdminPermission.ReviewOps],
   '/admin/recalls/bulk-upload': [AdminPermission.ContentWrite],
   '/admin/settings': [AdminPermission.SystemAdmin],
+  // Phase 4 — AI extraction workflow
+  '/admin/content/reading/extraction': [AdminPermission.ContentWrite],
+  // Phase 3 — per-user Reading policy overrides
+  '/admin/policies/reading/users': [AdminPermission.UsersWrite],
 };
 
 export const adminRoutePermissionMap: Record<string, string[]> = {
@@ -126,6 +130,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/billing': [AdminPermission.BillingRead],
   '/admin/business-intelligence': [AdminPermission.QualityAnalytics],
   '/admin/bulk-operations': [AdminPermission.SystemAdmin],
+  '/admin/calibration/speaking': [AdminPermission.ReviewOps],
   '/admin/community': [AdminPermission.SystemAdmin],
   '/admin/content': [AdminPermission.ContentRead],
   '/admin/content/dedup': [AdminPermission.ContentWrite],
@@ -167,6 +172,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/launch-readiness': [AdminPermission.SystemAdmin],
   '/admin/marketplace-review': [AdminPermission.ContentPublish],
   '/admin/notifications': [AdminPermission.SystemAdmin],
+  '/admin/onboarding/interlocutor': [AdminPermission.ReviewOps],
   '/admin/pending-review': [
     AdminPermission.ContentEditorReview,
     AdminPermission.ContentPublisherApproval,
@@ -183,6 +189,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/settings': [AdminPermission.SystemAdmin],
   '/admin/signup-catalog': [AdminPermission.ContentRead],
   '/admin/sla-health': [AdminPermission.SystemAdmin],
+  '/admin/speaking/recordings/audit': [AdminPermission.ReviewOps],
   '/admin/taxonomy': [AdminPermission.ContentRead],
   '/admin/users/import': [AdminPermission.UsersWrite],
   '/admin/users': [AdminPermission.UsersRead],
@@ -196,6 +203,10 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/content/speaking/shared-resources': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],
   '/admin/content/imports/real-content-folder': [AdminPermission.ContentWrite, AdminPermission.ContentPublish],
   '/admin/content/vocabulary/recall-set-tags': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
+  // Phase 4 — AI extraction workflow
+  '/admin/content/reading/extraction': [AdminPermission.ContentWrite],
+  // Phase 3 — per-user Reading policy overrides
+  '/admin/policies/reading/users': [AdminPermission.UsersWrite],
 };
 
 function normalizeAdminPath(pathname: string | null | undefined): string {

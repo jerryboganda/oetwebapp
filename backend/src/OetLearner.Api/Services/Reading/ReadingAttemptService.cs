@@ -40,9 +40,40 @@ public interface IReadingAttemptService
         CancellationToken ct);
 
     Task<ReadingAttempt> GetAsync(string userId, string attemptId, CancellationToken ct);
-    Task SaveAnswerAsync(string userId, string attemptId, string questionId, string userAnswerJson, CancellationToken ct);
+
+    /// <summary>
+    /// Autosave one answer.
+    /// </summary>
+    /// <param name="elapsedMs">Optional milliseconds the learner spent on
+    /// this question between focus and save. Server caps at 14_400_000 ms
+    /// (4 h). When supplied, the row's <c>ElapsedMs</c> is set to this
+    /// value and <c>TotalElapsedMs</c> is incremented atomically. Pass
+    /// <c>null</c> (the default) for legacy callers that do not yet
+    /// capture timing.</param>
+    Task SaveAnswerAsync(
+        string userId,
+        string attemptId,
+        string questionId,
+        string userAnswerJson,
+        int? elapsedMs = null,
+        CancellationToken ct = default);
     Task<ReadingAttemptBreakState> ResumePartABreakAsync(string userId, string attemptId, CancellationToken ct);
-    Task<ReadingGradingResult> SubmitAsync(string userId, string attemptId, CancellationToken ct);
+
+    /// <summary>
+    /// Submit an attempt for grading. Idempotent: concurrent or replayed
+    /// requests for the same (userId, attemptId) return the same
+    /// <see cref="ReadingGradingResult"/> and never re-grade or
+    /// double-write audit events. The optional
+    /// <paramref name="idempotencyKey"/> is the caller-supplied
+    /// <c>Idempotency-Key</c> header; when null a deterministic key is
+    /// derived from the attempt id.
+    /// </summary>
+    Task<ReadingGradingResult> SubmitAsync(
+        string userId,
+        string attemptId,
+        string? idempotencyKey = null,
+        CancellationToken ct = default);
+
     Task<int> SweepExpiredAsync(CancellationToken ct);
 }
 
@@ -301,7 +332,18 @@ public sealed class ReadingAttemptService(
             .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
             .ContinueWith(t => t.Result ?? throw new InvalidOperationException("Attempt not found."), ct);
 
-    public async Task SaveAnswerAsync(string userId, string attemptId, string questionId, string userAnswerJson, CancellationToken ct)
+    /// <summary>Server-side cap on per-save elapsed milliseconds. Defeats
+    /// runaway clocks or hostile clients claiming hours per autosave.
+    /// 4 hours = 14_400_000 ms.</summary>
+    private const int MaxElapsedMsPerSave = 14_400_000;
+
+    public async Task SaveAnswerAsync(
+        string userId,
+        string attemptId,
+        string questionId,
+        string userAnswerJson,
+        int? elapsedMs = null,
+        CancellationToken ct = default)
     {
         var attempt = await db.ReadingAttempts
             .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
@@ -400,6 +442,16 @@ public sealed class ReadingAttemptService(
             .CountAsync(a => a.ReadingAttemptId == attemptId, ct);
         var isNewAnswer = row is null;
         now = DateTimeOffset.UtcNow;
+
+        // Phase 1 closure — capture per-save and accumulated time-on-question.
+        // Negative or absurd values are discarded silently (client clock skew,
+        // hostile payload). Cap at MaxElapsedMsPerSave to bound write impact.
+        int? sanitisedElapsedMs = null;
+        if (elapsedMs is int e && e > 0)
+        {
+            sanitisedElapsedMs = Math.Min(e, MaxElapsedMsPerSave);
+        }
+
         if (row is null)
         {
             row = new ReadingAnswer
@@ -409,6 +461,8 @@ public sealed class ReadingAttemptService(
                 ReadingQuestionId = questionId,
                 UserAnswerJson = userAnswerJson,
                 AnsweredAt = now,
+                ElapsedMs = sanitisedElapsedMs,
+                TotalElapsedMs = sanitisedElapsedMs,
             };
             db.ReadingAnswers.Add(row);
         }
@@ -418,9 +472,15 @@ public sealed class ReadingAttemptService(
             row.AnsweredAt = now;
             row.IsCorrect = null; // regrade on submit
             row.PointsEarned = 0;
+            if (sanitisedElapsedMs is int delta)
+            {
+                row.ElapsedMs = delta;
+                row.TotalElapsedMs = (row.TotalElapsedMs ?? 0) + delta;
+            }
         }
 
         attempt.LastActivityAt = now;
+        var elapsedDetail = sanitisedElapsedMs is int dm ? $"; elapsedMs={dm}" : string.Empty;
         db.AuditEvents.Add(new AuditEvent
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -430,21 +490,52 @@ public sealed class ReadingAttemptService(
             Action = "ReadingAnswerSaved",
             ResourceType = "ReadingAttempt",
             ResourceId = attempt.Id,
-            Details = $"question={questionId}; answered={(isNewAnswer ? existingAnswerCount + 1 : existingAnswerCount)}",
+            Details = $"question={questionId}; answered={(isNewAnswer ? existingAnswerCount + 1 : existingAnswerCount)}{elapsedDetail}",
         });
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<ReadingGradingResult> SubmitAsync(string userId, string attemptId, CancellationToken ct)
+    /// <summary>Phase 1 closure — kebab-case scope for the
+    /// IdempotencyRecord rows that cover Reading attempt submission.</summary>
+    private const string SubmitIdempotencyScope = "reading-submit";
+
+    public async Task<ReadingGradingResult> SubmitAsync(
+        string userId,
+        string attemptId,
+        string? idempotencyKey = null,
+        CancellationToken ct = default)
     {
+        // Build deterministic key when caller did not pass one. The header
+        // path lets retries from a different tab / process collide on the
+        // same row and skip re-grading.
+        var key = !string.IsNullOrWhiteSpace(idempotencyKey)
+            ? idempotencyKey!.Trim()
+            : $"{userId}:{attemptId}";
+
+        // Fast path — cached grading result from a previous successful submit.
+        var existingRecord = await db.IdempotencyRecords.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Scope == SubmitIdempotencyScope && r.Key == key, ct);
+        if (existingRecord is not null)
+        {
+            var cached = TryDeserializeGradingResult(existingRecord.ResponseJson);
+            if (cached is not null) return cached;
+            // Fall through to re-grade if cached JSON is unreadable; this
+            // can only happen after a forward-incompatible schema change.
+            logger.LogWarning(
+                "Reading submit idempotency record {Key} unreadable; re-grading.", key);
+        }
+
         var attempt = await db.ReadingAttempts
             .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
             ?? throw new InvalidOperationException("Attempt not found.");
 
         if (attempt.Status is ReadingAttemptStatus.Submitted)
         {
-            // Idempotent — return existing grading.
-            return await grader.GradeAttemptAsync(attemptId, ct);
+            // Already submitted but no idempotency row (pre-Phase-1 attempts).
+            // Backfill the row from a fresh grading so future replays hit cache.
+            var graded = await grader.GradeAttemptAsync(attemptId, ct);
+            await TryPersistSubmitIdempotencyAsync(key, graded, ct);
+            return graded;
         }
 
         if (attempt.Status is ReadingAttemptStatus.Abandoned)
@@ -473,7 +564,56 @@ public sealed class ReadingAttemptService(
             logger.LogInformation("Attempt {AttemptId} past deadline but policy allows late submit.", attemptId);
         }
 
-        return await grader.GradeAttemptAsync(attemptId, ct);
+        var result = await grader.GradeAttemptAsync(attemptId, ct);
+
+        // Persist the cache row AFTER grading succeeded so transient failures
+        // do not lock us out of retrying. On unique-index collision (two
+        // concurrent submits raced), prefer the row already written by the
+        // peer and return its cached result.
+        var cachedAfterRace = await TryPersistSubmitIdempotencyAsync(key, result, ct);
+        return cachedAfterRace ?? result;
+    }
+
+    private async Task<ReadingGradingResult?> TryPersistSubmitIdempotencyAsync(
+        string key,
+        ReadingGradingResult result,
+        CancellationToken ct)
+    {
+        var record = new IdempotencyRecord
+        {
+            Id = $"idem-{Guid.NewGuid():N}",
+            Scope = SubmitIdempotencyScope,
+            Key = key,
+            ResponseJson = JsonSerializer.Serialize(result),
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.IdempotencyRecords.Add(record);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return null;
+        }
+        catch (DbUpdateException)
+        {
+            // Concurrent submit beat us to the unique (Scope, Key) row.
+            db.Entry(record).State = EntityState.Detached;
+            var winner = await db.IdempotencyRecords.AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Scope == SubmitIdempotencyScope && r.Key == key, ct);
+            return winner is null ? null : TryDeserializeGradingResult(winner.ResponseJson);
+        }
+    }
+
+    private static ReadingGradingResult? TryDeserializeGradingResult(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<ReadingGradingResult>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static DateTimeOffset ResolveAnswerWindowDeadline(

@@ -100,7 +100,7 @@ export function TranscriptPlayerWithComments({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const segments = transcript.segments ?? [];
+  const segments = useMemo(() => transcript.segments ?? [], [transcript.segments]);
 
   useEffect(() => {
     const audio = audioRef.current;

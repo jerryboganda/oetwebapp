@@ -175,6 +175,50 @@ export const replaceListeningStructure = (
 export const validateListeningStructure = (paperId: string) =>
   api<ListeningValidationReport>(`/v1/admin/papers/${paperId}/listening/validate`);
 
+/**
+ * Per-question PATCH body. Every field is optional; absent (undefined) fields
+ * are left untouched on the existing row. Maps onto
+ * `ListeningQuestionPatch` in `Services/Listening/ListeningAuthoringService.cs`.
+ */
+export interface ListeningQuestionPatchBody {
+  partCode?: ListeningPartCode;
+  type?: ListeningQuestionType;
+  stem?: string;
+  options?: string[];
+  correctAnswer?: string;
+  acceptedAnswers?: string[];
+  explanation?: string | null;
+  skillTag?: string | null;
+  transcriptExcerpt?: string | null;
+  distractorExplanation?: string | null;
+  points?: number;
+  optionDistractorWhy?: (string | null)[];
+  optionDistractorCategory?: (ListeningDistractorCategory | null)[];
+  speakerAttitude?: ListeningSpeakerAttitude | null;
+  transcriptEvidenceStartMs?: number | null;
+  transcriptEvidenceEndMs?: number | null;
+}
+
+/**
+ * PATCH one authored question. Server bumps `ListeningQuestion.Version` on any
+ * meaningful change (stem / correct answer / options / accepted variants),
+ * which in turn flows into the version-pin map snapshotted by in-flight
+ * attempts so admin edits never silently invalidate a candidate's grading.
+ * Returns the full re-tallied structure so the form can refresh in one call.
+ */
+export const patchListeningQuestion = (
+  paperId: string,
+  questionId: string,
+  patch: ListeningQuestionPatchBody,
+) =>
+  api<ListeningAuthoredQuestionList>(
+    `/v1/admin/papers/${paperId}/listening/structure/${encodeURIComponent(questionId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    },
+  );
+
 export const getListeningExtracts = (paperId: string) =>
   api<ListeningAuthoredExtractList>(`/v1/admin/papers/${paperId}/listening/extracts`);
 

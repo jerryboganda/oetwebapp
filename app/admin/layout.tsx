@@ -40,6 +40,7 @@ import {
   BookOpenText,
   Rocket,
   Cog,
+  UserCog,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -60,6 +61,7 @@ const adminNavGroups: NavGroup[] = [
     label: 'Content',
     items: [
       { href: '/admin/content', label: 'Content Hub', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/content' },
+      { href: '/admin/content/reading/extraction', label: 'AI Extraction', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/admin/content/reading/extraction' },
     ],
   },
   {
@@ -95,6 +97,7 @@ const adminNavGroups: NavGroup[] = [
     label: 'People & access',
     items: [
       { href: '/admin/users', label: 'User Management', icon: <Users className="w-5 h-5" />, matchPrefix: '/admin/users' },
+      { href: '/admin/policies/reading/users', label: 'Reading Overrides', icon: <UserCog className="w-5 h-5" />, matchPrefix: '/admin/policies/reading' },
       { href: '/admin/community', label: 'Community', icon: <MessageSquareText className="w-5 h-5" />, matchPrefix: '/admin/community' },
     ],
   },

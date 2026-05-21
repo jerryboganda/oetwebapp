@@ -47,13 +47,22 @@ export interface ListeningAuthoredQuestionList {
 
 export type ReadingPartCode = 'A' | 'B' | 'C';
 
-/** Mirrors `ReadingQuestionType` enum on the backend. */
+/**
+ * Mirrors the canonical `ReadingQuestionType` enum on the backend
+ * (`Domain/ReadingEntities.cs`). Phase 5 closure replaces the previous
+ * `'WordPool' | 'TrueFalseNotGiven'` aliases which the backend does
+ * NOT recognise — they would have failed validation on import. The
+ * legacy strings are mapped as follows when re-authoring an existing
+ * draft:
+ *   - WordPool          → MatchingTextReference
+ *   - TrueFalseNotGiven → MultipleChoice3
+ */
 export type ReadingQuestionType =
-  | 'WordPool'
+  | 'MatchingTextReference'
   | 'ShortAnswer'
+  | 'SentenceCompletion'
   | 'MultipleChoice4'
-  | 'MultipleChoice3'
-  | 'TrueFalseNotGiven';
+  | 'MultipleChoice3';
 
 export interface ReadingTextManifest {
   displayOrder: number;

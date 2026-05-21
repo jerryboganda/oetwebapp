@@ -660,6 +660,16 @@ builder.Services.AddScoped<OetLearner.Api.Services.IContentStalenessService, Oet
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAnalyticsService, OetLearner.Api.Services.Listening.ListeningAnalyticsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAuthoringService, OetLearner.Api.Services.Listening.ListeningAuthoringService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningBackfillService, OetLearner.Api.Services.Listening.ListeningBackfillService>();
+// Wave 4 — TTS synthesis. The stub provider emits silence so the pipeline
+// can run in dev/CI without TTS credentials. Replace with a DigitalOcean
+// Qwen3 / OpenAI implementation by swapping the IListeningTtsSynthesisProvider
+// registration; ListeningTtsService is provider-agnostic.
+builder.Services.AddSingleton<
+    OetLearner.Api.Services.Listening.IListeningTtsSynthesisProvider,
+    OetLearner.Api.Services.Listening.StubListeningTtsSynthesisProvider>();
+builder.Services.AddScoped<
+    OetLearner.Api.Services.Listening.IListeningTtsService,
+    OetLearner.Api.Services.Listening.ListeningTtsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningCurriculumService, OetLearner.Api.Services.Listening.ListeningCurriculumService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionAi, OetLearner.Api.Services.Listening.GroundedListeningExtractionAi>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionService, OetLearner.Api.Services.Listening.ListeningExtractionService>();
@@ -734,7 +744,7 @@ foreach (var name in new[]
 {
     "ConversationAzureClient", "ConversationWhisperClient", "ConversationDeepgramClient",
     "ConversationAzureTtsClient", "ConversationElevenLabsClient",
-    "ConversationCosyVoiceClient", "ConversationChatTtsClient", "ConversationGptSoVitsClient",
+    "ConversationCosyVoiceClient", "ConversationChatTtsClient", "ConversationDigitalOceanQwenTtsClient", "ConversationGptSoVitsClient",
 })
 {
     builder.Services.AddHttpClient(name, c => { c.Timeout = TimeSpan.FromMinutes(2); });
@@ -771,6 +781,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversatio
     OetLearner.Api.Services.Conversation.Tts.CosyVoiceConversationTtsProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
     OetLearner.Api.Services.Conversation.Tts.ChatTtsConversationTtsProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
+    OetLearner.Api.Services.Conversation.Tts.DigitalOceanQwen3TtsConversationProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
     OetLearner.Api.Services.Conversation.Tts.GptSoVitsConversationTtsProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProviderSelector,
@@ -1013,6 +1025,11 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningStructure
 // Disabled by default — operator opts in via Seed:ListeningSamples:Enabled=true.
 builder.Services.Configure<OetLearner.Api.Services.Listening.ListeningSampleSeederOptions>(
     builder.Configuration.GetSection(OetLearner.Api.Services.Listening.ListeningSampleSeederOptions.SectionName));
+builder.Services.Configure<OetLearner.Api.Services.Listening.ListeningStarterContentSeederOptions>(
+    builder.Configuration.GetSection(OetLearner.Api.Services.Listening.ListeningStarterContentSeederOptions.SectionName));
+builder.Services.AddScoped<
+    OetLearner.Api.Services.Listening.IListeningStarterContentSeeder,
+    OetLearner.Api.Services.Listening.ListeningStarterContentSeeder>();
 builder.Services.AddScoped<
     OetLearner.Api.Services.Listening.IListeningSampleSeeder,
     OetLearner.Api.Services.Listening.ListeningSampleSeeder>();
@@ -1603,6 +1620,25 @@ using (var seedScope = app.Services.CreateScope())
     {
         seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>()
             .LogWarning(ex, "Listening sample seeder failed (non-fatal)");
+    }
+}
+
+// Listening starter content seeder — Wave 5b of the OET Listening gap-fill
+// plan. Reads hand-authored 42-question JSON fixtures from
+// `Data/SeedData/listening/` and upserts them via the authoring service.
+// Idempotent; disabled by default via `Seed:ListeningStarter:Enabled`.
+using (var seedScope = app.Services.CreateScope())
+{
+    var starterSeeder = seedScope.ServiceProvider
+        .GetRequiredService<OetLearner.Api.Services.Listening.IListeningStarterContentSeeder>();
+    try
+    {
+        await starterSeeder.SeedAsync(CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>()
+            .LogWarning(ex, "Listening starter content seeder failed (non-fatal)");
     }
 }
 

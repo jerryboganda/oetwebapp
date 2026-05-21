@@ -124,6 +124,38 @@ public enum ListeningSpeakerAttitude
     Other = 5,
 }
 
+/// <summary>
+/// Short-answer (Part A) grader classification. Surfaced on the post-submit
+/// review page so the learner can see WHY their answer was rejected, not just
+/// that it was. Computed by <c>ListeningGradingService.Evaluate</c> after a
+/// candidate-set miss; null for MCQ and for any item the grader could not
+/// classify. Cached on <c>ListeningAnswer.MissReason</c>.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ListeningMissReason
+{
+    /// <summary>Answer matched canonical or accepted variant.</summary>
+    Match = 0,
+    /// <summary>Blank or whitespace-only response.</summary>
+    Empty = 1,
+    /// <summary>Levenshtein distance ≤2 to a candidate — likely a typo.</summary>
+    SpellingError = 2,
+    /// <summary>Candidate carries a numeric token; learner answer's numeric
+    /// tokens do not match.</summary>
+    WrongNumber = 3,
+    /// <summary>Learner answer contains every candidate token PLUS two or more
+    /// extra tokens — verbosity beyond the gap.</summary>
+    ExtraInfo = 4,
+    /// <summary>Learner answer matches a canonical answer for a DIFFERENT
+    /// question on the same paper — slotted into the wrong gap.</summary>
+    WrongSection = 5,
+    /// <summary>None of the heuristics fired — likely a paraphrase or
+    /// out-of-vocabulary attempt.</summary>
+    Paraphrase = 6,
+    /// <summary>Unclassified miss (reserved for future heuristics).</summary>
+    Other = 7,
+}
+
 [Index(nameof(PaperId), nameof(PartCode), IsUnique = true,
     Name = "UX_ListeningPart_Paper_PartCode")]
 public class ListeningPart
@@ -445,6 +477,12 @@ public class ListeningAnswer
     /// option carrying a <see cref="ListeningQuestionOption.DistractorCategory"/>.
     /// Null for correct answers, short-answer items, or un-tagged distractors.</summary>
     public ListeningDistractorCategory? SelectedDistractorCategory { get; set; }
+
+    /// <summary>Short-answer (Part A) miss classification computed at grade
+    /// time. <c>Match</c> when the candidate answer was accepted; one of the
+    /// failure tags otherwise. Null for MCQ items and for legacy rows graded
+    /// before this column existed.</summary>
+    public ListeningMissReason? MissReason { get; set; }
 
     /// <summary>Listening V2 — snapshot of <c>ListeningQuestion.Version</c>
     /// at the moment the answer was submitted. Grading reads this column to

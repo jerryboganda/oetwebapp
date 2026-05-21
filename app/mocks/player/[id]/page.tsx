@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock, FileText, Maximize2, PlayCircle, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, FileText, PlayCircle, ShieldCheck } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -13,6 +13,8 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { MicCheckPanel } from '@/components/domain/mic-check-panel';
 import { AudioPlaybackCheckPanel } from '@/components/domain/audio-playback-check-panel';
 import { WebcamCheckPanel } from '@/components/webcam-check-panel';
+import { ListeningStrictLayer } from '@/components/domain/mock-player/ListeningStrictLayer';
+import { PartAStrictTimer } from '@/components/domain/mock-player/PartAStrictTimer';
 import { analytics } from '@/lib/analytics';
 import { completeMockSection, fetchMockSession, startMockSection, submitMockSession } from '@/lib/api';
 import type { MockSession } from '@/lib/mock-data';
@@ -76,14 +78,17 @@ export default function MockPlayerPage() {
   // same browser tab does not force the learner to redo the check.
   const [micCheckPassed, setMicCheckPassed] = useState<Record<string, boolean>>({});
   const [audioCheckPassed, setAudioCheckPassed] = useState<Record<string, boolean>>({});
+  const [cameraCheckPassed, setCameraCheckPassed] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!session || typeof window === 'undefined') return;
     try {
       const nextMic: Record<string, boolean> = {};
       const nextAudio: Record<string, boolean> = {};
+      const nextCamera: Record<string, boolean> = {};
       let hasMic = false;
       let hasAudio = false;
+      let hasCamera = false;
       for (const section of session.sectionStates) {
         if (section.subtest === 'speaking') {
           if (window.sessionStorage.getItem(preflightStorageKey('mic', session.sessionId, section.id)) === '1') {
@@ -97,12 +102,17 @@ export default function MockPlayerPage() {
             hasAudio = true;
           }
         }
+        if (window.sessionStorage.getItem(preflightStorageKey('camera', session.sessionId, section.id)) === '1') {
+          nextCamera[section.id] = true;
+          hasCamera = true;
+        }
       }
       // Only seed state when sessionStorage actually has a prior pass — avoids
       // an unnecessary re-render after fetch resolves, which would otherwise
       // race with user-event pointer sequences in tests and the player UI.
       if (hasMic) setMicCheckPassed((prev) => ({ ...prev, ...nextMic }));
       if (hasAudio) setAudioCheckPassed((prev) => ({ ...prev, ...nextAudio }));
+      if (hasCamera) setCameraCheckPassed((prev) => ({ ...prev, ...nextCamera }));
     } catch {
       // sessionStorage may be unavailable in private mode; gates simply require redo.
     }
@@ -149,11 +159,56 @@ export default function MockPlayerPage() {
     [selectedSection, proctoring],
   );
 
+  const isStrictExamLaunch = Boolean(session && (session.config.mode === 'exam' || session.config.strictness === 'exam' || session.config.strictness === 'final_readiness'));
+  const handleCameraCheckComplete = useCallback(() => {
+    if (!selectedSection || !isStrictExamLaunch) return;
+    setCameraCheckPassed((prev) => ({ ...prev, [selectedSection.id]: true }));
+    recordPreflightPass('camera', selectedSection.id);
+    proctoring.report('cam_check_passed', {
+      metadata: { sectionId: selectedSection.id, subtest: selectedSection.subtest },
+    });
+  }, [selectedSection, isStrictExamLaunch, recordPreflightPass, proctoring]);
+
+  const handleCameraCheckFail = useCallback(
+    (reason: 'denied' | 'unavailable' | 'browser_unsupported') => {
+      if (!selectedSection || !isStrictExamLaunch) return;
+      proctoring.report('cam_check_failed', {
+        severity: 'warning',
+        metadata: { sectionId: selectedSection.id, subtest: selectedSection.subtest, reason },
+      });
+    },
+    [selectedSection, isStrictExamLaunch, proctoring],
+  );
+
   const requiresMicGate = selectedSection?.subtest === 'speaking';
   const requiresAudioGate = selectedSection?.subtest === 'listening';
+  const requiresCameraGate = Boolean(selectedSection && isStrictExamLaunch);
   const micGateSatisfied = !requiresMicGate || Boolean(selectedSection && micCheckPassed[selectedSection.id]);
   const audioGateSatisfied = !requiresAudioGate || Boolean(selectedSection && audioCheckPassed[selectedSection.id]);
-  const canLaunchSelectedSection = Boolean(selectedSection) && micGateSatisfied && audioGateSatisfied;
+  const cameraGateSatisfied = !requiresCameraGate || Boolean(selectedSection && cameraCheckPassed[selectedSection.id]);
+  const canLaunchSelectedSection = Boolean(selectedSection) && micGateSatisfied && audioGateSatisfied && cameraGateSatisfied;
+
+  const requestFullscreenIfStrict = async () => {
+    if (!isStrictExamLaunch || typeof document === 'undefined') return true;
+    if (document.fullscreenElement) return true;
+    const target = document.documentElement as HTMLElement & { requestFullscreen?: () => Promise<void> };
+    if (!target.requestFullscreen) {
+      proctoring.report('fullscreen_exit', {
+        severity: 'warning',
+        metadata: { reason: 'browser_unsupported', sectionId: selectedSection?.id },
+      });
+      return true;
+    }
+    try {
+      await target.requestFullscreen();
+      return true;
+    } catch {
+      setError('Fullscreen could not be started. Enable fullscreen to continue with this strict mock section.');
+      return false;
+    }
+  };
+
+  const isReadingPartA = selectedSection?.subtest === 'reading' && (selectedSection.partGroup === 'a' || /part\s*a/i.test(selectedSection.title));
 
   const handleSubmit = async () => {
     if (!session) return;
@@ -192,6 +247,13 @@ export default function MockPlayerPage() {
     }
     if (selectedSection.subtest === 'listening' && !audioCheckPassed[selectedSection.id]) {
       setError('Complete the audio playback check before launching the Listening section.');
+      return;
+    }
+    if (requiresCameraGate && !cameraCheckPassed[selectedSection.id]) {
+      setError('Complete the webcam check before launching this strict mock section.');
+      return;
+    }
+    if (!(await requestFullscreenIfStrict())) {
       return;
     }
     setLaunchingSectionId(selectedSection.id);
@@ -399,6 +461,44 @@ export default function MockPlayerPage() {
                       )
                     ) : null}
 
+                    {requiresCameraGate && selectedSection ? (
+                      cameraCheckPassed[selectedSection.id] ? (
+                        <InlineAlert variant="success">
+                          Webcam check complete for this strict mock section.
+                        </InlineAlert>
+                      ) : (
+                        <WebcamCheckPanel
+                          storageKey={preflightStorageKey('camera', session.sessionId, selectedSection.id)}
+                          onPassed={handleCameraCheckComplete}
+                          onFailed={handleCameraCheckFail}
+                          required
+                        />
+                      )
+                    ) : null}
+
+                    {selectedSection.subtest === 'listening' && session.config.mode === 'exam' && modePolicy ? (
+                      <ListeningStrictLayer
+                        onePlay={!modePolicy.listeningReplayAllowed || selectedSection.noReplay}
+                        transcriptHidden={!modePolicy.transcriptDuringAttemptAllowed}
+                        pauseAllowed={modePolicy.pauseAllowed}
+                        onReportIssue={handleReportAudioIssue}
+                      />
+                    ) : null}
+
+                    {isReadingPartA && session.config.mode === 'exam' ? (
+                      <PartAStrictTimer
+                        durationSeconds={selectedSection.readingWindowSeconds ?? 15 * 60}
+                        startedAt={selectedSection.startedAt}
+                        locked={selectedSection.state === 'completed' || selectedSection.state === 'locked'}
+                        onExpire={() => {
+                          proctoring.report('network_drop', {
+                            severity: 'info',
+                            metadata: { source: 'reading_part_a_timer_expired', sectionId: selectedSection.id },
+                          });
+                        }}
+                      />
+                    ) : null}
+
                     <Button
                       fullWidth
                       onClick={handleLaunchSection}
@@ -409,6 +509,8 @@ export default function MockPlayerPage() {
                           ? 'Complete the microphone check first'
                           : !audioGateSatisfied
                           ? 'Complete the audio playback check first'
+                          : !cameraGateSatisfied
+                          ? 'Complete the webcam check first'
                           : undefined
                       }
                     >

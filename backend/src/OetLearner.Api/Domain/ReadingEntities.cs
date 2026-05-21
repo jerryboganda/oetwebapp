@@ -437,6 +437,19 @@ public class ReadingAnswer
 
     public DateTimeOffset AnsweredAt { get; set; }
 
+    /// <summary>Phase 1 closure — per-save elapsed milliseconds the learner
+    /// spent on this question between focus and save. Captured from the
+    /// client. Server caps at 14_400_000 ms (4 h) to defeat absurd values.
+    /// Nullable for backward compatibility with rows authored before the
+    /// timing column existed.</summary>
+    public int? ElapsedMs { get; set; }
+
+    /// <summary>Phase 1 closure — accumulated milliseconds across every
+    /// save to this answer. Useful for analytics like "time per question"
+    /// and "abandoned-but-pondered" detection. Server-side updated as
+    /// <c>(TotalElapsedMs ?? 0) + ElapsedMs</c> on each autosave.</summary>
+    public int? TotalElapsedMs { get; set; }
+
     public ReadingAttempt? Attempt { get; set; }
     public ReadingQuestion? Question { get; set; }
 }

@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Highlighter, Strikethrough } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import type { ListeningQuestionAnnotation } from '@/hooks/use-listening-annotations';
 
 export interface BCQuestionRendererProps {
   questionNumber: number;
@@ -13,6 +14,16 @@ export interface BCQuestionRendererProps {
   value: string;
   onChange: (value: string) => void;
   locked?: boolean;
+  /**
+   * Controlled annotation state for this question. When provided together
+   * with `onAnnotationChange`, the renderer surfaces highlight + strikethrough
+   * state via the parent hook (`useListeningAnnotations`). When omitted,
+   * the renderer falls back to local component state for backward compat.
+   */
+  annotation?: ListeningQuestionAnnotation;
+  onAnnotationChange?: (
+    mutator: (current: ListeningQuestionAnnotation) => ListeningQuestionAnnotation,
+  ) => void;
 }
 
 export function BCQuestionRenderer({
@@ -23,9 +34,48 @@ export function BCQuestionRenderer({
   value,
   onChange,
   locked = false,
+  annotation,
+  onAnnotationChange,
 }: BCQuestionRendererProps) {
-  const [isStemHighlighted, setIsStemHighlighted] = useState(false);
-  const [struckOptions, setStruckOptions] = useState<Set<string>>(() => new Set());
+  const controlled = annotation !== undefined && onAnnotationChange !== undefined;
+  const [localStemHighlighted, setLocalStemHighlighted] = useState(false);
+  const [localStruckOptions, setLocalStruckOptions] = useState<Set<string>>(() => new Set());
+
+  const isStemHighlighted = controlled
+    ? Boolean(annotation?.stemHighlighted)
+    : localStemHighlighted;
+  const struckOptions = controlled
+    ? new Set(annotation?.struckOptions ?? [])
+    : localStruckOptions;
+
+  const setIsStemHighlighted = (nextOrFn: boolean | ((current: boolean) => boolean)) => {
+    if (controlled) {
+      onAnnotationChange?.((current) => ({
+        ...current,
+        stemHighlighted: typeof nextOrFn === 'function' ? nextOrFn(Boolean(current.stemHighlighted)) : nextOrFn,
+      }));
+    } else {
+      setLocalStemHighlighted((prev) => (typeof nextOrFn === 'function' ? nextOrFn(prev) : nextOrFn));
+    }
+  };
+
+  const setStruckOptionsForOption = (option: string) => {
+    if (controlled) {
+      onAnnotationChange?.((current) => {
+        const next = new Set(current.struckOptions ?? []);
+        if (next.has(option)) next.delete(option);
+        else next.add(option);
+        return { ...current, struckOptions: Array.from(next) };
+      });
+    } else {
+      setLocalStruckOptions((current) => {
+        const next = new Set(current);
+        if (next.has(option)) next.delete(option);
+        else next.add(option);
+        return next;
+      });
+    }
+  };
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const headingId = `listening-bc-q${questionNumber}-heading`;
   const statusId = `listening-bc-q${questionNumber}-status`;
@@ -38,15 +88,7 @@ export function BCQuestionRenderer({
 
   const toggleStruck = (option: string) => {
     if (locked) return;
-    setStruckOptions((current) => {
-      const next = new Set(current);
-      if (next.has(option)) {
-        next.delete(option);
-      } else {
-        next.add(option);
-      }
-      return next;
-    });
+    setStruckOptionsForOption(option);
   };
 
   const selectAndFocusOption = (index: number) => {

@@ -18,7 +18,7 @@ namespace OetLearner.Api.Services;
 /// </summary>
 public sealed class MockBookingService
 {
-    public const int MaxReschedulesPerBooking = 3;
+    public const int MaxReschedulesPerBooking = 2;
     public const int MinLeadTimeHours = 12;
 
     private readonly LearnerDbContext _db;

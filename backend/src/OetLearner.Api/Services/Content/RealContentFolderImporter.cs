@@ -676,9 +676,14 @@ public sealed class RealContentFolderImporter
     private async Task<(string mediaId, long bytes, string sha)> EnsureMediaAssetAsync(string adminId, RealContentProposal p, string sourceKey, CancellationToken ct)
     {
         var ext = (Path.GetExtension(p.SourcePath)?.TrimStart('.') ?? "").ToLowerInvariant();
-        await using var staged = await _storage.OpenReadAsync(sourceKey, ct);
+        // Load the staged bytes into an in-memory buffer and immediately dispose the
+        // source stream so the underlying file is no longer locked when we later call
+        // _storage.Move (on Windows, Move requires no open handles on the source file).
         await using var buffer = new MemoryStream();
-        await staged.CopyToAsync(buffer, ct);
+        {
+            await using var staged = await _storage.OpenReadAsync(sourceKey, ct);
+            await staged.CopyToAsync(buffer, ct);
+        }
         buffer.Position = 0;
 
         var validation = await _validator.ValidateAsync(buffer, ext, ct);

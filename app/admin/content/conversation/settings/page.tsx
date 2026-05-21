@@ -142,11 +142,13 @@ export default function AdminConversationSettingsPage() {
           ? String(v('cosyVoiceDefaultVoice') ?? '')
           : provider === 'chattts'
             ? String(v('chatTtsDefaultVoice') ?? '')
-            : provider === 'gptsovits'
-              ? String(v('gptSoVitsDefaultVoice') ?? '')
-              : provider === 'azure'
-                ? String(v('azureTtsDefaultVoice') ?? '')
-                : '';
+            : provider === 'digitalocean-qwen3-tts'
+              ? String(v('chatTtsDefaultVoice') ?? '')
+              : provider === 'gptsovits'
+                ? String(v('gptSoVitsDefaultVoice') ?? '')
+                : provider === 'azure'
+                  ? String(v('azureTtsDefaultVoice') ?? '')
+                  : '';
       const blob = await adminConversationTtsPreview({
         voice,
         locale: 'en-GB',
@@ -399,6 +401,7 @@ export default function AdminConversationSettingsPage() {
                     <option value="azure">Azure Speech</option>
                     <option value="elevenlabs">ElevenLabs</option>
                     <option value="cosyvoice">CosyVoice</option>
+                    <option value="digitalocean-qwen3-tts">DigitalOcean Serverless Inference Qwen3 TTS</option>
                     <option value="chattts">ChatTTS</option>
                     <option value="gptsovits">GPT-SoVITS</option>
                     <option value="mock">Mock</option>
@@ -417,6 +420,8 @@ export default function AdminConversationSettingsPage() {
                   <KeyInput label="ChatTTS API Key" present={settings.chatTtsApiKeyPresent} draftKey="chatTtsApiKey" draft={draft} set={setSecret} />
                   <Input label="ChatTTS Base URL" value={String(v('chatTtsBaseUrl') ?? '')} onChange={(e) => setField('chatTtsBaseUrl', e.target.value)} />
                   <Input label="ChatTTS Default Voice" value={String(v('chatTtsDefaultVoice') ?? '')} onChange={(e) => setField('chatTtsDefaultVoice', e.target.value)} />
+                  <Input label="DigitalOcean Qwen3 TTS Base URL" value={String(v('chatTtsBaseUrl') ?? '')} onChange={(e) => setField('chatTtsBaseUrl', e.target.value)} placeholder="https://<endpoint>/v1" />
+                  <Input label="DigitalOcean Qwen3 TTS Voice" value={String(v('chatTtsDefaultVoice') ?? '')} onChange={(e) => setField('chatTtsDefaultVoice', e.target.value)} placeholder="alloy" />
                   <KeyInput label="GPT-SoVITS API Key" present={settings.gptSoVitsApiKeyPresent} draftKey="gptSoVitsApiKey" draft={draft} set={setSecret} />
                   <Input label="GPT-SoVITS Base URL" value={String(v('gptSoVitsBaseUrl') ?? '')} onChange={(e) => setField('gptSoVitsBaseUrl', e.target.value)} />
                   <Input label="GPT-SoVITS Default Voice" value={String(v('gptSoVitsDefaultVoice') ?? '')} onChange={(e) => setField('gptSoVitsDefaultVoice', e.target.value)} />

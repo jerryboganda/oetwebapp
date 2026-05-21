@@ -1,0 +1,67 @@
+name: setup-oet-stack
+description: |
+  Composite action that prepares the OET learner-app CI environment:
+  installs the .NET SDK + Node toolchain, restores caches, optionally
+  starts a Postgres service container, and exposes a few sentinel env
+  vars for downstream jobs.
+
+inputs:
+  dotnet-version:
+    description: .NET SDK version
+    required: false
+    default: "10.0.x"
+  node-version:
+    description: Node.js version
+    required: false
+    default: "20"
+  with-postgres:
+    description: Set to "true" to spin up a local Postgres container.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    - name: Restore NuGet cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.sln') }}
+        restore-keys: |
+          nuget-${{ runner.os }}-
+
+    - name: NPM install
+      shell: bash
+      run: npm ci --no-audit --no-fund
+
+    - name: Wait for Postgres
+      if: ${{ inputs.with-postgres == 'true' }}
+      shell: bash
+      run: |
+        for i in {1..30}; do
+          if pg_isready -h 127.0.0.1 -p 5432 -U postgres >/dev/null 2>&1; then
+            echo "Postgres ready."
+            exit 0
+          fi
+          echo "Waiting for Postgres ($i/30)..."
+          sleep 2
+        done
+        echo "Postgres failed to become ready." >&2
+        exit 1
+
+    - name: Sentinel env
+      shell: bash
+      run: |
+        echo "OET_CI=true" >> "$GITHUB_ENV"
+        echo "ASPNETCORE_ENVIRONMENT=CI" >> "$GITHUB_ENV"

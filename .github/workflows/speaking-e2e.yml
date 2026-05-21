@@ -1,0 +1,31 @@
+name: Speaking Module — Playwright E2E
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # nightly 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Override target URL
+        required: false
+        default: ""
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ inputs.base_url != '' && inputs.base_url || secrets.STAGING_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-oet-stack
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Speaking E2E suite
+        run: npx playwright test tests/e2e/speaking-*.spec.ts --reporter=html,line
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: speaking-e2e-report
+          path: playwright-report

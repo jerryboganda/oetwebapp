@@ -234,7 +234,9 @@ export default function MockSetup() {
 
   useEffect(() => {
     let cancelled = false;
-    setEntitlementSummaryLoading(true);
+    window.queueMicrotask(() => {
+      if (!cancelled) setEntitlementSummaryLoading(true);
+    });
     fetchMockEntitlementsSummary()
       .then((summary) => {
         if (cancelled) return;

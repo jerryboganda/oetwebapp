@@ -140,7 +140,12 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         Assert.Equal(new[] { "listening", "reading", "writing", "speaking" }, sections.Select(section => section.GetProperty("subtest").GetString()).ToArray());
         Assert.Contains("/listening/player/mock-listening-regression", sections[0].GetProperty("launchRoute").GetString());
         Assert.Contains("/reading/paper/mock-reading-regression", sections[1].GetProperty("launchRoute").GetString());
-        Assert.Contains("/writing/player?taskId=mock-writing-regression", sections[2].GetProperty("launchRoute").GetString());
+        // Writing sections now use the dedicated mock-writing player route
+        // (/mocks/writing/{sectionAttemptId}?...) rather than the legacy
+        // /writing/player?taskId= format. The content paper ID is carried as
+        // the paperId query parameter.
+        Assert.Contains("/mocks/writing/", sections[2].GetProperty("launchRoute").GetString());
+        Assert.Contains("paperId=mock-writing-regression", sections[2].GetProperty("launchRoute").GetString());
         Assert.Contains("/speaking/task/mock-speaking-regression", sections[3].GetProperty("launchRoute").GetString());
         Assert.All(sections, section =>
         {

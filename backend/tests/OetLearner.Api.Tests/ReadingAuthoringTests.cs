@@ -2067,6 +2067,114 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Submit_writes_idempotency_record_and_replay_hits_cache()
+    {
+        // Phase 1 closure — proves the IdempotencyRecord row is created
+        // exactly once and that a replay reads from cache rather than
+        // re-grading. We assert by (a) checking row count == 1 with the
+        // expected scope, and (b) confirming the cached ResponseJson
+        // deserialises to the same RawScore returned by both calls.
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var first = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+        var second = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+
+        Assert.Equal(first.RawScore, second.RawScore);
+        var records = await db.IdempotencyRecords
+            .Where(r => r.Scope == "reading-submit")
+            .ToListAsync();
+        Assert.Single(records);
+        Assert.Contains($"u1:{started.AttemptId}", records[0].Key);
+        Assert.Contains("RawScore", records[0].ResponseJson);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submit_honours_caller_supplied_idempotency_key()
+    {
+        // Phase 1 closure — a caller-supplied Idempotency-Key header takes
+        // precedence over the deterministic key so retries from different
+        // user-agent generations can still collide on the cache row.
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var customKey = "client-submit-2026-05-21-abc";
+        var first = await attemptSvc.SubmitAsync("u1", started.AttemptId, customKey, default);
+        var second = await attemptSvc.SubmitAsync("u1", started.AttemptId, customKey, default);
+
+        Assert.Equal(first.RawScore, second.RawScore);
+        var records = await db.IdempotencyRecords
+            .Where(r => r.Scope == "reading-submit" && r.Key == customKey)
+            .ToListAsync();
+        Assert.Single(records);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SaveAnswer_elapsed_ms_accumulates_total()
+    {
+        // Phase 1 closure — successive saves of the same answer with
+        // elapsedMs increment TotalElapsedMs and overwrite ElapsedMs with
+        // the latest delta. Non-positive values are silently discarded.
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var firstQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1")
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, firstQuestion.Id, "\"X\"", 1_500, default);
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, firstQuestion.Id, "\"Y\"", 2_500, default);
+        // Negative value must not affect the total.
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, firstQuestion.Id, "\"Z\"", -10, default);
+
+        var row = await db.ReadingAnswers
+            .SingleAsync(a => a.ReadingAttemptId == started.AttemptId && a.ReadingQuestionId == firstQuestion.Id);
+        Assert.Equal(2_500, row.ElapsedMs);
+        Assert.Equal(4_000, row.TotalElapsedMs);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SaveAnswer_elapsed_ms_caps_at_four_hours()
+    {
+        // Phase 1 closure — server-side cap defeats absurd values from
+        // clock-skewed or hostile clients. Cap is 14_400_000 ms (4 h).
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var firstQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1")
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+
+        await attemptSvc.SaveAnswerAsync(
+            "u1", started.AttemptId, firstQuestion.Id, "\"X\"", int.MaxValue, default);
+
+        var row = await db.ReadingAnswers
+            .SingleAsync(a => a.ReadingAttemptId == started.AttemptId && a.ReadingQuestionId == firstQuestion.Id);
+        Assert.Equal(14_400_000, row.ElapsedMs);
+        Assert.Equal(14_400_000, row.TotalElapsedMs);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Extra_time_entitlement_extends_deadline()
     {
         var (db, structure, policy, _, attemptSvc) = Build();

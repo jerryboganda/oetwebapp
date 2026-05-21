@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Listening;
 
 // `ListeningExtractionDraft` collides between the in-memory AI-result record
@@ -232,6 +233,34 @@ public static class ListeningAuthoringAdminEndpoints
             var report = await svc.BackfillPaperAsync(paperId, adminId, ct);
             return Results.Ok(report);
         });
+
+        // Wave 4 — TTS synthesis. Reads the extract's transcript segments
+        // and produces a WAV blob through `IListeningTtsSynthesisProvider`,
+        // writing to `IFileStorage` at a content-addressed key. The stub
+        // provider emits silence (CI-safe); a real DigitalOcean Qwen3 / OAI
+        // provider plugs in via DI without touching this endpoint.
+        group.MapPost("/extracts/{extractId}/synthesize", async (
+            string paperId,
+            string extractId,
+            IListeningTtsService tts,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var result = await tts.SynthesizeAsync(extractId, adminId, ct);
+                return Results.Ok(result);
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(
+                    new { errorCode = ex.ErrorCode, message = ex.Message },
+                    statusCode: ex.StatusCode);
+            }
+        })
+        .WithName("SynthesizeListeningExtract")
+        .WithSummary("Synthesize extract audio from authored transcript segments via the configured TTS provider.");
 
         return app;
     }

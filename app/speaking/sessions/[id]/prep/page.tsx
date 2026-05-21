@@ -62,7 +62,9 @@ export default function SpeakingSessionPrepPage() {
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
-    setLoading(true);
+    window.queueMicrotask(() => {
+      if (!cancelled) setLoading(true);
+    });
     getSpeakingSession(sessionId)
       .then((s) => {
         if (cancelled) return;

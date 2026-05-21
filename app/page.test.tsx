@@ -1,11 +1,21 @@
 import { screen } from '@testing-library/react';
 import { renderWithRouter } from '@/tests/test-utils';
-const { mockFetchStudyPlan, mockFetchReadiness, mockFetchUserProfile, mockFetchDashboardHome, mockFetchEngagement, mockTrack, mockPush } = vi.hoisted(() => ({
+const {
+  mockFetchStudyPlan,
+  mockFetchReadiness,
+  mockFetchUserProfile,
+  mockFetchDashboardHome,
+  mockFetchEngagement,
+  mockLearnerGetScoringPolicy,
+  mockTrack,
+  mockPush,
+} = vi.hoisted(() => ({
   mockFetchStudyPlan: vi.fn(),
   mockFetchReadiness: vi.fn(),
   mockFetchUserProfile: vi.fn(),
   mockFetchDashboardHome: vi.fn(),
   mockFetchEngagement: vi.fn(),
+  mockLearnerGetScoringPolicy: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
 }));
@@ -33,6 +43,7 @@ vi.mock('@/lib/api', () => ({
   fetchUserProfile: mockFetchUserProfile,
   fetchDashboardHome: mockFetchDashboardHome,
   fetchEngagement: mockFetchEngagement,
+  learnerGetScoringPolicy: mockLearnerGetScoringPolicy,
   fetchPronunciationProfile: vi.fn().mockResolvedValue({
     overallScore: 0,
     projectedSpeakingScaled: 0,
@@ -111,6 +122,14 @@ describe('Dashboard page', () => {
       totalPracticeSessions: 42,
       avgSessionMinutes: 44,
       weeklyActivity: [{ day: 'Mon', active: true }, { day: 'Tue', active: true }],
+    });
+
+    mockLearnerGetScoringPolicy.mockResolvedValue({
+      writingPassScaled: 350,
+      speakingPassScaled: 350,
+      listeningPassScaled: 350,
+      readingPassScaled: 350,
+      targetCountry: 'Australia',
     });
   });
 

@@ -1,8 +1,9 @@
 import { screen } from '@testing-library/react';
-const { mockAddToMyVocabulary, mockFetchMockReport, mockFetchVocabularyTerms, mockTrack } = vi.hoisted(() => ({
+const { mockAddToMyVocabulary, mockFetchMockReport, mockFetchVocabularyTerms, mockLearnerGetActiveResultTemplate, mockTrack } = vi.hoisted(() => ({
   mockAddToMyVocabulary: vi.fn(),
   mockFetchMockReport: vi.fn(),
   mockFetchVocabularyTerms: vi.fn(),
+  mockLearnerGetActiveResultTemplate: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -27,6 +28,7 @@ vi.mock('@/lib/api', () => ({
   addToMyVocabulary: mockAddToMyVocabulary,
   fetchMockReport: mockFetchMockReport,
   fetchVocabularyTerms: mockFetchVocabularyTerms,
+  learnerGetActiveResultTemplate: mockLearnerGetActiveResultTemplate,
 }));
 
 import MockReportPage from './page';
@@ -63,6 +65,7 @@ describe('Mock report page', () => {
         pending: 0,
       },
     });
+    mockLearnerGetActiveResultTemplate.mockResolvedValue(null);
     mockFetchVocabularyTerms.mockResolvedValue([]);
     mockAddToMyVocabulary.mockResolvedValue({});
   });

@@ -227,8 +227,11 @@ export default function AdminSpeakingCalibrationPage() {
     if (!isAuthenticated || role !== 'admin') return;
 
     let cancelled = false;
-    setStatus('loading');
-    setErrorMessage(null);
+    window.queueMicrotask(() => {
+      if (cancelled) return;
+      setStatus('loading');
+      setErrorMessage(null);
+    });
 
     async function load() {
       try {

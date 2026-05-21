@@ -490,6 +490,7 @@ export interface MockSessionSection {
   bundleSectionId?: string;
   title: string;
   subtest?: string;
+  partGroup?: 'a' | 'bc' | 'full' | string;
   state: string;
   reviewAvailable: boolean;
   reviewSelected: boolean;
@@ -497,6 +498,11 @@ export interface MockSessionSection {
   contentPaperId?: string;
   contentPaperTitle?: string;
   timeLimitMinutes?: number;
+  noReplay?: boolean;
+  previewPauseSeconds?: number;
+  readingWindowSeconds?: number;
+  editingWindowSeconds?: number;
+  caseNoteHtml?: string;
   startedAt?: string | null;
   deadlineAt?: string | null;
   submittedAt?: string | null;

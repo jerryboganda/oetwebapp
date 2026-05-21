@@ -2,9 +2,9 @@
 
 // Mocks V2 Phase 5 — learner booking page.
 // Lets a learner pick a date (next 14 days), a published Speaking bundle,
-// and an available slot in IANA-local time. Submits the booking through the
-// existing `createMockBooking` helper; on `slot_taken` it transparently
-// re-fetches availability so the learner immediately sees the updated grid.
+// and an available slot in IANA-local time. Submits through `createMockBookingV2`
+// (POST /v1/mocks/bookings); on `slot_taken` it transparently re-fetches
+// availability so the learner immediately sees the updated grid.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -25,7 +25,7 @@ import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/form-controls';
 import {
-  createMockBooking,
+  createMockBookingV2,
   fetchMockAvailability,
   fetchMockOptions,
   isApiError,
@@ -193,12 +193,11 @@ export default function NewMockBookingPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await createMockBooking({
-        mockBundleId: selectedBundle.bundleId,
+      await createMockBookingV2({
+        bundleId: selectedBundle.bundleId,
         scheduledStartAt: selectedSlot,
-        timezoneIana: timezone,
+        timezone,
         consentToRecording: true,
-        learnerNotes: 'Booked from learner availability calendar.',
       });
       analytics.track('mock_booking_created', {
         bundleId: selectedBundle.bundleId,
@@ -449,7 +448,7 @@ export default function NewMockBookingPage() {
           <LearnerSurfaceSectionHeader
             eyebrow="4. Confirm"
             title="Confirm and book"
-            description="Live mocks are recorded so your tutor can review your performance. Bookings can be rescheduled up to three times."
+            description="Live mocks are recorded so your tutor can review your performance. Reschedule limits are admin-configurable and default to two changes per booking."
             icon={CheckCircle2}
             className="mb-4"
           />

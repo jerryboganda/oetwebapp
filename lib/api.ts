@@ -2510,6 +2510,7 @@ function mapMockSession(session: ApiRecord): MockSession {
       bundleSectionId: section.bundleSectionId ? String(section.bundleSectionId) : undefined,
       title: String(section.title ?? 'Mock section'),
       subtest: section.subtest ? String(section.subtest) : undefined,
+      partGroup: section.partGroup ? String(section.partGroup) : undefined,
       state: String(section.state ?? 'ready'),
       reviewAvailable: Boolean(section.reviewAvailable),
       reviewSelected: Boolean(section.reviewSelected),
@@ -2517,6 +2518,11 @@ function mapMockSession(session: ApiRecord): MockSession {
       contentPaperId: section.contentPaperId ? String(section.contentPaperId) : undefined,
       contentPaperTitle: section.contentPaperTitle ? String(section.contentPaperTitle) : undefined,
       timeLimitMinutes: section.timeLimitMinutes ? Number(section.timeLimitMinutes) : undefined,
+      noReplay: typeof section.noReplay === 'boolean' ? section.noReplay : undefined,
+      previewPauseSeconds: section.previewPauseSeconds ? Number(section.previewPauseSeconds) : undefined,
+      readingWindowSeconds: section.readingWindowSeconds ? Number(section.readingWindowSeconds) : undefined,
+      editingWindowSeconds: section.editingWindowSeconds ? Number(section.editingWindowSeconds) : undefined,
+      caseNoteHtml: typeof section.caseNoteHtml === 'string' ? section.caseNoteHtml : undefined,
       startedAt: section.startedAt ?? null,
       deadlineAt: section.deadlineAt ?? null,
       submittedAt: section.submittedAt ?? null,
@@ -2872,6 +2878,43 @@ export async function fetchMockAvailability(
     blockedReason: typeof item.blockedReason === 'string' ? item.blockedReason : undefined,
   }));
   return { slots };
+}
+
+// Mocks V2 Phase 5 — new bookings family hitting `/v1/mocks/bookings/*`.
+// These are additive to the legacy `/v1/mock-bookings/*` family kept above
+// for the existing learner list page; the Phase 5 calendar flow uses these.
+export async function createMockBookingV2(payload: {
+  bundleId: string;
+  scheduledStartAt: string;
+  timezone: string;
+  consentToRecording: boolean;
+}): Promise<MockBooking> {
+  const response = await apiRequest<ApiRecord>('/v1/mocks/bookings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return mapMockBooking(response);
+}
+
+export async function rescheduleMockBookingV2(
+  bookingId: string,
+  scheduledStartAt: string,
+): Promise<MockBooking> {
+  const response = await apiRequest<ApiRecord>(
+    `/v1/mocks/bookings/${encodeURIComponent(bookingId)}/reschedule`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ scheduledStartAt }),
+    },
+  );
+  return mapMockBooking(response);
+}
+
+export async function cancelMockBookingV2(bookingId: string): Promise<void> {
+  await apiRequest<ApiRecord>(
+    `/v1/mocks/bookings/${encodeURIComponent(bookingId)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export async function updateMockBooking(bookingId: string, payload: Record<string, unknown>): Promise<MockBooking> {
@@ -11226,28 +11269,196 @@ export interface AdminMocksAnalyticsLowQualityRow {
   flags: string[];
 }
 
+export interface AdminMocksAnalyticsWindow {
+  start: string;
+  end: string;
+}
+
+export interface AdminMocksAnalyticsAttemptsCompletion {
+  started: number;
+  completed: number;
+  completionRate: number;
+  window: AdminMocksAnalyticsWindow;
+}
+
+export interface AdminMocksAnalyticsReadinessDistribution {
+  red: number;
+  amber: number;
+  green: number;
+  darkGreen: number;
+}
+
+export interface AdminMocksAnalyticsAverageReadiness {
+  sampleSize: number;
+  averageScore: number | null;
+  distribution: AdminMocksAnalyticsReadinessDistribution;
+  window: AdminMocksAnalyticsWindow;
+}
+
+export interface AdminMocksAnalyticsPassPredictionProfessionRow {
+  profession: string;
+  sampleSize: number;
+  predictedPassRate: number;
+}
+
+export interface AdminMocksAnalyticsPassPrediction {
+  sampleSize: number;
+  predictedPassRate: number | null;
+  byProfession: AdminMocksAnalyticsPassPredictionProfessionRow[];
+  window: AdminMocksAnalyticsWindow;
+}
+
+export interface AdminMocksAnalyticsMarkingDelayRow {
+  subtest: 'writing' | 'speaking';
+  sampleSize: number;
+  avgDelayHours: number;
+  p95DelayHours: number;
+}
+
+export interface AdminMocksAnalyticsMarkingDelay {
+  perSubtest: AdminMocksAnalyticsMarkingDelayRow[];
+  window: AdminMocksAnalyticsWindow;
+}
+
+/**
+ * Phase 2 closure — Reading subtest aggregate across mock sessions.
+ * Backend computes this from `MockSectionAttempt` rows with
+ * `SubtestCode == "reading"`. Surfaced on the mocks analytics dashboard
+ * so operators see Reading-in-mocks performance without drilling into
+ * `/admin/analytics/reading`. Every field is nullable because the mock
+ * pipeline may not yet have written any Reading sections.
+ */
+export interface AdminMocksAnalyticsReadingSection {
+  started: number;
+  submitted: number;
+  completionRatePercent: number | null;
+  averageRawScore: number | null;
+  averageScaledScore: number | null;
+  averageCompletionSeconds: number | null;
+}
+
 export interface AdminMocksAnalyticsResponse {
   revenueByPackage: AdminMocksAnalyticsRevenueRow[];
   tutorWorkload: AdminMocksAnalyticsTutorWorkloadRow[];
   lowQualityFlags: AdminMocksAnalyticsLowQualityRow[];
+  readingSection: AdminMocksAnalyticsReadingSection;
+  attemptsCompletion: AdminMocksAnalyticsAttemptsCompletion;
+  averageReadiness: AdminMocksAnalyticsAverageReadiness;
+  passPrediction: AdminMocksAnalyticsPassPrediction;
+  markingDelay: AdminMocksAnalyticsMarkingDelay;
 }
 
-/**
- * GET /v1/admin/analytics/mocks
- *
- * Returns revenue-by-package, tutor workload, and low-quality flagged bundles
- * for the admin mocks dashboard. Tolerates a 404 (endpoint not yet wired) by
- * returning empty arrays so the page can render its empty states.
- */
-export async function fetchAdminMocksAnalytics(): Promise<AdminMocksAnalyticsResponse> {
+interface AdminMocksAnalyticsRootPayload {
+  revenueByPackage?: AdminMocksAnalyticsRevenueRow[];
+  tutorWorkload?: AdminMocksAnalyticsTutorWorkloadRow[];
+  lowQualityFlags?: AdminMocksAnalyticsLowQualityRow[];
+  readingSection?: AdminMocksAnalyticsReadingSection;
+}
+
+function emptyReadingSection(): AdminMocksAnalyticsReadingSection {
+  return {
+    started: 0,
+    submitted: 0,
+    completionRatePercent: null,
+    averageRawScore: null,
+    averageScaledScore: null,
+    averageCompletionSeconds: null,
+  };
+}
+
+function emptyAdminMocksAnalyticsWindow(): AdminMocksAnalyticsWindow {
+  const now = new Date().toISOString();
+  return { start: now, end: now };
+}
+
+function emptyAttemptsCompletion(): AdminMocksAnalyticsAttemptsCompletion {
+  return { started: 0, completed: 0, completionRate: 0, window: emptyAdminMocksAnalyticsWindow() };
+}
+
+function emptyAverageReadiness(): AdminMocksAnalyticsAverageReadiness {
+  return {
+    sampleSize: 0,
+    averageScore: null,
+    distribution: { red: 0, amber: 0, green: 0, darkGreen: 0 },
+    window: emptyAdminMocksAnalyticsWindow(),
+  };
+}
+
+function emptyPassPrediction(): AdminMocksAnalyticsPassPrediction {
+  return {
+    sampleSize: 0,
+    predictedPassRate: null,
+    byProfession: [],
+    window: emptyAdminMocksAnalyticsWindow(),
+  };
+}
+
+function emptyMarkingDelay(): AdminMocksAnalyticsMarkingDelay {
+  return { perSubtest: [], window: emptyAdminMocksAnalyticsWindow() };
+}
+
+async function fetchAdminMocksAnalyticsSubroute<T>(path: string, fallback: T): Promise<T> {
   try {
-    return await apiRequest<AdminMocksAnalyticsResponse>('/v1/admin/analytics/mocks');
+    return await apiRequest<T>(path);
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
-      return { revenueByPackage: [], tutorWorkload: [], lowQualityFlags: [] };
+      return fallback;
     }
     throw err;
   }
+}
+
+/**
+ * GET /v1/admin/analytics/mocks (root) + 4 Phase 8a sub-routes fetched in parallel.
+ *
+ * Root returns revenue-by-package, tutor workload, and low-quality flagged
+ * bundles. The four Phase 8a sub-routes layer on attempts-completion, average-
+ * readiness, pass-prediction, and marking-delay aggregations. Tolerates 404 on
+ * any individual route (endpoint not yet deployed) by substituting an empty
+ * skeleton so the page can render its empty states.
+ */
+export async function fetchAdminMocksAnalytics(): Promise<AdminMocksAnalyticsResponse> {
+  const rootPromise: Promise<AdminMocksAnalyticsRootPayload> = (async () => {
+    try {
+      return await apiRequest<AdminMocksAnalyticsRootPayload>('/v1/admin/analytics/mocks');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        return {};
+      }
+      throw err;
+    }
+  })();
+
+  const [root, attemptsCompletion, averageReadiness, passPrediction, markingDelay] = await Promise.all([
+    rootPromise,
+    fetchAdminMocksAnalyticsSubroute<AdminMocksAnalyticsAttemptsCompletion>(
+      '/v1/admin/analytics/mocks/attempts-completion',
+      emptyAttemptsCompletion(),
+    ),
+    fetchAdminMocksAnalyticsSubroute<AdminMocksAnalyticsAverageReadiness>(
+      '/v1/admin/analytics/mocks/average-readiness',
+      emptyAverageReadiness(),
+    ),
+    fetchAdminMocksAnalyticsSubroute<AdminMocksAnalyticsPassPrediction>(
+      '/v1/admin/analytics/mocks/pass-prediction',
+      emptyPassPrediction(),
+    ),
+    fetchAdminMocksAnalyticsSubroute<AdminMocksAnalyticsMarkingDelay>(
+      '/v1/admin/analytics/mocks/marking-delay',
+      emptyMarkingDelay(),
+    ),
+  ]);
+
+  return {
+    revenueByPackage: root.revenueByPackage ?? [],
+    tutorWorkload: root.tutorWorkload ?? [],
+    lowQualityFlags: root.lowQualityFlags ?? [],
+    readingSection: root.readingSection ?? emptyReadingSection(),
+    attemptsCompletion,
+    averageReadiness,
+    passPrediction,
+    markingDelay,
+  };
 }
 
 // ── Admin speaking calibration (Phase 7a) ───────────────────────────────
@@ -11510,6 +11721,76 @@ export async function startInterlocutorPracticeSession(
         sessionId: '',
         prepHref: '/speaking/select-profession',
       };
+    }
+    throw err;
+  }
+}
+
+// ── Phase 7a spec-named helper aliases ──────────────────────────────────
+//
+// The Phase 7a admin calibration + interlocutor pages spec asks for these
+// helper names. They are thin re-exports / wrappers over the helpers above
+// so the admin pages can opt into the spec naming without duplicating the
+// underlying network logic.
+
+/**
+ * Phase 7a alias for {@link fetchSpeakingCalibrationSummary}.
+ *
+ * Returns the per-tutor calibration drift overview surfaced on the admin
+ * speaking calibration page.
+ */
+export async function fetchSpeakingCalibrationOverview(
+  minSubmissions: number = 1,
+): Promise<SpeakingCalibrationDriftSummary> {
+  return fetchSpeakingCalibrationSummary(minSubmissions);
+}
+
+/**
+ * Phase 7a alias for {@link fetchInterlocutorTrainees}.
+ *
+ * Returns the synthesised interlocutor trainee table for the admin
+ * onboarding page.
+ */
+export async function fetchInterlocutorTraineeList(): Promise<InterlocutorTraineesResponse> {
+  return fetchInterlocutorTrainees();
+}
+
+/**
+ * Practice queue row — pending interlocutor practice recording under
+ * review by the calibration team.
+ */
+export interface InterlocutorPracticeQueueRow {
+  recordingId: string;
+  traineeId: string;
+  traineeName: string;
+  submittedAt: string;
+  durationSeconds: number;
+  status: 'Pending' | 'UnderReview' | 'Returned';
+}
+
+export interface InterlocutorPracticeQueueResponse {
+  recordings: InterlocutorPracticeQueueRow[];
+  totalPending: number;
+}
+
+/**
+ * GET /v1/admin/speaking/interlocutor-training/practice-queue
+ *
+ * Backend gap (Phase 7a): the dedicated practice queue endpoint is not
+ * wired yet. The helper tolerates 404 by returning an empty queue so the
+ * admin onboarding page renders the empty state instead of erroring.
+ *
+ * When the backend ships the endpoint this helper will start surfacing
+ * real rows without UI changes.
+ */
+export async function fetchInterlocutorPracticeQueue(): Promise<InterlocutorPracticeQueueResponse> {
+  try {
+    return await apiRequest<InterlocutorPracticeQueueResponse>(
+      '/v1/admin/speaking/interlocutor-training/practice-queue',
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return { recordings: [], totalPending: 0 };
     }
     throw err;
   }

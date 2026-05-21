@@ -237,6 +237,22 @@ export interface ListeningAttemptDto {
   expiresAt?: string | null;
 }
 
+/**
+ * Listening Part A miss classification surfaced on the review page. Matches
+ * the backend `ListeningMissReason` enum populated by the grader when an
+ * answer fails to match canonical + accepted variants. Null for MCQ items
+ * and for legacy attempts graded before the column existed.
+ */
+export type ListeningMissReason =
+  | 'Match'
+  | 'Empty'
+  | 'SpellingError'
+  | 'WrongNumber'
+  | 'ExtraInfo'
+  | 'WrongSection'
+  | 'Paraphrase'
+  | 'Other';
+
 export interface ListeningReviewItemDto {
   questionId: string;
   number: number;
@@ -250,6 +266,12 @@ export interface ListeningReviewItemDto {
   maxPoints: number;
   explanation: string;
   errorType: string | null;
+  /**
+   * Structured miss classification from the relational grader. Drives the
+   * "Missed because…" chip on the review page. Coexists with the legacy
+   * free-form `errorType` (which is computed from the JSON-pathway DTOs).
+   */
+  missReason?: ListeningMissReason | null;
   options: string[];
   transcript: {
     allowed: boolean;

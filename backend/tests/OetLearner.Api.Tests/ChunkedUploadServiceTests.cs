@@ -48,6 +48,8 @@ internal sealed class InMemoryFileStorage : IFileStorage
         return keys.Count;
     }
     public string? TryResolveLocalPath(string key) => null;
+    public Uri? ResolveReadUrl(string key, TimeSpan ttl)
+        => string.IsNullOrWhiteSpace(key) ? null : new Uri($"/media/file/{key}", UriKind.Relative);
 
     private sealed class CapturingStream(Action<byte[]> onClose) : MemoryStream
     {

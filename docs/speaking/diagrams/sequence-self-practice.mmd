@@ -1,0 +1,32 @@
+sequenceDiagram
+  participant L as Learner
+  participant FE as Next.js
+  participant API as .NET API
+  participant Hub as ConversationHub
+  participant ASR as Whisper
+  participant LLM as Anthropic Haiku 4.5
+  participant TTS as ElevenLabs
+
+  L->>FE: /speaking/sessions/{id}/warmup
+  FE->>API: POST start-warmup
+  API-->>FE: 200
+  L->>Hub: connect (SignalR)
+  Hub-->>L: warm-up persona seeded
+  L->>Hub: audio chunk
+  Hub->>ASR: transcribe
+  ASR-->>Hub: text
+  Hub->>LLM: warm-up turn
+  LLM-->>Hub: reply text
+  Hub->>TTS: synth
+  TTS-->>Hub: audio
+  Hub-->>L: audio out
+  L->>API: POST finish-warmup
+  API-->>FE: 200 (state=Prep)
+  FE->>L: redirect /prep
+  L->>API: POST start-roleplay
+  API-->>FE: 200 (state=Active)
+  Note over L,TTS: per-turn loop (persona cached)
+  L->>API: POST end
+  API->>API: enqueue SpeakingAiAssessmentService
+  API-->>Hub: AssessmentReady
+  Hub-->>L: redirect /results

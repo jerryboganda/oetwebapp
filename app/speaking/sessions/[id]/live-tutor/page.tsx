@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 /**
  * Learner-side live-tutor room (plan C.3).
@@ -41,7 +41,7 @@ export default function SpeakingSessionLiveTutorPage() {
   const [ending, setEnding] = useState(false);
   const endedRef = useRef(false);
 
-  // ── Load session + provision room + token ────────────────────────────────
+  // â”€â”€ Load session + provision room + token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
@@ -55,7 +55,7 @@ export default function SpeakingSessionLiveTutorPage() {
         setSession(s);
 
         if (s.mode !== 'live_tutor') {
-          // Defensive — should only land here in live-tutor mode.
+          // Defensive â€” should only land here in live-tutor mode.
           router.replace(`/speaking/sessions/${sessionId}`);
           return;
         }
@@ -93,9 +93,9 @@ export default function SpeakingSessionLiveTutorPage() {
     try {
       await endSpeakingSession(session.sessionId);
     } catch (err) {
-      // We don't block navigation on the end-session failure — tutor
+      // We don't block navigation on the end-session failure â€” tutor
       // side will also finalize. Log for diagnostics.
-      // eslint-disable-next-line no-console
+
       console.warn('[live-tutor] endSpeakingSession failed:', err);
     } finally {
       router.push(`/speaking/sessions/${session.sessionId}/results`);
@@ -106,7 +106,7 @@ export default function SpeakingSessionLiveTutorPage() {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <span className="inline-flex items-center gap-2 text-sm text-slate-500">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Connecting to the tutor room…
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Connecting to the tutor roomâ€¦
         </span>
       </div>
     );
@@ -144,16 +144,16 @@ export default function SpeakingSessionLiveTutorPage() {
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
-            Speaking · Live tutor
+            Speaking Â· Live tutor
           </p>
           <h1 className="text-2xl font-bold text-slate-900">{card.scenarioTitle}</h1>
           <p className="text-sm text-slate-600">
-            {card.setting} · {card.candidateRole}
+            {card.setting} Â· {card.candidateRole}
           </p>
         </div>
         {ending ? (
           <span className="inline-flex items-center gap-2 text-sm text-slate-500">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Wrapping up…
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Wrapping upâ€¦
           </span>
         ) : null}
       </header>
@@ -171,7 +171,7 @@ export default function SpeakingSessionLiveTutorPage() {
             <div className="flex h-full min-h-[480px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
               <span className="inline-flex items-center gap-2 text-sm text-slate-500">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                {consentAccepted ? 'Setting up the room…' : 'Waiting for consent…'}
+                {consentAccepted ? 'Setting up the roomâ€¦' : 'Waiting for consentâ€¦'}
               </span>
             </div>
           )}

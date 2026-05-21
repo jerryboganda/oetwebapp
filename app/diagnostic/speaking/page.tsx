@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 
 type SpeakingPhase = 'mic-check' | 'role-card' | 'recording' | 'review' | 'uploading' | 'done';
+const DIAGNOSTIC_RECORDING_LIMIT_MS = 5 * 60 * 1000;
 
 export default function DiagnosticSpeakingPage() {
   const router = useRouter();
@@ -136,7 +137,7 @@ export default function DiagnosticSpeakingPage() {
         if (recordingRef.current) {
           void handleStopRecording();
         }
-      }, 3000);
+      }, DIAGNOSTIC_RECORDING_LIMIT_MS);
 
       setPhase('recording');
       setIsRecording(true);

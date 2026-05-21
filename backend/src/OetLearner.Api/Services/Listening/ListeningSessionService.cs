@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Services.Listening;
 
@@ -356,7 +357,65 @@ public sealed class ListeningSessionService
             ConfirmRequired: mode.ConfirmDialogRequired,
             FreeNavigation: mode.FreeNavigation,
             OneWayLocks: mode.OneWayLocks,
-            UnansweredWarningRequired: mode.UnansweredWarningRequired);
+            UnansweredWarningRequired: mode.UnansweredWarningRequired,
+            AnnotationsJson: a.AnnotationsJson);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // R08 — annotation persistence (highlights + strikethroughs).
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>Hard cap on the per-attempt annotations payload. Larger
+    /// payloads are rejected with <c>listening_annotations_too_large</c>. The
+    /// limit is intentionally generous (64 KB) but bounded so a hostile
+    /// client cannot stuff arbitrary blobs onto the attempt row.</summary>
+    public const int MaxAnnotationsBytes = 64 * 1024;
+
+    public async Task SaveAnnotationsAsync(
+        string attemptId, string userId, string? annotationsJson, CancellationToken ct)
+    {
+        var attempt = await LoadOwnedAttemptAsync(attemptId, userId, ct);
+        if (attempt.Status != ListeningAttemptStatus.InProgress)
+        {
+            throw ApiException.Conflict(
+                "listening_annotations_attempt_not_in_progress",
+                "Annotations can only be saved while the attempt is in progress.");
+        }
+
+        var normalized = string.IsNullOrWhiteSpace(annotationsJson) ? null : annotationsJson;
+        if (normalized is not null)
+        {
+            // Use UTF-8 byte length so single multibyte chars (e.g. learner
+            // typed a non-Latin highlight label) count fairly.
+            var bytes = System.Text.Encoding.UTF8.GetByteCount(normalized);
+            if (bytes > MaxAnnotationsBytes)
+            {
+                throw ApiException.Validation(
+                    "listening_annotations_too_large",
+                    $"Annotations payload is {bytes} bytes; limit is {MaxAnnotationsBytes}.");
+            }
+
+            // Cheap shape guard — must parse as JSON. Avoids storing junk that
+            // would crash the frontend on hydrate.
+            try { using var _ = JsonDocument.Parse(normalized); }
+            catch (JsonException)
+            {
+                throw ApiException.Validation(
+                    "listening_annotations_invalid_json",
+                    "Annotations payload must be valid JSON.");
+            }
+        }
+
+        attempt.AnnotationsJson = normalized;
+        attempt.LastActivityAt = _clock.GetUtcNow();
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<string?> GetAnnotationsAsync(
+        string attemptId, string userId, CancellationToken ct)
+    {
+        var attempt = await LoadOwnedAttemptAsync(attemptId, userId, ct);
+        return attempt.AnnotationsJson;
     }
 }
 
@@ -378,7 +437,11 @@ public sealed record SessionStateDto(
     string AttemptId, string Mode, string State, string[] Locks,
     int WindowDurationMs, int WindowRemainingMs,
     bool ConfirmRequired, bool FreeNavigation, bool OneWayLocks,
-    bool UnansweredWarningRequired);
+    bool UnansweredWarningRequired,
+    /// <summary>Listening V2 — R08 highlights + strikethroughs payload last
+    /// persisted by the learner. Null when no annotations have been saved.
+    /// Frontend hydrates `useListeningAnnotations` from this on mount.</summary>
+    string? AnnotationsJson);
 
 public sealed record AdvanceResultDto(
     string Outcome,                          // "applied" | "confirm-required" | "rejected"
