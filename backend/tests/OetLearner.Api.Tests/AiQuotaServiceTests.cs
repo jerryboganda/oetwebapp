@@ -629,11 +629,11 @@ public class AiGatewayQuotaIntegrationTests
         });
         await db.SaveChangesAsync();
 
-        // Stash a BYOK key so resolver picks it.
+        // Stash a BYOK key for the provider this gateway call pins so resolver picks it.
         var dp = Microsoft.AspNetCore.DataProtection.DataProtectionProvider.Create("test-byok");
         var httpFactory = new SimpleHttpClientFactory();
         var vault = new AiCredentialVault(db, dp, httpFactory, NullLogger<AiCredentialVault>.Instance);
-        await vault.UpsertAsync("u", null, "openai-platform", "sk-thisisasupersecrettestkey-abcd", null, true, default);
+        await vault.UpsertAsync("u", null, "token-reporter", "sk-thisisasupersecrettestkey-abcd", null, true, default);
 
         var provider = new TokenReportingProvider(prompt: 120, completion: 80);
         var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);

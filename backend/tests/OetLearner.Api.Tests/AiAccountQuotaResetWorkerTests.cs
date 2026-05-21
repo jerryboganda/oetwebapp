@@ -83,10 +83,84 @@ public sealed class AiAccountQuotaResetWorkerTests : IAsyncDisposable
         Assert.Equal(0, resetCount);
     }
 
+    [Fact]
+    public async Task RunOnce_InMemoryProvider_UsesTrackedFallback()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        var protector = _dp.CreateProtector("AiProvider.PlatformKey.v1");
+
+        await using (var seed = new LearnerDbContext(options))
+        {
+            seed.AiProviders.Add(new AiProvider
+            {
+                Id = "provider-copilot",
+                Code = "copilot",
+                Name = "GitHub Copilot",
+                Dialect = AiProviderDialect.Copilot,
+                BaseUrl = "https://models.github.ai/inference",
+                EncryptedApiKey = string.Empty,
+                ApiKeyHint = string.Empty,
+                DefaultModel = "openai/gpt-4o-mini",
+                IsActive = true,
+                FailoverPriority = 100,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            seed.AiProviderAccounts.AddRange(
+                new AiProviderAccount
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ProviderId = "provider-copilot",
+                    Label = "stale",
+                    EncryptedApiKey = protector.Protect("pat-stale"),
+                    ApiKeyHint = "...test",
+                    MonthlyRequestCap = 1000,
+                    RequestsUsedThisMonth = 7,
+                    Priority = 0,
+                    IsActive = true,
+                    PeriodMonthKey = "2026-04",
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                },
+                new AiProviderAccount
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ProviderId = "provider-copilot",
+                    Label = "current",
+                    EncryptedApiKey = protector.Protect("pat-current"),
+                    ApiKeyHint = "...test",
+                    MonthlyRequestCap = 1000,
+                    RequestsUsedThisMonth = 3,
+                    Priority = 1,
+                    IsActive = true,
+                    PeriodMonthKey = "2026-05",
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                });
+            await seed.SaveChangesAsync();
+        }
+
+        var worker = NewWorker(DateTimeOffset.Parse("2026-05-08T12:00:00Z"), options);
+        var resetCount = await worker.RunOnceAsync(default);
+
+        Assert.Equal(1, resetCount);
+        await using var verify = new LearnerDbContext(options);
+        var stale = await verify.AiProviderAccounts.SingleAsync(a => a.Label == "stale");
+        var current = await verify.AiProviderAccounts.SingleAsync(a => a.Label == "current");
+        Assert.Equal("2026-05", stale.PeriodMonthKey);
+        Assert.Equal(0, stale.RequestsUsedThisMonth);
+        Assert.Equal(3, current.RequestsUsedThisMonth);
+    }
+
     private AiAccountQuotaResetWorker NewWorker(DateTimeOffset now)
+        => NewWorker(now, _options);
+
+    private static AiAccountQuotaResetWorker NewWorker(DateTimeOffset now, DbContextOptions<LearnerDbContext> options)
     {
         var services = new ServiceCollection();
-        services.AddScoped(_ => new LearnerDbContext(_options));
+        services.AddScoped(_ => new LearnerDbContext(options));
         var sp = services.BuildServiceProvider();
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
         return new AiAccountQuotaResetWorker(
