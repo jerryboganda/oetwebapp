@@ -73,8 +73,10 @@ export function useFullscreenGuard(options: UseFullscreenGuardOptions): UseFulls
   const onExitRef = useRef(onExit);
   const onReenterRef = useRef(onReenter);
 
-  onExitRef.current = onExit;
-  onReenterRef.current = onReenter;
+  useEffect(() => {
+    onExitRef.current = onExit;
+    onReenterRef.current = onReenter;
+  }, [onExit, onReenter]);
 
   const requestFullscreen = useCallback(async (target?: HTMLElement | null) => {
     if (typeof document === 'undefined') return;
@@ -167,7 +169,7 @@ export function useFullscreenGuard(options: UseFullscreenGuardOptions): UseFulls
     // Seed in case the document is already in fullscreen at mount.
     const initial = !!getCurrentFullscreenElement();
     wasFullscreenRef.current = initial;
-    setIsFullscreen(initial);
+    window.queueMicrotask(() => setIsFullscreen(initial));
 
     document.addEventListener('fullscreenchange', handleChange);
     document.addEventListener('webkitfullscreenchange', handleChange as EventListener);

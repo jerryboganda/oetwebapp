@@ -123,7 +123,7 @@ export default function SpeakingQueuePage() {
 
   const handleFilterClear = useCallback(() => setSelectedFilters({}), []);
 
-  const handleClaim = async (item: TutorQueueItem) => {
+  const handleClaim = useCallback(async (item: TutorQueueItem) => {
     setPendingId(item.sessionId);
     try {
       await tutorClaimSession(item.sessionId);
@@ -135,9 +135,9 @@ export default function SpeakingQueuePage() {
     } finally {
       setPendingId(null);
     }
-  };
+  }, [router]);
 
-  const handleRelease = async (item: TutorQueueItem) => {
+  const handleRelease = useCallback(async (item: TutorQueueItem) => {
     setPendingId(item.sessionId);
     try {
       await tutorReleaseSession(item.sessionId);
@@ -149,7 +149,7 @@ export default function SpeakingQueuePage() {
     } finally {
       setPendingId(null);
     }
-  };
+  }, [load]);
 
   const columns: Column<TutorQueueItem>[] = useMemo(
     () => [
@@ -254,7 +254,7 @@ export default function SpeakingQueuePage() {
         },
       },
     ],
-    [pendingId, router],
+    [handleClaim, handleRelease, pendingId, router],
   );
 
   return (

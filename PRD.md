@@ -1,89 +1,177 @@
-# Phase 2 PRD: Platform Optimization & Navigation Architecture
+﻿# PRD — Ultrawork Completion: Mocks, Speaking V2, Real Content
 
-Source: `OET_Platform_Functional_PRD.md` attached by the client on 2026-05-02.
-
-## Business Goals
-
-- Reduce registration abandonment by removing nonessential session and billing choices from initial account creation.
-- Keep learner navigation simple by making Recalls the single surface for vocabulary recall and pronunciation playback.
-- Protect click-to-hear Recalls pronunciation audio as a paid candidate feature.
-
-## Functional Requirements
-
-### Registration
-
-- Remove the `Session` dropdown from all sign-up UI paths.
-- Remove the `Session Summary` card from all sign-up UI paths.
-- Remove `Published Billing Plans` from the sign-up view.
-- Make `Target Country` mandatory.
-- The target country options must be exactly:
-  - United Kingdom
-  - Ireland
-  - Scotland
-  - USA
-  - Australia
-  - New Zealand
-  - Canada
-  - Gulf Countries
-  - Other Countries
-- Backend registration must accept every visible target country option.
-- Sign-up submission must not require `sessionId`.
-
-### Navigation
-
-- Remove `Pronunciation` from the learner sidebar.
-- Retain `Recalls` as the primary learner study tab.
-
-### Recalls Audio
-
-- Clicking a Recalls word must attempt pronunciation audio playback.
-- Recalls audio playback must be available only to registered/paid candidates.
-- Free/frozen candidates must see an upgrade prompt instead of hearing audio.
-- Backend must enforce the paid gate; frontend checks are only UX.
-- Learner payloads must not leak cached playable audio URLs that bypass the paid gate.
-- Recalls audio/listen-and-type calls must use vocabulary term IDs, not learner card IDs.
-
-## Production Readiness Criteria
-
-- TypeScript type-check passes.
-- ESLint passes for touched frontend files.
-- Full Vitest suite passes.
-- Focused backend tests pass for registration country/session behavior and Recalls audio entitlement/redaction behavior.
-- Independent review confirms no critical PRD gaps remain.
-
----
-
-# 2026-05-10 PRD Addendum: OET Reading Rulebook Closure
-
-Source: user-requested ultrawork/Ralph loop for closing all OET Reading rulebook gaps. Existing repo context: Reading uses structured objective marking rather than `rulebooks/reading` JSON files; implementation must extend the existing Reading subsystem documented in `docs/READING-MODULE-A-Z-IMPLEMENTATION-PLAN.md` and avoid creating a parallel module.
+Last updated: 2026-05-21 22:59:00 +05:00
 
 ## Goal
+Complete the remaining work across mocks strict UX/business workflow, Speaking V2/live tutor/admin configurability, and Project Real Content production readiness while preserving all existing dirty worktree changes.
 
-Ship Reading as a production-ready OET simulator: canonical structure, strict server-side marking and timing, one canonical learner route family, computer-delivered exam tools, paper-mode simulation, full regression coverage, and a green production build.
+## Locked Decisions
+- Preserve current modified and untracked work; no reset/clean/branch switch.
+- Heavy validation/build/test/deploy runs only on `oet-dev` at `/opt/oetwebapp`.
+- Production deploy is allowed if remote validation passes; content publishing remains explicitly review-gated.
+- Strict mock enforcement applies to final-readiness and explicit exam-mode mocks.
+- Mock booking reschedule limit is admin-configurable, default `2`.
+- Real Content import stages only missing/non-duplicate content as Drafts.
+- LiveKit, AI routing, TTS/backfill provider choices are admin-panel configurable.
+- Listening backfill may use DigitalOcean Serverless Inference Qwen3 TTS when configured.
 
-## Non-Negotiable Requirements
+## Worktree Snapshot
 
-- Production build must pass after Reading changes: type-check, lint, relevant unit tests, backend build/tests, Playwright smoke, and `npm run build`.
-- Canonical learner route is `/reading/paper/[paperId]` with `/reading/paper/[paperId]/results?attemptId=...`; legacy `/reading/player/[id]`, `/reading/results/[id]`, and legacy `/v1/reading/attempts/*` paths must be redirected, disabled, or removed without breaking valid saved links.
-- Backend owns all structure, timing, and marking decisions. Published exam-mode papers require Part A 20 items, Part B 6 items, Part C 16 items, total 42, Part A 15 minutes, B/C shared 45 minutes, no answer-key leakage, idempotent submit, and canonical raw-to-scaled scoring through `OetScoring`/`lib/scoring.ts` only.
-- Computer-delivered UI must include exam-faithful timer state, answered/unanswered/flagged navigation, per-question autosave, Part A lockout, B/C auto-submit, keyboard-accessible controls, highlight/notes/strike-through where supported, and mobile warning for strict exam mode.
-- Paper simulation must support original PDF access, printable/paper practice mode, answer-sheet style entry/review, Part A collection behavior at 15 minutes, and clear labeling when paper practice is not a strict computer-delivered attempt.
-- Tests must cover route shutdown, backend structure validation, answer redaction, strict timing, marking edge cases, computer UI tools, paper simulation flows, and build-time regressions.
-- Validation evidence must be appended to `PROGRESS.md` before completion, including commands run, pass/fail status, known unrelated blockers, and reviewer signoff.
+````text
+## mocks-phase6-verify...origin/mocks-phase6-verify
+ M .codex/config.toml
+ M .env.example
+ M app/admin/analytics/mocks/page.tsx
+ M app/admin/content/mocks/item-analysis/page.tsx
+ M app/admin/onboarding/interlocutor/page.tsx
+ M app/mocks/bookings/new/page.tsx
+ M backend/src/OetLearner.Api/Domain/ReadingEntities.cs
+ M backend/src/OetLearner.Api/Endpoints/MockAnalyticsEndpoints.cs
+ M backend/src/OetLearner.Api/Services/LearnerService.cs
+ M backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs
+ M lib/api.ts
+?? .github/CODEOWNERS
+?? .github/PULL_REQUEST_TEMPLATE/
+?? .github/actions/
+?? .github/workflows/speaking-a11y.yml
+?? .github/workflows/speaking-ci.yml
+?? .github/workflows/speaking-content-batch.yml
+?? .github/workflows/speaking-e2e.yml
+?? .github/workflows/speaking-load.yml
+?? CHANGELOG.md
+?? app/admin/content/mocks/[bundleId]/review-pipeline/
+?? components/domain/admin/MockItemAnalysisActions.tsx
+?? components/domain/admin/MockReviewStageRail.tsx
+?? components/domain/speaking/AiPatientAvatar.tsx
+?? docs/analytics/
+?? docs/ci/
+?? docs/desktop/
+?? docs/dev/
+?? docs/env/
+?? docs/load-testing/
+?? docs/mobile/
+?? docs/security/speaking/
+?? docs/speaking/README.md
+?? docs/speaking/ai-providers.md
+?? docs/speaking/api-surface.md
+?? docs/speaking/architecture.md
+?? docs/speaking/changelog.md
+?? docs/speaking/compliance.md
+?? docs/speaking/content-model.md
+?? docs/speaking/contributing.md
+?? docs/speaking/data-model.md
+?? docs/speaking/diagrams/
+?? docs/speaking/glossary.md
+?? docs/speaking/incident-runbook.md
+?? docs/speaking/livekit.md
+?? docs/speaking/post-mortem-template.md
+?? docs/speaking/post-mortems/
+?? docs/speaking/release-checklist.md
+?? docs/speaking/scoring.md
+?? docs/speaking/sla.md
+?? docs/speaking/state-machines.md
+?? lib/desktop/
+?? lib/native/
+?? ops/
+?? scripts/seed-speaking-dev.ps1
+?? scripts/seed-speaking-dev.sh
+?? scripts/speaking-smoke.ps1
+?? scripts/speaking-smoke.sh
+?? tests/a11y/
+?? tests/load/
+````
 
-## Execution Slices
+## Dirty Work Classified by Area
 
-- R0: Baseline and production-build audit. Confirm current Reading failures, stale routes, and build blockers before code changes.
-- R1: Legacy route shutdown. Replace internal links, add safe redirects or gone responses, and test old saved links.
-- R2: Backend strictness. Harden publish validation, learner DTO redaction, timing enforcement, submit idempotency, and canonical scoring boundaries.
-- R3: Computer UI tools. Complete timer/navigator/autosave/flag/highlight/strike-through/notes accessibility in the canonical player.
-- R4: Paper simulation. Add or verify printable original paper, answer-sheet flow, Part A collection simulation, and paper-mode result review.
-- R5: Regression tests. Add focused backend, Vitest, and Playwright coverage for every PRD rule above.
-- R6: Final validation and review. Run full required checks, record evidence, and perform independent Reading gap review.
+### ConfigDocsCi
+- tracked-modified: `.codex/config.toml`
+- tracked-modified: `.env.example`
+- untracked: `.github/actions/setup-oet-stack/action.yml`
+- untracked: `.github/CODEOWNERS`
+- untracked: `.github/PULL_REQUEST_TEMPLATE/speaking.md`
+- untracked: `.github/workflows/speaking-a11y.yml`
+- untracked: `.github/workflows/speaking-ci.yml`
+- untracked: `.github/workflows/speaking-content-batch.yml`
+- untracked: `.github/workflows/speaking-e2e.yml`
+- untracked: `.github/workflows/speaking-load.yml`
+- untracked: `CHANGELOG.md`
+- untracked: `docs/ci/speaking.md`
+- untracked: `docs/desktop/speaking-recording.md`
+- untracked: `docs/env/speaking.md`
+- untracked: `docs/mobile/speaking-recording.md`
+- untracked: `ops/dashboards/README.md`
+- untracked: `ops/dashboards/speaking-funnel.json`
+- untracked: `ops/dashboards/speaking-livekit.json`
+- untracked: `ops/dashboards/speaking-quality.json`
 
-## Completion Criteria
+### Mocks
+- tracked-modified: `app/admin/analytics/mocks/page.tsx`
+- tracked-modified: `app/admin/content/mocks/item-analysis/page.tsx`
+- tracked-modified: `app/mocks/bookings/new/page.tsx`
+- tracked-modified: `backend/src/OetLearner.Api/Endpoints/MockAnalyticsEndpoints.cs`
+- untracked: `app/admin/content/mocks/[bundleId]/review-pipeline/page.tsx`
+- untracked: `components/domain/admin/MockItemAnalysisActions.tsx`
+- untracked: `components/domain/admin/MockReviewStageRail.tsx`
+- untracked: `tests/a11y/helpers/axe-runner.ts`
+- untracked: `tests/a11y/README.md`
+- untracked: `tests/a11y/speaking-flows.a11y.spec.ts`
+- untracked: `tests/a11y/speaking-home.a11y.spec.ts`
+- untracked: `tests/load/lib/auth-helper.js`
+- untracked: `tests/load/README.md`
+- untracked: `tests/load/speaking-livekit-token.k6.js`
+- untracked: `tests/load/speaking-session-create.k6.js`
 
-- No active learner or backend code path depends on the legacy Reading attempt/player surfaces except intentional redirects or compatibility responses.
-- A learner can start, autosave, complete, and review a full 42-item Reading paper in strict exam mode and paper simulation mode.
-- Incorrect client behavior cannot bypass backend timing, structure, answer secrecy, or grading rules.
-- All required validation commands pass or have documented unrelated blockers accepted before release.
+### Other
+- tracked-modified: `app/admin/onboarding/interlocutor/page.tsx`
+- tracked-modified: `backend/src/OetLearner.Api/Domain/ReadingEntities.cs`
+- tracked-modified: `backend/src/OetLearner.Api/Services/LearnerService.cs`
+- tracked-modified: `backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs`
+- tracked-modified: `lib/api.ts`
+- untracked: `docs/analytics/speaking-events.md`
+- untracked: `docs/dev/quickstart-speaking.md`
+- untracked: `docs/load-testing/speaking-budgets.md`
+- untracked: `lib/desktop/speaking-audio-bridge.ts`
+- untracked: `lib/native/audio-recorder-bridge.ts`
+- untracked: `lib/native/capacitor-permissions.ts`
+- untracked: `scripts/seed-speaking-dev.ps1`
+- untracked: `scripts/seed-speaking-dev.sh`
+
+### Speaking
+- untracked: `components/domain/speaking/AiPatientAvatar.tsx`
+- untracked: `docs/security/speaking/abuse-cases.md`
+- untracked: `docs/security/speaking/attack-surface.md`
+- untracked: `docs/security/speaking/checklist.md`
+- untracked: `docs/security/speaking/data-classification.md`
+- untracked: `docs/security/speaking/key-rotation.md`
+- untracked: `docs/security/speaking/penetration-test-scope.md`
+- untracked: `docs/security/speaking/README.md`
+- untracked: `docs/security/speaking/threat-model.md`
+- untracked: `docs/speaking/ai-providers.md`
+- untracked: `docs/speaking/api-surface.md`
+- untracked: `docs/speaking/architecture.md`
+- untracked: `docs/speaking/changelog.md`
+- untracked: `docs/speaking/compliance.md`
+- untracked: `docs/speaking/content-model.md`
+- untracked: `docs/speaking/contributing.md`
+- untracked: `docs/speaking/data-model.md`
+- untracked: `docs/speaking/diagrams/sequence-self-practice.mmd`
+- untracked: `docs/speaking/glossary.md`
+- untracked: `docs/speaking/incident-runbook.md`
+- untracked: `docs/speaking/livekit.md`
+- untracked: `docs/speaking/post-mortems/.gitkeep`
+- untracked: `docs/speaking/post-mortem-template.md`
+- untracked: `docs/speaking/README.md`
+- untracked: `docs/speaking/release-checklist.md`
+- untracked: `docs/speaking/scoring.md`
+- untracked: `docs/speaking/sla.md`
+- untracked: `docs/speaking/state-machines.md`
+- untracked: `scripts/speaking-smoke.ps1`
+- untracked: `scripts/speaking-smoke.sh`
+
+
+## Acceptance Criteria
+- PRD/PROGRESS are current before implementation waves.
+- Mocks strict player, writing 5+40, booking settings, entitlement/readiness/QC/analytics are coherent and tested.
+- Speaking V2 has canonical session UX, typed recording pipeline, visible recorder errors, admin-configurable LiveKit/AI/TTS, and tests for configured/disabled states.
+- Real Content is re-audited on `oet-dev`; deploy/import/publish steps are evidenced, with publish gated by explicit approval.
+- Remote validation commands are recorded with pass/fail evidence in PROGRESS.md.

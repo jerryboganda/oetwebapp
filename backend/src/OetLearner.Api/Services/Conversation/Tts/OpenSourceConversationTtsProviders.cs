@@ -91,6 +91,58 @@ public sealed class ChatTtsConversationTtsProvider(
     }
 }
 
+/// <summary>
+/// OpenAI-compatible TTS adapter for DigitalOcean Serverless Inference/Qwen
+/// deployments. It intentionally reuses the admin-editable ChatTTS endpoint
+/// fields (base URL, API key, default voice) so operators can enable this
+/// provider from the existing conversation settings page without a schema
+/// migration. The selector only uses it when admins explicitly choose
+/// <c>digitalocean-qwen3-tts</c> or when auto mode finds it configured.
+/// </summary>
+public sealed class DigitalOceanQwen3TtsConversationProvider(
+    IHttpClientFactory httpClientFactory,
+    IConversationOptionsProvider optionsProvider,
+    ILogger<DigitalOceanQwen3TtsConversationProvider> logger) : IConversationTtsProvider
+{
+    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
+    public string Name => "digitalocean-qwen3-tts";
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().ChatTtsBaseUrl)
+                                && !string.IsNullOrWhiteSpace(ReadOptions().ChatTtsApiKey);
+
+    public async Task<ConversationTtsResult> SynthesizeAsync(ConversationTtsRequest request, CancellationToken ct)
+    {
+        if (!IsConfigured) throw new InvalidOperationException("DigitalOcean Qwen3 TTS not configured.");
+
+        var options = ReadOptions();
+        var client = httpClientFactory.CreateClient("ConversationDigitalOceanQwenTtsClient");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ChatTtsApiKey);
+
+        var url = $"{options.ChatTtsBaseUrl.TrimEnd('/')}/audio/speech";
+        var payload = JsonSerializer.Serialize(new
+        {
+            model = "qwen3-tts",
+            input = request.Text,
+            voice = string.IsNullOrWhiteSpace(request.Voice) ? options.ChatTtsDefaultVoice : request.Voice,
+            response_format = "mp3",
+        });
+        using var req = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+        };
+        using var response = await client.SendAsync(req, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync(ct);
+            logger.LogWarning("DigitalOcean Qwen3 TTS {Status}: {Err}", (int)response.StatusCode, err);
+            throw new ConversationTtsException("digitalocean_qwen3_tts_error", $"DigitalOcean Qwen3 TTS {(int)response.StatusCode}");
+        }
+        var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+        var mime = response.Content.Headers.ContentType?.MediaType ?? "audio/mpeg";
+        return new ConversationTtsResult(bytes, mime,
+            AzureConversationTtsProvider.ApproxDurationMs(request.Text), Name, "qwen3-tts");
+    }
+}
+
 public sealed class GptSoVitsConversationTtsProvider(
     IHttpClientFactory httpClientFactory,
     IConversationOptionsProvider optionsProvider,

@@ -51,7 +51,14 @@ public sealed record ReadingResolvedPolicy(
     bool AllowMultipleConcurrentAttempts,
     bool AllowPausingAttempt,
     bool AllowResumeAfterExpiry,
-    bool AllowPaperReadingMode);
+    bool AllowPaperReadingMode,
+    // Phase 5 closure — accessibility opt-ins surfaced to the learner
+    // client so the player can render its a11y settings panel only when
+    // the policy permits each toggle. Defaults inherited from the
+    // global ReadingPolicy row.
+    bool FontScaleUserControl = true,
+    bool HighContrastMode = true,
+    bool ScreenReaderOptimised = true);
 
 public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensions.Caching.Memory.IMemoryCache cache)
     : IReadingPolicyService
@@ -113,7 +120,10 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
             AllowMultipleConcurrentAttempts: g.AllowMultipleConcurrentAttempts,
             AllowPausingAttempt: g.AllowPausingAttempt,
             AllowResumeAfterExpiry: g.AllowResumeAfterExpiry,
-            AllowPaperReadingMode: g.AllowPaperReadingMode);
+            AllowPaperReadingMode: g.AllowPaperReadingMode,
+            FontScaleUserControl: g.FontScaleUserControl,
+            HighContrastMode: g.HighContrastMode,
+            ScreenReaderOptimised: g.ScreenReaderOptimised);
     }
 
     public async Task<ReadingPolicy> UpsertGlobalAsync(ReadingPolicy next, string adminId, CancellationToken ct)

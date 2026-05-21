@@ -492,3 +492,57 @@ This plan adds no new cross-cutting primitive. Everything new is Reading-specifi
 - **Question-level analytics** (e.g. "Q17 has a 15% correct rate — too hard?"): `ReadingAnswer` already carries `IsCorrect` and `AnsweredAt`. Analytics is a SQL view away.
 
 The shape that makes this hold up is the separation of **paper structure** (hierarchy: paper → parts → texts → questions) from **attempt data** (user's answers) from **grading rules** (canonical scoring). Change one, the others don't move.
+
+---
+
+## 14. Phase 1-7 closure (May 2026)
+
+Multi-phase closure of nine outstanding Reading-module gaps. Detailed
+plan in `~/.claude/plans/1-the-reading-exam-resilient-swan.md`; policy
+implications captured in `READING-AUTHORING-POLICY.md` §13. Headline
+deliverables:
+
+1. **Per-question timing** — `ReadingAnswer.ElapsedMs` + `TotalElapsedMs`
+   columns (migration `20260521190000_AddReadingAnswerTimingAndSubmitIdempotency`),
+   client capture via `questionFocusStartedAt` ref + `visibilitychange`
+   handler, server cap at 4 h.
+2. **Submit idempotency** — `IReadingAttemptService.SubmitAsync` writes
+   an `IdempotencyRecord` (Scope `reading-submit`) keyed by user+attempt
+   so concurrent submits / retries collide on cached grading.
+3. **Distractor analytics** — `ReadingAdminAnalyticsDto.DistractorTraps`
+   surfaces top 50 wrong-option selections by `ReadingDistractorCategory`,
+   rendered on `/admin/analytics/reading`.
+4. **Mocks cross-reference** — `/v1/admin/analytics/mocks` root payload
+   includes a `readingSection` block; rendered on `/admin/analytics/mocks`.
+5. **Per-user policy override admin UI** — new page
+   `/admin/policies/reading/users` over the existing
+   `/v1/admin/reading-policy/users/{userId}` endpoints.
+6. **AI extraction admin workflow** — new page
+   `/admin/content/reading/extraction` over the existing
+   `ReadingExtractionService` (propose / approve / reject with audit).
+7. **Learner a11y toggles** — font scale (90/100/110/125), high
+   contrast, screen-reader hints — gated by
+   `ReadingPolicy.FontScaleUserControl` / `.HighContrastMode` /
+   `.ScreenReaderOptimised` projected through
+   `ReadingResolvedPolicy`. Persisted to
+   `localStorage["oet-reading-a11y:{paperId}"]`.
+8. **Mock-section deep wiring** — `CompleteMockSectionAsync` wrapped in
+   an `IdempotencyRecord` (Scope `mock-section-complete`). Player
+   surfaces a retry CTA on the results page when the post-submit
+   `completeMockSection` call fails.
+9. **Wizard question-type fix** — `StepReading` and
+   `lib/mock-wizard/api.ts` now use canonical types
+   (`MatchingTextReference` etc.); the legacy `WordPool` /
+   `TrueFalseNotGiven` aliases are removed.
+
+### Test coverage
+
+- Backend: four new tests in `ReadingAuthoringTests.cs`
+  (`Submit_writes_idempotency_record_and_replay_hits_cache`,
+  `Submit_honours_caller_supplied_idempotency_key`,
+  `SaveAnswer_elapsed_ms_accumulates_total`,
+  `SaveAnswer_elapsed_ms_caps_at_four_hours`).
+- E2E: `tests/e2e/reading.spec.ts` covers the practice hub, the
+  Idempotency-Key header on submit, the distractor traps panel, the
+  mocks Reading cross-reference, the extraction page (`isStub`
+  gating), and the per-user override admin page.

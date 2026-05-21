@@ -18,7 +18,7 @@
  *     transition into the warning window without spamming updates
  *     every second (polite, with controlled refresh cadence).
  */
-import { useEffect, useId, useMemo, useReducer, useRef } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useReducedMotion, motion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -53,17 +53,20 @@ export function PrepCountdown({
   size = 'lg',
 }: PrepCountdownProps) {
   const total = Math.max(0, Math.floor(durationSeconds));
-  const startTsRef = useRef<number>(Date.now());
+  const [startTs, setStartTs] = useState(0);
   const completedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
   const labelId = useId();
   const reducedMotion = useReducedMotion();
 
   // Use a tick reducer rather than storing the count in state — this
   // way we re-derive the remaining seconds from the start timestamp
   // every render, which keeps things accurate even after tab-throttle.
-  const [, forceTick] = useReducer((n: number) => n + 1, 0);
+  const [nowMs, setNowMs] = useState(0);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     if (total <= 0) {
@@ -74,20 +77,24 @@ export function PrepCountdown({
       return undefined;
     }
 
-    startTsRef.current = Date.now();
+    const start = Date.now();
+    window.queueMicrotask(() => {
+      setStartTs(start);
+      setNowMs(start);
+    });
     completedRef.current = false;
 
     const interval = window.setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTsRef.current) / 1000);
+      const elapsed = Math.floor((Date.now() - start) / 1000);
       const remaining = total - elapsed;
       if (remaining <= 0 && !completedRef.current) {
         completedRef.current = true;
         window.clearInterval(interval);
-        forceTick();
+        setNowMs(Date.now());
         onCompleteRef.current();
         return;
       }
-      forceTick();
+      setNowMs(Date.now());
     }, 250);
 
     return () => {
@@ -95,7 +102,7 @@ export function PrepCountdown({
     };
   }, [total]);
 
-  const elapsed = Math.min(total, Math.floor((Date.now() - startTsRef.current) / 1000));
+  const elapsed = Math.min(total, Math.floor((nowMs - startTs) / 1000));
   const remaining = Math.max(0, total - elapsed);
   const isWarning = remaining > 0 && remaining <= WARNING_THRESHOLD_SECONDS;
   const fractionRemaining = total > 0 ? remaining / total : 0;

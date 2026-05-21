@@ -28,7 +28,7 @@ public sealed class ConversationTtsProviderSelector(
         IConversationTtsProvider? Find(string name) =>
             all.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
 
-        if (requested is "azure" or "elevenlabs" or "cosyvoice" or "chattts" or "gptsovits" or "mock")
+        if (requested is "azure" or "digitalocean-qwen3-tts" or "elevenlabs" or "cosyvoice" or "chattts" or "gptsovits" or "mock")
         {
             var p = Find(requested);
             if (p is null) { logger.LogWarning("TTS '{Name}' not registered.", requested); return Find("mock"); }
@@ -40,7 +40,7 @@ public sealed class ConversationTtsProviderSelector(
             return p;
         }
 
-        foreach (var candidate in new[] { "azure", "elevenlabs", "cosyvoice", "chattts", "gptsovits" })
+        foreach (var candidate in new[] { "azure", "digitalocean-qwen3-tts", "cosyvoice", "chattts", "gptsovits", "elevenlabs" })
         {
             var p = Find(candidate);
             if (p is { IsConfigured: true }) return p;

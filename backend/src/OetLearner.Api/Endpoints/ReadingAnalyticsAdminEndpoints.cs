@@ -63,7 +63,8 @@ public static class ReadingAnalyticsAdminEndpoints
                         "Create the first Reading paper",
                         "No Reading content papers exist yet, so analytics cannot accumulate evidence.",
                         "warning"),
-                });
+                },
+                Array.Empty<ReadingDistractorTrapDto>());
         }
 
         var paperIds = papers.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
@@ -128,6 +129,8 @@ public static class ReadingAnalyticsAdminEndpoints
         var skillBreakdown = BuildSkillBreakdown(questions, questionOpportunityMetrics.OpportunityCountsByQuestion, answersByQuestion);
         var hardestQuestions = BuildHardestQuestions(papers, questions, partById, questionOpportunityMetrics.OpportunityCountsByQuestion, answersByQuestion);
         var modeBreakdown = BuildModeBreakdown(attempts);
+        var distractorTraps = BuildDistractorTraps(
+            papers, questions, partById, questionOpportunityMetrics.OpportunityCountsByQuestion, analyticAnswers);
 
         var scaledScores = submittedAttempts
             .Select(GetScaledScore)
@@ -165,7 +168,100 @@ public static class ReadingAnalyticsAdminEndpoints
             skillBreakdown,
             hardestQuestions,
             modeBreakdown,
-            BuildActionInsights(paperAnalytics, partBreakdown, skillBreakdown, hardestQuestions, summary));
+            BuildActionInsights(paperAnalytics, partBreakdown, skillBreakdown, hardestQuestions, summary),
+            distractorTraps);
+    }
+
+    /// <summary>
+    /// Phase 2 closure — builds the per-question distractor trap rows used
+    /// by /admin/analytics/reading. Counts learners who picked an
+    /// option authored with a <see cref="ReadingDistractorCategory"/> as
+    /// their (wrong) answer, and divides by the opportunity count to
+    /// produce <c>SelectionRatePercent</c>. Returns top 50 by raw count to
+    /// keep payload bounded.
+    /// </summary>
+    private static IReadOnlyList<ReadingDistractorTrapDto> BuildDistractorTraps(
+        IReadOnlyList<ContentPaper> papers,
+        IReadOnlyList<ReadingQuestion> questions,
+        IReadOnlyDictionary<string, ReadingPart> partById,
+        IReadOnlyDictionary<string, int> opportunityCounts,
+        IReadOnlyList<ReadingAnswer> analyticAnswers)
+    {
+        if (analyticAnswers.Count == 0) return Array.Empty<ReadingDistractorTrapDto>();
+
+        var questionById = questions.ToDictionary(q => q.Id, StringComparer.Ordinal);
+        var paperById = papers.ToDictionary(p => p.Id, StringComparer.Ordinal);
+
+        return analyticAnswers
+            .Where(a => a.IsCorrect != true && a.SelectedDistractorCategory.HasValue)
+            .GroupBy(a => new
+            {
+                a.ReadingQuestionId,
+                Category = a.SelectedDistractorCategory!.Value,
+            })
+            .Select(g =>
+            {
+                var question = questionById.GetValueOrDefault(g.Key.ReadingQuestionId);
+                if (question is null) return null;
+                var part = partById.GetValueOrDefault(question.ReadingPartId);
+                var paper = part is null ? null : paperById.GetValueOrDefault(part.PaperId);
+                var opportunities = opportunityCounts.TryGetValue(question.Id, out var opp) ? opp : 0;
+                var count = g.Count();
+                var rate = opportunities > 0
+                    ? Math.Round((double)count / opportunities * 100.0, 1)
+                    : (double?)null;
+                return new ReadingDistractorTrapDto(
+                    QuestionId: question.Id,
+                    PaperId: paper?.Id ?? string.Empty,
+                    PaperTitle: paper?.Title ?? string.Empty,
+                    PartCode: part?.PartCode.ToString() ?? "?",
+                    Stem: Truncate(question.Stem, 200),
+                    OptionKey: ResolveDistractorOptionKey(question, g.Key.Category),
+                    Category: g.Key.Category.ToString(),
+                    SelectedCount: count,
+                    Opportunities: opportunities,
+                    SelectionRatePercent: rate);
+            })
+            .Where(row => row is not null)
+            .Cast<ReadingDistractorTrapDto>()
+            .OrderByDescending(r => r.SelectedCount)
+            .ThenByDescending(r => r.SelectionRatePercent ?? 0)
+            .Take(50)
+            .ToList();
+    }
+
+    private static string Truncate(string s, int max)
+        => string.IsNullOrEmpty(s) ? "" : (s.Length <= max ? s : s[..max] + "…");
+
+    /// <summary>
+    /// Phase 2 closure — best-effort lookup of which option key carries a
+    /// given distractor category for this question. Returns "?" when the
+    /// question's <see cref="ReadingQuestion.OptionDistractorsJson"/> is
+    /// missing or unparsable. Kept tolerant on purpose — we never want
+    /// analytics to throw because of authoring data quality.
+    /// </summary>
+    private static string ResolveDistractorOptionKey(ReadingQuestion question, ReadingDistractorCategory category)
+    {
+        if (string.IsNullOrWhiteSpace(question.OptionDistractorsJson)) return "?";
+        try
+        {
+            using var doc = JsonDocument.Parse(question.OptionDistractorsJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return "?";
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind == JsonValueKind.String
+                    && Enum.TryParse<ReadingDistractorCategory>(prop.Value.GetString(), true, out var parsed)
+                    && parsed == category)
+                {
+                    return prop.Name;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Fall through to "?" — analytics must never fail on authoring data.
+        }
+        return "?";
     }
 
     private static IReadOnlyList<ReadingPartAnalyticsDto> EmptyPartBreakdown() => new[]
@@ -563,7 +659,27 @@ public sealed record ReadingAdminAnalyticsDto(
     IReadOnlyList<ReadingSkillAnalyticsDto> SkillBreakdown,
     IReadOnlyList<ReadingQuestionAnalyticsDto> HardestQuestions,
     IReadOnlyList<ReadingModeAnalyticsDto> ModeBreakdown,
-    IReadOnlyList<ReadingActionInsightDto> ActionInsights);
+    IReadOnlyList<ReadingActionInsightDto> ActionInsights,
+    IReadOnlyList<ReadingDistractorTrapDto> DistractorTraps);
+
+/// <summary>
+/// Phase 2 closure — one row per question-option-category trap. Surfaces
+/// which wrong options the cohort fell for. The frontend renders these as
+/// a sortable "Distractor Traps" panel on /admin/analytics/reading, grouped
+/// by category. Top 50 by selection count are returned to keep the payload
+/// bounded.
+/// </summary>
+public sealed record ReadingDistractorTrapDto(
+    string QuestionId,
+    string PaperId,
+    string PaperTitle,
+    string PartCode,
+    string Stem,
+    string OptionKey,
+    string Category,
+    int SelectedCount,
+    int Opportunities,
+    double? SelectionRatePercent);
 
 public sealed record ReadingAdminAnalyticsSummaryDto(
     int TotalPapers,

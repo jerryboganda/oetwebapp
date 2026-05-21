@@ -19,6 +19,16 @@ export interface ListeningV2SessionState {
   freeNavigation: boolean;
   oneWayLocks: boolean;
   unansweredWarningRequired: boolean;
+  /**
+   * R08 annotations payload (highlights + strikethroughs) last persisted by
+   * the learner on this attempt. Null until first save. Hydrated by the
+   * frontend reducer on mount via `useListeningAnnotations`.
+   */
+  annotationsJson: string | null;
+}
+
+export interface ListeningAnnotationsResult {
+  annotationsJson: string | null;
 }
 
 export type AdvanceOutcome = 'applied' | 'confirm-required' | 'rejected';
@@ -106,6 +116,22 @@ export const listeningV2Api = {
   },
   myPathway() {
     return apiClient.get<ListeningPathwayStageView[]>('/v1/listening/v2/me/pathway');
+  },
+  /**
+   * R08 — persist learner highlights + strikethroughs. Server caps the
+   * payload at 64 KB and validates JSON shape; treat 400 responses as a
+   * permanent failure (do not retry the same payload).
+   */
+  saveAnnotations(attemptId: string, annotationsJson: string | null) {
+    return apiClient.put<void>(
+      `/v1/listening/v2/attempts/${encodeURIComponent(attemptId)}/annotations`,
+      { annotationsJson },
+    );
+  },
+  getAnnotations(attemptId: string) {
+    return apiClient.get<ListeningAnnotationsResult>(
+      `/v1/listening/v2/attempts/${encodeURIComponent(attemptId)}/annotations`,
+    );
   },
 };
 

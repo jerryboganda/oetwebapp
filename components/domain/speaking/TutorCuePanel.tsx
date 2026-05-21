@@ -1,7 +1,7 @@
-'use client';
+﻿'use client';
 
 /**
- * Phase 3 — tutor sidebar with interlocutor script + cue dispatch
+ * Phase 3 â€” tutor sidebar with interlocutor script + cue dispatch
  * (plan C.3 / D).
  *
  * Fetched from `/v1/admin/speaking/role-play-cards/{cardId}/interlocutor-script`
@@ -9,7 +9,7 @@
  * we render an authorisation hint instead of leaking any tutor copy.
  *
  * Cue dispatch broadcasts a hub method `BroadcastCue` over the
- * `SpeakingLiveRoomHub` (`/v1/conversations/hub` — TODO: confirm path
+ * `SpeakingLiveRoomHub` (`/v1/conversations/hub` â€” TODO: confirm path
  * with P3 hub agent). When the hub client isn't reachable we fall
  * back to local optimistic state and log a warning so the tutor still
  * gets visual feedback.
@@ -41,7 +41,7 @@ import {
 const DEFAULT_ROLE_PLAY_SECONDS = 5 * 60;
 
 export interface TutorCuePanelProps {
-  /** Role-play card identifier — pulled from the parent session. */
+  /** Role-play card identifier â€” pulled from the parent session. */
   cardId: string;
   /** Optional fixed timer length. Defaults to 5 minutes (300 s). */
   rolePlayDurationSeconds?: number;
@@ -71,15 +71,15 @@ async function loadCueBroadcaster(): Promise<CueBroadcaster | null> {
         try {
           await connection.invoke('BroadcastCue', cardId, label, index);
         } catch (err) {
-          // Don't kill the panel for transient hub issues — the tutor
+          // Don't kill the panel for transient hub issues â€” the tutor
           // still sees the local "delivered" state.
-          // eslint-disable-next-line no-console
+
           console.warn('[TutorCuePanel] BroadcastCue failed:', err);
         }
       },
     };
   } catch {
-    // SignalR or hub method not available — degrade gracefully.
+    // SignalR or hub method not available â€” degrade gracefully.
     return null;
   }
 }
@@ -136,14 +136,20 @@ export function TutorCuePanel({
   const broadcasterRef = useRef<CueBroadcaster | null>(null);
   const timerCompletedRef = useRef(false);
   const onTimerCompleteRef = useRef(onTimerComplete);
-  onTimerCompleteRef.current = onTimerComplete;
 
-  // ── Fetch script ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    onTimerCompleteRef.current = onTimerComplete;
+  }, [onTimerComplete]);
+
+  // â”€â”€ Fetch script â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setForbidden(false);
+    window.queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
+      setForbidden(false);
+    });
     adminGetInterlocutorScript(cardId)
       .then((data) => {
         if (cancelled) return;
@@ -166,7 +172,7 @@ export function TutorCuePanel({
     };
   }, [cardId]);
 
-  // ── Lazy-load cue broadcaster ─────────────────────────────────────────────
+  // â”€â”€ Lazy-load cue broadcaster â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     let cancelled = false;
     loadCueBroadcaster().then((b) => {
@@ -177,9 +183,9 @@ export function TutorCuePanel({
     };
   }, []);
 
-  // ── 5-minute timer ─────────────────────────────────────────────────────────
+  // â”€â”€ 5-minute timer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
-    setSecondsLeft(Math.max(0, Math.floor(rolePlayDurationSeconds)));
+    window.queueMicrotask(() => setSecondsLeft(Math.max(0, Math.floor(rolePlayDurationSeconds))));
     timerCompletedRef.current = false;
     const start = Date.now();
     const id = window.setInterval(() => {
@@ -250,7 +256,7 @@ export function TutorCuePanel({
 
       {loading ? (
         <div className="flex items-center gap-2 text-slate-500">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading interlocutor script…
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading interlocutor scriptâ€¦
         </div>
       ) : forbidden ? (
         <div

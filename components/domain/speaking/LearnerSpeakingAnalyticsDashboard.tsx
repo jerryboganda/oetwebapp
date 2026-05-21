@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -62,8 +62,8 @@ const READINESS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'info' |
 
 const READINESS_LABEL: Record<string, string> = {
   on_track: 'On track for OET',
-  needs_focus: 'Borderline — keep practising',
-  at_risk: 'At risk — drills recommended',
+  needs_focus: 'Borderline â€” keep practising',
+  at_risk: 'At risk â€” drills recommended',
   not_enough_data: 'Not enough data yet',
 };
 
@@ -192,7 +192,7 @@ export function LearnerSpeakingAnalyticsDashboard({
 
   return (
     <div className="space-y-6">
-      {/* ── Hero band ───────────────────────────────────────────────── */}
+      {/* â”€â”€ Hero band â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Card className="bg-gradient-to-br from-primary/10 via-surface to-info/10 p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -203,7 +203,7 @@ export function LearnerSpeakingAnalyticsDashboard({
               {formatBand(data.estimatedBand)}
             </p>
             <p className="mt-1 text-sm text-muted">
-              Practice-only — official scoring runs on real OET attempts.
+              Practice-only â€” official scoring runs on real OET attempts.
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:items-end">
@@ -217,18 +217,18 @@ export function LearnerSpeakingAnalyticsDashboard({
         </div>
       </Card>
 
-      {/* ── Vital stats ────────────────────────────────────────────── */}
+      {/* â”€â”€ Vital stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Scaled score"
-          value={data.currentScaled || '—'}
+          value={data.currentScaled || 'â€”'}
           icon={<Sparkles className="h-4 w-4" />}
           tone="info"
           hint="Out of 500. Practice estimate."
         />
         <StatCard
           label="Speaking speed"
-          value={data.speakingSpeedWpm ? `${data.speakingSpeedWpm} wpm` : '—'}
+          value={data.speakingSpeedWpm ? `${data.speakingSpeedWpm} wpm` : 'â€”'}
           icon={<Gauge className="h-4 w-4" />}
           tone={wpmTone}
           hint="Sweet spot: 120-170 wpm"
@@ -238,7 +238,7 @@ export function LearnerSpeakingAnalyticsDashboard({
           value={
             data.avgRolePlayLengthSeconds > 0
               ? `${Math.round(data.avgRolePlayLengthSeconds)}s`
-              : '—'
+              : 'â€”'
           }
           icon={<Activity className="h-4 w-4" />}
           tone="default"
@@ -249,7 +249,7 @@ export function LearnerSpeakingAnalyticsDashboard({
           value={
             data.weakestCriterion
               ? CRITERION_LABELS[data.weakestCriterion] ?? data.weakestCriterion
-              : '—'
+              : 'â€”'
           }
           icon={<TrendingUp className="h-4 w-4" />}
           tone="warning"
@@ -261,7 +261,7 @@ export function LearnerSpeakingAnalyticsDashboard({
         />
       </div>
 
-      {/* ── Criterion trend line chart ─────────────────────────────── */}
+      {/* â”€â”€ Criterion trend line chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Card className="p-5">
         <header className="mb-3 flex items-center justify-between">
           <div>
@@ -276,7 +276,7 @@ export function LearnerSpeakingAnalyticsDashboard({
         <div className="h-72 w-full">
           {trendData.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-muted">
-              No trend data yet — complete a few sessions to populate the chart.
+              No trend data yet â€” complete a few sessions to populate the chart.
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
@@ -309,14 +309,14 @@ export function LearnerSpeakingAnalyticsDashboard({
         </div>
       </Card>
 
-      {/* ── Strengths/Weaknesses bar chart ─────────────────────────── */}
+      {/* â”€â”€ Strengths/Weaknesses bar chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Card className="p-5">
         <header className="mb-3">
           <h2 className="text-base font-semibold text-navy dark:text-white">
             Strengths and weaknesses
           </h2>
           <p className="text-xs text-muted">
-            Bars ordered weakest → strongest. Aim above 4 across the board for a band-B.
+            Bars ordered weakest â†’ strongest. Aim above 4 across the board for a band-B.
           </p>
         </header>
         <div className="h-72 w-full">
@@ -358,7 +358,7 @@ export function LearnerSpeakingAnalyticsDashboard({
         </div>
       </Card>
 
-      {/* ── Recurring issues + next actions ─────────────────────────── */}
+      {/* â”€â”€ Recurring issues + next actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <header className="mb-3 flex items-center gap-2">
@@ -369,7 +369,7 @@ export function LearnerSpeakingAnalyticsDashboard({
           </header>
           {data.recurringIssues.length === 0 ? (
             <p className="text-sm text-muted">
-              No recurring issues flagged. Nice work — keep your streak going.
+              No recurring issues flagged. Nice work â€” keep your streak going.
             </p>
           ) : (
             <ul className="space-y-2" role="list">
@@ -411,7 +411,7 @@ export function LearnerSpeakingAnalyticsDashboard({
               <li className="flex items-start gap-2">
                 <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span>
-                  Slow down — your average pace ({data.speakingSpeedWpm} wpm) is above the OET sweet
+                  Slow down â€” your average pace ({data.speakingSpeedWpm} wpm) is above the OET sweet
                   spot.
                 </span>
               </li>
@@ -420,7 +420,7 @@ export function LearnerSpeakingAnalyticsDashboard({
               <li className="flex items-start gap-2">
                 <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span>
-                  Pick up the pace — fluency drills will help you hit the OET sweet spot.
+                  Pick up the pace â€” fluency drills will help you hit the OET sweet spot.
                 </span>
               </li>
             ) : null}
@@ -446,11 +446,7 @@ export function LearnerSpeakingAnalyticsDashboard({
             </li>
           </ul>
           <div className="mt-4">
-            <Link href="/speaking/drills">
-              <Button variant="primary" size="sm">
-                Open drills
-              </Button>
-            </Link>
+            <Button asChild variant="primary" size="sm"><Link href="/speaking/drills">Open drills</Link></Button>
           </div>
         </Card>
       </div>
@@ -459,3 +455,4 @@ export function LearnerSpeakingAnalyticsDashboard({
 }
 
 export default LearnerSpeakingAnalyticsDashboard;
+

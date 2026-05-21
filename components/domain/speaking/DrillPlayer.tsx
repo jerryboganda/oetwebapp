@@ -218,7 +218,7 @@ export function DrillPlayer({ drill, attemptId, maxSeconds = DEFAULT_MAX_SECONDS
             {formatTime(elapsed)} / {formatTime(maxSeconds)}
           </span>
           {state === 'recording' && (
-            <DrillWaveform stream={streamRef.current} />
+            <DrillWaveform stream={null} />
           )}
         </div>
         {previewUrl && state !== 'recording' && (

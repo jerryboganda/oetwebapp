@@ -206,3 +206,88 @@ When two options conflict, precedence is:
 
 Every resolved decision is logged with its decisive rule in
 `ReadingAttempt.PolicySnapshotJson` for forensic audit.
+
+---
+
+## 13. Phase 1-7 closure (May 2026)
+
+Multi-phase closure of the Reading exam module. Cross-references the
+plan file `~/.claude/plans/1-the-reading-exam-resilient-swan.md`.
+
+### Per-question timing (Phase 1)
+
+`ReadingAnswer` now carries two nullable int columns:
+
+- `ElapsedMs` — milliseconds the learner spent on this question between
+  the last focus/save and the current save.
+- `TotalElapsedMs` — accumulated milliseconds across every autosave to
+  the row.
+
+The client (`app/reading/paper/[paperId]/page.tsx`) seeds a per-question
+focus timestamp on `activeQuestionId` change and on `visibilitychange`,
+sends the delta in the autosave PUT body (`AnswerSaveDto.ElapsedMs`),
+then resets the timestamp so successive saves never double-count.
+Server-side cap is **14_400_000 ms (4 h)** to defeat hostile or
+clock-skewed payloads. Both fields default `NULL` for any row written
+before the migration.
+
+### Idempotency scopes (Phase 1, Phase 6)
+
+| Scope | Key | Source | Notes |
+| --- | --- | --- | --- |
+| `reading-submit` | `Idempotency-Key` header **or** `{userId}:{attemptId}` | Frontend sets `Idempotency-Key: reading-submit:{attemptId}` on every submit POST | Caches `ReadingGradingResult` JSON so a concurrent retry returns the cached grading instead of re-grading. |
+| `mock-section-complete` | `{userId}:{mockAttemptId}:{sectionId}` | Server-derived in `MockService.CompleteMockSectionAsync` | Caches the projected section payload so a double-fired completion from a second tab returns the same JSON. |
+
+Both honour the `IdempotencyRecord` unique index on `(Scope, Key)` and
+defer the row write until after the underlying operation succeeds, so a
+transient failure does not poison the cache.
+
+### Accessibility persistence (Phase 5)
+
+When `ReadingPolicy.FontScaleUserControl`, `.HighContrastMode`, or
+`.ScreenReaderOptimised` is `true`, the player's settings dropdown
+exposes the matching toggle. Selections persist to
+`localStorage["oet-reading-a11y:{paperId}"]` so the learner returns to
+the same accessibility profile per paper. The three flags are projected
+through `ReadingResolvedPolicy` and surfaced on
+`/v1/reading-papers/papers/{paperId}/structure` under `paper.policy`.
+
+### Admin override URL (Phase 3)
+
+Per-user Reading policy overrides are managed at
+`/admin/policies/reading/users` (new page). Form fields:
+`userId`, `extraTimeEntitlementPct` (0-200), `blockAttempts`, `reason`,
+`expiresAt`. Calls the existing
+`GET/PUT /v1/admin/reading-policy/users/{userId}` endpoints and records
+an `AuditEvent` under `Action="ReadingUserOverrideUpsert"`.
+
+### Distractor analytics + mocks cross-reference (Phase 2)
+
+`/v1/admin/reading/analytics` now returns a `distractorTraps` array
+(top 50 by selection count, with `selectionRatePercent`). Rendered as a
+"Distractor Traps" panel on `/admin/analytics/reading`.
+
+`/v1/admin/analytics/mocks` root payload includes a `readingSection`
+block computed from `MockSectionAttempt` rows with
+`SubtestCode == "reading"`: `started`, `submitted`, `completionRatePercent`,
+`averageRawScore`, `averageScaledScore`, `averageCompletionSeconds`.
+Rendered as a "Reading inside mocks" panel on `/admin/analytics/mocks`.
+
+### AI extraction admin workflow (Phase 4)
+
+`/admin/content/reading/extraction` is the three-pane (paper picker /
+draft list / manifest preview) workflow over the existing
+`ReadingExtractionService`. Approval calls `ApproveDraftAsync` which
+imports the manifest with `replaceExisting: true` — the page surfaces a
+confirmation prompt before firing.
+
+### Wizard question-type fix (Phase 5)
+
+`StepReading` in the mock wizard no longer emits `WordPool` or
+`TrueFalseNotGiven` (which the backend does not recognise). Canonical
+types: `MatchingTextReference`, `ShortAnswer`, `SentenceCompletion`,
+`MultipleChoice3`, `MultipleChoice4`. The Part-A default flipped from
+`WordPool` to `MatchingTextReference`. Pre-existing draft mock bundles
+that carry the legacy strings will fail validation on next save — see
+Risk #2 in the closure plan for the recommended one-shot data migration.
+

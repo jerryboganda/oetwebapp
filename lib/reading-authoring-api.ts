@@ -324,6 +324,16 @@ export interface ReadingLearnerStructureDto {
       title: string;
       downloadPath: string;
     }>;
+    /**
+     * Phase 5 closure — accessibility opt-ins from the resolved Reading
+     * policy. Each flag gates whether the player exposes the matching
+     * toggle in its settings panel.
+     */
+    policy?: {
+      fontScaleUserControl: boolean;
+      highContrastMode: boolean;
+      screenReaderOptimised: boolean;
+    };
   };
   parts: Array<{
     id: string;
@@ -539,6 +549,24 @@ export interface ReadingAdminAnalyticsDto {
     description: string;
     tone: 'success' | 'warning' | 'danger' | string;
   }>;
+  /**
+   * Phase 2 closure — distractor traps. One row per (question, option,
+   * category) where learners picked a wrong answer carrying authored
+   * distractor metadata. Top 50 by selection count. Drives the
+   * "Distractor Traps" panel on /admin/analytics/reading.
+   */
+  distractorTraps: Array<{
+    questionId: string;
+    paperId: string;
+    paperTitle: string;
+    partCode: ReadingPartCode | '?';
+    stem: string;
+    optionKey: string;
+    category: string;
+    selectedCount: number;
+    opportunities: number;
+    selectionRatePercent: number | null;
+  }>;
 }
 
 // ── HTTP helper ─────────────────────────────────────────────────────────
@@ -746,6 +774,38 @@ export const getReadingPolicy = () => api<ReadingPolicyDto>('/v1/admin/reading-p
 export const updateReadingPolicy = (body: ReadingPolicyDto) =>
   api<ReadingPolicyDto>('/v1/admin/reading-policy', { method: 'PUT', body: JSON.stringify(body) });
 
+/**
+ * Phase 3 closure — per-user Reading policy override. Lets operations
+ * grant a single learner extra time (e.g. an accessibility entitlement)
+ * or block a learner from starting new attempts, without editing the
+ * global policy. Backed by `ReadingUserPolicyOverride` row keyed on
+ * userId.
+ */
+export interface ReadingUserPolicyOverrideDto {
+  userId: string;
+  extraTimeEntitlementPct: number;
+  blockAttempts: boolean;
+  reason: string | null;
+  grantedByAdminId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string | null;
+}
+
+export const getReadingUserOverride = (userId: string) =>
+  api<ReadingUserPolicyOverrideDto | null>(
+    `/v1/admin/reading-policy/users/${encodeURIComponent(userId)}`,
+  );
+
+export const upsertReadingUserOverride = (
+  userId: string,
+  body: Omit<ReadingUserPolicyOverrideDto, 'grantedByAdminId' | 'createdAt' | 'updatedAt'>,
+) =>
+  api<ReadingUserPolicyOverrideDto>(
+    `/v1/admin/reading-policy/users/${encodeURIComponent(userId)}`,
+    { method: 'PUT', body: JSON.stringify(body) },
+  );
+
 // ── Learner ─────────────────────────────────────────────────────────────
 
 export const getReadingHome = () => api<ReadingHomeDto>('/v1/reading-papers/home');
@@ -819,16 +879,46 @@ export const startReadingAttempt = (
   return api<ReadingAttemptStarted>(`/v1/reading-papers/papers/${paperId}/attempts${suffix}`, { method: 'POST' });
 };
 
-export const saveReadingAnswer = (attemptId: string, questionId: string, userAnswerJson: string) =>
+/**
+ * Phase 1 closure — autosave one Reading answer.
+ *
+ * @param elapsedMs Optional milliseconds the learner spent on this
+ *   question between focus and save. Server caps at 14_400_000 ms (4 h)
+ *   and silently discards non-positive values. Pass `null` / omit when
+ *   timing is unavailable.
+ */
+export const saveReadingAnswer = (
+  attemptId: string,
+  questionId: string,
+  userAnswerJson: string,
+  elapsedMs?: number | null,
+) =>
   api<void>(`/v1/reading-papers/attempts/${attemptId}/answers/${questionId}`, {
-    method: 'PUT', body: JSON.stringify({ userAnswerJson }),
+    method: 'PUT',
+    body: JSON.stringify(
+      elapsedMs != null && elapsedMs > 0
+        ? { userAnswerJson, elapsedMs: Math.floor(elapsedMs) }
+        : { userAnswerJson },
+    ),
   });
 
 export const resumeReadingBreak = (attemptId: string) =>
   api<ReadingAttemptBreakState>(`/v1/reading-papers/attempts/${attemptId}/break/resume`, { method: 'POST' });
 
+/**
+ * Phase 1 closure — submit a Reading attempt for grading.
+ *
+ * The deterministic `Idempotency-Key` header lets a retried POST (network
+ * blip, double-click, second tab) collide with the original on the server
+ * and return the cached grading result instead of re-grading. The key
+ * shape is `reading-submit:{attemptId}` — derived without user input so
+ * any client retry of the same logical submission matches.
+ */
 export const submitReadingAttempt = (attemptId: string) =>
-  api<ReadingAttemptGraded>(`/v1/reading-papers/attempts/${attemptId}/submit`, { method: 'POST' });
+  api<ReadingAttemptGraded>(`/v1/reading-papers/attempts/${attemptId}/submit`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': `reading-submit:${attemptId}` },
+  });
 
 export const getReadingAttempt = (attemptId: string) =>
   api<{

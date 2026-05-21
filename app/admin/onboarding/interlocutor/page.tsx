@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, GraduationCap, UserMinus, UserPlus } from 'lucide-react';
+import { CheckCircle2, ClipboardList, GraduationCap, UserMinus, UserPlus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -16,9 +16,12 @@ import {
 } from '@/components/domain/admin-route-surface';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
-  fetchInterlocutorTrainees,
+  fetchInterlocutorPracticeQueue,
+  fetchInterlocutorTraineeList,
   markInterlocutorTrained,
   startInterlocutorPracticeSession,
+  type InterlocutorPracticeQueueResponse,
+  type InterlocutorPracticeQueueRow,
   type InterlocutorTraineeRow,
   type InterlocutorTraineesResponse,
   type InterlocutorTrainingStatusLabel,
@@ -73,6 +76,9 @@ export default function AdminInterlocutorOnboardingPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [status, setStatus] = useState<PageStatus>('loading');
   const [data, setData] = useState<InterlocutorTraineesResponse | null>(null);
+  const [practiceQueue, setPracticeQueue] = useState<InterlocutorPracticeQueueResponse | null>(
+    null,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [actionState, setActionState] = useState<Record<string, RowActionState>>({});
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
@@ -81,9 +87,15 @@ export default function AdminInterlocutorOnboardingPage() {
     setStatus('loading');
     setErrorMessage(null);
     try {
-      const result = await fetchInterlocutorTrainees();
-      setData(result);
-      setStatus(result.trainees.length > 0 ? 'success' : 'empty');
+      const [traineeResult, queueResult] = await Promise.all([
+        fetchInterlocutorTraineeList(),
+        fetchInterlocutorPracticeQueue(),
+      ]);
+      setData(traineeResult);
+      setPracticeQueue(queueResult);
+      const hasData =
+        traineeResult.trainees.length > 0 || queueResult.recordings.length > 0;
+      setStatus(hasData ? 'success' : 'empty');
     } catch (err) {
       console.error('[admin/onboarding/interlocutor] load failed', err);
       setErrorMessage(err instanceof Error ? err.message : 'Unable to load trainee data.');
@@ -172,6 +184,8 @@ export default function AdminInterlocutorOnboardingPage() {
     };
   }, [data]);
 
+  const practicePending = practiceQueue?.totalPending ?? 0;
+
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
@@ -192,6 +206,7 @@ export default function AdminInterlocutorOnboardingPage() {
             ))}
           </div>
           <Skeleton className="h-72 rounded-2xl" />
+          <Skeleton className="h-48 rounded-2xl" />
         </>
       ) : null}
 
@@ -218,7 +233,7 @@ export default function AdminInterlocutorOnboardingPage() {
       {status === 'success' && data ? (
         <div className="space-y-6">
           <MotionSection delayIndex={0}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <AdminRouteSummaryCard
                 label="In onboarding"
                 value={summary.inOnboarding}
@@ -239,6 +254,13 @@ export default function AdminInterlocutorOnboardingPage() {
                 hint="Failed to converge"
                 icon={<UserMinus className="h-5 w-5" />}
                 tone={summary.droppedOff > 0 ? 'danger' : 'success'}
+              />
+              <AdminRouteSummaryCard
+                label="Recordings under review"
+                value={practicePending}
+                hint={`${practiceQueue?.recordings.length ?? 0} in queue`}
+                icon={<ClipboardList className="h-5 w-5" />}
+                tone={practicePending > 0 ? 'warning' : 'default'}
               />
             </div>
           </MotionSection>
@@ -313,8 +335,78 @@ export default function AdminInterlocutorOnboardingPage() {
               </div>
             </AdminRoutePanel>
           </MotionSection>
+
+          <MotionSection delayIndex={2}>
+            <AdminRoutePanel
+              title="Practice queue"
+              description="Pending interlocutor practice recordings awaiting calibration team review. The dedicated backend endpoint lands in a follow-up; until then this panel renders any rows the API surfaces and otherwise stays empty."
+            >
+              <PracticeQueueList rows={practiceQueue?.recordings ?? []} />
+            </AdminRoutePanel>
+          </MotionSection>
         </div>
       ) : null}
     </AdminRouteWorkspace>
+  );
+}
+
+function PracticeQueueList({ rows }: { rows: InterlocutorPracticeQueueRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <p className="text-sm text-admin-text-muted">
+        No practice recordings are pending review. Submitted role-plays appear here once the
+        practice-queue endpoint ships.
+      </p>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-admin-border text-sm">
+        <thead>
+          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
+            <th className="py-3 pr-4">Trainee</th>
+            <th className="px-4 py-3">Recording</th>
+            <th className="px-4 py-3">Submitted</th>
+            <th className="px-4 py-3 text-right">Duration</th>
+            <th className="px-4 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-admin-border/70">
+          {rows.map((row) => (
+            <tr key={row.recordingId}>
+              <td className="py-3 pr-4">
+                <p className="font-semibold text-admin-text">{row.traineeName}</p>
+                <p className="text-xs text-admin-text-muted">{row.traineeId}</p>
+              </td>
+              <td className="px-4 py-3 text-admin-text-muted">
+                <code className="rounded bg-admin-surface-raised px-1.5 py-0.5 text-xs">
+                  {row.recordingId}
+                </code>
+              </td>
+              <td className="px-4 py-3 text-admin-text-muted">
+                {row.submittedAt ? new Date(row.submittedAt).toLocaleDateString() : '—'}
+              </td>
+              <td className="px-4 py-3 text-right tabular-nums text-admin-text">
+                {Math.round(row.durationSeconds)}s
+              </td>
+              <td className="px-4 py-3">
+                <Badge
+                  variant={
+                    row.status === 'UnderReview'
+                      ? 'warning'
+                      : row.status === 'Returned'
+                        ? 'danger'
+                        : 'outline'
+                  }
+                  className="text-[10px]"
+                >
+                  {row.status}
+                </Badge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

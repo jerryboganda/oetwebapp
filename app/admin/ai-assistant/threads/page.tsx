@@ -154,11 +154,11 @@ export default function AiAssistantThreadsPage() {
       header: 'Actions',
       render: (row) => (
         <div className="flex items-center gap-1">
-          <Link href={`/admin/ai-assistant/threads/${row.id}`}>
-            <Button variant="ghost" className="h-7 w-7 p-0">
+          <Button asChild variant="ghost" className="h-7 w-7 p-0">
+            <Link href={`/admin/ai-assistant/threads/${row.id}`} aria-label="View thread">
               <Eye className="h-3.5 w-3.5" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
           {row.status === 'active' && (
             <Button variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-300" onClick={() => setArchiveTarget(row)}>
               <Archive className="h-3.5 w-3.5" />

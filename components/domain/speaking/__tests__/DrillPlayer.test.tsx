@@ -103,9 +103,9 @@ describe('DrillPlayer', () => {
     });
 
     await waitFor(() => {
-      expect(button.getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByTestId('drill-player-record').getAttribute('aria-pressed')).toBe('true');
     });
-    expect(button.textContent).toBe('Stop recording');
+    expect(screen.getByTestId('drill-player-record').textContent).toBe('Stop recording');
   });
 
   it('uploads + scores the recording after submit and shows feedback', async () => {
@@ -118,7 +118,7 @@ describe('DrillPlayer', () => {
       fireEvent.click(button); // start
     });
     await act(async () => {
-      fireEvent.click(button); // stop (FakeMediaRecorder.stop triggers ondataavailable+onstop)
+      fireEvent.click(screen.getByTestId('drill-player-record')); // stop (FakeMediaRecorder.stop triggers ondataavailable+onstop)
     });
 
     // The submit button should now be visible.

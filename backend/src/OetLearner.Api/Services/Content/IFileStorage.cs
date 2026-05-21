@@ -30,6 +30,15 @@ public interface IFileStorage
     void Move(string sourceKey, string destKey, bool overwrite);
     int DeletePrefix(string prefix);
     string? TryResolveLocalPath(string key);
+
+    /// <summary>
+    /// Wave 4 — resolve a read URL for the given storage key. Local storage
+    /// returns a relative URL routed through <c>/media/file/{key}</c>; S3 /
+    /// object-store providers return a presigned GET URL valid for <paramref name="ttl"/>.
+    /// Returns <c>null</c> when the key is missing or the provider can't
+    /// emit a URL (e.g. unconfigured).
+    /// </summary>
+    Uri? ResolveReadUrl(string key, TimeSpan ttl);
 }
 
 public sealed class LocalFileStorage(IWebHostEnvironment environment, IOptions<StorageOptions> options) : IFileStorage
@@ -106,6 +115,16 @@ public sealed class LocalFileStorage(IWebHostEnvironment environment, IOptions<S
     }
 
     public string? TryResolveLocalPath(string key) => ResolvePath(key);
+
+    public Uri? ResolveReadUrl(string key, TimeSpan ttl)
+    {
+        // LocalFileStorage delegates URL serving to the API process — the
+        // route `/media/file/{key}` streams via MediaEndpoints with the same
+        // role-based access check as for download. TTL is ignored locally
+        // because the auth check runs on every request.
+        if (string.IsNullOrWhiteSpace(key)) return null;
+        return new Uri($"/media/file/{Uri.EscapeDataString(key)}", UriKind.Relative);
+    }
 
     private string ResolvePath(string key)
     {

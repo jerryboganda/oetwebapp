@@ -1,0 +1,55 @@
+{
+  "uid": "speaking-funnel",
+  "title": "Speaking — Funnel",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["speaking", "funnel"],
+  "timezone": "browser",
+  "refresh": "5m",
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": {
+    "list": [
+      { "name": "env", "type": "custom", "query": "production,staging", "current": { "text": "production", "value": "production" } },
+      { "name": "profession", "type": "custom", "query": "all,nursing,medicine,pharmacy,physio", "current": { "text": "all", "value": "all" } }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "module_entry (7d)",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "count(events{name=\"module_entry\",env=\"$env\"})" }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "warmup_finished (7d)",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "count(events{name=\"warmup_finished\",env=\"$env\"})" }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "roleplay_ended (7d)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "count(events{name=\"roleplay_ended\",env=\"$env\"})" }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "ai_assessment_viewed (7d)",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "count(events{name=\"ai_assessment_viewed\",env=\"$env\"})" }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Funnel by day",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 10 },
+      "targets": [
+        { "refId": "A", "expr": "sum by(name)(count_over_time(events{name=~\"module_entry|warmup_finished|roleplay_ended|ai_assessment_viewed\",env=\"$env\"}[1d]))" }
+      ]
+    }
+  ]
+}

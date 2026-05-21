@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock, FileLock2, Quote, Target, Volume2, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileLock2, Quote, Target, Volume2, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -28,6 +28,47 @@ function formatMilliseconds(value: number | null | undefined) {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return `${minutes}:${remainder.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Map the relational grader's `missReason` (Wave 1) and the legacy
+ * JSON-pathway `errorType` to a single human-readable chip label. Returns
+ * null when the answer was correct or no reason was recorded.
+ */
+function missReasonChip(item: ListeningReviewDto['itemReview'][number]): {
+  label: string;
+  hint: string;
+} | null {
+  if (item.isCorrect) return null;
+  const reason = (item.missReason ?? item.errorType ?? '').toString();
+  if (!reason) return null;
+  const key = reason.toLowerCase();
+  switch (key) {
+    case 'spellingerror':
+    case 'spelling':
+      return { label: 'Spelling', hint: 'Close to the answer — review medical spelling drills.' };
+    case 'wrongnumber':
+    case 'numbers_and_frequencies':
+    case 'grammar_number':
+      return { label: 'Number / quantity', hint: 'The digit or quantity heard did not match what you wrote.' };
+    case 'extrainfo':
+    case 'extra_info':
+      return { label: 'Extra information', hint: 'Only write the words required for the gap.' };
+    case 'wrongsection':
+    case 'wrong_section':
+      return { label: 'Right answer, wrong gap', hint: 'You wrote a correct phrase but for a different question.' };
+    case 'paraphrase':
+      return { label: 'Paraphrase', hint: 'OET Part A grades on the exact words heard — avoid rewording.' };
+    case 'empty':
+      return { label: 'Unanswered', hint: 'No answer was recorded for this question.' };
+    case 'distractor_confusion':
+      return { label: 'Distractor confusion', hint: 'A keyword from the audio appeared in the wrong option.' };
+    case 'other':
+    case 'detail_capture':
+      return { label: 'Accuracy', hint: 'Listen again for the exact detail asked for.' };
+    default:
+      return { label: reason.replace(/_/g, ' '), hint: 'Review the transcript clue for context.' };
+  }
 }
 
 export default function ListeningReviewPage() {
@@ -204,6 +245,19 @@ export default function ListeningReviewPage() {
                     </div>
                   </div>
                   <p className="mt-4 text-sm text-muted">{question.explanation}</p>
+                  {(() => {
+                    const chip = missReasonChip(question);
+                    if (!chip) return null;
+                    return (
+                      <div className="mt-3 flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                        <div>
+                          <p className="font-bold uppercase tracking-widest text-xs">Missed because — {chip.label}</p>
+                          <p className="mt-1 text-warning/90">{chip.hint}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted">
                     {question.speakerAttitude ? (
                       <span className="inline-flex items-center gap-1 rounded-lg bg-background-light px-3 py-2 font-semibold capitalize text-navy">

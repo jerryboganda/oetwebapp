@@ -1,10 +1,11 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithRouter } from '@/tests/test-utils';
-const { mockCreateMockBooking, mockCreateMockSession, mockFetchMockDiagnosticEntitlement, mockFetchMockOptions, mockTrack, mockPush } = vi.hoisted(() => ({
+const { mockCreateMockBooking, mockCreateMockSession, mockFetchMockDiagnosticEntitlement, mockFetchMockEntitlementsSummary, mockFetchMockOptions, mockTrack, mockPush } = vi.hoisted(() => ({
   mockCreateMockBooking: vi.fn(),
   mockCreateMockSession: vi.fn(),
   mockFetchMockDiagnosticEntitlement: vi.fn(),
+  mockFetchMockEntitlementsSummary: vi.fn(),
   mockFetchMockOptions: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('@/lib/api', () => ({
   createMockBooking: mockCreateMockBooking,
   createMockSession: mockCreateMockSession,
   fetchMockDiagnosticEntitlement: mockFetchMockDiagnosticEntitlement,
+  fetchMockEntitlementsSummary: mockFetchMockEntitlementsSummary,
   fetchMockOptions: mockFetchMockOptions,
 }));
 
@@ -34,6 +36,14 @@ describe('Mock setup page', () => {
       entitlement: 'one_per_lifetime',
       reason: null,
       message: null,
+    });
+    mockFetchMockEntitlementsSummary.mockResolvedValue({
+      items: [
+        { mockType: 'mock_full', label: 'Full mock', granted: 1, consumed: 0, remaining: 1 },
+        { mockType: 'mock_sub', label: 'Sub-test mock', granted: 1, consumed: 0, remaining: 1 },
+      ],
+      anyExhausted: false,
+      hasEligibleSubscription: true,
     });
     mockFetchMockOptions.mockResolvedValue({
       mockTypes: [

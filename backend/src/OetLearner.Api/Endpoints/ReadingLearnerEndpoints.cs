@@ -103,6 +103,17 @@ public static class ReadingLearnerEndpoints
                     paper.SubtestCode,
                     allowPaperReadingMode = resolvedPolicy.AllowPaperReadingMode,
                     questionPaperAssets,
+                    // Phase 5 closure — surface three a11y opt-ins to the
+                    // learner client so the player can render its settings
+                    // panel only when the policy explicitly enables each
+                    // toggle. Mirrors the AllowPaperReadingMode pattern
+                    // immediately above.
+                    policy = new
+                    {
+                        fontScaleUserControl = resolvedPolicy.FontScaleUserControl,
+                        highContrastMode = resolvedPolicy.HighContrastMode,
+                        screenReaderOptimised = resolvedPolicy.ScreenReaderOptimised,
+                    },
                 },
                 parts = parts.Select(p => new
                 {
@@ -205,7 +216,7 @@ public static class ReadingLearnerEndpoints
                 ?? throw new InvalidOperationException("auth required");
             try
             {
-                await svc.SaveAnswerAsync(userId, attemptId, questionId, dto.UserAnswerJson, ct);
+                await svc.SaveAnswerAsync(userId, attemptId, questionId, dto.UserAnswerJson, dto.ElapsedMs, ct);
                 return Results.NoContent();
             }
             catch (ReadingAttemptException ex)
@@ -228,7 +239,10 @@ public static class ReadingLearnerEndpoints
                 ?? throw new InvalidOperationException("auth required");
             try
             {
-                var result = await svc.SubmitAsync(userId, attemptId, ct);
+                var idempotencyKey = http.Request.Headers.TryGetValue("Idempotency-Key", out var hdr)
+                    ? hdr.ToString()
+                    : null;
+                var result = await svc.SubmitAsync(userId, attemptId, idempotencyKey, ct);
                 var paperId = await db.ReadingAttempts.AsNoTracking()
                     .Where(a => a.Id == attemptId && a.UserId == userId)
                     .Select(a => a.PaperId)
@@ -1150,4 +1164,10 @@ public static class ReadingLearnerEndpoints
 
 }
 
-public sealed record AnswerSaveDto(string UserAnswerJson);
+/// <summary>
+/// Reading autosave payload. <see cref="ElapsedMs"/> is the per-save
+/// milliseconds the learner spent on this question between focus and save.
+/// Server caps the value at 14_400_000 (4 h) and ignores non-positive
+/// values. Pass <c>null</c> for legacy clients that don't capture timing.
+/// </summary>
+public sealed record AnswerSaveDto(string UserAnswerJson, int? ElapsedMs = null);

@@ -1,0 +1,108 @@
+name: Speaking Module CI
+
+on:
+  pull_request:
+    paths:
+      - 'app/speaking/**'
+      - 'app/expert/speaking/**'
+      - 'app/admin/content/speaking/**'
+      - 'app/admin/private-speaking/**'
+      - 'app/admin/analytics/speaking/**'
+      - 'app/admin/analytics/mocks/**'
+      - 'components/domain/speaking/**'
+      - 'lib/api/speaking-*.ts'
+      - 'lib/api/interlocutor-*.ts'
+      - 'lib/analytics/speaking-events.ts'
+      - 'backend/src/OetLearner.Api/Domain/Speaking*.cs'
+      - 'backend/src/OetLearner.Api/Domain/RolePlay*.cs'
+      - 'backend/src/OetLearner.Api/Domain/Interlocutor*.cs'
+      - 'backend/src/OetLearner.Api/Services/Speaking/**'
+      - 'backend/src/OetLearner.Api/Endpoints/*Speaking*.cs'
+      - 'backend/src/OetLearner.Api/Endpoints/Tutor*.cs'
+      - 'backend/src/OetLearner.Api/Endpoints/AdminSpeaking*.cs'
+      - 'backend/src/OetLearner.Api/Hubs/**'
+      - '.github/workflows/speaking-ci.yml'
+  push:
+    branches: [main]
+
+concurrency:
+  group: speaking-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oet_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      ConnectionStrings__OetLearner: Host=localhost;Database=oet_test;Username=postgres;Password=postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-oet-stack
+        with:
+          with-postgres: "true"
+      - name: Restore + build
+        run: dotnet build backend/OetLearner.sln --configuration Release --nologo
+      - name: Speaking-tagged tests
+        run: dotnet test backend/OetLearner.sln --configuration Release --no-build --filter "FullyQualifiedName~Speaking" --logger "trx;LogFileName=speaking.trx"
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: speaking-test-results
+          path: '**/TestResults/*.trx'
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-oet-stack
+      - name: Lint
+        run: npm run lint
+      - name: Vitest
+        run: npm test -- --reporter=verbose
+      - name: Type-check
+        run: npx tsc --noEmit --pretty false
+      - name: Build
+        run: npm run build
+
+  migrations-check:
+    runs-on: ubuntu-latest
+    needs: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-oet-stack
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef
+      - name: Pending model changes?
+        run: |
+          cd backend/src/OetLearner.Api
+          if dotnet ef migrations has-pending-model-changes 2>&1 | tee /tmp/ef.out | grep -qi "no changes"; then
+            echo "OK: no pending model changes."
+          else
+            echo "FAIL: pending model changes detected — create a migration." >&2
+            cat /tmp/ef.out
+            exit 1
+          fi
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          config-path: .gitleaks.toml
+        continue-on-error: true

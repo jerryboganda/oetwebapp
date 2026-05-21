@@ -14,7 +14,14 @@ export default defineConfig({
       },
     },
     include: ['**/__tests__/**/*.{test,spec}.{ts,tsx}', '**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['**/node_modules/**', 'tests/e2e/**', '.kilo/**', 'OET Web App Login only screens take from here/**'],
+    exclude: [
+      '**/node_modules/**',
+      'tests/e2e/**',
+      'tests/a11y/**',
+      '.kilo/**',
+      'OET Web App Login only screens take from here/**',
+      'copilot-worktrees/**',
+    ],
   },
   resolve: {
     alias: {

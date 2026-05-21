@@ -2,7 +2,7 @@
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, Clock, Flag, Loader2, Play, RotateCcw, Save, Send, ZoomIn, ZoomOut } from 'lucide-react';
+import { AlertCircle, Clock, Eye, Flag, Loader2, Play, RotateCcw, Save, Send, Settings, ZoomIn, ZoomOut } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -93,6 +93,16 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [timingNotice, setTimingNotice] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(100);
+  /**
+   * Phase 5 closure — learner-controlled accessibility settings,
+   * persisted to localStorage under `oet-reading-a11y:{paperId}`. Each
+   * field is only surfaced when the resolved policy enables it
+   * (see structure.paper.policy). Defaults are conservative so a
+   * fresh learner sees the standard render.
+   */
+  const [fontScale, setFontScale] = useState<90 | 100 | 110 | 125>(100);
+  const [highContrast, setHighContrast] = useState(false);
+  const [screenReaderHints, setScreenReaderHints] = useState(false);
   const [displayWarnings, setDisplayWarnings] = useState<string[]>([]);
   const [eliminatedChoices, setEliminatedChoices] = useState<Set<string>>(() => new Set());
 
@@ -100,8 +110,55 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const autoSubmitTriggered = useRef(false);
   const dirtyQuestionIds = useRef<Set<string>>(new Set());
   const timingState = useRef({ partALocked: false, partBCWindowEnded: false, paperExpired: false, breakPending: false });
+  /**
+   * Phase 1 closure — wall-clock timestamp (ms) at which the currently
+   * focused question was last "shown" or "saved". On the next autosave
+   * we compute `Date.now() - questionFocusStartedAt[id]` and ship that
+   * as `elapsedMs` to the server, which accumulates the total. After
+   * sending, the entry is reset to `Date.now()` so subsequent saves only
+   * count the delta since the last save (no double-counting).
+   *
+   * Entries are seeded when `activeQuestionId` flips to a new question
+   * and cleared on attempt change. Tab-hidden detection (visibilitychange)
+   * also resets the timer so backgrounded tabs do not inflate timings.
+   */
+  const questionFocusStartedAt = useRef<Record<string, number>>({});
 
   useReadingBrowserZoomGuard();
+
+  /**
+   * Phase 5 closure — load any persisted a11y settings for this paper.
+   * Keyed per-paper so a learner who uses one paper with high-contrast
+   * does not inherit it on another.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(`oet-reading-a11y:${paperId}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        fontScale?: number;
+        highContrast?: boolean;
+        screenReaderHints?: boolean;
+      };
+      if (parsed.fontScale === 90 || parsed.fontScale === 100
+        || parsed.fontScale === 110 || parsed.fontScale === 125) {
+        setFontScale(parsed.fontScale);
+      }
+      if (typeof parsed.highContrast === 'boolean') setHighContrast(parsed.highContrast);
+      if (typeof parsed.screenReaderHints === 'boolean') setScreenReaderHints(parsed.screenReaderHints);
+    } catch { /* ignore corrupt entry */ }
+  }, [paperId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        `oet-reading-a11y:${paperId}`,
+        JSON.stringify({ fontScale, highContrast, screenReaderHints }),
+      );
+    } catch { /* localStorage may be full or disabled */ }
+  }, [paperId, fontScale, highContrast, screenReaderHints]);
 
   useEffect(() => {
     const readWarnings = () => {
@@ -217,6 +274,30 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       setActiveQuestionId(part.questions[0].id);
     }
   }, [activePart, activeQuestionId, displayedCurrentPart, firstDisplayedPart]);
+
+  /**
+   * Phase 1 closure — seed/refresh the per-question focus timestamp
+   * whenever the learner switches questions, so the next autosave can
+   * report the elapsed milliseconds. Reset to "now" when the tab is
+   * hidden (visibilitychange → "hidden") so backgrounded tabs don't
+   * inflate timings; when it becomes visible again we restart the clock.
+   */
+  useEffect(() => {
+    if (!activeQuestionId) return;
+    questionFocusStartedAt.current[activeQuestionId] = Date.now();
+  }, [activeQuestionId]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onVisibility = () => {
+      if (!activeQuestionId) return;
+      // Discard any accumulated time when the tab is hidden, and restart
+      // when visible. We never persist time spent in a hidden tab.
+      questionFocusStartedAt.current[activeQuestionId] = Date.now();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [activeQuestionId]);
 
   const isPracticeMode = attempt !== null && attempt.mode !== 'Exam';
   const presentation = requestedPresentation === 'paper' && structure?.paper.allowPaperReadingMode !== false
@@ -337,8 +418,19 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     }
 
     setSaveState('saving');
+    // Phase 1 closure — compute elapsed ms since last focus/save for this
+    // question. Capped client-side at 4 h to match the server cap.
+    const focusedAt = questionFocusStartedAt.current[questionId];
+    const nowTs = Date.now();
+    const elapsedMs = focusedAt != null && nowTs > focusedAt
+      ? Math.min(nowTs - focusedAt, 14_400_000)
+      : null;
     try {
-      await saveReadingAnswer(attempt.attemptId, questionId, valueJson);
+      await saveReadingAnswer(attempt.attemptId, questionId, valueJson, elapsedMs);
+      // Reset the focus timestamp so the next save only counts the delta
+      // since this save (no double-counting). If the learner switches tabs,
+      // the visibilitychange handler also resets this entry.
+      questionFocusStartedAt.current[questionId] = Date.now();
       dirtyQuestionIds.current.delete(questionId);
       setSaveState('saved');
     } catch (err) {
@@ -391,9 +483,20 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       });
 
       lockedQuestionIds.forEach((questionId) => dirtyQuestionIds.current.delete(questionId));
-      await Promise.all(answersToFlush.map(([questionId, valueJson]) =>
-        saveReadingAnswer(attempt.attemptId, questionId, valueJson)));
-      answersToFlush.forEach(([questionId]) => dirtyQuestionIds.current.delete(questionId));
+      // Phase 1 closure — final flush also reports per-question elapsed ms
+      // so the last batch of unsaved answers contributes to TotalElapsedMs.
+      const submitFlushNow = Date.now();
+      await Promise.all(answersToFlush.map(([questionId, valueJson]) => {
+        const focusedAt = questionFocusStartedAt.current[questionId];
+        const elapsedMs = focusedAt != null && submitFlushNow > focusedAt
+          ? Math.min(submitFlushNow - focusedAt, 14_400_000)
+          : null;
+        return saveReadingAnswer(attempt.attemptId, questionId, valueJson, elapsedMs);
+      }));
+      answersToFlush.forEach(([questionId]) => {
+        questionFocusStartedAt.current[questionId] = Date.now();
+        dirtyQuestionIds.current.delete(questionId);
+      });
       const graded = await submitReadingAttempt(attempt.attemptId);
       if (mockAttemptId && mockSectionId) {
         try {
@@ -406,10 +509,32 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             evidence: { source: 'reading_player' },
           });
         } catch (mockErr) {
-          // Do not lose the learner's submission on mock-write failure.
+          // Phase 6 closure — do not lose the learner's submission on
+          // mock-write failure. Persist a pending-completion marker so the
+          // results route surfaces a retry CTA, and surface a non-blocking
+          // warning on the player too.
           console.warn('Could not mark mock reading section complete', mockErr);
+          if (typeof window !== 'undefined') {
+            try {
+              window.sessionStorage.setItem(
+                `oet-mock-section-complete-pending:${attempt.attemptId}`,
+                JSON.stringify({
+                  mockAttemptId,
+                  mockSectionId,
+                  rawScore: graded.rawScore,
+                  rawScoreMax: graded.maxRawScore,
+                  scaledScore: graded.scaledScore,
+                  grade: graded.gradeLetter,
+                }),
+              );
+            } catch { /* sessionStorage may be full or blocked */ }
+          }
+          setError(
+            'Reading attempt submitted, but the mock dashboard did not receive '
+            + 'the score. Open results to retry the mock-completion step.',
+          );
         }
-        router.push(`/mocks/player/${mockAttemptId}`);
+        router.push(`/reading/paper/${paperId}/results?attemptId=${attempt.attemptId}`);
         return;
       }
       router.push(`/reading/paper/${paperId}/results?attemptId=${attempt.attemptId}`);
@@ -471,7 +596,20 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
   return (
     <LearnerDashboardShell pageTitle={structure.paper.title} backHref="/reading">
-      <main className="space-y-5" style={{ ['--reading-player-scale' as string]: zoomLevel / 100 }}>
+      <main
+        // Phase 5 closure — `--reading-font-scale` lets the player text
+        // grow without the SSR layout shift that a full body zoom causes,
+        // and the `data-reading-contrast` attribute lets `app/globals.css`
+        // (or a future Tailwind plugin) flip palette tokens on demand.
+        className="space-y-5"
+        data-reading-contrast={highContrast ? 'high' : 'standard'}
+        data-reading-screen-reader-hints={screenReaderHints ? 'on' : 'off'}
+        style={{
+          ['--reading-player-scale' as string]: zoomLevel / 100,
+          ['--reading-font-scale' as string]: fontScale / 100,
+          fontSize: `${fontScale}%`,
+        }}
+      >
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {timingNotice ? <InlineAlert variant="warning">{timingNotice}</InlineAlert> : null}
         {mockAttemptId ? (
@@ -535,6 +673,13 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               submitting={submitting}
               onZoomChange={setZoomLevel}
               onSubmit={() => setShowConfirm(true)}
+              a11yPolicy={structure.paper.policy ?? null}
+              fontScale={fontScale}
+              highContrast={highContrast}
+              screenReaderHints={screenReaderHints}
+              onFontScaleChange={setFontScale}
+              onHighContrastChange={setHighContrast}
+              onScreenReaderHintsChange={setScreenReaderHints}
             />
 
             {breakPending ? (
@@ -624,6 +769,13 @@ function AttemptToolbar({
   submitting,
   onZoomChange,
   onSubmit,
+  a11yPolicy,
+  fontScale,
+  highContrast,
+  screenReaderHints,
+  onFontScaleChange,
+  onHighContrastChange,
+  onScreenReaderHintsChange,
 }: {
   attempt: ActiveAttempt;
   activePart: ReadingPartCode;
@@ -639,6 +791,18 @@ function AttemptToolbar({
   submitting: boolean;
   onZoomChange: (next: number) => void;
   onSubmit: () => void;
+  /**
+   * Phase 5 closure — resolved a11y policy. When null or every flag is
+   * false the settings dropdown is hidden so we don't tease a learner
+   * with a control they cannot actually use.
+   */
+  a11yPolicy: { fontScaleUserControl: boolean; highContrastMode: boolean; screenReaderOptimised: boolean } | null;
+  fontScale: 90 | 100 | 110 | 125;
+  highContrast: boolean;
+  screenReaderHints: boolean;
+  onFontScaleChange: (next: 90 | 100 | 110 | 125) => void;
+  onHighContrastChange: (next: boolean) => void;
+  onScreenReaderHintsChange: (next: boolean) => void;
 }) {
   const breakStartedAt = attempt.partBCTimerPausedAt ?? attempt.partADeadlineAt;
   const breakSecondsLeft = Math.max(
@@ -680,6 +844,15 @@ function AttemptToolbar({
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <ReadingZoomControls zoomLevel={zoomLevel} onZoomChange={onZoomChange} />
+          <ReadingA11ySettings
+            policy={a11yPolicy}
+            fontScale={fontScale}
+            highContrast={highContrast}
+            screenReaderHints={screenReaderHints}
+            onFontScaleChange={onFontScaleChange}
+            onHighContrastChange={onHighContrastChange}
+            onScreenReaderHintsChange={onScreenReaderHintsChange}
+          />
           <SaveStatus state={saveState} />
           <Button variant="primary" onClick={onSubmit} loading={submitting} disabled={breakPending || paperExpired} aria-label="Submit attempt for grading">
             <Send className="h-4 w-4" aria-hidden="true" />
@@ -722,6 +895,102 @@ function ReadingZoomControls({ zoomLevel, onZoomChange }: { zoomLevel: number; o
         {hint}
       </span>
     </div>
+  );
+}
+
+/**
+ * Phase 5 closure — learner-facing accessibility controls. Renders
+ * nothing when the policy disables every flag (so we never tease a
+ * control the policy refuses to honour). Stored values are persisted
+ * per-paper by the player via localStorage.
+ */
+function ReadingA11ySettings({
+  policy,
+  fontScale,
+  highContrast,
+  screenReaderHints,
+  onFontScaleChange,
+  onHighContrastChange,
+  onScreenReaderHintsChange,
+}: {
+  policy: { fontScaleUserControl: boolean; highContrastMode: boolean; screenReaderOptimised: boolean } | null;
+  fontScale: 90 | 100 | 110 | 125;
+  highContrast: boolean;
+  screenReaderHints: boolean;
+  onFontScaleChange: (next: 90 | 100 | 110 | 125) => void;
+  onHighContrastChange: (next: boolean) => void;
+  onScreenReaderHintsChange: (next: boolean) => void;
+}) {
+  if (!policy
+    || (!policy.fontScaleUserControl && !policy.highContrastMode && !policy.screenReaderOptimised)) {
+    return null;
+  }
+
+  return (
+    <details className="group relative inline-block">
+      <summary
+        className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-border bg-background-light px-3 text-xs font-bold text-navy hover:border-border-hover focus:outline-none focus:ring-4 focus:ring-primary/15"
+        aria-label="Accessibility settings"
+      >
+        <Settings className="h-4 w-4" aria-hidden />
+        A11y
+      </summary>
+      <div
+        className="absolute right-0 z-10 mt-2 w-72 space-y-3 rounded-2xl border border-border bg-surface p-3 text-sm shadow-lg"
+        role="dialog"
+        aria-label="Accessibility settings"
+      >
+        {policy.fontScaleUserControl ? (
+          <div className="space-y-1">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Font size</p>
+            <div className="flex items-center gap-1">
+              {[90, 100, 110, 125].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => onFontScaleChange(value as 90 | 100 | 110 | 125)}
+                  aria-pressed={fontScale === value}
+                  className={
+                    'flex-1 rounded-lg border px-2 py-1.5 text-xs font-bold transition-colors ' +
+                    (fontScale === value
+                      ? 'border-primary bg-primary text-white'
+                      : 'border-border bg-background-light text-navy hover:bg-surface')
+                  }
+                >
+                  {value}%
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {policy.highContrastMode ? (
+          <label className="flex items-center gap-2 rounded-lg bg-background-light p-2 text-xs">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
+              checked={highContrast}
+              onChange={(e) => onHighContrastChange(e.target.checked)}
+            />
+            <span className="font-semibold text-navy">High-contrast palette</span>
+          </label>
+        ) : null}
+        {policy.screenReaderOptimised ? (
+          <label className="flex items-center gap-2 rounded-lg bg-background-light p-2 text-xs">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
+              checked={screenReaderHints}
+              onChange={(e) => onScreenReaderHintsChange(e.target.checked)}
+            />
+            <span className="font-semibold text-navy">Extra screen-reader hints</span>
+          </label>
+        ) : null}
+        <p className="text-[10px] text-muted">
+          <Eye className="mr-1 inline h-3 w-3" aria-hidden />
+          Settings persist per paper in this browser.
+        </p>
+      </div>
+    </details>
   );
 }
 

@@ -278,7 +278,65 @@ export default function ReadingAnalyticsPage() {
             </div>
           </MotionSection>
 
-          <MotionSection delayIndex={3}>
+          {analytics.distractorTraps.length > 0 ? (
+            <MotionSection delayIndex={3}>
+              <AdminRoutePanel
+                title="Distractor Traps"
+                description="Wrong options ranked by how often the cohort fell for them. Categories (Opposite, TooBroad, etc.) come from each option's authored distractor metadata."
+              >
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-border text-sm">
+                    <thead>
+                      <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+                        <th className="py-3 pr-4">Paper / question</th>
+                        <th className="px-4 py-3">Part</th>
+                        <th className="px-4 py-3">Option</th>
+                        <th className="px-4 py-3">Category</th>
+                        <th className="px-4 py-3">Selected</th>
+                        <th className="px-4 py-3">Trap rate</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border" data-testid="distractor-traps-rows">
+                      {analytics.distractorTraps.slice(0, 10).map((trap) => (
+                        <tr key={`${trap.questionId}-${trap.category}-${trap.optionKey}`}>
+                          <td className="py-3 pr-4 align-top">
+                            <p className="font-semibold text-navy">{trap.paperTitle || 'Unknown paper'}</p>
+                            <p className="line-clamp-2 text-xs text-muted">{trap.stem}</p>
+                          </td>
+                          <td className="px-4 py-3 align-top">
+                            <Badge variant="outline" className="text-[10px]">Part {trap.partCode}</Badge>
+                          </td>
+                          <td className="px-4 py-3 align-top font-mono text-xs text-navy">{trap.optionKey}</td>
+                          <td className="px-4 py-3 align-top">
+                            <Badge variant="warning" className="text-[10px]">{trap.category}</Badge>
+                          </td>
+                          <td className="px-4 py-3 align-top text-navy">
+                            {trap.selectedCount}
+                            {trap.opportunities > 0 ? <span className="text-xs text-muted"> / {trap.opportunities}</span> : null}
+                          </td>
+                          <td className="px-4 py-3 align-top text-navy">
+                            <div className="flex items-center justify-end gap-2">
+                              <span className="font-semibold">{formatPercent(trap.selectionRatePercent)}</span>
+                              <div className="h-2 w-16 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                                <div
+                                  className="h-full rounded-full bg-amber-500"
+                                  style={{
+                                    width: `${Math.min(100, Math.max(0, trap.selectionRatePercent ?? 0))}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </AdminRoutePanel>
+            </MotionSection>
+          ) : null}
+
+          <MotionSection delayIndex={4}>
             <AdminRoutePanel title="Paper Quality" description="Per-paper readiness and outcome signals for authoring QA and content operations.">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-border text-sm">

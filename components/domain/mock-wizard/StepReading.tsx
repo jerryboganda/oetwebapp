@@ -50,12 +50,19 @@ interface QuestionDraft {
   textDisplayOrder: number | null;
 }
 
+/**
+ * Canonical Reading question types. Mirrors the backend enum at
+ * `Domain/ReadingEntities.cs`. Phase 5 closure fixed a pre-existing
+ * contract drift here: the previous `WordPool` and `TrueFalseNotGiven`
+ * options would have failed manifest validation. `MatchingTextReference`
+ * is the canonical Part A "which text contains this idea?" form.
+ */
 const QUESTION_TYPES: { value: ReadingQuestionType; label: string }[] = [
-  { value: 'WordPool', label: 'Word pool (Part A)' },
+  { value: 'MatchingTextReference', label: 'Matching — text reference (Part A)' },
   { value: 'ShortAnswer', label: 'Short answer' },
+  { value: 'SentenceCompletion', label: 'Sentence completion' },
   { value: 'MultipleChoice4', label: 'Multiple choice (4)' },
   { value: 'MultipleChoice3', label: 'Multiple choice (3)' },
-  { value: 'TrueFalseNotGiven', label: 'True / False / Not given' },
 ];
 
 const PART_TARGETS: Record<ReadingPartCode, { items: number; label: string }> = {
@@ -118,7 +125,7 @@ export function StepReading() {
         id: makeId(),
         partCode,
         displayOrder: prev.filter((q) => q.partCode === partCode).length + 1,
-        questionType: partCode === 'A' ? 'WordPool' : 'MultipleChoice4',
+        questionType: partCode === 'A' ? 'MatchingTextReference' : 'MultipleChoice4',
         stem: '',
         optionsCsv: '',
         correctAnswer: '',
@@ -401,7 +408,7 @@ export function StepReading() {
                     value={q.correctAnswer}
                     onChange={(e) => updateQuestion(q.id, { correctAnswer: e.target.value })}
                   />
-                  {q.questionType === 'ShortAnswer' || q.questionType === 'WordPool' ? (
+                  {q.questionType === 'ShortAnswer' || q.questionType === 'SentenceCompletion' || q.questionType === 'MatchingTextReference' ? (
                     <Input
                       label="Accepted synonyms (CSV)"
                       value={q.acceptedSynonymsCsv}
@@ -409,7 +416,7 @@ export function StepReading() {
                     />
                   ) : null}
                 </div>
-                {q.questionType === 'ShortAnswer' || q.questionType === 'WordPool' ? (
+                {q.questionType === 'ShortAnswer' || q.questionType === 'SentenceCompletion' || q.questionType === 'MatchingTextReference' ? (
                   <label className="flex items-center gap-2 text-xs font-semibold text-navy">
                     <input
                       type="checkbox"

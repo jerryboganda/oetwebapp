@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
 using System.Security.Claims;
@@ -20,6 +21,11 @@ public static class ListeningV2Endpoints
     public sealed record GradeRequest();
     public sealed record CreateClassRequest(string Name, string? Description);
     public sealed record AddMemberRequest(string MemberUserId);
+    /// <summary>R08 annotations payload — opaque JSON capped at 64 KB. Owned
+    /// by the frontend reducer that serialises highlights + strikethroughs
+    /// per question.</summary>
+    public sealed record SaveAnnotationsRequest(string? AnnotationsJson);
+    public sealed record AnnotationsDto(string? AnnotationsJson);
 
     public static IEndpointRouteBuilder MapListeningV2Endpoints(this IEndpointRouteBuilder app)
     {
@@ -104,6 +110,52 @@ public static class ListeningV2Endpoints
         .Produces(StatusCodes.Status403Forbidden)
         .Produces(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // R08 — persist learner highlights + strikethroughs. Frontend hook
+        // `useListeningAnnotations` debounces 400 ms and PUTs the full
+        // payload. Server enforces a 64 KB cap and JSON-shape validation.
+        group.MapPut("/attempts/{attemptId}/annotations", async (
+            string attemptId, SaveAnnotationsRequest req, HttpContext http,
+            ListeningSessionService session, CancellationToken ct) =>
+        {
+            try
+            {
+                await session.SaveAnnotationsAsync(
+                    attemptId, http.UserId(), req?.AnnotationsJson, ct);
+                return Results.NoContent();
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(
+                    new { errorCode = ex.ErrorCode, message = ex.Message },
+                    statusCode: (int)ex.StatusCode);
+            }
+            catch (KeyNotFoundException) { return Results.NotFound(); }
+            catch (UnauthorizedAccessException) { return Results.Forbid(); }
+        })
+        .RequireRateLimiting("PerUserWrite")
+        .WithName("SaveListeningV2Annotations")
+        .WithSummary("Listening V2 — persist R08 highlights + strikethroughs (≤ 64 KB).")
+        .Produces(StatusCodes.Status204NoContent)
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict);
+
+        group.MapGet("/attempts/{attemptId}/annotations", async (
+            string attemptId, HttpContext http,
+            ListeningSessionService session, CancellationToken ct) =>
+        {
+            try
+            {
+                var json = await session.GetAnnotationsAsync(attemptId, http.UserId(), ct);
+                return Results.Ok(new AnnotationsDto(json));
+            }
+            catch (KeyNotFoundException) { return Results.NotFound(); }
+            catch (UnauthorizedAccessException) { return Results.Forbid(); }
+        })
+        .WithName("GetListeningV2Annotations")
+        .WithSummary("Listening V2 — read the learner's saved annotations payload.");
 
         group.MapPost("/attempts/{attemptId}/audio-resume", async (
             string attemptId, AudioResumeRequest req, HttpContext http,

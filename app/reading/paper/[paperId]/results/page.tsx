@@ -1,17 +1,28 @@
 'use client';
 
-import { Suspense, use, useEffect, useState } from 'react';
+import { Suspense, use, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, CheckCircle2, FileText, Target, XCircle } from 'lucide-react';
+import { ArrowLeft, BookOpen, CheckCircle2, FileText, RefreshCw, Target, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { getReadingAttemptReview, type ReadingAttemptReviewDto } from '@/lib/reading-authoring-api';
+import { completeMockSection } from '@/lib/api';
 import { isListeningReadingPassByScaled } from '@/lib/scoring';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
+
+interface PendingMockCompletion {
+  mockAttemptId: string;
+  mockSectionId: string;
+  rawScore: number;
+  rawScoreMax: number;
+  scaledScore: number | null;
+  grade: string;
+}
 
 export default function ReadingPaperResultsPage({ params }: { params: Promise<{ paperId: string }> }) {
   return (
@@ -71,6 +82,51 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
     return () => window.removeEventListener('hashchange', scrollToHash);
   }, [review]);
 
+  /**
+   * Phase 6 closure — detect a pending mock-section-complete marker the
+   * player wrote to sessionStorage on failure, and surface a retry CTA
+   * here so the learner can re-fire the write without losing context.
+   */
+  const [pendingMockCompletion, setPendingMockCompletion] = useState<PendingMockCompletion | null>(null);
+  const [mockRetryState, setMockRetryState] = useState<'idle' | 'retrying' | 'done' | 'error'>('idle');
+  const [mockRetryError, setMockRetryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!attemptId || typeof window === 'undefined') return;
+    try {
+      const raw = window.sessionStorage.getItem(`oet-mock-section-complete-pending:${attemptId}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as PendingMockCompletion;
+      if (parsed && typeof parsed.mockAttemptId === 'string' && typeof parsed.mockSectionId === 'string') {
+        setPendingMockCompletion(parsed);
+      }
+    } catch { /* ignore corrupt marker */ }
+  }, [attemptId]);
+
+  const handleRetryMockCompletion = useCallback(async () => {
+    if (!pendingMockCompletion || !attemptId) return;
+    setMockRetryState('retrying');
+    setMockRetryError(null);
+    try {
+      await completeMockSection(pendingMockCompletion.mockAttemptId, pendingMockCompletion.mockSectionId, {
+        contentAttemptId: attemptId,
+        rawScore: pendingMockCompletion.rawScore,
+        rawScoreMax: pendingMockCompletion.rawScoreMax,
+        scaledScore: pendingMockCompletion.scaledScore,
+        grade: pendingMockCompletion.grade,
+        evidence: { source: 'reading_results_retry' },
+      });
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(`oet-mock-section-complete-pending:${attemptId}`);
+      }
+      setMockRetryState('done');
+      setPendingMockCompletion(null);
+    } catch (err) {
+      setMockRetryState('error');
+      setMockRetryError(err instanceof Error ? err.message : 'Retry failed.');
+    }
+  }, [attemptId, pendingMockCompletion]);
+
   const raw = review?.attempt.rawScore ?? 0;
   const scaled = review?.attempt.scaledScore ?? null;
   const isPracticeOnly = scaled === null;
@@ -85,6 +141,44 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
 
         {loading ? <Skeleton className="h-96" /> : null}
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+        {pendingMockCompletion ? (
+          <InlineAlert variant="warning">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm">
+                Your Reading attempt is graded, but the mock dashboard did not
+                receive the score on the first try. Click <strong>Retry mock
+                completion</strong> to send it again.
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => void handleRetryMockCompletion()}
+                  disabled={mockRetryState === 'retrying'}
+                >
+                  <RefreshCw className="mr-1.5 h-4 w-4" aria-hidden />
+                  {mockRetryState === 'retrying' ? 'Retrying…' : 'Retry mock completion'}
+                </Button>
+                <Link
+                  href={`/mocks/player/${pendingMockCompletion.mockAttemptId}`}
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  Open mock dashboard
+                </Link>
+              </div>
+            </div>
+            {mockRetryError ? (
+              <p className="mt-2 text-xs text-red-600">{mockRetryError}</p>
+            ) : null}
+          </InlineAlert>
+        ) : null}
+        {mockRetryState === 'done' ? (
+          <InlineAlert variant="success">
+            Mock section marked complete. You can return to the mock dashboard.
+          </InlineAlert>
+        ) : null}
 
         {review ? (
           <>

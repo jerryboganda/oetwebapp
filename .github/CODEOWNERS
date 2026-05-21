@@ -1,0 +1,45 @@
+# CODEOWNERS — auto-request review from the right team based on path.
+# Last team listed wins for a given path. Teams must exist in GitHub.
+
+# Speaking module
+/app/speaking/                                       @speaking-team
+/app/expert/speaking/                                @speaking-team @tutor-ops
+/app/admin/content/speaking/                         @speaking-team @content-team
+/app/admin/private-speaking/                         @speaking-team @ops-team
+/app/admin/analytics/speaking/                       @speaking-team @analytics-team
+/app/admin/analytics/mocks/                          @speaking-team @analytics-team
+
+/backend/src/OetLearner.Api/Domain/Speaking*.cs      @speaking-team @backend-team
+/backend/src/OetLearner.Api/Domain/RolePlay*.cs      @speaking-team @backend-team
+/backend/src/OetLearner.Api/Domain/Interlocutor*.cs  @speaking-team @backend-team
+/backend/src/OetLearner.Api/Services/Speaking/       @speaking-team @backend-team
+/backend/src/OetLearner.Api/Endpoints/*Speaking*.cs  @speaking-team @backend-team
+/backend/src/OetLearner.Api/Endpoints/Tutor*.cs      @speaking-team @backend-team
+/backend/src/OetLearner.Api/Endpoints/AdminSpeaking* @speaking-team @backend-team
+/backend/src/OetLearner.Api/Hubs/                    @speaking-team @backend-team
+
+/components/domain/speaking/                         @speaking-team @design-team
+/lib/api/speaking-*.ts                               @speaking-team
+/lib/api/interlocutor-*.ts                           @speaking-team
+/lib/analytics/speaking-events.ts                    @speaking-team @analytics-team
+
+# Speaking docs + ops
+/docs/speaking/                                      @speaking-team
+/docs/speaking-module-runbook.md                     @speaking-team @ops-team
+/docs/security/speaking/                             @speaking-team @security-team
+/docs/ci/speaking.md                                 @speaking-team @platform-team
+/docs/env/speaking.md                                @speaking-team
+/.github/workflows/speaking-*.yml                    @speaking-team @platform-team
+/.github/actions/setup-oet-stack/                    @platform-team
+
+# Tests
+/tests/e2e/speaking-*.spec.ts                        @speaking-team @qa-team
+/tests/a11y/                                         @speaking-team @a11y-team
+/tests/load/                                         @speaking-team @ops-team
+
+# Mobile + desktop
+/lib/native/                                         @speaking-team @mobile-team
+/lib/desktop/                                        @speaking-team @desktop-team
+/electron/                                           @desktop-team
+/capacitor.config.ts                                 @mobile-team
+/capacitor.config.json                               @mobile-team

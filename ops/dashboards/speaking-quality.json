@@ -1,0 +1,31 @@
+{
+  "uid": "speaking-quality",
+  "title": "Speaking — Quality",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["speaking", "quality"],
+  "refresh": "5m",
+  "time": { "from": "now-30d", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "AI vs Tutor delta — mean absolute error per criterion",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "expr": "avg by(criterion)(speaking_assessment_delta_absolute{env=\"$env\"})" }]
+    },
+    {
+      "id": 2, "type": "bargauge", "title": "% Exam-ready (readiness band)",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "expr": "count(speaking_readiness_band{value=\"exam_ready\"}) / count(speaking_readiness_band)" }]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Calibration drift — top-10 tutors",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "targets": [{ "refId": "A", "expr": "topk(10, speaking_tutor_mae)" }]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Prompt cache hit rate (7d)",
+      "gridPos": { "x": 0, "y": 16, "w": 8, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "speaking_prompt_cache_hit_rate{env=\"$env\"}" }]
+    }
+  ]
+}

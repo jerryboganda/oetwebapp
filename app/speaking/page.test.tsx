@@ -1,10 +1,17 @@
 import { render, screen } from '@testing-library/react';
 import type { Submission } from '@/lib/mock-data';
 
-const { mockFetchSpeakingHome, mockFetchSubmissions, mockFetchMockReports, mockTrack } = vi.hoisted(() => ({
+const {
+  mockFetchSpeakingHome,
+  mockFetchSubmissions,
+  mockFetchMockReports,
+  mockLearnerListSpeakingSharedResources,
+  mockTrack,
+} = vi.hoisted(() => ({
   mockFetchSpeakingHome: vi.fn(),
   mockFetchSubmissions: vi.fn(),
   mockFetchMockReports: vi.fn(),
+  mockLearnerListSpeakingSharedResources: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -12,6 +19,17 @@ vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href}>{children}</a>,
 }));
 
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/speaking',
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    refresh: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+  }),
+}));
 
 vi.mock('@/components/layout', () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -29,10 +47,22 @@ vi.mock('@/lib/analytics', () => ({
   },
 }));
 
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({
+    loading: false,
+    user: {
+      role: 'learner',
+      activeProfessionId: 'medicine',
+    },
+  }),
+}));
+
 vi.mock('@/lib/api', () => ({
   fetchSpeakingHome: mockFetchSpeakingHome,
   fetchSubmissions: mockFetchSubmissions,
   fetchMockReports: mockFetchMockReports,
+  learnerListSpeakingSharedResources: mockLearnerListSpeakingSharedResources,
+  downloadSpeakingSharedResourceMedia: vi.fn(),
 }));
 
 import SpeakingPage from './page';
@@ -123,6 +153,7 @@ describe('Speaking page', () => {
       },
     ] satisfies Submission[]);
     mockFetchMockReports.mockResolvedValue([]);
+    mockLearnerListSpeakingSharedResources.mockResolvedValue([]);
   });
 
   it('shows dashboard-style speaking focus and readable speaking evidence dates', async () => {

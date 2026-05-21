@@ -70,7 +70,7 @@ export function useWebcamPreflight(options: UseWebcamPreflightOptions): UseWebca
     if (typeof window === 'undefined') return;
     try {
       if (window.sessionStorage.getItem(storageKey) === '1') {
-        setStatus('granted');
+        window.queueMicrotask(() => setStatus('granted'));
       }
     } catch {
       // sessionStorage unavailable (private mode) — fall through with idle.

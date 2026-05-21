@@ -356,6 +356,10 @@ function LiveSpeakingTaskContent() {
     }
 
     try {
+      if (!isNativeRecorder && (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined')) {
+        setSubmitError('Recording is not supported in this browser. Use an updated Chrome, Edge, Safari, or the mobile app, then try again.');
+        return;
+      }
       if (isNativeRecorder) {
         await SpeakingRecorder.start({ mimeType: 'audio/mp4' });
         mediaRecorderRef.current = null;
@@ -387,6 +391,16 @@ function LiveSpeakingTaskContent() {
 
     } catch (err) {
       console.error('Local recording failed:', err);
+      const message = err instanceof DOMException && err.name === 'NotAllowedError'
+        ? 'Microphone permission was blocked. Allow microphone access in your browser settings, then press Start recording again.'
+        : err instanceof DOMException && err.name === 'NotFoundError'
+          ? 'No microphone was detected. Connect a microphone or choose a different input device, then try again.'
+          : err instanceof Error
+            ? `Recording could not start: ${err.message}`
+            : 'Recording could not start. Check your microphone and try again.';
+      setSubmitError(message);
+      cleanupAudio(true);
+      setRecordingState('idle');
     }
   };
 

@@ -1,0 +1,36 @@
+{
+  "uid": "speaking-livekit",
+  "title": "Speaking — LiveKit Health",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["speaking", "livekit"],
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Active live rooms",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "speaking_live_rooms_active{env=\"$env\"}" }]
+    },
+    {
+      "id": 2, "type": "stat", "title": "Webhook delivery p95 (s)",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum(rate(speaking_livekit_webhook_latency_seconds_bucket[5m])) by (le))" }]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Egress success rate (24h)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "sum(rate(speaking_livekit_egress_success_total[24h])) / sum(rate(speaking_livekit_egress_total[24h]))" }]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Cue volume (24h)",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "sum(increase(speaking_live_room_cue_total[24h]))" }]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Connect failures by reason",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "targets": [{ "refId": "A", "expr": "sum by(reason)(rate(speaking_live_room_connect_failed_total[5m]))" }]
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+name: Speaking Module — Load Tests (k6)
+
+on:
+  schedule:
+    - cron: "0 4 * * 1" # weekly Monday 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      K6_TARGET_URL: ${{ secrets.STAGING_API_URL }}
+      OET_TEST_LEARNER_EMAIL: ${{ secrets.OET_LOAD_LEARNER_EMAIL }}
+      OET_TEST_LEARNER_PASSWORD: ${{ secrets.OET_LOAD_LEARNER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update && sudo apt-get install -y k6
+      - name: Run k6 suite
+        run: |
+          set -e
+          mkdir -p k6-out
+          for script in tests/load/speaking-*.k6.js; do
+            name=$(basename "$script" .k6.js)
+            echo "::group::$name"
+            k6 run --summary-export "k6-out/$name.json" "$script" || true
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: speaking-k6-results
+          path: k6-out

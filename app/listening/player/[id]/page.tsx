@@ -46,6 +46,8 @@ import { ListeningPreviewBanner, ListeningReviewBanner } from '@/components/doma
 import { completeMockSection } from '@/lib/api';
 import { resolveBlockedSeekTarget, shouldResumeAfterBlockedPause } from '@/lib/listening/audio-integrity';
 import { listeningV2Api, type AdvanceResult, type ListeningV2SessionState } from '@/lib/listening/v2-api';
+import { presentationModeFromSession } from '@/lib/listening/modes';
+import { ListeningPlayerSkinShell } from '@/components/domain/listening/player/skins/ListeningPlayerSkinShell';
 
 const FIRST_STRICT_STATE: ListeningFsmState = 'a1_preview';
 
@@ -973,8 +975,15 @@ function PlayerContent() {
     })).filter((entry) => entry.questions.length > 0)
     : currentSection ? [{ section: currentSection, questions: sectionGroups?.[currentSection] ?? [] }] : [];
   const shouldMountAudio = session.paper.audioAvailable && (!strictReadinessRequired || hasStarted);
+  // Wave 3 — resolve presentation skin from server-issued policy. The skin
+  // wraps the existing player chrome; rendering logic below stays identical.
+  const presentationMode = presentationModeFromSession({
+    mode: session.modePolicy.mode,
+    presentationStyle: session.modePolicy.presentationStyle ?? null,
+  });
 
   return (
+    <ListeningPlayerSkinShell mode={presentationMode}>
     <AppShell pageTitle={session.paper.title} distractionFree>
       {shouldMountAudio ? (
         <audio
@@ -1439,6 +1448,7 @@ function PlayerContent() {
         ) : null}
       </div>
     </AppShell>
+    </ListeningPlayerSkinShell>
   );
 }
 

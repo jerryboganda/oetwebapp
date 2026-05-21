@@ -1,0 +1,48 @@
+name: Speaking Module — Content Batch Generator
+
+on:
+  workflow_dispatch:
+    inputs:
+      profession:
+        description: Profession code (nursing, medicine, pharmacy, physio, dentistry, ...)
+        required: true
+      count:
+        description: Number of cards to draft
+        required: true
+        default: "10"
+      difficulty:
+        description: Difficulty distribution (e.g. "intermediate:6,exam_ready:4")
+        required: true
+        default: "intermediate:10"
+      topics:
+        description: Comma-separated topic list (optional)
+        required: false
+        default: ""
+
+jobs:
+  batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Invoke staging admin API
+        env:
+          API_URL: ${{ secrets.STAGING_API_URL }}
+          ADMIN_TOKEN: ${{ secrets.STAGING_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+          body=$(jq -n \
+            --arg p "${{ inputs.profession }}" \
+            --argjson c ${{ inputs.count }} \
+            --arg d "${{ inputs.difficulty }}" \
+            --arg t "${{ inputs.topics }}" \
+            '{ professionId: $p, count: $c, difficulty: $d, topicList: $t }')
+          response=$(curl --fail-with-body -sS \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -X POST "$API_URL/v1/admin/speaking/cards/batch" \
+            -d "$body")
+          echo "$response" | tee batch-response.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: speaking-batch-response
+          path: batch-response.json

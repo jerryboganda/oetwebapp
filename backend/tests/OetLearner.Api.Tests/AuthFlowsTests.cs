@@ -1254,7 +1254,7 @@ public class AuthFlowsTests
         yield return new object[]
         {
             currentUser,
-            new[] { "userId", "email", "role", "displayName", "isEmailVerified", "isAuthenticatorEnabled", "requiresEmailVerification", "requiresMfa", "emailVerifiedAt", "authenticatorEnabledAt", "adminPermissions" }
+            new[] { "userId", "email", "role", "displayName", "isEmailVerified", "isAuthenticatorEnabled", "requiresEmailVerification", "requiresMfa", "emailVerifiedAt", "authenticatorEnabledAt", "adminPermissions", "activeProfessionId", "activeProfessionLabel" }
         };
 
         yield return new object[]

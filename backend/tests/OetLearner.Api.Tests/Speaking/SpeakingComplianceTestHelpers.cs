@@ -74,6 +74,8 @@ internal sealed class StubFileStorage : IFileStorage
     }
 
     public string? TryResolveLocalPath(string key) => null;
+    public Uri? ResolveReadUrl(string key, TimeSpan ttl)
+        => string.IsNullOrWhiteSpace(key) ? null : new Uri($"/media/file/{key}", UriKind.Relative);
 }
 
 /// <summary>
