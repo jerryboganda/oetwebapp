@@ -337,10 +337,10 @@ export function LearnerSpeakingAnalyticsDashboard({
                   stroke="hsl(var(--muted))"
                 />
                 <Tooltip
-                  formatter={(value: number | string) => [
+                  formatter={((value: unknown) => [
                     typeof value === 'number' ? value.toFixed(2) : String(value ?? ''),
                     'Normalised score',
-                  ]}
+                  ]) as never}
                   contentStyle={{
                     background: 'var(--surface)',
                     border: '1px solid hsl(var(--border))',
