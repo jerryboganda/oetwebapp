@@ -52,6 +52,18 @@ public static class SpeakingSessionEndpoints
             .Produces<SpeakingSessionDetail>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
+        learner.MapPost("/{id}/start-warmup", StartWarmupAsync)
+            .WithSummary("Mark the unscored warm-up conversation as started (Phase 3).")
+            .Produces<SpeakingSessionDetail>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        learner.MapPost("/{id}/finish-warmup", FinishWarmupAsync)
+            .WithSummary("Transition warm-up → prep. The only authorised exit from warm-up.")
+            .Produces<SpeakingSessionDetail>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         learner.MapPost("/{id}/start-roleplay", StartRolePlayAsync)
             .WithSummary("Transition the session from prep → active.")
             .Produces<SpeakingSessionDetail>(StatusCodes.Status200OK)
@@ -114,6 +126,34 @@ public static class SpeakingSessionEndpoints
     {
         var userId = ResolveUserId(http);
         var detail = await sessions.GetSessionForLearnerAsync(userId, id, ct);
+        return Results.Ok(detail);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // POST /v1/speaking/sessions/{id}/start-warmup
+    // ─────────────────────────────────────────────────────────────────
+    private static async Task<IResult> StartWarmupAsync(
+        HttpContext http,
+        string id,
+        SpeakingSessionService sessions,
+        CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        var detail = await sessions.StartWarmupAsync(userId, id, ct);
+        return Results.Ok(detail);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // POST /v1/speaking/sessions/{id}/finish-warmup
+    // ─────────────────────────────────────────────────────────────────
+    private static async Task<IResult> FinishWarmupAsync(
+        HttpContext http,
+        string id,
+        SpeakingSessionService sessions,
+        CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        var detail = await sessions.FinishWarmupAsync(userId, id, ct);
         return Results.Ok(detail);
     }
 

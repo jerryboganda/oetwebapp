@@ -38,3 +38,80 @@ public record RecordingDeletionResponse(
     string RecordingId,
     bool BlobDeleted,
     DateTimeOffset ArchivedAt);
+
+// ── Phase 10 (P10) — recording self-management + admin audit + erasure preflight ──
+
+/// <summary>One row of <c>GET /v1/speaking/recordings/mine</c>. Joins the
+/// recording row with the owning session + role-play card so the learner
+/// "My recordings" UI can render profession + mode + duration + retention
+/// expiry without a separate lookup.</summary>
+public record MyRecordingRow(
+    string RecordingId,
+    string SessionId,
+    DateTimeOffset CreatedAt,
+    string Mode,
+    string ProfessionId,
+    string ScenarioTitle,
+    int DurationSeconds,
+    string MimeType,
+    bool IsArchived,
+    DateTimeOffset? RetentionExpiresAt);
+
+/// <summary>Response shape for <c>GET /v1/speaking/recordings/mine</c>.</summary>
+public record MyRecordingsResponse(MyRecordingRow[] Recordings);
+
+/// <summary>Filter inputs for the admin audit viewer.</summary>
+public record SpeakingAccessAuditFilter(
+    string? RecordingId,
+    string? LearnerEmailOrId,
+    string? TutorEmailOrId,
+    DateTimeOffset? From,
+    DateTimeOffset? To,
+    int Limit = 100);
+
+/// <summary>One row of <c>GET /v1/admin/speaking/recordings/audit</c>.
+/// Each row is an <see cref="AuditEvent"/> with action starting with
+/// <c>speaking.recording.</c> projected to a learner-friendly shape.</summary>
+public record SpeakingAccessAuditRow(
+    string AuditEventId,
+    DateTimeOffset OccurredAt,
+    string Action,
+    string? RecordingId,
+    string? SessionId,
+    string? LearnerUserId,
+    string ActorId,
+    string ActorName,
+    string? ActorRole,
+    string? Purpose,
+    string? Reason,
+    string? DetailsJson);
+
+/// <summary>Response shape for the admin audit viewer.</summary>
+public record SpeakingAccessAuditResponse(SpeakingAccessAuditRow[] Events);
+
+/// <summary>Item returned in the erasure-preflight inventory for the
+/// learner's recordings.</summary>
+public record ErasurePreflightRecording(
+    string RecordingId,
+    string SessionId,
+    DateTimeOffset CreatedAt,
+    int DurationSeconds,
+    bool IsArchived);
+
+/// <summary>Item returned in the erasure-preflight inventory for the
+/// learner's AI / tutor assessments.</summary>
+public record ErasurePreflightAssessment(
+    string AssessmentId,
+    string SessionId,
+    string Track,
+    DateTimeOffset GeneratedAt);
+
+/// <summary>Response shape for <c>POST /v1/learner/account/erasure-preflight</c>.
+/// Surfaces the inventory of consent, recording, and assessment records
+/// the caller currently owns so a subsequent full-erasure flow can show
+/// the user exactly what will be deleted. The preflight does NOT delete
+/// anything itself.</summary>
+public record ErasurePreflightResponse(
+    ConsentRecord[] Consents,
+    ErasurePreflightRecording[] Recordings,
+    ErasurePreflightAssessment[] Assessments);

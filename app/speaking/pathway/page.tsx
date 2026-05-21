@@ -1,0 +1,118 @@
+'use client';
+
+/**
+ * OET Speaking — Phase 8 P8.3 — learner-facing course pathway view.
+ *
+ * Renders the 16-stage pathway with state per stage. Backend owns
+ * the state machine (`/v1/speaking/course-pathway`).
+ */
+import { useEffect, useState } from 'react';
+import { LearnerDashboardShell } from '@/components/layout';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { InlineAlert } from '@/components/ui/alert';
+import {
+  fetchSpeakingPathway,
+  type SpeakingPathwayResponse,
+  type SpeakingPathwayStage,
+} from '@/lib/api/speaking-compliance';
+
+function stateBadge(state: SpeakingPathwayStage['state']) {
+  switch (state) {
+    case 'completed':
+      return <Badge variant="success">completed</Badge>;
+    case 'in_progress':
+      return <Badge variant="info">in progress</Badge>;
+    default:
+      return <Badge variant="muted">locked</Badge>;
+  }
+}
+
+export default function SpeakingPathwayPage() {
+  const [data, setData] = useState<SpeakingPathwayResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchSpeakingPathway();
+        if (!cancelled) setData(res);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Could not load pathway.');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <LearnerDashboardShell>
+      <div className="mx-auto max-w-4xl space-y-6 py-8">
+        <header className="space-y-2">
+          <h1 className="text-2xl font-semibold text-slate-900">
+            {data?.title ?? 'Your Speaking pathway'}
+          </h1>
+          <p className="text-slate-600">
+            A guided sequence of warm-ups, drills, and full role-plays. Complete each stage to
+            unlock the next.
+          </p>
+        </header>
+
+        {error && <InlineAlert variant="error">{error}</InlineAlert>}
+
+        {!data ? (
+          <Skeleton className="h-64 w-full rounded-xl" />
+        ) : (
+          <>
+            <Card className="p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm text-slate-500">Progress</div>
+                  <div className="text-lg font-semibold text-slate-900">
+                    {data.completedStageCount} / {data.totalStages} stages
+                  </div>
+                </div>
+                <div className="text-3xl font-mono font-semibold text-blue-600">
+                  {Math.round(data.progressPercent)}%
+                </div>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full bg-blue-500 transition-all"
+                  style={{ width: `${Math.min(100, Math.max(0, data.progressPercent))}%` }}
+                />
+              </div>
+            </Card>
+
+            <ol className="space-y-3">
+              {data.stages.map((stage, idx) => (
+                <li key={stage.code}>
+                  <Card className="p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-mono text-slate-500">
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+                          <span className="font-medium text-slate-900">{stage.title}</span>
+                          {stateBadge(stage.state)}
+                          <Badge variant="outline">{stage.activityKind}</Badge>
+                        </div>
+                        <p className="text-sm text-slate-600">{stage.description}</p>
+                      </div>
+                    </div>
+                  </Card>
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
+      </div>
+    </LearnerDashboardShell>
+  );
+}

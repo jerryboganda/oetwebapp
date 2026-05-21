@@ -12,6 +12,7 @@ import { Save, Send, Flag, PlayCircle, MessageSquare, RotateCcw, Mic, Square, Tr
 import { useParams, useRouter } from 'next/navigation';
 import { AudioPlayerWaveform } from '@/components/domain/audio-player-waveform';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
+import { VoiceNoteRecorder } from '@/components/domain/expert/VoiceNoteRecorder';
 import { fetchAuthorizedObjectUrl, fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchSpeakingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertSpeakingReview } from '@/lib/api';
 import { ensureFreshAccessToken } from '@/lib/auth-client';
 import { env } from '@/lib/env';
@@ -688,6 +689,18 @@ export default function SpeakingReviewWorkspace() {
             aria-label={`Comment for ${label}`}
             disabled={workspaceMeta?.isReadOnly}
           />
+          {/* Phase 7b — per-criterion voice note (collapsed by default; additive to the existing review-level recorder). */}
+          {!workspaceMeta?.isReadOnly && reviewRequestId ? (
+            <div className="mt-2">
+              <VoiceNoteRecorder
+                reviewRequestId={reviewRequestId}
+                criterionCode={key}
+                subtest="speaking"
+                collapsed
+                onUploaded={() => { void loadVoiceNotes(); }}
+              />
+            </div>
+          ) : null}
         </div>
       ))}
     </>

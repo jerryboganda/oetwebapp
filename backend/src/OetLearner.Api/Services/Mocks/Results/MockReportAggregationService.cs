@@ -15,7 +15,50 @@ public interface IMockSectionResultAdapter
 public interface IMockReportAggregationService
 {
     Task GenerateAsync(BackgroundJobItem job, CancellationToken ct);
+
+    /// <summary>
+    /// P5 Speaking adapter — average the two <see cref="SpeakingAiAssessment"/>
+    /// rows that belong to a <see cref="SpeakingMockSession"/> (one per
+    /// role-play) and write the combined scaled score + readiness band back
+    /// onto the session as a snapshot. Returns the resolved aggregate so
+    /// callers can include it in their response payload without a second
+    /// trip to the DB.
+    /// </summary>
+    Task<SpeakingMockAggregateResult> AggregateSpeakingMockSessionAsync(
+        string mockSessionId,
+        CancellationToken ct);
 }
+
+/// <summary>
+/// Combined Speaking mock result. <see cref="CombinedScaledScore"/> is the
+/// equally-weighted mean of both halves' scaled scores; null if either half
+/// has no AI assessment yet.
+/// </summary>
+public sealed record SpeakingMockAggregateResult(
+    string MockSessionId,
+    int? CombinedScaledScore,
+    string ReadinessBandCode,
+    string ReadinessBandLabel,
+    int PassThreshold,
+    SpeakingMockAggregateCriterion[] PerCriterion,
+    SpeakingMockAggregateHalf RolePlay1,
+    SpeakingMockAggregateHalf RolePlay2);
+
+public sealed record SpeakingMockAggregateCriterion(
+    string Code,
+    double Average,
+    int Max,
+    int Score1,
+    int Score2);
+
+public sealed record SpeakingMockAggregateHalf(
+    string AttemptId,
+    string? SpeakingSessionId,
+    string? AssessmentId,
+    int? EstimatedScaledScore,
+    string? ReadinessBand,
+    string? OverallSummary,
+    DateTimeOffset? GeneratedAt);
 
 public sealed record MockSectionResultContext(
     LearnerDbContext Db,
@@ -467,4 +510,167 @@ public sealed class MockReportAggregationService(
 
     private static string ToDisplaySubtest(string subtest)
         => string.IsNullOrWhiteSpace(subtest) ? "Mock" : char.ToUpperInvariant(subtest[0]) + subtest[1..];
+
+    // ─────────────────────────────────────────────────────────────────────
+    // P5 — Speaking mock-set aggregation
+    // ─────────────────────────────────────────────────────────────────────
+    //
+    // A Speaking mock set is two role-plays. Each half has its own
+    // `Attempt` row (linked via `SpeakingMockSession.Attempt1Id` /
+    // `Attempt2Id`) and a `SpeakingSession` that wraps that `Attempt`. The
+    // AI scorer writes a `SpeakingAiAssessment` keyed on the
+    // `SpeakingSessionId`.
+    //
+    // Aggregation = equal-weight mean of both halves' criterion scores,
+    // projected through `OetScoring.SpeakingProjectedScaled` (the SINGLE
+    // canonical projection helper — never inline 70%/350 math here) into a
+    // combined scaled score + readiness band. Persist on the session row so
+    // a later AI re-score does not silently change the snapshot the learner
+    // already saw.
+
+    public async Task<SpeakingMockAggregateResult> AggregateSpeakingMockSessionAsync(
+        string mockSessionId,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(mockSessionId))
+            throw new ArgumentException("mockSessionId is required", nameof(mockSessionId));
+
+        var session = await db.SpeakingMockSessions
+            .FirstOrDefaultAsync(x => x.Id == mockSessionId, ct)
+            ?? throw new InvalidOperationException($"SpeakingMockSession {mockSessionId} not found");
+
+        // Look up the SpeakingSession that wraps each Attempt — the AI
+        // assessment is keyed on SpeakingSession.Id, not Attempt.Id.
+        var attemptIds = new[] { session.Attempt1Id, session.Attempt2Id };
+        var speakingSessions = await db.SpeakingSessions.AsNoTracking()
+            .Where(x => x.AttemptId != null && attemptIds.Contains(x.AttemptId))
+            .ToListAsync(ct);
+
+        var speaking1 = speakingSessions.FirstOrDefault(x => x.AttemptId == session.Attempt1Id);
+        var speaking2 = speakingSessions.FirstOrDefault(x => x.AttemptId == session.Attempt2Id);
+
+        var speakingIds = speakingSessions.Select(x => x.Id).ToList();
+        var assessments = speakingIds.Count == 0
+            ? new List<SpeakingAiAssessment>()
+            : await db.SpeakingAiAssessments.AsNoTracking()
+                .Where(x => speakingIds.Contains(x.SpeakingSessionId))
+                .OrderByDescending(x => x.GeneratedAt)
+                .ToListAsync(ct);
+
+        // Pick the latest AI assessment per speaking session.
+        var ai1 = speaking1 is null ? null : assessments.FirstOrDefault(x => x.SpeakingSessionId == speaking1.Id);
+        var ai2 = speaking2 is null ? null : assessments.FirstOrDefault(x => x.SpeakingSessionId == speaking2.Id);
+
+        // Build the per-criterion average only when both halves are present.
+        SpeakingMockAggregateCriterion[] perCriterion;
+        int? combinedScaled = null;
+        string bandCode;
+
+        if (ai1 is not null && ai2 is not null)
+        {
+            perCriterion = new[]
+            {
+                Avg("intelligibility",       ai1.Intelligibility,        ai2.Intelligibility,        6),
+                Avg("fluency",               ai1.Fluency,                ai2.Fluency,                6),
+                Avg("appropriateness",       ai1.Appropriateness,        ai2.Appropriateness,        6),
+                Avg("grammarExpression",     ai1.GrammarExpression,      ai2.GrammarExpression,      6),
+                Avg("relationshipBuilding",  ai1.RelationshipBuilding,   ai2.RelationshipBuilding,   3),
+                Avg("patientPerspective",    ai1.PatientPerspective,     ai2.PatientPerspective,     3),
+                Avg("structure",             ai1.Structure,              ai2.Structure,              3),
+                Avg("informationGathering",  ai1.InformationGathering,   ai2.InformationGathering,   3),
+                Avg("informationGiving",     ai1.InformationGiving,      ai2.InformationGiving,      3),
+            };
+
+            // Use OetScoring.SpeakingProjectedScaled with averaged-then-rounded
+            // criterion scores so the projection helper stays the single
+            // source of truth for the rubric → scaled mapping.
+            var averagedScores = new OetScoring.SpeakingCriterionScores(
+                Intelligibility:      RoundHalfUp((ai1.Intelligibility      + ai2.Intelligibility)      / 2.0),
+                Fluency:              RoundHalfUp((ai1.Fluency              + ai2.Fluency)              / 2.0),
+                Appropriateness:      RoundHalfUp((ai1.Appropriateness      + ai2.Appropriateness)      / 2.0),
+                GrammarExpression:    RoundHalfUp((ai1.GrammarExpression    + ai2.GrammarExpression)    / 2.0),
+                RelationshipBuilding: RoundHalfUp((ai1.RelationshipBuilding + ai2.RelationshipBuilding) / 2.0),
+                PatientPerspective:   RoundHalfUp((ai1.PatientPerspective   + ai2.PatientPerspective)   / 2.0),
+                Structure:            RoundHalfUp((ai1.Structure            + ai2.Structure)            / 2.0),
+                InformationGathering: RoundHalfUp((ai1.InformationGathering + ai2.InformationGathering) / 2.0),
+                InformationGiving:    RoundHalfUp((ai1.InformationGiving    + ai2.InformationGiving)    / 2.0));
+
+            // Two paths to the combined scaled score: (a) project the
+            // averaged criterion scores via OetScoring; (b) average the two
+            // already-projected scaled scores. We use (a) so the result
+            // honours the canonical 70/30 anchor and stays stable even if a
+            // criterion is later re-rounded.
+            combinedScaled = OetScoring.SpeakingProjectedScaled(averagedScores);
+            bandCode = OetScoring.SpeakingReadinessBandCode(
+                OetScoring.SpeakingReadinessBandFromScaled(combinedScaled.Value));
+
+            // Persist snapshot the FIRST time both halves complete. If we
+            // already have a snapshot, leave it alone so a re-run after a
+            // re-score does not silently change historical numbers.
+            if (session.CombinedScaledSnapshot is null || string.IsNullOrEmpty(session.ReadinessBandSnapshot))
+            {
+                session.CombinedScaledSnapshot = combinedScaled;
+                session.ReadinessBandSnapshot = bandCode;
+                if (session.State != SpeakingMockSessionState.Completed)
+                {
+                    session.State = SpeakingMockSessionState.Completed;
+                    session.CompletedAt = DateTimeOffset.UtcNow;
+                }
+                session.OrchestratorState = SpeakingMockOrchestratorStates.Aggregated;
+                await db.SaveChangesAsync(ct);
+            }
+            else
+            {
+                // Prefer the persisted snapshot for display consistency.
+                combinedScaled = session.CombinedScaledSnapshot ?? combinedScaled;
+                bandCode = session.ReadinessBandSnapshot ?? bandCode;
+            }
+        }
+        else
+        {
+            // Only one (or zero) halves scored — fall back to the existing
+            // snapshot if one exists, otherwise NotReady.
+            combinedScaled = session.CombinedScaledSnapshot;
+            bandCode = string.IsNullOrEmpty(session.ReadinessBandSnapshot)
+                ? OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBand.NotReady)
+                : session.ReadinessBandSnapshot;
+
+            perCriterion = Array.Empty<SpeakingMockAggregateCriterion>();
+        }
+
+        return new SpeakingMockAggregateResult(
+            MockSessionId: session.Id,
+            CombinedScaledScore: combinedScaled,
+            ReadinessBandCode: bandCode,
+            ReadinessBandLabel: SpeakingBandLabel(bandCode),
+            PassThreshold: OetScoring.ScaledPassGradeB,
+            PerCriterion: perCriterion,
+            RolePlay1: BuildHalf(session.Attempt1Id, speaking1, ai1),
+            RolePlay2: BuildHalf(session.Attempt2Id, speaking2, ai2));
+
+        static SpeakingMockAggregateCriterion Avg(string code, int a, int b, int max)
+            => new(code, Math.Round((a + b) / 2.0, 2), max, a, b);
+
+        static int RoundHalfUp(double v) => (int)Math.Round(v, MidpointRounding.AwayFromZero);
+
+        static SpeakingMockAggregateHalf BuildHalf(string attemptId, SpeakingSession? sess, SpeakingAiAssessment? ai)
+            => new(
+                AttemptId: attemptId,
+                SpeakingSessionId: sess?.Id,
+                AssessmentId: ai?.Id,
+                EstimatedScaledScore: ai?.EstimatedScaledScore,
+                ReadinessBand: ai?.ReadinessBand,
+                OverallSummary: ai?.OverallSummary,
+                GeneratedAt: ai?.GeneratedAt);
+    }
+
+    private static string SpeakingBandLabel(string code) => code switch
+    {
+        "not_ready"  => "Not ready",
+        "developing" => "Developing",
+        "borderline" => "Borderline",
+        "exam_ready" => "Exam-ready",
+        "strong"     => "Strong",
+        _             => "Not ready",
+    };
 }

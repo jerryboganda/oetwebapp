@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
@@ -85,7 +86,7 @@ public class SpeakingTutorCalibrationService(LearnerDbContext db)
         }
         AdminService.ValidateRubricPayload(req.Scores);
 
-        var gold = AdminService_ParseRubricInternal(sample.GoldScoresJson)
+        var gold = ParseRubricInternal(sample.GoldScoresJson)
             ?? throw ApiException.Conflict("speaking_calibration_invalid_gold",
                 "Gold rubric for this sample is corrupt — admin must republish.");
 
@@ -241,6 +242,146 @@ public class SpeakingTutorCalibrationService(LearnerDbContext db)
         };
     }
 
+    // ────────────────────────────────────────────────────────────────────
+    // Phase 7 — drift report.
+    //
+    // For each tutor with ≥ minSamples calibration submissions, compute:
+    //   * `overallMAE`   = mean of absolute per-criterion errors across
+    //                       every submitted sample
+    //   * `criterionMAEJson` = per-criterion mean absolute error (drives
+    //                          the radar chart in the admin drift tab)
+    //   * `samples`      = count of submissions used to compute the MAE
+    //   * `lastSubmittedAt` = freshness signal
+    //
+    // Result is ordered by overall MAE descending — i.e. worst-drift first
+    // so admins can prioritise re-training.
+    // ────────────────────────────────────────────────────────────────────
+    public async Task<TutorCalibrationDriftReport> GetDriftReportAsync(
+        int minSamples,
+        CancellationToken ct)
+    {
+        var min = Math.Max(1, minSamples);
+
+        var scores = await db.SpeakingCalibrationScores
+            .AsNoTracking()
+            .Join(db.SpeakingCalibrationSamples.AsNoTracking(),
+                s => s.SampleId,
+                sa => sa.Id,
+                (s, sa) => new { score = s, sample = sa })
+            .Where(x => x.sample.Status == SpeakingCalibrationSampleStatus.Published)
+            .ToListAsync(ct);
+
+        if (scores.Count == 0)
+        {
+            return new TutorCalibrationDriftReport(
+                Tutors: Array.Empty<TutorCalibrationDriftRow>(),
+                SampleSize: 0,
+                SamplesPublished: 0,
+                MinSamples: min);
+        }
+
+        var tutorIds = scores.Select(x => x.score.TutorId).Distinct().ToArray();
+        var tutorNames = await db.ExpertUsers.AsNoTracking()
+            .Where(u => tutorIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.DisplayName })
+            .ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
+
+        var grouped = scores.GroupBy(x => x.score.TutorId)
+            .Where(g => g.Count() >= min)
+            .ToList();
+
+        var rows = new List<TutorCalibrationDriftRow>(grouped.Count);
+        foreach (var group in grouped)
+        {
+            // Per-criterion absolute errors → average across the group.
+            var perCriterionMae = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (var code in AdminService.SpeakingCriterionCodes)
+            {
+                perCriterionMae[code] = 0.0;
+            }
+
+            var samples = 0;
+            var totalAbs = 0.0;
+            DateTimeOffset lastSubmittedAt = DateTimeOffset.MinValue;
+
+            foreach (var entry in group)
+            {
+                var tutorScores = ParseRubricInternal(entry.score.ScoresJson);
+                var goldScores = ParseRubricInternal(entry.sample.GoldScoresJson);
+                if (tutorScores is null || goldScores is null) continue;
+                samples++;
+                if (entry.score.SubmittedAt > lastSubmittedAt) lastSubmittedAt = entry.score.SubmittedAt;
+
+                perCriterionMae["intelligibility"] += Math.Abs(tutorScores.Intelligibility - goldScores.Intelligibility);
+                perCriterionMae["fluency"] += Math.Abs(tutorScores.Fluency - goldScores.Fluency);
+                perCriterionMae["appropriateness"] += Math.Abs(tutorScores.Appropriateness - goldScores.Appropriateness);
+                perCriterionMae["grammarExpression"] += Math.Abs(tutorScores.GrammarExpression - goldScores.GrammarExpression);
+                perCriterionMae["relationshipBuilding"] += Math.Abs(tutorScores.RelationshipBuilding - goldScores.RelationshipBuilding);
+                perCriterionMae["patientPerspective"] += Math.Abs(tutorScores.PatientPerspective - goldScores.PatientPerspective);
+                perCriterionMae["structure"] += Math.Abs(tutorScores.Structure - goldScores.Structure);
+                perCriterionMae["informationGathering"] += Math.Abs(tutorScores.InformationGathering - goldScores.InformationGathering);
+                perCriterionMae["informationGiving"] += Math.Abs(tutorScores.InformationGiving - goldScores.InformationGiving);
+
+                totalAbs += entry.score.TotalAbsoluteError;
+            }
+
+            if (samples == 0) continue;
+
+            // Average each criterion across the sampled set.
+            foreach (var code in perCriterionMae.Keys.ToArray())
+            {
+                perCriterionMae[code] = Math.Round(perCriterionMae[code] / samples, 3);
+            }
+
+            var overallMae = Math.Round(totalAbs / (samples * 9), 3);
+
+            rows.Add(new TutorCalibrationDriftRow(
+                TutorId: group.Key,
+                DisplayName: tutorNames.TryGetValue(group.Key, out var name) ? name : group.Key,
+                Samples: samples,
+                OverallMAE: overallMae,
+                CriterionMAEJson: JsonSerializer.Serialize(perCriterionMae),
+                CriterionMAE: perCriterionMae,
+                LastSubmittedAt: lastSubmittedAt == DateTimeOffset.MinValue ? null : lastSubmittedAt));
+        }
+
+        return new TutorCalibrationDriftReport(
+            Tutors: rows.OrderByDescending(r => r.OverallMAE).ToArray(),
+            SampleSize: scores.Count,
+            SamplesPublished: scores.Select(x => x.sample.Id).Distinct().Count(),
+            MinSamples: min);
+    }
+
+    private static SpeakingCriterionScoresPayload? ParseRubricInternal(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+            int Get(string key)
+            {
+                if (doc.RootElement.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number)
+                {
+                    return v.GetInt32();
+                }
+                return 0;
+            }
+            return new SpeakingCriterionScoresPayload(
+                Intelligibility: Get("intelligibility"),
+                Fluency: Get("fluency"),
+                Appropriateness: Get("appropriateness"),
+                GrammarExpression: Get("grammarExpression"),
+                RelationshipBuilding: Get("relationshipBuilding"),
+                PatientPerspective: Get("patientPerspective"),
+                Structure: Get("structure"),
+                InformationGathering: Get("informationGathering"),
+                InformationGiving: Get("informationGiving"));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     private static bool IsValidCriterion(string code)
         => string.Equals(code, "general", StringComparison.OrdinalIgnoreCase)
         || AdminService.SpeakingCriterionCodes.Any(c => string.Equals(c, code, StringComparison.OrdinalIgnoreCase));
@@ -268,36 +409,4 @@ public class SpeakingTutorCalibrationService(LearnerDbContext db)
         createdAt = c.CreatedAt,
     };
 
-    // Bridge to AdminService.ParseRubric (private). We only need read
-    // access to the gold rubric; we don't want to make the helper public
-    // because it is an internal serialisation detail.
-    private static SpeakingCriterionScoresPayload? AdminService_ParseRubricInternal(string json)
-    {
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
-            int Get(string key)
-            {
-                if (doc.RootElement.TryGetProperty(key, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number)
-                {
-                    return v.GetInt32();
-                }
-                return 0;
-            }
-            return new SpeakingCriterionScoresPayload(
-                Intelligibility: Get("intelligibility"),
-                Fluency: Get("fluency"),
-                Appropriateness: Get("appropriateness"),
-                GrammarExpression: Get("grammarExpression"),
-                RelationshipBuilding: Get("relationshipBuilding"),
-                PatientPerspective: Get("patientPerspective"),
-                Structure: Get("structure"),
-                InformationGathering: Get("informationGathering"),
-                InformationGiving: Get("informationGiving"));
-        }
-        catch (System.Text.Json.JsonException)
-        {
-            return null;
-        }
-    }
 }

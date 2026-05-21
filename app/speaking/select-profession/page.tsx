@@ -50,7 +50,7 @@ export default function SelectSpeakingProfessionPage() {
           </p>
         </header>
 
-        {error ? <InlineAlert variant="destructive">{error}</InlineAlert> : null}
+        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <Card className="space-y-3 p-4">
           {professionsLoading ? (

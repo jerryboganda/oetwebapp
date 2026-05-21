@@ -585,6 +585,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockReadinessTrendServi
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockBundleReviewStageService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockPassPredictionService>();
 // W2-D — Speaking transcription pipeline (ASR adapter).
+// Default provider is the deterministic Mock; production wiring swaps this DI line for a real ASR adapter.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingTranscriptionProvider,
+    OetLearner.Api.Services.Speaking.MockSpeakingTranscriptionProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingTranscriptionPipeline>();
 // W2-E — Speaking + Writing AI pre-analysis services.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingPreAnalysisService>();
@@ -597,10 +600,26 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSessionServi
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingComplianceService>();
 // Phase 2 (B.3) — AI-side speaking assessment scorer.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingAiAssessmentService>();
-// Phase 3 (B.4) — LiveKit gateway. Stub returns synthetic ids until the
-// real SDK is wired in; webhook signature verification is real.
-builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.ILiveKitGateway,
-    OetLearner.Api.Services.Speaking.LiveKitGatewayStub>();
+// Phase 6 (P6) — LiveKit gateway. When LiveKit is configured (api key
+// present) the cloud adapter mints real JWTs and hits the LiveKit REST
+// surface; otherwise we fall back to the stub used by dev + tests.
+// Webhook signature verification in both implementations is real.
+{
+    var liveKitSection = builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName);
+    var liveKitOptions = liveKitSection.Get<OetLearner.Api.Configuration.LiveKitOptions>()
+        ?? new OetLearner.Api.Configuration.LiveKitOptions();
+    if (liveKitOptions.IsEnabled)
+    {
+        builder.Services.AddHttpClient("LiveKitCloud", c => { c.Timeout = TimeSpan.FromSeconds(15); });
+        builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.ILiveKitGateway,
+            OetLearner.Api.Services.Speaking.LiveKitCloudGateway>();
+    }
+    else
+    {
+        builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.ILiveKitGateway,
+            OetLearner.Api.Services.Speaking.LiveKitGatewayStub>();
+    }
+}
 // Phase 3 (B.4) — live-tutor room orchestration service.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingLiveRoomService>();
 // Phase 4 — tutor-side scoring + review-queue services.
@@ -1425,6 +1444,7 @@ app.MapAnalyticsEndpoints();
 app.MapNotificationEndpoints();
 app.MapLearnerEndpoints();
 app.MapMockReadinessEndpoints();
+app.MapMockBookingEndpoints();
 app.MapLearnerActionsEndpoints();
 app.MapExpertEndpoints();
 app.MapExpertMessagingEndpoints();
@@ -1513,7 +1533,11 @@ app.MapLiveKitWebhookEndpoint();
 app.MapTutorSpeakingEndpoints();
 // Phase 5 — speaking drill bank (learner + admin).
 app.MapSpeakingDrillEndpoints();
-// TODO Phase 6: register SpeakingAnalyticsEndpoints, InterlocutorTrainingEndpoints, SpeakingCoursePathwayEndpoints once methods exist.
+// Phase 6 — speaking analytics dashboards, interlocutor training modules,
+// and the 16-stage learner course pathway.
+app.MapSpeakingAnalyticsEndpoints();
+app.MapInterlocutorTrainingEndpoints();
+app.MapSpeakingCoursePathwayEndpoints();
 
 // ── Rulebook + Writing linter + Speaking auditor + Grounded AI gateway ──
 app.MapRulebookEndpoints();

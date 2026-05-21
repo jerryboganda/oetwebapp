@@ -138,6 +138,18 @@ public static class LearnerEndpoints
             Results.Ok(await service.StartSpeakingMockSetAsync(http.UserId(), mockSetId, body?.Mode ?? "exam", ct)));
         speaking.MapGet("/mock-sessions/{sessionId}", async (HttpContext http, string sessionId, LearnerService service, CancellationToken ct) =>
             Results.Ok(await service.GetSpeakingMockSessionAsync(http.UserId(), sessionId, ct)));
+        // P5 - two-role-play mock orchestrator bridge transitions. The
+        // bridge is the short interlocutor handoff between role-play 1 and
+        // role-play 2: start marks the moment the orchestrator UI shows
+        // the handoff screen, finish advances the lifecycle into Prep2.
+        speaking.MapPost("/mock-sessions/{sessionId}/bridge/start", async (HttpContext http, string sessionId, LearnerService service, CancellationToken ct) =>
+            Results.Ok(await service.StartBridgeAsync(http.UserId(), sessionId, ct)));
+        speaking.MapPost("/mock-sessions/{sessionId}/bridge/finish", async (HttpContext http, string sessionId, LearnerService service, CancellationToken ct) =>
+            Results.Ok(await service.FinishBridgeAsync(http.UserId(), sessionId, ct)));
+        // P5 - explicit aggregate trigger for the results page. Returns the
+        // combined Speaking band + per-criterion averages; idempotent.
+        speaking.MapPost("/mock-sessions/{sessionId}/aggregate", async (HttpContext http, string sessionId, LearnerService service, CancellationToken ct) =>
+            Results.Ok(await service.AggregateAsync(http.UserId(), sessionId, ct)));
 
         // Wave 5 of docs/SPEAKING-MODULE-PLAN.md - deep-link from a
         // speaking task into the AI-patient Conversation module so the

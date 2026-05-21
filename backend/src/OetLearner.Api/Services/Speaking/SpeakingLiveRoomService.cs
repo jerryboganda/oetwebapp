@@ -319,6 +319,106 @@ public sealed class SpeakingLiveRoomService
     // End-of-room
     // ─────────────────────────────────────────────────────────────────
 
+    // ─────────────────────────────────────────────────────────────────
+    // Booking → room glue (P6 task 4)
+    //
+    // Spec: when a MockBooking confirms a SubtestCode == "speaking"
+    // session, the live room should be provisioned at
+    // (ScheduledStartAt - 5min) via a background job, and torn down at
+    // (ScheduledStartAt + DefaultMaxDurationSeconds).
+    //
+    // The codebase currently has Mock Speaking running through
+    // ConversationHub for AI mode and SpeakingLiveRoomService for
+    // human-tutor mode, but no Hangfire/IHostedService binding has yet
+    // been wired for booking-driven provisioning of Speaking-specific
+    // live rooms (most Mock Speaking flows are tutor-initiated from
+    // the queue, where the room is created lazily by the learner's
+    // first request via CreateRoomForSessionAsync). The method below
+    // provides a stable seam either a hosted-service tick or a future
+    // Hangfire job can call without further refactoring.
+    //
+    // TODO(P6-followup): once the dedicated Speaking booking flow lands
+    //   (separate from the generic MockBooking pipeline), schedule
+    //   ProvisionForBookingAsync from a hosted background timer or
+    //   Hangfire recurring job that scans for bookings whose
+    //   ScheduledStartAt is within the next 5 minutes and whose
+    //   SubtestCode == "speaking".
+    // ─────────────────────────────────────────────────────────────────
+
+    public async Task<SpeakingLiveRoomCreationResult?> ProvisionForBookingAsync(
+        string bookingId,
+        string learnerUserId,
+        string speakingSessionId,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(bookingId)) throw new ArgumentException("bookingId required", nameof(bookingId));
+        if (string.IsNullOrWhiteSpace(learnerUserId)) throw new ArgumentException("learnerUserId required", nameof(learnerUserId));
+        if (string.IsNullOrWhiteSpace(speakingSessionId)) throw new ArgumentException("speakingSessionId required", nameof(speakingSessionId));
+
+        // Skip if a room already exists for this booking (idempotent).
+        var existing = await _db.SpeakingLiveRooms
+            .FirstOrDefaultAsync(r => r.BookingId == bookingId, ct);
+        if (existing is not null)
+        {
+            return new SpeakingLiveRoomCreationResult(existing.Id, _options.Value.WssUrl, existing.RoomName);
+        }
+
+        var result = await CreateRoomForSessionAsync(learnerUserId, speakingSessionId, ct);
+
+        // Stamp the room with the booking id so a follow-up scheduler
+        // tick can find rooms it provisioned.
+        var room = await _db.SpeakingLiveRooms.FirstAsync(r => r.Id == result.LiveRoomId, ct);
+        room.BookingId = bookingId;
+        room.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "SpeakingLiveRoomService.ProvisionForBooking bookingId={BookingId} roomId={LiveRoomId}",
+            bookingId,
+            room.Id);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Tear-down hook for rooms that have outlived
+    /// <see cref="LiveKitOptions.DefaultMaxDurationSeconds"/>. A future
+    /// hosted-service tick can call this against rooms whose
+    /// <c>ActualStartUtc + MaxDurationSeconds &lt; now</c> to enforce
+    /// the cap. Today the LiveKit Cloud egress timeout handles this
+    /// server-side, but we expose the seam so the platform can degrade
+    /// gracefully if the provider misses the deadline.
+    /// </summary>
+    public async Task TearDownExpiredRoomsAsync(CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var candidates = await _db.SpeakingLiveRooms
+            .Where(r => r.State == SpeakingLiveRoomState.Active
+                && r.ActualStartUtc.HasValue)
+            .ToListAsync(ct);
+
+        foreach (var room in candidates)
+        {
+            var cap = room.ActualStartUtc!.Value.AddSeconds(room.MaxDurationSeconds);
+            if (now < cap) continue;
+
+            _logger.LogInformation(
+                "SpeakingLiveRoomService.TearDownExpired roomId={LiveRoomId} startedAt={Started} cap={Cap}",
+                room.Id,
+                room.ActualStartUtc,
+                cap);
+
+            room.State = SpeakingLiveRoomState.Ended;
+            room.ActualEndUtc = now;
+            room.UpdatedAt = now;
+        }
+
+        if (candidates.Count > 0)
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
     public async Task EndRoomAsync(string userId, string liveRoomId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(userId)) throw new ArgumentException("userId required", nameof(userId));

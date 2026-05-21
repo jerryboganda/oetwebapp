@@ -344,6 +344,29 @@ export default function MockPlayerPage() {
                         <p className="mt-3 text-sm font-bold text-navy">{selectedSectionPolicy.timing}</p>
                         <p className="mt-1 text-sm leading-6 text-muted">{selectedSectionPolicy.examRule}</p>
                         <p className="mt-1 text-sm leading-6 text-muted">{selectedSectionPolicy.reviewRule}</p>
+                        {session.config.mode === 'exam' && modePolicy ? (() => {
+                          const lockRules: string[] = [];
+                          if (!modePolicy.listeningReplayAllowed) lockRules.push('Audio plays once — no replay');
+                          if (!modePolicy.pauseAllowed) lockRules.push('Timer cannot be paused');
+                          if (!modePolicy.hintsAllowed) lockRules.push('No hints during attempt');
+                          if (!modePolicy.transcriptDuringAttemptAllowed) lockRules.push('Transcript hidden until submission');
+                          if (!modePolicy.writingAssistantAllowed) lockRules.push('No grammar assistant in writing');
+                          if (!modePolicy.speakingCoachingAllowed) lockRules.push('No coaching during speaking');
+                          if (lockRules.length === 0) return null;
+                          return (
+                            <div className="mt-3 rounded-2xl border border-warning/30 bg-warning/5 p-3">
+                              <div className="flex items-center gap-2">
+                                <ShieldCheck className="h-4 w-4 text-warning" />
+                                <p className="text-[11px] font-black uppercase tracking-widest text-warning">Active locks:</p>
+                              </div>
+                              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5 text-muted">
+                                {lockRules.map((rule) => (
+                                  <li key={rule}>{rule}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        })() : null}
                       </div>
                     ) : null}
 

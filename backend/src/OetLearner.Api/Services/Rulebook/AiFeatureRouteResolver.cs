@@ -17,6 +17,13 @@ namespace OetLearner.Api.Services.Rulebook;
 /// This keeps Phase 7 strictly additive — features without an override row
 /// behave exactly as they did before the phase landed.
 /// </para>
+///
+/// <para>
+/// Speaking module additions (OET Speaking plan P1.3): three Speaking-only
+/// codes are registered here so the AiGatewayService routes them through
+/// the per-feature DB override path. Defaults are seeded by
+/// <see cref="OetLearner.Api.Services.Seeding.SpeakingAiRouteSeed"/>.
+/// </para>
 /// </summary>
 public interface IAiFeatureRouteResolver
 {
@@ -30,6 +37,96 @@ public interface IAiFeatureRouteResolver
 }
 
 public sealed record AiFeatureRouteResolution(string ProviderCode, string? Model);
+
+/// <summary>
+/// Speaking-module feature codes that are NOT in the canonical
+/// <see cref="AiFeatureCodes"/> set on <c>Domain/AiEntities.cs</c>.
+/// These are kept local to the Rulebook namespace because the Speaking
+/// module ships its own AI features (scoring v2, patient-turn LLM, card
+/// drafting) that are gated behind their own DB-routed override rows.
+/// <para>
+/// Pinned by the unit tests in <c>RolePlayCardProfessionFilterTests</c>
+/// and the seeder <see cref="OetLearner.Api.Services.Seeding.SpeakingAiRouteSeed"/>.
+/// </para>
+/// </summary>
+public static class SpeakingAiFeatureCodes
+{
+    /// <summary>OET Speaking dual-grader v2 — scoring-critical.
+    /// Default provider/model: Anthropic <c>claude-sonnet-4-6</c> with prompt
+    /// caching on; fallback OpenAI <c>gpt-4o</c>.</summary>
+    public const string SpeakingScoreV2 = "speaking.score.v2";
+
+    /// <summary>Per-turn AI patient LLM used during the AI role-play loop.
+    /// Cheap, low-latency. Default: Anthropic <c>claude-haiku-4-5</c> with
+    /// prompt caching on; fallback OpenAI <c>gpt-4o-mini</c>.</summary>
+    public const string SpeakingPatientTurnV1 = "speaking.patient.turn.v1";
+
+    /// <summary>Admin AI-draft tool for new role-play cards. Default:
+    /// Anthropic <c>claude-sonnet-4-6</c> with prompt caching on.</summary>
+    public const string CardDraftV1 = "card.draft.v1";
+
+    /// <summary>All Speaking-module feature codes registered by this file.
+    /// Iterate this set when seeding or validating allowlists.</summary>
+    public static readonly IReadOnlyList<string> All = new[]
+    {
+        SpeakingScoreV2,
+        SpeakingPatientTurnV1,
+        CardDraftV1,
+    };
+}
+
+/// <summary>
+/// Default provider routes for the Speaking-module AI features. Acts as
+/// the static fallback list for <see cref="AiFeatureRouteResolver"/> when
+/// no DB row exists for a given feature code. The seeder copies these into
+/// the <c>AiFeatureRoutes</c> table on startup so admins can edit them via
+/// the standard route-editor UI.
+/// </summary>
+public static class SpeakingAiRouteDefaults
+{
+    /// <summary>Per-feature default routing for the Speaking module.</summary>
+    public static readonly IReadOnlyList<SpeakingAiRouteDefault> Defaults = new[]
+    {
+        new SpeakingAiRouteDefault(
+            FeatureCode: SpeakingAiFeatureCodes.SpeakingScoreV2,
+            PrimaryProviderCode: "anthropic",
+            PrimaryModel: "claude-sonnet-4-6",
+            FallbackProviderCode: "openai",
+            FallbackModel: "gpt-4o",
+            PromptCachingEnabled: true,
+            Description: "Speaking dual-grader v2 (scoring-critical)."),
+        new SpeakingAiRouteDefault(
+            FeatureCode: SpeakingAiFeatureCodes.SpeakingPatientTurnV1,
+            PrimaryProviderCode: "anthropic",
+            PrimaryModel: "claude-haiku-4-5",
+            FallbackProviderCode: "openai",
+            FallbackModel: "gpt-4o-mini",
+            PromptCachingEnabled: true,
+            Description: "AI patient per-turn LLM (cheap, low-latency)."),
+        new SpeakingAiRouteDefault(
+            FeatureCode: SpeakingAiFeatureCodes.CardDraftV1,
+            PrimaryProviderCode: "anthropic",
+            PrimaryModel: "claude-sonnet-4-6",
+            FallbackProviderCode: null,
+            FallbackModel: null,
+            PromptCachingEnabled: true,
+            Description: "Admin role-play card AI draft tool."),
+    };
+}
+
+/// <summary>
+/// Immutable description of the default routing for a single Speaking
+/// AI feature. Read by the seeder + admin UI to pre-populate the
+/// route editor.
+/// </summary>
+public sealed record SpeakingAiRouteDefault(
+    string FeatureCode,
+    string PrimaryProviderCode,
+    string PrimaryModel,
+    string? FallbackProviderCode,
+    string? FallbackModel,
+    bool PromptCachingEnabled,
+    string Description);
 
 public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRouteResolver
 {
@@ -66,6 +163,10 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         AiFeatureCodes.AiAssistantAdmin,
         AiFeatureCodes.AiAssistantExpert,
         AiFeatureCodes.AiAssistantLearner,
+        // Speaking module (OET Speaking plan P1.3 — see SpeakingAiFeatureCodes).
+        SpeakingAiFeatureCodes.SpeakingScoreV2,
+        SpeakingAiFeatureCodes.SpeakingPatientTurnV1,
+        SpeakingAiFeatureCodes.CardDraftV1,
     };
 
     /// <summary>Subset of <see cref="KnownFeatureCodes"/> the bulk-route
@@ -89,8 +190,24 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         if (string.IsNullOrWhiteSpace(featureCode)) return null;
         var row = await db.AiFeatureRoutes.AsNoTracking()
             .FirstOrDefaultAsync(r => r.FeatureCode == featureCode && r.IsActive, ct);
-        if (row is null) return null;
-        return new AiFeatureRouteResolution(row.ProviderCode, row.Model);
+        if (row is not null)
+        {
+            return new AiFeatureRouteResolution(row.ProviderCode, row.Model);
+        }
+
+        // Speaking-module fallback: if no DB row exists, return the static
+        // default so the gateway has a route even before the seeder has run
+        // (CI tests, fresh DBs, etc.). Other feature codes keep the existing
+        // null behaviour — the gateway falls through to the global default
+        // provider.
+        var staticDefault = SpeakingAiRouteDefaults.Defaults
+            .FirstOrDefault(d => string.Equals(d.FeatureCode, featureCode, StringComparison.OrdinalIgnoreCase));
+        if (staticDefault is not null)
+        {
+            return new AiFeatureRouteResolution(staticDefault.PrimaryProviderCode, staticDefault.PrimaryModel);
+        }
+
+        return null;
     }
 
     public bool IsKnownFeatureCode(string featureCode) =>

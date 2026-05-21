@@ -75,6 +75,15 @@ public sealed class SpeakingSessionService(LearnerDbContext db)
             ExamTypeCode = "oet",
         };
 
+        // Sessions now open in the unscored WarmUp state. The learner UI
+        // calls POST /start-warmup → /finish-warmup before transitioning
+        // into the timed prep window. Live-tutor sessions skip warm-up
+        // because the human interlocutor handles introductions in the
+        // LiveKit room.
+        var initialState = mode == SpeakingSessionMode.LiveTutor
+            ? SpeakingSessionState.Prep
+            : SpeakingSessionState.WarmUp;
+
         var session = new SpeakingSession
         {
             Id = sessionId,
@@ -82,9 +91,9 @@ public sealed class SpeakingSessionService(LearnerDbContext db)
             RolePlayCardId = card.Id,
             MockSetId = string.IsNullOrWhiteSpace(req.MockSetId) ? null : req.MockSetId,
             Mode = mode,
-            State = SpeakingSessionState.Prep,
+            State = initialState,
             AttemptId = attemptId,
-            PrepStartedAt = now,
+            PrepStartedAt = initialState == SpeakingSessionState.Prep ? now : null,
             ConsentVersion = consentVersion,
             CreatedAt = now,
             UpdatedAt = now,
@@ -94,16 +103,79 @@ public sealed class SpeakingSessionService(LearnerDbContext db)
         db.SpeakingSessions.Add(session);
         await db.SaveChangesAsync(ct);
 
-        var prepEndsAt = now.AddSeconds(card.PrepTimeSeconds);
+        // Until warm-up finishes the prep window has not started, so the
+        // computed deadlines are forward-looking — the frontend can use
+        // them as soft hints, then re-fetch the session after the
+        // /finish-warmup call to get authoritative timestamps.
+        var prepStartedAt = session.PrepStartedAt ?? now;
+        var prepEndsAt = prepStartedAt.AddSeconds(card.PrepTimeSeconds);
         var rolePlayEndsAt = prepEndsAt.AddSeconds(card.RolePlayTimeSeconds);
 
         return new CreateSpeakingSessionResponse(
             SessionId: sessionId,
-            PrepStartedAt: now,
+            PrepStartedAt: prepStartedAt,
             PrepEndsAt: prepEndsAt,
             RolePlayEndsAt: rolePlayEndsAt,
             ConsentVersion: consentVersion,
             Card: ProjectLearnerCard(card));
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Warm-up transitions (Phase 3)
+    // ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Marks the warm-up window as started. Idempotent — calling twice
+    /// just refreshes <see cref="SpeakingSession.WarmupStartedAt"/>
+    /// without resetting the state machine. Rejects sessions that have
+    /// already left the warm-up state.
+    /// </summary>
+    public async Task<SpeakingSessionDetail> StartWarmupAsync(
+        string userId,
+        string sessionId,
+        CancellationToken ct)
+    {
+        var session = await LoadOwnedSessionAsync(userId, sessionId, ct, tracking: true);
+        if (session.State != SpeakingSessionState.WarmUp)
+        {
+            throw ApiException.Conflict("speaking_session_invalid_state",
+                $"Warm-up cannot start in state '{SpeakingSessionStates.ToCode(session.State)}'.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        session.WarmupStartedAt ??= now;
+        session.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+
+        return await GetSessionForLearnerAsync(userId, sessionId, ct);
+    }
+
+    /// <summary>
+    /// Transitions the session from <c>WarmUp</c> into <c>Prep</c>. This is
+    /// the only authorised path out of warm-up — clients cannot skip
+    /// straight to <c>Active</c>. Stamps both the warm-up end and the
+    /// prep start so the analytics layer can measure warm-up duration.
+    /// </summary>
+    public async Task<SpeakingSessionDetail> FinishWarmupAsync(
+        string userId,
+        string sessionId,
+        CancellationToken ct)
+    {
+        var session = await LoadOwnedSessionAsync(userId, sessionId, ct, tracking: true);
+        if (session.State != SpeakingSessionState.WarmUp)
+        {
+            throw ApiException.Conflict("speaking_session_invalid_state",
+                $"Warm-up can only finish from the warm-up state (current: {SpeakingSessionStates.ToCode(session.State)}).");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        session.WarmupEndedAt = now;
+        session.State = SpeakingSessionState.Prep;
+        session.PrepStartedAt = now;
+        session.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+
+        return await GetSessionForLearnerAsync(userId, sessionId, ct);
     }
 
     public async Task<SpeakingSessionDetail> GetSessionForLearnerAsync(
@@ -122,6 +194,8 @@ public sealed class SpeakingSessionService(LearnerDbContext db)
             Mode: SpeakingSessionModes.ToCode(session.Mode),
             State: SpeakingSessionStates.ToCode(session.State),
             RolePlayCardId: session.RolePlayCardId,
+            WarmupStartedAt: session.WarmupStartedAt,
+            WarmupEndedAt: session.WarmupEndedAt,
             PrepStartedAt: session.PrepStartedAt,
             RolePlayStartedAt: session.RolePlayStartedAt,
             EndedAt: session.EndedAt,
@@ -136,6 +210,17 @@ public sealed class SpeakingSessionService(LearnerDbContext db)
         CancellationToken ct)
     {
         var session = await LoadOwnedSessionAsync(userId, sessionId, ct, tracking: true);
+
+        // Strict state-machine: role-play only starts from Prep. Clients
+        // still sitting in WarmUp must call /finish-warmup first so the
+        // unscored warm-up audio is properly demarcated from the timed
+        // assessment window. This prevents skip-attacks that would let a
+        // learner avoid the warm-up loop entirely.
+        if (session.State == SpeakingSessionState.WarmUp)
+        {
+            throw ApiException.Conflict("speaking_session_warmup_not_finished",
+                "Finish the warm-up conversation before starting the role-play.");
+        }
         if (session.State != SpeakingSessionState.Prep)
         {
             throw ApiException.Conflict("speaking_session_invalid_state",

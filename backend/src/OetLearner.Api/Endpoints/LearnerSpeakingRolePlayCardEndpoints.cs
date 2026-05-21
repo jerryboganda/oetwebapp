@@ -1,15 +1,20 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Endpoints;
 
 // Phase 1 (B.1) of the OET Speaking module roadmap.
 //
-// Learner-facing read of a single `RolePlayCard`. The handler delegates
-// to `LearnerService.GetSpeakingRolePlayCardForLearnerAsync` which is
-// the **only** path through which a learner can fetch a role-play card
-// and is contractually obliged never to leak interlocutor data. The
-// xUnit test `RolePlayCardSerializationTests` enforces that guarantee.
+// Learner-facing list + detail for `RolePlayCard`. The handlers delegate
+// to `LearnerService.GetSpeakingRolePlayCardForLearnerAsync` /
+// `ListSpeakingRolePlayCardsForLearnerAsync` which are the **only** code
+// paths through which a learner can fetch a role-play card. They are
+// contractually obliged never to leak interlocutor data (pinned by the
+// xUnit tests `RolePlayCardSerializationTests` +
+// `InterlocutorScriptLeakageTests`) and to filter results by the
+// caller's active profession (pinned by
+// `RolePlayCardProfessionFilterTests`).
 //
 // `Program.cs` registers this via `MapLearnerSpeakingRolePlayCardEndpoints`.
 public static class LearnerSpeakingRolePlayCardEndpoints
@@ -20,6 +25,18 @@ public static class LearnerSpeakingRolePlayCardEndpoints
             .RequireAuthorization("LearnerOnly")
             .RequireRateLimiting("PerUser")
             .WithTags("Speaking Role-Play Cards (Learner)");
+
+        // Plan P2.1 — list endpoint. Filters by the caller's active
+        // profession + universal cards. Difficulty is the only supported
+        // query filter today; adding scenario tag / criteria filter is
+        // tracked under plan §2.3 on the frontend.
+        group.MapGet("", async (
+            LearnerService service,
+            HttpContext http,
+            CancellationToken ct,
+            [FromQuery] string? difficulty) =>
+            Results.Ok(await service.ListSpeakingRolePlayCardsForLearnerAsync(
+                LearnerId(http), difficulty, ct)));
 
         group.MapGet("/{id}", async (
             string id,

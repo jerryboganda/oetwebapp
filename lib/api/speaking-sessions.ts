@@ -150,6 +150,22 @@ export async function startRolePlay(sessionId: string): Promise<SpeakingSessionD
   );
 }
 
+/** Phase 3 P3.4 — mark warm-up as started. */
+export async function startSpeakingWarmup(sessionId: string): Promise<SpeakingSessionDetail> {
+  return apiClient.post<SpeakingSessionDetail>(
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/start-warmup`,
+    {},
+  );
+}
+
+/** Phase 3 P3.4 — finish warm-up and transition to prep. */
+export async function finishSpeakingWarmup(sessionId: string): Promise<SpeakingSessionDetail> {
+  return apiClient.post<SpeakingSessionDetail>(
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/finish-warmup`,
+    {},
+  );
+}
+
 export async function endSpeakingSession(sessionId: string): Promise<SpeakingSessionDetail> {
   return apiClient.post<SpeakingSessionDetail>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/end`,

@@ -10,6 +10,7 @@ import { Timer } from '@/components/ui/timer';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { AlertTriangle, FileAudio, FileText, MessageSquare, Mic, RotateCcw, Save, Send, Sparkles, Square, UploadCloud } from 'lucide-react';
 import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
+import { VoiceNoteRecorder } from '@/components/domain/expert/VoiceNoteRecorder';
 import { useParams, useRouter } from 'next/navigation';
 import { addWritingReviewVoiceNote, fetchAuthorizedObjectUrl, fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchWritingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertWritingReview, uploadMedia } from '@/lib/api';
 import { ensureFreshAccessToken } from '@/lib/auth-client';
@@ -1017,6 +1018,17 @@ export default function WritingReviewWorkspace() {
                   aria-label={`Comment for ${label}`}
                   disabled={workspaceMeta?.isReadOnly}
                 />
+                {/* Phase 7b — per-criterion voice note (collapsed by default; additive to the existing review-level recorder in the Voice Notes tab). */}
+                {!workspaceMeta?.isReadOnly && reviewRequestId ? (
+                  <div className="mt-2">
+                    <VoiceNoteRecorder
+                      reviewRequestId={reviewRequestId}
+                      criterionCode={key}
+                      subtest="writing"
+                      collapsed
+                    />
+                  </div>
+                ) : null}
               </div>
             ))}
 

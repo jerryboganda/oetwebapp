@@ -32,12 +32,16 @@ public record CreateSpeakingSessionResponse(
 
 /// <summary>Response from <c>GET /v1/speaking/sessions/{id}</c>. Returns
 /// the current state of the session along with the same learner-safe
-/// card projection used at create time.</summary>
+/// card projection used at create time. The warm-up timestamps were
+/// added in Phase 3 so the frontend state-router can tell warmup from
+/// prep without a separate API call.</summary>
 public record SpeakingSessionDetail(
     string SessionId,
     string Mode,
     string State,
     string RolePlayCardId,
+    DateTimeOffset? WarmupStartedAt,
+    DateTimeOffset? WarmupEndedAt,
     DateTimeOffset? PrepStartedAt,
     DateTimeOffset? RolePlayStartedAt,
     DateTimeOffset? EndedAt,
