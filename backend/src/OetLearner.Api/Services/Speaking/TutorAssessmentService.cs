@@ -476,7 +476,7 @@ public sealed class TutorAssessmentService(
         }
     }
 
-    internal static DivergenceMetric ComputeDivergence(
+    public static DivergenceMetric ComputeDivergence(
         SpeakingAiAssessment ai,
         SpeakingTutorAssessment tutor)
     {
