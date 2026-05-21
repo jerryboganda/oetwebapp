@@ -25,8 +25,8 @@ public sealed class AiAssistantGateway(
     IAiFeatureRouteResolver routeResolver,
     IAiProviderRegistry providerRegistry,
     IEnumerable<IAiModelProvider> providers,
-    IAiUsageRecorder? usageRecorder,
-    ILogger<AiAssistantGateway> logger) : IAiAssistantGateway
+    ILogger<AiAssistantGateway> logger,
+    IAiUsageRecorder? usageRecorder = null) : IAiAssistantGateway
 {
     public async IAsyncEnumerable<LlmStreamChunk> StreamCompleteWithToolsAsync(
         string featureCode,
