@@ -115,13 +115,8 @@ export default function AdminSpeakingRolePlayAiDraftPage() {
             <Select
               value={seed.professionId}
               onChange={(e) => setSeed({ ...seed, professionId: e.target.value })}
-            >
-              {PROFESSION_OPTIONS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
+              options={PROFESSION_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
+            />
             <Input
               placeholder="Clinical topic"
               value={seed.clinicalTopic}
@@ -140,11 +135,12 @@ export default function AdminSpeakingRolePlayAiDraftPage() {
                   difficulty: e.target.value as 'core' | 'extension' | 'exam',
                 })
               }
-            >
-              <option value="core">Core</option>
-              <option value="extension">Extension</option>
-              <option value="exam">Exam</option>
-            </Select>
+              options={[
+                { value: 'core', label: 'Core' },
+                { value: 'extension', label: 'Extension' },
+                { value: 'exam', label: 'Exam' },
+              ]}
+            />
             <Input
               placeholder="Setting (optional)"
               value={seed.setting}
