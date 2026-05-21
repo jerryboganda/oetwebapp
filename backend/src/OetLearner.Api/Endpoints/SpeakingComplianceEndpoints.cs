@@ -57,6 +57,20 @@ public static class SpeakingComplianceEndpoints
             CancellationToken ct) =>
             Results.Ok(await svc.DeleteRecordingAsync(http.UserId(), id, ct)));
 
+        // Phase 10 P10.1 — learner self-management list.
+        learner.MapGet("/recordings/mine", async (
+            HttpContext http,
+            SpeakingComplianceService svc,
+            CancellationToken ct) =>
+            Results.Ok(await svc.GetMyRecordingsAsync(http.UserId(), ct)));
+
+        // Phase 10 P10.3 — erasure preflight (no deletion).
+        learner.MapGet("/recordings/erasure-preflight", async (
+            HttpContext http,
+            SpeakingComplianceService svc,
+            CancellationToken ct) =>
+            Results.Ok(await svc.GetErasurePreflightAsync(http.UserId(), ct)));
+
         // Admin/tutor non-owner access. TeachingStaffOnly covers Expert + Admin.
         var teaching = app.MapGroup("/v1/admin/speaking")
             .RequireAuthorization("TeachingStaffOnly");
@@ -80,6 +94,13 @@ public static class SpeakingComplianceEndpoints
                 isArchived = recording.IsArchived,
             });
         });
+
+        // Phase 10 P10.2 — admin recording-access audit viewer.
+        teaching.MapGet("/recordings/audit", async (
+            [AsParameters] SpeakingAccessAuditFilter filter,
+            SpeakingComplianceService svc,
+            CancellationToken ct) =>
+            Results.Ok(await svc.GetAccessAuditAsync(filter, ct)));
 
         return app;
     }

@@ -250,6 +250,207 @@ public sealed class SpeakingComplianceService(
         return recording;
     }
 
+    // ── My recordings (Phase 10 P10.1) ────────────────────────────────
+
+    /// <summary>List the caller's own speaking recordings, joined with
+    /// the owning session + role-play card so the My-Recordings UI can
+    /// show profession, mode, scenario title, and retention countdown
+    /// without an N+1.</summary>
+    public async Task<MyRecordingsResponse> GetMyRecordingsAsync(
+        string userId,
+        CancellationToken ct)
+    {
+        var rows = await (
+            from r in db.SpeakingRecordings.AsNoTracking()
+            join s in db.SpeakingSessions.AsNoTracking() on r.SpeakingSessionId equals s.Id
+            join c in db.RolePlayCards.AsNoTracking() on s.RolePlayCardId equals c.Id into cj
+            from c in cj.DefaultIfEmpty()
+            where s.UserId == userId
+            orderby r.CreatedAt descending
+            select new MyRecordingRow(
+                r.Id,
+                s.Id,
+                r.CreatedAt,
+                s.Mode.ToString(),
+                c != null ? c.ProfessionId : "unknown",
+                c != null ? c.ScenarioTitle : "(scenario unavailable)",
+                r.DurationSeconds,
+                r.MimeType,
+                r.IsArchived,
+                r.RetentionExpiresAt))
+            .Take(500)
+            .ToListAsync(ct);
+
+        return new MyRecordingsResponse(rows.ToArray());
+    }
+
+    // ── Admin recording-access audit (Phase 10 P10.2) ─────────────────
+
+    /// <summary>Project the AuditEvent rows that record admin / tutor
+    /// access to learner recordings (and learner-initiated deletions)
+    /// to a learner-friendly shape. Filters are AND-combined; null /
+    /// blank filters are ignored.</summary>
+    public async Task<SpeakingAccessAuditResponse> GetAccessAuditAsync(
+        SpeakingAccessAuditFilter filter,
+        CancellationToken ct)
+    {
+        var limit = filter.Limit <= 0 ? 100 : Math.Min(filter.Limit, 500);
+
+        IQueryable<AuditEvent> q = db.AuditEvents
+            .AsNoTracking()
+            .Where(a => a.ResourceType == "SpeakingRecording"
+                && (a.Action == "SpeakingRecordingAccessed"
+                    || a.Action == "SpeakingRecordingDeleted"));
+
+        if (!string.IsNullOrWhiteSpace(filter.RecordingId))
+        {
+            var rid = filter.RecordingId.Trim();
+            q = q.Where(a => a.ResourceId == rid);
+        }
+        if (!string.IsNullOrWhiteSpace(filter.TutorEmailOrId))
+        {
+            var t = filter.TutorEmailOrId.Trim();
+            q = q.Where(a => a.ActorId == t || a.ActorName.Contains(t));
+        }
+        if (filter.From.HasValue)
+        {
+            var from = filter.From.Value;
+            q = q.Where(a => a.OccurredAt >= from);
+        }
+        if (filter.To.HasValue)
+        {
+            var to = filter.To.Value;
+            q = q.Where(a => a.OccurredAt <= to);
+        }
+
+        var raw = await q
+            .OrderByDescending(a => a.OccurredAt)
+            .Take(limit)
+            .Select(a => new
+            {
+                a.Id,
+                a.OccurredAt,
+                a.Action,
+                a.ResourceId,
+                a.ActorId,
+                a.ActorName,
+                a.Details,
+            })
+            .ToListAsync(ct);
+
+        // Resolve learner ids by joining recording → session.
+        var recordingIds = raw
+            .Select(x => x.ResourceId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .Distinct()
+            .ToArray();
+
+        var ownerLookup = await (
+            from r in db.SpeakingRecordings.AsNoTracking()
+            join s in db.SpeakingSessions.AsNoTracking() on r.SpeakingSessionId equals s.Id
+            where recordingIds.Contains(r.Id)
+            select new { r.Id, s.UserId, SessionId = s.Id })
+            .ToDictionaryAsync(x => x.Id, x => new { x.UserId, x.SessionId }, ct);
+
+        var rows = raw.Select(a =>
+        {
+            string? learnerUserId = null;
+            string? sessionId = null;
+            if (!string.IsNullOrEmpty(a.ResourceId)
+                && ownerLookup.TryGetValue(a.ResourceId, out var lookup))
+            {
+                learnerUserId = lookup.UserId;
+                sessionId = lookup.SessionId;
+            }
+
+            // Learner-id filter applied after lookup so we can match by
+            // the resolved owner rather than the raw ActorId column.
+            if (!string.IsNullOrWhiteSpace(filter.LearnerEmailOrId)
+                && learnerUserId != null
+                && !string.Equals(learnerUserId, filter.LearnerEmailOrId.Trim(), StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            string? purpose = null;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(a.Details))
+                {
+                    using var doc = JsonDocument.Parse(a.Details);
+                    if (doc.RootElement.TryGetProperty("purpose", out var p)
+                        && p.ValueKind == JsonValueKind.String)
+                    {
+                        purpose = p.GetString();
+                    }
+                }
+            }
+            catch (JsonException) { /* best-effort */ }
+
+            return new SpeakingAccessAuditRow(
+                a.Id,
+                a.OccurredAt,
+                a.Action,
+                a.ResourceId,
+                sessionId,
+                learnerUserId,
+                a.ActorId,
+                a.ActorName,
+                ActorRole: null,
+                Purpose: purpose,
+                Reason: null,
+                DetailsJson: a.Details);
+        })
+        .Where(x => x != null)
+        .Select(x => x!)
+        .ToArray();
+
+        return new SpeakingAccessAuditResponse(rows);
+    }
+
+    // ── Erasure preflight (Phase 10 P10.3) ────────────────────────────
+
+    /// <summary>Build the inventory of consent + recording + assessment
+    /// rows the caller currently owns, without deleting anything. The
+    /// frontend uses this to show learners exactly what a full GDPR
+    /// erasure will remove.</summary>
+    public async Task<ErasurePreflightResponse> GetErasurePreflightAsync(
+        string userId,
+        CancellationToken ct)
+    {
+        var consents = await db.SpeakingComplianceConsents
+            .AsNoTracking()
+            .Where(c => c.UserId == userId)
+            .OrderByDescending(c => c.AcceptedAt)
+            .Select(c => new ConsentRecord(c.ConsentType, c.ConsentVersion, c.AcceptedAt, c.RevokedAt))
+            .ToListAsync(ct);
+
+        var recordings = await (
+            from r in db.SpeakingRecordings.AsNoTracking()
+            join s in db.SpeakingSessions.AsNoTracking() on r.SpeakingSessionId equals s.Id
+            where s.UserId == userId
+            orderby r.CreatedAt descending
+            select new ErasurePreflightRecording(
+                r.Id, s.Id, r.CreatedAt, r.DurationSeconds, r.IsArchived))
+            .Take(500)
+            .ToListAsync(ct);
+
+        var assessments = await (
+            from a in db.SpeakingAiAssessments.AsNoTracking()
+            join s in db.SpeakingSessions.AsNoTracking() on a.SpeakingSessionId equals s.Id
+            where s.UserId == userId
+            orderby a.GeneratedAt descending
+            select new ErasurePreflightAssessment(
+                a.Id, s.Id, "ai", a.GeneratedAt))
+            .Take(500)
+            .ToListAsync(ct);
+
+        return new ErasurePreflightResponse(
+            consents.ToArray(),
+            recordings.ToArray(),
+            assessments.ToArray());
+    }
+
     // ── Retention helpers (used by SpeakingAudioRetentionWorker) ────────
 
     /// <summary>Phase 7 default retention window. If the session has at

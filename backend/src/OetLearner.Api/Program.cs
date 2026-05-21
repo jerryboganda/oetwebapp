@@ -585,6 +585,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockReadinessTrendServi
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockBundleReviewStageService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockPassPredictionService>();
 // W2-D — Speaking transcription pipeline (ASR adapter).
+// Default provider is the deterministic Mock; production wiring swaps this DI line for a real ASR adapter.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingTranscriptionProvider,
+    OetLearner.Api.Services.Speaking.MockSpeakingTranscriptionProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingTranscriptionPipeline>();
 // W2-E — Speaking + Writing AI pre-analysis services.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingPreAnalysisService>();
