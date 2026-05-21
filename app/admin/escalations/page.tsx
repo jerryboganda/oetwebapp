@@ -16,6 +16,7 @@ import { assignEscalationReviewer, resolveEscalation } from '@/lib/api';
 import { getAdminEscalationsData, getAdminUsersPageData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminReviewEscalation, AdminUserRow } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -41,6 +42,7 @@ export default function EscalationsPage() {
   const [resolutionNote, setResolutionNote] = useState('');
   const [isMutating, setIsMutating] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const selectedStatus = filters.status?.[0];
 
@@ -202,6 +204,16 @@ export default function EscalationsPage() {
                 {e.finalScore != null && <p className="text-xs font-semibold">Final: {e.finalScore}</p>}
               </div>
             )}
+            selectable
+            selectedKeys={selectedKeys}
+            onSelectionChange={setSelectedKeys}
+          />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'resolve', label: 'Resolve selected', onClick: () => setToast({ variant: 'error', message: 'Bulk resolve coming soon.' }) },
+            ]}
           />
         </AdminRoutePanel>
       </AsyncStateWrapper>

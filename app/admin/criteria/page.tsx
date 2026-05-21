@@ -17,6 +17,7 @@ import { createAdminCriterion, updateAdminCriterion } from '@/lib/api';
 import { getAdminCriteriaData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminCriterion } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -56,6 +57,7 @@ export default function CriteriaPage() {
   const [form, setForm] = useState<CriterionFormState>(defaultFormState);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const selectedStatus = filters.status?.[0];
 
@@ -254,7 +256,14 @@ export default function CriteriaPage() {
       >
         <AdminRoutePanel title="Criteria Library" description="Every row below is backed by the live admin criteria endpoint and persists status changes.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [] })} />
-          <DataTable columns={columns} data={criteria} keyExtractor={(criterion) => criterion.id} />
+          <DataTable columns={columns} data={criteria} keyExtractor={(criterion) => criterion.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
+            ]}
+          />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

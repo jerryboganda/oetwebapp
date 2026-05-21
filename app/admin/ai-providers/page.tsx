@@ -25,6 +25,7 @@ import {
 import { AiProviderAccountsModal } from '@/components/domain/ai-provider-accounts-modal';
 import { AiFeatureRoutesPanel } from '@/components/domain/ai-feature-routes-panel';
 import { AiFeatureToolGrantsPanel } from '@/components/domain/ai-feature-tool-grants-panel';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
@@ -264,6 +265,7 @@ export default function AiProvidersPage() {
   const [categoryFilter, setCategoryFilter] = useState<AiProviderRow['category'] | 'All'>('All');
   const [discoveringModels, setDiscoveringModels] = useState(false);
   const [discoveredModels, setDiscoveredModels] = useState<string[] | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try { setRows(await fetchAiProviders()); setStatus('success'); } catch { setStatus('error'); }
@@ -449,6 +451,16 @@ export default function AiProvidersPage() {
             data={categoryFilter === 'All' ? rows : rows.filter((r) => r.category === categoryFilter)}
             columns={columns}
             keyExtractor={(p) => p.id || p.code}
+            selectable
+            selectedKeys={selectedKeys}
+            onSelectionChange={setSelectedKeys}
+          />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
+            ]}
           />
         </AdminRoutePanel>
       </AsyncStateWrapper>

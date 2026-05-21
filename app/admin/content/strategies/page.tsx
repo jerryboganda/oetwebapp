@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
@@ -28,6 +29,7 @@ export default function AdminStrategiesPage() {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState<ToastState>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const loadGuides = useCallback(async () => {
     setPageStatus('loading');
@@ -211,7 +213,15 @@ export default function AdminStrategiesPage() {
         }
       >
         <AdminRoutePanel title="Guides" description="Create, edit, publish, and archive learner strategy articles.">
-          <DataTable columns={columns} data={guides} keyExtractor={(guide) => guide.id} aria-label="Strategy guides" />
+          <DataTable columns={columns} data={guides} keyExtractor={(guide) => guide.id} aria-label="Strategy guides" selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk archive coming soon.' }) },
+              { key: 'publish', label: 'Publish selected', onClick: () => setToast({ variant: 'error', message: 'Bulk publish coming soon.' }) },
+            ]}
+          />
         </AdminRoutePanel>
       </AsyncStateWrapper>
     </AdminRouteWorkspace>

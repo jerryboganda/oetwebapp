@@ -13,6 +13,7 @@ import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { apiClient } from '@/lib/api';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 interface ThreadRow {
   id: string;
@@ -61,6 +62,7 @@ export default function AiAssistantThreadsPage() {
   // Archive modal
   const [archiveTarget, setArchiveTarget] = useState<ThreadRow | null>(null);
   const [archiving, setArchiving] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const loadThreads = useCallback(async () => {
     try {
@@ -217,7 +219,14 @@ export default function AiAssistantThreadsPage() {
 
       <AsyncStateWrapper status={status} onRetry={loadThreads}>
         <AdminRoutePanel>
-          <DataTable columns={columns} data={threads} keyExtractor={(row) => row.id} emptyMessage="No threads found" />
+          <DataTable columns={columns} data={threads} keyExtractor={(row) => row.id} emptyMessage="No threads found" selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
+            ]}
+          />
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t border-admin-border px-4 py-3">
               <p className="text-xs text-admin-text-muted">

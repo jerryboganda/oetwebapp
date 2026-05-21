@@ -18,6 +18,7 @@ import { assignAdminReview, cancelAdminReview, reopenAdminReview } from '@/lib/a
 import { getAdminReviewFailureData, getAdminReviewOpsSummaryData, getAdminReviewQueueData, getAdminUsersPageData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminReviewFailures, AdminReviewOpsSummary, AdminReviewQueueItem, AdminUserRow } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -38,6 +39,7 @@ export default function ReviewOpsPage() {
   const [cancelReason, setCancelReason] = useState('');
   const [isMutating, setIsMutating] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const selectedStatus = filters.status?.[0];
   const selectedPriority = filters.priority?.[0];
@@ -605,7 +607,14 @@ export default function ReviewOpsPage() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={cardTransition}>
             <AdminRoutePanel title="Live Queue" description="Assign or cancel queued reviews with real backend mutations.">
               <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [], priority: [] })} />
-              <DataTable columns={queueColumns} data={queue} keyExtractor={(item) => item.id} mobileCardRender={queueMobileCardRender} />
+              <DataTable columns={queueColumns} data={queue} keyExtractor={(item) => item.id} mobileCardRender={queueMobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'cancel', label: 'Cancel selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk cancel coming soon.' }) },
+            ]}
+          />
             </AdminRoutePanel>
           </motion.div>
 

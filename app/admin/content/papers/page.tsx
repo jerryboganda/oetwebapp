@@ -22,6 +22,7 @@ import {
   listContentPapers,
   type ContentPaperDto,
 } from '@/lib/content-upload-api';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -80,6 +81,7 @@ export default function ContentPapersListPage() {
   const [newProfession, setNewProfession] = useState('medicine');
   const [newProvenance, setNewProvenance] = useState(DEFAULT_CONTENT_SOURCE_PROVENANCE);
   const [saving, setSaving] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -239,7 +241,15 @@ export default function ContentPapersListPage() {
 
       <AsyncStateWrapper status={status}>
         <AdminRoutePanel title={`Papers (${rows.length})`}>
-          <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} />
+          <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
+              { key: 'publish', label: 'Publish selected', onClick: () => {} },
+            ]}
+          />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

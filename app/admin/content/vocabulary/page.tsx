@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-error';
 import { Pagination } from '@/components/ui/pagination';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 import {
   fetchAdminVocabularyItems,
   deleteAdminVocabularyItem,
@@ -55,6 +56,7 @@ export default function AdminVocabularyPage() {
   const [categories, setCategories] = useState<Array<{ category: string; total: number }>>([]);
   const [recallSets, setRecallSets] = useState<AdminRecallSetSummary[]>([]);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchAdminVocabularyCategories()
@@ -248,7 +250,14 @@ export default function AdminVocabularyPage() {
           )}
 
           <AsyncStateWrapper status={pageStatus}>
-            <DataTable columns={columns} data={rows} keyExtractor={(r) => r.id} />
+            <DataTable columns={columns} data={rows} keyExtractor={(r) => r.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+            <BulkActionBar
+              selectedCount={selectedKeys.size}
+              onClearSelection={() => setSelectedKeys(new Set())}
+              actions={[
+                { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
+              ]}
+            />
             <Pagination
               page={page}
               pageSize={pageSize}

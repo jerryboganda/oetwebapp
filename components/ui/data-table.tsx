@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useCallback, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 
 import { cn } from '@/lib/utils';
@@ -44,6 +44,12 @@ interface DataTableProps<T> {
   'aria-label'?: string;
   /** Enable row virtualization for large datasets. See {@link DataTableVirtualizeOptions}. */
   virtualize?: DataTableVirtualizeOptions;
+  /** Show row-selection checkboxes. */
+  selectable?: boolean;
+  /** Controlled set of selected row keys. */
+  selectedKeys?: Set<string>;
+  /** Called when selection changes. */
+  onSelectionChange?: (keys: Set<string>) => void;
 }
 
 export function DataTable<T>({
@@ -56,7 +62,35 @@ export function DataTable<T>({
   className,
   'aria-label': ariaLabel,
   virtualize,
+  selectable,
+  selectedKeys,
+  onSelectionChange,
 }: DataTableProps<T>) {
+  const allKeys = data.map((row, idx) => keyExtractor(row, idx));
+  const allSelected = selectable && selectedKeys ? allKeys.length > 0 && allKeys.every((k) => selectedKeys.has(k)) : false;
+  const someSelected = selectable && selectedKeys ? allKeys.some((k) => selectedKeys.has(k)) && !allSelected : false;
+
+  const toggleAll = useCallback(() => {
+    if (!onSelectionChange || !selectedKeys) return;
+    if (allSelected) {
+      const next = new Set(selectedKeys);
+      allKeys.forEach((k) => next.delete(k));
+      onSelectionChange(next);
+    } else {
+      const next = new Set(selectedKeys);
+      allKeys.forEach((k) => next.add(k));
+      onSelectionChange(next);
+    }
+  }, [allKeys, allSelected, onSelectionChange, selectedKeys]);
+
+  const toggleRow = useCallback((key: string) => {
+    if (!onSelectionChange || !selectedKeys) return;
+    const next = new Set(selectedKeys);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    onSelectionChange(next);
+  }, [onSelectionChange, selectedKeys]);
+
   if (data.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-background-light px-6 py-10 text-center text-sm text-muted">
@@ -131,30 +165,57 @@ export function DataTable<T>({
   return (
     <div className={cn('overflow-hidden rounded-2xl border border-border bg-surface shadow-sm', className)}>
       <div className="md:hidden p-3">
+        {selectable && data.length > 0 && (
+          <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-background-light">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => { if (el) el.indeterminate = someSelected; }}
+              onChange={toggleAll}
+              aria-label="Select all"
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30 cursor-pointer"
+            />
+            <span className="text-xs text-muted font-medium">Select all</span>
+          </div>
+        )}
         {data.map((row, idx) => {
           const rowKey = keyExtractor(row, idx);
+          const isSelected = selectable && selectedKeys?.has(rowKey);
 
           if (hasMobileCardView) {
             return (
-              <Card
-                key={rowKey}
-                hoverable={Boolean(onRowClick)}
-                padding="md"
-                role={onRowClick ? 'button' : 'group'}
-                tabIndex={onRowClick ? 0 : undefined}
-                data-row-key={rowKey}
-                onClick={(event) => onRowClick?.(row, event)}
-                onKeyDown={(event) => {
-                  if (!onRowClick) return;
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onRowClick(row, event);
-                  }
-                }}
-                className={cn(onRowClick && 'cursor-pointer focus-visible:bg-primary/[0.03]')}
-              >
-                {mobileCardRender?.(row, idx)}
-              </Card>
+              <div key={rowKey} className={cn('relative', isSelected && 'ring-2 ring-primary/40 rounded-xl')}>
+                {selectable && (
+                  <div className="absolute top-3 left-3 z-10">
+                    <input
+                      type="checkbox"
+                      checked={isSelected || false}
+                      onChange={() => toggleRow(rowKey)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Select ${rowKey}`}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30 cursor-pointer"
+                    />
+                  </div>
+                )}
+                <Card
+                  hoverable={Boolean(onRowClick)}
+                  padding="md"
+                  role={onRowClick ? 'button' : 'group'}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  data-row-key={rowKey}
+                  onClick={(event) => onRowClick?.(row, event)}
+                  onKeyDown={(event) => {
+                    if (!onRowClick) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      onRowClick(row, event);
+                    }
+                  }}
+                  className={cn(onRowClick && 'cursor-pointer focus-visible:bg-primary/[0.03]', selectable && 'pl-10')}
+                >
+                  {mobileCardRender?.(row, idx)}
+                </Card>
+              </div>
             );
           }
 
@@ -177,6 +238,18 @@ export function DataTable<T>({
             <table className="w-full min-w-full text-sm" aria-label={ariaLabel}>
               <thead className="bg-background-light">
                 <tr className="border-b border-border/60">
+                  {selectable && (
+                    <th scope="col" className="border-b border-border py-2 px-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                        onChange={toggleAll}
+                        aria-label="Select all rows"
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30 cursor-pointer"
+                      />
+                    </th>
+                  )}
                   {columns.map((column) => (
                     <th
                       key={column.key}
@@ -194,10 +267,13 @@ export function DataTable<T>({
               </thead>
 
               <tbody className="divide-y divide-border bg-surface">
-                {data.map((row, idx) => (
+                {data.map((row, idx) => {
+                  const rowKey = keyExtractor(row, idx);
+                  const isSelected = selectable && selectedKeys?.has(rowKey);
+                  return (
                   <tr
-                    key={keyExtractor(row, idx)}
-                    data-row-key={keyExtractor(row, idx)}
+                    key={rowKey}
+                    data-row-key={rowKey}
                     onClick={(event) => onRowClick?.(row, event)}
                     onKeyDown={(event) => {
                       if (onRowClick && (event.key === 'Enter' || event.key === ' ')) {
@@ -210,8 +286,21 @@ export function DataTable<T>({
                     className={cn(
                       'border-b border-border/30 hover:bg-background-light/70 transition-colors focus:outline-none',
                       onRowClick && 'cursor-pointer hover:bg-primary/[0.03] focus-visible:bg-primary/[0.03] focus-visible:outline-none',
+                      isSelected && 'bg-primary/[0.05]',
                     )}
                   >
+                    {selectable && (
+                      <td className="px-3 py-3 w-10 align-middle">
+                        <input
+                          type="checkbox"
+                          checked={isSelected || false}
+                          onChange={() => toggleRow(rowKey)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Select row ${rowKey}`}
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     {columns.map((column) => (
                       <td
                         key={column.key}
@@ -225,7 +314,8 @@ export function DataTable<T>({
                       </td>
                     ))}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

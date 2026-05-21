@@ -14,6 +14,7 @@ import { retryWebhook } from '@/lib/api';
 import { getAdminWebhookEventsData, getAdminWebhookSummaryData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminWebhookEvent, AdminWebhookRetryResponse, AdminWebhookSummary } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -36,6 +37,7 @@ export default function WebhooksPage() {
   const [page] = useState(1);
   const [isMutating, setIsMutating] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const selectedStatus = filters.status?.[0];
   const selectedGateway = filters.gateway?.[0];
@@ -207,6 +209,16 @@ export default function WebhooksPage() {
                 {!e.retryable && e.retryBlockedReason && <p className="text-xs text-admin-text-muted">{e.retryBlockedReason}</p>}
               </div>
             )}
+            selectable
+            selectedKeys={selectedKeys}
+            onSelectionChange={setSelectedKeys}
+          />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'retry', label: 'Retry selected', onClick: () => setToast({ variant: 'error', message: 'Bulk retry coming soon.' }) },
+            ]}
           />
         </AdminRoutePanel>
       </AsyncStateWrapper>

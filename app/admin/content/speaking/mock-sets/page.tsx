@@ -25,6 +25,7 @@ import {
   archiveAdminSpeakingMockSet,
   type AdminSpeakingMockSetRow,
 } from '@/lib/api';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type SpeakingContentOption = { id: string; title: string; status: string };
 
@@ -51,6 +52,7 @@ export default function AdminSpeakingMockSetsPage() {
     tags: '',
     sortOrder: 0,
   });
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   // Load mock sets when filter changes.
   useEffect(() => {
@@ -317,6 +319,16 @@ export default function AdminSpeakingMockSetsPage() {
             columns={columns}
             data={rows}
             keyExtractor={(row) => row.mockSetId}
+            selectable
+            selectedKeys={selectedKeys}
+            onSelectionChange={setSelectedKeys}
+          />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
+            ]}
           />
         </AsyncStateWrapper>
       </AdminRoutePanel>

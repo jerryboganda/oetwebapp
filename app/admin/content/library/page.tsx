@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/form-controls';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminContentLibraryData } from '@/lib/admin';
 import type { AdminContentRow } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 
@@ -31,6 +32,7 @@ export default function AdminContentLibraryPage() {
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [reloadNonce, setReloadNonce] = useState(0);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const selectedType = filters.type?.[0];
@@ -277,7 +279,16 @@ export default function AdminContentLibraryPage() {
             />
           ) : (
             <div className="space-y-4">
-              <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} mobileCardRender={mobileCardRender} />
+              <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} mobileCardRender={mobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+              <BulkActionBar
+                selectedCount={selectedKeys.size}
+                onClearSelection={() => setSelectedKeys(new Set())}
+                actions={[
+                  { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
+                  { key: 'archive', label: 'Archive selected', onClick: () => setToast({ variant: 'error', message: 'Bulk archive coming soon.' }) },
+                  { key: 'publish', label: 'Publish selected', onClick: () => setToast({ variant: 'error', message: 'Bulk publish coming soon.' }) },
+                ]}
+              />
               <Pagination
                 page={page}
                 pageSize={pageSize}

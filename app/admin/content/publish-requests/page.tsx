@@ -18,6 +18,7 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { hasPermission, AdminPermission } from '@/lib/admin-permissions';
 import type { AdminPublishRequest } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -67,6 +68,7 @@ export default function PublishRequestsPage() {
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const selectedStatus = filters.status?.[0];
   const selectedStage = filters.stage?.[0];
@@ -322,6 +324,17 @@ export default function PublishRequestsPage() {
                 {r.rejectionReason ? <p className="text-xs text-[var(--color-error)]">{r.rejectionReason}</p> : null}
               </div>
             )}
+            selectable
+            selectedKeys={selectedKeys}
+            onSelectionChange={setSelectedKeys}
+          />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'approve', label: 'Approve selected', onClick: () => setToast({ variant: 'error', message: 'Bulk approve coming soon.' }) },
+              { key: 'reject', label: 'Reject selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk reject coming soon.' }) },
+            ]}
           />
         </AdminRoutePanel>
       </AsyncStateWrapper>

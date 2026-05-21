@@ -13,6 +13,7 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { fetchAdminMediaAssets, fetchAdminMediaAudit, adminProcessMediaAsset, uploadMedia, deleteMedia } from '@/lib/api';
 import type { MediaAsset, MediaAuditResult, PaginatedResponse } from '@/lib/types/content-hierarchy';
 import { Film, RefreshCw, AlertTriangle, Upload, Trash2, FileImage, FileText } from 'lucide-react';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -41,6 +42,7 @@ export default function AdminMediaPage() {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -279,7 +281,16 @@ export default function AdminMediaPage() {
           {pageStatus === 'empty' ? (
             <EmptyState icon={<Film className="w-8 h-8 text-admin-text-muted" />} title="No media assets" description="Upload files or import content to see media assets here." />
           ) : (
-            <DataTable columns={columns} data={assets} keyExtractor={(r) => r.id} />
+            <>
+            <DataTable columns={columns} data={assets} keyExtractor={(r) => r.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+            <BulkActionBar
+              selectedCount={selectedKeys.size}
+              onClearSelection={() => setSelectedKeys(new Set())}
+              actions={[
+                { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
+              ]}
+            />
+            </>
           )}
         </AsyncStateWrapper>
 

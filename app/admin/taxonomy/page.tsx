@@ -16,6 +16,7 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminTaxonomyData, getAdminTaxonomyImpactData } from '@/lib/admin';
 import { archiveAdminTaxonomy, createAdminTaxonomy, updateAdminTaxonomy } from '@/lib/api';
 import type { AdminTaxonomyImpact, AdminTaxonomyNode } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 
@@ -30,6 +31,7 @@ export default function AdminTaxonomyPage() {
   const [impact, setImpact] = useState<AdminTaxonomyImpact | null>(null);
   const [form, setForm] = useState({ label: '', code: '', status: 'active', description: '' });
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const selectedStatus = filters.status?.[0];
 
   useEffect(() => {
@@ -179,7 +181,14 @@ export default function AdminTaxonomyPage() {
         </AdminRoutePanel>
 
         <AdminRoutePanel title="Professions" description="Create, update, and archive professions with live impact checks before change.">
-          <DataTable columns={columns} data={nodes} keyExtractor={(row) => row.id} />
+          <DataTable columns={columns} data={nodes} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
+            ]}
+          />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

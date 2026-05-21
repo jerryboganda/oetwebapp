@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/form-controls';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { fetchAdminSponsors, type AdminSponsorDto } from '@/lib/api';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type Sponsor = AdminSponsorDto;
 
@@ -23,6 +24,7 @@ export default function AdminInstitutionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchAdminSponsors()
@@ -147,13 +149,25 @@ export default function AdminInstitutionsPage() {
           ) : error ? (
             <div className="p-8 text-center text-admin-text-muted">{error}</div>
           ) : (
+            <>
             <DataTable
               columns={columns}
               data={filtered}
               keyExtractor={(sponsor) => sponsor.id}
               emptyMessage="No institutions found."
               aria-label="Institutions"
+              selectable
+              selectedKeys={selectedKeys}
+              onSelectionChange={setSelectedKeys}
             />
+            <BulkActionBar
+              selectedCount={selectedKeys.size}
+              onClearSelection={() => setSelectedKeys(new Set())}
+              actions={[
+                { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
+              ]}
+            />
+            </>
           )}
         </AdminRoutePanel>
       </motion.div>

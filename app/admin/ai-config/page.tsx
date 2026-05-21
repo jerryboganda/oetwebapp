@@ -17,6 +17,7 @@ import { getAdminAIConfigData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminAIConfig } from '@/lib/types/admin';
 import { fetchAiProviders, type AiProviderRow } from '@/lib/ai-management-api';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -76,6 +77,7 @@ export default function AIConfigPage() {
     { value: 'anthropic', label: 'Anthropic' },
     { value: 'google', label: 'Google' },
   ]);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const selectedStatus = filters.status?.[0];
 
@@ -391,7 +393,14 @@ export default function AIConfigPage() {
 
         <AdminRoutePanel title="Configuration Registry" description="Live model metadata, thresholds, routing rules, and activation controls all come from the admin AI config endpoints.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [] })} />
-          <DataTable columns={columns} data={configs} keyExtractor={(config) => config.id} />
+          <DataTable columns={columns} data={configs} keyExtractor={(config) => config.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
+            ]}
+          />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

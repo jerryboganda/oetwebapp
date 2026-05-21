@@ -20,6 +20,7 @@ import type {
   PaginatedResponse,
 } from '@/lib/types/content-hierarchy';
 import { Upload, RefreshCw, Package } from 'lucide-react';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 
@@ -34,6 +35,7 @@ export default function AdminContentImportPage() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -139,7 +141,16 @@ export default function AdminContentImportPage() {
           {pageStatus === 'empty' ? (
             <EmptyState icon={<Package className="w-8 h-8 text-admin-text-muted" />} title="No content items yet" description="Import content using the button above." />
           ) : (
-            <DataTable columns={columns} data={items} keyExtractor={(r) => r.id} onRowClick={(r) => window.open(`/admin/content?id=${r.id}`, '_self')} />
+            <>
+            <DataTable columns={columns} data={items} keyExtractor={(r) => r.id} onRowClick={(r) => window.open(`/admin/content?id=${r.id}`, '_self')} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+            <BulkActionBar
+              selectedCount={selectedKeys.size}
+              onClearSelection={() => setSelectedKeys(new Set())}
+              actions={[
+                { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
+              ]}
+            />
+            </>
           )}
         </AsyncStateWrapper>
 

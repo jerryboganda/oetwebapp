@@ -40,6 +40,7 @@ import type {
   LessonType,
 } from '@/lib/types/content-hierarchy';
 import { BookOpen, ChevronRight, GitBranch, Layers, Package, Plus, RefreshCw } from 'lucide-react';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -245,6 +246,7 @@ export default function AdminContentHierarchyPage() {
 
   // ── Archive confirm state ──
   const [archiveTarget, setArchiveTarget] = useState<{ type: string; id: string; title: string } | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   // ── Load programs and packages ──
   useEffect(() => {
@@ -785,7 +787,14 @@ export default function AdminContentHierarchyPage() {
             {/* Program list (no drill-down) */}
             {!selectedProgramId && (
               <AdminRoutePanel title="Programs" actions={<Button variant="outline" size="sm" onClick={() => openProgramEditor()}>Create Program</Button>}>
-                <DataTable columns={programColumns} data={programs} keyExtractor={(row) => row.id} />
+                <DataTable columns={programColumns} data={programs} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+              <BulkActionBar
+                selectedCount={selectedKeys.size}
+                onClearSelection={() => setSelectedKeys(new Set())}
+                actions={[
+                  { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
+                ]}
+              />
               </AdminRoutePanel>
             )}
 

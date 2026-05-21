@@ -13,6 +13,7 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { apiClient } from '@/lib/api';
 import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
@@ -52,6 +53,7 @@ export default function BulkImportPage() {
   const [provenance, setProvenance] = useState(DEFAULT_CONTENT_SOURCE_PROVENANCE);
   const [committing, setCommitting] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (isLoading) return null;
@@ -183,7 +185,14 @@ export default function BulkImportPage() {
           </AdminRoutePanel>
 
           <AdminRoutePanel title={`Proposed papers (${staged.papers.length})`}>
-            <DataTable data={staged.papers} columns={columns} keyExtractor={(p) => p.proposalId} />
+            <DataTable data={staged.papers} columns={columns} keyExtractor={(p) => p.proposalId} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'discard', label: 'Discard selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk discard coming soon.' }) },
+            ]}
+          />
             <div className="flex gap-3 mt-4 justify-end">
               <Button variant="ghost" onClick={() => { setStaged(null); setApproved({}); }}>Discard</Button>
               <Button

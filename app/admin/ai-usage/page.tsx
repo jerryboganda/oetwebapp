@@ -30,6 +30,7 @@ import {
   type AiUsagePage,
   type AiUsageSummaryRow,
 } from '@/lib/ai-management-api';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -87,6 +88,7 @@ export default function AiUsagePage() {
 function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
   const [status, setStatus] = useState<PageStatus>('loading');
   const [summary, setSummary] = useState<AiUsageSummaryRow[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [accountSummary, setAccountSummary] = useState<AiUsageSummaryRow[]>([]);
   const [log, setLog] = useState<AiUsagePage | null>(null);
   const [trend, setTrend] = useState<{ day: string; totalTokens: number; calls: number }[]>([]);
@@ -203,7 +205,14 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
         <AdminRouteSummaryCard label="Trend days" value={fmt(trend.length)} icon={<RefreshCw className="w-5 h-5" />} />
       </div>
       <AdminRoutePanel title="By feature">
-        <DataTable data={summary} columns={summaryColumns} keyExtractor={(r) => r.key} />
+        <DataTable data={summary} columns={summaryColumns} keyExtractor={(r) => r.key} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'export', label: 'Export selected', onClick: () => onToast({ variant: 'error', message: 'Bulk export coming soon.' }) },
+            ]}
+          />
       </AdminRoutePanel>
       <AdminRoutePanel title="By account (multi-account providers)">
         {accountSummary.length === 0 ? (

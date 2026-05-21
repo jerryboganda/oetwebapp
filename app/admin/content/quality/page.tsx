@@ -13,6 +13,7 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -52,6 +53,7 @@ export default function ContentQualityPage() {
   const [status, setStatus] = useState<PageStatus>('loading');
   const [toast, setToast] = useState<ToastState>(null);
   const [scoring, setScoring] = useState<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     if (!canViewQuality) return;
@@ -152,7 +154,14 @@ export default function ContentQualityPage() {
 
       <AsyncStateWrapper status={status} errorMessage="Failed to load content quality data." onRetry={loadData}>
         <AdminRoutePanel>
-          <DataTable columns={columns} data={items} keyExtractor={(row) => row.id} />
+          <DataTable columns={columns} data={items} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
+            ]}
+          />
         </AdminRoutePanel>
       </AsyncStateWrapper>
     </AdminRouteWorkspace>

@@ -16,6 +16,7 @@ import { activateAdminFlag, createAdminFlag, deactivateAdminFlag, updateAdminFla
 import { getAdminFlagData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminFlag } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -52,6 +53,7 @@ export default function FlagsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const selectedType = filters.type?.[0];
 
@@ -350,7 +352,15 @@ export default function FlagsPage() {
 
         <AdminRoutePanel title="Rollout Registry" description="All visible enable, disable, and edit controls are backed by the admin feature flag endpoints and audit events.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ type: [] })} />
-          <DataTable columns={columns} data={flags} keyExtractor={(flag) => flag.id} mobileCardRender={mobileCardRender} />
+          <DataTable columns={columns} data={flags} keyExtractor={(flag) => flag.id} mobileCardRender={mobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'enable', label: 'Enable selected', onClick: () => setToast({ variant: 'error', message: 'Bulk enable coming soon.' }) },
+              { key: 'disable', label: 'Disable selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk disable coming soon.' }) },
+            ]}
+          />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

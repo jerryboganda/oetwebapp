@@ -65,6 +65,7 @@ import type {
   AdminBillingPlan,
   AdminBillingSubscription,
 } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -576,6 +577,7 @@ export default function BillingPage() {
     reason: '',
   });
   const [isSubmittingSubscriptionAction, setIsSubmittingSubscriptionAction] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   function openSubscriptionAction(state: SubscriptionActionState) {
     setSubscriptionActionForm({
@@ -2391,7 +2393,14 @@ export default function BillingPage() {
             </div>
           </div>
           <FilterBar groups={subscriptionFilterGroups} selected={subscriptionFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setSubscriptionFilters, groupId, optionId)} onClear={() => setSubscriptionFilters({ status: [] })} />
-          <DataTable columns={subscriptionColumns} data={subscriptions} keyExtractor={(subscription) => subscription.id} mobileCardRender={subscriptionMobileCardRender} />
+          <DataTable columns={subscriptionColumns} data={subscriptions} keyExtractor={(subscription) => subscription.id} mobileCardRender={subscriptionMobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'cancel', label: 'Cancel selected', variant: 'danger', onClick: () => {} },
+            ]}
+          />
         </AdminRoutePanel>
 
         <AdminRoutePanel

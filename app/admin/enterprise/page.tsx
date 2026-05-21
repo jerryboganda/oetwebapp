@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/modal';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 const SPONSOR_PORTAL_ENABLED = process.env.NEXT_PUBLIC_SPONSOR_PORTAL_ENABLED === 'true';
 
@@ -75,6 +76,7 @@ export default function EnterprisePage() {
   const [cohortName, setCohortName] = useState('');
   const [cohortExamType, setCohortExamType] = useState('oet');
   const [cohortMaxSeats, setCohortMaxSeats] = useState('30');
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     analytics.track('admin_view', { page: 'enterprise' });
@@ -204,7 +206,16 @@ export default function EnterprisePage() {
 
       <AsyncStateWrapper status={status} errorMessage="Failed to load enterprise data." onRetry={loadData}>
         <AdminRoutePanel>
-          {tab === 'sponsors' && <DataTable columns={sponsorColumns} data={sponsors} keyExtractor={(row) => row.id} />}
+          {tab === 'sponsors' && <DataTable columns={sponsorColumns} data={sponsors} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />}
+          {tab === 'sponsors' && selectedKeys.size > 0 && (
+            <BulkActionBar
+              selectedCount={selectedKeys.size}
+              onClearSelection={() => setSelectedKeys(new Set())}
+              actions={[
+                { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
+              ]}
+            />
+          )}
           {tab === 'cohorts' && <DataTable columns={cohortColumns} data={cohorts} keyExtractor={(row) => row.id} />}
         </AdminRoutePanel>
       </AsyncStateWrapper>

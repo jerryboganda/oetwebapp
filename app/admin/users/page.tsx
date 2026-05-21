@@ -48,6 +48,7 @@ import type {
   AdminUsersPageData,
   PermissionTemplate,
 } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -129,6 +130,7 @@ export default function UsersPage() {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const { options: professionOptions } = useProfessions();
 
   const selectedStatus = filters.status?.[0];
@@ -476,7 +478,15 @@ export default function UsersPage() {
               itemLabel="user"
               itemLabelPlural="users"
             />
-            <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} mobileCardRender={mobileCardRender} />
+            <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} mobileCardRender={mobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+            <BulkActionBar
+              selectedCount={selectedKeys.size}
+              onClearSelection={() => setSelectedKeys(new Set())}
+              actions={[
+                { key: 'suspend', label: 'Suspend selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk suspend coming soon.' }) },
+                { key: 'export', label: 'Export selected', onClick: () => setToast({ variant: 'error', message: 'Bulk export coming soon.' }) },
+              ]}
+            />
           </AdminRoutePanel>
         </AsyncStateWrapper>
       )}

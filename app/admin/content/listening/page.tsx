@@ -23,6 +23,7 @@ import {
   type ContentPaperDto,
   type PaperAssetRole,
 } from '@/lib/content-upload-api';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -74,6 +75,7 @@ export default function AdminListeningPapersPage() {
 
   const [filterStatus, setFilterStatus] = useState('');
   const [search, setSearch] = useState('');
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!isAuthenticated || role !== 'admin') return;
@@ -250,7 +252,15 @@ export default function AdminListeningPapersPage() {
 
       <AsyncStateWrapper status={status}>
         <AdminRoutePanel title={`Listening papers (${rows.length})`}>
-          <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} />
+          <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
+              { key: 'publish', label: 'Publish selected', onClick: () => {} },
+            ]}
+          />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

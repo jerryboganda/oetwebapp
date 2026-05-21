@@ -27,6 +27,7 @@ import {
 } from '@/lib/api';
 import { TARGET_COUNTRY_OPTIONS } from '@/lib/auth/target-countries';
 import type { AdminSignupCatalogResponse, AdminSignupExamTypeCatalogItem, AdminSignupProfessionCatalogItem } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type CatalogTab = 'exam-types' | 'professions';
@@ -49,6 +50,7 @@ export default function AdminSignupCatalogPage() {
   const [editingProfession, setEditingProfession] = useState<AdminSignupProfessionCatalogItem | null>(null);
   const [examForm, setExamForm] = useState<AdminSignupExamTypePayload>(blankExamForm);
   const [professionForm, setProfessionForm] = useState<AdminSignupProfessionPayload>(blankProfessionForm);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -198,7 +200,14 @@ export default function AdminSignupCatalogPage() {
             description="These values populate the Exam Type field during account registration."
             actions={<Button onClick={() => openExamEditor()} className="gap-2"><Plus className="h-4 w-4" /> Add Exam Type</Button>}
           >
-            <DataTable columns={examColumns} data={catalog.examTypes} keyExtractor={(row) => row.id} />
+            <DataTable columns={examColumns} data={catalog.examTypes} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+            <BulkActionBar
+              selectedCount={selectedKeys.size}
+              onClearSelection={() => setSelectedKeys(new Set())}
+              actions={[
+                { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
+              ]}
+            />
           </AdminRoutePanel>
         ) : (
           <AdminRoutePanel
@@ -206,7 +215,14 @@ export default function AdminSignupCatalogPage() {
             description="These values populate the Current Profession field and can be limited by exam type and target country."
             actions={<Button onClick={() => openProfessionEditor()} className="gap-2"><Plus className="h-4 w-4" /> Add Profession</Button>}
           >
-            <DataTable columns={professionColumns} data={catalog.professions} keyExtractor={(row) => row.id} />
+            <DataTable columns={professionColumns} data={catalog.professions} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+            <BulkActionBar
+              selectedCount={selectedKeys.size}
+              onClearSelection={() => setSelectedKeys(new Set())}
+              actions={[
+                { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
+              ]}
+            />
           </AdminRoutePanel>
         )}
       </AsyncStateWrapper>

@@ -16,6 +16,7 @@ import { reviewScoreGuaranteeClaim } from '@/lib/api';
 import { getAdminScoreGuaranteeClaimsData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminScoreGuaranteeClaim } from '@/lib/types/admin';
+import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -39,6 +40,7 @@ export default function ScoreGuaranteeClaimsPage() {
   const [reviewNote, setReviewNote] = useState('');
   const [isMutating, setIsMutating] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const selectedStatus = filters.status?.[0];
 
@@ -145,6 +147,17 @@ export default function ScoreGuaranteeClaimsPage() {
             data={claims}
             columns={columns}
             keyExtractor={(r) => r.id}
+            selectable
+            selectedKeys={selectedKeys}
+            onSelectionChange={setSelectedKeys}
+          />
+          <BulkActionBar
+            selectedCount={selectedKeys.size}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            actions={[
+              { key: 'approve', label: 'Approve selected', onClick: () => setToast({ variant: 'error', message: 'Bulk approve coming soon.' }) },
+              { key: 'deny', label: 'Deny selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk deny coming soon.' }) },
+            ]}
           />
         </AdminRoutePanel>
       </AsyncStateWrapper>
