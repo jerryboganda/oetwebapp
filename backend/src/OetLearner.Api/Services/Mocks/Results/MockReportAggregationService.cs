@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Services.Mocks.Results;
 
@@ -154,7 +156,9 @@ public sealed class MockSectionResultResolver(IEnumerable<IMockSectionResultAdap
 public sealed class MockReportAggregationService(
     LearnerDbContext db,
     NotificationService notifications,
-    MockSectionResultResolver sectionResolver) : IMockReportAggregationService
+    MockSectionResultResolver sectionResolver,
+    RemediationPlanService remediationPlan,
+    ILogger<MockReportAggregationService> logger) : IMockReportAggregationService
 {
     public async Task GenerateAsync(BackgroundJobItem job, CancellationToken ct)
     {
@@ -370,6 +374,19 @@ public sealed class MockReportAggregationService(
             report.Id,
             new Dictionary<string, object?> { ["mockAttemptId"] = mockAttempt.Id },
             ct);
+
+        // Seed the deterministic 7-day RemediationTask rows so the learner
+        // dashboard can render the post-mock plan immediately, without the
+        // learner needing to manually POST /v1/mocks/reports/{id}/remediation-plan/generate.
+        // GenerateFromReportAsync is idempotent per (userId, reportId).
+        try
+        {
+            await remediationPlan.GenerateFromReportAsync(mockAttempt.UserId, report.Id, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Auto-seed of remediation plan failed for report {ReportId}; learner can still POST to /remediation-plan/generate.", report.Id);
+        }
     }
 
     private static string? ReadString(Dictionary<string, object?> values, string key)

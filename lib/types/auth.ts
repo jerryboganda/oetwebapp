@@ -13,6 +13,8 @@ export interface CurrentUser {
   emailVerifiedAt: string | null;
   authenticatorEnabledAt: string | null;
   adminPermissions?: string[] | null;
+  activeProfessionId?: string | null;
+  activeProfessionLabel?: string | null;
 }
 
 export interface AuthSession {

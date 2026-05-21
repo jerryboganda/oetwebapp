@@ -220,7 +220,7 @@ export function InterlocutorScriptEditor({
           label="Profession role notes (optional)"
           value={professionRoleNotes ?? ''}
           onChange={(e) => setProfessionRoleNotes(e.target.value)}
-          placeholder='e.g. "Patient\'s daughter who lives nearby" — only when interlocutor is not the patient.'
+          placeholder={`e.g. "Patient's daughter who lives nearby" — only when interlocutor is not the patient.`}
           maxLength={500}
         />
       </section>

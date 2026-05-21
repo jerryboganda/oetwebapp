@@ -11,7 +11,9 @@ public sealed record CurrentUserResponse(
     bool RequiresMfa,
     DateTimeOffset? EmailVerifiedAt,
     DateTimeOffset? AuthenticatorEnabledAt,
-    string[]? AdminPermissions = null);
+    string[]? AdminPermissions = null,
+    string? ActiveProfessionId = null,
+    string? ActiveProfessionLabel = null);
 
 public sealed record AuthSessionResponse(
     string AccessToken,

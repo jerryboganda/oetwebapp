@@ -21,7 +21,9 @@ public sealed record AuthenticatedSessionSubject(
     bool RequiresMfa,
     DateTimeOffset? EmailVerifiedAt,
     DateTimeOffset? AuthenticatorEnabledAt,
-    string[]? AdminPermissions = null);
+    string[]? AdminPermissions = null,
+    string? ActiveProfessionId = null,
+    string? ActiveProfessionLabel = null);
 
 public sealed record IssuedAuthSession(
     string AccessToken,

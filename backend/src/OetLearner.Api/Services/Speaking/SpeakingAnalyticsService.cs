@@ -395,7 +395,7 @@ public sealed class SpeakingAnalyticsService(
                 var avgScaledScore = cardAssessments.Count > 0
                     ? Math.Round(cardAssessments.Average(a => (double)a.EstimatedScaledScore), 1)
                     : 0;
-                var title = cards.FirstOrDefault(c => c.Id == g.Key)?.Title ?? g.Key;
+                var title = cards.FirstOrDefault(c => c.Id == g.Key)?.ScenarioTitle ?? g.Key;
                 return new
                 {
                     rolePlayCardId = g.Key,

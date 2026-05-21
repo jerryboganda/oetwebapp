@@ -1017,7 +1017,24 @@ public sealed class AuthService(
             var learner = await db.Users
                 .AsNoTracking()
                 .SingleAsync(x => x.AuthAccountId == account.Id, cancellationToken);
-            return await BuildSubjectAsync(account, learner.Id, learner.DisplayName, cancellationToken);
+
+            string? professionLabel = null;
+            if (!string.IsNullOrWhiteSpace(learner.ActiveProfessionId))
+            {
+                professionLabel = await db.Professions
+                    .AsNoTracking()
+                    .Where(p => p.Id == learner.ActiveProfessionId)
+                    .Select(p => p.Label)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+
+            return await BuildSubjectAsync(
+                account,
+                learner.Id,
+                learner.DisplayName,
+                cancellationToken,
+                activeProfessionId: learner.ActiveProfessionId,
+                activeProfessionLabel: professionLabel);
         }
 
         if (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
@@ -1307,7 +1324,9 @@ public sealed class AuthService(
         string userId,
         string displayName,
         CancellationToken cancellationToken,
-        string[]? adminPermissions = null)
+        string[]? adminPermissions = null,
+        string? activeProfessionId = null,
+        string? activeProfessionLabel = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -1330,7 +1349,9 @@ public sealed class AuthService(
             requiresMfa,
             account.EmailVerifiedAt,
             account.AuthenticatorEnabledAt,
-            AdminPermissions: adminPermissions));
+            AdminPermissions: adminPermissions,
+            ActiveProfessionId: activeProfessionId,
+            ActiveProfessionLabel: activeProfessionLabel));
     }
 
     private static CurrentUserResponse BuildCurrentUserResponse(AuthenticatedSessionSubject subject)
@@ -1345,7 +1366,9 @@ public sealed class AuthService(
             subject.RequiresMfa,
             subject.EmailVerifiedAt,
             subject.AuthenticatorEnabledAt,
-            subject.AdminPermissions);
+            subject.AdminPermissions,
+            subject.ActiveProfessionId,
+            subject.ActiveProfessionLabel);
 
     private static bool TryBuildCurrentUserFromClaims(
         ClaimsPrincipal principal,

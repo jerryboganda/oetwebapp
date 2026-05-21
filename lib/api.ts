@@ -1445,6 +1445,16 @@ export async function postSpeakingDeviceCheck(payload: {
   });
 }
 
+export async function setActiveProfession(professionId: string): Promise<void> {
+  if (!professionId || typeof professionId !== 'string') {
+    throw new Error('professionId is required');
+  }
+  await apiRequest('/v1/settings/profile', {
+    method: 'PATCH',
+    body: JSON.stringify({ values: { professionId } }),
+  });
+}
+
 export async function updateUserProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
   const profileValues: ApiRecord = {};
   if (updates.displayName) profileValues.displayName = updates.displayName;
@@ -3170,6 +3180,23 @@ export async function completeRemediationTask(taskId: string): Promise<Remediati
     method: 'PATCH',
   });
   return response as unknown as RemediationTask;
+}
+
+export interface MockReadinessTrend {
+  attemptsConsidered: number;
+  overallTrend: 'up' | 'down' | 'flat';
+  consistentGreen: boolean;
+  message: string;
+}
+
+export async function fetchMockReadinessTrend(): Promise<MockReadinessTrend> {
+  const response = await apiRequest<ApiRecord>('/v1/learner/me/readiness/trend');
+  return {
+    attemptsConsidered: Number(response.attemptsConsidered ?? 0),
+    overallTrend: (response.overallTrend as 'up' | 'down' | 'flat') ?? 'flat',
+    consistentGreen: Boolean(response.consistentGreen),
+    message: String(response.message ?? ''),
+  };
 }
 
 export async function fetchReadiness(): Promise<ReadinessData> {
