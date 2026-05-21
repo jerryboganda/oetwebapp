@@ -254,6 +254,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
             Title = "Test card",
             Difficulty = "core",
             Status = ContentStatus.Published,
+            PublishedRevisionId = $"rev-{Guid.NewGuid():N}",
         });
         var cardId = $"card-{Guid.NewGuid():N}";
         _db.RolePlayCards.Add(new RolePlayCard
