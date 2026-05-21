@@ -185,6 +185,7 @@ public sealed class SpeakingPermissionTests : IAsyncLifetime
             SubtestCode = "speaking",
             Title = "Card",
             Difficulty = "core",
+            PublishedRevisionId = "rev-1",
             Status = ContentStatus.Published,
         });
 
@@ -264,6 +265,7 @@ public sealed class SpeakingPermissionTests : IAsyncLifetime
             SubtestCode = "speaking",
             Title = "Card",
             Difficulty = "core",
+            PublishedRevisionId = "rev-1",
             Status = ContentStatus.Published,
         });
 
