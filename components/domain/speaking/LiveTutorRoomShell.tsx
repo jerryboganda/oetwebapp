@@ -195,7 +195,6 @@ export function LiveTutorRoomShell({
           className="h-full w-full"
         >
           <RoomInterior />
-          {/* @ts-expect-error — dynamic import type narrowing */}
           <RoomAudioRenderer />
         </LiveKitRoom>
       </div>

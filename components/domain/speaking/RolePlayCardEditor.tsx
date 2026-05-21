@@ -57,7 +57,7 @@ function fillTasks(tasks: string[] | undefined): [string, string, string, string
 function nullableString(value: string | undefined | null): string | undefined {
   if (value == null) return undefined;
   const trimmed = value.trim();
-  return trimmed.length === 0 ? null : trimmed;
+  return trimmed.length === 0 ? undefined : trimmed;
 }
 
 export function RolePlayCardEditor({
