@@ -1,20 +1,22 @@
 'use client';
 
 /**
- * OET Speaking — Phase 11 P11.3 — role-play card AI-assisted draft (placeholder).
+ * OET Speaking — Phase 11 P11.3 — role-play card AI-assisted draft.
  *
- * Backend wiring contract (NOT yet implemented; Phase 11 follow-up):
+ * Backend wiring (live):
  *   POST /v1/admin/speaking/role-play-cards/ai-draft
  *     → routes through IAiGatewayService.BuildGroundedPrompt(
  *         Kind = Speaking,
- *         Task = GenerateRolePlayCard,
- *         FeatureCode = AiFeatureCodes.AdminSpeakingDraft)  // platform-only
- *       and returns AdminSpeakingRolePlayCardDraftResponse{ draft, warnings }.
+ *         Task = GenerateContent,
+ *         FeatureCode = AiFeatureCodes.AdminContentGeneration)  // platform-only
+ *       persists a Draft RolePlayCard + paired hidden InterlocutorScript
+ *       atomically, and returns the persisted card detail with an
+ *       optional `warning` if the AI reply could not be parsed and a
+ *       deterministic fallback was used.
  *
- * This page provides the admin UX surface so the navigation tree is complete
- * and the backend implementation has a stable contract to satisfy. Until the
- * endpoint ships, the form produces a deterministic starter template the
- * admin can refine and persist via the existing role-play-card create endpoint.
+ * On success the admin lands directly on the card editor for review +
+ * publishing — they remain accountable for clinical safety and rulebook
+ * alignment before changing status from Draft.
  */
 import Link from 'next/link';
 import { useState } from 'react';
@@ -25,9 +27,9 @@ import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { Input, Select } from '@/components/ui/form-controls';
 import {
-  adminCreateRolePlayCard,
+  draftSpeakingRolePlayCard,
   PROFESSION_OPTIONS,
-  type CreateRolePlayCardInput,
+  type AdminRolePlayCardAiDraftResponse,
 } from '@/lib/api/speaking-role-play-cards';
 
 interface DraftSeed {
@@ -35,40 +37,10 @@ interface DraftSeed {
   clinicalTopic: string;
   patientEmotion: string;
   difficulty: 'core' | 'extension' | 'exam';
-}
-
-function deterministicSeed(seed: DraftSeed): CreateRolePlayCardInput {
-  const profession = seed.professionId || 'nursing';
-  const topic = seed.clinicalTopic || 'medication adherence';
-  const emotion = seed.patientEmotion || 'anxious';
-  return {
-    professionId: profession,
-    scenarioTitle: `${topic} consultation — ${emotion} patient`,
-    setting: 'Outpatient clinic, mid-morning',
-    candidateRole: `You are the ${profession} on duty.`,
-    interlocutorRole: `You are the patient.`,
-    patientName: null,
-    patientAge: null,
-    background:
-      `The patient presents about ${topic}. They are ${emotion} about their condition and recent ` +
-      `treatment plan. They are looking for clear guidance and reassurance.`,
-    task1: `Greet the patient and confirm their identity.`,
-    task2: `Explore the patient's current concerns about ${topic}.`,
-    task3: `Provide clear, jargon-free information.`,
-    task4: `Negotiate a manageable next step with the patient.`,
-    task5: `Summarise the plan and check for understanding before closing.`,
-    allowedNotes: true,
-    prepTimeSeconds: 180,
-    rolePlayTimeSeconds: 300,
-    patientEmotion: emotion,
-    communicationGoal: `Reassure and align on a shared plan for ${topic}.`,
-    clinicalTopic: topic,
-    difficulty: seed.difficulty,
-    criteriaFocus: ['relationshipBuilding', 'understandingPatientPerspective', 'providingStructure'],
-    disclaimer:
-      'Practice scenario only — not a substitute for clinical judgement or real patient care.',
-    isLiveTutorEligible: true,
-  };
+  setting: string;
+  candidateRole: string;
+  interlocutorRole: string;
+  communicationGoal: string;
 }
 
 export default function AdminSpeakingRolePlayAiDraftPage() {
@@ -78,27 +50,46 @@ export default function AdminSpeakingRolePlayAiDraftPage() {
     clinicalTopic: '',
     patientEmotion: 'anxious',
     difficulty: 'core',
+    setting: '',
+    candidateRole: '',
+    interlocutorRole: '',
+    communicationGoal: '',
   });
-  const [draft, setDraft] = useState<CreateRolePlayCardInput | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [result, setResult] = useState<AdminRolePlayCardAiDraftResponse | null>(null);
 
-  function generate() {
+  async function generate() {
     setError(null);
-    setDraft(deterministicSeed(seed));
+    setWarning(null);
+    setResult(null);
+    setSubmitting(true);
+    try {
+      const response = await draftSpeakingRolePlayCard({
+        professionId: seed.professionId,
+        topic: seed.clinicalTopic.trim() || null,
+        emotion: seed.patientEmotion.trim() || null,
+        difficulty: seed.difficulty,
+        setting: seed.setting.trim() || null,
+        candidateRole: seed.candidateRole.trim() || null,
+        interlocutorRole: seed.interlocutorRole.trim() || null,
+        communicationGoal: seed.communicationGoal.trim() || null,
+      });
+      setResult(response);
+      if (response.warning) {
+        setWarning(response.warning);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not draft role-play card.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  async function accept() {
-    if (!draft) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const created = await adminCreateRolePlayCard(draft);
-      router.push(`/admin/content/speaking/role-play-cards/${encodeURIComponent(created.cardId)}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create role-play card.');
-      setSaving(false);
-    }
+  function openCardEditor() {
+    if (!result) return;
+    router.push(`/admin/content/speaking/role-play-cards/${encodeURIComponent(result.cardId)}`);
   }
 
   return (
@@ -110,17 +101,13 @@ export default function AdminSpeakingRolePlayAiDraftPage() {
           </Link>
           <h1 className="text-2xl font-semibold text-slate-900">Speaking · AI-assisted role-play card draft</h1>
           <p className="text-slate-600">
-            Generate a starter scenario from a profession + topic + patient-emotion seed. The admin
+            Generate a Draft scenario from a profession + topic + patient-emotion seed. The backend
+            builds a grounded prompt against the canonical rulebook + scoring, persists the card
+            and its hidden interlocutor script, and returns the saved draft for review. The admin
             remains accountable for accuracy, clinical safety, and rulebook alignment before
             publishing.
           </p>
         </header>
-
-        <InlineAlert variant="info">
-          Backend grounded-gateway endpoint (<code>POST /v1/admin/speaking/role-play-cards/ai-draft</code>) is
-          tracked as a Phase 11 follow-up. Until then this page produces a deterministic starter
-          scenario you can refine through the standard role-play card workflow.
-        </InlineAlert>
 
         <Card className="space-y-3 p-4">
           <h2 className="font-semibold text-slate-900">Seed</h2>
@@ -158,47 +145,70 @@ export default function AdminSpeakingRolePlayAiDraftPage() {
               <option value="extension">Extension</option>
               <option value="exam">Exam</option>
             </Select>
+            <Input
+              placeholder="Setting (optional)"
+              value={seed.setting}
+              onChange={(e) => setSeed({ ...seed, setting: e.target.value })}
+            />
+            <Input
+              placeholder="Candidate role (optional)"
+              value={seed.candidateRole}
+              onChange={(e) => setSeed({ ...seed, candidateRole: e.target.value })}
+            />
+            <Input
+              placeholder="Interlocutor role (optional)"
+              value={seed.interlocutorRole}
+              onChange={(e) => setSeed({ ...seed, interlocutorRole: e.target.value })}
+            />
+            <Input
+              placeholder="Communication goal (optional)"
+              value={seed.communicationGoal}
+              onChange={(e) => setSeed({ ...seed, communicationGoal: e.target.value })}
+            />
           </div>
           <div className="flex justify-end">
-            <Button onClick={generate}>Generate starter</Button>
+            <Button onClick={generate} disabled={submitting}>
+              {submitting ? 'Drafting…' : 'Generate role-play draft'}
+            </Button>
           </div>
         </Card>
 
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
+        {warning && <InlineAlert variant="warning">{warning}</InlineAlert>}
 
-        {draft && (
+        {result && (
           <Card className="space-y-3 p-4">
-            <h2 className="font-semibold text-slate-900">Draft preview</h2>
-            <div className="space-y-2 text-sm">
-              <div>
-                <strong className="text-slate-700">Title:</strong> {draft.scenarioTitle}
+            <h2 className="font-semibold text-slate-900">Draft saved</h2>
+            <p className="text-sm text-slate-600">
+              Card <code>{result.cardId}</code> persisted as <code>{result.card.status}</code>.
+            </p>
+            <dl className="grid gap-2 text-sm sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <dt className="font-medium text-slate-700">Scenario title</dt>
+                <dd className="text-slate-900">{result.card.scenarioTitle}</dd>
               </div>
               <div>
-                <strong className="text-slate-700">Setting:</strong> {draft.setting}
+                <dt className="font-medium text-slate-700">Profession</dt>
+                <dd className="text-slate-900">{result.card.professionId}</dd>
               </div>
               <div>
-                <strong className="text-slate-700">Background:</strong> {draft.background}
+                <dt className="font-medium text-slate-700">Difficulty</dt>
+                <dd className="text-slate-900">{result.card.difficulty}</dd>
               </div>
-              <ol className="list-decimal pl-5 space-y-1">
-                {[draft.task1, draft.task2, draft.task3, draft.task4, draft.task5]
-                  .filter((t): t is string => typeof t === 'string' && t.length > 0)
-                  .map((t, i) => (
-                    <li key={i}>{t}</li>
-                  ))}
-              </ol>
-              <p className="text-xs text-slate-500">
-                Difficulty: {draft.difficulty} · prep {draft.prepTimeSeconds}s · role-play{' '}
-                {draft.rolePlayTimeSeconds}s · live-tutor eligible:{' '}
-                {draft.isLiveTutorEligible ? 'yes' : 'no'}
-              </p>
-            </div>
+              <div className="sm:col-span-2">
+                <dt className="font-medium text-slate-700">Setting</dt>
+                <dd className="text-slate-900">{result.card.setting}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="font-medium text-slate-700">Background</dt>
+                <dd className="whitespace-pre-wrap text-slate-900">{result.card.background}</dd>
+              </div>
+            </dl>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setDraft(null)} disabled={saving}>
-                Discard
+              <Button variant="outline" onClick={() => setResult(null)}>
+                Draft another
               </Button>
-              <Button onClick={accept} disabled={saving}>
-                {saving ? 'Creating…' : 'Accept & open card editor'}
-              </Button>
+              <Button onClick={openCardEditor}>Open card editor</Button>
             </div>
           </Card>
         )}

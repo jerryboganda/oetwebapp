@@ -165,14 +165,28 @@ gateway:
 
 ## 11. Open follow-ups (P11/P12 backlog)
 
-- `POST /v1/admin/speaking/drills/ai-draft` — backend grounded-gateway
-  endpoint. UX surface ships in `app/admin/content/speaking/drills/ai-draft/`
-  with a deterministic starter; backend wiring is queued.
-- `POST /v1/admin/speaking/role-play-cards/ai-draft` — same shape for
-  role-play cards.
-- Once both endpoints land, swap the deterministic seed in those pages for a
-  real `IAiGatewayService.BuildGroundedPrompt(Kind = Speaking, Task =
-  GenerateRolePlayCard | GenerateSpeakingDrill)` call.
+All P11/P12 backend AI-draft follow-ups are now landed on
+`origin/mocks-phase6-verify`:
 
-These are explicitly tracked here so the navigation surface ships complete
-while the backend AI-draft work is sequenced.
+- `POST /v1/admin/speaking/drills/ai-draft` — live. Routes through
+  `IAiGatewayService.BuildGroundedPrompt(Kind = Speaking,
+  Task = GenerateContent, FeatureCode =
+  AiFeatureCodes.AdminContentGeneration)` (platform-only), parses the
+  reply, persists a `Draft` `SpeakingDrillItem` + `ContentItem` atomically,
+  and returns a flat projection plus an optional `warning` when the AI
+  reply could not be parsed and the deterministic fallback was used.
+  The admin UX surface at `app/admin/content/speaking/drills/ai-draft/`
+  calls this directly via `draftSpeakingDrill()` from
+  `lib/api/speaking-drills.ts`.
+- `POST /v1/admin/speaking/role-play-cards/ai-draft` — live. Same gateway
+  contract; persists the candidate card + paired hidden interlocutor
+  script atomically and returns the persisted `RolePlayCardDetail` with
+  an optional `warning`. The admin UX surface at
+  `app/admin/content/speaking/role-play-cards/ai-draft/` calls this
+  directly via `draftSpeakingRolePlayCard()` from
+  `lib/api/speaking-role-play-cards.ts` and navigates to the card editor
+  for review/publish.
+
+Both flows reuse the existing `AiFeatureCodes.AdminContentGeneration` +
+`AiTaskMode.GenerateContent` — no new constants or enum values were added
+for this work.

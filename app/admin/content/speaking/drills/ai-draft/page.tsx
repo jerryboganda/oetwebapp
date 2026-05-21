@@ -1,20 +1,21 @@
 'use client';
 
 /**
- * OET Speaking — Phase 11 P11.5 — drill bank AI-assisted draft (placeholder).
+ * OET Speaking — Phase 11 P11.5 — drill bank AI-assisted draft.
  *
- * Backend wiring contract (NOT yet implemented; Phase 11 follow-up):
+ * Backend wiring (live):
  *   POST /v1/admin/speaking/drills/ai-draft
  *     → routes through IAiGatewayService.BuildGroundedPrompt(
  *         Kind = Speaking,
- *         Task = GenerateSpeakingDrill,
- *         FeatureCode = AiFeatureCodes.AdminSpeakingDraft)  // platform-only
- *       and returns AdminSpeakingDrillDraftResponse{ draft: AdminDrillCreateInput, warnings: [] }.
+ *         Task = GenerateContent,
+ *         FeatureCode = AiFeatureCodes.AdminContentGeneration)  // platform-only
+ *       persists a Draft SpeakingDrillItem + ContentItem atomically
+ *       and returns a flat projection with an optional `warning` if
+ *       the AI reply could not be parsed and the deterministic
+ *       fallback was used.
  *
- * This page provides the admin UX surface so the navigation tree is complete
- * and so that the backend implementation has a stable contract to satisfy.
- * Until the endpoint ships, the form falls back to a deterministic starter
- * template the admin can edit + manually save via the drill bank list page.
+ * The admin reviews the persisted draft on the drill bank list and
+ * edits + publishes from there.
  */
 import Link from 'next/link';
 import { useState } from 'react';
@@ -25,9 +26,9 @@ import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { Input, Select } from '@/components/ui/form-controls';
 import {
-  createAdminDrill,
+  draftSpeakingDrill,
   SPEAKING_DRILL_KINDS,
-  type AdminDrillCreateInput,
+  type AdminSpeakingDrillAiDraftResponse,
   type SpeakingDrillKind,
 } from '@/lib/api/speaking-drills';
 
@@ -37,22 +38,6 @@ interface DraftSeed {
   weakCriterion: string;
 }
 
-function deterministicSeed(seed: DraftSeed): AdminDrillCreateInput {
-  const profession = seed.professionId || 'general';
-  const criterion = seed.weakCriterion || 'fluency';
-  return {
-    drillKind: seed.drillKind,
-    professionId: seed.professionId || null,
-    title: `${seed.drillKind.replace(/_/g, ' ')} drill — ${profession} (${criterion})`,
-    instructionText:
-      `Practice ${seed.drillKind.replace(/_/g, ' ')} for the ${criterion} criterion. ` +
-      `Focus on the patient-care scenarios most common for ${profession}. ` +
-      `Speak for 60–90 seconds, then review the transcript and self-mark against the rubric.`,
-    targetCriteria: [criterion],
-    recommendedAfterSessionScoreBelow: 350,
-  };
-}
-
 export default function AdminSpeakingDrillAiDraftPage() {
   const router = useRouter();
   const [seed, setSeed] = useState<DraftSeed>({
@@ -60,25 +45,30 @@ export default function AdminSpeakingDrillAiDraftPage() {
     professionId: '',
     weakCriterion: 'fluency',
   });
-  const [draft, setDraft] = useState<AdminDrillCreateInput | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<AdminSpeakingDrillAiDraftResponse | null>(null);
 
-  function generate() {
+  async function generate() {
     setError(null);
-    setDraft(deterministicSeed(seed));
-  }
-
-  async function accept() {
-    if (!draft) return;
-    setSaving(true);
-    setError(null);
+    setWarning(null);
+    setResult(null);
+    setSubmitting(true);
     try {
-      await createAdminDrill(draft);
-      router.push('/admin/content/speaking/drills');
+      const response = await draftSpeakingDrill({
+        drillKind: seed.drillKind,
+        professionId: seed.professionId.trim() || null,
+        criterionFocus: seed.weakCriterion.trim() || null,
+      });
+      setResult(response);
+      if (response.warning) {
+        setWarning(response.warning);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save drill.');
-      setSaving(false);
+      setError(err instanceof Error ? err.message : 'Could not draft drill.');
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -91,17 +81,12 @@ export default function AdminSpeakingDrillAiDraftPage() {
           </Link>
           <h1 className="text-2xl font-semibold text-slate-900">Speaking · AI-assisted drill draft</h1>
           <p className="text-slate-600">
-            Generate a starter drill skeleton from a profession + weak-criterion seed. Review the draft
-            carefully — the canonical rulebook is the source of truth and the admin remains accountable
-            for the published content.
+            Generate a Draft drill from a profession + weak-criterion seed. The backend builds a
+            grounded prompt against the canonical rulebook + scoring and persists the draft
+            automatically. Review and publish from the drill bank list — the admin remains
+            accountable for the published content.
           </p>
         </header>
-
-        <InlineAlert variant="info">
-          Backend grounded-gateway endpoint (<code>POST /v1/admin/speaking/drills/ai-draft</code>) is
-          tracked as a Phase 11 follow-up. Until then this page produces a deterministic starter
-          template you can refine and save through the standard drill admin endpoint.
-        </InlineAlert>
 
         <Card className="space-y-3 p-4">
           <h2 className="font-semibold text-slate-900">Seed</h2>
@@ -128,45 +113,49 @@ export default function AdminSpeakingDrillAiDraftPage() {
             />
           </div>
           <div className="flex justify-end">
-            <Button onClick={generate}>Generate starter</Button>
+            <Button onClick={generate} disabled={submitting}>
+              {submitting ? 'Drafting…' : 'Generate drill draft'}
+            </Button>
           </div>
         </Card>
 
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
+        {warning && <InlineAlert variant="warning">{warning}</InlineAlert>}
 
-        {draft && (
+        {result && (
           <Card className="space-y-3 p-4">
-            <h2 className="font-semibold text-slate-900">Draft preview</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                placeholder="Title"
-                value={draft.title}
-                onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-              />
-              <Input
-                placeholder="Profession id"
-                value={draft.professionId ?? ''}
-                onChange={(e) => setDraft({ ...draft, professionId: e.target.value || null })}
-              />
-              <Input
-                className="sm:col-span-2"
-                placeholder="Target criteria (comma-separated)"
-                value={draft.targetCriteria.join(', ')}
-                onChange={(e) => setDraft({ ...draft, targetCriteria: e.target.value.split(',') })}
-              />
-              <textarea
-                className="rounded border border-slate-300 p-2 text-sm sm:col-span-2"
-                rows={5}
-                value={draft.instructionText}
-                onChange={(e) => setDraft({ ...draft, instructionText: e.target.value })}
-              />
-            </div>
+            <h2 className="font-semibold text-slate-900">Draft saved</h2>
+            <p className="text-sm text-slate-600">
+              Drill <code>{result.drillId}</code> persisted as <code>{result.status}</code>.
+            </p>
+            <dl className="grid gap-2 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="font-medium text-slate-700">Title</dt>
+                <dd className="text-slate-900">{result.title}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-slate-700">Drill kind</dt>
+                <dd className="text-slate-900">{result.drillKind}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-slate-700">Profession</dt>
+                <dd className="text-slate-900">{result.professionId ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-slate-700">Target criteria</dt>
+                <dd className="text-slate-900">{result.targetCriteria.join(', ') || '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="font-medium text-slate-700">Instruction</dt>
+                <dd className="whitespace-pre-wrap text-slate-900">{result.instructionText}</dd>
+              </div>
+            </dl>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setDraft(null)} disabled={saving}>
-                Discard
+              <Button variant="outline" onClick={() => setResult(null)}>
+                Draft another
               </Button>
-              <Button onClick={accept} disabled={saving}>
-                {saving ? 'Saving…' : 'Accept & create drill'}
+              <Button onClick={() => router.push('/admin/content/speaking/drills')}>
+                Open drill bank
               </Button>
             </div>
           </Card>
