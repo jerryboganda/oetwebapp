@@ -10,9 +10,10 @@ import { analytics } from '@/lib/analytics';
 import {
     fetchMyVocabulary, fetchVocabularyDailySet, fetchVocabularyStats, removeFromMyVocabulary
 } from '@/lib/api';
+import { getMicroHover, prefersReducedMotion } from '@/lib/motion';
 import type { LearnerVocabulary, VocabularyDailySet, VocabularyStats } from '@/lib/types/vocabulary';
 import { BookOpen, Flame, HelpCircle, History, Layers, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
@@ -26,6 +27,8 @@ const MASTERY_COLORS: Record<string, string> = {
 };
 
 export default function VocabularyPage() {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const microHover = getMicroHover(reducedMotion);
   const [myList, setMyList] = useState<MyVocabItem[]>([]);
   const [stats, setStats] = useState<VocabularyStats | null>(null);
   const [dailySet, setDailySet] = useState<VocabularyDailySet | null>(null);
@@ -125,7 +128,7 @@ export default function VocabularyPage() {
         {quickLinks.map(link => (
           <Link key={link.href} href={link.href}>
             <motion.div
-              whileHover={{ scale: 1.02 }}
+              whileHover={microHover}
               className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-all hover:border-border-hover hover:shadow-md"
             >
               <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${link.iconTile}`}>

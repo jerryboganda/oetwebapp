@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -15,6 +14,7 @@ import {
   User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { MotionFadeSwitch } from '@/components/ui/motion-primitives';
 import { Stepper } from '@/components/ui/stepper';
 import { Input, Textarea, Select } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
@@ -309,16 +309,11 @@ export default function ExpertOnboardingPage() {
         )}
 
         {/* Step content */}
-        <AnimatePresence mode="wait" custom={direction}>
-          <motion.div
-            key={stepKey}
-            custom={direction}
-            initial={{ opacity: 0, x: direction * 60 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: direction * -60 }}
-            transition={{ duration: 0.25 }}
-            className="bg-surface rounded-2xl p-6 md:p-10 shadow-clinical"
-          >
+        <MotionFadeSwitch
+          activeKey={stepKey}
+          direction={direction as 1 | -1}
+          className="bg-surface rounded-2xl p-6 md:p-10 shadow-clinical"
+        >
             {stepKey === 'welcome' && <WelcomeStep />}
             {stepKey === 'profile' && (
               <ProfileStep
@@ -372,8 +367,7 @@ export default function ExpertOnboardingPage() {
             {stepKey === 'review' && (
               <ReviewStep profile={profile} qualifications={qualifications} schedule={schedule} rates={rates} />
             )}
-          </motion.div>
-        </AnimatePresence>
+        </MotionFadeSwitch>
 
         {/* Navigation */}
         <div className="flex items-center justify-between">

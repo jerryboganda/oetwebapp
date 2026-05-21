@@ -8,9 +8,10 @@ import { MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { fetchDueFlashcards, submitFlashcardReview } from '@/lib/api';
+import { getFadeSwitchTransition, prefersReducedMotion } from '@/lib/motion';
 import type { VocabularyFlashcard } from '@/lib/types/vocabulary';
 import { ArrowLeft, CheckCircle2, Layers, RotateCcw, Volume2 } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
@@ -22,6 +23,8 @@ const QUALITY_OPTIONS = [
 ];
 
 export default function FlashcardsPage() {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const flipTransition = getFadeSwitchTransition(reducedMotion);
   const [cards, setCards] = useState<VocabularyFlashcard[]>([]);
   const [current, setCurrent] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -149,10 +152,10 @@ export default function FlashcardsPage() {
           <AnimatePresence mode="wait">
             <motion.div
               key={card.id + (flipped ? '-back' : '-front')}
-              initial={{ rotateY: flipped ? -90 : 90, opacity: 0 }}
-              animate={{ rotateY: 0, opacity: 1 }}
-              exit={{ rotateY: flipped ? 90 : -90, opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              initial={reducedMotion ? { opacity: 0 } : { rotateY: flipped ? -90 : 90, opacity: 0 }}
+              animate={reducedMotion ? { opacity: 1 } : { rotateY: 0, opacity: 1 }}
+              exit={reducedMotion ? { opacity: 0 } : { rotateY: flipped ? 90 : -90, opacity: 0 }}
+              transition={flipTransition}
               className="mb-4 flex min-h-[220px] cursor-pointer select-none flex-col items-center justify-center rounded-2xl border border-border bg-surface p-8 text-center"
               onClick={() => !flipped && setFlipped(true)}
               role="button"

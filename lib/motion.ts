@@ -353,6 +353,45 @@ export function getFadeSwitchVariants(reducedMotion = false, direction: 1 | -1 =
   };
 }
 
+/** Progress / meter fill transition for width/height value changes. */
+export function getProgressFillTransition(reducedMotion = false): Transition {
+  if (reducedMotion) {
+    return { duration: motionTokens.duration.instant, ease: motionTokens.ease.standard };
+  }
+
+  const profile = getMotionRuntimeProfile();
+  return tuneTransition(
+    { duration: motionTokens.duration.slow, ease: motionTokens.ease.entrance },
+    profile,
+  );
+}
+
+/** Fast value transition for near-realtime meters such as audio levels. */
+export function getRealtimeValueTransition(reducedMotion = false): Transition {
+  if (reducedMotion) {
+    return { duration: motionTokens.duration.instant, ease: motionTokens.ease.standard };
+  }
+
+  const profile = getMotionRuntimeProfile();
+  return tuneTransition(
+    { duration: motionTokens.duration.instant, ease: motionTokens.ease.standard },
+    profile,
+  );
+}
+
+/** Slow looping pulse for active recording/listening indicators. */
+export function getRecordingPulseTransition(reducedMotion = false): Transition {
+  if (reducedMotion) {
+    return { duration: motionTokens.duration.instant, ease: motionTokens.ease.standard };
+  }
+
+  const profile = getMotionRuntimeProfile();
+  return tuneTransition(
+    { duration: 2, repeat: Infinity, ease: motionTokens.ease.subtle },
+    profile,
+  );
+}
+
 /* ─── Desktop lifecycle transitions ─── */
 
 /** CSS transition spec for desktop window focus/blur visual feedback. */

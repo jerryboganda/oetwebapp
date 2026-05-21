@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Mic, Square, RotateCcw, CheckCircle2, AlertCircle,
   FileText, Edit3, ChevronUp, ChevronDown,
@@ -16,6 +16,7 @@ import { Timer } from '@/components/ui/timer';
 import { fetchRoleCard, submitSpeakingRecording } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
+import { getRealtimeValueTransition, getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
 import type { RoleCard } from '@/lib/mock-data';
 
 // --- Types ---
@@ -24,6 +25,9 @@ type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 type RecordingState = 'idle' | 'recording' | 'paused' | 'finished';
 
 function LiveSpeakingTaskContent() {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const realtimeTransition = getRealtimeValueTransition(reducedMotion);
+  const recordingPulseTransition = getRecordingPulseTransition(reducedMotion);
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -478,8 +482,8 @@ function LiveSpeakingTaskContent() {
         <div className="relative z-10 mb-24 flex flex-col items-center gap-12">
           <div className="relative">
             <motion.div 
-              animate={recordingState === 'recording' ? { scale: [1, 1.05, 1] } : {}}
-              transition={{ repeat: Infinity, duration: 2 }}
+              animate={recordingState === 'recording' && !reducedMotion ? { scale: [1, 1.05, 1] } : {}}
+              transition={recordingPulseTransition}
               className={`w-48 h-48 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
                 recordingState === 'recording' ? 'border-danger/30 bg-danger/10 shadow-[0_0_40px_rgba(239,68,68,0.14)]' :
                 recordingState === 'paused' ? 'border-warning/30 bg-amber-50 shadow-[0_0_40px_rgba(245,158,11,0.14)]' : 'border-border bg-surface'
@@ -495,7 +499,7 @@ function LiveSpeakingTaskContent() {
                       <motion.div
                         key={i}
                         animate={{ height: level }}
-                        transition={{ type: 'tween', duration: 0.1 }}
+                        transition={realtimeTransition}
                         className="w-1.5 bg-danger rounded-full"
                       />
                     ))}

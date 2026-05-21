@@ -4,18 +4,25 @@ import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-she
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { MotionFadeSwitch } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { fetchPhrasingData } from '@/lib/api';
 import type { PhrasingSegment } from '@/lib/mock-data';
+import { getCelebrateMotion, getMicroHover, getMicroTap, getProgressFillTransition, prefersReducedMotion } from '@/lib/motion';
 import {
     AlertCircle, ChevronLeft, ChevronRight, Loader2, MessageSquare, Mic, Play, RotateCcw, Volume2, Zap
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
 function BetterPhrasingContent() {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const microHover = getMicroHover(reducedMotion);
+  const microTap = getMicroTap(reducedMotion);
+  const progressTransition = getProgressFillTransition(reducedMotion);
+  const celebrateMotion = getCelebrateMotion(reducedMotion);
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
@@ -103,6 +110,7 @@ function BetterPhrasingContent() {
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
+              transition={progressTransition}
               className="h-full bg-primary"
             />
           </div>
@@ -111,14 +119,7 @@ function BetterPhrasingContent() {
     >
       <main className="flex-1 p-6 overflow-y-auto">
         <div className="max-w-3xl mx-auto space-y-6">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentSegment.id}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="space-y-6"
-            >
+          <MotionFadeSwitch activeKey={currentSegment.id} className="space-y-6">
               {/* Original Phrase Card */}
               <Card className="p-8">
                 <div className="flex items-center gap-3 mb-4">
@@ -174,8 +175,8 @@ function BetterPhrasingContent() {
                 <h3 className="text-sm font-bold text-navy uppercase tracking-widest mb-6">Practice Improved Phrasing</h3>
                 <div className="flex items-center gap-8 mb-8">
                   <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={microHover}
+                    whileTap={microTap}
                     onClick={toggleRecording}
                     className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-lg ${isRecording ? 'bg-danger animate-pulse' : 'bg-primary hover:bg-primary/90'}`}
                   >
@@ -183,8 +184,7 @@ function BetterPhrasingContent() {
                   </motion.button>
                   {hasRecorded && (
                     <motion.button
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
+                      {...celebrateMotion}
                       onClick={() => setPlaybackActive(!playbackActive)}
                       className="w-14 h-14 rounded-full bg-background-light text-muted flex items-center justify-center hover:bg-border transition-all"
                     >
@@ -196,8 +196,7 @@ function BetterPhrasingContent() {
                   {isRecording ? 'Recording your drill...' : hasRecorded ? 'Drill complete! Review or move to next.' : 'Tap to start repeat drill'}
                 </p>
               </Card>
-            </motion.div>
-          </AnimatePresence>
+          </MotionFadeSwitch>
         </div>
       </main>
 
