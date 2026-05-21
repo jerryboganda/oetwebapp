@@ -25,7 +25,7 @@ export function cardClassName({
   padding?: CardPadding;
 }) {
   return cn(
-    'rounded-2xl border border-border bg-surface shadow-sm',
+    'rounded-2xl border border-border bg-surface text-navy shadow-sm',
     paddingStyles[padding],
     hoverable && 'transition-[border-color,box-shadow,transform] duration-200',
     hoverable && 'hover:border-border-hover hover:shadow-clinical',

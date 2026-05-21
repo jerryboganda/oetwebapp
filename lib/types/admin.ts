@@ -1047,8 +1047,8 @@ export interface AdminExpertEfficiencyData {
 
 export interface AdminBusinessIntelligenceData {
   generatedAt: string;
-  subscriptionHealth: AdminSubscriptionHealthData;
-  cohortAnalysis: AdminCohortAnalysisData;
-  contentEffectiveness: AdminContentEffectivenessData;
-  expertEfficiency: AdminExpertEfficiencyData;
+  subscriptionHealth: AdminSubscriptionHealthData | null;
+  cohortAnalysis: AdminCohortAnalysisData | null;
+  contentEffectiveness: AdminContentEffectivenessData | null;
+  expertEfficiency: AdminExpertEfficiencyData | null;
 }

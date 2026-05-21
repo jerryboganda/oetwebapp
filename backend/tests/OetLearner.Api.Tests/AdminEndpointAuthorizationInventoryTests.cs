@@ -11,6 +11,12 @@ public class AdminEndpointAuthorizationInventoryTests : IClassFixture<TestWebApp
     [
         "/v1/admin/dashboard",
         "/v1/admin/revenue",
+        // Teaching-staff (admin + expert/tutor) audit routes intentionally
+        // share the /v1/admin/speaking/... prefix because they expose
+        // privileged recording access. Authorization is enforced via
+        // TeachingStaffOnly which covers Expert + Admin roles.
+        "/v1/admin/speaking/recordings/{id}/access",
+        "/v1/admin/speaking/recordings/audit",
     ];
 
     private static readonly string[] MutatingMethods = ["POST", "PUT", "PATCH", "DELETE"];

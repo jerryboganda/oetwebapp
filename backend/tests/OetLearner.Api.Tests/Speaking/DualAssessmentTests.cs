@@ -56,6 +56,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
             sessionId,
             new[] { 5, 5, 5, 5 },     // linguistic
             new[] { 2, 2, 2, 2, 2 }); // clinical
+        await SeedTimestampedCommentAsync(sessionId);
 
         var aiBefore = await _db.SpeakingAiAssessments.AsNoTracking()
             .FirstAsync(a => a.Id == aiId);
@@ -114,6 +115,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
     public async Task AiAssessment_DoesNotMutateTutorAssessment()
     {
         var sessionId = await SeedFinishedSessionAsync("learner-2");
+        await SeedTimestampedCommentAsync(sessionId);
 
         // Seed a finalised tutor assessment first.
         var draftId = await _svc.CreateDraftAsync(
@@ -167,6 +169,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
     {
         var sessionId = await SeedFinishedSessionAsync("learner-3");
         await SeedAiAssessmentAsync(sessionId, new[] { 5, 5, 5, 5 }, new[] { 2, 2, 2, 2, 2 });
+        await SeedTimestampedCommentAsync(sessionId);
 
         var draftId = await _svc.CreateDraftAsync(
             "tutor-3",
@@ -217,13 +220,14 @@ public sealed class DualAssessmentTests : IAsyncLifetime
     public async Task Submit_RecomputesScaledScoreViaOetScoring()
     {
         var sessionId = await SeedFinishedSessionAsync("learner-5");
+        await SeedTimestampedCommentAsync(sessionId);
 
         var draftId = await _svc.CreateDraftAsync(
             "tutor-5",
             sessionId,
             new TutorAssessmentDraftRequest(
                 5, 4, 5, 4, 2, 3, 2, 2, 3,
-                null, null, null, null, null),
+                "Scoring test feedback.", null, null, null, null),
             CancellationToken.None);
 
         var result = await _svc.SubmitAsync(
@@ -254,6 +258,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
             Title = "Test card",
             Difficulty = "core",
             Status = ContentStatus.Published,
+            PublishedRevisionId = $"rev-{Guid.NewGuid():N}",
         });
         var cardId = $"card-{Guid.NewGuid():N}";
         _db.RolePlayCards.Add(new RolePlayCard
@@ -286,6 +291,24 @@ public sealed class DualAssessmentTests : IAsyncLifetime
         });
         await _db.SaveChangesAsync();
         return sessionId;
+    }
+
+    private async Task SeedTimestampedCommentAsync(string sessionId)
+    {
+        _db.SpeakingTimestampedComments.Add(new SpeakingTimestampedComment
+        {
+            Id = $"tc-{Guid.NewGuid():N}",
+            SpeakingSessionId = sessionId,
+            AuthorId = "tutor-fixture",
+            AuthorRole = "tutor",
+            TranscriptSegmentIndex = 0,
+            StartMs = 0,
+            EndMs = 1500,
+            CriterionCode = "general",
+            Severity = "info",
+            BodyMarkdown = "Fixture timestamped comment.",
+        });
+        await _db.SaveChangesAsync();
     }
 
     private async Task<string> SeedAiAssessmentAsync(

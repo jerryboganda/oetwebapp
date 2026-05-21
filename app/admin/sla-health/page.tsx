@@ -91,7 +91,7 @@ export default function SlaHealthPage() {
           {data.recommendations.length > 0 && (
             <AdminRoutePanel title="Recommendations">
               <ul className="space-y-1">
-                {data.recommendations.map((r, i) => <li key={i} className="text-sm text-muted">• {r}</li>)}
+                {data.recommendations.map((r, i) => <li key={i} className="text-sm text-admin-text-muted">• {r}</li>)}
               </ul>
             </AdminRoutePanel>
           )}

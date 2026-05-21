@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services;
 
@@ -420,4 +421,257 @@ public partial class AdminService
             publishedAt = content.PublishedAt,
             archivedAt = content.ArchivedAt,
         };
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Phase 11 (G.11) — AI-assisted drill drafting
+    // ════════════════════════════════════════════════════════════════════════
+    //
+    // Mirrors `AiDraftRolePlayCardAsync` in AdminService.SpeakingRolePlayCards.cs
+    // but produces a flat micro-drill instead of a paired card+script. The
+    // grounded gateway is required — the prompt embeds the canonical Speaking
+    // rulebook + scoring + guardrails, so the AI cannot fabricate criteria
+    // outside the rulebook. If the gateway is unparseable or refuses, we fall
+    // back to a deterministic starter and surface a `Warning` so the admin
+    // knows to edit before publishing.
+    //
+    // Feature code is `AdminContentGeneration` (platform-only — already in
+    // the BYOK refusal allowlist). The method returns the persisted draft
+    // projection plus the optional warning so the page can deep-link directly
+    // to the drill bank list with the new row visible as a Draft.
+    public async Task<AdminSpeakingDrillAiDraftResponse> AiDraftSpeakingDrillAsync(
+        IAiGatewayService gateway,
+        string adminId,
+        string adminName,
+        AdminSpeakingDrillAiDraftRequest request,
+        CancellationToken ct)
+    {
+        if (gateway is null) throw new ArgumentNullException(nameof(gateway));
+        if (request is null) throw new ArgumentNullException(nameof(request));
+        if (string.IsNullOrWhiteSpace(request.DrillKind))
+        {
+            throw ApiException.Validation("SPEAKING_DRILL_KIND_REQUIRED", "DrillKind is required.");
+        }
+        var kind = ParseDrillKind(request.DrillKind);
+        var profession = string.IsNullOrWhiteSpace(request.ProfessionId) ? null : request.ProfessionId.Trim();
+        var topic = string.IsNullOrWhiteSpace(request.Topic) ? "general clinical communication" : request.Topic.Trim();
+        var criterion = string.IsNullOrWhiteSpace(request.CriterionFocus) ? "fluency" : request.CriterionFocus.Trim();
+        var difficulty = string.IsNullOrWhiteSpace(request.Difficulty) ? "core" : request.Difficulty.Trim().ToLowerInvariant();
+
+        var examProfession = profession is null
+            ? ExamProfession.Medicine
+            : ParseProfessionToExam(profession);
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Speaking,
+            Profession = examProfession,
+            Task = AiTaskMode.GenerateContent,
+            CardType = "drill",
+        });
+
+        var userInput =
+            $"Produce ONE Speaking micro-drill (kind={kind}). Profession={profession ?? "general"}, " +
+            $"topic={topic}, weak criterion={criterion}, difficulty={difficulty}. Reply with strict JSON: " +
+            "{ \"title\": string, \"instructionText\": string, \"targetCriteria\": string[], " +
+            "\"recommendedAfterSessionScoreBelow\": number|null }. " +
+            "Title <= 90 chars. instructionText is 2-4 sentences instructing the candidate. " +
+            "targetCriteria must use rulebook criterion ids only (1-3 entries). " +
+            "recommendedAfterSessionScoreBelow is one of {300,350,400,null}.";
+
+        AiGatewayResult? aiResult = null;
+        ParsedDrillDraft? parsed = null;
+        string? warning = null;
+        try
+        {
+            aiResult = await gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = prompt,
+                UserInput = userInput,
+                Temperature = 0.4,
+                MaxTokens = 1024,
+                FeatureCode = AiFeatureCodes.AdminContentGeneration,
+                UserId = adminId,
+                PromptTemplateId = "drill.draft.v1",
+            }, ct);
+            parsed = TryParseDrillDraft(aiResult.Completion);
+            if (parsed is null)
+            {
+                warning = "AI reply could not be parsed. A deterministic starter was used. Edit before publishing.";
+            }
+        }
+        catch (PromptNotGroundedException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            warning = "AI provider error. A deterministic starter was used. Edit before publishing.";
+        }
+
+        parsed ??= BuildFallbackDrillDraft(kind, profession, topic, criterion);
+
+        var now = DateTimeOffset.UtcNow;
+        var contentId = $"ci-drill-{Guid.NewGuid():N}";
+        var drillId = $"sdi-{Guid.NewGuid():N}";
+
+        var content = new ContentItem
+        {
+            Id = contentId,
+            ContentType = "speaking_drill",
+            SubtestCode = "speaking",
+            ProfessionId = profession,
+            Title = parsed.Title,
+            Difficulty = difficulty,
+            EstimatedDurationMinutes = 1,
+            CriteriaFocusJson = JsonSupport.Serialize(parsed.TargetCriteria),
+            ScenarioType = kind.ToString().ToLowerInvariant(),
+            ModeSupportJson = JsonSupport.Serialize(new[] { "learning" }),
+            PublishedRevisionId = $"rev-{drillId}",
+            Status = ContentStatus.Draft,
+            CaseNotes = null,
+            DetailJson = JsonSupport.Serialize(new
+            {
+                instructionText = parsed.InstructionText,
+                drillKind = kind.ToString(),
+                targetCriteria = parsed.TargetCriteria,
+            }),
+            ModelAnswerJson = "{}",
+            ExamFamilyCode = "oet",
+            ExamTypeCode = "oet",
+            DifficultyRating = 1500,
+            SourceType = "ai_draft",
+            SourceProvenance = warning is null ? "AI draft via drill.draft.v1" : $"AI draft with template fallback ({warning})",
+            RightsStatus = "owned",
+            QaStatus = "pending",
+            FreshnessConfidence = "current",
+            InstructionLanguage = "en",
+            ContentLanguage = "en",
+            CreatedBy = adminId,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        var drill = new SpeakingDrillItem
+        {
+            Id = drillId,
+            ContentItemId = contentId,
+            DrillKind = kind,
+            TargetCriteriaJson = JsonSupport.Serialize(parsed.TargetCriteria),
+            RecommendedAfterSessionScoreBelow = parsed.RecommendedAfterSessionScoreBelow,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        db.ContentItems.Add(content);
+        db.SpeakingDrillItems.Add(drill);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName,
+            warning is null ? "AiDrafted" : "AiDraftedWithFallback",
+            "SpeakingDrill", drillId,
+            $"AI-drafted speaking drill: {content.Title} ({kind})"
+            + (warning is null ? "" : $" — warning: {warning}"),
+            ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        return new AdminSpeakingDrillAiDraftResponse(
+            DrillId: drillId,
+            DrillKind: kind.ToString(),
+            ProfessionId: profession,
+            Title: content.Title,
+            InstructionText: parsed.InstructionText,
+            TargetCriteria: parsed.TargetCriteria,
+            RecommendedAfterSessionScoreBelow: parsed.RecommendedAfterSessionScoreBelow,
+            Status: content.Status.ToString().ToLowerInvariant(),
+            CreatedAt: content.CreatedAt,
+            Warning: warning);
+    }
+
+    private sealed record ParsedDrillDraft(
+        string Title,
+        string InstructionText,
+        string[] TargetCriteria,
+        int? RecommendedAfterSessionScoreBelow);
+
+    private static ParsedDrillDraft? TryParseDrillDraft(string? completion)
+    {
+        if (string.IsNullOrWhiteSpace(completion)) return null;
+        var jsonText = ExtractJsonObject(completion);
+        if (jsonText is null) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(jsonText);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            var root = doc.RootElement;
+            var title = root.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String
+                ? t.GetString() : null;
+            var instr = root.TryGetProperty("instructionText", out var i) && i.ValueKind == JsonValueKind.String
+                ? i.GetString() : null;
+            if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(instr)) return null;
+            var crits = new List<string>();
+            if (root.TryGetProperty("targetCriteria", out var c) && c.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in c.EnumerateArray())
+                {
+                    if (el.ValueKind == JsonValueKind.String)
+                    {
+                        var s = el.GetString();
+                        if (!string.IsNullOrWhiteSpace(s)) crits.Add(s.Trim());
+                    }
+                }
+            }
+            if (crits.Count == 0) return null;
+            int? threshold = null;
+            if (root.TryGetProperty("recommendedAfterSessionScoreBelow", out var th)
+                && th.ValueKind == JsonValueKind.Number
+                && th.TryGetInt32(out var thInt))
+            {
+                threshold = thInt;
+            }
+            // Truncate title defensively.
+            if (title!.Length > 120) title = title.Substring(0, 120);
+            return new ParsedDrillDraft(title.Trim(), instr!.Trim(), crits.Take(3).ToArray(), threshold);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ExtractJsonObject(string text)
+    {
+        // The completion may include surrounding chatter; extract the
+        // first balanced JSON object substring.
+        var start = text.IndexOf('{');
+        if (start < 0) return null;
+        var depth = 0;
+        for (var idx = start; idx < text.Length; idx++)
+        {
+            var ch = text[idx];
+            if (ch == '{') depth++;
+            else if (ch == '}')
+            {
+                depth--;
+                if (depth == 0) return text.Substring(start, idx - start + 1);
+            }
+        }
+        return null;
+    }
+
+    private static ParsedDrillDraft BuildFallbackDrillDraft(
+        SpeakingDrillKind kind,
+        string? profession,
+        string topic,
+        string criterion)
+    {
+        var prof = profession ?? "general";
+        var kindLabel = kind.ToString();
+        return new ParsedDrillDraft(
+            Title: $"{kindLabel} drill — {prof} ({criterion})",
+            InstructionText:
+                $"Practice {kindLabel} for the {criterion} criterion. " +
+                $"Focus on the patient-care scenarios most common for {prof}, including {topic}. " +
+                $"Speak for 60–90 seconds, then review the transcript and self-mark against the rubric.",
+            TargetCriteria: new[] { criterion },
+            RecommendedAfterSessionScoreBelow: 350);
+    }
 }

@@ -218,7 +218,7 @@ export default function ListeningQuestionDeepDivePage() {
           <MotionSection delayIndex={2}>
             <AdminRoutePanel title="Wrong-answer histogram">
               {wrongHistogramRows.length === 0 ? (
-                <p className="text-sm text-muted">No wrong answers recorded for this question in the window.</p>
+                <p className="text-sm text-admin-text-muted">No wrong answers recorded for this question in the window.</p>
               ) : (
                 <div className="space-y-2" data-testid="listening-question-distractor-list">
                   {wrongHistogramRows.map(([wrong, count]) => (
@@ -238,7 +238,7 @@ export default function ListeningQuestionDeepDivePage() {
           <MotionSection delayIndex={3}>
             <AdminRoutePanel title="Common misspellings of the correct answer">
               {misspellings.length === 0 ? (
-                <p className="text-sm text-muted">
+                <p className="text-sm text-admin-text-muted">
                   <AlertTriangle className="mr-1 inline h-4 w-4" /> No spelling-near-miss patterns detected for &ldquo;
                   {distractor?.correctAnswer ?? '—'}&rdquo; in the last {days} days.
                 </p>

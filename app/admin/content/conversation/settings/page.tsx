@@ -189,7 +189,7 @@ export default function AdminConversationSettingsPage() {
           />
 
           {loading || !settings ? (
-            <p className="text-sm text-muted">Loading…</p>
+            <p className="text-sm text-admin-text-muted">Loading…</p>
           ) : (
             <div className="space-y-8">
               <Section title="Feature">
@@ -257,7 +257,7 @@ export default function AdminConversationSettingsPage() {
 
               <Section title="ASR (Speech → Text)">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">ASR Provider</span>
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-muted">ASR Provider</span>
                   <select
                     value={String(v('asrProvider') ?? 'auto')}
                     onChange={(e) => setField('asrProvider', e.target.value)}
@@ -389,7 +389,7 @@ export default function AdminConversationSettingsPage() {
 
               <Section title="TTS (Text → Speech)">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">TTS Provider</span>
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-muted">TTS Provider</span>
                   <select
                     value={String(v('ttsProvider') ?? 'auto')}
                     onChange={(e) => setField('ttsProvider', e.target.value)}

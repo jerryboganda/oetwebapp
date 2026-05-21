@@ -19,6 +19,12 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
         new("/v1/media/upload", "POST", null, "PerUserWrite"),
         new("/v1/admin/uploads/{uploadId}/parts/{partNumber:int}", "PUT", "AdminContentWrite", "PerUserWrite"),
         new("/v1/admin/imports/zip", "POST", "AdminContentWrite", "PerUserWrite"),
+        new("/v1/admin/imports/real-content-folder/stage", "POST", "AdminContentWrite", "PerUserWrite"),
+        new("/v1/admin/recall-documents", "POST", "AdminContentWrite", "PerUserWrite"),
+        new("/v1/admin/result-templates", "POST", "AdminContentWrite", "PerUserWrite"),
+        new("/v1/admin/rulebooks/{id}/reference-pdf", "POST", "AdminContentWrite", "PerUserWrite"),
+        new("/v1/admin/speaking/shared-resources", "POST", "AdminContentWrite", "PerUserWrite"),
+        new("/v1/speaking/drills/attempts/{aid}/recordings", "POST", "LearnerOnly", "PerUserWrite"),
     ];
 
     public EndpointRegistrationTests(TestWebApplicationFactory factory)

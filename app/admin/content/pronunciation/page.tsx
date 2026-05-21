@@ -114,7 +114,7 @@ export default function AdminPronunciationDashboard() {
 
         <AdminRoutePanel>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-muted">
+            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-text-muted">
               Search
               <div className="relative mt-1">
                 <input
@@ -128,7 +128,7 @@ export default function AdminPronunciationDashboard() {
                 <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted" aria-hidden />
               </div>
             </label>
-            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-muted">
+            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-text-muted">
               Profession
               <select
                 value={profession}
@@ -147,7 +147,7 @@ export default function AdminPronunciationDashboard() {
                 <option value="speech-pathology">Speech pathology</option>
               </select>
             </label>
-            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-muted">
+            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-text-muted">
               Difficulty
               <select
                 value={difficulty}
@@ -161,7 +161,7 @@ export default function AdminPronunciationDashboard() {
                 <option value="hard">Hard</option>
               </select>
             </label>
-            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-muted">
+            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-text-muted">
               Status
               <select
                 value={status}

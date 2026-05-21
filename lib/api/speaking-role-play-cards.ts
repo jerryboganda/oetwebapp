@@ -346,6 +346,46 @@ export async function adminUpsertInterlocutorScript(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Phase 11 (G.11) — AI-assisted draft
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Seed for `POST /v1/admin/speaking/role-play-cards/ai-draft`. */
+export interface AdminRolePlayCardAiDraftInput {
+  professionId: string;
+  topic?: string | null;
+  emotion?: string | null;
+  difficulty?: string | null;
+  setting?: string | null;
+  candidateRole?: string | null;
+  interlocutorRole?: string | null;
+  communicationGoal?: string | null;
+}
+
+/** Response from the grounded-gateway-backed role-play card draft endpoint. */
+export interface AdminRolePlayCardAiDraftResponse {
+  cardId: string;
+  card: RolePlayCardDetail;
+  warning?: string | null;
+}
+
+/**
+ * Calls the grounded gateway via the backend to persist a Draft
+ * candidate role-play card + paired hidden interlocutor script.
+ * The server enforces grounding (rulebook + scoring) and returns the
+ * persisted card + script as `RolePlayCardDetail` for an inline
+ * preview, plus an optional `warning` when the AI reply could not be
+ * parsed and a deterministic fallback was used.
+ */
+export async function draftSpeakingRolePlayCard(
+  input: AdminRolePlayCardAiDraftInput,
+): Promise<AdminRolePlayCardAiDraftResponse> {
+  return request<AdminRolePlayCardAiDraftResponse>(
+    '/v1/admin/speaking/role-play-cards/ai-draft',
+    { method: 'POST', body: JSON.stringify(input) },
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Learner function (no interlocutor data)
 // ─────────────────────────────────────────────────────────────────────────────
 

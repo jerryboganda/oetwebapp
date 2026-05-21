@@ -199,7 +199,7 @@ export default function AdminStrategiesPage() {
         emptyContent={
           <AdminRoutePanel>
             <div className="flex flex-col items-start gap-3">
-              <p className="text-sm text-muted">No strategy guides match the current filters.</p>
+              <p className="text-sm text-admin-text-muted">No strategy guides match the current filters.</p>
               <Button className="gap-2" asChild>
 <Link href="/admin/content/strategies/new">
                   <FilePlus2 className="h-4 w-4" />

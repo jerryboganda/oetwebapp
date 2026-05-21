@@ -169,7 +169,7 @@ export default function AdminRecallSetTagsPage() {
 
       <AdminRoutePanel>
         <div className="flex items-center justify-between">
-          <label className="inline-flex items-center gap-2 text-sm text-muted">
+          <label className="inline-flex items-center gap-2 text-sm text-admin-text-muted">
             <input
               type="checkbox"
               checked={includeArchived}

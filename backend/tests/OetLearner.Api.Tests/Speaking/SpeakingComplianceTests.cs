@@ -218,6 +218,7 @@ public sealed class SpeakingComplianceTests : IAsyncLifetime
             Title = "Test card",
             Difficulty = "core",
             Status = ContentStatus.Published,
+            PublishedRevisionId = $"rev-{Guid.NewGuid():N}",
         });
 
         var cardId = $"card-{Guid.NewGuid():N}";

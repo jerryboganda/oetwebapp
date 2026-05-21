@@ -306,7 +306,7 @@ export default function AdminSpeakingMockSetsPage() {
           onRetry={() => setReloadNonce((n) => n + 1)}
           emptyContent={
             <EmptyState
-              icon={<Sparkles className="h-10 w-10 text-muted" />}
+              icon={<Sparkles className="h-10 w-10 text-admin-text-muted" />}
               title="No mock sets yet"
               description="Create the first one to surface a paired-role-play exam to learners."
               action={{ label: 'New mock set', onClick: () => setCreateOpen(true) }}

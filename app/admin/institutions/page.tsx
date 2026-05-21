@@ -120,7 +120,7 @@ export default function AdminInstitutionsPage() {
           description="Search sponsor accounts by legal name, organization, or contact email."
           actions={(
             <div className="relative w-full min-w-[240px] sm:w-80">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
             <Input
               placeholder="Search by name, email, or organization..."
               value={filter}
@@ -145,7 +145,7 @@ export default function AdminInstitutionsPage() {
               ))}
             </div>
           ) : error ? (
-            <div className="p-8 text-center text-muted">{error}</div>
+            <div className="p-8 text-center text-admin-text-muted">{error}</div>
           ) : (
             <DataTable
               columns={columns}

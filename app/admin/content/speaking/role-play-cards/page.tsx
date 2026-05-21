@@ -170,7 +170,7 @@ export default function AdminSpeakingRolePlayCardsPage() {
             </Button>
           </div>
         </div>
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 text-xs text-admin-text-muted">
           {rows.length} card(s){filterCount > 0 ? ` matching ${filterCount} filter(s)` : ''}.
         </p>
       </AdminRoutePanel>

@@ -179,12 +179,12 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Term — primary key, always required */}
             <div>
-              <label className="mb-1 block text-sm font-medium text-navy">Term <span className="text-danger">*</span></label>
+              <label className="mb-1 block text-sm font-medium text-admin-text">Term <span className="text-danger">*</span></label>
               <Input required aria-label="Term" value={v.term} onChange={(e) => setV({ ...v, term: e.target.value })} maxLength={128} />
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-navy">Definition <span className="text-danger">*</span></label>
+              <label className="mb-1 block text-sm font-medium text-admin-text">Definition <span className="text-danger">*</span></label>
               <textarea
                 required
                 aria-label="Definition"

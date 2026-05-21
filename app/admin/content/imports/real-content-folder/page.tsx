@@ -114,7 +114,7 @@ export default function AdminRealContentFolderImportPage() {
 
       <AdminRoutePanel>
         <div className="space-y-3">
-          <p className="text-sm text-muted">
+          <p className="text-sm text-admin-text-muted">
             Step 1 — zip up your <code>Project Real Content</code> folder, upload it here, review the parsed proposals, then commit. Nothing is auto-published.
           </p>
           <div className="flex flex-col sm:flex-row sm:items-end gap-3">
@@ -128,7 +128,7 @@ export default function AdminRealContentFolderImportPage() {
                 className="w-full text-sm"
               />
               {file ? (
-                <p className="text-xs text-muted mt-1">
+                <p className="text-xs text-admin-text-muted mt-1">
                   {file.name} - {(file.size / 1024 / 1024).toFixed(2)} MB
                 </p>
               ) : null}

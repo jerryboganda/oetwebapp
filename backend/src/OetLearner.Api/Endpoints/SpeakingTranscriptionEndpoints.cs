@@ -32,7 +32,7 @@ public static class SpeakingTranscriptionEndpoints
     {
         // ── Admin trigger ──
         app.MapPost("/v1/admin/speaking/transcribe/{sessionId}", AdminTranscribeAsync)
-            .RequireAuthorization("AdminOnly")
+            .WithAdminWrite("AdminContentWrite")
             .WithTags("Speaking transcription")
             .WithSummary("Admin: queue (or re-queue) an ASR transcription for a Speaking session.")
             .Produces<SpeakingTranscriptionStatus>(StatusCodes.Status202Accepted)

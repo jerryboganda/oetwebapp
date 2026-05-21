@@ -467,7 +467,7 @@ export default function MockSetup() {
                   <CreditCard className="h-5 w-5" />
                 </span>
                 <div>
-                  <p className="text-sm font-black text-navy">You've used all available mocks in at least one bucket.</p>
+                  <p className="text-sm font-black text-navy">You&apos;ve used all available mocks in at least one bucket.</p>
                   <p className="mt-1 text-xs leading-5 text-muted">
                     Top up your mocks to keep practising — billing add-ons unlock additional attempts immediately.
                   </p>

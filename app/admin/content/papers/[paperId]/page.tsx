@@ -317,7 +317,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                       className="block w-full text-sm"
                     />
                     {uploadProgress !== null && (
-                      <div className="mt-2 flex items-center gap-2 text-sm text-muted">
+                      <div className="mt-2 flex items-center gap-2 text-sm text-admin-text-muted">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         Uploading… {Math.round(uploadProgress * 100)}%
                       </div>

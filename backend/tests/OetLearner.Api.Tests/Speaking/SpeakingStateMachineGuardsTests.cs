@@ -250,6 +250,7 @@ public sealed class SpeakingStateMachineGuardsTests : IAsyncLifetime
             Title = "State machine test card",
             Difficulty = "core",
             Status = ContentStatus.Published,
+            PublishedRevisionId = $"rev-{Guid.NewGuid():N}",
         });
 
         var cardId = $"card-{Guid.NewGuid():N}";

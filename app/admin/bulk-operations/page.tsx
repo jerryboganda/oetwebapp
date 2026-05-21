@@ -128,7 +128,7 @@ export default function BulkOperationsPage() {
             <div>
               <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
               <Textarea value={creditUserIds} onChange={(e) => setCreditUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
-              <p className="text-xs text-muted mt-1">{parseUserIds(creditUserIds).length} users</p>
+              <p className="text-xs text-admin-text-muted mt-1">{parseUserIds(creditUserIds).length} users</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -156,7 +156,7 @@ export default function BulkOperationsPage() {
             <div>
               <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
               <Textarea value={notifUserIds} onChange={(e) => setNotifUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
-              <p className="text-xs text-muted mt-1">{parseUserIds(notifUserIds).length} users</p>
+              <p className="text-xs text-admin-text-muted mt-1">{parseUserIds(notifUserIds).length} users</p>
             </div>
             <div>
               <label className="text-sm font-medium">Title</label>
@@ -182,7 +182,7 @@ export default function BulkOperationsPage() {
             <div>
               <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
               <Textarea value={statusUserIds} onChange={(e) => setStatusUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
-              <p className="text-xs text-muted mt-1">{parseUserIds(statusUserIds).length} users</p>
+              <p className="text-xs text-admin-text-muted mt-1">{parseUserIds(statusUserIds).length} users</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>

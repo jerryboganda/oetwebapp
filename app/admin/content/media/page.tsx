@@ -251,7 +251,7 @@ export default function AdminMediaPage() {
               <RefreshCw className="w-4 h-4 mr-1" /> Refresh
             </Button>
           </div>
-          <span className="text-xs text-muted">{total} asset{total !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-admin-text-muted">{total} asset{total !== 1 ? 's' : ''}</span>
         </div>
 
         {audit && (
@@ -277,7 +277,7 @@ export default function AdminMediaPage() {
 
         <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load media assets.">
           {pageStatus === 'empty' ? (
-            <EmptyState icon={<Film className="w-8 h-8 text-muted" />} title="No media assets" description="Upload files or import content to see media assets here." />
+            <EmptyState icon={<Film className="w-8 h-8 text-admin-text-muted" />} title="No media assets" description="Upload files or import content to see media assets here." />
           ) : (
             <DataTable columns={columns} data={assets} keyExtractor={(r) => r.id} />
           )}

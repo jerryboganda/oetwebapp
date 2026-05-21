@@ -368,22 +368,22 @@ export default function UserDetailPage() {
                   <div className="flex h-20 w-20 items-center justify-center rounded-full bg-lavender text-primary">
                     <UserIcon className="h-8 w-8" />
                   </div>
-                  <div className="w-full space-y-3 text-left text-sm text-muted">
+                  <div className="w-full space-y-3 text-left text-sm text-admin-text-muted">
                     <div className="flex items-start gap-3">
-                      <Mail className="mt-0.5 h-4 w-4 text-muted" />
+                      <Mail className="mt-0.5 h-4 w-4 text-admin-text-muted" />
                       <span className="break-all">{user.email}</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <UserLock className="mt-0.5 h-4 w-4 text-muted" />
+                      <UserLock className="mt-0.5 h-4 w-4 text-admin-text-muted" />
                       <span className="break-all">{user.authAccountId ?? 'No linked auth account'}</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Shield className="mt-0.5 h-4 w-4 text-muted" />
+                      <Shield className="mt-0.5 h-4 w-4 text-admin-text-muted" />
                       <span>Created {formatDate(user.createdAt, 'unknown')}</span>
                     </div>
                     {user.profession ? (
                       <div className="flex items-start gap-3">
-                        <ShieldCheck className="mt-0.5 h-4 w-4 text-muted" />
+                        <ShieldCheck className="mt-0.5 h-4 w-4 text-admin-text-muted" />
                         <span>Profession: {user.profession}</span>
                       </div>
                     ) : null}
@@ -420,10 +420,10 @@ export default function UserDetailPage() {
                     description="Granular admin permissions for this account. Edit in the Admins & Permissions tab."
                   >
                     {adminPermissions === null ? (
-                      <p className="text-sm text-muted">Loading permissions…</p>
+                      <p className="text-sm text-admin-text-muted">Loading permissions…</p>
                     ) : adminPermissions.length === 0 ? (
                       <div className="flex flex-wrap items-center gap-3">
-                        <p className="text-sm text-muted">No granular permissions granted yet.</p>
+                        <p className="text-sm text-admin-text-muted">No granular permissions granted yet.</p>
                         <Link
                           href="/admin/users?tab=admins"
                           className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:bg-background-light"
@@ -537,7 +537,7 @@ export default function UserDetailPage() {
                   </AdminRoutePanel>
                 ) : user.role === 'learner' ? (
                   <AdminRoutePanel title="Subscription" description="No active subscription found for this learner.">
-                    <p className="text-sm text-muted">This learner has not subscribed to a paid plan yet.</p>
+                    <p className="text-sm text-admin-text-muted">This learner has not subscribed to a paid plan yet.</p>
                   </AdminRoutePanel>
                 ) : null}
 

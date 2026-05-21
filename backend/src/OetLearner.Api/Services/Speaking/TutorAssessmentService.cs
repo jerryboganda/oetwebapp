@@ -82,6 +82,7 @@ public sealed class TutorAssessmentService(
             RecommendedRulebookEntries = req.RecommendedRulebookEntries is null
                 ? string.Empty
                 : string.Join(",", req.RecommendedRulebookEntries),
+            ReadinessBand = string.Empty,
             IsFinal = false,
             CreatedAt = now,
             UpdatedAt = now,

@@ -94,8 +94,17 @@ export interface DrillScoringResponse {
   nextRecommendations: string[];
 }
 
+/**
+ * Canonical learner-facing list shape returned by
+ * `GET /v1/speaking/drills`. Backend implementation:
+ * `LearnerService.ListSpeakingDrillsAsync(...)` →
+ * `{ kinds, totalCount, completedCount, items }`.
+ */
 export interface ListDrillsResponse {
-  drills: DrillSummary[];
+  kinds: readonly string[];
+  totalCount: number;
+  completedCount: number;
+  items: DrillSummary[];
 }
 
 export interface ListDrillsParams {
@@ -284,6 +293,49 @@ export async function deleteAdminDrill(drillId: string): Promise<AdminDrillDetai
   return apiClient.request<AdminDrillDetail>(
     `/v1/admin/speaking/drills/${encodeURIComponent(drillId)}`,
     { method: 'DELETE' },
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 11 (G.11) — AI-assisted draft
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Seed for `POST /v1/admin/speaking/drills/ai-draft`. */
+export interface AdminSpeakingDrillAiDraftInput {
+  drillKind: string;
+  professionId?: string | null;
+  topic?: string | null;
+  criterionFocus?: string | null;
+  difficulty?: string | null;
+}
+
+/** Response from the grounded-gateway-backed drill draft endpoint. */
+export interface AdminSpeakingDrillAiDraftResponse {
+  drillId: string;
+  drillKind: string;
+  professionId: string | null;
+  title: string;
+  instructionText: string;
+  targetCriteria: string[];
+  recommendedAfterSessionScoreBelow: number | null;
+  status: string;
+  createdAt: string;
+  warning?: string | null;
+}
+
+/**
+ * Calls the grounded gateway via the backend to persist a draft drill.
+ * The server enforces grounding (rulebook + scoring), persists a
+ * Draft `SpeakingDrillItem` + paired `ContentItem`, and returns a
+ * flat projection plus an optional `warning` when the AI reply could
+ * not be parsed and a deterministic fallback was used.
+ */
+export async function draftSpeakingDrill(
+  input: AdminSpeakingDrillAiDraftInput,
+): Promise<AdminSpeakingDrillAiDraftResponse> {
+  return apiClient.post<AdminSpeakingDrillAiDraftResponse>(
+    '/v1/admin/speaking/drills/ai-draft',
+    input,
   );
 }
 

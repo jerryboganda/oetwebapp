@@ -93,7 +93,8 @@ public static class SpeakingComplianceEndpoints
                 sessionId = recording.SpeakingSessionId,
                 isArchived = recording.IsArchived,
             });
-        });
+        })
+        .RequireRateLimiting("PerUserWrite");
 
         // Phase 10 P10.2 — admin recording-access audit viewer.
         teaching.MapGet("/recordings/audit", async (

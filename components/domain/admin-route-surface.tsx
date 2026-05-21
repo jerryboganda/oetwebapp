@@ -267,7 +267,7 @@ export function AdminRoutePanel({
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
       )}
-      <div className={cn('flex-1 min-h-0 p-4', contentClassName)}>{children}</div>
+      <div className={cn('flex-1 min-h-0 p-4 text-admin-text', contentClassName)}>{children}</div>
     </div>
   );
 }

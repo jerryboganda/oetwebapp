@@ -124,7 +124,7 @@ export default function AdminConversationTemplatesPage() {
               onChange={(e) => { setProfession(e.target.value); setPage(1); }}
               placeholder="medicine, nursing, pharmacy…" className="min-w-[180px]" />
             <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">Status</label>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-muted">Status</label>
               <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}
                 className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
                 <option value="">All</option>

@@ -403,7 +403,7 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
       >
         <Bell className="h-5 w-5" aria-hidden="true" />
         {unreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 py-px text-[10px] font-bold leading-none text-white shadow-sm shadow-primary/25">
+          <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 py-px text-[10px] font-bold leading-none text-white shadow-sm shadow-primary/25 dark:bg-violet-700">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}

@@ -46,8 +46,8 @@ public sealed class StrategyGuideServiceTests
             WeakSubtestsJson = "[\"writing\"]",
             StudyHoursPerWeek = 8,
             UpdatedAt = DateTimeOffset.UtcNow,
-            ExamTypeCode = "oet",
-            ExamFamilyCode = "oet"
+            ExamTypeCode = "OET",
+            ExamFamilyCode = "OET"
         });
         db.LearnerStrategyProgress.Add(new LearnerStrategyProgress
         {
@@ -110,7 +110,7 @@ public sealed class StrategyGuideServiceTests
         db.StrategyGuides.Add(new StrategyGuide
         {
             Id = "strategy-draft",
-            ExamTypeCode = "oet",
+            ExamTypeCode = "OET",
             Title = "",
             Summary = "Draft",
             Category = "writing",
@@ -145,7 +145,7 @@ public sealed class StrategyGuideServiceTests
         db.StrategyGuides.Add(new StrategyGuide
         {
             Id = "strategy-valid",
-            ExamTypeCode = "oet",
+            ExamTypeCode = "OET",
             Title = "Valid Strategy",
             Summary = "A valid guide.",
             Category = "writing",
@@ -210,7 +210,7 @@ public sealed class StrategyGuideServiceTests
             {
                 Id = "strategy-overview",
                 Slug = "oet-overview-strategy",
-                ExamTypeCode = "oet",
+                ExamTypeCode = "OET",
                 Title = "OET Strategy Overview",
                 Summary = "Build a simple weekly plan around the four subtests.",
                 Category = "exam_overview",
@@ -228,7 +228,7 @@ public sealed class StrategyGuideServiceTests
             {
                 Id = "strategy-writing",
                 Slug = "writing-letter-structure",
-                ExamTypeCode = "oet",
+                ExamTypeCode = "OET",
                 SubtestCode = "writing",
                 Title = "Writing Letter Structure",
                 Summary = "Plan a purposeful referral letter before you draft.",
@@ -247,7 +247,7 @@ public sealed class StrategyGuideServiceTests
             {
                 Id = "strategy-archived",
                 Slug = "archived",
-                ExamTypeCode = "oet",
+                ExamTypeCode = "OET",
                 Title = "Archived",
                 Summary = "Hidden.",
                 Category = "exam_overview",

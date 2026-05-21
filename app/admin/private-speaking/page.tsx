@@ -240,59 +240,59 @@ export default function AdminPrivateSpeakingPage() {
               <label className="flex items-center gap-3">
                 <input type="checkbox" checked={config.isEnabled} onChange={e => setConfig(c => c ? { ...c, isEnabled: e.target.checked } : c)}
                   className="w-4 h-4 rounded text-primary" />
-                <span className="text-sm text-navy dark:text-navy">Module Enabled</span>
+                <span className="text-sm text-admin-text">Module Enabled</span>
               </label>
               <div>
-                <label className="text-xs text-muted mb-1 block">Default Price (minor units)</label>
+                <label className="text-xs text-admin-text-muted mb-1 block">Default Price (minor units)</label>
                 <input type="number" value={config.defaultPriceMinorUnits}
                   onChange={e => setConfig(c => c ? { ...c, defaultPriceMinorUnits: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
               </div>
               <div>
-                <label className="text-xs text-muted mb-1 block">Currency</label>
+                <label className="text-xs text-admin-text-muted mb-1 block">Currency</label>
                 <input type="text" value={config.currency}
                   onChange={e => setConfig(c => c ? { ...c, currency: e.target.value } : c)}
                   className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
               </div>
               <div>
-                <label className="text-xs text-muted mb-1 block">Slot Duration (minutes)</label>
+                <label className="text-xs text-admin-text-muted mb-1 block">Slot Duration (minutes)</label>
                 <input type="number" value={config.defaultSlotDurationMinutes}
                   onChange={e => setConfig(c => c ? { ...c, defaultSlotDurationMinutes: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
               </div>
               <div>
-                <label className="text-xs text-muted mb-1 block">Buffer Between Slots (minutes)</label>
+                <label className="text-xs text-admin-text-muted mb-1 block">Buffer Between Slots (minutes)</label>
                 <input type="number" value={config.bufferMinutesBetweenSlots}
                   onChange={e => setConfig(c => c ? { ...c, bufferMinutesBetweenSlots: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
               </div>
               <div>
-                <label className="text-xs text-muted mb-1 block">Min Lead Time (hours)</label>
+                <label className="text-xs text-admin-text-muted mb-1 block">Min Lead Time (hours)</label>
                 <input type="number" value={config.minBookingLeadTimeHours}
                   onChange={e => setConfig(c => c ? { ...c, minBookingLeadTimeHours: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
               </div>
               <div>
-                <label className="text-xs text-muted mb-1 block">Max Advance Days</label>
+                <label className="text-xs text-admin-text-muted mb-1 block">Max Advance Days</label>
                 <input type="number" value={config.maxBookingAdvanceDays}
                   onChange={e => setConfig(c => c ? { ...c, maxBookingAdvanceDays: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
               </div>
               <div>
-                <label className="text-xs text-muted mb-1 block">Cancellation Window (hours)</label>
+                <label className="text-xs text-admin-text-muted mb-1 block">Cancellation Window (hours)</label>
                 <input type="number" value={config.cancellationWindowHours}
                   onChange={e => setConfig(c => c ? { ...c, cancellationWindowHours: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
               </div>
               <div>
-                <label className="text-xs text-muted mb-1 block">Reservation Timeout (minutes)</label>
+                <label className="text-xs text-admin-text-muted mb-1 block">Reservation Timeout (minutes)</label>
                 <input type="number" value={config.reservationTimeoutMinutes}
                   onChange={e => setConfig(c => c ? { ...c, reservationTimeoutMinutes: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
               </div>
             </div>
             <button onClick={handleSaveConfig} disabled={saving}
-              className="mt-4 px-5 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              className="mt-4 px-5 py-2 bg-primary hover:bg-primary-dark text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded-lg text-sm font-medium disabled:opacity-50">
               {saving ? 'Saving...' : 'Save Configuration'}
             </button>
           </AdminRoutePanel>
@@ -303,7 +303,7 @@ export default function AdminPrivateSpeakingPage() {
         <>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-navy dark:text-navy">Tutor Profiles</h3>
-            <button onClick={() => setShowCreateTutor(true)} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium">
+            <button onClick={() => setShowCreateTutor(true)} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded-lg text-sm font-medium">
               <Plus className="w-4 h-4" /> Add Tutor
             </button>
           </div>
@@ -326,7 +326,7 @@ export default function AdminPrivateSpeakingPage() {
               </div>
               <div className="flex gap-2 mt-3">
                 <button onClick={handleCreateTutor} disabled={saving || !newTutor.expertUserId || !newTutor.displayName}
-                  className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                  className="px-4 py-2 bg-primary hover:bg-primary-dark text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded-lg text-sm font-medium disabled:opacity-50">
                   {saving ? 'Creating...' : 'Create'}
                 </button>
                 <button onClick={() => setShowCreateTutor(false)} className="px-4 py-2 border border-border dark:border-border rounded-lg text-sm text-muted dark:text-muted">Cancel</button>
@@ -340,12 +340,12 @@ export default function AdminPrivateSpeakingPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-navy dark:text-navy">{tutor.displayName}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${tutor.isActive ? 'bg-success/10 text-success' : 'bg-lavender/30 text-muted'}`}>
+                      <span className="font-medium text-admin-text">{tutor.displayName}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${tutor.isActive ? 'bg-success/10 text-success' : 'bg-admin-surface-raised text-admin-text-muted'}`}>
                         {tutor.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </div>
-                    <div className="text-xs text-muted mt-0.5">
+                    <div className="text-xs text-admin-text-muted mt-0.5">
                       {tutor.timezone} · {tutor.totalSessions} sessions · Rating: {tutor.averageRating.toFixed(1)}
                     </div>
                   </div>
@@ -363,9 +363,9 @@ export default function AdminPrivateSpeakingPage() {
 
                 {/* Availability panel */}
                 {selectedTutorId === tutor.id && (
-                  <div className="mt-4 pt-4 border-t border-border dark:border-border">
-                    <h4 className="text-sm font-medium text-navy dark:text-navy mb-3">Weekly Availability Rules</h4>
-                    {availability.length === 0 && <p className="text-xs text-muted mb-3">No availability rules yet.</p>}
+                  <div className="mt-4 pt-4 border-t border-admin-border">
+                    <h4 className="text-sm font-medium text-admin-text mb-3">Weekly Availability Rules</h4>
+                    {availability.length === 0 && <p className="text-xs text-admin-text-muted mb-3">No availability rules yet.</p>}
                     <div className="space-y-2 mb-3">
                       {availability.map(rule => (
                         <div key={rule.id} className="flex items-center justify-between bg-background-light dark:bg-surface rounded-lg px-3 py-2">
@@ -385,10 +385,10 @@ export default function AdminPrivateSpeakingPage() {
                       </select>
                       <input type="time" value={newRule.startTime} onChange={e => setNewRule(r => ({ ...r, startTime: e.target.value }))}
                         className="px-2 py-1.5 border border-border dark:border-border rounded text-xs bg-surface dark:bg-surface" />
-                      <span className="text-xs text-muted">to</span>
+                      <span className="text-xs text-admin-text-muted">to</span>
                       <input type="time" value={newRule.endTime} onChange={e => setNewRule(r => ({ ...r, endTime: e.target.value }))}
                         className="px-2 py-1.5 border border-border dark:border-border rounded text-xs bg-surface dark:bg-surface" />
-                      <button onClick={handleAddRule} className="px-3 py-1.5 bg-primary text-white rounded text-xs hover:bg-primary-dark">
+                      <button onClick={handleAddRule} className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded text-xs">
                         <Plus className="w-3.5 h-3.5 inline" /> Add
                       </button>
                     </div>
@@ -404,12 +404,12 @@ export default function AdminPrivateSpeakingPage() {
       {tab === 'bookings' && (
         <AdminRoutePanel title="All bookings">
           {bookings.length === 0 ? (
-            <p className="text-sm text-muted text-center py-8">No bookings found.</p>
+            <p className="text-sm text-admin-text-muted text-center py-8">No bookings found.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border dark:border-border text-left text-xs text-muted uppercase">
+                  <tr className="border-b border-admin-border text-left text-xs text-admin-text-muted uppercase">
                     <th className="pb-2 pr-3">Booking</th>
                     <th className="pb-2 pr-3">Tutor</th>
                     <th className="pb-2 pr-3">Session</th>
@@ -457,7 +457,7 @@ export default function AdminPrivateSpeakingPage() {
       {tab === 'audit' && (
         <AdminRoutePanel title="Audit logs">
           {auditLogs.length === 0 ? (
-            <p className="text-sm text-muted text-center py-8">No audit logs found.</p>
+            <p className="text-sm text-admin-text-muted text-center py-8">No audit logs found.</p>
           ) : (
             <div className="space-y-2">
               {auditLogs.map(log => (

@@ -100,7 +100,7 @@ export default function AdminConversationSessionsPage() {
           <div className="mb-4 flex flex-wrap items-end gap-3">
             <Input label="User ID" value={userId} onChange={(e) => { setUserId(e.target.value); setPage(1); }} placeholder="learner_..." className="min-w-[200px]" />
             <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">State</label>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-muted">State</label>
               <select value={state} onChange={(e) => { setState(e.target.value); setPage(1); }}
                 className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
                 <option value="">All</option>
@@ -113,7 +113,7 @@ export default function AdminConversationSessionsPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">Task Type</label>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-muted">Task Type</label>
               <select value={taskTypeCode} onChange={(e) => { setTaskTypeCode(e.target.value); setPage(1); }}
                 className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
                 <option value="">All</option>

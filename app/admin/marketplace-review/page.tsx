@@ -100,8 +100,8 @@ export default function AdminMarketplaceReviewPage() {
         <AdminRoutePanel>
           <div className="text-center py-16">
             <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-3" />
-            <p className="text-sm font-bold text-navy">All caught up!</p>
-            <p className="text-xs text-muted mt-1">No pending submissions to review.</p>
+            <p className="text-sm font-bold text-admin-text">All caught up!</p>
+            <p className="text-xs text-admin-text-muted mt-1">No pending submissions to review.</p>
           </div>
         </AdminRoutePanel>
       ) : (
@@ -109,7 +109,7 @@ export default function AdminMarketplaceReviewPage() {
           title="Pending Submissions"
           description={`${items.length} submission${items.length !== 1 ? 's' : ''} awaiting review.`}
         >
-          <div className="text-sm text-muted">
+          <div className="text-sm text-admin-text-muted">
             <Clock className="w-4 h-4 inline mr-1" /> {items.length} submission{items.length !== 1 ? 's' : ''} pending review
           </div>
 
@@ -178,7 +178,7 @@ export default function AdminMarketplaceReviewPage() {
                         <div className="flex items-center gap-2">
                           <input type="checkbox" id={`ci-${item.id}`} checked={createContentItem} onChange={e => setCreateContentItem(e.target.checked)}
                             className="w-4 h-4 text-warning rounded" />
-                          <label htmlFor={`ci-${item.id}`} className="text-xs text-muted dark:text-muted">
+                          <label htmlFor={`ci-${item.id}`} className="text-xs text-muted">
                             Create ContentItem (Draft) on approval
                           </label>
                         </div>

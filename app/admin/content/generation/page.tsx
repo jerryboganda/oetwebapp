@@ -213,7 +213,7 @@ export default function AdminContentGenerationPage() {
           <AdminRoutePanel title="Generation parameters">
             <form onSubmit={handleGenerate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Content Type</label>
+                <label className="block text-sm font-medium text-admin-text dark:text-admin-text mb-1.5">Content Type</label>
                 <select
                   value={form.contentType}
                   onChange={e => setForm(p => ({ ...p, contentType: e.target.value as GenerationRequest['contentType'] }))}
@@ -291,7 +291,7 @@ export default function AdminContentGenerationPage() {
               <button
                 type="submit"
                 disabled={submitting || !form.topic.trim()}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary-dark text-white rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary-dark text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors"
               >
                 {submitting ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>

@@ -72,8 +72,8 @@ export default function ContentAnalyticsPage() {
 
       <AdminRoutePanel>
         <div className="flex gap-3 items-end">
-          <div className="flex-1"><label className="text-sm font-medium text-muted mb-1 block">Content ID</label><input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Enter content ID..." value={contentId} onChange={e => setContentId(e.target.value)} /></div>
-          <button onClick={load} disabled={loading} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50">{loading ? 'Loading...' : 'Analyze'}</button>
+          <div className="flex-1"><label className="text-sm font-medium text-admin-text-muted mb-1 block">Content ID</label><input className="w-full border border-admin-border bg-admin-surface-raised text-admin-text placeholder:text-admin-text-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Enter content ID..." value={contentId} onChange={e => setContentId(e.target.value)} /></div>
+          <button onClick={load} disabled={loading} className="px-4 py-2 bg-primary text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50">{loading ? 'Loading...' : 'Analyze'}</button>
         </div>
       </AdminRoutePanel>
 
@@ -83,7 +83,7 @@ export default function ContentAnalyticsPage() {
         <MotionSection className="space-y-6">
           <MotionItem>
             <AdminRoutePanel>
-              <h2 className="text-lg font-semibold text-navy">{data.title}</h2>
+              <h2 className="text-lg font-semibold text-admin-text">{data.title}</h2>
               <div className="flex gap-2 mt-1">
                 <Badge variant="outline" className="capitalize">{data.subtestCode}</Badge>
                 <Badge variant="outline">{data.status}</Badge>
@@ -110,9 +110,9 @@ export default function ContentAnalyticsPage() {
             <AdminRoutePanel title="Monthly Usage Trend">
               <div className="space-y-2">{data.monthlyTrend.map(m => (
                 <div key={m.month} className="flex items-center gap-3">
-                  <span className="text-xs font-mono w-20 text-muted">{m.month}</span>
+                  <span className="text-xs font-mono w-20 text-admin-text-muted">{m.month}</span>
                   <div className="flex-1 h-4 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, m.attempts * 10)}%` }} /></div>
-                  <span className="text-xs text-muted w-16 text-right">{m.attempts} / {m.completed}</span>
+                  <span className="text-xs text-admin-text-muted w-16 text-right">{m.attempts} / {m.completed}</span>
                 </div>
               ))}</div>
             </AdminRoutePanel>

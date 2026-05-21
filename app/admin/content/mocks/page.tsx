@@ -374,7 +374,7 @@ export default function AdminMockBundlesPage() {
                 </Button>
               </div>
               <div className="grid gap-3 md:grid-cols-4">
-                <label className="text-xs font-black uppercase tracking-widest text-muted">
+                <label className="text-xs font-black uppercase tracking-widest text-admin-text-muted">
                   Difficulty
                   <select value={newDifficulty} onChange={(e) => setNewDifficulty(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm normal-case tracking-normal">
                     <option value="foundation">Foundation</option>
@@ -383,7 +383,7 @@ export default function AdminMockBundlesPage() {
                     <option value="stretch">Stretch</option>
                   </select>
                 </label>
-                <label className="text-xs font-black uppercase tracking-widest text-muted">
+                <label className="text-xs font-black uppercase tracking-widest text-admin-text-muted">
                   Source status
                   <select value={newSourceStatus} onChange={(e) => setNewSourceStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm normal-case tracking-normal">
                     <option value="needs_review">Needs review</option>
@@ -392,7 +392,7 @@ export default function AdminMockBundlesPage() {
                     <option value="official_sample">Official sample</option>
                   </select>
                 </label>
-                <label className="text-xs font-black uppercase tracking-widest text-muted">
+                <label className="text-xs font-black uppercase tracking-widest text-admin-text-muted">
                   QA status
                   <select value={newQualityStatus} onChange={(e) => setNewQualityStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm normal-case tracking-normal">
                     <option value="draft">Draft</option>
@@ -402,7 +402,7 @@ export default function AdminMockBundlesPage() {
                     <option value="retired">Retired</option>
                   </select>
                 </label>
-                <label className="text-xs font-black uppercase tracking-widest text-muted">
+                <label className="text-xs font-black uppercase tracking-widest text-admin-text-muted">
                   Release policy
                   <select value={newReleasePolicy} onChange={(e) => setNewReleasePolicy(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm normal-case tracking-normal">
                     <option value="instant">Instant</option>
@@ -470,7 +470,7 @@ export default function AdminMockBundlesPage() {
 
           <div className="mb-4 flex flex-wrap items-end gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">Status</label>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-muted">Status</label>
               <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
                 <option value="">All</option>
                 <option value="draft">Draft</option>
@@ -479,7 +479,7 @@ export default function AdminMockBundlesPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">Type</label>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-muted">Type</label>
               <select value={mockType} onChange={(e) => setMockType(e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
                 <option value="">All</option>
                 <option value="full">Full</option>

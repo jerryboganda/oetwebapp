@@ -93,7 +93,7 @@ export default function ContentEffectivenessPage() {
             </MotionItem>
           ))}
         </MotionSection>
-      ) : <AdminRoutePanel><p className="text-center text-muted">No data available.</p></AdminRoutePanel>}
+      ) : <AdminRoutePanel><p className="text-center text-admin-text-muted">No data available.</p></AdminRoutePanel>}
     </AdminRouteWorkspace>
   );
 }

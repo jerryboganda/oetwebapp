@@ -112,7 +112,7 @@ export default function AdminSessionDetailPage() {
       <>
         <AdminRouteWorkspace>
           <AdminRoutePanel>
-            <p className="text-sm text-muted">{error ?? 'Session not found.'}</p>
+            <p className="text-sm text-admin-text-muted">{error ?? 'Session not found.'}</p>
             <Link href="/admin/content/conversation/sessions" className="mt-3 inline-flex items-center gap-1 text-sm text-primary">
               <ArrowLeft className="h-4 w-4" /> Back to sessions
             </Link>

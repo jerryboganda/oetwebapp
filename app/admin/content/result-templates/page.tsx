@@ -180,7 +180,7 @@ export default function AdminResultTemplatesPage() {
           <Button variant="outline" onClick={() => void reload()}>
             <RotateCcw className="h-4 w-4 mr-1" /> Refresh
           </Button>
-          <div className="ml-auto text-xs text-muted">{items.length} template(s)</div>
+          <div className="ml-auto text-xs text-admin-text-muted">{items.length} template(s)</div>
         </div>
       </AdminRoutePanel>
 

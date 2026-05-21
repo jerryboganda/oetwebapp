@@ -2386,7 +2386,7 @@ export default function BillingPage() {
         >
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
               <Input placeholder="Search by user or plan" value={subscriptionSearch} onChange={(event) => setSubscriptionSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -2400,7 +2400,7 @@ export default function BillingPage() {
         >
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
               <Input placeholder="Filter by coupon code" value={redemptionSearch} onChange={(event) => setRedemptionSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -2411,7 +2411,7 @@ export default function BillingPage() {
         <AdminRoutePanel title="Invoices" description="Search and filter real invoice records by status and learner reference.">
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
               <Input placeholder="Search by user or plan description" value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -2422,7 +2422,7 @@ export default function BillingPage() {
         <AdminRoutePanel title="Payment Transactions" description="Read-only payment activity from checkout and wallet top-up attempts.">
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
               <Input placeholder="Search learner, quote, product, or gateway ID" value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -2455,7 +2455,7 @@ export default function BillingPage() {
         <AdminRoutePanel title="Provider Lifecycle Signals" description="Read-only provider webhook lifecycle signals correlated against local billing evidence.">
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
               <Input placeholder="Search event, provider ID, or normalized status" value={providerSignalSearch} onChange={(event) => setProviderSignalSearch(event.target.value)} className="pl-9" />
             </div>
           </div>

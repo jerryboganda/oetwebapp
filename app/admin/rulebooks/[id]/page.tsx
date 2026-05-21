@@ -401,7 +401,7 @@ export default function AdminRulebookDetailPage() {
               {data.referencePdfAssetId ? 'Attached' : 'No PDF'}
             </Badge>
             {data.referencePdfAssetId ? (
-              <code className="text-xs text-muted">{data.referencePdfAssetId}</code>
+              <code className="text-xs text-admin-text-muted">{data.referencePdfAssetId}</code>
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -436,7 +436,7 @@ export default function AdminRulebookDetailPage() {
             <div key={s.id} className="flex items-center gap-2 p-2 rounded border">
               {editingSection?.id === s.id ? (
                 <>
-                  <span className="font-mono text-xs text-muted w-32">{s.code}</span>
+                  <span className="font-mono text-xs text-admin-text-muted w-32">{s.code}</span>
                   <Input value={editingSection.title} onChange={(e) => setEditingSection({ ...editingSection, title: e.target.value })} className="flex-1" />
                   <Input type="number" value={editingSection.orderIndex} onChange={(e) => setEditingSection({ ...editingSection, orderIndex: Number(e.target.value) })} className="w-20" />
                   <Button size="sm" onClick={() => handleUpdateSection(editingSection)}>Save</Button>
@@ -444,9 +444,9 @@ export default function AdminRulebookDetailPage() {
                 </>
               ) : (
                 <>
-                  <span className="font-mono text-xs text-muted w-32">{s.code}</span>
+                  <span className="font-mono text-xs text-admin-text-muted w-32">{s.code}</span>
                   <span className="flex-1 font-medium">{s.title}</span>
-                  <span className="text-xs text-muted">#{s.orderIndex}</span>
+                  <span className="text-xs text-admin-text-muted">#{s.orderIndex}</span>
                   <Button size="sm" variant="ghost" onClick={() => setEditingSection(s)}><Edit3 className="h-4 w-4" /></Button>
                   <Button size="sm" variant="ghost" onClick={() => handleDeleteSection(s)}><Trash2 className="h-4 w-4 text-danger" /></Button>
                 </>

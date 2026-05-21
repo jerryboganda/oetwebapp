@@ -1411,15 +1411,44 @@ export async function getAdminExpertEfficiencyData(params?: Parameters<typeof fe
 }
 
 export async function getAdminBusinessIntelligenceData(): Promise<AdminBusinessIntelligenceData> {
-  const [subscriptionHealth, cohortAnalysis, contentEffectiveness, expertEfficiency] = await Promise.all([
+  // Fetch all 4 aggregates in parallel but never let a single failure collapse
+  // the whole page. Each slice can independently fail; the page degrades
+  // gracefully and surfaces which one is offline.
+  const [subRes, cohortRes, contentRes, expertRes] = await Promise.allSettled([
     getAdminSubscriptionHealthData(),
     getAdminCohortAnalysisData({ groupBy: 'profession' }),
     getAdminContentEffectivenessData({ top: 4 }),
     getAdminExpertEfficiencyData({ days: 30 }),
   ]);
 
+  function logIfRejected(label: string, res: PromiseSettledResult<unknown>) {
+    if (res.status === 'rejected') {
+      console.error(`[BI] ${label} failed`, res.reason);
+    }
+  }
+  logIfRejected('subscriptionHealth', subRes);
+  logIfRejected('cohortAnalysis', cohortRes);
+  logIfRejected('contentEffectiveness', contentRes);
+  logIfRejected('expertEfficiency', expertRes);
+
+  const subscriptionHealth = subRes.status === 'fulfilled' ? subRes.value : null;
+  const cohortAnalysis = cohortRes.status === 'fulfilled' ? cohortRes.value : null;
+  const contentEffectiveness = contentRes.status === 'fulfilled' ? contentRes.value : null;
+  const expertEfficiency = expertRes.status === 'fulfilled' ? expertRes.value : null;
+
+  // If literally every slice fails, signal page-level error so the existing
+  // AsyncStateWrapper retry path can be used.
+  if (!subscriptionHealth && !cohortAnalysis && !contentEffectiveness && !expertEfficiency) {
+    throw new Error('All business intelligence aggregates failed to load.');
+  }
+
   return {
-    generatedAt: subscriptionHealth.generatedAt,
+    generatedAt:
+      subscriptionHealth?.generatedAt ??
+      cohortAnalysis?.generatedAt ??
+      contentEffectiveness?.generatedAt ??
+      expertEfficiency?.generatedAt ??
+      new Date().toISOString(),
     subscriptionHealth,
     cohortAnalysis,
     contentEffectiveness,

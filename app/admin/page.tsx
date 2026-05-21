@@ -47,6 +47,7 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminRouteWorkspace role="main" aria-label="Admin operations">
+      <h1 className="sr-only">Admin Dashboard</h1>
       <AsyncStateWrapper status={status} onRetry={() => window.location.reload()}>
         {d ? (
           <div className="flex flex-col gap-3">
@@ -58,7 +59,7 @@ export default function AdminDashboardPage() {
                   <Sparkles className="h-4 w-4 text-violet-400" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-xs font-bold uppercase tracking-[0.2em] text-violet-400 leading-none">Operations Center</h1>
+                  <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-violet-400 leading-none">Operations Center</h2>
                   <p className="text-xs text-admin-text-muted leading-none mt-1 truncate">Platform health · review risk · rollout signals</p>
                 </div>
               </div>

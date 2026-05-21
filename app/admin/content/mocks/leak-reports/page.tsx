@@ -257,9 +257,9 @@ export default function AdminMockLeakReportsPage() {
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
-                          <p className="font-medium text-navy">{row.reasonCode ?? '—'}</p>
+                          <p className="font-medium text-admin-text">{row.reasonCode ?? '—'}</p>
                           {row.pageOrQuestion ? (
-                            <p className="text-xs text-muted">@ {row.pageOrQuestion}</p>
+                            <p className="text-xs text-admin-text-muted">@ {row.pageOrQuestion}</p>
                           ) : null}
                           {row.evidenceUrl ? (
                             <a
@@ -272,14 +272,14 @@ export default function AdminMockLeakReportsPage() {
                             </a>
                           ) : null}
                         </td>
-                        <td className="px-4 py-3 text-navy">
+                        <td className="px-4 py-3 text-admin-text">
                           {row.reportedByUserDisplayName ?? row.reportedByUserId ?? '—'}
                         </td>
-                        <td className="px-4 py-3 text-muted">{formatDateTime(row.createdAt)}</td>
+                        <td className="px-4 py-3 text-admin-text-muted">{formatDateTime(row.createdAt)}</td>
                         <td className="px-4 py-3">
                           <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
                           {row.resolvedAt ? (
-                            <p className="mt-1 text-xs text-muted">
+                            <p className="mt-1 text-xs text-admin-text-muted">
                               {formatDateTime(row.resolvedAt)}
                             </p>
                           ) : null}

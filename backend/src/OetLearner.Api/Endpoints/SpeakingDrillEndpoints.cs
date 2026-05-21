@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Endpoints;
@@ -34,18 +35,12 @@ public static class SpeakingDrillEndpoints
             .RequireRateLimiting("PerUser")
             .WithTags("Speaking Drills (Learner)");
 
-        learner.MapGet("", async (
-            SpeakingDrillService service,
-            HttpContext http,
-            CancellationToken ct,
-            [FromQuery] string? kind,
-            [FromQuery] string? professionId,
-            [FromQuery] string? recommendedForSessionId) =>
-        {
-            var drills = await service.ListDrillsForLearnerAsync(
-                LearnerId(http), kind, professionId, recommendedForSessionId, ct);
-            return Results.Ok(new { drills });
-        });
+        // NOTE: GET /v1/speaking/drills is owned by Wave 6
+        // LearnerEndpoints.cs (`speaking.MapGet("/drills", ...)`) which
+        // returns the canonical { kinds, items } shape consumed by the
+        // learner UI and SpeakingDrillsListingTests. Mapping it here
+        // again would cause an AmbiguousMatchException at runtime, so
+        // this group only registers attempt/recording/score routes.
 
         learner.MapPost("/{id}/attempts", async (
             string id,
@@ -88,7 +83,7 @@ public static class SpeakingDrillEndpoints
                 file.Length,
                 ct);
             return Results.Ok(new { uploaded = true });
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().RequireRateLimiting("PerUserWrite");
 
         learner.MapPost("/attempts/{aid}/score", async (
             string aid,
@@ -161,6 +156,24 @@ public static class SpeakingDrillEndpoints
             CancellationToken ct) =>
             Results.Ok(await service.DeleteSpeakingDrillAsync(
                 AdminId(http), AdminName(http), id, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        // ── Phase 11 (G.11) — AI-assisted draft ─────────────────────────────
+        //
+        // Routes through the grounded gateway via
+        // `AdminService.AiDraftSpeakingDrillAsync`. Persists a Draft
+        // SpeakingDrillItem + ContentItem atomically and surfaces an
+        // optional `warning` when the AI reply could not be parsed and
+        // the deterministic fallback was used. Gateway refuses
+        // ungrounded prompts at construction time.
+        admin.MapPost("/ai-draft", async (
+            AdminSpeakingDrillAiDraftRequest request,
+            AdminService service,
+            IAiGatewayService gateway,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.AiDraftSpeakingDrillAsync(
+                gateway, AdminId(http), AdminName(http), request, ct)))
             .WithAdminWrite("AdminContentWrite");
 
         return app;

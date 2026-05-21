@@ -219,7 +219,7 @@ export default function AdminRecallsLibraryPage() {
               <RotateCcw className="h-4 w-4 mr-1" /> Refresh
             </Button>
           </div>
-          <div className="flex items-end justify-end text-xs text-muted">
+          <div className="flex items-end justify-end text-xs text-admin-text-muted">
             {total} total - page {page} / {totalPages}
           </div>
         </div>

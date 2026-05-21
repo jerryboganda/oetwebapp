@@ -796,7 +796,7 @@ export default function AdminContentHierarchyPage() {
                 actions={<Button variant="outline" size="sm" onClick={() => openTrackEditor(undefined, selectedProgramId ?? undefined)}>Create Track</Button>}
               >
                 {tracks.length === 0 ? (
-                  <EmptyState title="No tracks" description="Create a track for this program." icon={<Layers className="w-8 h-8 text-muted" />} />
+                  <EmptyState title="No tracks" description="Create a track for this program." icon={<Layers className="w-8 h-8 text-admin-text-muted" />} />
                 ) : (
                   <DataTable columns={trackColumns} data={tracks} keyExtractor={(row) => row.id} />
                 )}
@@ -810,7 +810,7 @@ export default function AdminContentHierarchyPage() {
                 actions={<Button variant="outline" size="sm" onClick={() => openModuleEditor(undefined, selectedTrackId ?? undefined)}>Create Module</Button>}
               >
                 {modules.length === 0 ? (
-                  <EmptyState title="No modules" description="Create a module for this track." icon={<Layers className="w-8 h-8 text-muted" />} />
+                  <EmptyState title="No modules" description="Create a module for this track." icon={<Layers className="w-8 h-8 text-admin-text-muted" />} />
                 ) : (
                   <DataTable columns={moduleColumns} data={modules} keyExtractor={(row) => row.id} />
                 )}
@@ -824,7 +824,7 @@ export default function AdminContentHierarchyPage() {
                 actions={<Button variant="outline" size="sm" onClick={() => openLessonEditor(undefined, selectedModuleId ?? undefined)}>Create Lesson</Button>}
               >
                 {lessons.length === 0 ? (
-                  <EmptyState title="No lessons" description="Create a lesson for this module." icon={<BookOpen className="w-8 h-8 text-muted" />} />
+                  <EmptyState title="No lessons" description="Create a lesson for this module." icon={<BookOpen className="w-8 h-8 text-admin-text-muted" />} />
                 ) : (
                   <DataTable columns={lessonColumns} data={lessons} keyExtractor={(row) => row.id} />
                 )}

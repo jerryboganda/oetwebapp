@@ -102,7 +102,7 @@ export default function WritingRuleViolationDashboardPage() {
       <Card className="p-4">
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <label htmlFor="window-select" className="block text-xs font-medium text-muted">
+            <label htmlFor="window-select" className="block text-xs font-medium text-admin-text-muted">
               Window
             </label>
             <select
@@ -119,7 +119,7 @@ export default function WritingRuleViolationDashboardPage() {
             </select>
           </div>
           <div>
-            <label htmlFor="profession-select" className="block text-xs font-medium text-muted">
+            <label htmlFor="profession-select" className="block text-xs font-medium text-admin-text-muted">
               Profession
             </label>
             <select

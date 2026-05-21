@@ -239,7 +239,7 @@ export default function AdminWritingPapersPage() {
             <div className="flex items-end gap-2 md:col-span-2">
               <Link
                 href="/admin/content/papers?subtest=writing"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-primary/90"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600"
               >
                 <Plus className="w-4 h-4 mr-1" /> Create Writing paper
               </Link>
@@ -272,19 +272,19 @@ export default function AdminWritingPapersPage() {
 
       <AdminRoutePanel>
         <details className="group">
-          <summary className="cursor-pointer text-sm font-semibold text-navy">
+          <summary className="cursor-pointer text-sm font-semibold text-admin-text">
             Authoring quick-reference: canonical Writing paper layout
           </summary>
-          <div className="mt-3 space-y-3 text-sm text-muted">
+          <div className="mt-3 space-y-3 text-sm text-admin-text-muted">
             <div>
-              <strong className="text-navy">Required asset roles:</strong>
+              <strong className="text-admin-text">Required asset roles:</strong>
               <ul className="ml-5 mt-1 list-disc space-y-1">
                 <li><code>CaseNotes</code> — learner-facing stimulus PDF.</li>
                 <li><code>ModelAnswer</code> — hidden reference answer PDF, shown only after submission through study views.</li>
               </ul>
             </div>
             <div>
-              <strong className="text-navy">Required authoring fields:</strong>
+              <strong className="text-admin-text">Required authoring fields:</strong>
               <ul className="ml-5 mt-1 list-disc space-y-1">
                 <li>Canonical letter type, task prompt, case notes text, and model answer text.</li>
                 <li>Source provenance before publish.</li>

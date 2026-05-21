@@ -103,9 +103,9 @@ export default function MockWizardLandingPage() {
         ) : null}
 
         <section className="mt-6">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-muted">Resume drafts</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-admin-text-muted">Resume drafts</h2>
           {loading ? (
-            <p className="mt-3 inline-flex items-center gap-2 text-sm text-muted">
+            <p className="mt-3 inline-flex items-center gap-2 text-sm text-admin-text-muted">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </p>
           ) : drafts.length === 0 ? (
