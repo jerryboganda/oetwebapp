@@ -60,7 +60,7 @@ public static class InterlocutorTrainingEndpoints
                 body.RequiredForCalibration,
                 ct);
             return Results.Ok(row);
-        });
+        }).WithAdminWrite("AdminContentWrite");
 
         admin.MapPatch("/{id}", async (
             HttpContext http,
@@ -81,7 +81,7 @@ public static class InterlocutorTrainingEndpoints
                 body.RequiredForCalibration,
                 ct);
             return Results.Ok(row);
-        });
+        }).WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/{id}/publish", async (
             HttpContext http,
@@ -92,7 +92,7 @@ public static class InterlocutorTrainingEndpoints
             var (adminId, adminName) = http.AdminIdentity();
             var row = await svc.PublishModuleAsync(adminId, adminName, id, ct);
             return Results.Ok(row);
-        });
+        }).WithAdminWrite("AdminContentWrite");
 
         admin.MapPost("/{id}/archive", async (
             HttpContext http,
@@ -103,7 +103,7 @@ public static class InterlocutorTrainingEndpoints
             var (adminId, adminName) = http.AdminIdentity();
             var row = await svc.ArchiveModuleAsync(adminId, adminName, id, ct);
             return Results.Ok(row);
-        });
+        }).WithAdminWrite("AdminContentWrite");
 
         // ── Tutor / Expert ─────────────────────────────────────────────────
         var tutor = app.MapGroup("/v1/expert/speaking/interlocutor-training")

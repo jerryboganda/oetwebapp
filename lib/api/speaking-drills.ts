@@ -94,8 +94,17 @@ export interface DrillScoringResponse {
   nextRecommendations: string[];
 }
 
+/**
+ * Canonical learner-facing list shape returned by
+ * `GET /v1/speaking/drills`. Backend implementation:
+ * `LearnerService.ListSpeakingDrillsAsync(...)` →
+ * `{ kinds, totalCount, completedCount, items }`.
+ */
 export interface ListDrillsResponse {
-  drills: DrillSummary[];
+  kinds: readonly string[];
+  totalCount: number;
+  completedCount: number;
+  items: DrillSummary[];
 }
 
 export interface ListDrillsParams {
