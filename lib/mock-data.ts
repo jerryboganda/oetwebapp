@@ -931,6 +931,31 @@ export interface DiagnosticResult {
   criterionBreakdown: CriterionFeedback[];
 }
 
+// ─── Phase 1 P1.4 — MockDiagnosticService output extensions ──────────────────
+// Mirrors the new fields on the backend `ReadinessScore` record so the
+// diagnostic page can render the recommended level, recommended starter
+// modules, and 4-week study path emitted by `MockDiagnosticService`.
+
+export type DiagnosticRecommendedLevel = 'beginner' | 'improver' | 'intermediate' | 'advanced';
+
+export interface DiagnosticStudyPathStep {
+  stepNumber: number;
+  title: string;
+  description: string;
+  routeHref: string;
+  subtestCode?: string | null;
+  drillId?: string | null;
+}
+
+export interface DiagnosticRecommendedPlan {
+  /** One of beginner / improver / intermediate / advanced — overall readiness band. */
+  recommendedLevel: DiagnosticRecommendedLevel | null;
+  /** Ordered drill IDs (from `RemediationCatalog`) the learner should start with. */
+  recommendedModuleIds: string[];
+  /** Ordered 4-week study path (one step per week). */
+  studyPath: DiagnosticStudyPathStep[];
+}
+
 // ══════════════════════════════════════════════════════
 //                    MOCK DATA FIXTURES
 // ══════════════════════════════════════════════════════

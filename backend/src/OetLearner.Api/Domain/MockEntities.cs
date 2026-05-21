@@ -110,6 +110,19 @@ public class MockBundleSection
 
     public bool IsRequired { get; set; } = true;
 
+    /// <summary>
+    /// Mocks Module Phase 3.6 — model-answer release lifecycle. Controls when
+    /// the section's model answer / annotated key becomes visible to the
+    /// learner in the post-mock report renderer. Stored lower-case;
+    /// allowed values defined by <see cref="MockModelAnswerReleasePolicies"/>:
+    ///   "immediate"     — visible the moment the attempt completes.
+    ///   "after-attempt" — visible after the learner submits this section.
+    ///   "after-marked"  — visible after expert marking concludes (default).
+    ///   "after-passed"  — visible only once the learner reaches Grade B+.
+    /// </summary>
+    [MaxLength(32)]
+    public string ModelAnswerReleasePolicy { get; set; } = MockModelAnswerReleasePolicies.AfterMarked;
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public MockBundle? MockBundle { get; set; }
@@ -360,6 +373,17 @@ public class MockContentReview
     [MaxLength(32)]
     public string Status { get; set; } = "open";
 
+    /// <summary>
+    /// Mocks Module Phase 3.3 — editorial stage gate. For
+    /// <see cref="ReviewType"/> == "editorial_stage" the row represents a
+    /// transition into one of the canonical stages defined by
+    /// <see cref="MockBundleReviewStages"/> (academic → medical → language →
+    /// technical → pilot → published). For other review types (leak_report,
+    /// etc.) the value stays at the default "pending" and is informational.
+    /// </summary>
+    [MaxLength(32)]
+    public string Stage { get; set; } = "pending";
+
     [MaxLength(2000)]
     public string Notes { get; set; } = string.Empty;
 
@@ -371,6 +395,76 @@ public class MockContentReview
 
     public MockBundle? MockBundle { get; set; }
     public MockAttempt? MockAttempt { get; set; }
+}
+
+/// <summary>
+/// Canonical editorial review stages for a <see cref="MockBundle"/>.
+/// Mocks Module Phase 3.3 — multi-stage content review state machine.
+///
+/// Pipeline order: <c>academic → medical → language → technical → pilot → published</c>.
+/// The <see cref="MockBundleReviewStageService"/> persists each transition as a
+/// <see cref="MockContentReview"/> row scoped with <c>ReviewType = "editorial_stage"</c>.
+/// Only when stage transitions to <see cref="Published"/> does the service flip the
+/// bundle's <see cref="MockBundle.Status"/> to active and stamp
+/// <see cref="MockBundle.PublishedAt"/>.
+/// </summary>
+public static class MockBundleReviewStages
+{
+    public const string Academic = "academic";
+    public const string Medical = "medical";
+    public const string Language = "language";
+    public const string Technical = "technical";
+    public const string Pilot = "pilot";
+    public const string Published = "published";
+
+    /// <summary>Stable canonical ordering; index = pipeline position.</summary>
+    public static readonly IReadOnlyList<string> Ordered = new[]
+    {
+        Academic, Medical, Language, Technical, Pilot, Published,
+    };
+
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        Academic, Medical, Language, Technical, Pilot, Published,
+    };
+
+    /// <summary>True if the value matches one of the canonical stage codes.</summary>
+    public static bool IsValid(string? value) => value is not null && All.Contains(value);
+
+    /// <summary>
+    /// Return the stage index in the pipeline (0..5), or -1 for unknown values.
+    /// Used by the stage service to ensure monotonic progression.
+    /// </summary>
+    public static int IndexOf(string? value)
+    {
+        if (value is null) return -1;
+        for (var i = 0; i < Ordered.Count; i++)
+        {
+            if (string.Equals(Ordered[i], value, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return -1;
+    }
+}
+
+/// <summary>
+/// Canonical model-answer release policy codes used by
+/// <see cref="MockBundleSection.ModelAnswerReleasePolicy"/>. Mirrors the
+/// Mocks Module Phase 3.6 spec.
+/// </summary>
+public static class MockModelAnswerReleasePolicies
+{
+    public const string Immediate = "immediate";
+    public const string AfterAttempt = "after-attempt";
+    public const string AfterMarked = "after-marked";
+    public const string AfterPassed = "after-passed";
+
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        Immediate, AfterAttempt, AfterMarked, AfterPassed,
+    };
+
+    public static bool IsValid(string? value) => value is not null && All.Contains(value);
 }
 
 /// <summary>
@@ -434,13 +528,14 @@ public static class MockProctoringKinds
     public const string AudioPlaybackFailed = "audio_playback_failed";
     public const string NetworkDrop = "network_drop";
     public const string MultipleDisplaysDetected = "multiple_displays_detected";
+    public const string RecordingChunkRejected = "recording_chunk_rejected";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
         FullscreenExit, VisibilityHidden, TabSwitch, PasteBlocked, CopyBlocked,
         MicCheckPassed, MicCheckFailed, CamCheckPassed, CamCheckFailed,
         AudioIssueReported, AudioPlaybackPassed, AudioPlaybackFailed,
-        NetworkDrop, MultipleDisplaysDetected,
+        NetworkDrop, MultipleDisplaysDetected, RecordingChunkRejected,
     };
 
     public static readonly IReadOnlySet<string> Severities = new HashSet<string>(StringComparer.Ordinal)
@@ -452,6 +547,7 @@ public static class MockProctoringKinds
     {
         TabSwitch or FullscreenExit or VisibilityHidden or MultipleDisplaysDetected => "warning",
         MicCheckFailed or CamCheckFailed or NetworkDrop or AudioIssueReported or AudioPlaybackFailed => "warning",
+        RecordingChunkRejected => "warning",
         PasteBlocked or CopyBlocked => "info",
         _ => "info",
     };

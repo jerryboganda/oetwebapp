@@ -1,0 +1,142 @@
+'use client';
+
+/**
+ * Phase 1 (C.2) of the OET Speaking module roadmap.
+ *
+ * Two-step wizard for authoring a new role-play card:
+ *   Step 1: candidate card (RolePlayCardEditor) — saves as Draft.
+ *   Step 2: hidden interlocutor script (InterlocutorScriptEditor) — once
+ *           saved we redirect to the card's detail page where the admin
+ *           can publish.
+ *
+ * Admins can also skip step 2 if they need to come back later — the
+ * detail page exposes a sidebar link to /interlocutor for finishing the
+ * pair up.
+ */
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, ArrowRight, ClipboardList } from 'lucide-react';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Toast } from '@/components/ui/alert';
+import { Stepper } from '@/components/ui/stepper';
+import { RolePlayCardEditor, type RolePlayCardEditorValue } from '@/components/domain/speaking/RolePlayCardEditor';
+import { InterlocutorScriptEditor } from '@/components/domain/speaking/InterlocutorScriptEditor';
+import {
+  adminCreateRolePlayCard,
+  adminUpsertInterlocutorScript,
+  type RolePlayCardDetail,
+  type UpsertInterlocutorScriptInput,
+} from '@/lib/api/speaking-role-play-cards';
+
+type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+export default function NewSpeakingRolePlayCardPage() {
+  const router = useRouter();
+  const [step, setStep] = useState<1 | 2>(1);
+  const [savedCard, setSavedCard] = useState<RolePlayCardDetail | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState<ToastState>(null);
+
+  async function handleCardSubmit(value: RolePlayCardEditorValue) {
+    setSubmitting(true);
+    try {
+      const created = await adminCreateRolePlayCard(value);
+      setSavedCard(created);
+      setToast({ variant: 'success', message: `Draft "${created.scenarioTitle}" saved.` });
+      setStep(2);
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleInterlocutorSubmit(cardId: string, value: UpsertInterlocutorScriptInput) {
+    setSubmitting(true);
+    try {
+      await adminUpsertInterlocutorScript(cardId, value);
+      setToast({ variant: 'success', message: 'Interlocutor script saved.' });
+      router.push(`/admin/content/speaking/role-play-cards/${encodeURIComponent(cardId)}`);
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AdminRouteWorkspace role="main" aria-label="New speaking role-play card">
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={ClipboardList}
+        accent="navy"
+        title="New role-play card"
+        description="Two steps: write the candidate card, then the hidden interlocutor script. You can return to step 2 later if needed."
+        aside={
+          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
+            <Button
+              variant="outline"
+              onClick={() => router.push('/admin/content/speaking/role-play-cards')}
+            >
+              <ArrowLeft className="mr-1 h-4 w-4" /> Back to list
+            </Button>
+          </div>
+        }
+      />
+
+      <AdminRoutePanel>
+        <Stepper
+          steps={[
+            { id: 'candidate', label: 'Candidate card' },
+            { id: 'interlocutor', label: 'Interlocutor script' },
+          ]}
+          currentStep={step - 1}
+        />
+      </AdminRoutePanel>
+
+      {step === 1 ? (
+        <Card className="p-6">
+          <RolePlayCardEditor
+            mode="create"
+            submitting={submitting}
+            onSubmit={handleCardSubmit}
+          />
+        </Card>
+      ) : savedCard ? (
+        <Card className="p-6">
+          <InterlocutorScriptEditor
+            cardId={savedCard.cardId}
+            value={null}
+            mode="create"
+            submitting={submitting}
+            onSubmit={handleInterlocutorSubmit}
+            secondaryAction={
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() =>
+                  router.push(
+                    `/admin/content/speaking/role-play-cards/${encodeURIComponent(savedCard.cardId)}`,
+                  )
+                }
+              >
+                Skip for now <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            }
+          />
+        </Card>
+      ) : null}
+
+      {toast ? (
+        <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
+      ) : null}
+    </AdminRouteWorkspace>
+  );
+}

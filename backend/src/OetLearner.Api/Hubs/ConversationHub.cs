@@ -14,7 +14,7 @@ using OetLearner.Api.Services.Rulebook;
 namespace OetLearner.Api.Hubs;
 
 [Authorize(Policy = "LearnerOnly")]
-public class ConversationHub(
+public partial class ConversationHub(
     IServiceScopeFactory scopeFactory,
     ConversationRealtimeTurnStore realtimeTurns,
     ILogger<ConversationHub> logger) : Hub

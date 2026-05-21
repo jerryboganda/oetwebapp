@@ -269,8 +269,12 @@ public sealed class MockReportAggregationService(
 
         report.State = AsyncState.Completed;
         report.GeneratedAt = DateTimeOffset.UtcNow;
+        // V1 schema marker — consumers branch on payloadSchemaVersion. See MockReportPayloadV1.cs
+        // and lib/mocks/report-payload.ts for the typed contract.
+        report.PayloadSchemaVersion = "v1";
         report.PayloadJson = JsonSupport.Serialize(new
         {
+            payloadSchemaVersion = "v1",
             id = report.Id,
             reportId = report.Id,
             mockAttemptId = mockAttempt.Id,

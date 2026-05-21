@@ -2,15 +2,17 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock, FileText, PlayCircle, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, FileText, Maximize2, PlayCircle, ShieldCheck } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Modal } from '@/components/ui/modal';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MicCheckPanel } from '@/components/domain/mic-check-panel';
 import { AudioPlaybackCheckPanel } from '@/components/domain/audio-playback-check-panel';
+import { WebcamCheckPanel } from '@/components/webcam-check-panel';
 import { analytics } from '@/lib/analytics';
 import { completeMockSection, fetchMockSession, startMockSection, submitMockSession } from '@/lib/api';
 import type { MockSession } from '@/lib/mock-data';
@@ -22,8 +24,9 @@ import {
   isTeacherMarkedSubtest,
 } from '@/lib/mocks/workflow';
 import { useMockProctoring } from '@/lib/hooks/use-mock-proctoring';
+import { useFullscreenGuard } from '@/hooks/use-fullscreen-guard';
 
-type PreflightKind = 'mic' | 'audio';
+type PreflightKind = 'mic' | 'audio' | 'camera';
 const preflightStorageKey = (kind: PreflightKind, sessionId: string, sectionId: string) =>
   `mock-preflight:${kind}:${sessionId}:${sectionId}`;
 

@@ -8,11 +8,13 @@ import { Badge } from '@/components/ui/badge';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Timer } from '@/components/ui/timer';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Save, Send, Flag, PlayCircle, MessageSquare, RotateCcw } from 'lucide-react';
+import { Save, Send, Flag, PlayCircle, MessageSquare, RotateCcw, Mic, Square, Trash2, FileAudio } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { AudioPlayerWaveform } from '@/components/domain/audio-player-waveform';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
-import { fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchSpeakingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertSpeakingReview } from '@/lib/api';
+import { fetchAuthorizedObjectUrl, fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchSpeakingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertSpeakingReview } from '@/lib/api';
+import { ensureFreshAccessToken } from '@/lib/auth-client';
+import { env } from '@/lib/env';
 import { analytics } from '@/lib/analytics';
 import { useExpertStore } from '@/lib/stores/expert-store';
 import type { ExpertChecklistItem, ExpertLearnerReviewContext, ExpertReviewHistory, ExpertSavedDraft, ExpertTranscriptLine, SpeakingCriterionKey, SpeakingReviewDetail, TimestampComment } from '@/lib/types/expert';
@@ -98,6 +100,47 @@ function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
+// ── Speaking voice-note feedback (Phase 4) ──
+// Local shape — Agent W2-B owns the backend contract. We accept the broad
+// envelope { items: SpeakingVoiceNote[] } and tolerate either `url` or
+// `mediaUrl` and either `id` or `voiceNoteId` for forward-compatibility.
+interface SpeakingVoiceNote {
+  id: string;
+  reviewRequestId: string;
+  fileName: string;
+  durationSeconds?: number | null;
+  status: string;
+  createdAt: string;
+  url: string;
+  isOwner?: boolean;
+}
+
+function normalizeSpeakingVoiceNote(raw: unknown): SpeakingVoiceNote | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const id = typeof r.id === 'string' ? r.id : typeof r.voiceNoteId === 'string' ? r.voiceNoteId : null;
+  const url = typeof r.url === 'string' ? r.url : typeof r.mediaUrl === 'string' ? r.mediaUrl : null;
+  if (!id || !url) return null;
+  return {
+    id,
+    reviewRequestId: typeof r.reviewRequestId === 'string' ? r.reviewRequestId : '',
+    fileName: typeof r.fileName === 'string' ? r.fileName : 'voice-note',
+    durationSeconds: typeof r.durationSeconds === 'number' ? r.durationSeconds : null,
+    status: typeof r.status === 'string' ? r.status : 'ready',
+    createdAt: typeof r.createdAt === 'string' ? r.createdAt : new Date().toISOString(),
+    url,
+    isOwner: typeof r.isOwner === 'boolean' ? r.isOwner : true,
+  };
+}
+
+function formatDuration(seconds?: number | null): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return '--:--';
+  const total = Math.round(seconds);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 export default function SpeakingReviewWorkspace() {
   const params = useParams();
   const rawReviewRequestId = params?.reviewRequestId;
@@ -132,6 +175,18 @@ export default function SpeakingReviewWorkspace() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [reviewHistory, setReviewHistory] = useState<ExpertReviewHistory | null>(null);
   const [learnerContext, setLearnerContext] = useState<ExpertLearnerReviewContext | null>(null);
+
+  // Voice-note feedback (Phase 4 — task W2-G)
+  const [voiceNotes, setVoiceNotes] = useState<SpeakingVoiceNote[]>([]);
+  const [voiceNoteUrls, setVoiceNoteUrls] = useState<Record<string, string>>({});
+  const [voiceNotesLoading, setVoiceNotesLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isUploadingVoiceNote, setIsUploadingVoiceNote] = useState(false);
+  const [deletingVoiceNoteId, setDeletingVoiceNoteId] = useState<string | null>(null);
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
 
   const applyDraft = useCallback((draft: DraftCandidate | null) => {
     if (!draft) return;
@@ -337,6 +392,206 @@ export default function SpeakingReviewWorkspace() {
       setIsReworking(false);
     }
   }, [clearReviewDraft, isDirty, persistDraft, reviewRequestId, reworkReason, router]);
+
+  // ── Voice-note feedback (Phase 4 — task W2-G) ──
+  // Direct inline fetch per W2-G ownership boundary (cannot extend lib/api.ts).
+  // Endpoint owner: Agent W2-B.
+  const buildAuthHeaders = useCallback(async (extras?: Record<string, string>): Promise<Headers> => {
+    const token = await ensureFreshAccessToken();
+    const headers = new Headers({ Accept: 'application/json' });
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    if (typeof document !== 'undefined') {
+      const csrfMatch = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
+      if (csrfMatch) headers.set('x-csrf-token', csrfMatch[1]);
+    }
+    if (extras) {
+      Object.entries(extras).forEach(([key, value]) => headers.set(key, value));
+    }
+    return headers;
+  }, []);
+
+  const speakingVoiceNotesUrl = useMemo(() => {
+    if (!reviewRequestId) return null;
+    const base = (env.apiBaseUrl || '').replace(/\/$/, '');
+    return `${base}/v1/expert/speaking/reviews/${encodeURIComponent(reviewRequestId)}/voice-notes`;
+  }, [reviewRequestId]);
+
+  const loadVoiceNotes = useCallback(async () => {
+    if (!speakingVoiceNotesUrl) return;
+    setVoiceNotesLoading(true);
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch(speakingVoiceNotesUrl, { method: 'GET', headers, credentials: 'include' });
+      if (response.status === 404) {
+        setVoiceNotes([]);
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`Failed to load voice notes (${response.status}).`);
+      }
+      const body = (await response.json().catch(() => ({}))) as Record<string, unknown> | unknown[];
+      const items: unknown[] = Array.isArray(body)
+        ? body
+        : Array.isArray((body as Record<string, unknown>).items)
+          ? ((body as Record<string, unknown>).items as unknown[])
+          : [];
+      const normalized = items.map(normalizeSpeakingVoiceNote).filter((item): item is SpeakingVoiceNote => item !== null);
+      setVoiceNotes(normalized);
+    } catch (error) {
+      // Quiet on first load — empty list is acceptable if endpoint not yet live.
+      console.warn('[Speaking review] voice notes load failed:', error);
+      setVoiceNotes([]);
+    } finally {
+      setVoiceNotesLoading(false);
+    }
+  }, [buildAuthHeaders, speakingVoiceNotesUrl]);
+
+  useEffect(() => {
+    if (!reviewRequestId) return;
+    void loadVoiceNotes();
+  }, [loadVoiceNotes, reviewRequestId]);
+
+  // Resolve authorised object URLs for playback (mirrors writing review pattern).
+  useEffect(() => {
+    if (voiceNotes.length === 0) {
+      setVoiceNoteUrls({});
+      return;
+    }
+    let cancelled = false;
+    const createdUrls: string[] = [];
+    Promise.all(voiceNotes.map(async (note) => {
+      try {
+        const objectUrl = await fetchAuthorizedObjectUrl(note.url);
+        createdUrls.push(objectUrl);
+        return [note.id, objectUrl] as const;
+      } catch {
+        return [note.id, ''] as const;
+      }
+    }))
+      .then((entries) => {
+        if (!cancelled) {
+          setVoiceNoteUrls(Object.fromEntries(entries.filter(([, url]) => url)));
+        }
+      });
+    return () => {
+      cancelled = true;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [voiceNotes]);
+
+  const stopRecordingTracks = useCallback(() => {
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+    recorderRef.current = null;
+  }, []);
+
+  useEffect(() => () => stopRecordingTracks(), [stopRecordingTracks]);
+
+  const uploadVoiceNote = useCallback(async (file: File, durationSeconds: number) => {
+    if (!speakingVoiceNotesUrl) return;
+    setIsUploadingVoiceNote(true);
+    try {
+      const headers = await buildAuthHeaders();
+      // Let the browser set the multipart boundary automatically.
+      headers.delete('Content-Type');
+      const form = new FormData();
+      form.append('file', file, file.name);
+      if (Number.isFinite(durationSeconds) && durationSeconds > 0) {
+        form.append('durationSeconds', String(Math.round(durationSeconds)));
+      }
+      const response = await fetch(speakingVoiceNotesUrl, { method: 'POST', headers, body: form, credentials: 'include' });
+      if (!response.ok) {
+        let message = `Voice-note upload failed (${response.status}).`;
+        try {
+          const err = await response.json();
+          message = err?.message ?? err?.title ?? message;
+        } catch {
+          // ignore
+        }
+        throw new Error(message);
+      }
+      setToast({ variant: 'success', message: 'Voice note attached to this review.' });
+      analytics.track('speaking_voice_note_added', { reviewRequestId });
+      await loadVoiceNotes();
+    } catch (error) {
+      setToast({ variant: 'error', message: error instanceof Error ? error.message : 'Could not save the voice note.' });
+    } finally {
+      setIsUploadingVoiceNote(false);
+    }
+  }, [buildAuthHeaders, loadVoiceNotes, reviewRequestId, speakingVoiceNotesUrl]);
+
+  const handleStartRecording = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setToast({ variant: 'error', message: 'Audio recording is not available in this browser.' });
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recordingChunksRef.current = [];
+      const startedAt = Date.now();
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const durationSeconds = (Date.now() - startedAt) / 1000;
+        const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const file = new File([blob], `speaking-review-voice-note-${Date.now()}.webm`, { type: blob.type || 'audio/webm' });
+        stopRecordingTracks();
+        setIsRecording(false);
+        setRecordingStartedAt(null);
+        void uploadVoiceNote(file, durationSeconds);
+      };
+      recordingStreamRef.current = stream;
+      recorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setRecordingStartedAt(startedAt);
+    } catch {
+      setToast({ variant: 'error', message: 'Microphone permission was not granted.' });
+    }
+  }, [stopRecordingTracks, uploadVoiceNote]);
+
+  const handleStopRecording = useCallback(() => {
+    recorderRef.current?.stop();
+  }, []);
+
+  const handleDeleteVoiceNote = useCallback(async (noteId: string) => {
+    if (!speakingVoiceNotesUrl) return;
+    setDeletingVoiceNoteId(noteId);
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch(`${speakingVoiceNotesUrl}/${encodeURIComponent(noteId)}`, {
+        method: 'DELETE',
+        headers,
+        credentials: 'include',
+      });
+      if (!response.ok && response.status !== 204) {
+        let message = `Delete failed (${response.status}).`;
+        try {
+          const err = await response.json();
+          message = err?.message ?? err?.title ?? message;
+        } catch {
+          // ignore
+        }
+        throw new Error(message);
+      }
+      setVoiceNotes((current) => current.filter((note) => note.id !== noteId));
+      setVoiceNoteUrls((current) => {
+        const next = { ...current };
+        const stale = next[noteId];
+        if (stale) URL.revokeObjectURL(stale);
+        delete next[noteId];
+        return next;
+      });
+      setToast({ variant: 'success', message: 'Voice note removed.' });
+      analytics.track('speaking_voice_note_deleted', { reviewRequestId, voiceNoteId: noteId });
+    } catch (error) {
+      setToast({ variant: 'error', message: error instanceof Error ? error.message : 'Could not delete voice note.' });
+    } finally {
+      setDeletingVoiceNoteId(null);
+    }
+  }, [buildAuthHeaders, reviewRequestId, speakingVoiceNotesUrl]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -709,6 +964,95 @@ export default function SpeakingReviewWorkspace() {
                 disabled={workspaceMeta?.isReadOnly}
               />
               <p className="text-xs text-muted mt-1 text-right">{finalComment.length} characters</p>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-3" role="region" aria-label="Voice-note feedback">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-navy">
+                    <FileAudio className="h-4 w-4 text-primary" aria-hidden="true" /> Voice-note feedback
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    Record spoken feedback for the candidate. Notes save automatically when you stop recording.
+                  </p>
+                  {isRecording && recordingStartedAt && (
+                    <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+                      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden="true" />
+                      Recording...
+                    </p>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {isRecording ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      onClick={handleStopRecording}
+                      disabled={isUploadingVoiceNote}
+                      aria-label="Stop recording voice note"
+                    >
+                      <Square className="h-4 w-4" /> Stop
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void handleStartRecording()}
+                      disabled={workspaceMeta?.isReadOnly || isUploadingVoiceNote}
+                      loading={isUploadingVoiceNote}
+                      aria-label="Record voice note"
+                    >
+                      <Mic className="h-4 w-4" /> {isUploadingVoiceNote ? 'Uploading...' : 'Record'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 space-y-2" role="list" aria-label="Saved voice notes">
+                {voiceNotesLoading ? (
+                  <p className="text-xs text-muted">Loading voice notes...</p>
+                ) : voiceNotes.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-gray-200 bg-slate-50 p-3 text-xs text-muted">
+                    No voice notes yet. Record one above to attach spoken feedback.
+                  </p>
+                ) : (
+                  voiceNotes.map((note) => (
+                    <div key={note.id} className="rounded-lg border border-gray-200 bg-slate-50 p-3" role="listitem">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold text-navy">{note.fileName}</p>
+                          <p className="text-[11px] text-muted">
+                            {formatDuration(note.durationSeconds)} • {new Date(note.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={note.status === 'ready' || note.status === 'completed' ? 'success' : 'info'}>{note.status}</Badge>
+                          {note.isOwner && !workspaceMeta?.isReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteVoiceNote(note.id)}
+                              disabled={deletingVoiceNoteId === note.id}
+                              className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-red-600 hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+                              aria-label={`Delete voice note ${note.fileName}`}
+                            >
+                              <Trash2 className="h-3 w-3" /> {deletingVoiceNoteId === note.id ? 'Deleting...' : 'Delete'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <audio
+                        controls
+                        src={voiceNoteUrls[note.id]}
+                        className="mt-2 w-full"
+                        preload="metadata"
+                        aria-label={`Voice note recorded ${new Date(note.createdAt).toLocaleString()}`}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             <p className="text-xs text-muted">Keyboard: Ctrl+S save draft · Ctrl+Enter submit</p>

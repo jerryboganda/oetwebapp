@@ -39,6 +39,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<MockContentReview> MockContentReviews => Set<MockContentReview>();
     public DbSet<MockProctoringEvent> MockProctoringEvents => Set<MockProctoringEvent>();
     public DbSet<MockItemAnalysisSnapshot> MockItemAnalysisSnapshots => Set<MockItemAnalysisSnapshot>();
+    public DbSet<MockEntitlementLedger> MockEntitlementLedgers => Set<MockEntitlementLedger>();
     public DbSet<RemediationTask> RemediationTasks => Set<RemediationTask>();
     public DbSet<AnalyticsEventRecord> AnalyticsEvents => Set<AnalyticsEventRecord>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
@@ -350,6 +351,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<WritingOptions> WritingOptions => Set<WritingOptions>();
     public DbSet<WritingAttemptAsset> WritingAttemptAssets => Set<WritingAttemptAsset>();
     public DbSet<ReviewVoiceNote> ReviewVoiceNotes => Set<ReviewVoiceNote>();
+    public DbSet<SpeakingReviewVoiceNote> SpeakingReviewVoiceNotes => Set<SpeakingReviewVoiceNote>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -963,6 +965,18 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Speaking Sessions / Recordings / Transcripts (partial; see LearnerDbContext.SpeakingSessions.cs).
         OnModelCreatingSpeakingSessions(modelBuilder);
 
+        // Speaking AI + Tutor Assessments + Timestamped Comments (partial; see LearnerDbContext.SpeakingAssessments.cs).
+        OnModelCreatingSpeakingAssessments(modelBuilder);
+
+        // Speaking Live Rooms + Tokens (partial; see LearnerDbContext.SpeakingLiveRooms.cs).
+        OnModelCreatingSpeakingLiveRooms(modelBuilder);
+
+        // Speaking Drill Items + Attempts (partial; see LearnerDbContext.SpeakingDrills.cs).
+        OnModelCreatingSpeakingDrills(modelBuilder);
+
+        // Interlocutor Training Modules + Progress (partial; see LearnerDbContext.InterlocutorTraining.cs).
+        OnModelCreatingInterlocutorTraining(modelBuilder);
+
         // Recall Set Tags table (partial; see LearnerDbContext.RecallSetTags.cs).
         OnModelCreatingRecallSetTags(modelBuilder);
     }
@@ -996,6 +1010,26 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.SpeakingSessions.cs (partial).
     /// </summary>
     partial void OnModelCreatingSpeakingSessions(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.SpeakingAssessments.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingSpeakingAssessments(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.SpeakingLiveRooms.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingSpeakingLiveRooms(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.SpeakingDrills.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingSpeakingDrills(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.InterlocutorTraining.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingInterlocutorTraining(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.RecallSetTags.cs (partial).

@@ -1,8 +1,10 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Speaking;
@@ -16,7 +18,14 @@ namespace OetLearner.Api.Services.Speaking;
 /// Sweeps in batches of 500 to keep memory bounded. The blob is removed
 /// via <see cref="IFileStorage"/> and the <c>AudioObjectKey</c> column is
 /// cleared. Other attempt fields (transcript, analysis, scores) are retained
-/// — only the raw recording is reaped.
+/// - only the raw recording is reaped.
+///
+/// Phase 7 of the OET Speaking module plan (B.8) extended this worker
+/// with a second sweep that walks <see cref="SpeakingRecording"/> rows
+/// (the new typed schema introduced in Phase 1+) and physically deletes
+/// blobs whose <c>RetentionExpiresAt</c> has elapsed. Each deletion
+/// emits an <see cref="AuditEvent"/> row so the compliance audit trail
+/// captures every reaper-initiated removal.
 /// </summary>
 public sealed class SpeakingAudioRetentionWorker(
     IServiceScopeFactory scopeFactory,
@@ -51,9 +60,33 @@ public sealed class SpeakingAudioRetentionWorker(
 
     /// <summary>
     /// Internal entry point used by tests. Returns the number of
-    /// attempts that had their audio cleared.
+    /// attempts that had their audio cleared. Also drives the Phase 7
+    /// <see cref="SpeakingRecording"/> sweep but doesn't surface that
+    /// count separately to preserve the existing test contract — use
+    /// <see cref="SweepSpeakingRecordingsOnceAsync"/> for the new path.
     /// </summary>
     public async Task<int> SweepOnceAsync(CancellationToken ct)
+    {
+        var clearedAttempts = await SweepLegacyAttemptsAsync(ct);
+
+        // Phase 7 sweep — never throws on partial failure so the
+        // legacy attempt sweep above stays the authoritative count.
+        try
+        {
+            await SweepSpeakingRecordingsOnceAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "SpeakingRecording retention sweep failed");
+        }
+
+        return clearedAttempts;
+    }
+
+    /// <summary>Legacy sweep over <see cref="Attempt.AudioObjectKey"/>.
+    /// Preserved verbatim from the original worker so existing tests
+    /// (<c>SpeakingAudioRetentionWorkerTests</c>) continue to pass.</summary>
+    private async Task<int> SweepLegacyAttemptsAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -127,5 +160,110 @@ public sealed class SpeakingAudioRetentionWorker(
             clearedAttempts, deletedBlobs);
 
         return clearedAttempts;
+    }
+
+    /// <summary>
+    /// Phase 7 sweep: walks <see cref="SpeakingRecording"/> rows whose
+    /// <c>RetentionExpiresAt</c> has elapsed AND that are not already
+    /// archived. Deletes the underlying blob (best-effort) and writes:
+    ///   * <c>IsArchived = true</c> on the recording row.
+    ///   * An <see cref="AuditEvent"/> row with action
+    ///     <c>SpeakingRecordingExpiredByRetention</c> so the GDPR audit
+    ///     trail captures every reaper-initiated deletion.
+    /// Returns the number of rows archived in this sweep.
+    /// </summary>
+    public async Task<int> SweepSpeakingRecordingsOnceAsync(CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        var options = scope.ServiceProvider
+            .GetRequiredService<IOptions<SpeakingComplianceOptions>>().Value;
+
+        if (options.RetentionDaysDefault <= 0)
+        {
+            return 0;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+
+        // Pull due rows. The retention worker only sweeps rows that
+        // explicitly carry a RetentionExpiresAt — sessions that have
+        // never been wired through the new lifecycle still rely on the
+        // legacy Attempt.AudioObjectKey sweep above.
+        var due = await db.SpeakingRecordings
+            .Where(r => r.RetentionExpiresAt != null
+                && r.RetentionExpiresAt <= now
+                && !r.IsArchived)
+            .OrderBy(r => r.RetentionExpiresAt)
+            .Take(BatchSize)
+            .ToListAsync(ct);
+
+        if (due.Count == 0)
+        {
+            return 0;
+        }
+
+        var archivedCount = 0;
+        foreach (var recording in due)
+        {
+            var blobDeleted = false;
+            string? storageKey = null;
+
+            try
+            {
+                var mediaAsset = await db.MediaAssets
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(m => m.Id == recording.MediaAssetId, ct);
+                if (mediaAsset is not null && !string.IsNullOrWhiteSpace(mediaAsset.StoragePath))
+                {
+                    storageKey = mediaAsset.StoragePath;
+                    if (storage.Exists(storageKey))
+                    {
+                        blobDeleted = storage.Delete(storageKey);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Failed to delete blob for SpeakingRecording {RecordingId}", recording.Id);
+            }
+
+            recording.IsArchived = true;
+            // Snapshot the actual archival timestamp.
+            recording.RetentionExpiresAt ??= now;
+
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = "system",
+                ActorName = "SpeakingAudioRetentionWorker",
+                Action = "SpeakingRecordingExpiredByRetention",
+                ResourceType = "SpeakingRecording",
+                ResourceId = recording.Id,
+                Details = JsonSerializer.Serialize(new
+                {
+                    sessionId = recording.SpeakingSessionId,
+                    blobDeleted,
+                    storageKey,
+                    source = recording.Source.ToString(),
+                    sha256 = recording.Sha256,
+                }),
+            });
+
+            archivedCount++;
+        }
+
+        if (archivedCount == 0)
+        {
+            return 0;
+        }
+
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation(
+            "SpeakingRecording retention sweep archived {Count} rows.", archivedCount);
+        return archivedCount;
     }
 }

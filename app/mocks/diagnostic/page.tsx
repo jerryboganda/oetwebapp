@@ -36,8 +36,11 @@ import {
   fetchMockDiagnosticStudyPath,
   fetchMockOptions,
   fetchMockReport,
+  parseDiagnosticRecommendedPlan,
 } from '@/lib/api';
 import type {
+  DiagnosticRecommendedLevel,
+  DiagnosticRecommendedPlan,
   MockBundleOption,
   MockDiagnosticEntitlement,
   MockReport,
@@ -169,6 +172,7 @@ function DiagnosticMockPageContent() {
   const router = useRouter();
   const [entitlement, setEntitlement] = useState<MockDiagnosticEntitlement | null>(null);
   const [studyPath, setStudyPath] = useState<DiagnosticStudyPath | null>(null);
+  const [recommendedPlan, setRecommendedPlan] = useState<DiagnosticRecommendedPlan | null>(null);
   const [report, setReport] = useState<MockReport | null>(null);
   const [bundles, setBundles] = useState<DiagnosticBundleSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -196,6 +200,10 @@ function DiagnosticMockPageContent() {
         if (studyPathResult.status === 'fulfilled') {
           resolvedStudyPath = mapStudyPath(studyPathResult.value);
           setStudyPath(resolvedStudyPath);
+          // Phase 1 P1.4 — Surface the recommended level / starter modules /
+          // 4-week study path attached by MockDiagnosticService. Falls back
+          // to null when the backend response is the legacy shape.
+          setRecommendedPlan(parseDiagnosticRecommendedPlan(studyPathResult.value));
         } else if (studyPathResult.reason instanceof ApiError && studyPathResult.reason.status === 404) {
           setStudyPath({
             diagnosticCompleted: false,
@@ -270,6 +278,7 @@ function DiagnosticMockPageContent() {
           <ResultState
             report={report}
             studyPath={studyPath}
+            recommendedPlan={recommendedPlan}
             sorData={sorData}
             sorReady={sorReady}
             onNavigate={(href) => router.push(href)}
@@ -390,21 +399,65 @@ function LandingState({
 }
 
 // ─── Result + Study path state ────────────────────────────────────────────
+const LEVEL_META: Record<DiagnosticRecommendedLevel, { label: string; variant: 'success' | 'warning' | 'danger' | 'info'; blurb: string }> = {
+  beginner: {
+    label: 'Beginner',
+    variant: 'danger',
+    blurb: 'Build foundations across all four sub-tests before adding exam pace.',
+  },
+  improver: {
+    label: 'Improver',
+    variant: 'warning',
+    blurb: 'You can pass parts of the exam — focus on lifting your weakest sub-test first.',
+  },
+  intermediate: {
+    label: 'Intermediate',
+    variant: 'info',
+    blurb: 'Approaching Grade B. Tighten exam strategy and reduce silly errors.',
+  },
+  advanced: {
+    label: 'Advanced',
+    variant: 'success',
+    blurb: 'Strong readiness signal — polish for consistency and time pressure.',
+  },
+};
+
 function ResultState({
   report,
   studyPath,
+  recommendedPlan,
   sorData,
   sorReady,
   onNavigate,
 }: {
   report: MockReport;
   studyPath: DiagnosticStudyPath;
+  recommendedPlan: DiagnosticRecommendedPlan | null;
   sorData: ReturnType<typeof mockReportToStatementOfResults> | null;
   sorReady: boolean;
   onNavigate: (href: string) => void;
 }) {
+  const level = recommendedPlan?.recommendedLevel ?? null;
+  const levelMeta = level ? LEVEL_META[level] : null;
+  const recommendedModuleIds = recommendedPlan?.recommendedModuleIds ?? [];
+  const fourWeekPath = recommendedPlan?.studyPath ?? [];
   return (
     <MotionSection className="space-y-6">
+      {levelMeta ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center gap-2">
+              <Target className="h-4 w-4 text-primary" />
+              Your recommended starting level
+              <Badge variant={levelMeta.variant}>{levelMeta.label}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-6 text-muted">{levelMeta.blurb}</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {sorReady && sorData ? (
         <OetStatementOfResultsCard data={sorData} />
       ) : (
@@ -456,6 +509,107 @@ function ResultState({
           </div>
         </CardContent>
       </Card>
+
+      {recommendedModuleIds.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary" />
+              Recommended starting modules
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-muted">
+              These drills target your biggest gaps. Open them in order to make the most of week one.
+            </p>
+            <ul className="space-y-2">
+              {fourWeekPath
+                .filter((step) => recommendedModuleIds.includes(step.drillId ?? ''))
+                .map((step) => {
+                  const subtest = isSubtestCode(step.subtestCode) ? step.subtestCode : null;
+                  const meta = subtest ? SUBTEST_META[subtest] : null;
+                  const Icon = meta?.icon;
+                  return (
+                    <li
+                      key={step.drillId ?? `module-${step.stepNumber}`}
+                      className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-surface p-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {Icon && meta ? (
+                            <span className={`inline-flex items-center gap-1 text-xs font-semibold ${meta.accent}`}>
+                              <Icon className="h-3.5 w-3.5" />
+                              {meta.label}
+                            </span>
+                          ) : null}
+                          <p className="text-sm font-semibold text-navy">{step.title.replace(/^Week \d+:\s*/, '')}</p>
+                        </div>
+                        {step.description ? (
+                          <p className="mt-1 text-xs leading-5 text-muted">{step.description}</p>
+                        ) : null}
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => onNavigate(step.routeHref)}>
+                        Open
+                        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                      </Button>
+                    </li>
+                  );
+                })}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {fourWeekPath.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Your 4-week study path
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-muted">
+              One focused module per week, drawn from the diagnostic. Tick them off in order.
+            </p>
+            <ol className="space-y-2">
+              {fourWeekPath.map((step) => {
+                const subtest = isSubtestCode(step.subtestCode) ? step.subtestCode : null;
+                const meta = subtest ? SUBTEST_META[subtest] : null;
+                const Icon = meta?.icon;
+                return (
+                  <li
+                    key={`${step.stepNumber}-${step.drillId ?? step.title}`}
+                    className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-4"
+                  >
+                    <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                      {step.stepNumber}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {Icon && meta ? (
+                          <span className={`inline-flex items-center gap-1 text-xs font-semibold ${meta.accent}`}>
+                            <Icon className="h-3.5 w-3.5" />
+                            {meta.label}
+                          </span>
+                        ) : null}
+                        <p className="text-sm font-semibold text-navy">{step.title}</p>
+                      </div>
+                      {step.description ? (
+                        <p className="mt-1 text-xs leading-5 text-muted">{step.description}</p>
+                      ) : null}
+                    </div>
+                    <Button variant="primary" size="sm" onClick={() => onNavigate(step.routeHref)}>
+                      Open
+                      <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                    </Button>
+                  </li>
+                );
+              })}
+            </ol>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

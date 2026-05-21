@@ -37,6 +37,9 @@ import type {
   MockBooking,
   MockSpeakingContent,
   MockDiagnosticEntitlement,
+  DiagnosticRecommendedLevel,
+  DiagnosticRecommendedPlan,
+  DiagnosticStudyPathStep,
   ReadinessData,
   ProgressEvidenceSummary,
   TrendPoint,
@@ -2862,6 +2865,47 @@ export async function fetchMockDiagnosticStudyPath() {
   return apiRequest<ApiRecord>('/v1/mocks/diagnostic/study-path');
 }
 
+/**
+ * Phase 1 P1.4 — Parse the optional `recommendedLevel + recommendedModuleIds +
+ * studyPath` block that the backend `MockDiagnosticService` now attaches to
+ * its readiness output. The diagnostic page calls this with whatever
+ * `fetchMockDiagnosticStudyPath` returned (or any payload that wraps these
+ * fields) so the new render path degrades silently when the backend response
+ * is the legacy shape.
+ *
+ * Returns `null` when no `recommendedLevel` is present so callers can keep
+ * their existing conditional rendering.
+ */
+export function parseDiagnosticRecommendedPlan(record: ApiRecord | null | undefined): DiagnosticRecommendedPlan | null {
+  if (!record) return null;
+  const level = typeof record.recommendedLevel === 'string'
+    ? (record.recommendedLevel.toLowerCase() as DiagnosticRecommendedLevel)
+    : null;
+  const validLevels: DiagnosticRecommendedLevel[] = ['beginner', 'improver', 'intermediate', 'advanced'];
+  const safeLevel = level && validLevels.includes(level) ? level : null;
+
+  const ids = Array.isArray(record.recommendedModuleIds)
+    ? (record.recommendedModuleIds as unknown[]).filter((x): x is string => typeof x === 'string')
+    : [];
+
+  const stepsRaw = Array.isArray(record.studyPath) ? (record.studyPath as ApiRecord[]) : [];
+  const steps: DiagnosticStudyPathStep[] = stepsRaw.map((s, idx) => ({
+    stepNumber: typeof s.stepNumber === 'number' ? s.stepNumber : idx + 1,
+    title: String(s.title ?? `Week ${idx + 1}`),
+    description: String(s.description ?? ''),
+    routeHref: typeof s.routeHref === 'string' && s.routeHref.length > 0 ? s.routeHref : '/dashboard',
+    subtestCode: typeof s.subtestCode === 'string' ? s.subtestCode : null,
+    drillId: typeof s.drillId === 'string' ? s.drillId : null,
+  }));
+
+  if (!safeLevel && ids.length === 0 && steps.length === 0) return null;
+  return {
+    recommendedLevel: safeLevel,
+    recommendedModuleIds: ids,
+    studyPath: steps,
+  };
+}
+
 export async function fetchMockDiagnosticEntitlement(): Promise<MockDiagnosticEntitlement> {
   const response = await apiRequest<ApiRecord>('/v1/mocks/diagnostic/entitlement');
   return {
@@ -2870,6 +2914,55 @@ export async function fetchMockDiagnosticEntitlement(): Promise<MockDiagnosticEn
     reason: typeof response.reason === 'string' ? response.reason : null,
     message: typeof response.message === 'string' ? response.message : null,
   };
+}
+
+// ----- Mocks V2 Wave 5 — entitlement summary -------------------------------------
+// Backend contract: `GET /v1/mocks/entitlements/summary` returns the per-mock-type
+// breakdown of granted / consumed / remaining counts, so the setup screen can
+// render a "3 of 5 Writing mocks used" widget and surface a paywall CTA when any
+// bucket is fully consumed. The endpoint is being introduced alongside the
+// MockEntitlementLedger; this client tolerates a 404 (returning an empty
+// summary) so the UI degrades gracefully until the backend is wired.
+
+export interface MockEntitlementSummaryItem {
+  mockType: string;
+  label: string;
+  granted: number;
+  consumed: number;
+  remaining: number;
+}
+
+export interface MockEntitlementSummary {
+  items: MockEntitlementSummaryItem[];
+  anyExhausted: boolean;
+}
+
+export async function fetchMockEntitlementsSummary(): Promise<MockEntitlementSummary> {
+  try {
+    const response = await apiRequest<ApiRecord>('/v1/mocks/entitlements/summary');
+    const items = asArray(response.items).map((item: ApiRecord): MockEntitlementSummaryItem => {
+      const granted = Math.max(0, Number(item.granted ?? 0) || 0);
+      const consumed = Math.max(0, Number(item.consumed ?? 0) || 0);
+      const remainingRaw = item.remaining ?? granted - consumed;
+      const remaining = Math.max(0, Number(remainingRaw) || 0);
+      return {
+        mockType: String(item.mockType ?? item.type ?? ''),
+        label: String(item.label ?? item.mockType ?? item.type ?? 'Mock'),
+        granted,
+        consumed,
+        remaining,
+      };
+    }).filter((entry) => entry.mockType.length > 0);
+    const anyExhausted = typeof response.anyExhausted === 'boolean'
+      ? response.anyExhausted
+      : items.some((entry) => entry.granted > 0 && entry.remaining <= 0);
+    return { items, anyExhausted };
+  } catch (err) {
+    if (isApiError(err) && (err.status === 404 || err.code === 'not_found')) {
+      return { items: [], anyExhausted: false };
+    }
+    throw err;
+  }
 }
 
 // ----- Mocks V2 Wave 4 — bookings ------------------------------------------------
@@ -10829,3 +10922,128 @@ export async function downloadRulebookReferencePdfMedia(assetId: string): Promis
   return response.blob();
 }
 
+// ── Mock bundle review stage (Phase 3 multi-stage review) ───────────────
+
+export interface MockBundleReviewStageEntry {
+  stage: string;
+  status: string;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+  notes?: string | null;
+}
+
+export interface MockBundleReviewStageSummary {
+  currentStage: string;
+  stages: MockBundleReviewStageEntry[];
+}
+
+/**
+ * GET /v1/admin/mocks/bundles/{bundleId}/review-stage/summary
+ *
+ * Returns the current review stage and history for a mock bundle. Endpoint may
+ * not exist yet during dev — falls back to an empty summary on 404 so the UI
+ * can render an "unconfigured" state without blowing up.
+ */
+export async function fetchMockBundleReviewStageSummary(
+  bundleId: string,
+): Promise<MockBundleReviewStageSummary> {
+  try {
+    return await apiRequest<MockBundleReviewStageSummary>(
+      `/v1/admin/mocks/bundles/${encodeURIComponent(bundleId)}/review-stage/summary`,
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return { currentStage: '', stages: [] };
+    }
+    throw err;
+  }
+}
+
+/**
+ * POST /v1/admin/mocks/bundles/{bundleId}/review-stage/advance
+ *
+ * Advances the bundle to the supplied next stage (e.g. medical → language).
+ * The backend is the source of truth for which transitions are legal.
+ */
+export async function advanceMockBundleReviewStage(
+  bundleId: string,
+  nextStage: string,
+  notes?: string,
+): Promise<void> {
+  try {
+    await apiRequest<void>(
+      `/v1/admin/mocks/bundles/${encodeURIComponent(bundleId)}/review-stage/advance`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ nextStage, notes: notes ?? null }),
+      },
+      { acceptedStatuses: [204] },
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return;
+    }
+    throw err;
+  }
+}
+
+// ── Admin mocks analytics (Phase 3) ─────────────────────────────────────
+
+export interface AdminMocksAnalyticsRevenueRow {
+  packageCode: string;
+  packageName: string;
+  totalRevenue: number;
+  currency: string;
+}
+
+export interface AdminMocksAnalyticsTutorWorkloadRow {
+  tutorId: string;
+  tutorName: string;
+  pendingBookings: number;
+  completedThisWeek: number;
+}
+
+export interface AdminMocksAnalyticsLowQualityRow {
+  bundleId: string;
+  bundleTitle: string;
+  itemCount: number;
+  flags: string[];
+}
+
+export interface AdminMocksAnalyticsResponse {
+  revenueByPackage: AdminMocksAnalyticsRevenueRow[];
+  tutorWorkload: AdminMocksAnalyticsTutorWorkloadRow[];
+  lowQualityFlags: AdminMocksAnalyticsLowQualityRow[];
+}
+
+/**
+ * GET /v1/admin/analytics/mocks
+ *
+ * Returns revenue-by-package, tutor workload, and low-quality flagged bundles
+ * for the admin mocks dashboard. Tolerates a 404 (endpoint not yet wired) by
+ * returning empty arrays so the page can render its empty states.
+ */
+export async function fetchAdminMocksAnalytics(): Promise<AdminMocksAnalyticsResponse> {
+  try {
+    return await apiRequest<AdminMocksAnalyticsResponse>('/v1/admin/analytics/mocks');
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return { revenueByPackage: [], tutorWorkload: [], lowQualityFlags: [] };
+    }
+    throw err;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// OET Speaking module re-exports
+//
+// Surface the typed API clients living under `lib/api/speaking-*.ts` so
+// existing call sites can keep importing from `lib/api`. Each module
+// owns its own request/response types — these `export *` lines are the
+// single integration point.
+// ─────────────────────────────────────────────────────────────────────────
+export * from './api/speaking-role-play-cards';
+export * from './api/speaking-sessions';
+export * from './api/speaking-live-rooms';
+export * from './api/speaking-assessments';
+export * from './api/speaking-compliance';

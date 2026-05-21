@@ -8,10 +8,12 @@ import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Timer } from '@/components/ui/timer';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { FileAudio, FileText, MessageSquare, Mic, RotateCcw, Save, Send, Square, UploadCloud } from 'lucide-react';
+import { AlertTriangle, FileAudio, FileText, MessageSquare, Mic, RotateCcw, Save, Send, Sparkles, Square, UploadCloud } from 'lucide-react';
 import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
 import { useParams, useRouter } from 'next/navigation';
 import { addWritingReviewVoiceNote, fetchAuthorizedObjectUrl, fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchWritingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertWritingReview, uploadMedia } from '@/lib/api';
+import { ensureFreshAccessToken } from '@/lib/auth-client';
+import { env } from '@/lib/env';
 import { analytics } from '@/lib/analytics';
 import { useExpertStore } from '@/lib/stores/expert-store';
 import { paletteFor, WRITING_CRITERIA_ORDER } from '@/lib/writing-criterion-colors';
@@ -168,6 +170,8 @@ export default function WritingReviewWorkspace() {
   const [isRecording, setIsRecording] = useState(false);
   const [paperAssetUrls, setPaperAssetUrls] = useState<Record<string, string>>({});
   const [voiceNoteUrls, setVoiceNoteUrls] = useState<Record<string, string>>({});
+  const [isAiPreFilling, setIsAiPreFilling] = useState(false);
+  const [aiPreFillApplied, setAiPreFillApplied] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
 
@@ -578,6 +582,67 @@ export default function WritingReviewWorkspace() {
     }
   }, [normalizedScoreNumbers, reviewRequestId, voiceFile, voiceTranscript, voiceWrittenNotes]);
 
+  // ── AI pre-fill rubric (Phase 4 — advisory) ──
+  // Direct inline fetch per W2-G ownership boundary (cannot extend lib/api.ts).
+  // Endpoint owner: Agent W2-B. Response shape: { scores: { purpose, content, ... } }
+  // with optional `rationales` keyed by criterion. Defensive parsing tolerates
+  // either nested `scores` or root-level keys.
+  const handleAiPreFill = useCallback(async () => {
+    const attemptId = reviewDetail?.attemptId;
+    if (!attemptId) {
+      setToast({ variant: 'error', message: 'AI pre-fill is unavailable — no attempt is linked to this review.' });
+      return;
+    }
+    setIsAiPreFilling(true);
+    try {
+      const token = await ensureFreshAccessToken();
+      const headers = new Headers({ Accept: 'application/json' });
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+      if (typeof document !== 'undefined') {
+        const csrfMatch = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
+        if (csrfMatch) headers.set('x-csrf-token', csrfMatch[1]);
+      }
+      const base = (env.apiBaseUrl || '').replace(/\/$/, '');
+      const url = `${base}/v1/admin/ai-pre-analysis/writing/${encodeURIComponent(attemptId)}`;
+      const response = await fetch(url, { method: 'POST', headers, credentials: 'include' });
+      if (!response.ok) {
+        throw new Error(`AI pre-fill failed (${response.status}).`);
+      }
+      const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      const nestedScores = body && typeof body === 'object' && body.scores && typeof body.scores === 'object'
+        ? (body.scores as Record<string, unknown>)
+        : null;
+      const rawScores: Record<string, unknown> = nestedScores ?? body;
+      const nextScores: Record<string, string> = {};
+      let appliedCount = 0;
+      CRITERIA.forEach(({ key }) => {
+        const value = rawScores?.[key];
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          nextScores[key] = String(value);
+          appliedCount += 1;
+        }
+      });
+      if (appliedCount === 0) {
+        setToast({ variant: 'error', message: 'AI pre-fill returned no usable scores.' });
+        return;
+      }
+      setScores((current) => ({ ...current, ...nextScores }));
+      setValidationErrors((current) => {
+        const next = new Set(current);
+        Object.keys(nextScores).forEach((key) => next.delete(key));
+        return next;
+      });
+      setAiPreFillApplied(true);
+      setIsDirty(true, 'ai-pre-fill');
+      setToast({ variant: 'success', message: `AI pre-filled ${appliedCount} of ${CRITERIA.length} criteria. Review and adjust before submitting.` });
+      analytics.track('writing_ai_pre_fill_applied', { reviewRequestId, attemptId, criteriaCount: appliedCount });
+    } catch (error) {
+      setToast({ variant: 'error', message: error instanceof Error ? error.message : 'AI pre-fill failed.' });
+    } finally {
+      setIsAiPreFilling(false);
+    }
+  }, [reviewDetail?.attemptId, reviewRequestId, setIsDirty]);
+
   const tabOptions = [
     { id: 'response', label: 'Learner Response' },
     { id: 'paper', label: 'Paper Assets' },
@@ -898,6 +963,38 @@ export default function WritingReviewWorkspace() {
                 </div>
               </div>
             )}
+
+            <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3" role="region" aria-label="AI rubric pre-fill">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-violet-900">
+                    <Sparkles className="h-4 w-4" aria-hidden="true" /> AI rubric pre-fill
+                  </p>
+                  <p className="mt-1 text-xs text-violet-800">
+                    Generate provisional band scores for the six writing criteria. You remain responsible for the final judgement.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleAiPreFill()}
+                  disabled={workspaceMeta?.isReadOnly || isAiPreFilling || !reviewDetail?.attemptId}
+                  loading={isAiPreFilling}
+                  aria-label="Pre-fill rubric with AI"
+                  className="shrink-0"
+                >
+                  <Sparkles className="h-4 w-4" /> {isAiPreFilling ? 'Pre-filling...' : 'Pre-fill rubric with AI'}
+                </Button>
+              </div>
+              {aiPreFillApplied && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900" role="status">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <p>
+                    <span className="font-semibold">Pre-fill only — review and adjust.</span> These AI-generated scores are advisory. Verify each band before submitting.
+                  </p>
+                </div>
+              )}
+            </div>
 
             {CRITERIA.map(({ key, label }) => (
               <div key={key} className={`p-3 bg-white border rounded-md ${validationErrors.has(key) ? 'border-red-400 ring-1 ring-red-200' : 'border-gray-200'}`}>

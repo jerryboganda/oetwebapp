@@ -225,7 +225,13 @@ public static class LearnerEndpoints
         // rejected at the boundary, not after a partial read.
         v1.MapPost("/mock-bookings/{bookingId}/recording-chunk", async (HttpContext http, string bookingId, [FromQuery] int part, MockBookingRecordingService recordings, CancellationToken ct) =>
         {
-            var result = await recordings.AppendChunkAsync(http.UserId(), bookingId, part, http.Request.ContentType, http.Request.Body, ct);
+            // Phase 2 hardening (May 2026) — optional client-supplied
+            // SHA-256 over the raw chunk bytes. When present the service
+            // verifies it against the bytes it actually receives; absence
+            // is tolerated for back-compat with older clients but the
+            // monotonic sequence check still runs unconditionally.
+            var clientSha256 = http.Request.Headers["X-Chunk-Sha256"].ToString();
+            var result = await recordings.AppendChunkAsync(http.UserId(), bookingId, part, http.Request.ContentType, http.Request.Body, clientSha256, ct);
             return Results.Ok(result);
         })
             .WithMetadata(new RequestSizeLimitAttribute(MockBookingRecordingService.MaxChunkBytes + 64L * 1024))

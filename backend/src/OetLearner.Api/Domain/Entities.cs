@@ -848,6 +848,12 @@ public class MockReport
     public AsyncState State { get; set; }
     public string PayloadJson { get; set; } = "{}";
     public DateTimeOffset? GeneratedAt { get; set; }
+
+    // Schema version of PayloadJson. Empty string indicates pre-V1 reports written before
+    // the schema was formalised. The aggregator writes "v1" for all new reports. Consumers
+    // should branch on this rather than guessing at the payload shape.
+    [MaxLength(16)]
+    public string PayloadSchemaVersion { get; set; } = string.Empty;
 }
 
 public class AnalyticsEventRecord

@@ -6,10 +6,12 @@ import {
   Award,
   Check,
   Clock,
+  CreditCard,
   FileText,
   Headphones,
   Info,
   Layers,
+  Lock,
   Mic,
   PenTool,
   ShieldCheck,
@@ -18,6 +20,7 @@ import {
   Trophy,
   Zap,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -26,7 +29,14 @@ import { Input } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MotionCollapse, MotionPresence, MotionSection } from '@/components/ui/motion-primitives';
-import { createMockBooking, createMockSession, fetchMockDiagnosticEntitlement, fetchMockOptions } from '@/lib/api';
+import {
+  createMockBooking,
+  createMockSession,
+  fetchMockDiagnosticEntitlement,
+  fetchMockEntitlementsSummary,
+  fetchMockOptions,
+} from '@/lib/api';
+import type { MockEntitlementSummary } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { MockBundleOption, MockConfig, MockDeliveryMode, MockDiagnosticEntitlement, MockOptions, MockStrictness, MockTypeToken } from '@/lib/mock-data';
 import {
@@ -138,6 +148,8 @@ export default function MockSetup() {
   const [reviewSelection, setReviewSelection] = useState<ReviewSelection>('none');
   const [selectedBundleId, setSelectedBundleId] = useState<string | null>(null);
   const [diagnosticEntitlement, setDiagnosticEntitlement] = useState<MockDiagnosticEntitlement | null>(null);
+  const [entitlementSummary, setEntitlementSummary] = useState<MockEntitlementSummary | null>(null);
+  const [entitlementSummaryLoading, setEntitlementSummaryLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [bookingAt, setBookingAt] = useState('');
@@ -190,6 +202,26 @@ export default function MockSetup() {
       cancelled = true;
     };
   }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setEntitlementSummaryLoading(true);
+    fetchMockEntitlementsSummary()
+      .then((summary) => {
+        if (cancelled) return;
+        setEntitlementSummary(summary);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setEntitlementSummary({ items: [], anyExhausted: false });
+      })
+      .finally(() => {
+        if (!cancelled) setEntitlementSummaryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const reviewOptions = useMemo(() => buildReviewOptions(mockType, subType), [mockType, subType]);
   const selectedReviewSelection = normalizeReviewSelection(mockType, subType, reviewSelection);
@@ -304,6 +336,82 @@ export default function MockSetup() {
             { icon: Clock, label: 'Timer', value: strictTimer ? 'Strict' : 'Flexible' },
           ]}
         />
+
+        <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8" aria-label="Mock entitlement summary">
+          <LearnerSurfaceSectionHeader
+            eyebrow="Entitlements"
+            title="Your mock allowance"
+            description="Each mock type has its own bucket. Top up from billing when one runs out."
+            icon={ShieldCheck}
+            className="mb-4"
+          />
+          {entitlementSummaryLoading ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Skeleton className="h-20 rounded-xl" />
+              <Skeleton className="h-20 rounded-xl" />
+            </div>
+          ) : !entitlementSummary || entitlementSummary.items.length === 0 ? (
+            <InlineAlert variant="info">
+              No mock entitlements found yet. Visit billing to choose a plan or top-up that unlocks mock attempts.
+            </InlineAlert>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {entitlementSummary.items.map((item) => {
+                const totalForPct = item.granted > 0 ? item.granted : Math.max(1, item.consumed + item.remaining);
+                const usedPct = Math.min(100, Math.round((item.consumed / totalForPct) * 100));
+                const exhausted = item.granted > 0 && item.remaining <= 0;
+                const tone = exhausted
+                  ? 'border-danger bg-danger/5'
+                  : item.remaining <= 1
+                    ? 'border-warning bg-warning/5'
+                    : 'border-border bg-background-light';
+                const barColor = exhausted
+                  ? 'bg-danger'
+                  : item.remaining <= 1
+                    ? 'bg-warning'
+                    : 'bg-primary';
+                return (
+                  <div key={item.mockType} className={`rounded-xl border p-4 transition-colors ${tone}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-navy">{item.label}</p>
+                        <p className="mt-1 text-xs text-muted">
+                          {item.consumed} of {item.granted} used / {item.remaining} remaining
+                        </p>
+                      </div>
+                      {exhausted ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-danger/10 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-danger">
+                          <Lock className="h-3 w-3" /> Exhausted
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-border/60" role="progressbar" aria-valuenow={usedPct} aria-valuemin={0} aria-valuemax={100} aria-label={`${item.label} usage`}>
+                      <div className={`h-full ${barColor} transition-all`} style={{ width: `${usedPct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {entitlementSummary?.anyExhausted ? (
+            <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-danger/40 bg-danger/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
+                  <CreditCard className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-sm font-black text-navy">You've used all available mocks in at least one bucket.</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">
+                    Top up your mocks to keep practising — billing add-ons unlock additional attempts immediately.
+                  </p>
+                </div>
+              </div>
+              <Button variant="primary" asChild>
+                <Link href="/billing">Top up mocks</Link>
+              </Button>
+            </div>
+          ) : null}
+        </section>
 
         {loading ? (
           <div className="space-y-4">

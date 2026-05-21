@@ -191,6 +191,13 @@ public class MockDiagnosticService(LearnerDbContext db)
             .OrderBy(s => s.Score)
             .FirstOrDefault()?.SubtestCode ?? "writing";
 
+        // Phase 1 P1.4 — derive level + module recommendations + 4-week study path
+        // from the per-sub-test readiness scores. The mapping uses
+        // RemediationCatalog as a single source of truth for module ids and routes,
+        // so admin overrides automatically propagate to the diagnostic UI.
+        var recommendedLevel = ResolveRecommendedLevel(subtestScores);
+        var (recommendedModuleIds, studyPath) = BuildStudyPath(subtestScores, weakestSubtest);
+
         return new ReadinessScore
         {
             UserId = userId,
@@ -200,8 +207,111 @@ public class MockDiagnosticService(LearnerDbContext db)
             SubtestScores = subtestScores,
             WeakestSubtest = weakestSubtest,
             Recommendation = GenerateRecommendation(subtestScores, weakestSubtest),
+            RecommendedLevel = recommendedLevel,
+            RecommendedModuleIds = recommendedModuleIds,
+            StudyPath = studyPath,
             CalculatedAt = DateTimeOffset.UtcNow
         };
+    }
+
+    /// <summary>
+    /// Phase 1 P1.4 — Map an overall readiness score (0–100, derived from raw
+    /// criterion scores) to one of four canonical study levels. The
+    /// thresholds mirror the scaled-score grade bands used by the OET
+    /// statement-of-results adapter so the level shown next to the diagnostic
+    /// result is consistent with the badge a learner sees on their report.
+    ///
+    /// <list type="bullet">
+    ///   <item><c>beginner</c> — overall &lt; 30 (Grade E/D territory)</item>
+    ///   <item><c>improver</c> — 30–49 (Grade C / weak C+)</item>
+    ///   <item><c>intermediate</c> — 50–69 (Grade C+ / approaching B)</item>
+    ///   <item><c>advanced</c> — ≥ 70 (Grade B+ readiness)</item>
+    /// </list>
+    /// </summary>
+    private static string ResolveRecommendedLevel(Dictionary<string, SubtestReadiness> subtestScores)
+    {
+        if (subtestScores.Count == 0) return "beginner";
+        var avg = subtestScores.Values.Average(s => s.Score);
+        if (avg >= 70) return "advanced";
+        if (avg >= 50) return "intermediate";
+        if (avg >= 30) return "improver";
+        return "beginner";
+    }
+
+    /// <summary>
+    /// Phase 1 P1.4 — Build a 4-week study path by walking the readiness
+    /// scores from weakest to strongest, pulling the first drill of each
+    /// weakness's <see cref="RemediationCatalog"/> entry. Each step lands one
+    /// week apart; the weakest sub-test always starts in week 1 so the
+    /// learner's first action is targeted at the biggest deficit. If the
+    /// catalog runs out before week 4, the remaining slots are filled with
+    /// the next-best drill from the weakest sub-test.
+    /// </summary>
+    private static (List<string> ModuleIds, List<StudyPathStep> Steps) BuildStudyPath(
+        Dictionary<string, SubtestReadiness> subtestScores,
+        string weakestSubtest)
+    {
+        var orderedSubtests = subtestScores.Values
+            .OrderBy(s => s.Score)
+            .Select(s => s.SubtestCode)
+            .ToList();
+        if (orderedSubtests.Count == 0)
+        {
+            orderedSubtests = new List<string> { weakestSubtest };
+        }
+
+        var moduleIds = new List<string>();
+        var steps = new List<StudyPathStep>();
+        var stepNumber = 1;
+
+        foreach (var subtest in orderedSubtests)
+        {
+            if (stepNumber > 4) break;
+            var drills = RemediationCatalog.Resolve($"low_{subtest}");
+            if (drills.Count == 0) continue;
+            var drill = drills[0];
+            moduleIds.Add(drill.DrillId);
+            steps.Add(new StudyPathStep
+            {
+                StepNumber = stepNumber,
+                Title = $"Week {stepNumber}: {drill.Label}",
+                Description = drill.Description,
+                RouteHref = drill.RouteHref,
+                SubtestCode = subtest,
+                DrillId = drill.DrillId
+            });
+            stepNumber++;
+        }
+
+        // Backfill missing weeks with subsequent drills from the weakest sub-test
+        // so the learner always sees a full 4-step plan even when only one
+        // weakness was detected.
+        if (stepNumber <= 4)
+        {
+            var weakestDrills = RemediationCatalog.Resolve($"low_{weakestSubtest}");
+            var index = 1;
+            while (stepNumber <= 4 && index < weakestDrills.Count)
+            {
+                var drill = weakestDrills[index];
+                if (!moduleIds.Contains(drill.DrillId))
+                {
+                    moduleIds.Add(drill.DrillId);
+                    steps.Add(new StudyPathStep
+                    {
+                        StepNumber = stepNumber,
+                        Title = $"Week {stepNumber}: {drill.Label}",
+                        Description = drill.Description,
+                        RouteHref = drill.RouteHref,
+                        SubtestCode = weakestSubtest,
+                        DrillId = drill.DrillId
+                    });
+                    stepNumber++;
+                }
+                index++;
+            }
+        }
+
+        return (moduleIds, steps);
     }
 
     // ── Skill Tag Mapping ──
@@ -310,7 +420,45 @@ public class ReadinessScore
     public Dictionary<string, SubtestReadiness> SubtestScores { get; set; } = new();
     public string WeakestSubtest { get; set; } = default!;
     public string Recommendation { get; set; } = default!;
+
+    /// <summary>
+    /// Phase 1 P1.4 — Coarse study level derived from the overall readiness
+    /// score. One of <c>beginner</c>, <c>improver</c>, <c>intermediate</c>,
+    /// <c>advanced</c>. Front-end surfaces this as a badge above the study
+    /// path so the learner instantly knows where they sit.
+    /// </summary>
+    public string RecommendedLevel { get; set; } = "beginner";
+
+    /// <summary>
+    /// Phase 1 P1.4 — Ordered drill IDs (from <see cref="RemediationCatalog"/>)
+    /// that the learner should start with. Mirrors the drills referenced by
+    /// <see cref="StudyPath"/> so the front-end can deep-link without
+    /// re-resolving the catalog.
+    /// </summary>
+    public List<string> RecommendedModuleIds { get; set; } = new();
+
+    /// <summary>
+    /// Phase 1 P1.4 — Ordered 4-week study path (one step per week). Renders
+    /// as a numbered list on the diagnostic results page.
+    /// </summary>
+    public List<StudyPathStep> StudyPath { get; set; } = new();
+
     public DateTimeOffset CalculatedAt { get; set; }
+}
+
+/// <summary>
+/// Phase 1 P1.4 — One week of the personalised diagnostic study path. The
+/// front-end renders these as a numbered list with a deep-link to the drill
+/// surface.
+/// </summary>
+public class StudyPathStep
+{
+    public int StepNumber { get; set; }
+    public string Title { get; set; } = default!;
+    public string Description { get; set; } = default!;
+    public string RouteHref { get; set; } = default!;
+    public string? SubtestCode { get; set; }
+    public string? DrillId { get; set; }
 }
 
 public class SubtestReadiness

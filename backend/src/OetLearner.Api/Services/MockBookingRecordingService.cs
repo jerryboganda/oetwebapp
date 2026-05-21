@@ -57,9 +57,47 @@ public sealed class MockBookingRecordingService
         string? mimeType,
         Stream body,
         CancellationToken ct)
+        => await AppendChunkAsync(userId, bookingId, part, mimeType, body, clientSha256: null, ct);
+
+    /// <summary>
+    /// Phase 2 hardening (May 2026) — overload accepting the client-supplied
+    /// SHA-256 (lowercase hex) from the <c>X-Chunk-Sha256</c> request header,
+    /// plus an out-of-order/duplicate detection guard.
+    ///
+    /// Two new server-side validations are enforced beyond the existing
+    /// cap/size/idempotency checks:
+    /// <list type="number">
+    /// <item><description><b>Per-chunk SHA-256 verification.</b> If the client
+    /// supplies a SHA, the server computes its own from the received bytes
+    /// and rejects mismatches with HTTP 422 + a <see cref="MockProctoringEvent"/>
+    /// of kind <see cref="MockProctoringKinds.RecordingChunkRejected"/>.</description></item>
+    /// <item><description><b>Monotonic sequence check.</b> Genuinely new parts
+    /// (not idempotent retries of an existing part) must satisfy
+    /// <c>part == lastAcceptedPart + 1</c> (or be <c>0</c> for the first chunk).
+    /// Gaps and duplicates are rejected with HTTP 422 + the same proctoring
+    /// event kind, with metadata flagging "sequence_gap" or
+    /// "sequence_duplicate".</description></item>
+    /// </list>
+    /// Idempotent retries (same part + same SHA already accepted) bypass the
+    /// sequence check — they are by design replays, not new chunks.
+    /// </summary>
+    public async Task<object> AppendChunkAsync(
+        string userId,
+        string bookingId,
+        int part,
+        string? mimeType,
+        Stream body,
+        string? clientSha256,
+        CancellationToken ct)
     {
         if (part < 0 || part >= MaxChunks)
             throw ApiException.Validation("invalid_part", $"part must be in [0, {MaxChunks}).");
+
+        // Normalise client-supplied SHA early. Reject obviously malformed
+        // values so we don't burn body bandwidth on a doomed request.
+        var normalisedClientSha = NormaliseSha256(clientSha256);
+        if (clientSha256 is { Length: > 0 } && normalisedClientSha is null)
+            throw ApiException.Validation("invalid_client_sha256", "X-Chunk-Sha256 must be 64 lowercase hex characters.");
 
         var booking = await _db.MockBookings.FirstOrDefaultAsync(x => x.Id == bookingId, ct)
             ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
@@ -102,6 +140,28 @@ public sealed class MockBookingRecordingService
             }
         }
 
+        // Phase 2 hardening — monotonic sequence check. Done BEFORE reading
+        // the body so we don't waste bandwidth on a doomed request. Genuine
+        // new parts must extend the manifest by exactly one; gaps and out-
+        // of-order indices are rejected. Idempotent retries (existingForPart
+        // != null) skip this check; their SHA-equality is verified after the
+        // body is hashed.
+        if (existingForPart is null)
+        {
+            var lastAccepted = manifest.Chunks.Count == 0
+                ? -1
+                : manifest.Chunks.Max(c => c.Part);
+            var expectedNextPart = lastAccepted + 1;
+            if (part != expectedNextPart)
+            {
+                var reason = part < expectedNextPart ? "sequence_duplicate" : "sequence_gap";
+                await EmitChunkRejectionAsync(booking, part, reason, expectedNextPart, ct);
+                throw ApiException.Validation(
+                    "chunk_sequence_violation",
+                    $"Expected part {expectedNextPart} but received {part} ({reason}).");
+            }
+        }
+
         // Buffer with bounded read so we can hash + measure before writing.
         using var buffer = new MemoryStream();
         var buf = new byte[81920];
@@ -124,6 +184,19 @@ public sealed class MockBookingRecordingService
         buffer.Position = 0;
         var sha = Convert.ToHexString(await SHA256.HashDataAsync(buffer, ct)).ToLowerInvariant();
         buffer.Position = 0;
+
+        // Phase 2 hardening — verify client-supplied SHA matches the bytes
+        // we received. A mismatch indicates either transport corruption or
+        // a malicious client lying about the payload. Reject with a 422 and
+        // emit a proctoring event for admin visibility.
+        if (normalisedClientSha is not null
+            && !string.Equals(normalisedClientSha, sha, StringComparison.Ordinal))
+        {
+            await EmitChunkRejectionAsync(booking, part, "sha_mismatch", expectedSequence: null, ct, normalisedClientSha, sha);
+            throw ApiException.Validation(
+                "chunk_sha_mismatch",
+                "Client-supplied SHA-256 does not match the received chunk bytes.");
+        }
 
         // Idempotent retry: same part + same SHA = duplicate, return success without mutation.
         if (existingForPart is not null)
@@ -245,6 +318,72 @@ public sealed class MockBookingRecordingService
 
     private static string WriteManifest(RecordingManifest manifest)
         => JsonSerializer.Serialize(manifest);
+
+    /// <summary>
+    /// Normalise a client-supplied SHA-256 to lowercase hex. Returns
+    /// <c>null</c> for absent / blank input, or for any value that is not
+    /// exactly 64 hex characters. Strips an optional <c>sha256:</c> prefix.
+    /// </summary>
+    private static string? NormaliseSha256(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var trimmed = raw.Trim();
+        if (trimmed.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+            trimmed = trimmed.Substring("sha256:".Length);
+        if (trimmed.Length != 64) return null;
+        for (var i = 0; i < trimmed.Length; i++)
+        {
+            var c = trimmed[i];
+            var ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+            if (!ok) return null;
+        }
+        return trimmed.ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Persist a <see cref="MockProctoringEvent"/> capturing a rejected
+    /// recording chunk. No-ops when the booking has no linked
+    /// <see cref="MockBooking.MockAttemptId"/> (the FK on
+    /// <see cref="MockProctoringEvent"/> is non-nullable). The booking's
+    /// manifest is intentionally NOT mutated — we are only annotating the
+    /// audit trail for the admin proctoring dashboard.
+    /// </summary>
+    private async Task EmitChunkRejectionAsync(
+        MockBooking booking,
+        int part,
+        string reason,
+        int? expectedSequence,
+        CancellationToken ct,
+        string? clientSha256 = null,
+        string? serverSha256 = null)
+    {
+        if (string.IsNullOrWhiteSpace(booking.MockAttemptId)) return;
+
+        var metadata = new Dictionary<string, object?>
+        {
+            ["bookingId"] = booking.Id,
+            ["part"] = part,
+            ["reason"] = reason,
+        };
+        if (expectedSequence is int expected)
+            metadata["expectedPart"] = expected;
+        if (clientSha256 is not null)
+            metadata["clientSha256"] = clientSha256;
+        if (serverSha256 is not null)
+            metadata["serverSha256"] = serverSha256;
+
+        _db.MockProctoringEvents.Add(new MockProctoringEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            MockAttemptId = booking.MockAttemptId!,
+            MockSectionAttemptId = null,
+            Kind = MockProctoringKinds.RecordingChunkRejected,
+            Severity = "warning",
+            OccurredAt = DateTimeOffset.UtcNow,
+            MetadataJson = JsonSerializer.Serialize(metadata),
+        });
+        await _db.SaveChangesAsync(ct);
+    }
 
     private static string NormaliseMimeType(string? raw)
     {

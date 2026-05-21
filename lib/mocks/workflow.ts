@@ -105,6 +105,24 @@ export interface MockReadinessDecision {
   variant: 'danger' | 'warning' | 'success' | 'info' | 'muted';
 }
 
+export interface MockReadinessTrendDecision {
+  attemptsConsidered: number;
+  overallTrend: 'up' | 'down' | 'flat';
+  consistentGreen: boolean;
+  message: string;
+  level: MockReadinessLevel;
+}
+
+// Canonical OET Grade-B scaled threshold. Mirrors
+// backend `MockReadinessTrendService.GradeBScaledThreshold`.
+export const MOCK_READINESS_GRADE_B_SCALED = 350;
+
+// Default trend window. Mirrors backend `DefaultAttemptsConsidered`.
+export const MOCK_READINESS_TREND_DEFAULT_WINDOW = 5;
+
+// Minimum attempts required to declare a non-flat trend / consistent green.
+export const MOCK_READINESS_TREND_MIN_ATTEMPTS = 2;
+
 export function getMockModePolicy(mode: MockMode): MockModePolicy {
   if (mode === 'practice') {
     return {
@@ -240,6 +258,88 @@ export function getMockReadinessDecision(report: MockReport): MockReadinessDecis
   };
 }
 
+/**
+ * Trend-based readiness across multiple completed MockReports. Mirrors the
+ * backend `MockReadinessTrendService.ComputeAsync` semantics:
+ *
+ *   - "consistent green" is true when the two most-recent reports both reach
+ *     the canonical OET Grade-B threshold (scaled >= 350).
+ *   - `overallTrend` is "up" / "down" / "flat" based on the linear delta
+ *     between the most-recent and the oldest considered report (>=10 = up,
+ *     <=-10 = down, otherwise flat).
+ *   - `attemptsConsidered` counts only reports whose `overallScore` parses
+ *     to a numeric scaled value.
+ *
+ * The single-attempt `getMockReadinessDecision` above is preserved verbatim;
+ * callers showing per-report cards should keep using it. Surfaces that
+ * recommend booking (dashboards, exam-booking gates) should consume this
+ * trend variant instead.
+ *
+ * Input ordering is **not** required — callers may pass reports in any
+ * order; this function sorts by `date` descending internally and keeps the
+ * most-recent `MOCK_READINESS_TREND_DEFAULT_WINDOW` reports.
+ */
+export function getMockReadinessTrend(reports: MockReport[]): MockReadinessTrendDecision {
+  const sorted = [...reports]
+    .filter((report) => report && typeof report === 'object')
+    .sort((a, b) => compareReportDatesDesc(a, b))
+    .slice(0, MOCK_READINESS_TREND_DEFAULT_WINDOW);
+
+  const scores = sorted
+    .map((report) => parseScoreValue(report.overallScore))
+    .filter((value): value is number => value !== null);
+
+  const attemptsConsidered = scores.length;
+
+  if (attemptsConsidered === 0) {
+    return {
+      attemptsConsidered: 0,
+      overallTrend: 'flat',
+      consistentGreen: false,
+      message: 'No completed mocks yet — finish a full mock to start a trend.',
+      level: 'pending',
+    };
+  }
+
+  if (attemptsConsidered < MOCK_READINESS_TREND_MIN_ATTEMPTS) {
+    return {
+      attemptsConsidered,
+      overallTrend: 'flat',
+      consistentGreen: false,
+      message: 'One mock on record — complete another full mock to confirm the trend.',
+      level: 'pending',
+    };
+  }
+
+  const newest = scores[0];
+  const secondNewest = scores[1];
+  const oldestInWindow = scores[scores.length - 1];
+
+  const consistentGreen =
+    newest >= MOCK_READINESS_GRADE_B_SCALED && secondNewest >= MOCK_READINESS_GRADE_B_SCALED;
+
+  let overallTrend: 'up' | 'down' | 'flat';
+  const delta = newest - oldestInWindow;
+  if (delta >= 10) {
+    overallTrend = 'up';
+  } else if (delta <= -10) {
+    overallTrend = 'down';
+  } else {
+    overallTrend = 'flat';
+  }
+
+  const level = deriveAggregateLevel(scores, consistentGreen);
+  const message = buildTrendMessage(attemptsConsidered, consistentGreen, overallTrend);
+
+  return {
+    attemptsConsidered,
+    overallTrend,
+    consistentGreen,
+    message,
+    level,
+  };
+}
+
 export function buildMockRemediationPlan(report: MockReport): MockRemediationAction[] {
   const weakSubtest = report.weakestCriterion.subtest.toLowerCase();
   const weakCriterion = report.weakestCriterion.criterion;
@@ -313,4 +413,50 @@ function routeForWeakness(subtest: string): string {
   if (subtest.includes('writing')) return '/writing/library';
   if (subtest.includes('speaking')) return '/speaking/selection';
   return '/practice';
+}
+
+function compareReportDatesDesc(a: MockReport, b: MockReport): number {
+  const aTime = Date.parse(a.date ?? '');
+  const bTime = Date.parse(b.date ?? '');
+  // NaN dates sink to the bottom; valid newer dates float to the top.
+  const aValid = Number.isFinite(aTime);
+  const bValid = Number.isFinite(bTime);
+  if (aValid && bValid) return bTime - aTime;
+  if (aValid) return -1;
+  if (bValid) return 1;
+  return 0;
+}
+
+function deriveAggregateLevel(
+  scoresDesc: readonly number[],
+  consistentGreen: boolean,
+): MockReadinessLevel {
+  if (scoresDesc.length === 0) return 'pending';
+
+  const newest = scoresDesc[0];
+
+  if (consistentGreen && newest >= 400) return 'dark-green';
+  if (consistentGreen) return 'green';
+
+  if (newest >= 400) return 'green';
+  if (newest >= MOCK_READINESS_GRADE_B_SCALED) return 'amber';
+  if (newest >= 320) return 'amber';
+  return 'red';
+}
+
+function buildTrendMessage(
+  attemptsConsidered: number,
+  consistentGreen: boolean,
+  overallTrend: 'up' | 'down' | 'flat',
+): string {
+  if (consistentGreen) {
+    return `Consistent green across last ${attemptsConsidered} mocks — exam-ready signal.`;
+  }
+  if (overallTrend === 'up') {
+    return 'Trend is improving across recent mocks — keep practising before booking the official OET.';
+  }
+  if (overallTrend === 'down') {
+    return 'Recent mocks are trending down — complete remediation before booking.';
+  }
+  return 'Mixed results — complete remediation before booking.';
 }

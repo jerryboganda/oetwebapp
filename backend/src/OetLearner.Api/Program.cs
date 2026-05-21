@@ -153,6 +153,7 @@ builder.Services.Configure<WebPushOptions>(builder.Configuration.GetSection(WebP
 builder.Services.Configure<NotificationProofHarnessOptions>(builder.Configuration.GetSection(NotificationProofHarnessOptions.SectionName));
 builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSection("PasswordPolicy"));
 builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
+builder.Services.Configure<OetLearner.Api.Configuration.LiveKitOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSignalR(options =>
 {
@@ -578,6 +579,39 @@ builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.IMockSectionRes
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.MockSectionResultResolver>();
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.IMockReportAggregationService,
     OetLearner.Api.Services.Mocks.Results.MockReportAggregationService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockReadinessTrendService>();
+// Wave 2 service registrations — added by W2-A on behalf of W2-D/E/F.
+// W2-A's own services:
+builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockBundleReviewStageService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockPassPredictionService>();
+// W2-D — Speaking transcription pipeline (ASR adapter).
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingTranscriptionPipeline>();
+// W2-E — Speaking + Writing AI pre-analysis services.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingPreAnalysisService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingPreScoreService>();
+// W2-F — Speaking expert review voice-note service.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingReviewVoiceNoteService>();
+// Phase 2 (B.3) — typed Speaking session lifecycle service.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSessionService>();
+// Phase 7 (B.8) — Speaking compliance / consent / GDPR erasure service.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingComplianceService>();
+// Phase 2 (B.3) — AI-side speaking assessment scorer.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingAiAssessmentService>();
+// Phase 3 (B.4) — LiveKit gateway. Stub returns synthetic ids until the
+// real SDK is wired in; webhook signature verification is real.
+builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.ILiveKitGateway,
+    OetLearner.Api.Services.Speaking.LiveKitGatewayStub>();
+// Phase 3 (B.4) — live-tutor room orchestration service.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingLiveRoomService>();
+// Phase 4 — tutor-side scoring + review-queue services.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.TutorAssessmentService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.TutorReviewQueueService>();
+// Phase 5 — drill bank service.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingDrillService>();
+// Phase 6 — analytics + course pathway + interlocutor training services.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingAnalyticsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingCoursePathwayService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.InterlocutorTrainingService>();
 // DI hotfix (2026-05-06): these services are consumed directly by minimal-API
 // endpoint handlers but were not registered, causing ASP.NET to fall back to
 // inferring them as Body parameters and aborting host startup with
@@ -587,6 +621,7 @@ builder.Services.AddScoped<AdminWalletTierService>();
 builder.Services.AddScoped<NativeIapService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.MediaAssetAccessService>();
 builder.Services.AddScoped<MockDiagnosticEntitlementService>();
+builder.Services.AddScoped<IMockEntitlementService, MockEntitlementService>();
 builder.Services.AddScoped<MockItemAnalysisService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Recalls.RecallsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.RefundService>();
@@ -1389,6 +1424,7 @@ app.MapAuthEndpoints();
 app.MapAnalyticsEndpoints();
 app.MapNotificationEndpoints();
 app.MapLearnerEndpoints();
+app.MapMockReadinessEndpoints();
 app.MapLearnerActionsEndpoints();
 app.MapExpertEndpoints();
 app.MapExpertMessagingEndpoints();
@@ -1404,6 +1440,15 @@ OetLearner.Api.Endpoints.AiAssistantEndpoints.MapAiAssistantEndpoints(app);
 app.MapContentPapersAdminEndpoints();
 app.MapContentStalenessEndpoints();
 app.MapMockAdminEndpoints();
+app.MapMockEntitlementEndpoints();
+// Wave 2 endpoint groups — added by W2-A on behalf of W2-D/E/F.
+// W2-A's own endpoints:
+app.MapMockBundleReviewStageEndpoints();
+app.MapMockAnalyticsEndpoints();
+// W2-D — Speaking ASR transcription endpoints.
+app.MapSpeakingTranscriptionEndpoints();
+// W2-F — Speaking expert review voice-note endpoints.
+app.MapSpeakingReviewVoiceNoteEndpoints();
 app.MapContentPapersLearnerEndpoints();
 app.MapReadingAuthoringAdminEndpoints();
 app.MapReadingAnalyticsAdminEndpoints();
@@ -1455,6 +1500,21 @@ if (app.Configuration.GetValue<bool>("Features:SponsorPortalEnabled"))
 app.MapPrivateSpeakingEndpoints();
 app.MapSpeakingCalibrationEndpoints();
 
+// ── OET Speaking module (Phase 1+ role-play cards, sessions, compliance) ──
+app.MapAdminSpeakingContentEndpoints();
+app.MapLearnerSpeakingRolePlayCardEndpoints();
+app.MapSpeakingComplianceEndpoints();
+// Phase 2 — typed Speaking session lifecycle (prep → active → finished).
+app.MapSpeakingSessionEndpoints();
+// Phase 3 — live-tutor rooms + LiveKit webhook ingestion.
+app.MapSpeakingLiveRoomEndpoints();
+app.MapLiveKitWebhookEndpoint();
+// Phase 4 — tutor-side speaking review surface.
+app.MapTutorSpeakingEndpoints();
+// Phase 5 — speaking drill bank (learner + admin).
+app.MapSpeakingDrillEndpoints();
+// TODO Phase 6: register SpeakingAnalyticsEndpoints, InterlocutorTrainingEndpoints, SpeakingCoursePathwayEndpoints once methods exist.
+
 // ── Rulebook + Writing linter + Speaking auditor + Grounded AI gateway ──
 app.MapRulebookEndpoints();
 app.MapRulebookAdminEndpoints();
@@ -1469,6 +1529,7 @@ app.MapHub<NotificationHub>("/v1/notifications/hub").RequireAuthorization();
 app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization();
 app.MapHub<OetLearner.Api.Hubs.AiAssistantHub>("/v1/ai-assistant/hub").RequireAuthorization();
 app.MapHub<OetLearner.Api.Services.Mocks.MockLiveRoomHub>("/v1/mocks/live-room/hub").RequireAuthorization();
+app.MapHub<OetLearner.Api.Hubs.SpeakingLiveRoomHub>("/v1/speaking/live-rooms/hub").RequireAuthorization();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

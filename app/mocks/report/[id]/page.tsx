@@ -7,7 +7,6 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  AlertTriangle,
   RefreshCw,
   FileText,
   Headphones,
@@ -20,6 +19,8 @@ import {
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { OetStatementOfResultsCard } from '@/components/domain';
+import { WeaknessNarrative } from '@/components/domain/mock-weakness-narrative';
+import { TimeAnalyticsBreakdown } from '@/components/domain/mock-time-analytics';
 import { MockVocabularyReview } from '@/components/domain/vocabulary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -38,6 +39,10 @@ import {
   type LearnerResultTemplateDto,
 } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
+import type {
+  MockReportPerQuestionTimingV1,
+  MockReportWeaknessNarrativeV1,
+} from '@/lib/mocks/report-payload';
 import { analytics } from '@/lib/analytics';
 import { oetGradeFromScaled } from '@/lib/scoring';
 import { isMockReportStatementOfResultsReady, mockReportToStatementOfResults } from '@/lib/adapters/oet-sor-adapter';
@@ -183,6 +188,12 @@ function MockReportContent() {
     );
   }
 
+  // V1 payload fields are populated incrementally (see lib/mocks/report-payload.ts);
+  // narrow once here so downstream JSX can read optional V1-only fields safely.
+  const reportV1 = report as MockReport & {
+    weaknessNarrative?: MockReportWeaknessNarrativeV1 | null;
+    perQuestionTiming?: MockReportPerQuestionTimingV1[] | null;
+  };
   const comp = report.priorComparison;
   const readiness = getMockReadinessDecision(report);
   const pendingTeacherReviews = report.reviewSummary
@@ -429,27 +440,32 @@ function MockReportContent() {
           </div>
         </MotionSection>
 
-        {/* 4. Weakest Criterion */}
-        <MotionSection
-          delayIndex={3}
-        >
+        {/* 4. Weakest Criterion — V1 payload renders WeaknessNarrative with
+            aggregated headline/body/tags; pre-V1 payloads fall back to the
+            legacy weakestCriterion card via the component's `fallback` prop. */}
+        <MotionSection delayIndex={3}>
           <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Area for Improvement</h2>
-          <div className="bg-danger/10 rounded-2xl border border-danger/30 p-6 sm:p-8">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-6 h-6 text-danger" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-black text-danger uppercase tracking-widest">{report.weakestCriterion.subtest}</span>
-                  <span className="text-danger/40">•</span>
-                  <span className="text-xs font-black text-danger uppercase tracking-widest">Weakest Criterion</span>
-                </div>
-                <h3 className="text-lg font-black text-danger mb-2">{report.weakestCriterion.criterion}</h3>
-                <p className="text-sm text-danger/80 leading-relaxed">{report.weakestCriterion.description}</p>
-              </div>
-            </div>
-          </div>
+          <WeaknessNarrative
+            headline={reportV1.weaknessNarrative?.headline}
+            body={reportV1.weaknessNarrative?.body}
+            tags={reportV1.weaknessNarrative?.tags}
+            fallback={{
+              subtest: report.weakestCriterion.subtest,
+              criterion: report.weakestCriterion.criterion,
+              description: report.weakestCriterion.description,
+            }}
+          />
+        </MotionSection>
+
+        {/* 4b. Time analytics — per-section utilisation and (when populated)
+            longest-3-questions panel. Reads timing from the legacy MockReport
+            field plus the optional V1 perQuestionTiming array. */}
+        <MotionSection delayIndex={3}>
+          <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Time analytics</h2>
+          <TimeAnalyticsBreakdown
+            timingAnalysis={report.timingAnalysis ?? []}
+            perQuestionTiming={reportV1.perQuestionTiming ?? null}
+          />
         </MotionSection>
 
         {/* 5. Words to Review — surfaces OET vocabulary tied to the weakest criterion */}
