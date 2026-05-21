@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Seeding;
 using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Hubs;

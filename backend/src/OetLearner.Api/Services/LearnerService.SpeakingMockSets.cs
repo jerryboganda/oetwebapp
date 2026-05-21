@@ -324,9 +324,9 @@ public partial class LearnerService
         // started attempt 2 (e.g. via the legacy speaking task page).
         var a1Done = a1.State == AttemptState.Submitted || a1.State == AttemptState.Completed;
         var a2Done = a2.State == AttemptState.Submitted || a2.State == AttemptState.Completed;
-        var a2Started = a2.StartedAt is not null && a2.State != AttemptState.InProgress
-            ? true
-            : a2.State == AttemptState.InProgress && a2.StartedAt is not null;
+        // Attempt.StartedAt is non-nullable DateTimeOffset, so InProgress
+        // is the only "in flight" indicator we need.
+        var a2Started = a2.State == AttemptState.InProgress;
 
         if (a1Done && a2Done) return SpeakingMockOrchestratorStates.Aggregated;
         if (a1Done && a2Started) return SpeakingMockOrchestratorStates.Active2;

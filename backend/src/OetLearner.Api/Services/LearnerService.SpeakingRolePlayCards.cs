@@ -164,14 +164,14 @@ public partial class LearnerService
         // universal-profession case. The ContentItem join is a left-join via
         // key equality; we never expose any of its other fields to the learner.
         var record = await (
-            from card in db.RolePlayCards.AsNoTracking()
+            from rpc in db.RolePlayCards.AsNoTracking()
             join item in db.ContentItems.AsNoTracking()
-                on card.ContentItemId equals item.Id into joined
+                on rpc.ContentItemId equals item.Id into joined
             from item in joined.DefaultIfEmpty()
-            where card.Id == cardId
+            where rpc.Id == cardId
             select new
             {
-                Card = card,
+                Card = rpc,
                 ContentItemProfessionId = item != null ? item.ProfessionId : null,
             })
             .FirstOrDefaultAsync(ct);
