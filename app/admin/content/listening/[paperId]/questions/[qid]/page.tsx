@@ -344,7 +344,7 @@ export default function AdminListeningQuestionEditorPage() {
               {isMcq ? (
                 <div className="rounded-2xl border border-border bg-background-light p-4">
                   <p className="text-xs font-black uppercase tracking-widest text-muted">Options</p>
-                  <p className="mt-1 text-xs text-muted">Authors mark the correct option via the radio. The correct option's text is mirrored into `correctAnswer`.</p>
+                  <p className="mt-1 text-xs text-muted">{"Authors mark the correct option via the radio. The correct option's text is mirrored into `correctAnswer`."}</p>
                   <div className="mt-3 grid gap-3">
                     {form.options.map((option, index) => {
                       const letter = String.fromCharCode(65 + index);

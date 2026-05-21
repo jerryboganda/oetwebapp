@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import { Highlighter, Strikethrough } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -81,10 +81,9 @@ export function BCQuestionRenderer({
   const statusId = `listening-bc-q${questionNumber}-status`;
   const struckCount = struckOptions.size;
 
-  const struckSummary = useMemo(() => {
-    if (struckCount === 0) return 'No options are struck out.';
-    return `${struckCount} option${struckCount === 1 ? '' : 's'} struck out.`;
-  }, [struckCount]);
+  const struckSummary = struckCount === 0
+    ? 'No options are struck out.'
+    : `${struckCount} option${struckCount === 1 ? '' : 's'} struck out.`;
 
   const toggleStruck = (option: string) => {
     if (locked) return;
