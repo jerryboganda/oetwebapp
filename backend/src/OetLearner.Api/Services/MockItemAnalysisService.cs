@@ -57,6 +57,12 @@ public sealed class MockItemAnalysisService
                 distractor = r.DistractorJson,
                 flag = r.Flag,
                 generatedAt = r.GeneratedAt,
+                // Mocks Module Phase 6 — surface retire state so the admin
+                // item-analysis dashboard can disable the retire button on
+                // already-retired rows.
+                retiredAt = r.RetiredAt,
+                retiredReason = r.RetiredReason,
+                retiredByAdminId = r.RetiredByAdminId,
             }).ToArray(),
         };
     }
@@ -97,6 +103,10 @@ public sealed class MockItemAnalysisService
                 distractor = r.DistractorJson,
                 flag = r.Flag,
                 generatedAt = r.GeneratedAt,
+                // Mocks Module Phase 6 — see GetForBundleAsync.
+                retiredAt = r.RetiredAt,
+                retiredReason = r.RetiredReason,
+                retiredByAdminId = r.RetiredByAdminId,
             }).ToArray(),
         };
     }

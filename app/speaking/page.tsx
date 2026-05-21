@@ -45,6 +45,9 @@ const evidenceDateFormatter = new Intl.DateTimeFormat('en-US', {
 const primaryLinkClasses = 'pressable inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
 
 export default function SpeakingHome() {
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  const needsProfession = !authLoading && user?.role === 'learner' && !user?.activeProfessionId;
   const [home, setHome] = useState<SpeakingHome | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
@@ -54,6 +57,13 @@ export default function SpeakingHome() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (needsProfession) {
+      router.replace('/speaking/select-profession');
+    }
+  }, [needsProfession, router]);
+
+  useEffect(() => {
+    if (authLoading || needsProfession) return;
     analytics.track('module_entry', { module: 'speaking' });
     Promise.all([fetchSpeakingHome(), fetchSubmissions(), fetchMockReports(), learnerListSpeakingSharedResources()])
       .then(([speakingHome, allSubmissions, reports, resources]) => {
@@ -64,7 +74,7 @@ export default function SpeakingHome() {
       })
       .catch(() => setError('Failed to load speaking tasks. Please try again.'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [authLoading, needsProfession]);
 
   const resumeAttempt = useMemo(() => {
     return (home?.pastAttempts ?? []).find((attempt) => {

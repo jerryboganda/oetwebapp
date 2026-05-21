@@ -52,7 +52,8 @@ public partial class LearnerService(
     DisputeService? disputeService = null,
     IOptions<BillingOptions>? billingOptions = null,
     IOptions<StorageOptions>? storageOptions = null,
-    global::OetLearner.Api.Services.IWritingEntitlementService? writingEntitlement = null)
+    global::OetLearner.Api.Services.IWritingEntitlementService? writingEntitlement = null,
+    OetLearner.Api.Services.Mocks.Results.IMockReportAggregationService? mockReportAggregation = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;

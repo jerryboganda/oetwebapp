@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Mocks.Results;
 
 namespace OetLearner.Api.Services;
 
@@ -112,6 +113,7 @@ public partial class LearnerService
             Attempt2Id = attempt2.Id,
             Mode = normalisedMode,
             State = SpeakingMockSessionState.InProgress,
+            OrchestratorState = SpeakingMockOrchestratorStates.Prep1,
             StartedAt = DateTimeOffset.UtcNow,
         };
         db.SpeakingMockSessions.Add(session);
@@ -144,7 +146,199 @@ public partial class LearnerService
         var mockSet = await db.SpeakingMockSets
             .FirstAsync(x => x.Id == session.MockSetId, cancellationToken);
 
+        // Sync OrchestratorState with the actual attempt/evaluation state on
+        // every read so the orchestrator UI never gets stuck if the learner
+        // walked through the legacy task page that doesn't call our
+        // bridge endpoints.
+        await SyncOrchestratorStateAsync(session, cancellationToken);
+
         return await BuildMockSessionResponseAsync(session, mockSet, cancellationToken);
+    }
+
+    // P5 - Bridge transitions
+    //
+    // The orchestrator's strict state machine for the two-role-play mock:
+    //
+    //   Prep1 -> Active1 -> Finished1 -> [Bridge] -> Prep2 -> Active2 -> Finished2 -> Aggregated
+    //
+    // We can't drive Prep1/Active1/Finished1/Prep2/Active2/Finished2
+    // directly from this service because those transitions happen on the
+    // child `Attempt` rows (started/submitted via the legacy speaking
+    // endpoints). Instead, `SyncOrchestratorStateAsync` is called on every
+    // session read and pushes the orchestrator state forward to match the
+    // child attempts. The two explicit transitions we DO own here are the
+    // bridge endpoints — they're a learner-driven handoff with no audio
+    // attached.
+
+    public async Task<object> StartBridgeAsync(
+        string userId,
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
+
+        var session = await db.SpeakingMockSessions
+            .FirstOrDefaultAsync(x => x.Id == sessionId && x.UserId == userId, cancellationToken)
+            ?? throw ApiException.NotFound("speaking_mock_session_not_found", "That mock session does not exist.");
+
+        // Auto-advance Prep1/Active1 -> Finished1 first if the child attempt
+        // is already complete; otherwise the guard below will reject.
+        await SyncOrchestratorStateAsync(session, cancellationToken);
+
+        if (!string.Equals(session.OrchestratorState, SpeakingMockOrchestratorStates.Finished1, StringComparison.Ordinal)
+            && !string.Equals(session.OrchestratorState, SpeakingMockOrchestratorStates.Bridge, StringComparison.Ordinal))
+        {
+            throw ApiException.Conflict(
+                "speaking_mock_bridge_invalid_state",
+                $"Cannot start the bridge from state '{session.OrchestratorState}'. Role-play 1 must be finished first.");
+        }
+
+        if (string.Equals(session.OrchestratorState, SpeakingMockOrchestratorStates.Finished1, StringComparison.Ordinal))
+        {
+            session.OrchestratorState = SpeakingMockOrchestratorStates.Bridge;
+            session.BridgeStartedAt = DateTimeOffset.UtcNow;
+            await RecordEventAsync(userId, "speaking_mock_bridge_started", new
+            {
+                mockSessionId = session.Id,
+                mockSetId = session.MockSetId,
+            }, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var mockSet = await db.SpeakingMockSets.FirstAsync(x => x.Id == session.MockSetId, cancellationToken);
+        return await BuildMockSessionResponseAsync(session, mockSet, cancellationToken);
+    }
+
+    public async Task<object> FinishBridgeAsync(
+        string userId,
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
+
+        var session = await db.SpeakingMockSessions
+            .FirstOrDefaultAsync(x => x.Id == sessionId && x.UserId == userId, cancellationToken)
+            ?? throw ApiException.NotFound("speaking_mock_session_not_found", "That mock session does not exist.");
+
+        if (!string.Equals(session.OrchestratorState, SpeakingMockOrchestratorStates.Bridge, StringComparison.Ordinal))
+        {
+            throw ApiException.Conflict(
+                "speaking_mock_bridge_invalid_state",
+                $"Cannot finish the bridge from state '{session.OrchestratorState}'. Start the bridge first.");
+        }
+
+        session.OrchestratorState = SpeakingMockOrchestratorStates.Prep2;
+        await RecordEventAsync(userId, "speaking_mock_bridge_finished", new
+        {
+            mockSessionId = session.Id,
+            mockSetId = session.MockSetId,
+            bridgeDurationSeconds = session.BridgeStartedAt is null
+                ? (double?)null
+                : (DateTimeOffset.UtcNow - session.BridgeStartedAt.Value).TotalSeconds,
+        }, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+
+        var mockSet = await db.SpeakingMockSets.FirstAsync(x => x.Id == session.MockSetId, cancellationToken);
+        return await BuildMockSessionResponseAsync(session, mockSet, cancellationToken);
+    }
+
+    /// <summary>
+    /// P5 - When both halves have a completed AI assessment, project the
+    /// combined readiness band and persist a snapshot. Called by
+    /// <see cref="GetSpeakingMockSessionAsync"/> and the bridge transitions
+    /// so the result is available as soon as the second half scores.
+    /// </summary>
+    public async Task<object?> AggregateAsync(
+        string userId,
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
+
+        var session = await db.SpeakingMockSessions
+            .FirstOrDefaultAsync(x => x.Id == sessionId && x.UserId == userId, cancellationToken)
+            ?? throw ApiException.NotFound("speaking_mock_session_not_found", "That mock session does not exist.");
+
+        if (mockReportAggregation is null) return null;
+        var agg = await mockReportAggregation.AggregateSpeakingMockSessionAsync(session.Id, cancellationToken);
+        return new
+        {
+            mockSessionId = agg.MockSessionId,
+            combinedScaledScore = agg.CombinedScaledScore,
+            readinessBand = agg.ReadinessBandCode,
+            readinessBandLabel = agg.ReadinessBandLabel,
+            passThreshold = agg.PassThreshold,
+            perCriterion = agg.PerCriterion,
+            rolePlay1 = agg.RolePlay1,
+            rolePlay2 = agg.RolePlay2,
+        };
+    }
+
+    private async Task SyncOrchestratorStateAsync(
+        SpeakingMockSession session,
+        CancellationToken cancellationToken)
+    {
+        // Reading the child attempts is enough to know which half is in
+        // which lifecycle stage. A simple state-only sync keeps the call
+        // cheap; the full per-attempt summary already happens in
+        // BuildMockSessionResponseAsync.
+        var attempt1 = await db.Attempts.AsNoTracking().FirstOrDefaultAsync(x => x.Id == session.Attempt1Id, cancellationToken);
+        var attempt2 = await db.Attempts.AsNoTracking().FirstOrDefaultAsync(x => x.Id == session.Attempt2Id, cancellationToken);
+        if (attempt1 is null || attempt2 is null) return;
+
+        var prev = session.OrchestratorState;
+        var next = DeriveOrchestratorState(prev, attempt1, attempt2);
+
+        // Always run aggregation when we land on Aggregated.
+        if (string.Equals(next, SpeakingMockOrchestratorStates.Aggregated, StringComparison.Ordinal)
+            && mockReportAggregation is not null)
+        {
+            try
+            {
+                await mockReportAggregation.AggregateSpeakingMockSessionAsync(session.Id, cancellationToken);
+                // Re-read to capture the snapshot the aggregator wrote.
+                await db.Entry(session).ReloadAsync(cancellationToken);
+                return; // Aggregator already saved.
+            }
+            catch (InvalidOperationException)
+            {
+                // Aggregator can no-op if the AI assessments aren't ready
+                // yet — fall through to the plain state assignment below.
+            }
+        }
+
+        if (!string.Equals(prev, next, StringComparison.Ordinal))
+        {
+            session.OrchestratorState = next;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private static string DeriveOrchestratorState(string current, Attempt a1, Attempt a2)
+    {
+        // Bridge is learner-driven (must be set by StartBridgeAsync). The
+        // sync helper never overwrites it back to Finished1 once entered;
+        // it only auto-advances from Bridge to Prep2 if the learner already
+        // started attempt 2 (e.g. via the legacy speaking task page).
+        var a1Done = a1.State == AttemptState.Submitted || a1.State == AttemptState.Completed;
+        var a2Done = a2.State == AttemptState.Submitted || a2.State == AttemptState.Completed;
+        var a2Started = a2.StartedAt is not null && a2.State != AttemptState.InProgress
+            ? true
+            : a2.State == AttemptState.InProgress && a2.StartedAt is not null;
+
+        if (a1Done && a2Done) return SpeakingMockOrchestratorStates.Aggregated;
+        if (a1Done && a2Started) return SpeakingMockOrchestratorStates.Active2;
+        if (a1Done)
+        {
+            // Already in Bridge or Prep2? Don't undo learner-driven moves.
+            if (string.Equals(current, SpeakingMockOrchestratorStates.Bridge, StringComparison.Ordinal)) return current;
+            if (string.Equals(current, SpeakingMockOrchestratorStates.Prep2, StringComparison.Ordinal)) return current;
+            return SpeakingMockOrchestratorStates.Finished1;
+        }
+        if (a1.State == AttemptState.InProgress) return SpeakingMockOrchestratorStates.Active1;
+        return SpeakingMockOrchestratorStates.Prep1;
     }
 
     private async Task<Attempt> CreateSpeakingMockAttemptAsync(
@@ -284,6 +478,9 @@ public partial class LearnerService
             description = mockSet.Description,
             mode = session.Mode,
             state = session.State.ToString().ToLowerInvariant(),
+            // P5: orchestrator state drives the frontend strict-flow router.
+            orchestratorState = session.OrchestratorState,
+            bridgeStartedAt = session.BridgeStartedAt,
             startedAt = session.StartedAt,
             completedAt = session.CompletedAt,
             criteriaFocus = SplitCsv(mockSet.CriteriaFocus),

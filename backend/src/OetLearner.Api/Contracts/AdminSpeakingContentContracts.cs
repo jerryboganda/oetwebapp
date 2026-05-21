@@ -160,3 +160,101 @@ public record AdminInterlocutorScriptDetail(
     string? CreatedByUserId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
+
+// ── Phase 11 (G.11) — AI-assisted authoring ────────────────────────────────
+
+/// <summary>Single-shot AI draft request for a candidate card + paired
+/// interlocutor script. The admin fills in profession + topic + emotion +
+/// difficulty; the backend builds a grounded prompt and asks the gateway
+/// for one structured-JSON response containing both the candidate card and
+/// the interlocutor script. The resulting card is persisted with
+/// <c>Status = Draft</c> and an admin reviews + edits before publishing.</summary>
+public record AdminRolePlayCardAiDraftRequest(
+    string ProfessionId,
+    string? Topic,
+    string? Emotion,
+    string? Difficulty,
+    string? Setting,
+    string? CandidateRole,
+    string? InterlocutorRole,
+    string? CommunicationGoal);
+
+/// <summary>Response from a single-shot AI draft. Contains the persisted
+/// draft card id so the admin UI can deep-link to the editor, plus the
+/// projected detail (card + script) for an inline preview.</summary>
+public record AdminRolePlayCardAiDraftResponse(
+    string CardId,
+    AdminRolePlayCardDetail Card,
+    string? Warning);
+
+/// <summary>Enqueue a batch generation job. The background worker picks
+/// Pending rows on a 60-second tick and produces drafts at low
+/// concurrency.</summary>
+public record AdminRolePlayCardBatchRequest(
+    string ProfessionId,
+    int Count,
+    string[]? TopicList,
+    DifficultyBucket[]? DifficultyDistribution,
+    string? IdempotencyKey);
+
+/// <summary>Maps a difficulty code to the number of cards to draft at
+/// that difficulty in the batch.</summary>
+public record DifficultyBucket(string Difficulty, int Count);
+
+/// <summary>Compact projection of a batch request row for the admin
+/// queue.</summary>
+public record AdminRolePlayCardBatchSummary(
+    string BatchId,
+    string ProfessionId,
+    int Count,
+    int GeneratedCount,
+    string Status,
+    string RequestedByAdminId,
+    string? RequestedByAdminName,
+    string? Error,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? CompletedAt);
+
+/// <summary>Single-shot AI draft request for a micro-drill.</summary>
+public record AdminSpeakingDrillAiDraftRequest(
+    string DrillKind,
+    string? ProfessionId,
+    string? Topic,
+    string? CriterionFocus,
+    string? Difficulty);
+
+/// <summary>Response from a single-shot drill draft. Contains the drillId
+/// + a flat projection of the persisted draft.</summary>
+public record AdminSpeakingDrillAiDraftResponse(
+    string DrillId,
+    string DrillKind,
+    string? ProfessionId,
+    string Title,
+    string InstructionText,
+    string[] TargetCriteria,
+    int? RecommendedAfterSessionScoreBelow,
+    string Status,
+    DateTimeOffset CreatedAt,
+    string? Warning);
+
+/// <summary>Auto-pair two published role-play cards from the same
+/// profession into a draft mock set. The service picks two cards with
+/// complementary criteria focus (one info-giving heavy, one
+/// info-gathering heavy where possible).</summary>
+public record AdminSpeakingMockSetAutoPairRequest(
+    string ProfessionId,
+    string? Difficulty,
+    string? Title);
+
+/// <summary>Response from an auto-pair. Returns the new mock set id +
+/// the two role-play content ids that were chosen.</summary>
+public record AdminSpeakingMockSetAutoPairResponse(
+    string MockSetId,
+    string Title,
+    string ProfessionId,
+    string RolePlay1ContentId,
+    string RolePlay1Title,
+    string RolePlay2ContentId,
+    string RolePlay2Title,
+    string? Warning);

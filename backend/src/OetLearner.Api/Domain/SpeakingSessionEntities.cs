@@ -29,6 +29,13 @@ public enum SpeakingSessionMode
 
 public enum SpeakingSessionState
 {
+    /// <summary>
+    /// Friendly, unscored warm-up conversation that runs before the
+    /// official prep window. Introduced with Phase 3 of the Speaking
+    /// module roadmap. Numerically distinct from existing states so EF
+    /// rows that pre-date the warm-up flow continue to deserialize.
+    /// </summary>
+    WarmUp = 5,
     Prep = 0,
     Active = 1,
     Finished = 2,
@@ -96,6 +103,15 @@ public class SpeakingSession
     [MaxLength(64)]
     public string? AttemptId { get; set; }
 
+    /// <summary>When the warm-up conversation started. Phase 3.
+    /// Null for sessions created before warm-up support shipped, or for
+    /// sessions that skipped warm-up via the dev-mode fast path.</summary>
+    public DateTimeOffset? WarmupStartedAt { get; set; }
+
+    /// <summary>When the learner pressed "Start preparation" to finish
+    /// the warm-up and transition into the prep window.</summary>
+    public DateTimeOffset? WarmupEndedAt { get; set; }
+
     public DateTimeOffset? PrepStartedAt { get; set; }
     public DateTimeOffset? RolePlayStartedAt { get; set; }
     public DateTimeOffset? EndedAt { get; set; }
@@ -118,6 +134,15 @@ public class SpeakingSession
     /// existing `app/speaking/task/[id]/page.tsx` CBT compliance
     /// flow).</summary>
     public DateTimeOffset? PaperDestroyedAt { get; set; }
+
+    /// <summary>
+    /// P8 (drill bank + course pathway). JSON array of <see cref="SpeakingDrillItem.Id"/>
+    /// values the course-pathway recommender suggests after this session's AI
+    /// assessment lands. Up to 5 entries ordered weakest-criterion-first.
+    /// Null until <c>SpeakingCoursePathwayService.RecommendDrillsAsync</c> runs.
+    /// </summary>
+    [MaxLength(1024)]
+    public string? RecommendedDrillIdsJson { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
@@ -177,6 +202,12 @@ public class SpeakingRecording
     /// follow-up webhooks to the recording row.</summary>
     [MaxLength(64)]
     public string? EgressTrackId { get; set; }
+
+    /// <summary>True when the recording was captured during the
+    /// unscored warm-up conversation (Phase 3). The retention worker
+    /// shortens the deletion window for these rows so the warm-up
+    /// audio never sits around longer than necessary.</summary>
+    public bool IsWarmup { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 }
@@ -243,6 +274,7 @@ public static class SpeakingSessionModes
 
 public static class SpeakingSessionStates
 {
+    public const string WarmUp = "warmup";
     public const string Prep = "prep";
     public const string Active = "active";
     public const string Finished = "finished";
@@ -251,6 +283,7 @@ public static class SpeakingSessionStates
 
     public static string ToCode(SpeakingSessionState state) => state switch
     {
+        SpeakingSessionState.WarmUp => WarmUp,
         SpeakingSessionState.Active => Active,
         SpeakingSessionState.Finished => Finished,
         SpeakingSessionState.Cancelled => Cancelled,

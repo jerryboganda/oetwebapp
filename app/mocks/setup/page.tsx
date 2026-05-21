@@ -24,6 +24,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
@@ -64,6 +65,34 @@ function isMockTypeToken(value: unknown): value is MockTypeToken {
 }
 function isFullShape(t: MockType) { return FULL_SHAPE_TOKENS.has(t); }
 function isSubShape(t: MockType) { return SUB_SHAPE_TOKENS.has(t); }
+
+// Mocks Phase 8b — frontend MockTypeToken to backend MockEntitlementKeys ledger
+// token. Each canonical mock-type maps to the ledger key that grants it.
+// `sub` resolves dynamically against the chosen sub-test (writing/speaking
+// have dedicated ledger keys, reading/listening fall back to `mock_sub`).
+const MOCK_TYPE_LEDGER_KEYS: Record<MockTypeToken, string> = {
+  full: 'mock_full',
+  lrw: 'mock_lrw',
+  sub: 'mock_sub',
+  part: 'mock_part',
+  diagnostic: 'mock_diagnostic',
+  final_readiness: 'mock_final_readiness',
+  remedial: 'mock_remedial',
+};
+
+function ledgerKeyForSelection(mockType: MockType, subType: MockSubType): string {
+  if (mockType !== 'sub') return MOCK_TYPE_LEDGER_KEYS[mockType];
+  if (subType === 'writing') return 'mock_writing';
+  if (subType === 'speaking') return 'mock_speaking_session';
+  return 'mock_sub';
+}
+
+// Phase 8b — diagnostic uses its own one-per-lifetime entitlement, not the
+// generic ledger. Free-tier learners always get exactly one diagnostic, so the
+// type-selector must never disable it on a "0 remaining" signal.
+const ENTITLEMENT_GATED_TYPES: ReadonlySet<MockTypeToken> = new Set<MockTypeToken>([
+  'full', 'lrw', 'sub', 'part', 'final_readiness', 'remedial',
+]);
 
 const SUBTEST_META: Record<MockSubType, { label: string; icon: ElementType; active: string }> = {
   listening: { label: 'Listening', icon: Headphones, active: 'border-primary bg-primary/10 text-primary' },
@@ -229,6 +258,44 @@ export default function MockSetup() {
   const selectedReviewCost = reviewCost(selectedReviewSelection);
   const insufficientCredits = selectedReviewCost > availableCredits;
 
+  // Phase 8b — entitlement gating. Maps each backend ledger token to its
+  // remaining-credit count so the type selector and Start button can disable
+  // options the learner does not own. Subscribers are unlimited and bypass
+  // the gate via the `hasEligibleSubscription` shortcut.
+  const remainingByLedgerKey = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const item of entitlementSummary?.items ?? []) {
+      map[item.mockType] = item.remaining;
+    }
+    return map;
+  }, [entitlementSummary]);
+  const isUnlimitedEntitlement = useMemo(
+    () => (entitlementSummary?.items ?? []).some((item) => item.granted >= Number.MAX_SAFE_INTEGER / 2),
+    [entitlementSummary],
+  );
+  const remainingForMockType = (id: MockTypeToken): number => {
+    if (!ENTITLEMENT_GATED_TYPES.has(id)) return Number.POSITIVE_INFINITY;
+    if (isUnlimitedEntitlement) return Number.POSITIVE_INFINITY;
+    const key = ledgerKeyForSelection(id, subType);
+    return remainingByLedgerKey[key] ?? 0;
+  };
+  const selectedMockTypeRemaining = remainingForMockType(mockType);
+  const entitlementBlocked = entitlementSummary !== null
+    && !isUnlimitedEntitlement
+    && ENTITLEMENT_GATED_TYPES.has(mockType)
+    && selectedMockTypeRemaining <= 0;
+
+  // Build a short plain-English balance line: "You have 2 Full mock, 1 Speaking
+  // mock, 0 Writing mock attempts available." Hidden when the user has an
+  // unlimited subscription or no granted credits to summarise.
+  const balanceSentence = useMemo(() => {
+    if (!entitlementSummary || isUnlimitedEntitlement) return null;
+    const visible = entitlementSummary.items.filter((item) => item.granted > 0);
+    if (visible.length === 0) return null;
+    const parts = visible.map((item) => `${item.remaining} ${item.label}`);
+    return `You have ${parts.join(', ')} attempts available.`;
+  }, [entitlementSummary, isUnlimitedEntitlement]);
+
   const availableBundles = useMemo(() => {
     return (options?.availableBundles ?? []).filter((bundle) => bundleMatches(bundle, mockType, subType, profession));
   }, [mockType, options?.availableBundles, profession, subType]);
@@ -275,7 +342,7 @@ export default function MockSetup() {
   };
 
   const handleStart = async () => {
-    if (!selectedBundle || insufficientCredits || diagnosticBlocked) return;
+    if (!selectedBundle || insufficientCredits || diagnosticBlocked || entitlementBlocked) return;
     setStarting(true);
     setStartError(null);
     try {
@@ -431,6 +498,12 @@ export default function MockSetup() {
                 description="Coming from the Mocks page? Your selection is already preset."
                 className="mb-4"
               />
+              {balanceSentence ? (
+                <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-info/30 bg-info/5 px-4 py-3">
+                  <Badge variant="info" className="shrink-0">Balance</Badge>
+                  <p className="text-sm leading-5 text-navy">{balanceSentence}</p>
+                </div>
+              ) : null}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {(() => {
                   // Wave 1: render all canonical mock types. Icon mapping is local; backend
@@ -458,14 +531,25 @@ export default function MockSetup() {
                   return list.map(({ id, label, desc }) => {
                     const Icon = ICONS[id] ?? FileText;
                     const isSelected = mockType === id;
+                    // Phase 8b — disable types whose ledger bucket is empty.
+                    // `entitlementSummary === null` means we haven't loaded yet;
+                    // don't gate until we have ground truth so the UI doesn't
+                    // flicker.
+                    const remaining = remainingForMockType(id);
+                    const isGated = ENTITLEMENT_GATED_TYPES.has(id)
+                      && entitlementSummary !== null
+                      && !isUnlimitedEntitlement;
+                    const disabled = isGated && remaining <= 0;
                     return (
                       <button
                         key={id}
                         type="button"
-                        onClick={() => handleMockTypeChange(id)}
-                        className={`rounded-2xl border-2 p-5 text-left transition-all ${
+                        onClick={() => !disabled && handleMockTypeChange(id)}
+                        disabled={disabled}
+                        aria-disabled={disabled}
+                        className={`relative rounded-2xl border-2 p-5 text-left transition-all ${
                           isSelected ? 'border-primary bg-primary/5 ring-4 ring-primary/10' : 'border-border hover:border-border-hover hover:bg-background-light'
-                        }`}
+                        } ${disabled ? 'cursor-not-allowed opacity-60 hover:border-border hover:bg-transparent' : ''}`}
                       >
                         <div className="mb-3 flex items-center justify-between">
                           <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isSelected ? 'bg-primary text-white' : 'bg-background-light text-muted'}`}>
@@ -475,6 +559,26 @@ export default function MockSetup() {
                         </div>
                         <h3 className={`text-lg font-bold ${isSelected ? 'text-primary' : 'text-navy'}`}>{label}</h3>
                         <p className="mt-1 text-sm text-muted">{desc}</p>
+                        {isGated ? (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            {disabled ? (
+                              <>
+                                <Badge variant="danger">0 remaining</Badge>
+                                <Link
+                                  href="/billing"
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+                                >
+                                  Buy more
+                                </Link>
+                              </>
+                            ) : remaining <= 1 ? (
+                              <Badge variant="warning">{remaining} remaining</Badge>
+                            ) : (
+                              <Badge variant="muted">{remaining} remaining</Badge>
+                            )}
+                          </div>
+                        ) : null}
                       </button>
                     );
                   });
@@ -484,6 +588,13 @@ export default function MockSetup() {
                 <div className="mt-4">
                   <InlineAlert variant="warning">
                     {diagnosticEntitlement?.message ?? 'Your billing plan does not currently allow another diagnostic mock.'}
+                  </InlineAlert>
+                </div>
+              ) : null}
+              {entitlementBlocked ? (
+                <div className="mt-4">
+                  <InlineAlert variant="warning">
+                    You have no remaining attempts for this mock type. Top up from billing to unlock more.
                   </InlineAlert>
                 </div>
               ) : null}
@@ -850,14 +961,18 @@ export default function MockSetup() {
             <div className="sticky bottom-4 z-10 rounded-2xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur">
               <Button
                 onClick={handleStart}
-                disabled={starting || !selectedBundle || insufficientCredits || diagnosticBlocked}
+                disabled={starting || !selectedBundle || insufficientCredits || diagnosticBlocked || entitlementBlocked}
                 size="lg"
                 className="w-full gap-2 py-5 text-base font-black"
               >
                 {starting ? 'Starting...' : 'Start Mock Test'}
               </Button>
               <p className="mt-3 text-center text-xs text-muted">
-                {selectedBundle ? `${selectedBundle.title} / ${selectedBundle.estimatedDurationMinutes} minutes` : 'Select a published bundle to continue.'}
+                {entitlementBlocked
+                  ? 'No remaining attempts for this mock type — top up from billing to continue.'
+                  : selectedBundle
+                    ? `${selectedBundle.title} / ${selectedBundle.estimatedDurationMinutes} minutes`
+                    : 'Select a published bundle to continue.'}
               </p>
             </div>
           </>

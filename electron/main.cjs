@@ -1123,3 +1123,126 @@ ipcMain.handle('desktop:print-page', async (event, options) => {
     return { ok: false, error: err.message || 'PRINT_FAILED' };
   }
 });
+
+// ── Speaking module: audio capture IPC bridge ───────────────────────
+//
+// `media` and `microphone` permissions are already granted to trusted
+// renderer frames via `applyApplicationSecurityPolicies` (see ALLOWED_
+// PERMISSION_NAMES above). The actual audio capture is still performed
+// by the renderer's MediaRecorder API (which is correct on Chromium),
+// but these IPC channels reserve a future native bridge surface — for
+// example a node-based capture using NAudio (Windows) or AVFoundation
+// (macOS) when MediaRecorder is unavailable or codec parity is needed.
+//
+// For now they accept renderer-encoded audio blobs and persist them to
+// `app.getPath('temp')` so the renderer can re-read them without
+// holding the entire blob in memory.
+
+const SPEAKING_AUDIO_DIR = path.join(app.getPath('temp'), 'oet-prep-speaking-audio');
+const speakingAudioSessions = new Map();
+
+function ensureSpeakingAudioDir() {
+  if (!fs.existsSync(SPEAKING_AUDIO_DIR)) {
+    fs.mkdirSync(SPEAKING_AUDIO_DIR, { recursive: true });
+  }
+}
+
+function sanitizeSpeakingSessionId(sessionId) {
+  if (typeof sessionId !== 'string' || sessionId.trim() === '') {
+    throw new Error('A valid speaking session id is required.');
+  }
+  return sessionId.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64);
+}
+
+ipcMain.handle('speaking:audio:start', async (event, payload) => {
+  if (!validateSenderFrame(event)) throw new Error('Unauthorized IPC sender.');
+  ensureSpeakingAudioDir();
+  const sessionId = sanitizeSpeakingSessionId(payload?.sessionId);
+  const mimeType = typeof payload?.mimeType === 'string' && payload.mimeType
+    ? payload.mimeType
+    : 'audio/webm';
+  speakingAudioSessions.set(sessionId, {
+    sessionId,
+    mimeType,
+    startedAt: Date.now(),
+    chunks: [],
+    finalized: false,
+  });
+  return { ok: true, sessionId, mimeType, mode: 'renderer-capture' };
+});
+
+ipcMain.handle('speaking:audio:stop', async (event, payload) => {
+  if (!validateSenderFrame(event)) throw new Error('Unauthorized IPC sender.');
+  const sessionId = sanitizeSpeakingSessionId(payload?.sessionId);
+  const session = speakingAudioSessions.get(sessionId);
+  if (!session) {
+    return { ok: false, error: 'SESSION_NOT_FOUND' };
+  }
+
+  ensureSpeakingAudioDir();
+
+  const chunks = Array.isArray(payload?.chunks) ? payload.chunks : [];
+  const buffers = chunks
+    .filter((chunk) => chunk instanceof ArrayBuffer || ArrayBuffer.isView(chunk))
+    .map((chunk) => (chunk instanceof ArrayBuffer ? Buffer.from(chunk) : Buffer.from(chunk.buffer)));
+  const fileBuffer = buffers.length > 0 ? Buffer.concat(buffers) : Buffer.alloc(0);
+  const fileName = `${sessionId}-${session.startedAt}.bin`;
+  const filePath = path.join(SPEAKING_AUDIO_DIR, fileName);
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(path.resolve(SPEAKING_AUDIO_DIR))) {
+    return { ok: false, error: 'INVALID_PATH' };
+  }
+
+  fs.writeFileSync(resolved, fileBuffer);
+  session.finalized = true;
+  session.filePath = resolved;
+  session.sizeBytes = fileBuffer.length;
+  session.stoppedAt = Date.now();
+  speakingAudioSessions.set(sessionId, session);
+
+  return {
+    ok: true,
+    sessionId,
+    sizeBytes: fileBuffer.length,
+    mimeType: session.mimeType,
+    filePath: resolved,
+    durationMs: session.stoppedAt - session.startedAt,
+  };
+});
+
+ipcMain.handle('speaking:audio:get-blob', async (event, payload) => {
+  if (!validateSenderFrame(event)) throw new Error('Unauthorized IPC sender.');
+  const sessionId = sanitizeSpeakingSessionId(payload?.sessionId);
+  const session = speakingAudioSessions.get(sessionId);
+  if (!session || !session.finalized || !session.filePath) {
+    return { ok: false, error: 'SESSION_NOT_AVAILABLE' };
+  }
+  try {
+    const data = fs.readFileSync(session.filePath);
+    return {
+      ok: true,
+      sessionId,
+      mimeType: session.mimeType,
+      sizeBytes: data.length,
+      // Return as ArrayBuffer so renderer can wrap in Blob without copy.
+      data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+    };
+  } catch (err) {
+    return { ok: false, error: err.message || 'READ_FAILED' };
+  }
+});
+
+ipcMain.handle('speaking:audio:discard', async (event, payload) => {
+  if (!validateSenderFrame(event)) throw new Error('Unauthorized IPC sender.');
+  const sessionId = sanitizeSpeakingSessionId(payload?.sessionId);
+  const session = speakingAudioSessions.get(sessionId);
+  if (session?.filePath) {
+    try {
+      fs.unlinkSync(session.filePath);
+    } catch {
+      // Best-effort cleanup
+    }
+  }
+  speakingAudioSessions.delete(sessionId);
+  return { ok: true, sessionId };
+});

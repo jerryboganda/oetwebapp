@@ -41,13 +41,20 @@ public sealed class LiveKitOptions
     public bool EgressEnabled { get; set; } = true;
 
     /// <summary>Destination bucket for egress recordings (e.g. an
-    /// S3-compatible URL). When empty, egress writes to the LiveKit
-    /// default storage backend.</summary>
+    /// S3-compatible URL like <c>s3://oet-speaking-recordings</c>).
+    /// When empty, egress writes to the LiveKit default storage backend.
+    /// The full output path emitted to LiveKit is
+    /// <c>{EgressBucket}/oet-speaking/{RoomName}.mp4</c>.</summary>
     public string EgressBucket { get; set; } = string.Empty;
+
+    /// <summary>Optional region for the egress S3 bucket. When empty,
+    /// the LiveKit Cloud project's default region credentials apply.</summary>
+    public string EgressBucketRegion { get; set; } = string.Empty;
 
     /// <summary>True when the provider is configured for live calls.
     /// False short-circuits room provisioning to the stub gateway, which
     /// returns synthetic identifiers.</summary>
     public bool IsEnabled => !string.Equals(Provider, "disabled", StringComparison.OrdinalIgnoreCase)
-        && !string.IsNullOrWhiteSpace(ApiKey);
+        && !string.IsNullOrWhiteSpace(ApiKey)
+        && !string.IsNullOrWhiteSpace(ApiSecret);
 }

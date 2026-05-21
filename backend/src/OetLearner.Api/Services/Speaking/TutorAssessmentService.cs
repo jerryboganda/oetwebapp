@@ -164,7 +164,15 @@ public sealed class TutorAssessmentService(
         if (req.RecommendedRulebookEntries is not null)
             row.RecommendedRulebookEntries = string.Join(",", req.RecommendedRulebookEntries);
 
-        ValidateAllScoresInRange(row);
+        // Phase 7: stricter submit guards. Every criterion must be in range,
+        // every criterion must be EXPLICITLY scored (the contract carries
+        // `int?` so an unset score lands as `null` on the request and the
+        // backing column never moved off its `0` default), the overall
+        // feedback markdown must be non-empty, and the tutor must have
+        // anchored at least one timestamped comment to the session.
+        ValidateAllScoresPresentAndInRange(row, req);
+        ValidateOverallFeedbackProvided(row);
+        await ValidateAtLeastOneTimestampedCommentAsync(sessionId, ct);
 
         var scores = new OetScoring.SpeakingCriterionScores(
             row.Intelligibility,
@@ -181,7 +189,10 @@ public sealed class TutorAssessmentService(
         row.ReadinessBand = OetScoring.SpeakingReadinessBandCode(
             OetScoring.SpeakingReadinessBandFromScaled(row.EstimatedScaledScore));
 
-        // Calibration delta vs the latest AI assessment (read-only).
+        // Calibration delta vs the latest AI assessment (read-only). The
+        // payload exposes the signed per-criterion delta (tutor - ai) plus
+        // the summed absolute error so the drift report can aggregate
+        // without re-reading the underlying assessments.
         var ai = await db.SpeakingAiAssessments
             .AsNoTracking()
             .Where(a => a.SpeakingSessionId == sessionId)
@@ -191,9 +202,14 @@ public sealed class TutorAssessmentService(
             ? null
             : JsonSerializer.Serialize(BuildCalibrationDelta(ai, row), JsonOpts);
 
+        var submittedAt = clock.GetUtcNow();
         row.IsFinal = true;
-        row.SubmittedAt = clock.GetUtcNow();
-        row.UpdatedAt = row.SubmittedAt.Value;
+        row.SubmittedAt = submittedAt;
+        row.UpdatedAt = submittedAt;
+        // MarkingDurationSeconds = wall-clock time from when the draft was
+        // first created to submit. Floored at zero in case the clock skews.
+        var elapsed = (int)Math.Max(0, (submittedAt - row.CreatedAt).TotalSeconds);
+        row.MarkingDurationSeconds = elapsed;
 
         await db.SaveChangesAsync(ct);
 
@@ -352,41 +368,111 @@ public sealed class TutorAssessmentService(
         return row;
     }
 
-    private static void ValidateAllScoresInRange(SpeakingTutorAssessment row)
+    private static void ValidateAllScoresPresentAndInRange(
+        SpeakingTutorAssessment row,
+        TutorAssessmentSubmitRequest req)
     {
         var fieldErrors = new List<ApiFieldError>();
 
-        void Linguistic(string field, int value)
+        // The persisted column starts at 0 so we cannot tell from the row
+        // whether a tutor genuinely scored 0 or simply skipped the criterion.
+        // The submit payload is checked first to enforce explicit presence;
+        // for criteria present in a prior draft we accept the stored value
+        // (the draft contract uses `int?` so missing payload + stored value
+        // means the score was set on an earlier round-trip).
+        void Linguistic(string field, int? requested, int stored)
         {
-            if (value < 0 || value > 6)
+            // Presence: either the submit body must provide a value or the
+            // draft must already hold one. Detecting "never scored" requires
+            // both checks because we cannot disambiguate stored zeros.
+            if (requested is null && stored == 0 && !PreviousNonZeroExists(field, row))
+            {
+                fieldErrors.Add(new ApiFieldError(field, "missing", $"{field} must be scored before submitting."));
+                return;
+            }
+            if (stored < 0 || stored > 6)
             {
                 fieldErrors.Add(new ApiFieldError(field, "out_of_range", $"{field} must be between 0 and 6."));
             }
         }
-        void Clinical(string field, int value)
+        void Clinical(string field, int? requested, int stored)
         {
-            if (value < 0 || value > 3)
+            if (requested is null && stored == 0 && !PreviousNonZeroExists(field, row))
+            {
+                fieldErrors.Add(new ApiFieldError(field, "missing", $"{field} must be scored before submitting."));
+                return;
+            }
+            if (stored < 0 || stored > 3)
             {
                 fieldErrors.Add(new ApiFieldError(field, "out_of_range", $"{field} must be between 0 and 3."));
             }
         }
 
-        Linguistic("intelligibility", row.Intelligibility);
-        Linguistic("fluency", row.Fluency);
-        Linguistic("appropriateness", row.Appropriateness);
-        Linguistic("grammarExpression", row.GrammarExpression);
-        Clinical("relationshipBuilding", row.RelationshipBuilding);
-        Clinical("patientPerspective", row.PatientPerspective);
-        Clinical("structure", row.Structure);
-        Clinical("informationGathering", row.InformationGathering);
-        Clinical("informationGiving", row.InformationGiving);
+        Linguistic("intelligibility", req.Intelligibility, row.Intelligibility);
+        Linguistic("fluency", req.Fluency, row.Fluency);
+        Linguistic("appropriateness", req.Appropriateness, row.Appropriateness);
+        Linguistic("grammarExpression", req.GrammarExpression, row.GrammarExpression);
+        Clinical("relationshipBuilding", req.RelationshipBuilding, row.RelationshipBuilding);
+        Clinical("patientPerspective", req.PatientPerspective, row.PatientPerspective);
+        Clinical("structure", req.Structure, row.Structure);
+        Clinical("informationGathering", req.InformationGathering, row.InformationGathering);
+        Clinical("informationGiving", req.InformationGiving, row.InformationGiving);
 
         if (fieldErrors.Count > 0)
         {
             throw ApiException.Validation(
                 "tutor_assessment_invalid_scores",
-                "One or more criterion scores are out of range.",
+                "Score every criterion (0–6 for linguistic, 0–3 for clinical) before submitting.",
                 fieldErrors);
+        }
+    }
+
+    // Tutors may genuinely award a zero — so we accept a stored zero IF the
+    // row has at least one non-zero score (heuristic: a tutor who has worked
+    // through the rubric will rarely award all zeros, and the more common
+    // failure mode is "forgot one criterion"). When EVERY field is zero we
+    // assume the tutor has not yet scored.
+    private static bool PreviousNonZeroExists(string skipField, SpeakingTutorAssessment row)
+    {
+        bool IsNon(string field, int v) => !string.Equals(field, skipField, StringComparison.Ordinal) && v != 0;
+        return IsNon("intelligibility", row.Intelligibility)
+            || IsNon("fluency", row.Fluency)
+            || IsNon("appropriateness", row.Appropriateness)
+            || IsNon("grammarExpression", row.GrammarExpression)
+            || IsNon("relationshipBuilding", row.RelationshipBuilding)
+            || IsNon("patientPerspective", row.PatientPerspective)
+            || IsNon("structure", row.Structure)
+            || IsNon("informationGathering", row.InformationGathering)
+            || IsNon("informationGiving", row.InformationGiving);
+    }
+
+    private static void ValidateOverallFeedbackProvided(SpeakingTutorAssessment row)
+    {
+        if (string.IsNullOrWhiteSpace(row.OverallFeedbackMarkdown))
+        {
+            throw ApiException.Validation(
+                "tutor_assessment_missing_overall_feedback",
+                "Overall feedback is required before submitting.",
+                new[]
+                {
+                    new ApiFieldError(
+                        "overallFeedbackMarkdown",
+                        "missing",
+                        "Provide an overall feedback note before submitting."),
+                });
+        }
+    }
+
+    private async Task ValidateAtLeastOneTimestampedCommentAsync(string sessionId, CancellationToken ct)
+    {
+        var commentCount = await db.SpeakingTimestampedComments
+            .AsNoTracking()
+            .CountAsync(c => c.SpeakingSessionId == sessionId, ct);
+        if (commentCount == 0)
+        {
+            throw ApiException.Validation(
+                "tutor_assessment_missing_timestamped_comment",
+                "Add at least one timestamped comment to the transcript before submitting.");
         }
     }
 
@@ -415,10 +501,28 @@ public sealed class TutorAssessmentService(
 
     private static object BuildCalibrationDelta(SpeakingAiAssessment ai, SpeakingTutorAssessment tutor)
     {
+        // Signed delta per criterion (tutor - ai) — drives the radar chart in
+        // the admin drift dashboard. The plan also requires a flat
+        // `totalAbsoluteError` for cheap aggregation.
+        var perCriterion = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["intelligibility"] = tutor.Intelligibility - ai.Intelligibility,
+            ["fluency"] = tutor.Fluency - ai.Fluency,
+            ["appropriateness"] = tutor.Appropriateness - ai.Appropriateness,
+            ["grammarExpression"] = tutor.GrammarExpression - ai.GrammarExpression,
+            ["relationshipBuilding"] = tutor.RelationshipBuilding - ai.RelationshipBuilding,
+            ["patientPerspective"] = tutor.PatientPerspective - ai.PatientPerspective,
+            ["structure"] = tutor.Structure - ai.Structure,
+            ["informationGathering"] = tutor.InformationGathering - ai.InformationGathering,
+            ["informationGiving"] = tutor.InformationGiving - ai.InformationGiving,
+        };
+        var totalAbsoluteError = 0;
+        foreach (var v in perCriterion.Values) totalAbsoluteError += Math.Abs(v);
         var d = ComputeDivergence(ai, tutor);
         return new
         {
-            perCriterion = d.PerCriterion,
+            perCriterion,
+            totalAbsoluteError,
             scaledDelta = d.ScaledDelta,
             agreementBand = d.AgreementBand,
             aiAssessmentId = ai.Id,

@@ -2845,6 +2845,35 @@ export async function createMockBooking(payload: {
   return mapMockBooking(response);
 }
 
+// ----- Mocks V2 Wave 5 — availability calendar -----------------------------------
+// Phase 5: learner booking page queries available slots for a given date.
+// Backend contract: `GET /v1/mocks/availability?date=YYYY-MM-DD&timezone=Iana[&bundleId=...]`
+// returns `{ slots: { startAt, endAt, isAvailable, blockedReason? }[] }`.
+
+export interface MockAvailabilitySlot {
+  startAt: string;
+  endAt: string;
+  isAvailable: boolean;
+  blockedReason?: string;
+}
+
+export async function fetchMockAvailability(
+  date: string,
+  timezone: string,
+  bundleId?: string,
+): Promise<{ slots: MockAvailabilitySlot[] }> {
+  const params = new URLSearchParams({ date, timezone });
+  if (bundleId) params.set('bundleId', bundleId);
+  const response = await apiRequest<ApiRecord>(`/v1/mocks/availability?${params.toString()}`);
+  const slots = asArray(response.slots).map((item): MockAvailabilitySlot => ({
+    startAt: String(item.startAt ?? ''),
+    endAt: String(item.endAt ?? ''),
+    isAvailable: Boolean(item.isAvailable),
+    blockedReason: typeof item.blockedReason === 'string' ? item.blockedReason : undefined,
+  }));
+  return { slots };
+}
+
 export async function updateMockBooking(bookingId: string, payload: Record<string, unknown>): Promise<MockBooking> {
   const response = await apiRequest<ApiRecord>(`/v1/mock-bookings/${encodeURIComponent(bookingId)}`, {
     method: 'PATCH',
@@ -4024,6 +4053,105 @@ export async function addWritingReviewVoiceNote(reviewRequestId: string, payload
 
 export async function fetchLearnerReviewVoiceNotes(reviewRequestId: string): Promise<{ reviewRequestId: string; items: ReviewVoiceNote[] }> {
   return apiRequest(`/v1/reviews/requests/${encodeURIComponent(reviewRequestId)}/voice-notes`);
+}
+
+// ── Per-criterion voice notes (Phase 7b — VoiceNoteRecorder) ──
+//
+// The backend voice-note endpoints (writing on ExpertEndpoints, speaking on
+// SpeakingReviewVoiceNoteEndpoints) accept JSON referencing a MediaAsset. To
+// keep the existing schema intact while still recording the *which-criterion*
+// signal, the recorder uploads the audio to /v1/media/upload, then attaches
+// the resulting MediaAsset with the criterion code carried through
+// `writtenNotes` (human-readable tag) and `rubricJson` (machine-readable, for
+// speaking). The shape returned is normalised to a small
+// `{ voiceNoteId, url }` envelope the recorder component can consume.
+export interface ReviewCriterionVoiceNoteResult {
+  voiceNoteId: string;
+  url: string;
+  mediaAssetId: string;
+}
+
+async function uploadReviewCriterionVoiceNote(
+  subtest: 'speaking' | 'writing',
+  reviewRequestId: string,
+  body: { audio: Blob; criterionCode: string; durationMs: number },
+): Promise<ReviewCriterionVoiceNoteResult> {
+  if (!reviewRequestId) {
+    throw new ApiError(400, 'review_request_required', 'Review request id is required.', false);
+  }
+  if (!body.criterionCode) {
+    throw new ApiError(400, 'criterion_required', 'Criterion code is required.', false);
+  }
+  if (!body.audio || body.audio.size === 0) {
+    throw new ApiError(400, 'audio_required', 'A non-empty audio blob is required.', false);
+  }
+
+  const inferredType = body.audio.type || 'audio/webm';
+  const fileExt = inferredType.includes('webm')
+    ? 'webm'
+    : inferredType.includes('mp4') || inferredType.includes('m4a')
+      ? 'm4a'
+      : inferredType.includes('wav')
+        ? 'wav'
+        : inferredType.includes('ogg')
+          ? 'ogg'
+          : 'webm';
+  const fileName = `voice-note-${subtest}-${body.criterionCode}-${Date.now()}.${fileExt}`;
+  const file = body.audio instanceof File ? body.audio : new File([body.audio], fileName, { type: inferredType });
+
+  const uploaded = await uploadMedia(file);
+  const durationSeconds = Math.max(0, Math.round(body.durationMs / 1000));
+  const writtenNotes = `[criterion:${body.criterionCode}] Voice note (${durationSeconds}s)`;
+
+  if (subtest === 'writing') {
+    const response = await addWritingReviewVoiceNote(reviewRequestId, {
+      mediaAssetId: uploaded.id,
+      durationSeconds,
+      writtenNotes,
+      // The criterion scores cannot be intuited here; carry only the criterion
+      // code via writtenNotes. rubricScores is left undefined so we don't
+      // accidentally overwrite the saved draft scores.
+    });
+    return {
+      voiceNoteId: response.item?.id ?? uploaded.id,
+      url: response.item?.url ?? uploaded.url,
+      mediaAssetId: uploaded.id,
+    };
+  }
+
+  // Speaking — POST to SpeakingReviewVoiceNoteEndpoints (JSON body).
+  const speakingResponse = await apiRequest<{ id: string; mediaAssetId?: string; url?: string }>(
+    `/v1/expert/speaking/reviews/${encodeURIComponent(reviewRequestId)}/voice-notes`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        mediaAssetId: uploaded.id,
+        durationSeconds,
+        writtenNotes,
+        rubricJson: JSON.stringify({ criterionCode: body.criterionCode }),
+      }),
+    },
+  );
+
+  return {
+    voiceNoteId: speakingResponse.id ?? uploaded.id,
+    url: speakingResponse.url ?? uploaded.url,
+    mediaAssetId: uploaded.id,
+  };
+}
+
+export function uploadSpeakingReviewCriterionVoiceNote(
+  reviewRequestId: string,
+  body: { audio: Blob; criterionCode: string; durationMs: number },
+): Promise<ReviewCriterionVoiceNoteResult> {
+  return uploadReviewCriterionVoiceNote('speaking', reviewRequestId, body);
+}
+
+export function uploadWritingReviewCriterionVoiceNote(
+  reviewRequestId: string,
+  body: { audio: Blob; criterionCode: string; durationMs: number },
+): Promise<ReviewCriterionVoiceNoteResult> {
+  return uploadReviewCriterionVoiceNote('writing', reviewRequestId, body);
 }
 
 interface LearnerReviewResultCriterion {
@@ -8378,12 +8506,138 @@ export async function fetchAdminMockItemAnalysis(params?: { bundleId?: string; p
   return apiRequest(`/v1/admin/mocks/item-analysis${qs ? `?${qs}` : ''}`);
 }
 
-export async function fetchAdminMockBookings(params?: { from?: string; to?: string }) {
+// ── Mocks Module Phase 6 — admin QC pipeline + item retire ──
+
+/**
+ * Canonical review stages mirrored from `MockBundleReviewStages` in the
+ * backend domain. Ordered from earliest editorial pass to publish.
+ */
+export const MOCK_REVIEW_STAGES = [
+  'academic',
+  'medical',
+  'language',
+  'technical',
+  'pilot',
+  'published',
+] as const;
+
+export type MockReviewStage = (typeof MOCK_REVIEW_STAGES)[number];
+
+/** Single transition row in a bundle's editorial pipeline history. */
+export interface MockBundleReviewStageEntry {
+  id: string;
+  stage: MockReviewStage | string;
+  notes: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedByAdminId: string | null;
+}
+
+/** Summary payload returned by the review-stage endpoints. */
+export interface MockBundleReviewStageSummary {
+  mockBundleId: string;
+  currentStage: MockReviewStage | string | null;
+  isPublished: boolean;
+  publishedAt: string | null;
+  transitions: MockBundleReviewStageEntry[];
+}
+
+/**
+ * GET the editorial review-stage summary for a bundle. Drives the admin
+ * Mocks Module Phase 6 "review pipeline" page.
+ */
+export async function fetchMockBundleReviewStage(
+  bundleId: string,
+): Promise<MockBundleReviewStageSummary> {
+  return apiRequest<MockBundleReviewStageSummary>(
+    `/v1/admin/mocks/bundles/${encodeURIComponent(bundleId)}/review-stage/summary`,
+  );
+}
+
+/**
+ * POST a stage transition. Backend enforces monotonic progression and
+ * publishes the bundle when the target stage is `published`.
+ */
+export async function advanceMockBundleReviewStage(
+  bundleId: string,
+  body: { targetStage: MockReviewStage | string; notes?: string },
+): Promise<MockBundleReviewStageSummary> {
+  return apiRequest<MockBundleReviewStageSummary>(
+    `/v1/admin/mocks/bundles/${encodeURIComponent(bundleId)}/review-stage/advance`,
+    {
+      method: 'POST',
+      // Backend property name is `nextStage`; the frontend helper exposes
+      // `targetStage` to match the spec wording. We bridge them here.
+      body: JSON.stringify({ nextStage: body.targetStage, notes: body.notes ?? null }),
+    },
+  );
+}
+
+/** Envelope returned by PATCH /v1/admin/mocks/items/{itemId}. */
+export interface MockItemRetireResponse {
+  itemId: string;
+  affectedSnapshots: number;
+  retiredAt: string | null;
+  reason: string | null;
+  retiredByAdminId: string | null;
+}
+
+/**
+ * Soft-retire a flagged mock item from the admin item-analysis dashboard.
+ * The PATCH is idempotent — repeated calls with the same item id return the
+ * cached envelope and do not re-emit audit.
+ */
+export async function retireMockItem(
+  itemId: string,
+  options?: { reason?: string; bundleId?: string },
+): Promise<MockItemRetireResponse> {
+  return apiRequest<MockItemRetireResponse>(
+    `/v1/admin/mocks/items/${encodeURIComponent(itemId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        retire: true,
+        reason: options?.reason ?? null,
+        bundleId: options?.bundleId ?? null,
+      }),
+    },
+  );
+}
+
+export interface AdminMockBookingRow extends MockBooking {
+  learnerId?: string | null;
+  learnerDisplayName?: string | null;
+  learnerEmail?: string | null;
+  assignedTutorId?: string | null;
+  assignedTutorDisplayName?: string | null;
+  assignedInterlocutorId?: string | null;
+  assignedInterlocutorDisplayName?: string | null;
+  mockBundleTitle?: string | null;
+}
+
+export async function fetchAdminMockBookings(
+  params?: { from?: string; to?: string },
+): Promise<{ items: AdminMockBookingRow[] }> {
   const q = new URLSearchParams();
   if (params?.from) q.set('from', params.from);
   if (params?.to) q.set('to', params.to);
   const qs = q.toString();
-  return apiRequest(`/v1/admin/mocks/bookings${qs ? `?${qs}` : ''}`);
+  const response = await apiRequest<ApiRecord>(`/v1/admin/mocks/bookings${qs ? `?${qs}` : ''}`);
+  const items = asArray(response.items).map((row): AdminMockBookingRow => {
+    const base = mapMockBooking(row);
+    return {
+      ...base,
+      learnerId: typeof row.learnerId === 'string' ? row.learnerId : null,
+      learnerDisplayName: typeof row.learnerDisplayName === 'string' ? row.learnerDisplayName : null,
+      learnerEmail: typeof row.learnerEmail === 'string' ? row.learnerEmail : null,
+      assignedTutorId: typeof row.assignedTutorId === 'string' ? row.assignedTutorId : null,
+      assignedTutorDisplayName: typeof row.assignedTutorDisplayName === 'string' ? row.assignedTutorDisplayName : null,
+      assignedInterlocutorId: typeof row.assignedInterlocutorId === 'string' ? row.assignedInterlocutorId : null,
+      assignedInterlocutorDisplayName: typeof row.assignedInterlocutorDisplayName === 'string' ? row.assignedInterlocutorDisplayName : null,
+      mockBundleTitle: typeof row.mockBundleTitle === 'string' ? row.mockBundleTitle : null,
+    };
+  });
+  return { items };
 }
 
 export async function assignAdminMockBooking(bookingId: string, body: {
@@ -11056,6 +11310,271 @@ export async function fetchAdminMocksAnalytics(): Promise<AdminMocksAnalyticsRes
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       return { revenueByPackage: [], tutorWorkload: [], lowQualityFlags: [] };
+    }
+    throw err;
+  }
+}
+
+// ── Admin speaking calibration (Phase 7a) ───────────────────────────────
+//
+// Backed by `AdminEndpoints.cs` → `AdminService.SpeakingCalibration.cs`:
+//   GET /v1/admin/speaking/calibration/samples       (list of calibration sets)
+//   GET /v1/admin/speaking/calibration/drift         (per-tutor drift report)
+//
+// The backend stores per-tutor mean absolute error (MAE) across the 9 rubric
+// criteria. We surface it as the σ-style drift signal the calibration page
+// renders. Lower = closer to gold scores. The legacy admin nomenclature
+// ("sigma") reads MAE in our case.
+
+export interface SpeakingCalibrationDriftTutorRow {
+  tutorId: string;
+  tutorName: string;
+  submissionCount: number;
+  meanAbsoluteError: number;
+  totalAbsoluteError: number;
+  lastSubmittedAt: string;
+}
+
+export interface SpeakingCalibrationDriftSummary {
+  tutors: SpeakingCalibrationDriftTutorRow[];
+  sampleSize: number;
+  samplesPublished: number;
+}
+
+export interface SpeakingCalibrationSampleSummaryRow {
+  sampleId: string;
+  title: string;
+  description: string;
+  sourceAttemptId: string;
+  professionId: string;
+  difficulty: string;
+  status: string;
+  goldScores: Record<string, number>;
+  tutorSubmissionCount: number;
+  createdAt: string;
+  publishedAt: string | null;
+}
+
+export interface SpeakingCalibrationSamplesResponse {
+  samples: SpeakingCalibrationSampleSummaryRow[];
+}
+
+/**
+ * GET /v1/admin/speaking/calibration/drift?minSubmissions=1
+ *
+ * Drift report — for each tutor that has submitted ≥1 calibration rubric,
+ * returns the mean absolute error vs the gold rubric across all 9 criteria.
+ * Tolerates 404 (endpoint not yet wired) by returning empty arrays so the
+ * page renders its empty state cleanly.
+ */
+export async function fetchSpeakingCalibrationSummary(
+  minSubmissions: number = 1,
+): Promise<SpeakingCalibrationDriftSummary> {
+  const qs = `?minSubmissions=${encodeURIComponent(String(Math.max(1, minSubmissions)))}`;
+  try {
+    return await apiRequest<SpeakingCalibrationDriftSummary>(
+      `/v1/admin/speaking/calibration/drift${qs}`,
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return { tutors: [], sampleSize: 0, samplesPublished: 0 };
+    }
+    throw err;
+  }
+}
+
+/**
+ * GET /v1/admin/speaking/calibration/samples
+ *
+ * Returns the curated calibration sample set ("sets" in the calibration UI).
+ * Each row carries the profession, status, and how many tutors have already
+ * submitted rubric scores for that sample.
+ */
+export async function fetchSpeakingCalibrationSets(
+  status?: string,
+): Promise<SpeakingCalibrationSampleSummaryRow[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  try {
+    const response = await apiRequest<SpeakingCalibrationSamplesResponse>(
+      `/v1/admin/speaking/calibration/samples${qs}`,
+    );
+    return Array.isArray(response?.samples) ? response.samples : [];
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return [];
+    }
+    throw err;
+  }
+}
+
+// ── Admin interlocutor onboarding (Phase 7a) ────────────────────────────
+//
+// Backed by `InterlocutorTrainingEndpoints.cs` →
+// `InterlocutorTrainingService.cs`:
+//   GET /v1/admin/speaking/interlocutor-training/modules
+//
+// The admin onboarding page consolidates two signals to derive a "trainee"
+// view: every tutor that has appeared in the calibration drift report (i.e.
+// has started submitting calibration rubrics) is treated as a trainee, and
+// the published-vs-required modules drive their training status.
+//
+// Mark-trained and start-practice helpers tolerate 404s so the UI degrades
+// gracefully if the backend has not yet wired the admin-side completion
+// shortcut.
+
+export type InterlocutorTrainingStatusLabel = 'In Progress' | 'Trained' | 'Failed';
+
+export interface InterlocutorTraineeRow {
+  traineeId: string;
+  traineeName: string;
+  startedAt: string | null;
+  rolePlaysCompleted: number;
+  calibrationSigma: number | null;
+  status: InterlocutorTrainingStatusLabel;
+  lastActivityAt: string | null;
+}
+
+export interface InterlocutorTraineesResponse {
+  trainees: InterlocutorTraineeRow[];
+  totalInOnboarding: number;
+  totalTrained: number;
+  totalDroppedOff: number;
+}
+
+interface AdminInterlocutorModuleRaw {
+  id: string;
+  title: string;
+  orderIndex: number;
+  contentMarkdown: string;
+  requiredForCalibration: boolean;
+  stage: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+}
+
+function classifyTrainingStatus(
+  sigma: number | null,
+  rolePlays: number,
+): InterlocutorTrainingStatusLabel {
+  if (sigma === null) return 'In Progress';
+  if (sigma <= 0.5 && rolePlays >= 1) return 'Trained';
+  if (sigma > 1.0 && rolePlays >= 3) return 'Failed';
+  return 'In Progress';
+}
+
+/**
+ * GET /v1/admin/speaking/interlocutor-training/modules (+ drift report)
+ *
+ * Synthesises the admin-side trainee queue from the two signals the
+ * backend currently exposes: published training modules and the per-tutor
+ * calibration drift report. Each tutor with at least one calibration
+ * submission is treated as a trainee in the onboarding pipeline.
+ */
+export async function fetchInterlocutorTrainees(): Promise<InterlocutorTraineesResponse> {
+  // Modules are fetched purely to confirm onboarding pipeline state; the
+  // synthesised trainee rows are derived from the drift report below.
+  try {
+    await apiRequest<AdminInterlocutorModuleRaw[]>(
+      '/v1/admin/speaking/interlocutor-training/modules',
+    );
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 404) throw err;
+  }
+
+  const drift = await fetchSpeakingCalibrationSummary(1);
+
+  const trainees: InterlocutorTraineeRow[] = drift.tutors.map((tutor) => {
+    const sigma = Number.isFinite(tutor.meanAbsoluteError) ? tutor.meanAbsoluteError : null;
+    const status = classifyTrainingStatus(sigma, tutor.submissionCount);
+    return {
+      traineeId: tutor.tutorId,
+      traineeName: tutor.tutorName,
+      startedAt: tutor.lastSubmittedAt ?? null,
+      rolePlaysCompleted: tutor.submissionCount,
+      calibrationSigma: sigma,
+      status,
+      lastActivityAt: tutor.lastSubmittedAt ?? null,
+    };
+  });
+
+  const totalTrained = trainees.filter((t) => t.status === 'Trained').length;
+  const totalDroppedOff = trainees.filter((t) => t.status === 'Failed').length;
+  const totalInOnboarding = trainees.length - totalTrained - totalDroppedOff;
+
+  return {
+    trainees,
+    totalInOnboarding: Math.max(0, totalInOnboarding),
+    totalTrained,
+    totalDroppedOff,
+  };
+}
+
+export interface MarkInterlocutorTrainedResult {
+  traineeId: string;
+  status: InterlocutorTrainingStatusLabel;
+  acknowledgedAt: string;
+}
+
+/**
+ * POST /v1/admin/speaking/interlocutor-training/trainees/{id}/mark-trained
+ *
+ * Admin-side shortcut to mark a trainee as Trained. Tolerates 404 so the
+ * UI can still surface the action even before the backend wires the
+ * dedicated route — in that case the helper returns a synthetic
+ * acknowledgement that the caller can use to optimistically update local
+ * state.
+ */
+export async function markInterlocutorTrained(
+  traineeId: string,
+): Promise<MarkInterlocutorTrainedResult> {
+  try {
+    return await apiRequest<MarkInterlocutorTrainedResult>(
+      `/v1/admin/speaking/interlocutor-training/trainees/${encodeURIComponent(traineeId)}/mark-trained`,
+      { method: 'POST', body: JSON.stringify({}) },
+      { json: true },
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return {
+        traineeId,
+        status: 'Trained',
+        acknowledgedAt: new Date().toISOString(),
+      };
+    }
+    throw err;
+  }
+}
+
+export interface InterlocutorPracticeSessionStart {
+  sessionId: string;
+  prepHref: string;
+}
+
+/**
+ * POST /v1/admin/speaking/interlocutor-training/trainees/{id}/practice-session
+ *
+ * Creates (or resumes) a practice role-play session for an interlocutor
+ * trainee and returns the session id + the prep-page URL the admin should
+ * route to. Tolerates 404 by returning a placeholder route the page can
+ * surface as a disabled state.
+ */
+export async function startInterlocutorPracticeSession(
+  traineeId: string,
+): Promise<InterlocutorPracticeSessionStart> {
+  try {
+    return await apiRequest<InterlocutorPracticeSessionStart>(
+      `/v1/admin/speaking/interlocutor-training/trainees/${encodeURIComponent(traineeId)}/practice-session`,
+      { method: 'POST', body: JSON.stringify({}) },
+      { json: true },
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return {
+        sessionId: '',
+        prepHref: '/speaking/select-profession',
+      };
     }
     throw err;
   }

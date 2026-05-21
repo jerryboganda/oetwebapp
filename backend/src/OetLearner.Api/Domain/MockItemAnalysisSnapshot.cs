@@ -52,4 +52,29 @@ public class MockItemAnalysisSnapshot
     public string? Flag { get; set; }
 
     public DateTimeOffset GeneratedAt { get; set; }
+
+    /// <summary>
+    /// Mocks Module Phase 6 — item retire timestamp set by
+    /// <c>PATCH /v1/admin/mocks/items/{itemId}</c>. When non-null the row
+    /// represents a withdrawn item that must be excluded from new mock
+    /// attempts and surfaced as a tombstone in admin dashboards. Retire is a
+    /// soft action: the snapshot row is preserved so historical analytics
+    /// remain reproducible.
+    /// </summary>
+    public DateTimeOffset? RetiredAt { get; set; }
+
+    /// <summary>
+    /// Mocks Module Phase 6 — free-text rationale captured at retire time
+    /// (e.g. "ambiguous distractor", "image rights expired"). Persisted only
+    /// when supplied by the admin; null for legacy rows.
+    /// </summary>
+    [MaxLength(512)]
+    public string? RetiredReason { get; set; }
+
+    /// <summary>
+    /// Mocks Module Phase 6 — admin user id (sub claim) that triggered the
+    /// retire transition. Mirrors the audit trail row written alongside.
+    /// </summary>
+    [MaxLength(64)]
+    public string? RetiredByAdminId { get; set; }
 }

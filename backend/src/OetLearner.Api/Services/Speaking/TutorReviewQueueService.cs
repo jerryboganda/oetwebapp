@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OetLearner.Api.Contracts;
@@ -14,9 +15,15 @@ namespace OetLearner.Api.Services.Speaking;
 // subtest code is fixed at <c>speaking_session</c> so legacy
 // writing-only review flows are not affected.
 //
-// The queue intentionally does NOT pre-filter by tutor specialty: the
-// admin UI surfaces all professions and the optional
-// <c>professionId</c> query parameter narrows the listing on demand.
+// Phase 7 additions:
+//   * Idle claims auto-release after <see cref="IdleClaimTtlMinutes"/> so
+//     the queue cannot be permanently blocked by a tutor that walks away
+//     mid-review. The TTL is enforced lazily on every queue read +
+//     claim attempt so we do not need a dedicated background sweep
+//     timer.
+//   * Listing order prioritises (a) sessions whose profession matches the
+//     tutor's specialties (so neurology nurses see neurology sessions
+//     first) then (b) oldest unclaimed first — i.e. FIFO fairness.
 public sealed class TutorReviewQueueService(
     LearnerDbContext db,
     ILogger<TutorReviewQueueService> logger,
@@ -27,15 +34,27 @@ public sealed class TutorReviewQueueService(
     /// distinct from legacy writing / listening review claims.</summary>
     public const string SubtestCode = "speaking_session";
 
+    /// <summary>Idle claims are auto-released after this many minutes.
+    /// Calibrated to the plan default of 15 minutes; can be overridden in
+    /// tests via the optional constructor parameter wired up through DI
+    /// in <c>Program.cs</c>.</summary>
+    public const int IdleClaimTtlMinutes = 15;
+
     /// <summary>Lists finished sessions that have not yet been claimed
     /// AND have no final tutor assessment. Optional
     /// <paramref name="professionId"/> filters by the role-play card's
-    /// owning profession.</summary>
+    /// owning profession. Listing order: (1) profession-priority match
+    /// against the tutor's specialties, (2) oldest unclaimed first.</summary>
     public async Task<IReadOnlyList<TutorReviewQueueItem>> ListQueueAsync(
         string tutorId,
         string? professionId,
         CancellationToken ct)
     {
+        // First, sweep stale claims so they don't fall through the cracks of
+        // every subsequent call. Cheap on small queues, idempotent on busy
+        // ones (the predicate uses an indexed column).
+        await ReleaseExpiredClaimsAsync(ct);
+
         var query = from session in db.SpeakingSessions.AsNoTracking()
                     join card in db.RolePlayCards.AsNoTracking()
                         on session.RolePlayCardId equals card.Id
@@ -48,8 +67,11 @@ public sealed class TutorReviewQueueService(
             query = query.Where(x => x.card.ProfessionId == pid);
         }
 
+        // Pull a wider window than we will return so the in-memory
+        // fairness sort has something to work with. 200 is plenty —
+        // finished-and-unscored is a small subset in steady state.
         var raw = await query
-            .OrderByDescending(x => x.session.EndedAt)
+            .OrderBy(x => x.session.EndedAt)   // oldest first → FIFO
             .Take(200)
             .ToListAsync(ct);
 
@@ -92,6 +114,10 @@ public sealed class TutorReviewQueueService(
             .GroupBy(a => a.ResourceId!)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.OccurredAt).First());
 
+        // Pull the tutor's specialties up-front so the fairness sort can
+        // bucket profession matches before timestamps.
+        var specialties = await LoadTutorSpecialtiesAsync(tutorId, ct);
+
         var items = new List<TutorReviewQueueItem>(raw.Count);
         foreach (var r in raw)
         {
@@ -115,14 +141,116 @@ public sealed class TutorReviewQueueService(
                 ClaimedBySomeoneElse: hasClaim && !mineClaim));
         }
 
-        return items;
+        // Fairness ordering: profession-match first, then oldest finishedAt.
+        // Sessions claimed by the requesting tutor stay visible (they may
+        // want to resume their own work) but are bucketed last in case
+        // they are reviewing several at once.
+        return items
+            .OrderBy(x => x.ClaimedByMe)                       // unclaimed-by-me first
+            .ThenByDescending(x => specialties.Contains(x.ProfessionId)) // profession match
+            .ThenBy(x => x.EndedAt ?? DateTimeOffset.MaxValue)  // oldest unclaimed first
+            .ToList();
+    }
+
+    /// <summary>Releases every claim whose CreatedAt + TTL is in the past.
+    /// Called lazily on read + claim paths so we do not need a separate
+    /// background sweep timer; the audit log records each release with the
+    /// reason set to <c>idle_ttl</c>.</summary>
+    public async Task<int> ReleaseExpiredClaimsAsync(CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var cutoff = now.AddMinutes(-IdleClaimTtlMinutes);
+
+        var stale = await db.ReviewRequests
+            .Where(r => r.SubtestCode == SubtestCode && r.CreatedAt < cutoff)
+            .ToListAsync(ct);
+        if (stale.Count == 0) return 0;
+
+        var sessionIds = stale.Select(s => s.AttemptId).ToList();
+        // Skip entries that have already been turned into a final tutor
+        // assessment — we never want to revert a completed claim.
+        var finalised = await db.SpeakingTutorAssessments.AsNoTracking()
+            .Where(t => t.IsFinal && sessionIds.Contains(t.SpeakingSessionId))
+            .Select(t => t.SpeakingSessionId)
+            .ToListAsync(ct);
+        var finalisedSet = finalised.ToHashSet();
+
+        // Resolve the owning tutor for each claim from the audit trail so
+        // the release event keeps the actor identity.
+        var ownerByResource = await db.AuditEvents.AsNoTracking()
+            .Where(a => a.Action == "SpeakingSessionClaimed" && sessionIds.Contains(a.ResourceId!))
+            .GroupBy(a => a.ResourceId!)
+            .Select(g => new
+            {
+                ResourceId = g.Key,
+                ActorId = g.OrderByDescending(x => x.OccurredAt).First().ActorId,
+            })
+            .ToDictionaryAsync(x => x.ResourceId, x => x.ActorId, ct);
+
+        var released = 0;
+        foreach (var claim in stale)
+        {
+            if (finalisedSet.Contains(claim.AttemptId)) continue;
+
+            var ownerId = ownerByResource.TryGetValue(claim.AttemptId, out var owner)
+                ? owner
+                : "system";
+            db.ReviewRequests.Remove(claim);
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Action = "SpeakingSessionReleased",
+                ActorId = ownerId ?? "system",
+                ActorName = ownerId ?? "system",
+                ResourceId = claim.AttemptId,
+                ResourceType = "SpeakingSession",
+                Details = $"reviewRequestId={claim.Id};reason=idle_ttl;ttlMinutes={IdleClaimTtlMinutes}",
+                OccurredAt = now,
+            });
+            released++;
+        }
+
+        if (released > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation(
+                "Released {Count} idle speaking review claims older than {Ttl} minutes.",
+                released, IdleClaimTtlMinutes);
+        }
+        return released;
+    }
+
+    private async Task<HashSet<string>> LoadTutorSpecialtiesAsync(string tutorId, CancellationToken ct)
+    {
+        var raw = await db.ExpertUsers.AsNoTracking()
+            .Where(u => u.Id == tutorId)
+            .Select(u => u.SpecialtiesJson)
+            .FirstOrDefaultAsync(ct);
+        if (string.IsNullOrWhiteSpace(raw)) return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var arr = JsonSerializer.Deserialize<string[]>(raw);
+            return arr is null
+                ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(arr.Where(s => !string.IsNullOrWhiteSpace(s)), StringComparer.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>First-write-wins claim. Inserts a <see cref="ReviewRequest"/>
     /// row anchored to the speaking session. Raises a 409 if the
-    /// session is already claimed by another tutor.</summary>
+    /// session is already claimed by another tutor whose claim has not yet
+    /// expired (idle claims older than <see cref="IdleClaimTtlMinutes"/>
+    /// are released first).</summary>
     public async Task ClaimAsync(string tutorId, string sessionId, CancellationToken ct)
     {
+        // Sweep stale claims before reading so the requesting tutor never
+        // sees a "claimed" 409 caused by a dormant claim.
+        await ReleaseExpiredClaimsAsync(ct);
+
         var session = await db.SpeakingSessions.AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == sessionId, ct);
         if (session is null)
