@@ -170,7 +170,7 @@ export function LearnerSpeakingAnalyticsDashboard({
 
   if (error) {
     return (
-      <InlineAlert tone="error" title="Could not load analytics">
+      <InlineAlert variant="error" title="Could not load analytics">
         {error}
       </InlineAlert>
     );
@@ -207,7 +207,7 @@ export function LearnerSpeakingAnalyticsDashboard({
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:items-end">
-            <Badge variant={readinessTone === 'success' ? 'success' : readinessTone === 'danger' ? 'danger' : 'neutral'}>
+            <Badge variant={readinessTone === 'success' ? 'success' : readinessTone === 'danger' ? 'danger' : 'muted'}>
               {readinessLabel}
             </Badge>
             <p className="text-sm text-muted">
@@ -337,7 +337,10 @@ export function LearnerSpeakingAnalyticsDashboard({
                   stroke="hsl(var(--muted))"
                 />
                 <Tooltip
-                  formatter={(value: number) => [value.toFixed(2), 'Normalised score']}
+                  formatter={(value: number | string) => [
+                    typeof value === 'number' ? value.toFixed(2) : String(value ?? ''),
+                    'Normalised score',
+                  ]}
                   contentStyle={{
                     background: 'var(--surface)',
                     border: '1px solid hsl(var(--border))',

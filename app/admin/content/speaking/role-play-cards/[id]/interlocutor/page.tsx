@@ -35,7 +35,7 @@ type ToastState = { variant: 'success' | 'error'; message: string } | null;
 export default function EditInterlocutorScriptPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const cardId = params.id;
+  const cardId = params?.id;
 
   const [card, setCard] = useState<RolePlayCardDetail | null>(null);
   const [script, setScript] = useState<InterlocutorScriptDetail | null>(null);

@@ -37,7 +37,7 @@ type Mode = 'learner' | 'tutor';
 export default function PreviewSpeakingRolePlayCardPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const cardId = params.id;
+  const cardId = params?.id;
 
   const [mode, setMode] = useState<Mode>('learner');
   const [card, setCard] = useState<RolePlayCardDetail | null>(null);

@@ -262,6 +262,10 @@ const TRACKED_EVENTS = [
   'escalation_submitted',
   // Achievements extended
   'streak_freeze_used',
+  // Expert review extras
+  'speaking_voice_note_added',
+  'speaking_voice_note_deleted',
+  'writing_ai_pre_fill_applied',
   // Generic page view
   'page_viewed',
 ] as const;

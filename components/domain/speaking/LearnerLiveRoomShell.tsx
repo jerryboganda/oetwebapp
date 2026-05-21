@@ -143,7 +143,6 @@ export function LearnerLiveRoomShell({
         {/* Large tile — tutor */}
         <div className="absolute inset-0 flex items-center justify-center">
           {remoteCamera ? (
-            // @ts-expect-error — dynamic import type narrowing
             <VideoTrack trackRef={remoteCamera} className="h-full w-full object-cover" />
           ) : (
             <div className="text-sm text-slate-400">Waiting for your tutor to join…</div>
@@ -153,7 +152,6 @@ export function LearnerLiveRoomShell({
         {/* Small tile — self-view (muted) */}
         <div className="absolute bottom-4 right-4 h-32 w-44 overflow-hidden rounded-xl border border-white/20 bg-slate-900 shadow-lg sm:h-40 sm:w-56">
           {localCamera ? (
-            // @ts-expect-error — dynamic import type narrowing
             <VideoTrack trackRef={localCamera} className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full items-center justify-center text-xs text-slate-500">
@@ -208,7 +206,6 @@ export function LearnerLiveRoomShell({
 
   return (
     <div className={cn('relative h-full min-h-[480px] w-full', className)}>
-      {/* @ts-expect-error — dynamic import type narrowing */}
       <LiveKitRoom
         token={token}
         serverUrl={livekitWssUrl}
@@ -220,7 +217,6 @@ export function LearnerLiveRoomShell({
         className="h-full w-full"
       >
         <RoomInterior />
-        {/* @ts-expect-error — dynamic import type narrowing */}
         <RoomAudioRenderer />
       </LiveKitRoom>
     </div>

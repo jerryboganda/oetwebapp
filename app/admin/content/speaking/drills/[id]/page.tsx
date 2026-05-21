@@ -164,13 +164,8 @@ export default function AdminSpeakingDrillEditPage() {
                 onChange={(e) =>
                   setEdit({ ...edit, drillKind: e.target.value as SpeakingDrillKind })
                 }
-              >
-                {SPEAKING_DRILL_KINDS.map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
-                ))}
-              </Select>
+                options={SPEAKING_DRILL_KINDS.map((k) => ({ value: k, label: k }))}
+              />
               <Input
                 placeholder="Profession id (optional)"
                 value={edit.professionId ?? ''}

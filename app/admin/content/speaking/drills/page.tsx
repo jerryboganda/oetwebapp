@@ -155,21 +155,25 @@ export default function AdminSpeakingDrillsPage() {
         <Card className="space-y-4 p-4">
           <h2 className="font-semibold text-slate-900">Filters</h2>
           <div className="grid gap-3 sm:grid-cols-3">
-            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="inreview">In review</option>
-              <option value="published">Published</option>
-              <option value="archived">Archived</option>
-            </Select>
-            <Select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
-              <option value="">All kinds</option>
-              {SPEAKING_DRILL_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </Select>
+            <Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              options={[
+                { value: '', label: 'All statuses' },
+                { value: 'draft', label: 'Draft' },
+                { value: 'inreview', label: 'In review' },
+                { value: 'published', label: 'Published' },
+                { value: 'archived', label: 'Archived' },
+              ]}
+            />
+            <Select
+              value={kindFilter}
+              onChange={(e) => setKindFilter(e.target.value)}
+              options={[
+                { value: '', label: 'All kinds' },
+                ...SPEAKING_DRILL_KINDS.map((k) => ({ value: k, label: k })),
+              ]}
+            />
             <Button variant="outline" onClick={reload} disabled={loading}>
               Refresh
             </Button>
@@ -192,13 +196,8 @@ export default function AdminSpeakingDrillsPage() {
               onChange={(e) =>
                 setDraft({ ...draft, drillKind: e.target.value as SpeakingDrillKind })
               }
-            >
-              {SPEAKING_DRILL_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </Select>
+              options={SPEAKING_DRILL_KINDS.map((k) => ({ value: k, label: k }))}
+            />
             <Input
               placeholder="Profession id (optional)"
               value={draft.professionId ?? ''}

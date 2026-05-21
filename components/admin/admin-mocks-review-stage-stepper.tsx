@@ -195,9 +195,9 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
                     {isComplete ? <Check className="h-3 w-3" aria-hidden /> : idx + 1}
                   </span>
                   {STAGE_LABELS[stage]}
-                  {entry?.reviewedAt ? (
+                  {entry?.resolvedAt ? (
                     <span className="ml-1 text-[10px] opacity-80">
-                      {new Date(entry.reviewedAt).toLocaleDateString()}
+                      {new Date(entry.resolvedAt).toLocaleDateString()}
                     </span>
                   ) : null}
                 </div>
@@ -256,11 +256,11 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
         <h3 className="inline-flex items-center gap-2 text-sm font-bold text-navy">
           <History className="h-4 w-4" /> Stage history
         </h3>
-        {(summary?.stages ?? []).length === 0 ? (
+        {(summary?.transitions ?? []).length === 0 ? (
           <p className="text-sm text-muted">No review activity recorded yet.</p>
         ) : (
           <ul className="space-y-2">
-            {(summary?.stages ?? []).map((entry, idx) => (
+            {(summary?.transitions ?? []).map((entry, idx) => (
               <StageHistoryRow
                 key={`${entry.stage}-${idx}`}
                 entry={entry}

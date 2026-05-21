@@ -41,7 +41,7 @@ interface DraftSeed {
 export default function AdminSpeakingDrillAiDraftPage() {
   const router = useRouter();
   const [seed, setSeed] = useState<DraftSeed>({
-    drillKind: 'fluency_relay',
+    drillKind: 'Fluency',
     professionId: '',
     weakCriterion: 'fluency',
   });
@@ -94,13 +94,8 @@ export default function AdminSpeakingDrillAiDraftPage() {
             <Select
               value={seed.drillKind}
               onChange={(e) => setSeed({ ...seed, drillKind: e.target.value as SpeakingDrillKind })}
-            >
-              {SPEAKING_DRILL_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </Select>
+              options={SPEAKING_DRILL_KINDS.map((k) => ({ value: k, label: k }))}
+            />
             <Input
               placeholder="Profession id (e.g. nursing)"
               value={seed.professionId}

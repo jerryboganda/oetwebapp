@@ -126,7 +126,6 @@ export function LiveTutorRoomShell({
       <div className="relative h-full w-full overflow-hidden rounded-2xl bg-slate-950">
         <div className="absolute inset-0 flex items-center justify-center">
           {remoteCamera ? (
-            // @ts-expect-error — dynamic import type narrowing
             <VideoTrack trackRef={remoteCamera} className="h-full w-full object-cover" />
           ) : (
             <div className="text-sm text-slate-400">Waiting for the candidate to join…</div>
@@ -135,7 +134,6 @@ export function LiveTutorRoomShell({
 
         <div className="absolute bottom-4 right-4 h-32 w-44 overflow-hidden rounded-xl border border-white/20 bg-slate-900 shadow-lg sm:h-40 sm:w-56">
           {localCamera ? (
-            // @ts-expect-error — dynamic import type narrowing
             <VideoTrack trackRef={localCamera} className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full items-center justify-center text-xs text-slate-500">
@@ -183,7 +181,6 @@ export function LiveTutorRoomShell({
   return (
     <div className={cn('grid gap-4 lg:grid-cols-[1fr_minmax(280px,420px)]', className)}>
       <div className="relative h-full min-h-[480px] w-full">
-        {/* @ts-expect-error — dynamic import type narrowing */}
         <LiveKitRoom
           token={token}
           serverUrl={livekitWssUrl}
