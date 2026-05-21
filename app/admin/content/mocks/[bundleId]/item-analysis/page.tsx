@@ -80,7 +80,7 @@ export default function MockBundleItemAnalysisPage() {
           description="Per-item difficulty and distractor diagnostics aggregated from submitted attempts."
           actions={
             <div className="flex items-center gap-2">
-              <Link href="/admin/content/mocks" className="inline-flex items-center gap-1 text-sm text-muted hover:text-primary">
+              <Link href="/admin/content/mocks" className="inline-flex items-center gap-1 text-sm text-admin-text-muted hover:text-primary">
                 <ArrowLeft className="h-3.5 w-3.5" /> Back
               </Link>
               <Button
@@ -153,9 +153,9 @@ export default function MockBundleItemAnalysisPage() {
                         {row.flag === 'too_easy' ? <Badge variant="warning">Too easy</Badge>
                           : row.flag === 'too_hard' ? <Badge variant="danger">Too hard</Badge>
                           : row.flag === 'tempting_distractor' ? <Badge variant="warning">Tempting distractor</Badge>
-                          : <span className="text-muted">—</span>}
+                          : <span className="text-admin-text-muted">—</span>}
                       </td>
-                      <td className="px-3 py-2 text-xs text-muted">
+                      <td className="px-3 py-2 text-xs text-admin-text-muted">
                         {distractors.length === 0 ? '—' : distractors.map(([k, v]) => `${k}: ${v}`).join(' · ')}
                       </td>
                     </tr>
@@ -167,7 +167,7 @@ export default function MockBundleItemAnalysisPage() {
         )}
 
         {data?.generatedAt ? (
-          <p className="mt-3 text-xs text-muted">Last computed {new Date(data.generatedAt).toLocaleString()}.</p>
+          <p className="mt-3 text-xs text-admin-text-muted">Last computed {new Date(data.generatedAt).toLocaleString()}.</p>
         ) : null}
       </AdminRoutePanel>
     </AdminRouteWorkspace>

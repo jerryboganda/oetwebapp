@@ -112,7 +112,7 @@ export default function AdminContentImportPage() {
               <RefreshCw className="w-4 h-4 mr-1" /> Refresh
             </Button>
           </div>
-          <span className="text-xs text-muted">{total} item{total !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-admin-text-muted">{total} item{total !== 1 ? 's' : ''}</span>
         </div>
 
         {importResult && (
@@ -137,7 +137,7 @@ export default function AdminContentImportPage() {
 
         <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load inventory.">
           {pageStatus === 'empty' ? (
-            <EmptyState icon={<Package className="w-8 h-8 text-muted" />} title="No content items yet" description="Import content using the button above." />
+            <EmptyState icon={<Package className="w-8 h-8 text-admin-text-muted" />} title="No content items yet" description="Import content using the button above." />
           ) : (
             <DataTable columns={columns} data={items} keyExtractor={(r) => r.id} onRowClick={(r) => window.open(`/admin/content?id=${r.id}`, '_self')} />
           )}

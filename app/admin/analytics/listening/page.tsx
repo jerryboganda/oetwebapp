@@ -162,13 +162,13 @@ export default function ListeningAnalyticsPage() {
 
       {status === 'error' ? (
         <AdminRoutePanel title="Listening analytics unavailable">
-          <p className="text-sm text-muted">The analytics service could not be loaded. Try again after the API is available.</p>
+          <p className="text-sm text-admin-text-muted">The analytics service could not be loaded. Try again after the API is available.</p>
         </AdminRoutePanel>
       ) : null}
 
       {status === 'empty' ? (
         <AdminRoutePanel title="No Listening submissions yet">
-          <p className="text-sm text-muted">Once learners submit Listening attempts, this dashboard will populate.</p>
+          <p className="text-sm text-admin-text-muted">Once learners submit Listening attempts, this dashboard will populate.</p>
         </AdminRoutePanel>
       ) : null}
 
@@ -210,11 +210,11 @@ export default function ListeningAnalyticsPage() {
                 {(['A', 'B', 'C'] as const).map((p) => (
                   <div key={p} className="grid grid-cols-[6rem_minmax(0,1fr)_5rem] items-center gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-navy">Part {p}</p>
-                      <p className="text-xs text-muted">{p === 'A' ? '24 gap-fill' : p === 'B' ? '6 MCQs' : '12 MCQs'}</p>
+                      <p className="text-sm font-semibold text-admin-text">Part {p}</p>
+                      <p className="text-xs text-admin-text-muted">{p === 'A' ? '24 gap-fill' : p === 'B' ? '6 MCQs' : '12 MCQs'}</p>
                     </div>
                     <AccuracyBar value={partAccuracyMap[p]} />
-                    <p className="text-right text-sm font-semibold text-navy">{formatPercent(partAccuracyMap[p])}</p>
+                    <p className="text-right text-sm font-semibold text-admin-text">{formatPercent(partAccuracyMap[p])}</p>
                   </div>
                 ))}
               </div>
@@ -224,7 +224,7 @@ export default function ListeningAnalyticsPage() {
           <MotionSection delayIndex={2}>
             <AdminRoutePanel title="Hardest questions">
               {analytics.hardestQuestions.length === 0 ? (
-                <p className="text-sm text-muted">Not enough attempts yet — at least 3 attempts are required for an item to qualify.</p>
+                <p className="text-sm text-admin-text-muted">Not enough attempts yet — at least 3 attempts are required for an item to qualify.</p>
               ) : (
                 <div className="space-y-2">
                   {analytics.hardestQuestions.map((q) => (
@@ -255,7 +255,7 @@ export default function ListeningAnalyticsPage() {
           <MotionSection delayIndex={3}>
             <AdminRoutePanel title="MCQ distractor heat (top 10 noisiest items)">
               {analytics.distractorHeat.length === 0 ? (
-                <p className="text-sm text-muted">No MCQ distractor noise detected in this window.</p>
+                <p className="text-sm text-admin-text-muted">No MCQ distractor noise detected in this window.</p>
               ) : (
                 <div className="space-y-2">
                   {analytics.distractorHeat.map((d) => (
@@ -285,7 +285,7 @@ export default function ListeningAnalyticsPage() {
           <MotionSection delayIndex={4}>
             <AdminRoutePanel title="Common misspellings (Part A short-answer)">
               {analytics.commonMisspellings.length === 0 ? (
-                <p className="text-sm text-muted">
+                <p className="text-sm text-admin-text-muted">
                   <AlertTriangle className="mr-1 inline h-4 w-4" /> No spelling-near-miss patterns detected in the window.
                 </p>
               ) : (
@@ -308,7 +308,7 @@ export default function ListeningAnalyticsPage() {
 
       <MotionSection delayIndex={5}>
         <AdminRoutePanel title="Audit export">
-          <p className="text-sm text-muted">
+          <p className="text-sm text-admin-text-muted">
             Download the full normalized + legacy JSON for a single Listening attempt. The export is recorded as an audit event.
           </p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">

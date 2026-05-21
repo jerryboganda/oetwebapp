@@ -25,8 +25,15 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 }
 
 const variantStyles: Record<string, string> = {
-  primary: 'bg-primary text-white hover:bg-primary/90 shadow-sm',
-  secondary: 'bg-navy text-white hover:bg-navy/90 shadow-sm',
+  // Dark-mode `--color-primary` is lightened (#a78bfa) for accent text/icons,
+  // but `text-white` on top of that lighter fill only reaches ~2.88:1 (WCAG
+  // AA fail). Pin the dark-mode button background to violet-700 so contrast
+  // with white stays at ~7.3:1.
+  primary: 'bg-primary text-white hover:bg-primary/90 shadow-sm dark:bg-violet-700 dark:hover:bg-violet-600',
+  // Dark-mode `--color-navy` inverts to #e5eef9 (near-white). `text-white`
+  // on top of that is ~1.06:1 — effectively invisible. Force a dark
+  // foreground in dark mode so the button reaches ~13:1.
+  secondary: 'bg-navy text-white hover:bg-navy/90 shadow-sm dark:text-slate-900',
   ghost: 'text-navy hover:bg-lavender/40 dark:hover:bg-white/5',
   destructive: 'bg-danger text-white hover:bg-danger/90 shadow-sm',
   outline: 'border border-border text-navy hover:bg-surface hover:border-border-hover',

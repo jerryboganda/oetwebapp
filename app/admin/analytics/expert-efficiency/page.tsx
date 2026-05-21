@@ -109,7 +109,7 @@ export default function ExpertEfficiencyPage() {
           </AdminRoutePanel>
         </MotionSection>
       ) : (
-        <AdminRoutePanel><p className="text-center text-sm text-muted">No data available.</p></AdminRoutePanel>
+        <AdminRoutePanel><p className="text-center text-sm text-admin-text-muted">No data available.</p></AdminRoutePanel>
       )}
     </AdminRouteWorkspace>
   );

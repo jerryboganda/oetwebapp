@@ -172,20 +172,20 @@ export default function AdminScoringSystemPage() {
               {jsonError ? (
                 <p className="text-xs text-danger mt-1">{jsonError}</p>
               ) : (
-                <p className="text-xs text-muted mt-1">Used by the dashboard to render per-country passing thresholds.</p>
+                <p className="text-xs text-admin-text-muted mt-1">Used by the dashboard to render per-country passing thresholds.</p>
               )}
             </div>
           </div>
         )}
 
         {current ? (
-          <p className="text-xs text-muted mt-3">
+          <p className="text-xs text-admin-text-muted mt-3">
             Active version <code>{current.id.slice(0, 12)}...</code>
             {' - '}updated {new Date(current.updatedAt).toLocaleString()}
             {current.updatedByUserId ? ` by ${current.updatedByUserId.slice(0, 12)}...` : ''}
           </p>
         ) : (
-          <p className="text-xs text-muted mt-3">No scoring policy has been saved yet - defaults shown above; click Save & Publish to create the first version.</p>
+          <p className="text-xs text-admin-text-muted mt-3">No scoring policy has been saved yet - defaults shown above; click Save & Publish to create the first version.</p>
         )}
       </AdminRoutePanel>
 

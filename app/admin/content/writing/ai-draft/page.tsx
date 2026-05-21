@@ -120,7 +120,7 @@ export default function WritingAiDraftPage() {
       />
 
       <AdminRoutePanel>
-        <p className="text-sm leading-6 text-muted">
+        <p className="text-sm leading-6 text-admin-text-muted">
           This generates a draft Writing task via the grounded AI gateway. Drafts are always stored
           as <strong>draft</strong> — review and edit before publishing. The gateway physically refuses
           ungrounded prompts.

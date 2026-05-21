@@ -210,7 +210,7 @@ export default function EditGrammarLessonPage() {
       />
 
       <AdminRoutePanel title="Publish gate">
-        <p className="text-sm text-muted">
+        <p className="text-sm text-admin-text-muted">
           Publish gate:{' '}
           {publishGate === null
             ? 'checking…'

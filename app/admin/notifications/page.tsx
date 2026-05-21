@@ -855,7 +855,7 @@ export default function AdminNotificationsPage() {
             {health?.failureQueue?.length ? (
               <DataTable columns={failureQueueColumns} data={health.failureQueue} keyExtractor={(row) => `${row.eventId}:${row.channel}:${row.attemptedAt}`} />
             ) : (
-              <p className="text-sm text-muted">No failed or expired deliveries are currently queued for investigation.</p>
+              <p className="text-sm text-admin-text-muted">No failed or expired deliveries are currently queued for investigation.</p>
             )}
           </AdminRoutePanel>
 
@@ -921,7 +921,7 @@ export default function AdminNotificationsPage() {
             {deliveries.length ? (
               <>
                 <DataTable columns={deliveryColumns} data={deliveries} keyExtractor={(row) => row.id} />
-                <div className="flex flex-col gap-3 border-t border-border pt-3 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 border-t border-border pt-3 text-sm text-admin-text-muted sm:flex-row sm:items-center sm:justify-between">
                   <span>Showing {deliveryStartIndex}-{deliveryEndIndex} of {deliveryTotalCount}</span>
                   <div className="flex items-center gap-2">
                     <Button
@@ -934,7 +934,7 @@ export default function AdminNotificationsPage() {
                     >
                       Previous
                     </Button>
-                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Page {deliveryPage} / {deliveryTotalPages}</span>
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Page {deliveryPage} / {deliveryTotalPages}</span>
                     <Button
                       type="button"
                       size="sm"
@@ -949,7 +949,7 @@ export default function AdminNotificationsPage() {
                 </div>
               </>
             ) : (
-              <p className="text-sm text-muted">No delivery attempts have been recorded yet.</p>
+              <p className="text-sm text-admin-text-muted">No delivery attempts have been recorded yet.</p>
             )}
           </AdminRoutePanel>
         </div>
@@ -961,29 +961,29 @@ export default function AdminNotificationsPage() {
                 {
                   key: 'timestamp',
                   header: 'Timestamp',
-                  render: (row) => <span className="text-sm text-muted">{new Date(row.timestamp).toLocaleString()}</span>,
+                  render: (row) => <span className="text-sm text-admin-text-muted">{new Date(row.timestamp).toLocaleString()}</span>,
                 },
                 {
                   key: 'actor',
                   header: 'Actor',
-                  render: (row) => <span className="font-medium text-navy">{row.actor}</span>,
+                  render: (row) => <span className="font-medium text-admin-text">{row.actor}</span>,
                 },
                 {
                   key: 'resource',
                   header: 'Resource',
-                  render: (row) => <span className="font-mono text-xs text-muted">{row.resource}</span>,
+                  render: (row) => <span className="font-mono text-xs text-admin-text-muted">{row.resource}</span>,
                 },
                 {
                   key: 'details',
                   header: 'Details',
-                  render: (row) => <span className="text-sm text-muted">{row.details}</span>,
+                  render: (row) => <span className="text-sm text-admin-text-muted">{row.details}</span>,
                 },
               ]}
               data={auditRows}
               keyExtractor={(row) => row.id}
             />
           ) : (
-            <p className="text-sm text-muted">No notification policy audit rows have been recorded yet.</p>
+            <p className="text-sm text-admin-text-muted">No notification policy audit rows have been recorded yet.</p>
           )}
         </AdminRoutePanel>
       </AsyncStateWrapper>

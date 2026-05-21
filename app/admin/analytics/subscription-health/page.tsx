@@ -85,7 +85,7 @@ export default function SubscriptionHealthPage() {
                   <div key={p.planId} className="flex items-center gap-3">
                     <span className="text-sm font-medium w-32 truncate">{p.planName}</span>
                     <div className="flex-1 h-4 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, data.mrr > 0 ? p.monthlyRevenue / data.mrr * 100 : 0)}%` }} /></div>
-                    <span className="text-sm text-muted w-24 text-right">${p.monthlyRevenue}</span>
+                    <span className="text-sm text-admin-text-muted w-24 text-right">${p.monthlyRevenue}</span>
                     <Badge variant="outline" className="text-[10px]">{p.subscribers} subs</Badge>
                   </div>
                 ))}
@@ -98,7 +98,7 @@ export default function SubscriptionHealthPage() {
               <div className="space-y-2">
                 {data.monthlyTrend.map(m => (
                   <div key={m.month} className="flex items-center gap-3">
-                    <span className="text-xs font-mono w-20 text-muted">{m.month}</span>
+                    <span className="text-xs font-mono w-20 text-admin-text-muted">{m.month}</span>
                     <div className="flex-1 flex gap-1">
                       <div className="h-4 rounded-l-full bg-success" style={{ width: `${m.newSubscriptions * 5}%` }} />
                       <div className="h-4 rounded-r-full bg-danger" style={{ width: `${m.cancellations * 5}%` }} />
@@ -116,7 +116,7 @@ export default function SubscriptionHealthPage() {
           )}
         </MotionSection>
       ) : (
-        <AdminRoutePanel><p className="text-center text-sm text-muted">No data available.</p></AdminRoutePanel>
+        <AdminRoutePanel><p className="text-center text-sm text-admin-text-muted">No data available.</p></AdminRoutePanel>
       )}
     </AdminRouteWorkspace>
   );

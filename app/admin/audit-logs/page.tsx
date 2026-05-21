@@ -262,7 +262,7 @@ export default function AuditLogsPage() {
       <AdminRoutePanel title="Audit Stream" description="Search, filter, and inspect individual events without leaving the admin console.">
         <div className="max-w-md">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
             <Input placeholder="Search actions, actors, resources, or details" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
           </div>
         </div>
@@ -272,7 +272,7 @@ export default function AuditLogsPage() {
           onRetry={() => window.location.reload()}
           emptyContent={
             <EmptyState
-              icon={<FileText className="h-10 w-10 text-muted" />}
+              icon={<FileText className="h-10 w-10 text-admin-text-muted" />}
               title="No audit events found"
               description="Adjust the search or filters, or wait for more operational activity to be recorded."
             />

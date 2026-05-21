@@ -1201,9 +1201,9 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<UsersPage />);
 
-    expect(await screen.findByRole('main', { name: /user operations/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main', { name: /user management/i })).toBeInTheDocument();
     expect((await screen.findAllByRole('link', { name: /dr sana malik/i })).length).toBeGreaterThan(0);
-    expect(screen.getByRole('heading', { name: /^user operations$/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^user management$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^directory$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /invite user/i })).toBeInTheDocument();
   });

@@ -94,7 +94,7 @@ const adminNavGroups: NavGroup[] = [
   {
     label: 'People & access',
     items: [
-      { href: '/admin/users', label: 'User Operations', icon: <Users className="w-5 h-5" />, matchPrefix: '/admin/users' },
+      { href: '/admin/users', label: 'User Management', icon: <Users className="w-5 h-5" />, matchPrefix: '/admin/users' },
       { href: '/admin/community', label: 'Community', icon: <MessageSquareText className="w-5 h-5" />, matchPrefix: '/admin/community' },
     ],
   },
@@ -314,7 +314,7 @@ function getAdminPageTitle(pathname: string | null) {
   }
 
   if (pathname.startsWith('/admin/users')) {
-    return 'User Operations';
+    return 'User Management';
   }
 
   if (pathname.startsWith('/admin/institutions')) {
@@ -323,7 +323,7 @@ function getAdminPageTitle(pathname: string | null) {
 
   // Legacy routes — kept for redirect stubs only.
   if (pathname.startsWith('/admin/experts') || pathname.startsWith('/admin/permissions') || pathname.startsWith('/admin/roles')) {
-    return 'User Operations';
+    return 'User Management';
   }
 
   if (pathname.startsWith('/admin/billing')) {

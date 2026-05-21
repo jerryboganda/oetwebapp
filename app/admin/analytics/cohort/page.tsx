@@ -70,7 +70,7 @@ export default function CohortAnalysisPage() {
       {loading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : data ? (
         <MotionSection className="space-y-4">
           <AdminRoutePanel>
-            <p className="text-sm text-muted">Total learners: <strong>{data.totalLearners}</strong> • Grouped by: <strong className="capitalize">{data.groupBy}</strong></p>
+            <p className="text-sm text-admin-text-muted">Total learners: <strong>{data.totalLearners}</strong> • Grouped by: <strong className="capitalize">{data.groupBy}</strong></p>
           </AdminRoutePanel>
           {data.cohorts.map(c => (
             <MotionItem key={c.cohortKey}>
@@ -87,7 +87,7 @@ export default function CohortAnalysisPage() {
             </MotionItem>
           ))}
         </MotionSection>
-      ) : <AdminRoutePanel><p className="text-center text-muted">No data available.</p></AdminRoutePanel>}
+      ) : <AdminRoutePanel><p className="text-center text-admin-text-muted">No data available.</p></AdminRoutePanel>}
     </AdminRouteWorkspace>
   );
 }

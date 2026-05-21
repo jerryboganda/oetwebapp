@@ -233,7 +233,7 @@ export default function AdminContentLibraryPage() {
         <AdminRoutePanel title="Filters" description="Filter by subtest, profession, or publication state.">
           <div className="max-w-sm">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
               <Input
                 placeholder="Search title, ID, or author"
                 value={searchQuery}
@@ -263,7 +263,7 @@ export default function AdminContentLibraryPage() {
         >
           {rows.length === 0 ? (
             <EmptyState
-              icon={<Search className="h-10 w-10 text-muted" />}
+              icon={<Search className="h-10 w-10 text-admin-text-muted" />}
               title="No matching content"
               description="Adjust your search or filters to find a content item."
               action={{

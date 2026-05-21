@@ -144,13 +144,23 @@ export default function BusinessIntelligencePage() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
-  const subscription = data?.subscriptionHealth;
-  const cohorts = data?.cohortAnalysis.cohorts ?? [];
-  const contentItems = data?.contentEffectiveness.items ?? [];
-  const experts = data?.expertEfficiency.experts ?? [];
+  const subscription = data?.subscriptionHealth ?? null;
+  const cohortData = data?.cohortAnalysis ?? null;
+  const contentData = data?.contentEffectiveness ?? null;
+  const expertData = data?.expertEfficiency ?? null;
+
+  const cohorts = cohortData?.cohorts ?? [];
+  const contentItems = contentData?.items ?? [];
+  const experts = expertData?.experts ?? [];
   const topCohort = cohorts[0];
   const topContent = contentItems[0];
   const topExpert = experts[0];
+
+  const unavailableSections: string[] = [];
+  if (data && !subscription) unavailableSections.push('Subscription health');
+  if (data && !cohortData) unavailableSections.push('Learner cohorts');
+  if (data && !contentData) unavailableSections.push('Content effectiveness');
+  if (data && !expertData) unavailableSections.push('Tutor efficiency');
 
   const topPlanRevenue = Math.max(1, ...(subscription?.revenueByPlan.map((plan) => plan.monthlyRevenue) ?? []));
   const maxTrendVolume = Math.max(1, ...(subscription?.monthlyTrend.map((point) => point.newSubscriptions + point.cancellations) ?? []));
@@ -172,6 +182,21 @@ export default function BusinessIntelligencePage() {
       >
         {data ? (
           <>
+            {unavailableSections.length > 0 ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-foreground"
+              >
+                <p className="font-semibold text-warning">Some panels are temporarily unavailable</p>
+                <p className="mt-1 text-foreground/80">
+                  {unavailableSections.join(', ')} {unavailableSections.length === 1 ? 'is' : 'are'} offline. The
+                  remaining sections are still live and the page will recover automatically once the backend
+                  responds.
+                </p>
+              </div>
+            ) : null}
+
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <AdminRouteSummaryCard
                 label="Monthly recurring revenue"
@@ -195,8 +220,8 @@ export default function BusinessIntelligencePage() {
               />
               <AdminRouteSummaryCard
                 label="Total learners"
-                value={formatNumber(data.cohortAnalysis.totalLearners)}
-                hint={`Grouped by ${data.cohortAnalysis.groupBy}`}
+                value={formatNumber(cohortData?.totalLearners ?? 0)}
+                hint={`Grouped by ${cohortData?.groupBy ?? 'profession'}`}
                 icon={<Layers3 className="h-5 w-5" />}
               />
               <AdminRouteSummaryCard
@@ -208,8 +233,8 @@ export default function BusinessIntelligencePage() {
               />
               <AdminRouteSummaryCard
                 label="Tutor throughput"
-                value={formatDecimal(data.expertEfficiency.summary.averageReviewsPerExpertPerDay)}
-                hint={`${formatNumber(data.expertEfficiency.summary.activeExperts)} active of ${formatNumber(data.expertEfficiency.summary.totalExperts)} tutors`}
+                value={formatDecimal(expertData?.summary.averageReviewsPerExpertPerDay ?? null)}
+                hint={`${formatNumber(expertData?.summary.activeExperts ?? 0)} active of ${formatNumber(expertData?.summary.totalExperts ?? 0)} tutors`}
                 icon={<Activity className="h-5 w-5" />}
               />
             </div>
@@ -221,16 +246,16 @@ export default function BusinessIntelligencePage() {
               >
                 <div className="grid gap-4 md:grid-cols-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">ARPU</p>
-                    <p className="text-xl font-semibold text-navy">{formatCurrency(subscription?.arpu ?? 0, 2)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">ARPU</p>
+                    <p className="text-xl font-semibold text-admin-text">{formatCurrency(subscription?.arpu ?? 0, 2)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Trial conversion</p>
-                    <p className="text-xl font-semibold text-navy">{formatPercent(subscription?.trialConversionRate ?? 0)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Trial conversion</p>
+                    <p className="text-xl font-semibold text-admin-text">{formatPercent(subscription?.trialConversionRate ?? 0)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">New this month</p>
-                    <p className="text-xl font-semibold text-navy">{formatNumber(subscription?.newSubscriptionsThisMonth ?? 0)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">New this month</p>
+                    <p className="text-xl font-semibold text-admin-text">{formatNumber(subscription?.newSubscriptionsThisMonth ?? 0)}</p>
                   </div>
                 </div>
 
@@ -284,20 +309,20 @@ export default function BusinessIntelligencePage() {
 
               <AdminRoutePanel
                 title="Learner Cohorts"
-                description={`Grouped by ${data.cohortAnalysis.groupBy}. ${formatNumber(data.cohortAnalysis.totalLearners)} learners are in view.`}
+                description={`Grouped by ${cohortData?.groupBy ?? 'profession'}. ${formatNumber(cohortData?.totalLearners ?? 0)} learners are in view.`}
               >
                 <div className="grid gap-3 md:grid-cols-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Top cohort</p>
-                    <p className="text-lg font-semibold text-navy">{topCohort ? topCohort.cohortName : 'No data'}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Top cohort</p>
+                    <p className="text-lg font-semibold text-admin-text">{topCohort ? topCohort.cohortName : 'No data'}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Learners</p>
-                    <p className="text-lg font-semibold text-navy">{topCohort ? formatNumber(topCohort.learnerCount) : '--'}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Learners</p>
+                    <p className="text-lg font-semibold text-admin-text">{topCohort ? formatNumber(topCohort.learnerCount) : '--'}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Avg score</p>
-                    <p className="text-lg font-semibold text-navy">{formatDecimal(topCohort?.averageScore ?? null)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Avg score</p>
+                    <p className="text-lg font-semibold text-admin-text">{formatDecimal(topCohort?.averageScore ?? null)}</p>
                   </div>
                 </div>
 
@@ -330,7 +355,7 @@ export default function BusinessIntelligencePage() {
                       </div>
                     </div>
                   )) : (
-                    <p className="text-sm text-muted">No cohort data is available yet.</p>
+                    <p className="text-sm text-admin-text-muted">No cohort data is available yet.</p>
                   )}
                 </div>
               </AdminRoutePanel>
@@ -343,16 +368,16 @@ export default function BusinessIntelligencePage() {
               >
                 <div className="grid gap-3 md:grid-cols-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Top item</p>
-                    <p className="text-lg font-semibold text-navy">{topContent ? truncate(topContent.title) : 'No data'}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Top item</p>
+                    <p className="text-lg font-semibold text-admin-text">{topContent ? truncate(topContent.title) : 'No data'}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Top score</p>
-                    <p className="text-lg font-semibold text-navy">{formatDecimal(topContent?.effectivenessScore ?? null)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Top score</p>
+                    <p className="text-lg font-semibold text-admin-text">{formatDecimal(topContent?.effectivenessScore ?? null)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Completion</p>
-                    <p className="text-lg font-semibold text-navy">{topContent ? formatPercent(topContent.completionRate) : '--'}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Completion</p>
+                    <p className="text-lg font-semibold text-admin-text">{topContent ? formatPercent(topContent.completionRate) : '--'}</p>
                   </div>
                 </div>
 
@@ -383,37 +408,37 @@ export default function BusinessIntelligencePage() {
                           <p className="text-sm font-semibold text-navy">{formatPercent(item.completionRate)}</p>
                         </div>
                         <div>
-                          <p className="text-xs uppercase tracking-[0.12em] text-muted">Avg score</p>
-                          <p className="text-sm font-semibold text-navy">{formatDecimal(item.averageScore)}</p>
+                          <p className="text-xs uppercase tracking-[0.12em] text-admin-text-muted">Avg score</p>
+                          <p className="text-sm font-semibold text-admin-text">{formatDecimal(item.averageScore)}</p>
                         </div>
                         <div>
-                          <p className="text-xs uppercase tracking-[0.12em] text-muted">Avg time</p>
-                          <p className="text-sm font-semibold text-navy">{formatDurationSeconds(item.avgTimeSeconds)}</p>
+                          <p className="text-xs uppercase tracking-[0.12em] text-admin-text-muted">Avg time</p>
+                          <p className="text-sm font-semibold text-admin-text">{formatDurationSeconds(item.avgTimeSeconds)}</p>
                         </div>
                       </div>
                     </div>
                   )) : (
-                    <p className="text-sm text-muted">No content effectiveness data is available yet.</p>
+                    <p className="text-sm text-admin-text-muted">No content effectiveness data is available yet.</p>
                   )}
                 </div>
               </AdminRoutePanel>
 
               <AdminRoutePanel
                 title="Tutor Efficiency"
-                description={`${formatNumber(data.expertEfficiency.summary.activeExperts)} active of ${formatNumber(data.expertEfficiency.summary.totalExperts)} tutors over the last ${data.expertEfficiency.period} days.`}
+                description={`${formatNumber(expertData?.summary.activeExperts ?? 0)} active of ${formatNumber(expertData?.summary.totalExperts ?? 0)} tutors over the last ${expertData?.period ?? 30} days.`}
               >
                 <div className="grid gap-3 md:grid-cols-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Reviews completed</p>
-                    <p className="text-lg font-semibold text-navy">{formatNumber(data.expertEfficiency.summary.totalReviewsCompleted)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Reviews completed</p>
+                    <p className="text-lg font-semibold text-admin-text">{formatNumber(expertData?.summary.totalReviewsCompleted ?? 0)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Reviews per tutor</p>
-                    <p className="text-lg font-semibold text-navy">{formatDecimal(data.expertEfficiency.summary.averageReviewsPerExpertPerDay)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Reviews per tutor</p>
+                    <p className="text-lg font-semibold text-admin-text">{formatDecimal(expertData?.summary.averageReviewsPerExpertPerDay ?? null)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Top tutor</p>
-                    <p className="text-lg font-semibold text-navy">{topExpert ? truncate(topExpert.expertName) : 'No data'}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Top tutor</p>
+                    <p className="text-lg font-semibold text-admin-text">{topExpert ? truncate(topExpert.expertName) : 'No data'}</p>
                   </div>
                 </div>
 
@@ -450,18 +475,18 @@ export default function BusinessIntelligencePage() {
                             <p className="text-sm font-semibold text-navy">{decimalFormatter.format(expert.reviewsPerDay)}</p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-[0.12em] text-muted">AI align</p>
-                            <p className="text-sm font-semibold text-navy">{formatDecimal(expert.aiAlignmentScore)}</p>
+                            <p className="text-xs uppercase tracking-[0.12em] text-admin-text-muted">AI align</p>
+                            <p className="text-sm font-semibold text-admin-text">{formatDecimal(expert.aiAlignmentScore)}</p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-[0.12em] text-muted">Period</p>
-                            <p className="text-sm font-semibold text-navy">{expert.period} days</p>
+                            <p className="text-xs uppercase tracking-[0.12em] text-admin-text-muted">Period</p>
+                            <p className="text-sm font-semibold text-admin-text">{expert.period} days</p>
                           </div>
                         </div>
                       </div>
                     );
                   }) : (
-                    <p className="text-sm text-muted">No tutor efficiency data is available yet.</p>
+                    <p className="text-sm text-admin-text-muted">No tutor efficiency data is available yet.</p>
                   )}
                 </div>
               </AdminRoutePanel>

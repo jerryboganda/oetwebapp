@@ -175,7 +175,7 @@ export default function AdminLaunchReadinessPage() {
           />
 
           {loading || !settings ? (
-            <p className="text-sm text-muted">Loading launch readiness settings...</p>
+            <p className="text-sm text-admin-text-muted">Loading launch readiness settings...</p>
           ) : (
             <div className="space-y-8">
               <div className="grid gap-3 md:grid-cols-3">

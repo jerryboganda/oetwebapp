@@ -217,7 +217,7 @@ export default function AdminListeningPapersPage() {
             <div className="flex items-end gap-2 md:col-span-2">
               <Link
                 href="/admin/content/papers?subtest=listening"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-primary/90"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600"
               >
                 <Plus className="w-4 h-4 mr-1" /> Create Listening paper
               </Link>
@@ -250,12 +250,12 @@ export default function AdminListeningPapersPage() {
 
       <AdminRoutePanel>
         <details className="group">
-          <summary className="cursor-pointer text-sm font-semibold text-navy">
+          <summary className="cursor-pointer text-sm font-semibold text-admin-text">
             Authoring quick-reference: canonical Listening paper layout
           </summary>
-          <div className="mt-3 space-y-3 text-sm text-muted">
+          <div className="mt-3 space-y-3 text-sm text-admin-text-muted">
             <div>
-              <strong className="text-navy">Canonical structure (42 items total):</strong>
+              <strong className="text-admin-text">Canonical structure (42 items total):</strong>
               <ul className="ml-5 mt-1 list-disc space-y-1">
                 <li><strong>Part A</strong> — 2 patient consultations × 12 short-answer items = <strong>24 items</strong></li>
                 <li><strong>Part B</strong> — 6 short workplace extracts × 1 multiple-choice (3-option) item = <strong>6 items</strong></li>
@@ -263,7 +263,7 @@ export default function AdminListeningPapersPage() {
               </ul>
             </div>
             <div>
-              <strong className="text-navy">Required asset roles (4):</strong>
+              <strong className="text-admin-text">Required asset roles (4):</strong>
               <ul className="ml-5 mt-1 list-disc space-y-1">
                 <li><code>Audio</code> — single combined MP3/WAV for the full paper</li>
                 <li><code>QuestionPaper</code> — learner-facing PDF</li>
@@ -272,7 +272,7 @@ export default function AdminListeningPapersPage() {
               </ul>
             </div>
             <div>
-              <strong className="text-navy">Publish gate checks:</strong>
+              <strong className="text-admin-text">Publish gate checks:</strong>
               <ul className="ml-5 mt-1 list-disc space-y-1">
                 <li>All 4 required asset roles attached as primary</li>
                 <li>Non-empty <code>SourceProvenance</code></li>

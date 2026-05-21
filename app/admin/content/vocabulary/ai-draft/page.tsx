@@ -126,11 +126,11 @@ export default function AdminVocabularyAiDraftPage() {
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Count (1–25)</label>
+                <label className="mb-1 block text-sm font-medium text-admin-text">Count (1–25)</label>
                 <Input aria-label="Draft count" type="number" min={1} max={25} value={count} onChange={(e) => setCount(Math.max(1, Math.min(25, parseInt(e.target.value) || 5)))} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Profession</label>
+                <label className="mb-1 block text-sm font-medium text-admin-text">Profession</label>
                 <select aria-label="Profession" value={professionId} onChange={(e) => setProfessionId(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
                   <option value="">General (medicine)</option>
                   <option value="medicine">Medicine</option>

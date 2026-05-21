@@ -109,7 +109,7 @@ export default function PronunciationAiDraftPage() {
       <AdminRoutePanel title="Parameters">
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-sm text-navy dark:text-white">Target phoneme / IPA</span>
+            <span className="text-sm text-admin-text">Target phoneme / IPA</span>
             <input
               type="text"
               value={phoneme}
@@ -118,7 +118,7 @@ export default function PronunciationAiDraftPage() {
             />
           </label>
           <label className="block">
-            <span className="text-sm text-navy dark:text-white">Focus</span>
+            <span className="text-sm text-admin-text">Focus</span>
             <select
               value={focus}
               onChange={(e) => setFocus(e.target.value)}
@@ -132,7 +132,7 @@ export default function PronunciationAiDraftPage() {
             </select>
           </label>
           <label className="block">
-            <span className="text-sm text-navy dark:text-white">Profession</span>
+            <span className="text-sm text-admin-text">Profession</span>
             <select
               value={profession}
               onChange={(e) => setProfession(e.target.value)}
@@ -148,7 +148,7 @@ export default function PronunciationAiDraftPage() {
             </select>
           </label>
           <label className="block">
-            <span className="text-sm text-navy dark:text-white">Difficulty</span>
+            <span className="text-sm text-admin-text">Difficulty</span>
             <select
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value)}
@@ -160,7 +160,7 @@ export default function PronunciationAiDraftPage() {
             </select>
           </label>
           <label className="block col-span-2">
-            <span className="text-sm text-navy dark:text-white">Primary rule ID (optional, e.g. P01.1)</span>
+            <span className="text-sm text-admin-text">Primary rule ID (optional, e.g. P01.1)</span>
             <input
               type="text"
               value={primaryRuleId}
@@ -169,7 +169,7 @@ export default function PronunciationAiDraftPage() {
             />
           </label>
           <label className="block col-span-2">
-            <span className="text-sm text-navy dark:text-white">Prompt (optional)</span>
+            <span className="text-sm text-admin-text">Prompt (optional)</span>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -203,7 +203,7 @@ export default function PronunciationAiDraftPage() {
             <DraftRow label="Primary rule" value={draft.primaryRuleId ?? '—'} mono />
           </dl>
           <div>
-            <span className="text-xs uppercase tracking-[0.15em] text-muted">Example words</span>
+            <span className="text-xs uppercase tracking-[0.15em] text-admin-text-muted">Example words</span>
             <div className="mt-1 flex flex-wrap gap-1">
               {draft.exampleWords.map((w) => (
                 <span key={w} className="rounded-full bg-background-light px-2 py-0.5 text-xs">{w}</span>
@@ -212,7 +212,7 @@ export default function PronunciationAiDraftPage() {
           </div>
           {draft.minimalPairs.length > 0 && (
             <div>
-              <span className="text-xs uppercase tracking-[0.15em] text-muted">Minimal pairs</span>
+              <span className="text-xs uppercase tracking-[0.15em] text-admin-text-muted">Minimal pairs</span>
               <div className="mt-1 flex flex-wrap gap-1">
                 {draft.minimalPairs.map((p, i) => (
                   <span key={i} className="rounded-full bg-background-light px-2 py-0.5 text-xs">
@@ -223,16 +223,16 @@ export default function PronunciationAiDraftPage() {
             </div>
           )}
           <div>
-            <span className="text-xs uppercase tracking-[0.15em] text-muted">Practice sentences</span>
+            <span className="text-xs uppercase tracking-[0.15em] text-admin-text-muted">Practice sentences</span>
             <ul className="mt-1 space-y-1 text-sm">
               {draft.sentences.map((s, i) => (
-                <li key={i} className="italic text-muted">{s}</li>
+                <li key={i} className="italic text-admin-text-muted">{s}</li>
               ))}
             </ul>
           </div>
           {draft.tipsHtml && (
             <div>
-              <span className="text-xs uppercase tracking-[0.15em] text-muted">Tips</span>
+              <span className="text-xs uppercase tracking-[0.15em] text-admin-text-muted">Tips</span>
               <div className="prose prose-sm mt-1 max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(draft.tipsHtml) }} />
             </div>
           )}
@@ -249,8 +249,8 @@ export default function PronunciationAiDraftPage() {
 function DraftRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-baseline gap-2">
-      <dt className="text-xs uppercase tracking-[0.15em] text-muted w-32 shrink-0">{label}</dt>
-      <dd className={`text-navy dark:text-white ${mono ? 'font-mono text-xs' : ''}`}>{value}</dd>
+      <dt className="text-xs uppercase tracking-[0.15em] text-admin-text-muted w-32 shrink-0">{label}</dt>
+      <dd className={`text-admin-text ${mono ? 'font-mono text-xs' : ''}`}>{value}</dd>
     </div>
   );
 }

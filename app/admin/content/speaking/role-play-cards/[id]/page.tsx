@@ -178,7 +178,7 @@ export default function EditSpeakingRolePlayCardPage() {
                 >
                   {card.status}
                 </Badge>
-                <span className="text-muted">
+                <span className="text-admin-text-muted">
                   Created {new Date(card.createdAt).toLocaleDateString()} - Updated{' '}
                   {new Date(card.updatedAt).toLocaleDateString()}
                   {card.publishedAt

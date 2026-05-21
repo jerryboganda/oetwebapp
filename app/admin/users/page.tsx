@@ -388,13 +388,13 @@ export default function UsersPage() {
   ];
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="User operations">
+    <AdminRouteWorkspace role="main" aria-label="User management">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
       <header className="flex flex-col gap-4 border-b border-border/60 pb-4 md:flex-row md:items-end md:justify-between">
         <div className="space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Admin workspace</p>
-          <h1 className="text-2xl font-semibold text-navy">User Operations</h1>
+          <h1 className="text-2xl font-semibold text-navy">User Management</h1>
           <p className="max-w-2xl text-sm text-muted">
             One hub for every account on the platform — learners, tutors, and admins. Invite, suspend, restore,
             audit, recover access, and manage admin permissions, all backed by the live admin API.
@@ -462,7 +462,7 @@ export default function UsersPage() {
           <AdminRoutePanel title="Directory" description={`Showing ${users.length} of ${total.toLocaleString()} accounts (page ${page} of ${totalPages}). Filter by status, or free-text search across name, email, and ID.`}>
             <div className="max-w-sm">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
                 <Input placeholder="Search by name, email, or ID" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
               </div>
             </div>
@@ -699,7 +699,7 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
                 <Link href={`/admin/users/${admin.id}`} className="text-sm font-medium text-primary hover:underline">
                   {admin.name}
                 </Link>
-                <p className="text-xs text-muted">{admin.email}</p>
+                <p className="text-xs text-admin-text-muted">{admin.email}</p>
               </div>
               <Button size="sm" variant="outline" onClick={() => openPermissions(admin)} className="gap-1.5">
                 <KeyRound className="h-3.5 w-3.5" />
@@ -708,7 +708,7 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
             </div>
           ))}
           {filtered.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted">No admins match your search.</p>
+            <p className="py-6 text-center text-sm text-admin-text-muted">No admins match your search.</p>
           ) : null}
         </div>
       </AdminRoutePanel>

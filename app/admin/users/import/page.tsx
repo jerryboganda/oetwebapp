@@ -166,8 +166,8 @@ export default function BulkImportUsersPage() {
               </div>
             ) : (
               <div className="mt-3">
-                <p className="text-sm font-medium text-navy">Drop your CSV file here</p>
-                <p className="mt-1 text-xs text-muted">or click to browse — max 5 MB, up to 1,000 rows</p>
+                <p className="text-sm font-medium text-admin-text">Drop your CSV file here</p>
+                <p className="mt-1 text-xs text-admin-text-muted">or click to browse — max 5 MB, up to 1,000 rows</p>
               </div>
             )}
           </div>

@@ -367,7 +367,7 @@ export default function AdminVocabularyImportPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <label className="flex min-w-64 flex-col gap-1 text-xs font-medium text-muted">
+              <label className="flex min-w-64 flex-col gap-1 text-xs font-medium text-admin-text-muted">
                 Import batch ID
                 <input
                   value={importBatchId}
@@ -377,7 +377,7 @@ export default function AdminVocabularyImportPage() {
                   className="rounded-lg border border-border bg-background-light px-3 py-2 font-mono text-xs text-navy focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-70"
                 />
               </label>
-              <label className="flex min-w-64 flex-col gap-1 text-xs font-medium text-muted">
+              <label className="flex min-w-64 flex-col gap-1 text-xs font-medium text-admin-text-muted">
                 Source CSV
                 <input
                   ref={fileInput}
@@ -423,7 +423,7 @@ export default function AdminVocabularyImportPage() {
 
             <div className="rounded-2xl border border-border bg-background-light/70 p-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <label className="flex min-w-64 flex-1 flex-col gap-1 text-xs font-medium text-muted">
+                <label className="flex min-w-64 flex-1 flex-col gap-1 text-xs font-medium text-admin-text-muted">
                   Approved manifest CSV
                   <input
                     ref={manifestInput}

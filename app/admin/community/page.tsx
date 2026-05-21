@@ -251,9 +251,9 @@ export default function AdminCommunityPage() {
                         </Badge>
                       )}
                     </div>
-                    <p className="font-medium text-navy">{row.title}</p>
-                    <p className="text-xs text-muted">by {row.authorDisplayName} · {formatDate(row.createdAt)}</p>
-                    <div className="flex items-center gap-3 text-xs text-muted">
+                    <p className="font-medium text-admin-text">{row.title}</p>
+                    <p className="text-xs text-admin-text-muted">by {row.authorDisplayName} · {formatDate(row.createdAt)}</p>
+                    <div className="flex items-center gap-3 text-xs text-admin-text-muted">
                       <span className="flex items-center gap-1"><MessageCircle className="h-3 w-3" /> {row.replyCount}</span>
                       <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {row.viewCount}</span>
                     </div>

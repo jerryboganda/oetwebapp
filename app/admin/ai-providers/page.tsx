@@ -433,7 +433,7 @@ export default function AiProvidersPage() {
         </div>
         <AdminRoutePanel title="Registered providers">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted">Filter by category:</span>
+            <span className="text-xs text-admin-text-muted">Filter by category:</span>
             {(['All', 'TextChat', 'Tts', 'Asr', 'Phoneme', 'Ocr', 'PdfExtraction'] as const).map((cat) => (
               <Button
                 key={cat}

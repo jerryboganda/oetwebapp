@@ -149,7 +149,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
         <span className="font-mono text-xs">
           {r.accountId ? r.accountId.slice(0, 8) : '—'}
           {r.failoverTrace && (
-            <span className="ml-1 text-[10px] text-muted">⤳</span>
+            <span className="ml-1 text-[10px] text-admin-text-muted">⤳</span>
           )}
         </span>
       ),
@@ -162,7 +162,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
       key: 'tr',
       header: 'Trace',
       render: (r) => (
-        <span className="text-xs text-muted truncate max-w-xs block" title={[r.policyTrace, r.failoverTrace].filter(Boolean).join(' | ')}>
+        <span className="text-xs text-admin-text-muted truncate max-w-xs block" title={[r.policyTrace, r.failoverTrace].filter(Boolean).join(' | ')}>
           {r.failoverTrace ?? r.policyTrace ?? ''}
         </span>
       ),
@@ -181,7 +181,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
         (r.failovers ?? 0) > 0 ? (
           <Badge variant="warning">{r.failovers}</Badge>
         ) : (
-          <span className="text-muted">0</span>
+          <span className="text-admin-text-muted">0</span>
         ),
     },
     {
@@ -304,7 +304,7 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
               <Input type="number" label="Hard-kill at %" value={policy.hardKillPct}
                 onChange={(e) => setPolicy({ ...policy, hardKillPct: Number(e.target.value) })} />
             </div>
-            <p className="text-sm text-muted mt-2">
+            <p className="text-sm text-admin-text-muted mt-2">
               Current platform spend: {fmtUsd(policy.currentSpendUsd)} ({policy.monthlyBudgetUsd > 0
                 ? Math.round((policy.currentSpendUsd / policy.monthlyBudgetUsd) * 100)
                 : 0}%).
@@ -312,7 +312,7 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
           </AdminRoutePanel>
 
           <AdminRoutePanel title="Per-feature kill list">
-            <p className="text-sm text-muted mb-2">
+            <p className="text-sm text-admin-text-muted mb-2">
               Comma-separated list of AI feature codes to disable without flipping the global kill-switch.
               Calls to a disabled feature are refused with <code className="font-mono">feature_disabled</code> before any quota / BYOK check.
               Example: <code className="font-mono">conversation.evaluation,speaking.grade</code>.
@@ -353,7 +353,7 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
                   onChange={(e) => setPolicy({ ...policy, byokTransientRetryCount: Number(e.target.value) })}
                 />
               </div>
-              <p className="text-xs text-muted">
+              <p className="text-xs text-admin-text-muted">
                 After {policy.byokErrorCooldownHours || 0}h of auth errors on a user&apos;s BYOK key, the gateway falls back to the platform key.
                 Transient (5xx / timeout) failures retry up to {policy.byokTransientRetryCount || 0}× before giving up.
               </p>

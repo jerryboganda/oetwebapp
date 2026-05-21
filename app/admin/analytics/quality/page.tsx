@@ -236,17 +236,17 @@ export default function QualityAnalyticsPage() {
               <AdminRoutePanel title="Sample Coverage" description="Quality analytics are only as trustworthy as the evidence window behind them.">
                 <div className="grid gap-4 md:grid-cols-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Evaluation Samples</p>
-                    <p className="text-xl font-semibold text-navy">{analytics.freshness.evaluationSampleCount}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Evaluation Samples</p>
+                    <p className="text-xl font-semibold text-admin-text">{analytics.freshness.evaluationSampleCount}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Review Samples</p>
-                    <p className="text-xl font-semibold text-navy">{analytics.freshness.reviewSampleCount}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Review Samples</p>
+                    <p className="text-xl font-semibold text-admin-text">{analytics.freshness.reviewSampleCount}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Applied Filters</p>
-                    <p className="text-sm text-muted">Subtest: {analytics.filters.subtest}</p>
-                    <p className="text-sm text-muted">Profession: {analytics.filters.profession}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Applied Filters</p>
+                    <p className="text-sm text-admin-text-muted">Subtest: {analytics.filters.subtest}</p>
+                    <p className="text-sm text-admin-text-muted">Profession: {analytics.filters.profession}</p>
                   </div>
                 </div>
               </AdminRoutePanel>

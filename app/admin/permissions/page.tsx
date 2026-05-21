@@ -1,21 +1,9 @@
-'use client';
-
 // Legacy Permission Management surface. Consolidated into the unified User
-// Operations hub at /admin/users → "Admins & Permissions" tab.
+// Operations hub at /admin/users → "Admins & Permissions" tab. Server-side
+// redirect avoids any flash of intermediate UI.
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { AdminRouteRedirectNotice } from '@/components/domain/admin-route-surface';
+import { redirect } from 'next/navigation';
 
 export default function PermissionsRedirectPage() {
-  const router = useRouter();
-  useEffect(() => {
-    router.replace('/admin/users?tab=admins');
-  }, [router]);
-  return (
-    <AdminRouteRedirectNotice
-      title="Permissions moved to User Operations"
-      description="Permission management now lives under Admins & Permissions. Redirecting to the unified workspace."
-    />
-  );
+  redirect('/admin/users?tab=admins');
 }

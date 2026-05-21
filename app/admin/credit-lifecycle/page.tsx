@@ -51,12 +51,12 @@ export default function CreditLifecyclePage() {
           <MotionItem>
             <AdminRoutePanel title="Current Policy" description="Active rules governing credit issuance and lifecycle.">
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="text-center"><p className="text-lg font-bold text-navy">{data.policy.expiryEnabled ? `${data.policy.expiryDays}d` : 'Never'}</p><p className="text-xs text-muted">Credit Expiry</p></div>
-                <div className="text-center"><p className="text-lg font-bold text-navy">{data.policy.rolloverEnabled ? `${data.policy.rolloverPercentage}%` : 'No'}</p><p className="text-xs text-muted">Rollover</p></div>
-                <div className="text-center"><Badge variant={data.policy.refundOnFailedReview ? 'default' : 'outline'}>{data.policy.refundOnFailedReview ? 'Yes' : 'No'}</Badge><p className="text-xs text-muted mt-1">Refund on Failed</p></div>
-                <div className="text-center"><Badge variant={data.policy.refundOnCancelledReview ? 'default' : 'outline'}>{data.policy.refundOnCancelledReview ? 'Yes' : 'No'}</Badge><p className="text-xs text-muted mt-1">Refund on Cancel</p></div>
-                <div className="text-center"><Badge variant={data.policy.proRataOnDowngrade ? 'default' : 'outline'}>{data.policy.proRataOnDowngrade ? 'Yes' : 'No'}</Badge><p className="text-xs text-muted mt-1">Pro-rata Downgrade</p></div>
-                <div className="text-center"><p className="text-lg font-bold text-navy">{data.policy.maximumCreditBalance}</p><p className="text-xs text-muted">Max Balance</p></div>
+                <div className="text-center"><p className="text-lg font-bold text-admin-text">{data.policy.expiryEnabled ? `${data.policy.expiryDays}d` : 'Never'}</p><p className="text-xs text-admin-text-muted">Credit Expiry</p></div>
+                <div className="text-center"><p className="text-lg font-bold text-admin-text">{data.policy.rolloverEnabled ? `${data.policy.rolloverPercentage}%` : 'No'}</p><p className="text-xs text-admin-text-muted">Rollover</p></div>
+                <div className="text-center"><Badge variant={data.policy.refundOnFailedReview ? 'default' : 'outline'}>{data.policy.refundOnFailedReview ? 'Yes' : 'No'}</Badge><p className="text-xs text-admin-text-muted mt-1">Refund on Failed</p></div>
+                <div className="text-center"><Badge variant={data.policy.refundOnCancelledReview ? 'default' : 'outline'}>{data.policy.refundOnCancelledReview ? 'Yes' : 'No'}</Badge><p className="text-xs text-admin-text-muted mt-1">Refund on Cancel</p></div>
+                <div className="text-center"><Badge variant={data.policy.proRataOnDowngrade ? 'default' : 'outline'}>{data.policy.proRataOnDowngrade ? 'Yes' : 'No'}</Badge><p className="text-xs text-admin-text-muted mt-1">Pro-rata Downgrade</p></div>
+                <div className="text-center"><p className="text-lg font-bold text-admin-text">{data.policy.maximumCreditBalance}</p><p className="text-xs text-admin-text-muted">Max Balance</p></div>
               </div>
             </AdminRoutePanel>
           </MotionItem>
@@ -69,17 +69,17 @@ export default function CreditLifecyclePage() {
           {data.systemStats.last30DaysTransactions.length > 0 && (
             <AdminRoutePanel title="Last 30 Days by Type">
               <div className="space-y-1">{data.systemStats.last30DaysTransactions.map(t => (
-                <div key={t.type} className="flex items-center justify-between text-sm"><span className="capitalize">{t.type.replace(/_/g, ' ')}</span><span className="text-muted">{t.count} txns • {t.totalAmount} credits</span></div>
+                <div key={t.type} className="flex items-center justify-between text-sm"><span className="capitalize">{t.type.replace(/_/g, ' ')}</span><span className="text-admin-text-muted">{t.count} txns • {t.totalAmount} credits</span></div>
               ))}</div>
             </AdminRoutePanel>
           )}
 
           <AdminRoutePanel title="Policy Notes">
-            {data.notes.map((n, i) => <p key={i} className="text-sm text-muted">• {n}</p>)}
+            {data.notes.map((n, i) => <p key={i} className="text-sm text-admin-text-muted">• {n}</p>)}
           </AdminRoutePanel>
         </MotionSection>
       ) : (
-        <AdminRoutePanel><p className="text-center text-sm text-muted">Unable to load credit lifecycle data.</p></AdminRoutePanel>
+        <AdminRoutePanel><p className="text-center text-sm text-admin-text-muted">Unable to load credit lifecycle data.</p></AdminRoutePanel>
       )}
     </AdminRouteWorkspace>
   );

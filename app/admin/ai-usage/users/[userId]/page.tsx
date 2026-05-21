@@ -199,7 +199,7 @@ export default function AdminUserAiPage({ params }: { params: Promise<{ userId: 
         </AdminRoutePanel>
 
         <AdminRoutePanel title="Quota / policy override">
-          <div className="mb-2 flex items-center gap-2 text-sm text-muted">
+          <div className="mb-2 flex items-center gap-2 text-sm text-admin-text-muted">
             <SlidersHorizontal className="w-4 h-4" />
             {override
               ? <>Override active since {new Date(override.createdAt).toLocaleDateString()}{override.expiresAt ? `, expires ${new Date(override.expiresAt).toLocaleDateString()}` : ''}.</>

@@ -160,7 +160,7 @@ export default function BulkImportPage() {
             disabled={uploading}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void doUpload(f); }}
           />
-          {uploading && <span className="text-sm text-muted flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Staging…</span>}
+          {uploading && <span className="text-sm text-admin-text-muted flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Staging…</span>}
         </div>
       </AdminRoutePanel>
 

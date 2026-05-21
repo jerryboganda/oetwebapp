@@ -106,7 +106,7 @@ export default function AdminSpeakingCalibrationPage() {
       >
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs uppercase tracking-widest text-muted" htmlFor="minSubmissions">
+            <label className="text-xs uppercase tracking-widest text-admin-text-muted" htmlFor="minSubmissions">
               Min submissions
             </label>
             <Input
@@ -123,7 +123,7 @@ export default function AdminSpeakingCalibrationPage() {
             <RefreshCw className="h-3.5 w-3.5" /> Refresh
           </Button>
           {report && (
-            <span className="text-xs text-muted">
+            <span className="text-xs text-admin-text-muted">
               {report.tutors.length} tutors · {report.sampleSize} score rows · {report.samplesPublished} published samples
             </span>
           )}
@@ -142,7 +142,7 @@ export default function AdminSpeakingCalibrationPage() {
             keyExtractor={(row) => row.tutorId}
           />
         ) : (
-          <p className="text-sm text-muted">No tutors meet the minimum submission threshold.</p>
+          <p className="text-sm text-admin-text-muted">No tutors meet the minimum submission threshold.</p>
         )}
       </AdminRoutePanel>
 
@@ -151,7 +151,7 @@ export default function AdminSpeakingCalibrationPage() {
         description="Gold-marked recordings tutors calibrate against."
       >
         {samples.length === 0 ? (
-          <p className="text-sm text-muted">No samples yet — create one in the speaking content workspace.</p>
+          <p className="text-sm text-admin-text-muted">No samples yet — create one in the speaking content workspace.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {samples.map((s) => (

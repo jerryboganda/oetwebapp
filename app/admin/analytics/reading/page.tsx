@@ -181,13 +181,13 @@ export default function ReadingAnalyticsPage() {
 
       {status === 'error' ? (
         <AdminRoutePanel title="Reading analytics unavailable">
-          <p className="text-sm text-muted">The analytics service could not be loaded. Try again after the API is available.</p>
+          <p className="text-sm text-admin-text-muted">The analytics service could not be loaded. Try again after the API is available.</p>
         </AdminRoutePanel>
       ) : null}
 
       {status === 'empty' ? (
         <AdminRoutePanel title="No Reading analytics yet">
-          <p className="text-sm text-muted">Create and publish Reading papers, then learner submissions will populate this dashboard.</p>
+          <p className="text-sm text-admin-text-muted">Create and publish Reading papers, then learner submissions will populate this dashboard.</p>
         </AdminRoutePanel>
       ) : null}
 
@@ -256,7 +256,7 @@ export default function ReadingAnalyticsPage() {
                         </div>
                       </div>
                     </div>
-                  )) : <p className="text-sm text-muted">No submitted question evidence in this window.</p>}
+                  )) : <p className="text-sm text-admin-text-muted">No submitted question evidence in this window.</p>}
                 </div>
               </AdminRoutePanel>
 
@@ -283,7 +283,7 @@ export default function ReadingAnalyticsPage() {
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-border text-sm">
                   <thead>
-                    <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+                    <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">
                       <th className="py-3 pr-4">Paper</th>
                       <th className="px-4 py-3">Shape</th>
                       <th className="px-4 py-3">Attempts</th>
@@ -296,18 +296,18 @@ export default function ReadingAnalyticsPage() {
                     {analytics.papers.map((paper) => (
                       <tr key={paper.paperId}>
                         <td className="py-3 pr-4">
-                          <p className="font-semibold text-navy">{paper.title}</p>
-                          <p className="text-xs text-muted">{paper.status} · {paper.difficulty}</p>
+                          <p className="font-semibold text-admin-text">{paper.title}</p>
+                          <p className="text-xs text-admin-text-muted">{paper.status} · {paper.difficulty}</p>
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={paper.isExamReady ? 'success' : 'warning'} className="text-[10px]">
                             {paper.partACount}+{paper.partBCount}+{paper.partCCount}
                           </Badge>
                         </td>
-                        <td className="px-4 py-3 text-navy">{paper.submittedCount}/{paper.attemptCount}</td>
-                        <td className="px-4 py-3 text-navy">{formatNumber(paper.averageScaledScore)}</td>
-                        <td className="px-4 py-3 text-navy">{formatPercent(paper.passRatePercent)}</td>
-                        <td className="px-4 py-3 text-navy">{formatMinutes(paper.averageCompletionSeconds)}</td>
+                        <td className="px-4 py-3 text-admin-text">{paper.submittedCount}/{paper.attemptCount}</td>
+                        <td className="px-4 py-3 text-admin-text">{formatNumber(paper.averageScaledScore)}</td>
+                        <td className="px-4 py-3 text-admin-text">{formatPercent(paper.passRatePercent)}</td>
+                        <td className="px-4 py-3 text-admin-text">{formatMinutes(paper.averageCompletionSeconds)}</td>
                       </tr>
                     ))}
                   </tbody>

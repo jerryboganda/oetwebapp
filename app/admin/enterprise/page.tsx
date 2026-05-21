@@ -162,7 +162,7 @@ export default function EnterprisePage() {
           icon={<Building2 className="w-5 h-5" />}
         />
         <AdminRoutePanel>
-          <p className="text-sm leading-6 text-muted">
+          <p className="text-sm leading-6 text-admin-text-muted">
             Sponsor finance, learner attribution, reporting, contracts, and privacy evidence are not launch-ready. Backend sponsor and enterprise endpoints are disabled by default with the same feature gate.
           </p>
         </AdminRoutePanel>
