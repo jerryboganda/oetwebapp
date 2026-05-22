@@ -24,6 +24,7 @@ interface DriftData {
     actualCompleted: number;
     totalItems: number;
     shouldRegenerate: boolean;
+    autoRegenQueued?: boolean;
     recommendation: string;
   };
   subtestDrift?: { subtestCode: string; total: number; completed: number; overdue: number; completionRate: number }[];
@@ -92,10 +93,15 @@ export default function StudyPlanDriftPage() {
                       <span className="text-sm">Overdue: <strong>{data.drift.overdueItems}</strong></span>
                       <span className="text-sm">Progress: <strong>{data.drift.actualCompleted}/{data.drift.totalItems}</strong></span>
                     </div>
-                    {data.drift.shouldRegenerate && (
+                    {data.drift.autoRegenQueued && (
+                      <p className="mt-2 text-xs italic">
+                        Auto-recovery already queued — your plan will refresh shortly.
+                      </p>
+                    )}
+                    {data.drift.shouldRegenerate && !data.drift.autoRegenQueued && (
                       <>
                         <Button variant="primary" size="sm" className="mt-3" onClick={handleRegenerate} disabled={regenerating}>
-                          <RefreshCw className={`w-4 h-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} /> {regenerating ? 'Regenerating…' : 'Regenerate Plan'}
+                          <RefreshCw className={`w-4 h-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} /> {regenerating ? 'Regenerating…' : 'Recover my plan'}
                         </Button>
                         {regenError && <p className="mt-2 text-xs text-danger">{regenError}</p>}
                       </>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -77,12 +78,12 @@ export default function StudyPlanPage() {
     loadData();
   }, [loadData]);
 
-  const handleMarkComplete = async (id: string) => {
+  const handleMarkComplete = async (id: string, feedbackRating?: number) => {
     const prev = tasks.find(t => t.id === id);
     setTasks((all) => all.map((t) => (t.id === id ? { ...t, status: 'completed' } : t)));
     try {
-      await updateStudyPlanTask(id, { status: 'completed' });
-      track('plan_item_completed');
+      await updateStudyPlanTask(id, { status: 'completed', feedbackRating });
+      track('plan_item_completed', { feedbackRating });
     } catch {
       // Rollback on failure
       if (prev) setTasks((all) => all.map((t) => (t.id === id ? { ...t, status: prev.status } : t)));
@@ -101,7 +102,10 @@ export default function StudyPlanPage() {
 
   const handleStart = (task: StudyPlanTask) => {
     track('task_started', { subTest: task.subTest, contentId: task.contentId });
-    router.push(`/${task.subTest.toLowerCase()}`);
+    // Honor ContentRoute from backend (deep-link into specific content) when
+    // present; fall back to the subtest landing route otherwise.
+    const target = task.route && task.route.startsWith('/') ? task.route : `/${task.subTest.toLowerCase()}`;
+    router.push(target);
   };
 
   const renderTaskCard = (task: StudyPlanTask) => {
@@ -227,6 +231,13 @@ export default function StudyPlanPage() {
               { icon: Target, label: 'Next checkpoint', value: `${nextCheckpointCount} tasks` },
             ]}
           />
+
+          <Link
+            href="/readiness"
+            className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline"
+          >
+            See how this plan moves your readiness →
+          </Link>
 
           {/* Sections */}
           {SECTIONS.map(({ type, title, icon: SectionIcon, eyebrow, description }) => {
