@@ -9,7 +9,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge, CategoryBadge, DifficultyBadge, SourceBadge, SubtestBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, DifficultyBadge, SourceBadge } from '@/components/ui/badge';
 import {
   fetchVocabularyTerms,
   addToMyVocabulary,

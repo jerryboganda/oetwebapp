@@ -9,7 +9,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge, CategoryBadge, DifficultyBadge, SourceBadge, SubtestBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, DifficultyBadge, SourceBadge } from '@/components/ui/badge';
 import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 import {
   fetchVocabularyTerm,
@@ -298,16 +298,6 @@ export default function VocabularyTermDetailPage() {
               <div className="flex items-center gap-2">Difficulty: <DifficultyBadge difficulty={term.difficulty} size="sm" /></div>
               {provenanceLabel && <div className="flex items-center gap-2">Source: <SourceBadge label={provenanceLabel} size="sm" /></div>}
             </div>
-            {term.oetSubtestTags && term.oetSubtestTags.length > 0 && (
-              <div className="mt-4 border-t border-border pt-3">
-                <div className="mb-2 text-xs font-semibold uppercase text-muted">Subtest relevance</div>
-                <div className="flex flex-wrap gap-2">
-                  {term.oetSubtestTags.map((tag) => (
-                    <SubtestBadge key={tag} tag={tag} size="sm" />
-                  ))}
-                </div>
-              </div>
-            )}
           </Card>
         </div>
       </div>

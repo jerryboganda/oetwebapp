@@ -8,7 +8,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge, CategoryBadge, DifficultyBadge, SourceBadge, SubtestBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, DifficultyBadge, SourceBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import {
@@ -384,13 +384,6 @@ export default function RecallsWordsPage() {
                       {definitionText && <p className="mt-3 text-sm leading-relaxed text-muted">{definitionText}</p>}
                       {term.exampleSentence && (
                         <p className="mt-2 text-xs italic leading-relaxed text-muted/80">{term.exampleSentence}</p>
-                      )}
-                      {term.oetSubtestTags && term.oetSubtestTags.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border/50 pt-3">
-                          {term.oetSubtestTags.map((tag) => (
-                            <SubtestBadge key={tag} tag={tag} size="sm" />
-                          ))}
-                        </div>
                       )}
                     </article>
                   );

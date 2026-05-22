@@ -12,7 +12,7 @@ using OetLearner.Api.Data;
 namespace OetLearner.Api.Data.Migrations
 {
     [DbContext(typeof(LearnerDbContext))]
-    [Migration("20260522220515_ReadingP0Hardening_FksIndexesJsonLimitsAuditCols")]
+    [Migration("20260522221758_ReadingP0Hardening_FksIndexesJsonLimitsAuditCols")]
     partial class ReadingP0Hardening_FksIndexesJsonLimitsAuditCols
     {
         /// <inheritdoc />
@@ -12541,6 +12541,11 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "Status");
 
+                    b.HasIndex("UserId", "PaperId", "Mode", "Status")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ReadingAttempt_UserPaperExam_InProgress")
+                        .HasFilter("\"Mode\" = 0 AND \"Status\" = 0");
+
                     b.HasIndex(new[] { "UserId", "PaperId", "Mode", "Status" }, "IX_ReadingAttempt_User_Paper_Mode_Status");
 
                     b.ToTable("ReadingAttempts");
@@ -18327,6 +18332,17 @@ namespace OetLearner.Api.Data.Migrations
                     b.Navigation("Attempt");
 
                     b.Navigation("Question");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.ReadingPart", b =>
+                {
+                    b.HasOne("OetLearner.Api.Domain.ContentPaper", "Paper")
+                        .WithMany()
+                        .HasForeignKey("PaperId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Paper");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ReadingQuestion", b =>
