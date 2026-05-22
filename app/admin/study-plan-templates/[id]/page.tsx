@@ -686,7 +686,7 @@ export default function StudyPlanTemplateEditorPage() {
       {tab === 'validation' && (
         <div>
           {validation === null ? (
-            <p className="text-gray-600">Click "Validate" above to check the template structure.</p>
+            <p className="text-gray-600">Click &quot;Validate&quot; above to check the template structure.</p>
           ) : validation.isValid ? (
             <div className="bg-green-50 border border-green-200 text-green-800 rounded p-4">
               ✓ Template structure is valid.
@@ -710,7 +710,7 @@ export default function StudyPlanTemplateEditorPage() {
       {tab === 'preview' && (
         <div>
           {preview === null ? (
-            <p className="text-gray-600">Click "Preview" above to dry-run the generator on this template.</p>
+            <p className="text-gray-600">Click &quot;Preview&quot; above to dry-run the generator on this template.</p>
           ) : (
             <div className="space-y-2">
               {preview.days.map((d, idx) => (
