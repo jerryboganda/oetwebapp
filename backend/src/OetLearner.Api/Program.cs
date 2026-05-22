@@ -673,6 +673,8 @@ builder.Services.AddSingleton<
 builder.Services.AddScoped<
     OetLearner.Api.Services.Listening.IListeningTtsService,
     OetLearner.Api.Services.Listening.ListeningTtsService>();
+// Wave 4 deferred — TTS background job worker (polls ListeningTtsJobs table).
+builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningTtsJobWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningCurriculumService, OetLearner.Api.Services.Listening.ListeningCurriculumService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionAi, OetLearner.Api.Services.Listening.GroundedListeningExtractionAi>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionService, OetLearner.Api.Services.Listening.ListeningExtractionService>();
@@ -1036,11 +1038,22 @@ builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiCreditR
 builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiAccountQuotaResetWorker>();
 
 // Content Upload subsystem (Slice 2). IFileStorage sits in front of disk
-// access so future S3/R2 swap is a DI-only change.
+// access. Wave 4: provider is runtime-selected via Storage:Provider.
 builder.Services.AddSingleton<OetLearner.Api.Services.Content.IHtmlSanitizer,
     OetLearner.Api.Services.Content.HtmlSanitizerService>();
-builder.Services.AddSingleton<OetLearner.Api.Services.Content.IFileStorage,
-    OetLearner.Api.Services.Content.LocalFileStorage>();
+
+// Storage provider selector — "s3" activates S3CompatibleFileStorage.
+var storageProvider = storageOptions?.Provider ?? "local";
+if (storageProvider.Equals("s3", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<OetLearner.Api.Services.Content.IFileStorage,
+        OetLearner.Api.Services.Content.S3CompatibleFileStorage>();
+}
+else
+{
+    builder.Services.AddSingleton<OetLearner.Api.Services.Content.IFileStorage,
+        OetLearner.Api.Services.Content.LocalFileStorage>();
+}
 builder.Services.AddSingleton<OetLearner.Api.Services.Content.IUploadContentValidator,
     OetLearner.Api.Services.Content.MagicByteValidator>();
 // Upload antivirus scanner. Effective provider is runtime-admin configurable

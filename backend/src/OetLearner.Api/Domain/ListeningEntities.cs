@@ -236,6 +236,12 @@ public class ListeningExtract
     /// Used by drill targeting and pathway recommendation.</summary>
     public int? DifficultyRating { get; set; }
 
+    /// <summary>Wave 4 — SHA-256 hex of the synthesised audio WAV written by
+    /// <c>ListeningTtsService</c>. Null until TTS synthesis has completed for
+    /// this extract. Used by admin to detect stale audio after re-authoring.</summary>
+    [MaxLength(64)]
+    public string? AudioContentSha { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
@@ -825,6 +831,52 @@ public class TeacherClassMember
     public DateTimeOffset AddedAt { get; set; }
 
     public TeacherClass? Class { get; set; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wave 4 — TTS background job queue
+// ─────────────────────────────────────────────────────────────────────────────
+
+public enum ListeningTtsJobStatus
+{
+    Pending   = 0,
+    Running   = 1,
+    Completed = 2,
+    Failed    = 3,
+}
+
+/// <summary>Queued TTS synthesis job for a <see cref="ListeningExtract"/>.
+/// Created by the admin synthesize endpoint and processed by
+/// <c>ListeningTtsJobWorker</c> in the background.</summary>
+[Index(nameof(Status), nameof(CreatedAt))]
+[Index(nameof(ExtractId))]
+public class ListeningTtsJob
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ExtractId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string RequestedBy { get; set; } = default!;
+
+    public ListeningTtsJobStatus Status { get; set; } = ListeningTtsJobStatus.Pending;
+
+    /// <summary>Number of synthesis attempts so far. Max 3 (exp backoff).</summary>
+    public int RetryCount { get; set; }
+
+    /// <summary>Last error message for display in admin UI.</summary>
+    [MaxLength(2048)]
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>Earliest time at which the worker may retry this job
+    /// (exponential backoff: retry 1 = +30 s, retry 2 = +2 min, retry 3 = +10 min).</summary>
+    public DateTimeOffset? RetryAfter { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 /// <summary>

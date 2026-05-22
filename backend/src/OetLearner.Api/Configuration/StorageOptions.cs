@@ -4,6 +4,29 @@ public sealed class StorageOptions
 {
     public string LocalRootPath { get; set; } = "App_Data/storage";
     public long MaxUploadBytes { get; set; } = 25L * 1024 * 1024;
+
+    // ── S3 / Object-store (DigitalOcean Spaces, Cloudflare R2, AWS S3) ───────
+    // Set Provider = "s3" to activate. All four fields are required when active.
+    // Works with any S3-compatible endpoint — pass EndpointUrl for DO Spaces / R2.
+    // Leave EndpointUrl empty for standard AWS S3 (regional endpoint auto-resolved).
+
+    /// <summary><c>"local"</c> (default) or <c>"s3"</c>.</summary>
+    public string Provider { get; set; } = "local";
+
+    public string? BucketName { get; set; }
+
+    /// <summary>Override endpoint — required for DO Spaces / Cloudflare R2.
+    /// E.g. <c>https://ams3.digitaloceanspaces.com</c>. Omit for AWS S3.</summary>
+    public string? EndpointUrl { get; set; }
+
+    public string? AccessKeyId { get; set; }
+    public string? SecretAccessKey { get; set; }
+
+    /// <summary>AWS region code. Default <c>us-east-1</c>.</summary>
+    public string AwsRegion { get; set; } = "us-east-1";
+
+    /// <summary>TTL (seconds) for presigned GET URLs. Default 3600 (1 h).</summary>
+    public int SignedReadTtlSeconds { get; set; } = 3600;
     public string[] AllowedAudioContentTypes { get; set; } =
     [
         "audio/webm",

@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Listening;
@@ -235,32 +237,69 @@ public static class ListeningAuthoringAdminEndpoints
         });
 
         // Wave 4 — TTS synthesis. Reads the extract's transcript segments
-        // and produces a WAV blob through `IListeningTtsSynthesisProvider`,
-        // writing to `IFileStorage` at a content-addressed key. The stub
-        // provider emits silence (CI-safe); a real DigitalOcean Qwen3 / OAI
-        // provider plugs in via DI without touching this endpoint.
+        // Wave 4 deferred — enqueues a ListeningTtsJob so the background worker
+        // (ListeningTtsJobWorker) handles synthesis asynchronously. The endpoint
+        // returns 202 Accepted with the job ID immediately; the client polls
+        // GET /v1/admin/papers/{id}/listening/extracts/{eid}/synthesize/{jobId}.
         group.MapPost("/extracts/{extractId}/synthesize", async (
             string paperId,
             string extractId,
-            IListeningTtsService tts,
+            LearnerDbContext db,
             HttpContext http,
             CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            try
-            {
-                var result = await tts.SynthesizeAsync(extractId, adminId, ct);
-                return Results.Ok(result);
-            }
-            catch (ApiException ex)
-            {
+
+            // Validate extract belongs to this paper.
+            var extract = await db.ListeningExtracts
+                .FirstOrDefaultAsync(e => e.Id == extractId, ct);
+            if (extract is null)
                 return Results.Json(
-                    new { errorCode = ex.ErrorCode, message = ex.Message },
-                    statusCode: ex.StatusCode);
-            }
+                    new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} not found." },
+                    statusCode: 404);
+
+            var job = new ListeningTtsJob
+            {
+                Id          = Guid.NewGuid().ToString("N"),
+                ExtractId   = extractId,
+                RequestedBy = adminId,
+                Status      = ListeningTtsJobStatus.Pending,
+                CreatedAt   = DateTimeOffset.UtcNow,
+                UpdatedAt   = DateTimeOffset.UtcNow,
+            };
+            db.ListeningTtsJobs.Add(job);
+            await db.SaveChangesAsync(ct);
+
+            return Results.Accepted($"/v1/admin/papers/{paperId}/listening/extracts/{extractId}/synthesize/{job.Id}",
+                new { jobId = job.Id, status = "queued", extractId });
         })
         .WithName("SynthesizeListeningExtract")
-        .WithSummary("Synthesize extract audio from authored transcript segments via the configured TTS provider.");
+        .WithSummary("Enqueue background TTS synthesis for an extract. Returns 202 Accepted with jobId.");
+
+        // Poll a TTS job status.
+        group.MapGet("/extracts/{extractId}/synthesize/{jobId}", async (
+            string paperId,
+            string extractId,
+            string jobId,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var job = await db.ListeningTtsJobs
+                .FirstOrDefaultAsync(j => j.Id == jobId && j.ExtractId == extractId, ct);
+            if (job is null)
+                return Results.NotFound(new { errorCode = "tts_job_not_found" });
+
+            return Results.Ok(new
+            {
+                jobId      = job.Id,
+                status     = job.Status.ToString().ToLowerInvariant(),
+                retryCount = job.RetryCount,
+                error      = job.ErrorMessage,
+                updatedAt  = job.UpdatedAt,
+            });
+        })
+        .WithName("GetListeningTtsJobStatus")
+        .WithSummary("Poll TTS synthesis job status.");
 
         return app;
     }

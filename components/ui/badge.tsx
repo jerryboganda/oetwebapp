@@ -102,21 +102,46 @@ export function CriterionChip({ label, active, onClick, className }: { label: st
 }
 
 /**
- * Category chip — uses a stable colour assignment per functional category
- * (conditions / anatomy / procedures / etc.). Falls back to violet.
+ * Category chip — uses a stable colour per functional category for visual
+ * differentiation at a glance. Subtle pastel backgrounds with darker text.
  */
+const categoryVariantMap: Record<string, BadgeProps['variant']> = {
+  condition: 'rose',
+  anatomy: 'sky',
+  procedure: 'violet',
+  investigation: 'info',
+  professional_communication: 'indigo',
+  equipment: 'slate',
+  medication: 'emerald',
+  clinical_communication: 'indigo',
+  pharmacology: 'emerald',
+  conditions: 'rose',
+  symptoms: 'warning',
+  symptom: 'warning',
+  procedures: 'violet',
+  diagnostics: 'info',
+  patient_communication: 'violet',
+  counselling: 'sky',
+  documentation: 'slate',
+  medical: 'rose',
+  intervention: 'danger',
+  general: 'muted',
+};
+
 export function CategoryBadge({ category, size }: { category: string; size?: 'sm' | 'md' }) {
-  const label = (category || '').replace(/_/g, ' ');
-  return <Badge variant="indigo" size={size}>{label}</Badge>;
+  const key = (category || '').toLowerCase().replace(/\s+/g, '_').trim();
+  const label = (category || '').replace(/[_-]/g, ' ');
+  const variant = categoryVariantMap[key] ?? 'indigo';
+  return <Badge variant={variant} size={size}>{label}</Badge>;
 }
 
 /**
- * Difficulty chip — easy/medium/hard → emerald/sky/rose.
+ * Difficulty chip — easy/medium/hard with intuitive colour coding.
  */
 export function DifficultyBadge({ difficulty, size }: { difficulty: string; size?: 'sm' | 'md' }) {
   const key = (difficulty || '').toLowerCase().trim();
   const variant: BadgeProps['variant'] =
-    key === 'easy' ? 'violet' :
+    key === 'easy' ? 'emerald' :
     key === 'hard' ? 'rose' :
     key === 'medium' ? 'warning' :
     'slate';
@@ -124,9 +149,34 @@ export function DifficultyBadge({ difficulty, size }: { difficulty: string; size
 }
 
 /**
- * Source / provenance chip — neutral slate so it does not compete with
- * the category and difficulty chips.
+ * Source / provenance chip — subtle emerald tint for platform-authored content,
+ * muted slate for external/unknown provenance.
  */
 export function SourceBadge({ label, size }: { label: string; size?: 'sm' | 'md' }) {
-  return <Badge variant="slate" size={size}>{label}</Badge>;
+  const isPlatform = label.toLowerCase().includes('platform');
+  return <Badge variant={isPlatform ? 'emerald' : 'slate'} size={size}>{label}</Badge>;
+}
+
+/**
+ * OET Subtest relevance chip — colour-coded by skill area.
+ * listening → sky, reading → emerald, writing → violet, speaking → rose.
+ */
+const subtestVariantMap: Record<string, BadgeProps['variant']> = {
+  listening: 'sky',
+  listening_a: 'sky',
+  listening_b: 'sky',
+  listening_c: 'sky',
+  reading: 'emerald',
+  reading_a: 'emerald',
+  reading_b: 'emerald',
+  reading_c: 'emerald',
+  writing: 'violet',
+  speaking: 'rose',
+};
+
+export function SubtestBadge({ tag, size }: { tag: string; size?: 'sm' | 'md' }) {
+  const key = (tag || '').toLowerCase().trim();
+  const variant = subtestVariantMap[key] ?? 'slate';
+  const label = key.replace(/_/g, ' ');
+  return <Badge variant={variant} size={size}>{label}</Badge>;
 }

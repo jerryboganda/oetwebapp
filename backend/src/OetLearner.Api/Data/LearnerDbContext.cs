@@ -274,6 +274,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<TeacherClass> TeacherClasses => Set<TeacherClass>();
     public DbSet<TeacherClassMember> TeacherClassMembers => Set<TeacherClassMember>();
     public DbSet<ListeningAttemptNote> ListeningAttemptNotes => Set<ListeningAttemptNote>();
+    public DbSet<ListeningTtsJob> ListeningTtsJobs => Set<ListeningTtsJob>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<BillingPlanVersion> BillingPlanVersions => Set<BillingPlanVersion>();
     public DbSet<WalletTopUpTierConfig> WalletTopUpTierConfigs => Set<WalletTopUpTierConfig>();

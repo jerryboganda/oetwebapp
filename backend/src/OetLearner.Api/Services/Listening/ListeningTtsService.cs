@@ -152,6 +152,7 @@ public sealed class ListeningTtsService(
             await storage.WriteAsync(key, src, ct);
         }
 
+        extract.AudioContentSha = sha;
         extract.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 

@@ -27,6 +27,11 @@ export interface VocabularyTerm {
    * into any practice collection label yet.
    */
   recallSetCodes?: string[];
+  /**
+   * OET subtest relevance tags — e.g. `["listening_a", "writing", "speaking"]`.
+   * Populated by admin; empty array if unclassified.
+   */
+  oetSubtestTags?: string[];
 }
 
 export interface VocabularyTermSummary {
