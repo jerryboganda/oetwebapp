@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
+using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Conversation.Tts;
 using OetLearner.Api.Services.VoiceDesign;
 

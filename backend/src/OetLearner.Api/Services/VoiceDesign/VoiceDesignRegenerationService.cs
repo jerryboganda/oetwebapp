@@ -24,7 +24,7 @@ public sealed class VoiceDesignRegenerationService(
         // Count items based on audio type and scope
         if (request.AudioType is "all" or "vocabulary")
         {
-            var vocabQuery = db.VocabularyTerms.Where(t => t.IsActive);
+            var vocabQuery = db.VocabularyTerms.Where(t => t.Status == "active");
             vocabQuery = request.Scope switch
             {
                 "missing" => vocabQuery.Where(t => t.AudioMediaAssetId == null),
@@ -36,8 +36,7 @@ public sealed class VoiceDesignRegenerationService(
 
         if (request.AudioType is "all" or "listening")
         {
-            var listeningQuery = db.ListeningExtracts
-                .Where(e => e.Status == ListeningExtractStatus.Published);
+            var listeningQuery = db.ListeningExtracts.AsQueryable();
             listeningQuery = request.Scope switch
             {
                 "missing" => listeningQuery.Where(e => e.AudioContentSha == null),
@@ -91,7 +90,7 @@ public sealed class VoiceDesignRegenerationService(
         if (request.AudioType is "all" or "vocabulary")
         {
             var vocabTerms = await db.VocabularyTerms
-                .Where(t => t.IsActive)
+                .Where(t => t.Status == "active")
                 .Where(t => request.Scope == "missing"
                     ? t.AudioMediaAssetId == null
                     : request.Scope == "different-voice"
@@ -119,7 +118,7 @@ public sealed class VoiceDesignRegenerationService(
         if (request.AudioType is "all" or "listening")
         {
             var extracts = await db.ListeningExtracts
-                .Where(e => e.Status == ListeningExtractStatus.Published)
+                .AsQueryable()
                 .Where(e => request.Scope == "missing"
                     ? e.AudioContentSha == null
                     : request.Scope == "different-voice"
