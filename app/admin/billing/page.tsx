@@ -135,6 +135,8 @@ interface BillingCouponFormState {
   applicablePlanCodesText: string;
   applicableAddOnCodesText: string;
   notes: string;
+  couponVariant: string;
+  variantMetadataJson: string;
 }
 
 const defaultPlanForm: BillingPlanFormState = {
@@ -193,6 +195,8 @@ const defaultCouponForm: BillingCouponFormState = {
   applicablePlanCodesText: '',
   applicableAddOnCodesText: '',
   notes: '',
+  couponVariant: 'percent_off',
+  variantMetadataJson: '',
 };
 
 const emptyProviderLifecycleSummary: AdminBillingProviderLifecycleSignalsSummary = {
@@ -478,6 +482,8 @@ function toCouponForm(coupon: AdminBillingCoupon): BillingCouponFormState {
     applicablePlanCodesText: (coupon.applicablePlanCodes ?? []).join(', '),
     applicableAddOnCodesText: (coupon.applicableAddOnCodes ?? []).join(', '),
     notes: coupon.notes ?? '',
+    couponVariant: coupon.couponVariant ?? 'percent_off',
+    variantMetadataJson: coupon.variantMetadataJson ?? '',
   };
 }
 
@@ -2163,6 +2169,8 @@ export default function BillingPage() {
         applicablePlanCodesJson: jsonList(couponForm.applicablePlanCodesText),
         applicableAddOnCodesJson: jsonList(couponForm.applicableAddOnCodesText),
         notes: couponForm.notes.trim() || null,
+        couponVariant: couponForm.couponVariant,
+        variantMetadataJson: couponForm.variantMetadataJson || null,
       };
 
       if (editingCouponId) {
@@ -3017,6 +3025,40 @@ export default function BillingPage() {
             />
             <Input label="Discount value" type="number" min={0} step="0.01" value={couponForm.discountValue} onChange={(event) => setCouponForm((current) => ({ ...current, discountValue: event.target.value }))} />
             <Input label="Currency" value={couponForm.currency} onChange={(event) => setCouponForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Select
+              label="Coupon variant"
+              value={couponForm.couponVariant}
+              onChange={(event) => setCouponForm((current) => ({ ...current, couponVariant: event.target.value, variantMetadataJson: '' }))}
+              options={[
+                { value: 'percent_off', label: 'Percent off (standard)' },
+                { value: 'fixed_off', label: 'Fixed amount off (standard)' },
+                { value: 'first_month_only', label: 'First month only' },
+                { value: 'trial_extension_days', label: 'Trial extension (days)' },
+                { value: 'free_months', label: 'Free months' },
+                { value: 'bogo', label: 'BOGO' },
+                { value: 'bundle_discount', label: 'Bundle discount' },
+              ]}
+            />
+            {couponForm.couponVariant === 'trial_extension_days' && (
+              <Input
+                label="Extension days"
+                type="number"
+                min={1}
+                value={(() => { try { return JSON.parse(couponForm.variantMetadataJson || '{}').extensionDays ?? 7; } catch { return 7; } })()}
+                onChange={(event) => setCouponForm((current) => ({ ...current, variantMetadataJson: JSON.stringify({ extensionDays: parseInt(event.target.value) || 7 }) }))}
+              />
+            )}
+            {couponForm.couponVariant === 'free_months' && (
+              <Input
+                label="Free months"
+                type="number"
+                min={1}
+                value={(() => { try { return JSON.parse(couponForm.variantMetadataJson || '{}').freeMonths ?? 1; } catch { return 1; } })()}
+                onChange={(event) => setCouponForm((current) => ({ ...current, variantMetadataJson: JSON.stringify({ freeMonths: parseInt(event.target.value) || 1 }) }))}
+              />
+            )}
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Input label="Starts at" type="datetime-local" value={couponForm.startsAt} onChange={(event) => setCouponForm((current) => ({ ...current, startsAt: event.target.value }))} />

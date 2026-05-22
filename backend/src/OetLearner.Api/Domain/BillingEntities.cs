@@ -216,6 +216,24 @@ public class BillingCoupon
 
     public int RedemptionCount { get; set; }
 
+    /// <summary>Phase 7 extension: percent_off | fixed_off | first_month_only | trial_extension_days | free_months | bogo | bundle_discount.</summary>
+    [MaxLength(32)]
+    public string CouponVariant { get; set; } = "percent_off";
+
+    /// <summary>JSON metadata bag for variant-specific params (e.g. {"extensionDays":7}, {"freeMonths":1}).</summary>
+    [MaxLength(2048)]
+    public string VariantMetadataJson { get; set; } = "{}";
+
+    /// <summary>JSON array of ISO 3166-1 alpha-2 country codes allowed; empty = any.</summary>
+    [MaxLength(1024)]
+    public string EligibleCountriesJson { get; set; } = "[]";
+
+    public bool NewUsersOnly { get; set; }
+    public bool ExistingUsersOnly { get; set; }
+
+    public bool StackableWithReferral { get; set; }
+    public bool StackableWithAffiliate { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
@@ -370,6 +388,10 @@ public class BillingQuote
 
     [MaxLength(64)]
     public string? IdempotencyKey { get; set; }
+
+    /// <summary>Links the quote to a pricing experiment assignment for conversion attribution.</summary>
+    [MaxLength(64)]
+    public string? ExperimentAssignmentId { get; set; }
 
     [MaxLength(4096)]
     public string SnapshotJson { get; set; } = "{}";

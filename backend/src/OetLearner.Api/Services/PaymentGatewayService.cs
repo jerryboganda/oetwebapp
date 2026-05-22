@@ -744,19 +744,37 @@ public sealed class PayPalGateway(
 }
 
 /// <summary>
+/// Lookup contract for payment gateways. Implemented by <see cref="PaymentGatewayService"/>
+/// in production; tests can substitute a fake to avoid spinning up HTTP clients.
+/// </summary>
+public interface IPaymentGatewayProvider
+{
+    IPaymentGateway GetGateway(string name);
+    IReadOnlyList<string> SupportedGateways { get; }
+}
+
+/// <summary>
 /// Unified payment gateway service that routes to Stripe or PayPal based on gateway name.
 /// Registered as a scoped service to keep gateway configuration and HTTP clients aligned with request scope.
 /// </summary>
-public sealed class PaymentGatewayService
+public sealed class PaymentGatewayService : IPaymentGatewayProvider
 {
     private readonly Dictionary<string, IPaymentGateway> _gateways;
 
-    public PaymentGatewayService(StripeGateway stripe, PayPalGateway paypal)
+    public PaymentGatewayService(
+        StripeGateway stripe,
+        PayPalGateway paypal,
+        OetLearner.Api.Services.Billing.Gateways.PayTabsGateway payTabs,
+        OetLearner.Api.Services.Billing.Gateways.PaymobGateway paymob,
+        OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway checkoutCom)
     {
         _gateways = new Dictionary<string, IPaymentGateway>(StringComparer.OrdinalIgnoreCase)
         {
             ["stripe"] = stripe,
-            ["paypal"] = paypal
+            ["paypal"] = paypal,
+            ["paytabs"] = payTabs,
+            ["paymob"] = paymob,
+            ["checkoutcom"] = checkoutCom,
         };
     }
 

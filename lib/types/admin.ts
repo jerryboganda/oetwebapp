@@ -611,6 +611,8 @@ export interface AdminBillingCoupon {
   applicableAddOnCodes: string[];
   redemptionCount: number;
   notes: string | null;
+  couponVariant?: string;
+  variantMetadataJson?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -17,9 +17,30 @@ public sealed class BillingOptions
     /// </summary>
     public int WebhookMaxAttempts { get; set; } = 5;
 
+    /// <summary>
+    /// Currency used when neither the target row nor a region-pricing override
+    /// supplies one. Defaults to AUD for back-compat with existing AUD-only catalogs.
+    /// Override via <c>Billing__DefaultCurrency</c>.
+    /// </summary>
+    public string DefaultCurrency { get; set; } = "AUD";
+
+    /// <summary>
+    /// Region used when the buyer's country cannot be detected. Defaults to ROW.
+    /// </summary>
+    public string DefaultRegion { get; set; } = "ROW";
+
     public StripeBillingOptions Stripe { get; set; } = new();
     public PayPalBillingOptions PayPal { get; set; } = new();
     public WalletBillingOptions Wallet { get; set; } = new();
+
+    /// <summary>PayTabs (Gulf/Egypt) configuration. Inactive when ServerKey/ProfileId unset.</summary>
+    public PayTabsOptions PayTabs { get; set; } = new();
+
+    /// <summary>Paymob (Egypt) configuration. Inactive when ApiKey unset.</summary>
+    public PaymobOptions Paymob { get; set; } = new();
+
+    /// <summary>Checkout.com (MENA premium cards) configuration. Inactive when SecretKey unset.</summary>
+    public CheckoutComOptions CheckoutCom { get; set; } = new();
 }
 
 public sealed class WalletBillingOptions

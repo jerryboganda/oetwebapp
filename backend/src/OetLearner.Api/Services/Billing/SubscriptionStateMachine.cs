@@ -38,6 +38,14 @@ public static class SubscriptionStateMachine
                 SubscriptionStatus.Active,
                 SubscriptionStatus.PastDue,
                 SubscriptionStatus.Suspended, // dispute-pending equivalent
+                SubscriptionStatus.Paused,    // Phase 6 voluntary pause
+                SubscriptionStatus.Cancelled,
+                SubscriptionStatus.Expired,
+            },
+            [SubscriptionStatus.Paused] = new HashSet<SubscriptionStatus>
+            {
+                SubscriptionStatus.Paused,
+                SubscriptionStatus.Active,    // Phase 6 resume
                 SubscriptionStatus.Cancelled,
                 SubscriptionStatus.Expired,
             },
@@ -102,6 +110,44 @@ public static class SubscriptionStateMachine
         subscription.Status = target;
         subscription.ChangedAt = DateTimeOffset.UtcNow;
         return true;
+    }
+
+    /// <summary>Phase 6 — pause an active subscription until <paramref name="until"/>.</summary>
+    public static void Pause(Subscription subscription, DateTimeOffset? until, string reason)
+    {
+        ArgumentNullException.ThrowIfNull(subscription);
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("A non-empty reason is required for subscription state transitions.", nameof(reason));
+        }
+        if (!IsLegal(subscription.Status, SubscriptionStatus.Paused))
+        {
+            throw ApiException.Conflict(
+                "subscription_illegal_transition",
+                $"Subscription transition {subscription.Status} -> Paused is not allowed (reason: {reason}).");
+        }
+        subscription.Status = SubscriptionStatus.Paused;
+        subscription.PausedUntil = until;
+        subscription.ChangedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>Phase 6 — resume a paused subscription back to Active.</summary>
+    public static void Resume(Subscription subscription, string reason)
+    {
+        ArgumentNullException.ThrowIfNull(subscription);
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("A non-empty reason is required for subscription state transitions.", nameof(reason));
+        }
+        if (subscription.Status != SubscriptionStatus.Paused)
+        {
+            throw ApiException.Conflict(
+                "subscription_resume_invalid_state",
+                "Only paused subscriptions can be resumed.");
+        }
+        subscription.Status = SubscriptionStatus.Active;
+        subscription.PausedUntil = null;
+        subscription.ChangedAt = DateTimeOffset.UtcNow;
     }
 
     public static void ReactivateCancelled(Subscription subscription, string reason, DateTimeOffset changedAt)

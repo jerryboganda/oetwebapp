@@ -112,6 +112,9 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/content/reading/extraction': [AdminPermission.ContentWrite],
   // Phase 3 — per-user Reading policy overrides
   '/admin/policies/reading/users': [AdminPermission.UsersWrite],
+  // Study Planner admin surfaces
+  '/admin/study-plan-templates': [AdminPermission.ContentRead],
+  '/admin/learners': [AdminPermission.UsersRead],
 };
 
 export const adminRoutePermissionMap: Record<string, string[]> = {
@@ -213,6 +216,12 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/content/reading/extraction': [AdminPermission.ContentWrite],
   // Phase 3 — per-user Reading policy overrides
   '/admin/policies/reading/users': [AdminPermission.UsersWrite],
+  // Study Planner admin surfaces
+  '/admin/study-plan-templates': [AdminPermission.ContentRead],
+  '/admin/study-plan-templates/:id': [AdminPermission.ContentRead],
+  '/admin/study-plan-templates/:id/preview': [AdminPermission.ContentRead],
+  '/admin/study-plan-templates/new': [AdminPermission.ContentWrite],
+  '/admin/learners/:userId/study-plan': [AdminPermission.UsersRead],
 };
 
 function normalizeAdminPath(pathname: string | null | undefined): string {
