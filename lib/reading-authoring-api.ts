@@ -577,6 +577,8 @@ function resolveUrl(path: string): string {
   return base ? `${base.replace(/\/$/, '')}${path}` : path;
 }
 
+const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await ensureFreshAccessToken();
   const headers = new Headers(init?.headers);
@@ -584,6 +586,11 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (init?.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
+  }
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (!CSRF_SAFE_METHODS.has(method) && typeof document !== 'undefined' && !headers.has('x-csrf-token')) {
+    const csrfMatch = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
+    if (csrfMatch) headers.set('x-csrf-token', csrfMatch[1]);
   }
   const res = await fetchWithTimeout(resolveUrl(path), { ...init, headers });
   if (!res.ok) {
