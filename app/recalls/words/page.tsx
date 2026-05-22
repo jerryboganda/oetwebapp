@@ -334,16 +334,6 @@ export default function RecallsWordsPage() {
             </div>
           ) : catalogTerms.length > 0 ? (
             <div className="space-y-3">
-              <Pagination
-                page={catalogPage}
-                pageSize={catalogPageSize}
-                total={catalogTotal}
-                onPageChange={(p) => goToCatalogPage(p)}
-                onPageSizeChange={(size) => { setCatalogPageSize(size); setCatalogPage(1); setCatalogLoading(true); }}
-                pageSizeOptions={[10, 24, 50, 100, 500]}
-                itemLabel="term"
-                resetOnPageSizeChange={false}
-              />
               <div className="grid gap-3 md:grid-cols-2">
                 {catalogTerms.map((term) => {
                   const hasAudio = Boolean(term.audioUrl || term.audioMediaAssetId);

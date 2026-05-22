@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -121,26 +122,83 @@ export function Pagination({
             />
           </div>
         ) : null}
-        <div className="flex items-center gap-2 pt-5 md:pt-0">
+        <nav className="flex items-center gap-1 pt-5 md:pt-0" aria-label="Pagination">
           <Button
             variant="outline"
             onClick={() => onPageChange(Math.max(1, page - 1))}
             disabled={page <= 1}
+            className="gap-1"
           >
+            <ChevronLeft size={16} />
             Previous
           </Button>
-          <span className="text-sm text-muted">
-            Page {page} of {totalPages}
-          </span>
+          <PageNumbers currentPage={page} totalPages={totalPages} onPageChange={onPageChange} />
           <Button
             variant="outline"
             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
             disabled={page >= totalPages}
+            className="gap-1"
           >
             Next
+            <ChevronRight size={16} />
           </Button>
-        </div>
+        </nav>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Renders numbered page buttons with ellipsis for large page counts.
+ * Shows at most 7 slots: first, last, current ±1, and ellipsis gaps.
+ */
+function PageNumbers({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  const pages = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const items: (number | 'ellipsis-start' | 'ellipsis-end')[] = [1];
+    if (currentPage > 3) items.push('ellipsis-start');
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = start; i <= end; i++) items.push(i);
+    if (currentPage < totalPages - 2) items.push('ellipsis-end');
+    items.push(totalPages);
+    return items;
+  }, [currentPage, totalPages]);
+
+  return (
+    <div className="hidden items-center gap-1 sm:flex">
+      {pages.map((item, idx) =>
+        typeof item === 'number' ? (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onPageChange(item)}
+            aria-current={item === currentPage ? 'page' : undefined}
+            className={cn(
+              'inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-sm font-medium transition-colors',
+              item === currentPage
+                ? 'bg-primary text-white'
+                : 'text-muted hover:bg-muted/10 hover:text-foreground',
+            )}
+          >
+            {item}
+          </button>
+        ) : (
+          <span key={`${item}-${idx}`} className="px-1 text-sm text-muted">
+            &hellip;
+          </span>
+        ),
+      )}
     </div>
   );
 }
