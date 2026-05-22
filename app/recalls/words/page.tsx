@@ -18,6 +18,7 @@ import {
   fetchRecallsAudio,
   fetchVocabularyCategories,
   fetchVocabularyTerms,
+  fetchAuthorizedObjectUrl,
   isApiError,
   type RecallsTodayResponse,
   type RecallsQueueItem,
@@ -133,15 +134,26 @@ export default function RecallsWordsPage() {
     setSelectedCategory(nextCategory);
   }
 
-  function playTerm(term: VocabularyTerm) {
-    const src = term.audioUrl
-      ? term.audioUrl
-      : term.audioMediaAssetId
-        ? `/v1/media/${term.audioMediaAssetId}/content`
+  async function playTerm(term: VocabularyTerm) {
+    // Prefer the canonical /v1/media/{id}/content endpoint when an asset id is
+    // available; some legacy AudioUrl rows point at /media/file/... which is not
+    // a routable endpoint on either the web app or the API. Use the authorized
+    // object-URL helper so the request carries auth headers and goes through the
+    // backend proxy.
+    const path = term.audioMediaAssetId
+      ? `/v1/media/${term.audioMediaAssetId}/content`
+      : term.audioUrl
+        ? term.audioUrl
         : null;
-    if (!src) return;
-    const a = new Audio(src);
-    a.play().catch(() => {});
+    if (!path) return;
+    try {
+      const objectUrl = await fetchAuthorizedObjectUrl(path);
+      const a = new Audio(objectUrl);
+      a.addEventListener('ended', () => URL.revokeObjectURL(objectUrl), { once: true });
+      await a.play().catch(() => {});
+    } catch (err) {
+      console.error('[recalls/words] playTerm failed:', err);
+    }
   }
 
   async function handleStar(it: RecallsQueueItem, reason: RecallsStarReason) {
