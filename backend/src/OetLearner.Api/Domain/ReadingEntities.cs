@@ -176,6 +176,11 @@ public class ReadingPart
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
+    /// <summary>Navigation back to the owning ContentPaper. Set up as an
+    /// explicit FK in LearnerDbContext so PostgreSQL enforces referential
+    /// integrity (no orphaned ReadingPart rows after paper deletion).</summary>
+    public ContentPaper? Paper { get; set; }
+
     public ICollection<ReadingText> Texts { get; set; } = new List<ReadingText>();
     public ICollection<ReadingQuestion> Questions { get; set; } = new List<ReadingQuestion>();
 }
@@ -206,7 +211,10 @@ public class ReadingText
     [MaxLength(256)]
     public string? Source { get; set; }
 
-    /// <summary>Sanitised HTML. Rendered verbatim in the player.</summary>
+    /// <summary>Sanitised HTML. Rendered verbatim in the player.
+    /// Capped at 65,536 chars (64 KB) — a Part C long article comfortably
+    /// fits. Hard cap defeats payload-inflation DoS.</summary>
+    [MaxLength(65536)]
     public string BodyHtml { get; set; } = string.Empty;
 
     public int WordCount { get; set; }
@@ -257,17 +265,22 @@ public class ReadingQuestion
     public string Stem { get; set; } = default!;
 
     /// <summary>JSON array/object holding the selectable options for MCQ /
-    /// matching types. Unused for short-answer / sentence-completion.</summary>
+    /// matching types. Unused for short-answer / sentence-completion.
+    /// Capped at 4096 chars — covers 4 options each with rich text and
+    /// distractor metadata. Hard cap defeats payload-inflation DoS.</summary>
+    [MaxLength(4096)]
     public string OptionsJson { get; set; } = "[]";
 
     /// <summary>Correct answer(s). Shape depends on type:
     /// MCQ → <c>"A"</c>; matching (multi) → <c>["1","3"]</c>;
-    /// short answer → <c>"ORT"</c>.</summary>
+    /// short answer → <c>"ORT"</c>. Capped at 512 chars.</summary>
+    [MaxLength(512)]
     public string CorrectAnswerJson { get; set; } = "\"\"";
 
     /// <summary>Accepted alternate spellings / synonyms. Array of strings.
     /// Only consulted when <see cref="ReadingQuestionType.ShortAnswer"/>
-    /// or <see cref="ReadingQuestionType.SentenceCompletion"/>.</summary>
+    /// or <see cref="ReadingQuestionType.SentenceCompletion"/>. Capped 4096.</summary>
+    [MaxLength(4096)]
     public string? AcceptedSynonymsJson { get; set; }
 
     /// <summary>Case-sensitive exact match? Default false = case-insensitive.</summary>
@@ -284,7 +297,8 @@ public class ReadingQuestion
     /// <c>{"A":"Opposite","B":"DistortedDetail","D":"NotInText"}</c>.
     /// Authoring-only; NEVER serialised to learner DTOs. Optional —
     /// questions without distractor metadata simply don't contribute to
-    /// distractor analytics.</summary>
+    /// distractor analytics. Capped at 2048 chars.</summary>
+    [MaxLength(2048)]
     public string? OptionDistractorsJson { get; set; }
 
     /// <summary>Phase 4 — per-question authoring lifecycle. New questions
@@ -346,6 +360,9 @@ public class ReadingQuestionReviewLog
 /// </summary>
 [Index(nameof(UserId), nameof(Status))]
 [Index(nameof(PaperId), nameof(StartedAt))]
+[Index(nameof(UserId), nameof(PaperId))]
+[Index(nameof(UserId), nameof(PaperId), nameof(Mode), nameof(Status),
+    Name = "IX_ReadingAttempt_User_Paper_Mode_Status")]
 public class ReadingAttempt
 {
     [Key]
@@ -379,13 +396,19 @@ public class ReadingAttempt
 
     /// <summary>Snapshot of the Reading policy that was in effect when the
     /// attempt started. Ensures policy changes don't retroactively alter an
-    /// in-flight or past attempt.</summary>
+    /// in-flight or past attempt. Capped at 16,384 chars.</summary>
+    [MaxLength(16384)]
     public string PolicySnapshotJson { get; set; } = "{}";
 
     /// <summary>Paper revision id at attempt-start. Protects in-flight
     /// attempts from mid-flight content edits.</summary>
     [MaxLength(64)]
     public string? PaperRevisionId { get; set; }
+
+    /// <summary>Optimistic concurrency token. Prevents lost updates on the
+    /// timer/break state when concurrent autosave + sweep races interleave.</summary>
+    [ConcurrencyCheck]
+    public int RowVersion { get; set; }
 
     /// <summary>
     /// Phase 3: practice mode. Default <c>Exam</c> for back-compat with all
@@ -398,7 +421,9 @@ public class ReadingAttempt
     /// is in scope for this attempt (Drill / MiniTest / ErrorBank). Shape:
     /// <c>{ "kind":"drill", "questionIds":[...], "label":"Part A scan",
     /// "minutes": 10 }</c>. Null for Exam and Learning modes (full paper).
+    /// Capped at 8192 chars — covers ErrorBank retest with hundreds of ids.
     /// </summary>
+    [MaxLength(8192)]
     public string? ScopeJson { get; set; }
 
     public ICollection<ReadingAnswer> Answers { get; set; } = new List<ReadingAnswer>();
@@ -407,6 +432,7 @@ public class ReadingAttempt
 /// <summary>One answer. Written by autosave, graded at submit.</summary>
 [Index(nameof(ReadingAttemptId), nameof(ReadingQuestionId), IsUnique = true,
     Name = "UX_ReadingAnswer_Attempt_Question")]
+[Index(nameof(ReadingAttemptId), Name = "IX_ReadingAnswer_AttemptId")]
 public class ReadingAnswer
 {
     [Key]
@@ -420,7 +446,9 @@ public class ReadingAnswer
     public string ReadingQuestionId { get; set; } = default!;
 
     /// <summary>JSON shaped to match the question type (echoes
-    /// <see cref="ReadingQuestion.CorrectAnswerJson"/>).</summary>
+    /// <see cref="ReadingQuestion.CorrectAnswerJson"/>). Capped at 2048 chars
+    /// — covers any reasonable matching/MCQ answer set.</summary>
+    [MaxLength(2048)]
     public string UserAnswerJson { get; set; } = "\"\"";
 
     public bool? IsCorrect { get; set; }
@@ -446,9 +474,17 @@ public class ReadingAnswer
 
     /// <summary>Phase 1 closure — accumulated milliseconds across every
     /// save to this answer. Useful for analytics like "time per question"
-    /// and "abandoned-but-pondered" detection. Server-side updated as
-    /// <c>(TotalElapsedMs ?? 0) + ElapsedMs</c> on each autosave.</summary>
+    /// and "abandoned-but-pondered" detection. Server-side updated via an
+    /// atomic raw-SQL <c>UPDATE col = col + @delta</c> in
+    /// <c>ReadingAttemptService.SaveAnswerAsync</c> so concurrent autosaves
+    /// from multiple tabs do not race and lose increments.</summary>
     public int? TotalElapsedMs { get; set; }
+
+    /// <summary>Insert timestamp. Set on first autosave. Audit + retention.</summary>
+    public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>Last update timestamp. Refreshed every autosave + at grade.</summary>
+    public DateTimeOffset UpdatedAt { get; set; }
 
     public ReadingAttempt? Attempt { get; set; }
     public ReadingQuestion? Question { get; set; }

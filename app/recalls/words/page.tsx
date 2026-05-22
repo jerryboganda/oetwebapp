@@ -18,16 +18,19 @@ import {
   fetchRecallsAudio,
   fetchVocabularyCategories,
   fetchVocabularyTerms,
+  fetchVocabularyRecallSets,
   fetchAuthorizedObjectUrl,
   isApiError,
   type RecallsTodayResponse,
   type RecallsQueueItem,
   type RecallsStarReason,
+  type RecallSetSummary,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { playTransientAudio } from '@/lib/recalls-audio';
 import type { VocabularyCategoriesResponse, VocabularyTerm } from '@/lib/types/vocabulary';
 import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
+import { Pagination } from '@/components/ui/pagination';
 
 const STAR_REASONS: { key: RecallsStarReason; label: string }[] = [
   { key: 'spelling', label: 'Spelling' },
@@ -66,10 +69,10 @@ export default function RecallsWordsPage() {
   const [categoryFilters, setCategoryFilters] = useState([{ key: 'all', label: 'All categories' }]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [catalogPage, setCatalogPage] = useState(1);
-  const CATALOG_PAGE_SIZE = 24;
-  const catalogPageCount = Math.max(1, Math.ceil(catalogTotal / CATALOG_PAGE_SIZE));
-  const catalogRangeStart = catalogTotal === 0 ? 0 : (catalogPage - 1) * CATALOG_PAGE_SIZE + 1;
-  const catalogRangeEnd = Math.min(catalogTotal, catalogPage * CATALOG_PAGE_SIZE);
+  const [catalogPageSize, setCatalogPageSize] = useState(24);
+  const [recallSets, setRecallSets] = useState<RecallSetSummary[]>([]);
+  const [selectedRecallSet, setSelectedRecallSet] = useState('');
+  const catalogPageCount = Math.max(1, Math.ceil(catalogTotal / catalogPageSize));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starOpenFor, setStarOpenFor] = useState<string | null>(null);
@@ -103,6 +106,12 @@ export default function RecallsWordsPage() {
       .catch(() => {
         // Non-fatal: the matrix still works with the all-categories fallback.
       });
+
+    fetchVocabularyRecallSets({ examTypeCode: 'oet' })
+      .then((data) => setRecallSets(data.sets ?? []))
+      .catch(() => {
+        // Non-fatal: recall set filter will simply not render.
+      });
   }, []);
 
   useEffect(() => {
@@ -110,8 +119,9 @@ export default function RecallsWordsPage() {
     fetchVocabularyTerms({
       examTypeCode: 'oet',
       category: selectedCategory === 'all' ? undefined : selectedCategory,
+      recallSet: selectedRecallSet || undefined,
       page: catalogPage,
-      pageSize: CATALOG_PAGE_SIZE,
+      pageSize: catalogPageSize,
     })
       .then((response) => {
         if (!active) return;
@@ -132,13 +142,21 @@ export default function RecallsWordsPage() {
     return () => {
       active = false;
     };
-  }, [selectedCategory, catalogPage]);
+  }, [selectedCategory, selectedRecallSet, catalogPage, catalogPageSize]);
 
   function handleCategoryChange(nextCategory: string) {
     if (nextCategory === selectedCategory) return;
     setCatalogLoading(true);
     setCatalogError(null);
     setSelectedCategory(nextCategory);
+    setCatalogPage(1);
+  }
+
+  function handleRecallSetChange(nextSet: string) {
+    if (nextSet === selectedRecallSet) return;
+    setCatalogLoading(true);
+    setCatalogError(null);
+    setSelectedRecallSet(nextSet);
     setCatalogPage(1);
   }
 
@@ -249,6 +267,41 @@ export default function RecallsWordsPage() {
 
         <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
           <div className="space-y-3">
+            {recallSets.length > 0 && (
+              <fieldset>
+                <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Recall set</legend>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    aria-pressed={selectedRecallSet === ''}
+                    onClick={() => handleRecallSetChange('')}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                      selectedRecallSet === ''
+                        ? 'border-primary bg-primary text-white'
+                        : 'border-border text-muted hover:border-primary hover:text-primary'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {recallSets.map((s) => (
+                    <button
+                      key={s.code}
+                      type="button"
+                      aria-pressed={selectedRecallSet === s.code}
+                      onClick={() => handleRecallSetChange(s.code)}
+                      title={s.description}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                        selectedRecallSet === s.code
+                          ? 'border-primary bg-primary text-white'
+                          : 'border-border text-muted hover:border-primary hover:text-primary'
+                      }`}
+                    >
+                      {s.shortLabel} ({s.termCount})
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
             <fieldset>
               <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Functional category</legend>
               <div className="flex flex-wrap gap-2">
@@ -281,14 +334,16 @@ export default function RecallsWordsPage() {
             </div>
           ) : catalogTerms.length > 0 ? (
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
-                <span>
-                  Showing {catalogRangeStart}–{catalogRangeEnd} of {catalogTotal} active terms for this matrix slice.
-                </span>
-                <span aria-live="polite">
-                  Page {catalogPage} of {catalogPageCount}
-                </span>
-              </div>
+              <Pagination
+                page={catalogPage}
+                pageSize={catalogPageSize}
+                total={catalogTotal}
+                onPageChange={(p) => goToCatalogPage(p)}
+                onPageSizeChange={(size) => { setCatalogPageSize(size); setCatalogPage(1); setCatalogLoading(true); }}
+                pageSizeOptions={[10, 24, 50, 100, 500]}
+                itemLabel="term"
+                resetOnPageSizeChange={false}
+              />
               <div className="grid gap-3 md:grid-cols-2">
                 {catalogTerms.map((term) => {
                   const hasAudio = Boolean(term.audioUrl || term.audioMediaAssetId);
@@ -342,63 +397,16 @@ export default function RecallsWordsPage() {
                 })}
               </div>
               {catalogPageCount > 1 && (
-                <nav
-                  aria-label="Vocabulary catalog pagination"
-                  className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3"
-                >
-                  <button
-                    type="button"
-                    onClick={() => goToCatalogPage(catalogPage - 1)}
-                    disabled={catalogPage <= 1 || catalogLoading}
-                    className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    ← Previous
-                  </button>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {Array.from({ length: catalogPageCount }, (_, i) => i + 1)
-                      .filter((n) =>
-                        n === 1 ||
-                        n === catalogPageCount ||
-                        Math.abs(n - catalogPage) <= 2,
-                      )
-                      .reduce<(number | 'gap')[]>((acc, n) => {
-                        const last = acc[acc.length - 1];
-                        if (typeof last === 'number' && n - last > 1) acc.push('gap');
-                        acc.push(n);
-                        return acc;
-                      }, [])
-                      .map((entry, idx) =>
-                        entry === 'gap' ? (
-                          <span key={`gap-${idx}`} className="px-1 text-xs text-muted">
-                            …
-                          </span>
-                        ) : (
-                          <button
-                            key={entry}
-                            type="button"
-                            aria-current={entry === catalogPage ? 'page' : undefined}
-                            onClick={() => goToCatalogPage(entry)}
-                            disabled={catalogLoading}
-                            className={`min-w-[2rem] rounded-full border px-2 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                              entry === catalogPage
-                                ? 'border-primary bg-primary text-white'
-                                : 'border-border text-muted hover:border-primary hover:text-primary'
-                            }`}
-                          >
-                            {entry}
-                          </button>
-                        ),
-                      )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => goToCatalogPage(catalogPage + 1)}
-                    disabled={catalogPage >= catalogPageCount || catalogLoading}
-                    className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Next →
-                  </button>
-                </nav>
+                <Pagination
+                  page={catalogPage}
+                  pageSize={catalogPageSize}
+                  total={catalogTotal}
+                  onPageChange={(p) => goToCatalogPage(p)}
+                  onPageSizeChange={(size) => { setCatalogPageSize(size); setCatalogPage(1); setCatalogLoading(true); }}
+                  pageSizeOptions={[10, 24, 50, 100, 500]}
+                  itemLabel="term"
+                  resetOnPageSizeChange={false}
+                />
               )}
             </div>
           ) : (

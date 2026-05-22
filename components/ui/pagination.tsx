@@ -56,7 +56,7 @@ export interface PaginationProps {
   className?: string;
 }
 
-const DEFAULT_PAGE_SIZES: ReadonlyArray<number> = [10, 20, 50];
+const DEFAULT_PAGE_SIZES: ReadonlyArray<number> = [10, 20, 50, 100, 500];
 
 export function Pagination({
   page,

@@ -644,6 +644,15 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Reading Authoring (R1). A ReadingPart belongs to a ContentPaper.
         // Cascade: archive a paper → archive its structure. Answers and
         // attempts stay (historical record of a user's study).
+        // P0 hardening 2026-05: enforce FK ReadingPart → ContentPaper at the
+        // DB level (was a comment-only relationship before, no referential
+        // integrity). Paper hard-delete blocked while parts exist; archive
+        // instead.
+        modelBuilder.Entity<ReadingPart>()
+            .HasOne(x => x.Paper)
+            .WithMany()
+            .HasForeignKey(x => x.PaperId)
+            .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ReadingText>()
             .HasOne(x => x.Part)
             .WithMany(p => p.Texts)
@@ -674,6 +683,21 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             .WithMany()
             .HasForeignKey(x => x.ReadingQuestionId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // P0 hardening 2026-05: filtered unique index preventing a learner
+        // from holding two in-progress Exam attempts on the same paper. The
+        // existing service-level check (`ReadingAttemptService.StartAsync`)
+        // has a race window between the SELECT and the INSERT under
+        // concurrent requests; the DB now closes it deterministically.
+        // Practice modes (Learning / Drill / MiniTest / ErrorBank) are
+        // deliberately excluded so a learner may run them alongside an exam
+        // attempt (matches existing service comment).
+        modelBuilder.Entity<ReadingAttempt>()
+            .HasIndex(a => new { a.UserId, a.PaperId, a.Mode, a.Status })
+            .HasDatabaseName("UX_ReadingAttempt_UserPaperExam_InProgress")
+            .IsUnique()
+            .HasFilter("\"Mode\" = 0 AND \"Status\" = 0");
+
         modelBuilder.Entity<ReadingPolicy>()
             .Property(x => x.AllowPaperReadingMode)
             .HasDefaultValue(true);

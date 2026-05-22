@@ -129,6 +129,12 @@ public sealed class ReadingGradingService(
         attempt.SubmittedAt ??= DateTimeOffset.UtcNow;
         attempt.LastActivityAt = DateTimeOffset.UtcNow;
 
+        // P0-F 2026-05 hardening: bump the optimistic-concurrency token so
+        // that a concurrent grader running against the same row hits a
+        // DbUpdateConcurrencyException on save instead of silently
+        // overwriting our final score.
+        attempt.RowVersion++;
+
         await UpdateErrorBankAsync(attempt, questionById, ct);
 
         db.AuditEvents.Add(new AuditEvent
@@ -142,7 +148,28 @@ public sealed class ReadingGradingService(
             ResourceId = attempt.Id,
             Details = $"raw={raw}/{attempt.MaxRawScore} scaled={attempt.ScaledScore?.ToString() ?? "n/a"} mode={attempt.Mode}",
         });
-        await db.SaveChangesAsync(ct);
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another submit raced us to graded state. Reload the canonical
+            // result the winner persisted instead of overwriting it.
+            logger.LogInformation(
+                "Reading attempt {AttemptId} grade lost concurrency race; returning winner's stored result.",
+                attemptId);
+            db.ChangeTracker.Clear();
+            var winner = await db.ReadingAttempts.AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == attemptId, ct)
+                ?? throw new InvalidOperationException("Attempt vanished after concurrency conflict.");
+            if (winner.RawScore is int winnerRaw)
+            {
+                return await BuildResultFromExistingAsync(winner, winnerRaw, ct);
+            }
+            // Winner not yet committed - rare. Fall through with our values.
+        }
 
         return new ReadingGradingResult(
             RawScore: raw,

@@ -3028,6 +3028,8 @@ public sealed class NotificationService(
             channels.Add(NormalizeChannel(NotificationChannel.Push));
         }
 
+        var channelsJson = JsonSupport.Serialize(channels.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+
         if (existingItem is null)
         {
             existingItem = new NotificationInboxItem
@@ -3041,7 +3043,7 @@ public sealed class NotificationService(
                 Body = notificationEvent.Body,
                 ActionUrl = notificationEvent.ActionUrl,
                 Severity = notificationEvent.Severity,
-                ChannelsJson = JsonSupport.Serialize(channels.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()),
+                ChannelsJson = channelsJson,
                 CreatedAt = notificationEvent.CreatedAt
             };
             db.NotificationInboxItems.Add(existingItem);
@@ -3052,11 +3054,43 @@ public sealed class NotificationService(
             existingItem.Body = notificationEvent.Body;
             existingItem.ActionUrl = notificationEvent.ActionUrl;
             existingItem.Severity = notificationEvent.Severity;
-            existingItem.ChannelsJson = JsonSupport.Serialize(channels.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+            existingItem.ChannelsJson = channelsJson;
         }
 
-        await db.SaveChangesAsync(ct);
-        return existingItem;
+        // P0-M 2026-05 hardening: fix the race window where two concurrent
+        // ProcessFanoutAsync calls for the same NotificationEventId both
+        // miss the FirstOrDefaultAsync above, both stage an Add, and the
+        // second SaveChangesAsync hits the unique-index violation
+        // (5076 jobs queued up in this state on production).
+        // Strategy: catch the DbUpdateException, detach our duplicate
+        // insert, reload the row the peer wrote, and apply the same
+        // channel/title/body updates so the caller observes the merged
+        // state.
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return existingItem;
+        }
+        catch (DbUpdateException) when (existingItem.Id.StartsWith("nin-", StringComparison.Ordinal)
+                                        && db.Entry(existingItem).State == EntityState.Added)
+        {
+            db.Entry(existingItem).State = EntityState.Detached;
+            var winner = await db.NotificationInboxItems
+                .FirstOrDefaultAsync(item => item.NotificationEventId == notificationEvent.Id, ct);
+            if (winner is null)
+            {
+                // Should be unreachable - the unique violation implies a row exists.
+                throw new InvalidOperationException(
+                    $"NotificationInboxItem race detected for event {notificationEvent.Id} but winner row not found.");
+            }
+            winner.Title = notificationEvent.Title;
+            winner.Body = notificationEvent.Body;
+            winner.ActionUrl = notificationEvent.ActionUrl;
+            winner.Severity = notificationEvent.Severity;
+            winner.ChannelsJson = channelsJson;
+            await db.SaveChangesAsync(ct);
+            return winner;
+        }
     }
 
     private async Task PublishRealtimeAsync(string authAccountId, NotificationInboxItem inboxItem, CancellationToken ct)

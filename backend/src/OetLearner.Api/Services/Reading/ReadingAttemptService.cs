@@ -436,11 +436,6 @@ public sealed class ReadingAttemptService(
                 "UserAnswerJson must be valid JSON.");
         }
 
-        var row = await db.ReadingAnswers.FirstOrDefaultAsync(
-            a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId, ct);
-        var existingAnswerCount = await db.ReadingAnswers
-            .CountAsync(a => a.ReadingAttemptId == attemptId, ct);
-        var isNewAnswer = row is null;
         now = DateTimeOffset.UtcNow;
 
         // Phase 1 closure — capture per-save and accumulated time-on-question.
@@ -452,33 +447,64 @@ public sealed class ReadingAttemptService(
             sanitisedElapsedMs = Math.Min(e, MaxElapsedMsPerSave);
         }
 
-        if (row is null)
+        // P0-H 2026-05 hardening: TotalElapsedMs increment must be atomic at
+        // DB level so two tabs autosaving the same question do not race and
+        // lose increments. Strategy:
+        //   1. Try INSERT (race-safe via UX_ReadingAnswer_Attempt_Question unique
+        //      constraint). One writer wins, the other catches DbUpdateException
+        //      and falls through to UPDATE.
+        //   2. UPDATE uses ExecuteUpdateAsync (SET col = col + @delta) so the
+        //      accumulator is incremented by the database, not by EF
+        //      change-tracking after a read.
+        var existingAnswerCount = await db.ReadingAnswers
+            .CountAsync(a => a.ReadingAttemptId == attemptId, ct);
+        var isNewAnswer = false;
+        var newId = Guid.NewGuid().ToString("N");
+
+        try
         {
-            row = new ReadingAnswer
+            var insertRow = new ReadingAnswer
             {
-                Id = Guid.NewGuid().ToString("N"),
+                Id = newId,
                 ReadingAttemptId = attemptId,
                 ReadingQuestionId = questionId,
                 UserAnswerJson = userAnswerJson,
                 AnsweredAt = now,
                 ElapsedMs = sanitisedElapsedMs,
                 TotalElapsedMs = sanitisedElapsedMs,
+                CreatedAt = now,
+                UpdatedAt = now,
             };
-            db.ReadingAnswers.Add(row);
+            db.ReadingAnswers.Add(insertRow);
+            await db.SaveChangesAsync(ct);
+            isNewAnswer = true;
         }
-        else
+        catch (DbUpdateException)
         {
-            row.UserAnswerJson = userAnswerJson;
-            row.AnsweredAt = now;
-            row.IsCorrect = null; // regrade on submit
-            row.PointsEarned = 0;
-            if (sanitisedElapsedMs is int delta)
+            // Concurrent insert beat us, or row already existed. Switch to
+            // atomic update path.
+            db.ChangeTracker.Clear();
+            var deltaSql = sanitisedElapsedMs ?? 0;
+            var rowsAffected = await db.ReadingAnswers
+                .Where(a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(a => a.UserAnswerJson, _ => userAnswerJson)
+                    .SetProperty(a => a.AnsweredAt, _ => now)
+                    .SetProperty(a => a.UpdatedAt, _ => now)
+                    .SetProperty(a => a.IsCorrect, _ => (bool?)null)
+                    .SetProperty(a => a.PointsEarned, _ => 0)
+                    .SetProperty(a => a.ElapsedMs, _ => sanitisedElapsedMs)
+                    .SetProperty(a => a.TotalElapsedMs, a => (a.TotalElapsedMs ?? 0) + deltaSql),
+                    ct);
+            if (rowsAffected == 0)
             {
-                row.ElapsedMs = delta;
-                row.TotalElapsedMs = (row.TotalElapsedMs ?? 0) + delta;
+                throw new InvalidOperationException(
+                    "Failed to persist Reading answer (concurrent delete?).");
             }
         }
 
+        // Update attempt.LastActivityAt + write audit log in a fresh save so
+        // it does not get tangled with the answer write path above.
         attempt.LastActivityAt = now;
         var elapsedDetail = sanitisedElapsedMs is int dm ? $"; elapsedMs={dm}" : string.Empty;
         db.AuditEvents.Add(new AuditEvent
