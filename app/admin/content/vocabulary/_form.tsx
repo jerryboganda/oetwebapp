@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { fetchAdminVocabularyRecallSets } from '@/lib/api';
-import { vocabularyProvenanceLabel } from '@/lib/vocabulary-provenance';
 
 export type VocabFormValues = {
   term: string;
@@ -122,7 +121,6 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
   });
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
-  const provenanceLabel = vocabularyProvenanceLabel(v.sourceProvenance);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -259,9 +257,6 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
                 <Badge variant={v.status === 'active' ? 'success' : v.status === 'draft' ? 'warning' : 'muted'}>
                   {v.status}
                 </Badge>
-                {provenanceLabel && (
-                  <Badge variant="warning">{provenanceLabel}</Badge>
-                )}
               </div>
               <p className="mt-1 text-xs text-muted">Setting status to “active” on save will run the publish gate. Use the Publish button below to active-and-validate in one step.</p>
             </div>

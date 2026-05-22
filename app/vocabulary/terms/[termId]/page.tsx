@@ -9,7 +9,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge, CategoryBadge, DifficultyBadge, SourceBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, DifficultyBadge } from '@/components/ui/badge';
 import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 import {
   fetchVocabularyTerm,
@@ -21,7 +21,6 @@ import {
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
-import { vocabularyProvenanceLabel } from '@/lib/vocabulary-provenance';
 import type { VocabularyTerm, LearnerVocabulary } from '@/lib/types/vocabulary';
 
 const MASTERY_COLORS: Record<string, string> = {
@@ -137,7 +136,6 @@ export default function VocabularyTermDetailPage() {
       </LearnerDashboardShell>
     );
   }
-  const provenanceLabel = vocabularyProvenanceLabel(term.sourceProvenance);
 
   return (
     <LearnerDashboardShell>
@@ -171,7 +169,6 @@ export default function VocabularyTermDetailPage() {
               className="mb-3"
             />
             <div className="flex flex-wrap items-center gap-3">
-              {provenanceLabel && <Badge variant="warning">{provenanceLabel}</Badge>}
               <button
                 onClick={() => void playAudio()}
                 className="inline-flex items-center gap-2 rounded-full bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10"
@@ -296,7 +293,6 @@ export default function VocabularyTermDetailPage() {
               {term.professionId && <div>Profession: <span className="font-medium text-navy capitalize">{term.professionId}</span></div>}
               <div className="flex items-center gap-2">Category: <CategoryBadge category={term.category} size="sm" /></div>
               <div className="flex items-center gap-2">Difficulty: <DifficultyBadge difficulty={term.difficulty} size="sm" /></div>
-              {provenanceLabel && <div className="flex items-center gap-2">Source: <SourceBadge label={provenanceLabel} size="sm" /></div>}
             </div>
           </Card>
         </div>

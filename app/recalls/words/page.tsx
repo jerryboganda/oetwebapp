@@ -8,7 +8,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge, CategoryBadge, DifficultyBadge, SourceBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, DifficultyBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import {
@@ -367,9 +367,6 @@ export default function RecallsWordsPage() {
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <CategoryBadge category={term.category} size="sm" />
                         <DifficultyBadge difficulty={term.difficulty} size="sm" />
-                        {term.sourceProvenance && (
-                          <SourceBadge label={term.sourceProvenance} size="sm" />
-                        )}
                       </div>
                       {definitionText && <p className="mt-3 text-sm leading-relaxed text-muted">{definitionText}</p>}
                       {term.exampleSentence && (

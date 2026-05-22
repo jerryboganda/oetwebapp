@@ -9,7 +9,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge, CategoryBadge, DifficultyBadge, SourceBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, DifficultyBadge } from '@/components/ui/badge';
 import {
   fetchVocabularyTerms,
   addToMyVocabulary,
@@ -21,7 +21,6 @@ import {
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
-import { vocabularyProvenanceLabel } from '@/lib/vocabulary-provenance';
 import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 import type { VocabularyTerm, VocabularyCategoriesResponse } from '@/lib/types/vocabulary';
 
@@ -228,7 +227,6 @@ export default function BrowseVocabularyPage() {
         <>
           <div className="space-y-3 mb-6">
             {terms.map((term, i) => {
-              const provenanceLabel = vocabularyProvenanceLabel(term.sourceProvenance);
               return (
                 <MotionItem
                   key={term.id}
@@ -257,7 +255,6 @@ export default function BrowseVocabularyPage() {
                     <div className="mb-2 flex flex-wrap items-center gap-1.5">
                       <CategoryBadge category={term.category} size="sm" />
                       <DifficultyBadge difficulty={term.difficulty} size="sm" />
-                      {provenanceLabel && <SourceBadge label={provenanceLabel} size="sm" />}
                     </div>
                     <p className="text-sm leading-relaxed text-muted">{term.definition}</p>
                     {term.exampleSentence && <p className="mt-1.5 text-xs italic leading-relaxed text-muted/80">&quot;{term.exampleSentence}&quot;</p>}
