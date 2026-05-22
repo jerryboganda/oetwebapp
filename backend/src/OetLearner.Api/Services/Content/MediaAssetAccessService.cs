@@ -70,6 +70,11 @@ public sealed class MediaAssetAccessService(
             return true;
         }
 
+        if (await CanLearnerAccessVocabularyAudioAsync(media.Id, normalizedProfession, ct))
+        {
+            return true;
+        }
+
         if (await CanLearnerAccessPublishedRulebookReferencePdfAsync(media.Id, normalizedProfession, ct))
         {
             return true;
@@ -164,6 +169,16 @@ public sealed class MediaAssetAccessService(
                 && (document.ProfessionId == null
                     || (!string.IsNullOrWhiteSpace(normalizedProfession)
                         && document.ProfessionId == normalizedProfession)), ct);
+
+    private Task<bool> CanLearnerAccessVocabularyAudioAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)
+        => db.VocabularyTerms
+            .AsNoTracking()
+            .AnyAsync(term =>
+                term.AudioMediaAssetId == mediaAssetId
+                && term.Status == "active"
+                && (term.ProfessionId == null
+                    || (!string.IsNullOrWhiteSpace(normalizedProfession)
+                        && term.ProfessionId == normalizedProfession)), ct);
 
     private Task<bool> CanLearnerAccessPublishedRulebookReferencePdfAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)
         => db.RulebookVersions
