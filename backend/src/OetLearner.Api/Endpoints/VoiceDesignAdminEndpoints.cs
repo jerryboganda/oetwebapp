@@ -21,7 +21,7 @@ public static class VoiceDesignAdminEndpoints
             IConversationOptionsProvider optionsProvider,
             CancellationToken ct) =>
         {
-            var opts = await optionsProvider.GetCurrentAsync(ct);
+            var opts = await optionsProvider.GetAsync(ct);
             return Results.Ok(new AdminVoiceDesignConfigResponse(
                 ModelVariant: opts.Qwen3ModelVariant ?? "flash",
                 VoiceId: opts.Qwen3VoiceId ?? "Cherry",
