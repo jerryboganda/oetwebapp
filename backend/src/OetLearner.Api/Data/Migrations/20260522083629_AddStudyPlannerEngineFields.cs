@@ -127,6 +127,111 @@ namespace OetLearner.Api.Data.Migrations
                     CONSTRAINT "PK_StudyPlanTemplateTiers" PRIMARY KEY ("Id")
                 );
 
+                ALTER TABLE "GatewayRoutingConfigs" ADD COLUMN IF NOT EXISTS "Id" character varying(64) NOT NULL DEFAULT '';
+                ALTER TABLE "GatewayRoutingConfigs" ADD COLUMN IF NOT EXISTS "Region" character varying(16) NOT NULL DEFAULT '';
+                ALTER TABLE "GatewayRoutingConfigs" ADD COLUMN IF NOT EXISTS "Currency" character varying(8) NOT NULL DEFAULT '';
+                ALTER TABLE "GatewayRoutingConfigs" ADD COLUMN IF NOT EXISTS "ProductType" character varying(32) NOT NULL DEFAULT '';
+                ALTER TABLE "GatewayRoutingConfigs" ADD COLUMN IF NOT EXISTS "GatewayName" character varying(32) NOT NULL DEFAULT '';
+                ALTER TABLE "GatewayRoutingConfigs" ADD COLUMN IF NOT EXISTS "Priority" integer NOT NULL DEFAULT 0;
+                ALTER TABLE "GatewayRoutingConfigs" ADD COLUMN IF NOT EXISTS "IsEnabled" boolean NOT NULL DEFAULT false;
+                ALTER TABLE "GatewayRoutingConfigs" ADD COLUMN IF NOT EXISTS "CreatedAt" timestamp with time zone NOT NULL DEFAULT NOW();
+                ALTER TABLE "GatewayRoutingConfigs" ADD COLUMN IF NOT EXISTS "UpdatedAt" timestamp with time zone NOT NULL DEFAULT NOW();
+                ALTER TABLE "GatewayRoutingConfigs" ADD COLUMN IF NOT EXISTS "UpdatedByAdminId" character varying(64);
+
+                ALTER TABLE "RegionPricings" ADD COLUMN IF NOT EXISTS "Id" character varying(64) NOT NULL DEFAULT '';
+                ALTER TABLE "RegionPricings" ADD COLUMN IF NOT EXISTS "TargetType" character varying(32) NOT NULL DEFAULT '';
+                ALTER TABLE "RegionPricings" ADD COLUMN IF NOT EXISTS "TargetId" character varying(64) NOT NULL DEFAULT '';
+                ALTER TABLE "RegionPricings" ADD COLUMN IF NOT EXISTS "Region" character varying(16) NOT NULL DEFAULT '';
+                ALTER TABLE "RegionPricings" ADD COLUMN IF NOT EXISTS "Currency" character varying(8) NOT NULL DEFAULT '';
+                ALTER TABLE "RegionPricings" ADD COLUMN IF NOT EXISTS "PriceAmount" numeric(12,2) NOT NULL DEFAULT 0;
+                ALTER TABLE "RegionPricings" ADD COLUMN IF NOT EXISTS "IsActive" boolean NOT NULL DEFAULT false;
+                ALTER TABLE "RegionPricings" ADD COLUMN IF NOT EXISTS "CreatedAt" timestamp with time zone NOT NULL DEFAULT NOW();
+                ALTER TABLE "RegionPricings" ADD COLUMN IF NOT EXISTS "UpdatedAt" timestamp with time zone NOT NULL DEFAULT NOW();
+                ALTER TABLE "RegionPricings" ADD COLUMN IF NOT EXISTS "CreatedByAdminId" character varying(64);
+                ALTER TABLE "RegionPricings" ADD COLUMN IF NOT EXISTS "UpdatedByAdminId" character varying(64);
+
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "Id" character varying(64) NOT NULL DEFAULT '';
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "ProfessionId" character varying(32) NOT NULL DEFAULT '';
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "Count" integer NOT NULL DEFAULT 0;
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "GeneratedCount" integer NOT NULL DEFAULT 0;
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "TopicListJson" character varying(2000) NOT NULL DEFAULT '[]';
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "DifficultyDistributionJson" character varying(500) NOT NULL DEFAULT '{}';
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "Status" integer NOT NULL DEFAULT 0;
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "RequestedByAdminId" character varying(64) NOT NULL DEFAULT '';
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "RequestedByAdminName" character varying(160);
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "IdempotencyKey" character varying(96);
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "Error" character varying(1024);
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "CreatedAt" timestamp with time zone NOT NULL DEFAULT NOW();
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "StartedAt" timestamp with time zone;
+                ALTER TABLE "SpeakingCardBatchRequests" ADD COLUMN IF NOT EXISTS "CompletedAt" timestamp with time zone;
+
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "Id" character varying(64) NOT NULL DEFAULT '';
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "Name" character varying(128) NOT NULL DEFAULT '';
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "Slug" character varying(64) NOT NULL DEFAULT '';
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "Description" character varying(1024);
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "ExamTypeCode" character varying(16) NOT NULL DEFAULT 'OET';
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "ExamFamilyCode" character varying(16) NOT NULL DEFAULT 'oet';
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "MinWeeks" integer NOT NULL DEFAULT 1;
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "MaxWeeks" integer NOT NULL DEFAULT 52;
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "TargetBand" character varying(8);
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "ProfessionId" character varying(32);
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "FocusTagsJson" jsonb NOT NULL DEFAULT '[]'::jsonb;
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "DefaultMinutesPerDay" integer NOT NULL DEFAULT 60;
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "TemplateBodyJson" jsonb NOT NULL DEFAULT '{"weeks":[],"checkpoints":[]}'::jsonb;
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "IsActive" boolean NOT NULL DEFAULT true;
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "Version" integer NOT NULL DEFAULT 1;
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "CreatedBy" character varying(64);
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "CreatedAt" timestamp with time zone NOT NULL DEFAULT NOW();
+                ALTER TABLE "StudyPlanTemplates" ADD COLUMN IF NOT EXISTS "UpdatedAt" timestamp with time zone NOT NULL DEFAULT NOW();
+
+                UPDATE "StudyPlanTemplates"
+                SET
+                    "ExamTypeCode" = COALESCE(NULLIF("ExamTypeCode", ''), 'OET'),
+                    "ExamFamilyCode" = COALESCE(NULLIF("ExamFamilyCode", ''), 'oet');
+
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'StudyPlanTemplates' AND column_name = 'DurationWeeks'
+                    ) THEN
+                        UPDATE "StudyPlanTemplates"
+                        SET
+                            "MinWeeks" = CASE WHEN "MinWeeks" <= 0 AND "DurationWeeks" > 0 THEN "DurationWeeks" ELSE "MinWeeks" END,
+                            "MaxWeeks" = CASE WHEN "MaxWeeks" <= 0 AND "DurationWeeks" > 0 THEN "DurationWeeks" ELSE "MaxWeeks" END;
+                    END IF;
+
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'StudyPlanTemplates' AND column_name = 'DefaultHoursPerWeek'
+                    ) THEN
+                        UPDATE "StudyPlanTemplates"
+                        SET "DefaultMinutesPerDay" = CASE
+                            WHEN "DefaultMinutesPerDay" <= 0 AND "DefaultHoursPerWeek" > 0 THEN GREATEST(15, ("DefaultHoursPerWeek" * 60) / 7)
+                            ELSE "DefaultMinutesPerDay"
+                        END;
+                    END IF;
+
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'StudyPlanTemplates' AND column_name = 'IsArchived'
+                    ) THEN
+                        UPDATE "StudyPlanTemplates" SET "IsActive" = NOT "IsArchived";
+                    END IF;
+
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'StudyPlanTemplates' AND column_name = 'CreatedByAdminId'
+                    ) THEN
+                        UPDATE "StudyPlanTemplates" SET "CreatedBy" = COALESCE("CreatedBy", "CreatedByAdminId");
+                    END IF;
+                END $$;
+
+                ALTER TABLE "StudyPlanTemplateTiers" ADD COLUMN IF NOT EXISTS "Id" character varying(64) NOT NULL DEFAULT '';
+                ALTER TABLE "StudyPlanTemplateTiers" ADD COLUMN IF NOT EXISTS "TemplateId" character varying(64) NOT NULL DEFAULT '';
+                ALTER TABLE "StudyPlanTemplateTiers" ADD COLUMN IF NOT EXISTS "TierCode" character varying(32) NOT NULL DEFAULT '';
+                ALTER TABLE "StudyPlanTemplateTiers" ADD COLUMN IF NOT EXISTS "CreatedAt" timestamp with time zone NOT NULL DEFAULT NOW();
+
                 CREATE INDEX IF NOT EXISTS "IX_StudyPlans_TemplateId" ON "StudyPlans" ("TemplateId");
                 CREATE INDEX IF NOT EXISTS "IX_StudyPlans_UserId_IsActive" ON "StudyPlans" ("UserId", "IsActive");
                 CREATE INDEX IF NOT EXISTS "IX_StudyPlanItems_LinkedReviewItemId" ON "StudyPlanItems" ("LinkedReviewItemId");
