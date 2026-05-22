@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3 } from 'lucide-react';
+import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3, Volume2, Crown } from 'lucide-react';
 import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -219,6 +219,32 @@ export default function AdminVocabularyPage() {
             </div>
           }
         />
+
+        {/* TTS Configuration Info */}
+        <div className="rounded-xl border border-border bg-surface/50 p-4 mb-1">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-navy mb-2">
+            <Volume2 className="h-4 w-4 text-primary" />
+            Vocabulary Audio (TTS Configuration)
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/5 p-3">
+              <Volume2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+              <div>
+                <p className="text-sm font-medium text-navy">Browser TTS</p>
+                <p className="text-xs text-muted mt-0.5">Free-tier fallback via Web Speech API. Works offline, instant playback. Active for all learners by default.</p>
+              </div>
+              <Badge variant="success">Active</Badge>
+            </div>
+            <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3">
+              <Crown className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+              <div>
+                <p className="text-sm font-medium text-navy">Premium TTS (ElevenLabs)</p>
+                <p className="text-xs text-muted mt-0.5">British clinical pronunciation via AI. Requires active subscription. Managed in AI Providers settings.</p>
+              </div>
+              <Badge variant="warning">Premium</Badge>
+            </div>
+          </div>
+        </div>
 
         <AdminRoutePanel>
           <div className="mb-4 grid gap-3 sm:grid-cols-4">

@@ -9,7 +9,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, DifficultyBadge, SourceBadge, SubtestBadge } from '@/components/ui/badge';
 import {
   fetchVocabularyTerms,
   addToMyVocabulary,
@@ -22,6 +22,7 @@ import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
 import { vocabularyProvenanceLabel } from '@/lib/vocabulary-provenance';
+import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 import type { VocabularyTerm, VocabularyCategoriesResponse } from '@/lib/types/vocabulary';
 
 // Mobile offline cache — lazy, best-effort; skipped in SSR and when IndexedDB is unavailable.
@@ -81,6 +82,7 @@ export default function BrowseVocabularyPage() {
   }, [category, page, pageSize, recallSet, search]);
 
   useEffect(() => {
+    preloadVoices();
     analytics.track('vocab_browse_viewed');
     // Load categories once on mount.
     fetchVocabularyCategories({ examTypeCode: 'oet' })
@@ -117,10 +119,20 @@ export default function BrowseVocabularyPage() {
     }
   }
 
-  async function playAudio(termId: string) {
+  async function playAudio(termId: string, termText?: string) {
     const response = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
-    if (!response) return;
-    playTransientAudio(response.url);
+    if (response) {
+      playTransientAudio(response.url);
+      return;
+    }
+    // Fallback: browser TTS when audio is blocked or unavailable
+    if (termText && isBrowserTtsAvailable()) {
+      try {
+        await speakTerm(termText);
+      } catch {
+        // Best-effort
+      }
+    }
   }
 
   const totalPages = Math.ceil(total / pageSize);
@@ -221,13 +233,13 @@ export default function BrowseVocabularyPage() {
                 <MotionItem
                   key={term.id}
                   delayIndex={i}
-                  className="flex gap-4 rounded-2xl border border-border bg-surface p-4"
+                  className="group flex gap-4 rounded-2xl border border-border bg-surface p-5 transition-all duration-200 hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
                       <Link
                         href={`/vocabulary/terms/${encodeURIComponent(term.id)}`}
-                        className="font-bold text-navy hover:underline"
+                        className="text-base font-bold text-navy hover:text-primary transition-colors"
                       >
                         {term.term}
                       </Link>
@@ -235,28 +247,26 @@ export default function BrowseVocabularyPage() {
                         <span className="text-xs italic text-muted">{term.ipaPronunciation}</span>
                       )}
                       <button
-                        onClick={() => void playAudio(term.id)}
-                        className="inline-flex items-center rounded-full p-1 text-muted transition-colors hover:bg-background-light hover:text-primary"
+                        onClick={() => void playAudio(term.id, term.term)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20"
                         aria-label={`Play pronunciation of ${term.term}`}
                       >
                         <Volume2 className="h-3.5 w-3.5" />
                       </button>
-                      <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">
-                        {term.category.replace(/_/g, ' ')}
-                      </span>
-                      <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">
-                        {term.difficulty}
-                      </span>
-                      {provenanceLabel && <Badge variant="warning">{provenanceLabel}</Badge>}
                     </div>
-                    <p className="text-sm text-muted">{term.definition}</p>
-                    {term.exampleSentence && <p className="mt-1 text-xs italic text-muted">&quot;{term.exampleSentence}&quot;</p>}
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                      <CategoryBadge category={term.category} size="sm" />
+                      <DifficultyBadge difficulty={term.difficulty} size="sm" />
+                      {provenanceLabel && <SourceBadge label={provenanceLabel} size="sm" />}
+                    </div>
+                    <p className="text-sm leading-relaxed text-muted">{term.definition}</p>
+                    {term.exampleSentence && <p className="mt-1.5 text-xs italic leading-relaxed text-muted/80">&quot;{term.exampleSentence}&quot;</p>}
                   </div>
                   <button
                     onClick={() => handleAdd(term.id)}
                     disabled={adding.has(term.id) || added.has(term.id)}
-                    className={`flex-shrink-0 rounded-lg p-2 transition-colors ${added.has(term.id) ? 'bg-success/10 text-success' : 'text-muted hover:bg-background-light hover:text-primary'}`}
-                    title="Add to my list"
+                    className={`flex-shrink-0 self-start rounded-xl p-2.5 transition-all duration-200 ${added.has(term.id) ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/60' : 'text-muted border border-transparent hover:bg-primary/10 hover:text-primary hover:border-primary/20'}`}
+                    title={added.has(term.id) ? 'Added to your list' : 'Add to my list'}
                     aria-label={added.has(term.id) ? `${term.term} added to your list` : `Add ${term.term} to your list`}
                   >
                     {added.has(term.id) ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}

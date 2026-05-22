@@ -9,7 +9,8 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, DifficultyBadge, SourceBadge, SubtestBadge } from '@/components/ui/badge';
+import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 import {
   fetchVocabularyTerm,
   fetchMyVocabulary,
@@ -43,6 +44,7 @@ export default function VocabularyTermDetailPage() {
   const { guardAudio, modal: audioUpgradeModal } = useRecallsAudioUpgrade();
 
   useEffect(() => {
+    preloadVoices();
     if (!termId) return;
     analytics.track('vocab_term_detail_viewed', { termId });
     void loadAll(termId);
@@ -99,9 +101,18 @@ export default function VocabularyTermDetailPage() {
 
   async function playAudio() {
     if (!term) return;
-    const response = await guardAudio(() => fetchRecallsAudio(term.id, 'normal'), { termId: term.id });
-    if (!response) return;
-    playTransientAudio(response.url);
+    try {
+      const response = await guardAudio(() => fetchRecallsAudio(term.id, 'normal'), { termId: term.id });
+      if (response) {
+        playTransientAudio(response.url);
+        return;
+      }
+    } catch {
+      // Audio asset unavailable — fall through to browser TTS
+    }
+    if (isBrowserTtsAvailable()) {
+      speakTerm(term.term);
+    }
   }
 
   if (loading) {
@@ -283,9 +294,20 @@ export default function VocabularyTermDetailPage() {
             <div className="space-y-2 text-muted">
               <div>Exam: <span className="font-medium text-navy">{term.examTypeCode.toUpperCase()}</span></div>
               {term.professionId && <div>Profession: <span className="font-medium text-navy capitalize">{term.professionId}</span></div>}
-              <div>Category: <span className="font-medium text-navy capitalize">{term.category.replace(/_/g, ' ')}</span></div>
-              <div>Difficulty: <span className="font-medium text-navy capitalize">{term.difficulty}</span></div>
+              <div className="flex items-center gap-2">Category: <CategoryBadge category={term.category} size="sm" /></div>
+              <div className="flex items-center gap-2">Difficulty: <DifficultyBadge difficulty={term.difficulty} size="sm" /></div>
+              {provenanceLabel && <div className="flex items-center gap-2">Source: <SourceBadge label={provenanceLabel} size="sm" /></div>}
             </div>
+            {term.oetSubtestTags && term.oetSubtestTags.length > 0 && (
+              <div className="mt-4 border-t border-border pt-3">
+                <div className="mb-2 text-xs font-semibold uppercase text-muted">Subtest relevance</div>
+                <div className="flex flex-wrap gap-2">
+                  {term.oetSubtestTags.map((tag) => (
+                    <SubtestBadge key={tag} tag={tag} size="sm" />
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       </div>

@@ -8,7 +8,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge, CategoryBadge, DifficultyBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, DifficultyBadge, SourceBadge, SubtestBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import {
@@ -27,6 +27,7 @@ import {
 import { analytics } from '@/lib/analytics';
 import { playTransientAudio } from '@/lib/recalls-audio';
 import type { VocabularyCategoriesResponse, VocabularyTerm } from '@/lib/types/vocabulary';
+import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 
 const STAR_REASONS: { key: RecallsStarReason; label: string }[] = [
   { key: 'spelling', label: 'Spelling' },
@@ -78,6 +79,7 @@ export default function RecallsWordsPage() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   useEffect(() => {
+    preloadVoices();
     analytics.track('recalls_words_viewed');
     Promise.all([fetchRecallsToday(), fetchRecallsQueue(40)])
       .then(([t, q]) => {
@@ -152,24 +154,30 @@ export default function RecallsWordsPage() {
   }
 
   async function playTerm(term: VocabularyTerm) {
-    // Prefer the canonical /v1/media/{id}/content endpoint when an asset id is
-    // available; some legacy AudioUrl rows point at /media/file/... which is not
-    // a routable endpoint on either the web app or the API. Use the authorized
-    // object-URL helper so the request carries auth headers and goes through the
-    // backend proxy.
+    // Prefer canonical audio asset when available
     const path = term.audioMediaAssetId
       ? `/v1/media/${term.audioMediaAssetId}/content`
       : term.audioUrl
         ? term.audioUrl
         : null;
-    if (!path) return;
-    try {
-      const objectUrl = await fetchAuthorizedObjectUrl(path);
-      const a = new Audio(objectUrl);
-      a.addEventListener('ended', () => URL.revokeObjectURL(objectUrl), { once: true });
-      await a.play().catch(() => {});
-    } catch (err) {
-      console.error('[recalls/words] playTerm failed:', err);
+    if (path) {
+      try {
+        const objectUrl = await fetchAuthorizedObjectUrl(path);
+        const a = new Audio(objectUrl);
+        a.addEventListener('ended', () => URL.revokeObjectURL(objectUrl), { once: true });
+        await a.play().catch(() => {});
+        return;
+      } catch (err) {
+        console.error('[recalls/words] playTerm asset failed, falling back to browser TTS:', err);
+      }
+    }
+    // Fallback: browser-native TTS
+    if (isBrowserTtsAvailable()) {
+      try {
+        await speakTerm(term.term);
+      } catch {
+        // Best-effort — browser TTS not critical
+      }
     }
   }
 
@@ -294,57 +302,40 @@ export default function RecallsWordsPage() {
                       onKeyDown={(event) => {
                         if (event.key === ' ' || event.code === 'Space') {
                           event.preventDefault();
-                          if (hasAudio) playTerm(term);
+                          playTerm(term);
                         }
                       }}
-                      className="rounded-xl border border-border bg-background/70 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="group rounded-2xl border border-border bg-surface p-5 transition-all duration-200 hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-semibold text-navy">{term.term}</h3>
-                        {hasAudio ? (
-                          <button
-                            type="button"
-                            onClick={() => playTerm(term)}
-                            aria-label={`Play pronunciation of ${term.term}`}
-                            title="Play pronunciation"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary hover:bg-primary/15"
-                          >
-                            <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled
-                            aria-disabled="true"
-                            aria-label={`Audio not yet available for ${term.term}`}
-                            title="Audio not yet available"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary opacity-40 cursor-not-allowed"
-                          >
-                            <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        <CategoryBadge category={term.category} size="sm" />
-                        <DifficultyBadge difficulty={term.difficulty} size="sm" />
-                      </div>
-                      {definitionText && <p className="mt-2 text-sm text-muted">{definitionText}</p>}
-                      <p className="mt-2 text-xs italic text-muted">{term.exampleSentence}</p>
-                      {hasAudio ? (
+                        <h3 className="text-base font-bold text-navy">{term.term}</h3>
                         <button
                           type="button"
                           onClick={() => playTerm(term)}
-                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                          aria-label={`Play pronunciation of ${term.term}`}
+                          title={hasAudio ? 'Play pronunciation' : 'Play with browser TTS'}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20 group-hover:bg-primary/15"
                         >
-                          <Volume2 size={12} className="h-3 w-3" aria-hidden="true" />
-                          <span>Play pronunciation</span>
+                          <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />
                         </button>
-                      ) : (
-                        <span
-                          className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted opacity-60 cursor-not-allowed"
-                          title="Audio not yet available"
-                        >
-                          <Volume2 size={12} className="h-3 w-3" aria-hidden="true" />
-                          <span>Audio not yet available</span>
-                        </span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <CategoryBadge category={term.category} size="sm" />
+                        <DifficultyBadge difficulty={term.difficulty} size="sm" />
+                        {term.sourceProvenance && (
+                          <SourceBadge label={term.sourceProvenance} size="sm" />
+                        )}
+                      </div>
+                      {definitionText && <p className="mt-3 text-sm leading-relaxed text-muted">{definitionText}</p>}
+                      {term.exampleSentence && (
+                        <p className="mt-2 text-xs italic leading-relaxed text-muted/80">{term.exampleSentence}</p>
+                      )}
+                      {term.oetSubtestTags && term.oetSubtestTags.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border/50 pt-3">
+                          {term.oetSubtestTags.map((tag) => (
+                            <SubtestBadge key={tag} tag={tag} size="sm" />
+                          ))}
+                        </div>
                       )}
                     </article>
                   );
