@@ -1,8 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Calendar,
   Clock,
@@ -10,53 +8,85 @@ import {
   ShieldAlert,
   ShieldCheck,
   Shield,
-  FileText,
-  Headphones,
-  PenTool,
-  Mic,
   TrendingUp,
   Info,
+  Sliders,
+  RefreshCcw,
+  BookOpen,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchReadiness, fetchReadinessRisk } from '@/lib/api';
-import type { ReadinessData } from '@/lib/mock-data';
-import { useReducedMotion } from 'motion/react';
+import { fetchReadiness, fetchReadinessHistory, fetchReadinessForecast, refreshReadiness } from '@/lib/api';
+import type { ReadinessData, ReadinessHistoryPoint, ReadinessForecast } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { ReadinessTrendChart } from '@/components/domain/readiness-trend-chart';
+import { ReadinessForecastGauge } from '@/components/domain/readiness-forecast-gauge';
+import { ReadinessForecastSimulator } from '@/components/domain/readiness-forecast-simulator';
+import { ReadinessBlockerCard } from '@/components/domain/readiness-blocker-card';
+import { ReadinessSubtestCard } from '@/components/domain/readiness-subtest-card';
+import { ReadinessTargetDateEdit } from '@/components/domain/readiness-target-date-edit';
 import { analytics } from '@/lib/analytics';
-import { getMotionDelay, getProgressFillTransition, prefersReducedMotion } from '@/lib/motion';
 
-const SUBTEST_ICONS: Record<string, React.ElementType> = {
-  reading:   FileText,
-  listening: Headphones,
-  writing:   PenTool,
-  speaking:  Mic,
-};
+const TREND_SERIES_OPTIONS: { value: 'overall' | 'writing' | 'speaking' | 'reading' | 'listening' | 'vocabulary'; label: string }[] = [
+  { value: 'overall', label: 'Overall' },
+  { value: 'writing', label: 'Writing' },
+  { value: 'speaking', label: 'Speaking' },
+  { value: 'reading', label: 'Reading' },
+  { value: 'listening', label: 'Listening' },
+  { value: 'vocabulary', label: 'Vocabulary' },
+];
 
 export default function ReadinessCenter() {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
-  const progressTransition = getProgressFillTransition(reducedMotion);
   const [data, setData] = useState<ReadinessData | null>(null);
-  const [riskData, setRiskData] = useState<{ riskProbability: number; riskLevel: string; factors: { label: string; severity: string; impact: number; description: string }[]; recommendation: string } | null>(null);
+  const [history, setHistory] = useState<ReadinessHistoryPoint[]>([]);
+  const [forecast, setForecast] = useState<ReadinessForecast | null>(null);
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
+  const [trendSeries, setTrendSeries] = useState<typeof TREND_SERIES_OPTIONS[number]['value']>('overall');
+
+  const loadAll = useCallback(async () => {
+    setError('');
+    const [readinessResult, historyResult, forecastResult] = await Promise.allSettled([
+      fetchReadiness(),
+      fetchReadinessHistory(12),
+      fetchReadinessForecast(),
+    ]);
+    if (readinessResult.status === 'fulfilled') setData(readinessResult.value);
+    else setError('Could not load readiness data.');
+    if (historyResult.status === 'fulfilled') setHistory(historyResult.value);
+    if (forecastResult.status === 'fulfilled') setForecast(forecastResult.value);
+  }, []);
 
   useEffect(() => {
     analytics.track('readiness_viewed');
-    fetchReadiness()
-      .then(setData)
-      .catch(() => setError('Could not load readiness data.'));
-    fetchReadinessRisk()
-      .then((r: { riskProbability: number; riskLevel: string; factors: { label: string; severity: string; impact: number; description: string }[]; recommendation: string }) => setRiskData(r))
-      .catch(() => { /* non-critical — page still works without risk data */ });
-  }, []);
+    void loadAll();
+  }, [loadAll]);
 
-  if (error) {
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      const fresh = await refreshReadiness();
+      setData(fresh);
+      // refresh history + forecast too
+      const [h, f] = await Promise.all([
+        fetchReadinessHistory(12).catch(() => history),
+        fetchReadinessForecast().catch(() => forecast),
+      ]);
+      setHistory(h);
+      setForecast(f);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not refresh readiness.');
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  if (error && !data) {
     return (
       <LearnerDashboardShell pageTitle="Readiness Center" backHref="/">
-        <div>
-          <InlineAlert variant="error">{error}</InlineAlert>
-        </div>
+        <div><InlineAlert variant="error">{error}</InlineAlert></div>
       </LearnerDashboardShell>
     );
   }
@@ -65,42 +95,21 @@ export default function ReadinessCenter() {
     return (
       <LearnerDashboardShell pageTitle="Readiness Center" backHref="/">
         <div className="space-y-6">
-          {[1, 2, 3].map(i => (
-            <Skeleton key={i} className="h-40 rounded-2xl" />
-          ))}
+          {[1, 2, 3].map(i => <Skeleton key={i} className="h-40 rounded-2xl" />)}
         </div>
       </LearnerDashboardShell>
     );
   }
 
-  // Risk accent is expressed via icon tile + eyebrow chip on a Surface White card,
-  // not via a saturated full-bleed background.
+  const riskIcon = data.overallRisk === 'High' ? ShieldAlert : data.overallRisk === 'Moderate' ? Shield : ShieldCheck;
   const riskAccent =
-    data.overallRisk === 'High'     ? { tile: 'bg-danger/10 text-danger', chip: 'bg-danger/10 text-danger border-danger/20' } :
+    data.overallRisk === 'High' ? { tile: 'bg-danger/10 text-danger', chip: 'bg-danger/10 text-danger border-danger/20' } :
     data.overallRisk === 'Moderate' ? { tile: 'bg-warning/10 text-warning', chip: 'bg-warning/10 text-warning border-warning/20' } :
-                                      { tile: 'bg-success/10 text-success', chip: 'bg-success/10 text-success border-success/20' };
-  const riskIcon =
-    data.overallRisk === 'High' ? ShieldAlert :
-    data.overallRisk === 'Moderate' ? Shield :
-    ShieldCheck;
+    data.overallRisk === 'Low' ? { tile: 'bg-success/10 text-success', chip: 'bg-success/10 text-success border-success/20' } :
+    { tile: 'bg-muted/10 text-muted', chip: 'bg-muted/10 text-muted border-border' };
   const RiskIconCmp = riskIcon;
 
-  // ── Risk Gauge Data ──
-  const apiRiskPercent = riskData?.riskProbability;
-  const riskPercent = typeof apiRiskPercent === 'number' ? apiRiskPercent : null;
-  const needleAngle = riskPercent == null ? null : Math.PI * (1 - riskPercent / 100);
-  const needleX = needleAngle == null ? null : 100 + 80 * Math.cos(needleAngle);
-  const needleY = needleAngle == null ? null : 100 - 80 * Math.sin(needleAngle);
-
-  interface RiskFactor { label: string; severity: 'high' | 'medium' | 'low'; impact: number; description: string }
-  const riskFactors: RiskFactor[] = riskData?.factors?.length
-    ? riskData.factors.map((f) => ({
-        label: f.label,
-        severity: (f.severity === 'high' || f.severity === 'medium' || f.severity === 'low' ? f.severity : 'medium') as 'high' | 'medium' | 'low',
-        impact: f.impact,
-        description: f.description,
-      }))
-    : [];
+  const riskFactors = (data as unknown as { riskFactors?: { label: string; severity: string; impact: number; description: string; actionHref?: string }[] }).riskFactors ?? [];
 
   return (
     <LearnerDashboardShell
@@ -113,262 +122,239 @@ export default function ReadinessCenter() {
           eyebrow="Readiness Focus"
           icon={TrendingUp}
           accent="primary"
-          title="See what needs to close before your target date"
-          description="Use readiness evidence to identify current risk, weakest links, and the study volume you should protect next."
+          title="Close the gap to exam day with evidence"
+          description="Live signal from mocks, practice, tutor reviews, vocabulary mastery, and study-plan progress. Each panel links to the next best action."
           highlights={[
             { icon: Calendar, label: 'Target date', value: data.targetDate },
             { icon: riskIcon, label: 'Current risk', value: data.overallRisk },
-            { icon: Clock, label: 'Study volume', value: `${data.recommendedStudyHours} hours left` },
+            { icon: Clock, label: 'Recommended', value: `${data.recommendedStudyHours} hrs/week` },
           ]}
         />
 
-        {/* 1. Risk Probability Gauge + Recommended Study + Risk Factors */}
+        {/* Top row: Forecast gauge | Overall + actions | Risk factors */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <MotionSection
-            className="bg-surface border border-border rounded-[24px] p-8 shadow-sm relative overflow-hidden"
-          >
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-4">
+          <section className="bg-surface border border-border rounded-[24px] p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
                 <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${riskAccent.tile}`}>
                   <RiskIconCmp className="w-4 h-4" />
                 </span>
                 <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${riskAccent.chip}`}>
-                  Target-Date Risk
+                  Forecast
                 </span>
               </div>
-
-              {/* ── Risk Probability Gauge ── */}
-              <div className="flex flex-col items-center my-4">
-                <svg viewBox="0 0 200 120" className="w-48 h-auto">
-                  <defs>
-                    <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="var(--color-success)" />
-                      <stop offset="50%" stopColor="var(--color-warning)" />
-                      <stop offset="100%" stopColor="var(--color-danger)" />
-                    </linearGradient>
-                  </defs>
-                  <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="var(--color-border)" strokeWidth="14" strokeLinecap="round" />
-                  {riskPercent == null ? null : (
-                    <>
-                      <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#gaugeGrad)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${251 * (riskPercent / 100)} 251`} />
-                      <circle cx={needleX ?? 0} cy={needleY ?? 0} r="6" fill="var(--color-navy)" stroke="var(--color-surface)" strokeWidth="2" />
-                    </>
-                  )}
-                  <text x="100" y="95" textAnchor="middle" className="fill-navy text-xl font-bold">{riskPercent == null ? 'Unavailable' : `${riskPercent}%`}</text>
-                  <text x="100" y="112" textAnchor="middle" className="fill-muted text-[10px] font-bold uppercase tracking-widest">probability</text>
-                </svg>
-              </div>
-
-              <h2 className="text-3xl font-bold mb-2 text-center text-navy">{data.overallRisk} Risk</h2>
-              <p className="text-muted text-sm leading-relaxed text-center max-w-sm mx-auto">
-                {riskPercent == null
-                  ? 'Target-date probability is unavailable until the readiness risk service returns an estimate.'
-                  : `With ${data.weeksRemaining} weeks remaining until your exam, the backend estimate is ${riskPercent}%.`}
-              </p>
+              <button
+                onClick={() => setSimulatorOpen(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
+              >
+                <Sliders className="w-3.5 h-3.5" /> Run scenario
+              </button>
             </div>
-          </MotionSection>
+            <ReadinessForecastGauge
+              probability={data.targetDateProbability ?? null}
+              confidenceBand={data.confidenceLevel}
+              targetDate={data.targetDate}
+            />
+          </section>
 
-          <MotionSection
-            delayIndex={1}
-            className="rounded-2xl border border-border bg-surface p-8 text-navy relative overflow-hidden shadow-sm flex flex-col justify-center"
-          >
-            <div className="relative z-10">
+          <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm flex flex-col justify-between">
+            <div>
               <div className="flex items-center gap-2 mb-4">
-                <Clock className="w-6 h-6 text-primary" />
-                <span className="text-sm font-bold uppercase tracking-widest text-muted">Recommended Study</span>
+                <Clock className="w-5 h-5 text-primary" />
+                <span className="text-xs font-bold uppercase tracking-widest text-muted">Overall readiness</span>
               </div>
-              <div className="flex items-baseline gap-2 mb-2">
-                <h2 className="text-5xl font-bold">{data.recommendedStudyHours}</h2>
-                <span className="text-xl font-bold text-muted">hours</span>
+              <div className="flex items-baseline gap-2 mb-1">
+                <h2 className="text-5xl font-bold">{Math.round(data.overallReadiness ?? 0)}</h2>
+                <span className="text-lg text-muted">/ 100</span>
               </div>
-              <p className="text-muted text-sm leading-relaxed">
-                Estimated remaining study time to reach target readiness levels before {data.targetDate}.
+              <p className="text-xs text-muted leading-relaxed mb-3">
+                {data.recommendedStudyHoursRationale ?? `Target ${data.targetDate} · ${data.weeksRemaining} weeks remaining.`}
               </p>
+              <div className="text-xs font-bold text-navy">
+                Recommended: {data.recommendedStudyHours} hrs/week
+              </div>
             </div>
-          </MotionSection>
+            <div className="mt-4 flex items-center justify-between">
+              <ReadinessTargetDateEdit initialDate={data.targetDate} onSaved={() => void loadAll()} />
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline disabled:opacity-50"
+              >
+                <RefreshCcw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
+          </section>
 
-          {/* ── Risk Factors Breakdown ── */}
-          <MotionSection
-            delayIndex={2}
-            className="bg-surface rounded-[24px] border border-border p-6 shadow-sm"
-          >
-            <div className="flex items-center gap-2 mb-5">
+          <section className="bg-surface rounded-[24px] border border-border p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-warning/10 text-warning">
                 <AlertTriangle className="w-4 h-4" />
               </span>
-              <span className="text-xs font-bold uppercase tracking-widest text-muted">Risk Factors</span>
+              <span className="text-xs font-bold uppercase tracking-widest text-muted">Risk factors</span>
             </div>
-              <div className="space-y-4">
-                {riskFactors.length === 0 ? (
-                  <p className="text-sm leading-6 text-muted">
-                    Risk factors are unavailable until the backend returns an evidence-backed breakdown.
-                  </p>
-                ) : riskFactors.map((factor) => {
-                const sevToken =
-                  factor.severity === 'high'   ? { chip: 'bg-danger/10 text-danger',   bar: 'bg-danger' } :
-                  factor.severity === 'medium' ? { chip: 'bg-warning/10 text-warning', bar: 'bg-warning' } :
-                                                 { chip: 'bg-success/10 text-success', bar: 'bg-success' };
-                return (
-                <div key={factor.label}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-sm font-semibold text-navy">{factor.label}</span>
-                    <span className={`text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${sevToken.chip}`}>{factor.severity}</span>
-                  </div>
-                  <div className="h-2 w-full bg-background-light rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${factor.impact}%` }}
-                      transition={{
-                        ...progressTransition,
-                        delay: getMotionDelay(1, reducedMotion, 0.4),
-                      }}
-                      className={`h-full rounded-full ${sevToken.bar}`}
-                    />
-                  </div>
-                  <p className="text-[11px] text-muted mt-1">{factor.description}</p>
-                </div>
-                );
-              })}
+            <div className="space-y-3">
+              {riskFactors.length === 0 ? (
+                <p className="text-sm text-muted">No critical risk factors detected.</p>
+              ) : (
+                riskFactors.slice(0, 5).map((f) => {
+                  const sev = f.severity === 'high' ? { chip: 'bg-danger/10 text-danger', bar: 'bg-danger' }
+                    : f.severity === 'medium' ? { chip: 'bg-warning/10 text-warning', bar: 'bg-warning' }
+                    : { chip: 'bg-success/10 text-success', bar: 'bg-success' };
+                  return (
+                    <div key={f.label}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-navy">{f.label}</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${sev.chip}`}>{f.severity}</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-background-light rounded-full overflow-hidden">
+                        <div className={`h-full ${sev.bar}`} style={{ width: `${Math.min(100, f.impact)}%` }} />
+                      </div>
+                      <p className="text-[11px] text-muted mt-1">{f.description}</p>
+                    </div>
+                  );
+                })
+              )}
             </div>
-          </MotionSection>
+          </section>
         </div>
 
+        {/* Sub-tests grid */}
+        <section>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Readiness by sub-test"
+            title="See where the gap actually is"
+            description="Each sub-test card deep-links to focused practice. Vocabulary mastery is tracked alongside as a multiplier across all sub-tests."
+            className="mb-4"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {data.subTests.map((test) => (
+              <ReadinessSubtestCard key={test.id} test={test} />
+            ))}
+            {data.vocabulary && (
+              <ReadinessSubtestCard
+                test={{
+                  id: 'vocabulary',
+                  name: 'Vocabulary' as ReadinessData['subTests'][number]['name'],
+                  readiness: data.vocabulary.readiness,
+                  target: data.vocabulary.target,
+                  status: `${data.vocabulary.mastered}/${data.vocabulary.masteryTarget} mastered · ${Math.round(data.vocabulary.accuracy30d)}% accuracy 30d`,
+                  color: 'text-teal-600',
+                  bg: 'bg-teal-50',
+                  barColor: 'bg-teal-500',
+                  confidenceBand: undefined,
+                  dataPoints: data.vocabulary.dataPoints,
+                }}
+                href="/vocabulary?filter=due"
+              />
+            )}
+          </div>
+        </section>
+
+        {/* Trend chart */}
+        <section className="bg-surface rounded-[24px] border border-border p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div>
+              <h3 className="text-lg font-bold text-navy">Readiness trend</h3>
+              <p className="text-xs text-muted">Last 12 weeks of overall and per-sub-test readiness.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {TREND_SERIES_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setTrendSeries(opt.value)}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-full border ${
+                    trendSeries === opt.value
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-surface text-navy border-border hover:bg-background-light'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ReadinessTrendChart data={history} series={trendSeries} target={70} />
+        </section>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-          {/* Left: Sub-test Readiness + Blockers */}
-          <div className="lg:col-span-2 space-y-8">
-
-            <section>
-              <LearnerSurfaceSectionHeader
-                eyebrow="Readiness by Sub-test"
-                title="See where the gap actually is"
-                description="Each sub-test should show current readiness, target, and whether it is the weakest link."
-                className="mb-4"
-              />
-              <div className="bg-surface rounded-[24px] border border-border p-6 sm:p-8 shadow-sm space-y-8">
-                {data.subTests.map((test, idx) => {
-                  const Icon = SUBTEST_ICONS[test.id] ?? FileText;
-                  return (
-                    <MotionItem
-                      key={test.id}
-                      delayIndex={idx}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-xl ${test.bg} flex items-center justify-center shrink-0`}>
-                            <Icon className={`w-5 h-5 ${test.color}`} />
-                          </div>
-                          <div>
-                            <h3 className="text-base font-bold text-navy flex items-center gap-2">
-                              {test.name}
-                              {test.isWeakest && (
-                                <span className="bg-danger/10 text-danger text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                                  <AlertTriangle className="w-3 h-3" /> Weakest Link
-                                </span>
-                              )}
-                            </h3>
-                            <p className="text-xs text-muted">{test.status}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-lg font-bold text-navy">{test.readiness}%</span>
-                          <span className="text-xs text-muted ml-1">/ {test.target}% target</span>
-                        </div>
-                      </div>
-                      <div className="h-3 w-full bg-background-light rounded-full overflow-hidden relative">
-                        <div
-                          className="absolute top-0 bottom-0 w-0.5 bg-border z-10"
-                          style={{ left: `${test.target}%` }}
-                        />
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${test.readiness}%` }}
-                          transition={{
-                            ...progressTransition,
-                            delay: getMotionDelay(idx, reducedMotion, 0.5),
-                          }}
-                          className={`h-full rounded-full ${test.barColor}`}
-                        />
-                      </div>
-                    </MotionItem>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section>
-              <LearnerSurfaceSectionHeader
-                eyebrow="Key Blockers"
-                title="Make the biggest constraints explicit"
-                description="A learner should immediately understand what is slowing progress before looking at more charts."
-                className="mb-4"
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {data.blockers.map((blocker, idx) => (
-                  <MotionItem
-                    key={blocker.id}
-                    delayIndex={idx}
-                    className="bg-surface rounded-[24px] border border-danger/20 p-5 shadow-sm"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-danger/10 text-danger">
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                      </span>
-                      <h3 className="text-sm font-bold text-navy">{blocker.title}</h3>
-                    </div>
-                    <p className="text-xs text-muted leading-relaxed">{blocker.description}</p>
-                  </MotionItem>
-                ))}
-              </div>
-            </section>
+          {/* Blockers */}
+          <div className="lg:col-span-2 space-y-4">
+            <LearnerSurfaceSectionHeader
+              eyebrow="Actionable blockers"
+              title="What is slowing you down right now"
+              description="Each blocker has a one-click action that takes you to the right practice or task."
+              className="mb-0"
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {data.blockers.length === 0 ? (
+                <p className="text-sm text-muted col-span-full">No blockers detected. Keep going!</p>
+              ) : (
+                data.blockers.map((b) => <ReadinessBlockerCard key={String(b.id)} blocker={b} />)
+              )}
+            </div>
           </div>
 
-          {/* Right: Evidence Panel */}
+          {/* Evidence panel */}
           <div>
             <LearnerSurfaceSectionHeader
               eyebrow="Evidence"
-              title="Show what the estimate is based on"
-              description="Readiness should feel earned by visible practice, mock, and tutor-review evidence."
+              title="What this is based on"
+              description="Readiness is computed from real practice — mocks, tutor reviews, vocabulary, and study-plan progress."
               className="mb-4"
             />
-            <MotionSection
-              delayIndex={1}
-              className="bg-surface rounded-[24px] border border-border p-6 sm:p-8 shadow-sm"
-            >
-              <p className="text-sm text-muted mb-6 leading-relaxed">
-                Readiness estimates are calculated using your recent performance data, weighted by full mocks and tutor reviews.
-              </p>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between py-3 border-b border-border">
-                  <span className="text-sm font-medium text-muted">Full Mocks</span>
-                  <span className="text-base font-bold text-navy">{data.evidence.mocksCompleted}</span>
-                </div>
-                <div className="flex items-center justify-between py-3 border-b border-border">
-                  <span className="text-sm font-medium text-muted">Practice Questions</span>
-                  <span className="text-base font-bold text-navy">{data.evidence.practiceQuestions}</span>
-                </div>
-                <div className="flex items-center justify-between py-3 border-b border-border">
-                  <span className="text-sm font-medium text-muted">Tutor Reviews</span>
-                  <span className="text-base font-bold text-navy">{data.evidence.expertReviews}</span>
-                </div>
+            <section className="bg-surface rounded-[24px] border border-border p-6 shadow-sm">
+              <div className="space-y-3">
+                <EvidenceRow label="Full mocks (90d)" value={data.evidence.mocksCompleted} />
+                <EvidenceRow label="Practice questions (90d)" value={data.evidence.practiceQuestions} />
+                <EvidenceRow label="Tutor reviews (90d)" value={data.evidence.expertReviews} />
+                <EvidenceRow label="Vocab reviewed (30d)" value={data.evidence.vocabReviewed30d ?? 0} icon={BookOpen} />
               </div>
-              <div className="mt-6 bg-background-light rounded-xl p-4 border border-border">
+              <div className="mt-5 bg-background-light rounded-xl p-4 border border-border">
                 <div className="flex items-start gap-3">
                   <TrendingUp className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-xs font-bold text-navy uppercase tracking-widest mb-1">Recent Trend</h4>
+                    <h4 className="text-xs font-bold text-navy uppercase tracking-widest mb-1">Recent trend</h4>
                     <p className="text-xs text-muted leading-relaxed">{data.evidence.recentTrend}</p>
                   </div>
                 </div>
               </div>
-              <div className="mt-6 flex items-center gap-2 text-[10px] font-bold text-muted uppercase tracking-widest">
-                <Info className="w-3 h-3" /> Updated: {data.evidence.lastUpdated}
+              <div className="mt-4 flex items-center justify-between text-[10px] font-bold text-muted uppercase tracking-widest">
+                <span className="inline-flex items-center gap-1"><Info className="w-3 h-3" /> Updated</span>
+                <span>{new Date(data.evidence.lastUpdated).toLocaleDateString()}</span>
               </div>
-            </MotionSection>
+              <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-muted uppercase tracking-widest">
+                <span>Confidence</span>
+                <span className="text-navy">{data.confidenceLevel ?? 'Low'}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[10px] font-bold text-muted uppercase tracking-widest">
+                <span>Data points</span>
+                <span className="text-navy">{data.dataPointCount ?? 0}</span>
+              </div>
+            </section>
           </div>
         </div>
-
       </div>
+
+      <ReadinessForecastSimulator
+        open={simulatorOpen}
+        onClose={() => setSimulatorOpen(false)}
+        initialForecast={forecast ?? undefined}
+      />
     </LearnerDashboardShell>
+  );
+}
+
+function EvidenceRow({ label, value, icon: Icon }: { label: string; value: number; icon?: React.ElementType }) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-border last:border-b-0">
+      <span className="text-sm font-medium text-muted inline-flex items-center gap-1.5">
+        {Icon ? <Icon className="w-3.5 h-3.5" /> : null}
+        {label}
+      </span>
+      <span className="text-base font-bold text-navy">{value}</span>
+    </div>
   );
 }
