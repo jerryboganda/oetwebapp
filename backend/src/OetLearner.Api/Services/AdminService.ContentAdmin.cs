@@ -655,12 +655,16 @@ public partial class AdminService
             if (ok)
             {
                 var existing = await FindExistingVocabularyTermForImportAsync(BuildImportKey(r), ct);
-                if (existing is not null)
+                if (existing is not null && string.IsNullOrWhiteSpace(r.ExistingId))
                 {
                     existingConflicts++;
                     dups++;
                     err = "Existing vocabulary term with the same term, exam type, and profession will be skipped unless reviewed as an update.";
                     ok = false;
+                }
+                else if (existing is not null && !string.IsNullOrWhiteSpace(r.ExistingId))
+                {
+                    // Row has an Id column — will be upserted (updated) on commit.
                 }
             }
             if (ok) valid++; else invalid++;
@@ -736,7 +740,7 @@ public partial class AdminService
             firstSeenLine[duplicateKey] = r.LineNumber;
 
             var existing = await FindExistingVocabularyTermForImportAsync(BuildImportKey(r), ct);
-            if (existing is not null)
+            if (existing is not null && string.IsNullOrWhiteSpace(r.ExistingId))
             {
                 duplicates++;
                 continue;
@@ -777,6 +781,18 @@ public partial class AdminService
         var importedTermIds = new List<string>(cleanRows.Count);
         foreach (var r in cleanRows)
         {
+            // Upsert: if the CSV has an Id column and the term exists, update it
+            if (!string.IsNullOrWhiteSpace(r.ExistingId))
+            {
+                var existingById = await db.VocabularyTerms.FirstOrDefaultAsync(
+                    t => t.Id == r.ExistingId.Trim() && t.Status != "archived", ct);
+                if (existingById is not null)
+                {
+                    UpdateVocabularyTermFromCsvRow(existingById, r, batchId, normalisedRecallSetCode);
+                    importedTermIds.Add(existingById.Id);
+                    continue;
+                }
+            }
             var id = $"VOC-{Guid.NewGuid():N}"[..12];
             db.VocabularyTerms.Add(CreateVocabularyTermFromCsvRow(r, id, batchId, normalisedRecallSetCode));
             importedTermIds.Add(id);
@@ -1204,7 +1220,29 @@ public partial class AdminService
     }
 
     private static IReadOnlyList<string> SplitList(string raw)
-        => raw.Split(new[] { '|', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
+        var trimmed = raw.Trim();
+        // Auto-detect JSON array format: ["term1","term2"]
+        if (trimmed.StartsWith('[') && trimmed.EndsWith(']'))
+        {
+            try
+            {
+                var parsed = System.Text.Json.JsonSerializer.Deserialize<string[]>(trimmed);
+                if (parsed is not null)
+                    return parsed.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToArray();
+            }
+            catch (System.Text.Json.JsonException) { /* fall through to delimiter split */ }
+        }
+        // Pipe or semicolon delimited (legacy format)
+        if (trimmed.Contains('|') || trimmed.Contains(';'))
+            return trimmed.Split(new[] { '|', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        // Comma-separated fallback (for plain CSV values like "term1, term2, term3")
+        if (trimmed.Contains(','))
+            return trimmed.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        // Single value
+        return new[] { trimmed };
+    }
 
     private static VocabularyTerm CreateVocabularyTermFromCsvRow(
         CsvVocabRow row, string id, string importBatchId, string recallSetCode)
@@ -1233,6 +1271,7 @@ public partial class AdminService
             AudioSlowUrl = CleanOptional(row.AudioSlowUrl),
             AudioSentenceUrl = CleanOptional(row.AudioSentenceUrl),
             AudioMediaAssetId = CleanOptional(row.AudioMediaAssetId),
+            ImageUrl = CleanOptional(row.ImageUrl),
             SynonymsJson = string.IsNullOrWhiteSpace(row.SynonymsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.SynonymsRaw!)),
             CollocationsJson = string.IsNullOrWhiteSpace(row.CollocationsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.CollocationsRaw!)),
             RelatedTermsJson = string.IsNullOrWhiteSpace(row.RelatedTermsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.RelatedTermsRaw!)),
@@ -1247,6 +1286,55 @@ public partial class AdminService
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
+    }
+
+    private static void UpdateVocabularyTermFromCsvRow(
+        VocabularyTerm existing, CsvVocabRow row, string importBatchId, string recallSetCode)
+    {
+        existing.Term = row.Term!.Trim();
+        if (!string.IsNullOrWhiteSpace(row.Definition))
+            existing.Definition = CleanOptional(row.Definition);
+        if (!string.IsNullOrWhiteSpace(row.ExampleSentence))
+            existing.ExampleSentence = CleanOptional(row.ExampleSentence);
+        if (!string.IsNullOrWhiteSpace(row.ContextNotes))
+            existing.ContextNotes = CleanOptional(row.ContextNotes);
+        existing.ExamTypeCode = ExamCodes.Normalize(row.ExamTypeCode);
+        if (!string.IsNullOrWhiteSpace(row.ProfessionId))
+            existing.ProfessionId = CleanOptional(row.ProfessionId);
+        if (!string.IsNullOrWhiteSpace(row.Category))
+            existing.Category = CleanOptional(row.Category) ?? existing.Category;
+        if (!string.IsNullOrWhiteSpace(row.Difficulty))
+            existing.Difficulty = CleanOptional(row.Difficulty) ?? existing.Difficulty;
+        if (!string.IsNullOrWhiteSpace(row.IpaPronunciation))
+            existing.IpaPronunciation = CleanOptional(row.IpaPronunciation);
+        if (!string.IsNullOrWhiteSpace(row.AmericanSpelling))
+            existing.AmericanSpelling = CleanOptional(row.AmericanSpelling);
+        if (!string.IsNullOrWhiteSpace(row.AudioUrl))
+            existing.AudioUrl = CleanOptional(row.AudioUrl);
+        if (!string.IsNullOrWhiteSpace(row.AudioSlowUrl))
+            existing.AudioSlowUrl = CleanOptional(row.AudioSlowUrl);
+        if (!string.IsNullOrWhiteSpace(row.AudioSentenceUrl))
+            existing.AudioSentenceUrl = CleanOptional(row.AudioSentenceUrl);
+        if (!string.IsNullOrWhiteSpace(row.AudioMediaAssetId))
+            existing.AudioMediaAssetId = CleanOptional(row.AudioMediaAssetId);
+        if (!string.IsNullOrWhiteSpace(row.ImageUrl))
+            existing.ImageUrl = CleanOptional(row.ImageUrl);
+        if (!string.IsNullOrWhiteSpace(row.SynonymsRaw))
+            existing.SynonymsJson = JsonSupport.Serialize(SplitList(row.SynonymsRaw!));
+        if (!string.IsNullOrWhiteSpace(row.CollocationsRaw))
+            existing.CollocationsJson = JsonSupport.Serialize(SplitList(row.CollocationsRaw!));
+        if (!string.IsNullOrWhiteSpace(row.RelatedTermsRaw))
+            existing.RelatedTermsJson = JsonSupport.Serialize(SplitList(row.RelatedTermsRaw!));
+        // Preserve recall set codes — add the new code if not already present
+        var existingCodes = new List<string>();
+        try { existingCodes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(existing.RecallSetCodesJson ?? "[]") ?? new(); } catch { }
+        if (!existingCodes.Contains(recallSetCode, StringComparer.OrdinalIgnoreCase))
+        {
+            existingCodes.Add(recallSetCode);
+            existing.RecallSetCodesJson = System.Text.Json.JsonSerializer.Serialize(existingCodes);
+        }
+        existing.SourceProvenance = BuildBatchSourceProvenance(row.SourceProvenance, importBatchId);
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     private static string TryExtractRecallSetCodeFromStored(string? json)
@@ -1473,7 +1561,9 @@ public partial class AdminService
         string? SynonymsRaw,
         string? CollocationsRaw,
         string? RelatedTermsRaw,
-        string? SourceProvenance);
+        string? SourceProvenance,
+        string? ImageUrl,
+        string? ExistingId);
 
     private async Task<VocabularyImportValidationContext> BuildVocabularyImportValidationContextAsync(CancellationToken ct)
     {
@@ -1661,17 +1751,50 @@ public partial class AdminService
         "audiosentenceurl", "sentenceaudio", "audiosentence",
         "audiomediaassetid", "audioassetid", "mediaassetid",
         "contextnotes", "context",
-        "synonyms", "synonymscsv",
-        "collocations", "collocationscsv",
-        "relatedterms", "relatedtermscsv",
+        "synonyms", "synonymscsv", "synonymsjson",
+        "collocations", "collocationscsv", "collocationsjson",
+        "relatedterms", "relatedtermscsv", "relatedtermsjson",
         "sourceprovenance", "provenance",
+        "imageurl", "image",
+        "id",
+        "importbatchid", "status", "createdat", "updatedat",
     };
 
     private static async Task<List<CsvVocabRow>> ParseCsvAsync(IFormFile file, CancellationToken ct)
     {
         var rows = new List<CsvVocabRow>();
-        using var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8, leaveOpen: false);
-        var content = await reader.ReadToEndAsync(ct);
+        // Auto-detect encoding: try UTF-8 first (with BOM detection enabled),
+        // then fall back to Windows-1252 if the stream contains invalid UTF-8 sequences.
+        string content;
+        using (var stream = file.OpenReadStream())
+        using (var ms = new MemoryStream())
+        {
+            await stream.CopyToAsync(ms, ct);
+            var bytes = ms.ToArray();
+            // Check for UTF-8 BOM (EF BB BF) or UTF-16 LE BOM (FF FE)
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+            {
+                content = Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
+            }
+            else if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+            {
+                content = Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
+            }
+            else
+            {
+                // Try UTF-8; if it produces replacement chars, fall back to Windows-1252
+                content = Encoding.UTF8.GetString(bytes);
+                if (content.Contains('\uFFFD'))
+                {
+                    try
+                    {
+                        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+                        content = Encoding.GetEncoding(1252).GetString(bytes);
+                    }
+                    catch { /* stick with UTF-8 if codepage unavailable */ }
+                }
+            }
+        }
         // Defensively strip a leading UTF-8 BOM. StreamReader normally
         // consumes it, but uploaders that pre-encode the file may include a
         // literal U+FEFF as the first character.
@@ -1713,10 +1836,12 @@ public partial class AdminService
             var ati = Col("audiosentenceurl", "sentenceaudio", "audiosentence");
             var ami = Col("audiomediaassetid", "audioassetid", "mediaassetid");
             var cni = Col("contextnotes", "context");
-            var sy = Col("synonyms", "synonymscsv");
-            var co = Col("collocations", "collocationscsv");
-            var rt = Col("relatedterms", "relatedtermscsv");
+            var sy = Col("synonyms", "synonymscsv", "synonymsjson");
+            var co = Col("collocations", "collocationscsv", "collocationsjson");
+            var rt = Col("relatedterms", "relatedtermscsv", "relatedtermsjson");
             var sp = Col("sourceprovenance", "provenance");
+            var iu = Col("imageurl", "image");
+            var eid = Col("id");
 
             foreach (var record in records.Skip(1))
             {
@@ -1742,7 +1867,9 @@ public partial class AdminService
                     SynonymsRaw: Get(sy),
                     CollocationsRaw: Get(co),
                     RelatedTermsRaw: Get(rt),
-                    SourceProvenance: Get(sp)));
+                    SourceProvenance: Get(sp),
+                    ImageUrl: Get(iu),
+                    ExistingId: Get(eid)));
             }
         }
         else
@@ -1778,7 +1905,9 @@ public partial class AdminService
                     SynonymsRaw: null,
                     CollocationsRaw: null,
                     RelatedTermsRaw: null,
-                    SourceProvenance: null));
+                    SourceProvenance: null,
+                    ImageUrl: null,
+                    ExistingId: null));
             }
         }
         return rows;
@@ -1795,6 +1924,16 @@ public partial class AdminService
         var recordLineNumber = 1;
         var lineNumber = 1;
         var inQuotes = false;
+
+        // Auto-detect field delimiter from first line (comma, semicolon, or tab)
+        var firstLineEnd = csvContent.IndexOfAny(new[] { '\r', '\n' });
+        var firstLine = firstLineEnd >= 0 ? csvContent[..firstLineEnd] : csvContent;
+        var commas = firstLine.Count(c => c == ',');
+        var semicolons = firstLine.Count(c => c == ';');
+        var tabs = firstLine.Count(c => c == '\t');
+        var delimiter = commas >= semicolons && commas >= tabs ? ','
+                      : semicolons >= tabs ? ';'
+                      : '\t';
 
         void AddRecord()
         {
@@ -1846,7 +1985,7 @@ public partial class AdminService
             else
             {
                 if (c == '"') inQuotes = true;
-                else if (c == ',')
+                else if (c == delimiter)
                 {
                     fields.Add(sb.ToString());
                     sb.Clear();
