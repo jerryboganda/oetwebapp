@@ -572,7 +572,9 @@ public partial class AdminService
         var validation = await BuildVocabularyImportValidationContextAsync(ct);
         var preview = new List<AdminVocabularyImportPreviewRow>(rows.Count);
         var warnings = new List<string>();
-        var termsSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Maps dedupe-key → line number of FIRST occurrence so subsequent
+        // duplicates can cite where the original lives in the file.
+        var firstSeenLine = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var valid = 0; var invalid = 0; var dups = 0; var existingConflicts = 0;
 
         foreach (var r in rows)
@@ -581,8 +583,21 @@ public partial class AdminService
             if (ok)
             {
                 var duplicateKey = PreviewDuplicateKey(r);
-                var duplicate = !termsSeen.Add(duplicateKey);
-                if (duplicate) { dups++; err = "Duplicate row in this file for the same term, exam type, and profession."; ok = false; }
+                if (firstSeenLine.TryGetValue(duplicateKey, out var firstLine))
+                {
+                    // In-CSV duplicate. Silently deduped — first occurrence
+                    // wins; emit a warning with the stable code so admins can
+                    // see why the row was skipped. The publish path is not
+                    // affected because no DB row is written for skipped dups.
+                    dups++;
+                    err = $"duplicate-in-csv: Skipped: duplicate of line {firstLine} in the same upload.";
+                    warnings.Add($"line {r.LineNumber}: duplicate-in-csv (duplicate of line {firstLine})");
+                    ok = false;
+                }
+                else
+                {
+                    firstSeenLine[duplicateKey] = r.LineNumber;
+                }
             }
             if (ok)
             {
@@ -635,9 +650,12 @@ public partial class AdminService
         var validation = await BuildVocabularyImportValidationContextAsync(ct);
 
         var imported = 0; var skipped = 0; var duplicates = 0; var failed = 0;
+        var inCsvDuplicates = 0;
         var errors = new List<string>();
         var cleanRows = new List<CsvVocabRow>();
-        var termsSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Maps dedupe-key → line number of FIRST occurrence so subsequent
+        // duplicates can cite where the original lives in the file.
+        var firstSeenLine = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var r in rows)
         {
@@ -650,11 +668,19 @@ public partial class AdminService
             }
 
             var duplicateKey = PreviewDuplicateKey(r);
-            if (!termsSeen.Add(duplicateKey))
+            if (firstSeenLine.TryGetValue(duplicateKey, out var firstLine))
             {
+                // In-CSV duplicate. Silently dedupe — first occurrence wins.
+                // Counted under `duplicates` for API-shape parity with the
+                // preview surface, but tracked separately so the commit gate
+                // doesn't block on a class of skip the operator can't fix.
                 duplicates++;
+                inCsvDuplicates++;
+                if (errors.Count < 20)
+                    errors.Add($"Row {r.LineNumber}: duplicate-in-csv: Skipped duplicate of line {firstLine}.");
                 continue;
             }
+            firstSeenLine[duplicateKey] = r.LineNumber;
 
             var existing = await FindExistingVocabularyTermForImportAsync(BuildImportKey(r), ct);
             if (existing is not null)
@@ -668,9 +694,13 @@ public partial class AdminService
         }
 
         skipped = duplicates + failed;
+        // Blocking skips exclude in-CSV duplicates — those are silently
+        // deduped per the relaxed import contract (Term-only / header-less
+        // CSVs may legitimately include the same recall term twice).
+        var blockingSkips = failed + (duplicates - inCsvDuplicates);
         if (dryRun)
         {
-            if (skipped == 0)
+            if (blockingSkips == 0)
             {
                 await UpsertVocabularyImportDryRunAsync(batchId, fileSha256, imported, ct);
                 await db.SaveChangesAsync(ct);
@@ -682,7 +712,7 @@ public partial class AdminService
 
         await RequireMatchingVocabularyImportDryRunAsync(batchId, fileSha256, imported, ct);
 
-        if (skipped > 0)
+        if (blockingSkips > 0)
         {
             throw ApiException.Validation(
                 "VOCABULARY_IMPORT_NOT_CLEAN",
@@ -706,9 +736,80 @@ public partial class AdminService
             await LogAuditAsync(adminId, adminName, "Bulk Import", "VocabularyTerm", "bulk",
                 $"Batch {batchId}: imported {imported} vocabulary items, skipped {skipped} (dup={duplicates}, failed={failed}).", ct);
             await CommitIfOwnedAsync(tx, ct);
+
+            // Phase 3 — kick off background TTS generation for the freshly
+            // inserted terms. Skip rows that already carry audio metadata
+            // (the CSV may include AudioUrl).
+            if (vocabularyAudioQueue is not null && importedTermIds.Count > 0)
+            {
+                var newRows = await db.VocabularyTerms.AsNoTracking()
+                    .Where(t => importedTermIds.Contains(t.Id))
+                    .Select(t => new { t.Id, t.Term, t.AudioUrl, t.AudioMediaAssetId })
+                    .ToListAsync(ct);
+                foreach (var row in newRows)
+                {
+                    if (!string.IsNullOrWhiteSpace(row.AudioUrl)
+                        || !string.IsNullOrWhiteSpace(row.AudioMediaAssetId))
+                        continue;
+                    await vocabularyAudioQueue.EnqueueAsync(
+                        new OetLearner.Api.Services.Vocabulary.VocabularyAudioJob(
+                            TermId: row.Id,
+                            Text: row.Term,
+                            Voice: null,
+                            Locale: "en-GB",
+                            BatchId: batchId),
+                        ct);
+                }
+            }
         }
 
         return new AdminVocabularyImportResponse(batchId, imported, skipped, duplicates, failed, errors);
+    }
+
+    /// <summary>
+    /// Phase 3 — enqueue background TTS jobs for vocabulary terms that
+    /// have neither <see cref="VocabularyTerm.AudioMediaAssetId"/> nor
+    /// <see cref="VocabularyTerm.AudioUrl"/>. When <paramref name="batchId"/>
+    /// is non-empty we restrict to rows whose <c>SourceProvenance</c>
+    /// starts with <c>batch={id};</c>. Otherwise we sweep up to 5000 rows
+    /// platform-wide.
+    /// </summary>
+    public async Task<object> EnqueueVocabularyAudioBackfillAsync(string? batchId, CancellationToken ct)
+    {
+        if (vocabularyAudioQueue is null)
+            return new { enqueued = 0, skipped = "queue-not-configured" };
+
+        IQueryable<VocabularyTerm> query = db.VocabularyTerms.AsNoTracking()
+            .Where(t => t.AudioMediaAssetId == null && (t.AudioUrl == null || t.AudioUrl == ""));
+
+        var normalised = string.IsNullOrWhiteSpace(batchId) ? null : batchId.Trim();
+        if (!string.IsNullOrEmpty(normalised))
+        {
+            var prefix = $"batch={normalised};";
+            query = query.Where(t => t.SourceProvenance != null && t.SourceProvenance.StartsWith(prefix));
+        }
+
+        var rows = await query
+            .OrderBy(t => t.Id)
+            .Take(5000)
+            .Select(t => new { t.Id, t.Term })
+            .ToListAsync(ct);
+
+        var enqueued = 0;
+        foreach (var row in rows)
+        {
+            if (string.IsNullOrWhiteSpace(row.Term)) continue;
+            await vocabularyAudioQueue.EnqueueAsync(
+                new OetLearner.Api.Services.Vocabulary.VocabularyAudioJob(
+                    TermId: row.Id,
+                    Text: row.Term,
+                    Voice: null,
+                    Locale: "en-GB",
+                    BatchId: normalised ?? string.Empty),
+                ct);
+            enqueued++;
+        }
+        return new { enqueued };
     }
 
     public async Task<object> GetVocabularyImportBatchSummaryAsync(string importBatchId, CancellationToken ct)
@@ -971,13 +1072,19 @@ public partial class AdminService
         {
             Id = id,
             Term = row.Term!.Trim(),
-            Definition = row.Definition!.Trim(),
-            ExampleSentence = string.IsNullOrWhiteSpace(row.ExampleSentence) ? string.Empty : row.ExampleSentence!.Trim(),
+            // Definition / ExampleSentence are optional on import; the publish
+            // gate still enforces a non-empty Definition before a row can
+            // leave draft.
+            Definition = CleanOptional(row.Definition),
+            ExampleSentence = CleanOptional(row.ExampleSentence),
             ContextNotes = CleanOptional(row.ContextNotes),
             ExamTypeCode = examType,
             ProfessionId = CleanOptional(row.ProfessionId),
-            Category = string.IsNullOrWhiteSpace(row.Category) ? "medical" : row.Category!.Trim(),
-            Difficulty = string.IsNullOrWhiteSpace(row.Difficulty) ? "medium" : row.Difficulty!.Trim(),
+            // Header-less / undeclared rows default to the "recall-term"
+            // bucket so they remain discoverable in the admin UI without
+            // forcing the uploader to pick a category up-front.
+            Category = CleanOptional(row.Category) ?? "recall-term",
+            Difficulty = CleanOptional(row.Difficulty) ?? "medium",
             IpaPronunciation = CleanOptional(row.IpaPronunciation),
             AmericanSpelling = CleanOptional(row.AmericanSpelling),
             AudioUrl = CleanOptional(row.AudioUrl),
@@ -990,6 +1097,9 @@ public partial class AdminService
             // Apply the chosen recall-set categorisation to every imported row
             // so admins can filter/maintain the practice-collection later.
             RecallSetCodesJson = System.Text.Json.JsonSerializer.Serialize(new[] { recallSetCode }),
+            // BuildBatchSourceProvenance(null, batchId) auto-stamps
+            // "batch={id};source=admin-vocabulary-import;date=yyyy-MM-dd"
+            // when the CSV row omits provenance.
             SourceProvenance = BuildBatchSourceProvenance(row.SourceProvenance, importBatchId),
             Status = "draft",
             CreatedAt = DateTimeOffset.UtcNow,
@@ -1259,12 +1369,14 @@ public partial class AdminService
         string importBatchId,
         VocabularyImportValidationContext validation)
     {
+        // Term is the only hard-required field. Imported rows land as
+        // status="draft"; the publish gate enforces Definition + provenance
+        // before a row can leave draft, so optional fields here are safe.
         if (string.IsNullOrWhiteSpace(r.Term)) return (false, "Empty 'term'.");
-        if (string.IsNullOrWhiteSpace(r.Definition)) return (false, "Empty 'definition'.");
-        if (string.IsNullOrWhiteSpace(r.Category)) return (false, "Empty 'category'. Category must be explicitly approved for the batch.");
-        if (string.IsNullOrWhiteSpace(r.Difficulty)) return (false, "Empty 'difficulty'. Difficulty must be explicitly approved for the batch.");
         if (r.Term.Trim().Length > 128) return (false, "Term exceeds 128 characters.");
-        if (r.Definition.Trim().Length > 1024) return (false, "Definition exceeds 1024 characters.");
+
+        if (!string.IsNullOrWhiteSpace(r.Definition) && r.Definition!.Trim().Length > 1024)
+            return (false, "Definition exceeds 1024 characters.");
         if (TrimmedLength(r.ExampleSentence) > 2048) return (false, "Example sentence exceeds 2048 characters.");
         if (TrimmedLength(r.ContextNotes) > 1024) return (false, "Context notes exceed 1024 characters.");
         if (TrimmedLength(r.ExamTypeCode) > 16) return (false, "Exam type code exceeds 16 characters.");
@@ -1277,18 +1389,33 @@ public partial class AdminService
         if (TrimmedLength(r.AudioSlowUrl) > 256) return (false, "Slow audio URL exceeds 256 characters.");
         if (TrimmedLength(r.AudioSentenceUrl) > 256) return (false, "Sentence audio URL exceeds 256 characters.");
         if (TrimmedLength(r.AudioMediaAssetId) > 64) return (false, "Audio media asset id exceeds 64 characters.");
-        if (string.IsNullOrWhiteSpace(r.SourceProvenance)) return (false, "Empty 'sourceProvenance'. Source provenance must include a compact source pointer for the batch.");
-        if (TrimmedLength(r.SourceProvenance) > 512) return (false, "Source provenance exceeds 512 characters.");
-        if (!HasCompactSourcePointer(r.SourceProvenance)) return (false, "Source provenance must include a compact source pointer such as src=..., source=..., or manifest=....");
-        if (BuildBatchSourceProvenance(r.SourceProvenance, importBatchId).Length > 512) return (false, "Source provenance plus import batch id exceeds 512 characters.");
 
-        var category = r.Category.Trim();
-        if (!ApprovedVocabularyCategories.Contains(category))
-            return (false, $"Unknown category '{category}'. Use an approved vocabulary taxonomy value or record editorial approval before import.");
+        // SourceProvenance is optional on import. When the row supplies a
+        // value we still enforce the compact source-pointer contract. When
+        // it's missing, CreateVocabularyTermFromCsvRow stamps an auto
+        // "batch={id};source=admin-vocabulary-import;date=..." provenance via
+        // BuildBatchSourceProvenance(null, batchId), which the publish gate
+        // still requires before activation.
+        if (!string.IsNullOrWhiteSpace(r.SourceProvenance))
+        {
+            if (TrimmedLength(r.SourceProvenance) > 512) return (false, "Source provenance exceeds 512 characters.");
+            if (!HasCompactSourcePointer(r.SourceProvenance!)) return (false, "Source provenance must include a compact source pointer such as src=..., source=..., or manifest=....");
+            if (BuildBatchSourceProvenance(r.SourceProvenance, importBatchId).Length > 512) return (false, "Source provenance plus import batch id exceeds 512 characters.");
+        }
 
-        var difficulty = r.Difficulty.Trim();
-        if (!ApprovedVocabularyDifficulties.Contains(difficulty))
-            return (false, $"Unknown difficulty '{difficulty}'. Use easy, medium, or hard.");
+        if (!string.IsNullOrWhiteSpace(r.Category))
+        {
+            var category = r.Category!.Trim();
+            if (!ApprovedVocabularyCategories.Contains(category))
+                return (false, $"Unknown category '{category}'. Use an approved vocabulary taxonomy value or record editorial approval before import.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(r.Difficulty))
+        {
+            var difficulty = r.Difficulty!.Trim();
+            if (!ApprovedVocabularyDifficulties.Contains(difficulty))
+                return (false, $"Unknown difficulty '{difficulty}'. Use easy, medium, or hard.");
+        }
 
         var examTypeCode = ExamCodes.Normalize(r.ExamTypeCode);
         if (!validation.ExamTypeCodes.Contains(examTypeCode))
@@ -1326,7 +1453,11 @@ public partial class AdminService
         "nursing_care",
         "oral_health",
         "dispensing",
-        "counselling"
+        "counselling",
+        // Default category for header-less / undeclared rows imported via the
+        // term-only CSV path. The publish gate still enforces medical-category
+        // pronunciation rules separately, so this is safe to expose.
+        "recall-term"
     };
 
     private static readonly HashSet<string> ApprovedVocabularyDifficulties = new(StringComparer.OrdinalIgnoreCase)
@@ -1369,71 +1500,144 @@ public partial class AdminService
         => !string.IsNullOrWhiteSpace(value)
             && value.ToLowerInvariant() is not "admin-vocabulary-import" and not "csv" and not "import" and not "unknown" and not "n/a" and not "na" and not "none" and not "null" and not "placeholder";
 
+    // Headers recognised as a valid first-row header. Keep lowercase; the
+    // matcher compares trimmed lowercase tokens. If the first record's fields
+    // contain ANY of these, the row is treated as a header row and subsequent
+    // rows are parsed by column name. Otherwise the file is treated as
+    // header-less with positional columns: 0=Term, 1=Definition, 2=Category,
+    // 3=Difficulty (all but Term optional).
+    private static readonly HashSet<string> KnownVocabularyCsvHeaders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "term", "definition", "examplesentence", "example",
+        "category", "difficulty",
+        "professionid", "profession",
+        "examtypecode", "examtype",
+        "ipapronunciation", "ipa", "pronunciation",
+        "americanspelling", "american", "usspelling", "usvariant",
+        "audiourl", "audio",
+        "audioslowurl", "slowaudio", "audioslow",
+        "audiosentenceurl", "sentenceaudio", "audiosentence",
+        "audiomediaassetid", "audioassetid", "mediaassetid",
+        "contextnotes", "context",
+        "synonyms", "synonymscsv",
+        "collocations", "collocationscsv",
+        "relatedterms", "relatedtermscsv",
+        "sourceprovenance", "provenance",
+    };
+
     private static async Task<List<CsvVocabRow>> ParseCsvAsync(IFormFile file, CancellationToken ct)
     {
         var rows = new List<CsvVocabRow>();
         using var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8, leaveOpen: false);
-        var records = ParseVocabCsvRecords(await reader.ReadToEndAsync(ct));
+        var content = await reader.ReadToEndAsync(ct);
+        // Defensively strip a leading UTF-8 BOM. StreamReader normally
+        // consumes it, but uploaders that pre-encode the file may include a
+        // literal U+FEFF as the first character.
+        if (content.Length > 0 && content[0] == '\uFEFF') content = content[1..];
+        var records = ParseVocabCsvRecords(content);
         if (records.Count == 0)
-            throw ApiException.Validation("INVALID_CSV", "CSV file is empty or missing header row.");
+            throw ApiException.Validation("INVALID_CSV", "CSV file is empty.");
 
-        var headerRecord = records[0];
-        var headers = headerRecord.Fields.Select(h => h.Trim().ToLowerInvariant()).ToArray();
-        int Col(params string[] names)
+        var firstRecord = records[0];
+        var firstFields = firstRecord.Fields.Select(h => h.Trim().ToLowerInvariant()).ToArray();
+        var looksLikeHeader = firstFields.Any(f => KnownVocabularyCsvHeaders.Contains(f));
+
+        if (looksLikeHeader)
         {
-            foreach (var n in names)
+            var headers = firstFields;
+            int Col(params string[] names)
             {
-                var idx = Array.IndexOf(headers, n.ToLowerInvariant());
-                if (idx >= 0) return idx;
+                foreach (var n in names)
+                {
+                    var idx = Array.IndexOf(headers, n.ToLowerInvariant());
+                    if (idx >= 0) return idx;
+                }
+                return -1;
             }
-            return -1;
+
+            var ti = Col("term");
+            if (ti < 0)
+                throw ApiException.Validation("INVALID_CSV", "CSV header row must include a 'Term' column.");
+            var di = Col("definition");
+            var ei = Col("examplesentence", "example");
+            var ci = Col("category");
+            var dfi = Col("difficulty");
+            var pi = Col("professionid", "profession");
+            var exi = Col("examtypecode", "examtype");
+            var ipi = Col("ipapronunciation", "ipa", "pronunciation");
+            var usi = Col("americanspelling", "american", "usspelling", "usvariant");
+            var ai = Col("audiourl", "audio");
+            var asi = Col("audioslowurl", "slowaudio", "audioslow");
+            var ati = Col("audiosentenceurl", "sentenceaudio", "audiosentence");
+            var ami = Col("audiomediaassetid", "audioassetid", "mediaassetid");
+            var cni = Col("contextnotes", "context");
+            var sy = Col("synonyms", "synonymscsv");
+            var co = Col("collocations", "collocationscsv");
+            var rt = Col("relatedterms", "relatedtermscsv");
+            var sp = Col("sourceprovenance", "provenance");
+
+            foreach (var record in records.Skip(1))
+            {
+                var cols = record.Fields;
+                string? Get(int idx) => idx >= 0 && cols.Count > idx ? cols[idx].Trim() : null;
+
+                rows.Add(new CsvVocabRow(
+                    LineNumber: record.LineNumber,
+                    Term: Get(ti),
+                    Definition: Get(di),
+                    ExampleSentence: Get(ei),
+                    Category: Get(ci),
+                    Difficulty: Get(dfi),
+                    ProfessionId: Get(pi),
+                    ExamTypeCode: Get(exi),
+                    IpaPronunciation: Get(ipi),
+                    AmericanSpelling: Get(usi),
+                    AudioUrl: Get(ai),
+                    AudioSlowUrl: Get(asi),
+                    AudioSentenceUrl: Get(ati),
+                    AudioMediaAssetId: Get(ami),
+                    ContextNotes: Get(cni),
+                    SynonymsRaw: Get(sy),
+                    CollocationsRaw: Get(co),
+                    RelatedTermsRaw: Get(rt),
+                    SourceProvenance: Get(sp)));
+            }
         }
-
-        var ti = Col("term"); var di = Col("definition");
-        if (ti < 0 || di < 0)
-            throw ApiException.Validation("INVALID_CSV", "CSV must have 'Term' and 'Definition' columns.");
-        var ei = Col("examplesentence", "example");
-        var ci = Col("category");
-        var dfi = Col("difficulty");
-        var pi = Col("professionid", "profession");
-        var exi = Col("examtypecode", "examtype");
-        var ipi = Col("ipapronunciation", "ipa", "pronunciation");
-        var usi = Col("americanspelling", "american", "usspelling", "usvariant");
-        var ai = Col("audiourl", "audio");
-        var asi = Col("audioslowurl", "slowaudio", "audioSlow");
-        var ati = Col("audiosentenceurl", "sentenceaudio", "audioSentence");
-        var ami = Col("audiomediaassetid", "audioassetid", "mediaassetid");
-        var cni = Col("contextnotes", "context");
-        var sy = Col("synonyms", "synonymscsv");
-        var co = Col("collocations", "collocationscsv");
-        var rt = Col("relatedterms", "relatedtermscsv");
-        var sp = Col("sourceprovenance", "provenance");
-
-        foreach (var record in records.Skip(1))
+        else
         {
-            var cols = record.Fields;
-            string? Get(int idx) => idx >= 0 && cols.Count > idx ? cols[idx].Trim() : null;
+            // Header-less mode. Positional columns:
+            //   0 = Term (required)
+            //   1 = Definition (optional)
+            //   2 = Category (optional)
+            //   3 = Difficulty (optional)
+            // Everything else is left null; the row will be created as
+            // status="draft" with auto-stamped source provenance.
+            foreach (var record in records)
+            {
+                var cols = record.Fields;
+                string? Get(int idx) => idx >= 0 && cols.Count > idx ? cols[idx].Trim() : null;
 
-            rows.Add(new CsvVocabRow(
-                LineNumber: record.LineNumber,
-                Term: Get(ti),
-                Definition: Get(di),
-                ExampleSentence: Get(ei),
-                Category: Get(ci),
-                Difficulty: Get(dfi),
-                ProfessionId: Get(pi),
-                ExamTypeCode: Get(exi),
-                IpaPronunciation: Get(ipi),
-                AmericanSpelling: Get(usi),
-                AudioUrl: Get(ai),
-                AudioSlowUrl: Get(asi),
-                AudioSentenceUrl: Get(ati),
-                AudioMediaAssetId: Get(ami),
-                ContextNotes: Get(cni),
-                SynonymsRaw: Get(sy),
-                CollocationsRaw: Get(co),
-                RelatedTermsRaw: Get(rt),
-                SourceProvenance: Get(sp)));
+                rows.Add(new CsvVocabRow(
+                    LineNumber: record.LineNumber,
+                    Term: Get(0),
+                    Definition: Get(1),
+                    ExampleSentence: null,
+                    Category: Get(2),
+                    Difficulty: Get(3),
+                    ProfessionId: null,
+                    ExamTypeCode: null,
+                    IpaPronunciation: null,
+                    AmericanSpelling: null,
+                    AudioUrl: null,
+                    AudioSlowUrl: null,
+                    AudioSentenceUrl: null,
+                    AudioMediaAssetId: null,
+                    ContextNotes: null,
+                    SynonymsRaw: null,
+                    CollocationsRaw: null,
+                    RelatedTermsRaw: null,
+                    SourceProvenance: null));
+            }
         }
         return rows;
     }

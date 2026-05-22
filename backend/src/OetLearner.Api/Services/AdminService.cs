@@ -21,7 +21,8 @@ public partial class AdminService(
     IPasswordHasher<ApplicationUserAccount> passwordHasher,
     TimeProvider timeProvider,
     NotificationService notifications,
-    LearnerService learnerService)
+    LearnerService learnerService,
+    OetLearner.Api.Services.Vocabulary.IVocabularyAudioQueue? vocabularyAudioQueue = null)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";

@@ -1082,6 +1082,14 @@ public static class AdminEndpoints
             => Results.Ok(await service.BulkImportVocabularyV2Async(http.AdminId(), http.AdminName(), file, dryRun ?? true, importBatchId, recallSetCode, ct)))
             .RequireRateLimiting("PerUserWrite").DisableAntiforgery().WithAdminRead("AdminContentWrite");
 
+        // Phase 3 — backfill TTS audio for vocabulary terms missing audio.
+        // `batchId` (optional) limits to terms imported under that batch;
+        // omitted = platform-wide sweep capped at 5000 rows.
+        admin.MapPost("/vocabulary/audio/backfill", async (AdminService service, CancellationToken ct,
+                [FromQuery] string? batchId, [FromQuery] bool? missingOnly)
+            => Results.Ok(await service.EnqueueVocabularyAudioBackfillAsync(batchId, ct)))
+            .RequireRateLimiting("PerUserWrite").WithAdminWrite("AdminContentWrite");
+
         admin.MapGet("/vocabulary/import/batches/{importBatchId}", async (string importBatchId, AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetVocabularyImportBatchSummaryAsync(importBatchId, ct)))
             .WithAdminRead("AdminContentRead");

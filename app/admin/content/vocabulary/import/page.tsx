@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, Download, FileText, Copy, FileCheck2, SearchCheck, Tag } from 'lucide-react';
+import { ArrowLeft, Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, Download, FileText, Copy, FileCheck2, SearchCheck, Tag, RefreshCw, Volume2 } from 'lucide-react';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
@@ -19,6 +19,7 @@ import {
   exportAdminVocabularyImportBatchCsv,
   reconcileAdminVocabularyImportBatch,
   rollbackAdminVocabularyImportBatch,
+  backfillAdminVocabularyAudio,
   adminListRecallSetTags,
   type RecallSetTagDto,
 } from '@/lib/api';
@@ -55,6 +56,13 @@ type ImportResponse = {
   errors?: string[];
 };
 
+type BatchSummaryRow = {
+  id: string;
+  term: string | null;
+  audioMediaAssetId: string | null;
+  audioUrl: string | null;
+};
+
 type BatchSummary = {
   importBatchId: string;
   total: number;
@@ -62,6 +70,7 @@ type BatchSummary = {
   active: number;
   archived: number;
   warnings: string[];
+  rows?: BatchSummaryRow[];
 };
 
 type ReconciliationFieldMismatch = {
@@ -275,6 +284,26 @@ export default function AdminVocabularyImportPage() {
     }
   }
 
+  async function handleAudioBackfill() {
+    const batchId = committedBatchId ?? importBatchId.trim();
+    if (!batchId) return;
+    setBatchActionLoading(true);
+    try {
+      const res = await backfillAdminVocabularyAudio(batchId) as { enqueued?: number; skipped?: string };
+      if (res?.skipped) {
+        setToast({ variant: 'warning', message: `Audio backfill not available: ${res.skipped}.` });
+      } else {
+        setToast({ variant: 'success', message: `Queued ${res?.enqueued ?? 0} term${res?.enqueued === 1 ? '' : 's'} for Qwen3 TTS generation.` });
+      }
+      await loadBatchSummary(batchId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Audio backfill failed.';
+      setToast({ variant: 'error', message: msg });
+    } finally {
+      setBatchActionLoading(false);
+    }
+  }
+
   async function handleRollbackBatch() {
     const batchId = committedBatchId ?? importBatchId.trim();
     if (!batchId) return;
@@ -320,7 +349,7 @@ export default function AdminVocabularyImportPage() {
         <AdminRouteSectionHeader
           eyebrow="CMS"
           title="Import vocabulary (CSV)"
-          description="Upload RFC 4180 CSV. Required columns: Term, Definition, Category, Difficulty, SourceProvenance. Optional: ExampleSentence, ProfessionId, IpaPronunciation, AmericanSpelling, AudioUrl, AudioSlowUrl, AudioSentenceUrl, AudioMediaAssetId, ContextNotes, Synonyms/SynonymsCsv, Collocations, RelatedTerms."
+          description="Upload any CSV — only the Term column is required. Header-less CSVs (one term per line, no column row) are accepted. All other columns are optional: Definition, Category, Difficulty, ExampleSentence, ProfessionId, IpaPronunciation, AmericanSpelling, AudioUrl, AudioSlowUrl, AudioSentenceUrl, AudioMediaAssetId, ContextNotes, Synonyms / SynonymsCsv, Collocations, RelatedTerms, SourceProvenance. Audio is generated automatically by Qwen3 TTS within ~2 min of commit. Duplicates in the same upload are silently skipped."
           icon={Upload}
           actions={
             <>
@@ -414,12 +443,39 @@ export default function AdminVocabularyImportPage() {
               </Button>
             </div>
 
-            {batchSummary && (
-              <InlineAlert variant={batchSummary.active > 0 ? 'warning' : 'success'}>
-                Batch {batchSummary.importBatchId}: {batchSummary.total} total · {batchSummary.draft} draft · {batchSummary.active} active · {batchSummary.archived} archived.
-                {batchSummary.warnings.length > 0 && ` ${batchSummary.warnings.join(' ')}`}
-              </InlineAlert>
-            )}
+            {batchSummary && (() => {
+              const summaryRows = batchSummary.rows ?? [];
+              const audioReadyCount = summaryRows.filter(r => !!r.audioMediaAssetId).length;
+              const knownRowCount = summaryRows.length;
+              const audioReady = knownRowCount > 0 && audioReadyCount >= knownRowCount;
+              const showAudioBlock = knownRowCount > 0;
+              return (
+                <div className="space-y-2">
+                  <InlineAlert variant={batchSummary.active > 0 ? 'warning' : 'success'}>
+                    Batch {batchSummary.importBatchId}: {batchSummary.total} total · {batchSummary.draft} draft · {batchSummary.active} active · {batchSummary.archived} archived.
+                    {batchSummary.warnings.length > 0 && ` ${batchSummary.warnings.join(' ')}`}
+                  </InlineAlert>
+                  {showAudioBlock && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-background-light/60 px-3 py-2 text-xs text-navy">
+                      <Volume2 className="h-4 w-4 text-primary" />
+                      <span className="font-medium">Audio: {audioReadyCount} / {knownRowCount}</span>
+                      {audioReady
+                        ? <Badge variant="success"><CheckCircle2 className="mr-1 h-3 w-3" />Ready</Badge>
+                        : <Badge variant="warning"><RefreshCw className="mr-1 h-3 w-3" />Generating…</Badge>
+                      }
+                      <Button variant="outline" size="sm" disabled={batchActionLoading} onClick={() => void loadBatchSummary()}>
+                        <RefreshCw className="mr-1.5 h-3 w-3" /> Refresh
+                      </Button>
+                      {!audioReady && (
+                        <Button variant="secondary" size="sm" disabled={batchActionLoading} onClick={handleAudioBackfill}>
+                          Backfill missing audio
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="rounded-2xl border border-border bg-background-light/70 p-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -538,22 +594,27 @@ export default function AdminVocabularyImportPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {preview.rows.slice(0, 100).map(r => (
-                        <tr key={r.lineNumber} className={!r.valid ? 'bg-danger/10' : ''}>
+                      {preview.rows.slice(0, 100).map(r => {
+                        const isDuplicateInCsv = !r.valid && !!r.error && r.error.startsWith('duplicate-in-csv');
+                        return (
+                        <tr key={r.lineNumber} className={!r.valid ? (isDuplicateInCsv ? 'bg-warning/10' : 'bg-danger/10') : ''}>
                           <td className="px-3 py-1.5 text-xs text-muted">{r.lineNumber}</td>
                           <td className="px-3 py-1.5">
                             {r.valid
                               ? <Badge variant="success"><CheckCircle2 className="mr-1 h-3 w-3" />OK</Badge>
-                              : <Badge variant="danger"><AlertTriangle className="mr-1 h-3 w-3" />Error</Badge>
+                              : isDuplicateInCsv
+                                ? <Badge variant="warning" title={r.error ?? undefined}><Copy className="mr-1 h-3 w-3" />Duplicate</Badge>
+                                : <Badge variant="danger"><AlertTriangle className="mr-1 h-3 w-3" />Error</Badge>
                             }
                           </td>
                           <td className="px-3 py-1.5 font-medium">{r.term ?? '—'}</td>
                           <td className="px-3 py-1.5 text-xs text-muted line-clamp-1 max-w-xs">{r.definition ?? '—'}</td>
                           <td className="px-3 py-1.5 text-xs">{r.americanSpelling ?? '—'}</td>
                           <td className="px-3 py-1.5 text-xs">{r.category ?? '—'}</td>
-                          <td className="px-3 py-1.5 text-xs text-danger">{r.error ?? ''}</td>
+                          <td className={`px-3 py-1.5 text-xs ${isDuplicateInCsv ? 'text-warning' : 'text-danger'}`}>{r.error ?? ''}</td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                   {preview.rows.length > 100 && (

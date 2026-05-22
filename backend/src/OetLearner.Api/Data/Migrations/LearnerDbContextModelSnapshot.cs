@@ -15707,7 +15707,6 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Definition")
-                        .IsRequired()
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
@@ -15722,7 +15721,6 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("character varying(16)");
 
                     b.Property<string>("ExampleSentence")
-                        .IsRequired()
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)");
 

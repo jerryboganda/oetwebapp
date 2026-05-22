@@ -879,14 +879,17 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         var missingSourceCsv = VocabularyImportCsvHeader
             + $"source-recall-{Guid.NewGuid():N},\"Definition\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\n";
 
+        // SourceProvenance is now optional on import (Phase 1 of header-less
+        // CSV support). Missing provenance must validate cleanly because the
+        // import service auto-stamps a batch-derived source-pointer via
+        // BuildBatchSourceProvenance(null, batchId).
         using (var previewContent = CsvContent(missingSourceCsv, "recalls-missing-source.csv"))
         {
             var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", previewContent);
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
-            Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
-            Assert.Equal(1, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
-            Assert.Contains("sourceProvenance", previewJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
         }
 
         var batchOnlySourceCsv = VocabularyImportCsvHeader
@@ -1175,6 +1178,173 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         var response = await _client.PostAsync("/v1/admin/users/import", content);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // ── Phase 1: flexible vocabulary CSV import ────────────────────────────
+
+    [Fact]
+    public async Task AdminVocabularyImport_HeaderlessTermOnlyCsv_PreviewSucceeds()
+    {
+        var t1 = $"aneurysm-{Guid.NewGuid():N}";
+        var t2 = $"bank-manager-{Guid.NewGuid():N}";
+        var t3 = $"co-codamol-{Guid.NewGuid():N}";
+        var csv = $"{t1}\n{t2}\n{t3}\n";
+
+        using var content = CsvContent(csv, "headerless.csv");
+        var response = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", content);
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(3, json.RootElement.GetProperty("validRows").GetInt32());
+        Assert.Equal(0, json.RootElement.GetProperty("invalidRows").GetInt32());
+
+        var terms = json.RootElement.GetProperty("rows").EnumerateArray()
+            .Select(r => r.GetProperty("term").GetString())
+            .ToList();
+        Assert.Contains(t1, terms);
+        Assert.Contains(t2, terms);
+        Assert.Contains(t3, terms);
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_HeaderedFullCsv_StillSucceeds()
+    {
+        var term = $"headered-regression-{Guid.NewGuid():N}";
+        var csv = VocabularyImportCsvHeader
+            + $"{term},\"Headered definition\",\"Headered example.\",medical,medium,medicine,oet,,,,,,,,\"src=verified-source;p=1;row=1\"\n";
+
+        using var content = CsvContent(csv, "headered.csv");
+        var response = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", content);
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(1, json.RootElement.GetProperty("validRows").GetInt32());
+        Assert.Equal(0, json.RootElement.GetProperty("invalidRows").GetInt32());
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_HeaderlessCsv_StripsBomAndCrlf()
+    {
+        var t1 = $"bom-row-{Guid.NewGuid():N}";
+        var t2 = $"bom-row-{Guid.NewGuid():N}";
+        var t3 = $"bom-row-{Guid.NewGuid():N}";
+        var csv = "\uFEFF" + $"{t1}\r\n{t2}\r\n{t3}\r\n";
+
+        using var content = CsvContent(csv, "bom.csv");
+        var response = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", content);
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(3, json.RootElement.GetProperty("validRows").GetInt32());
+        Assert.Equal(0, json.RootElement.GetProperty("invalidRows").GetInt32());
+
+        var terms = json.RootElement.GetProperty("rows").EnumerateArray()
+            .Select(r => r.GetProperty("term").GetString())
+            .ToList();
+        Assert.DoesNotContain(terms, term => term is not null && term.StartsWith('\uFEFF'));
+        Assert.Contains(t1, terms);
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_HeaderlessCsv_InCsvDuplicates_DedupedWithWarning()
+    {
+        var t1 = $"dup-a-{Guid.NewGuid():N}";
+        var t2 = $"dup-b-{Guid.NewGuid():N}";
+        var t3 = $"dup-c-{Guid.NewGuid():N}";
+        // 5 rows: t1, t2, t1 (dup of line 1), t3, t2 (dup of line 2) → 3 unique, 2 in-csv dups
+        var csv = $"{t1}\n{t2}\n{t1}\n{t3}\n{t2}\n";
+        var batchId = Guid.NewGuid().ToString("N");
+
+        using (var previewContent = CsvContent(csv, "dups.csv"))
+        {
+            var preview = await _client.PostAsync($"/v1/admin/vocabulary/import/preview?recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(3, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            // duplicateRows counts in-csv dups
+            Assert.Equal(2, previewJson.RootElement.GetProperty("duplicateRows").GetInt32());
+            var warnings = previewJson.RootElement.GetProperty("warnings").EnumerateArray()
+                .Select(w => w.GetString() ?? "")
+                .Where(w => w.Contains("duplicate-in-csv"))
+                .ToList();
+            Assert.Equal(2, warnings.Count);
+        }
+
+        using (var dryRunContent = CsvContent(csv, "dups.csv"))
+        {
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+            dryRun.EnsureSuccessStatusCode();
+            using var dryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
+            Assert.Equal(3, dryRunJson.RootElement.GetProperty("imported").GetInt32());
+            Assert.Equal(2, dryRunJson.RootElement.GetProperty("duplicates").GetInt32());
+            Assert.Equal(0, dryRunJson.RootElement.GetProperty("failedRows").GetInt32());
+        }
+
+        using (var commitContent = CsvContent(csv, "dups.csv"))
+        {
+            var commit = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", commitContent);
+            commit.EnsureSuccessStatusCode();
+            using var commitJson = JsonDocument.Parse(await commit.Content.ReadAsStringAsync());
+            Assert.Equal(3, commitJson.RootElement.GetProperty("imported").GetInt32());
+            Assert.Equal(2, commitJson.RootElement.GetProperty("duplicates").GetInt32());
+            var errors = commitJson.RootElement.GetProperty("errors").EnumerateArray()
+                .Select(e => e.GetString() ?? "")
+                .Where(e => e.Contains("duplicate-in-csv"))
+                .ToList();
+            Assert.Equal(2, errors.Count);
+        }
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_ImportedTermsLandAsDraft_AndPublishGateRejectsMissingDefinition()
+    {
+        var term = $"draft-gate-{Guid.NewGuid():N}";
+        var csv = $"{term}\n";
+        var batchId = Guid.NewGuid().ToString("N");
+
+        using (var dryRunContent = CsvContent(csv, "draft.csv"))
+        {
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+            dryRun.EnsureSuccessStatusCode();
+        }
+
+        using (var commitContent = CsvContent(csv, "draft.csv"))
+        {
+            var commit = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", commitContent);
+            commit.EnsureSuccessStatusCode();
+            using var commitJson = JsonDocument.Parse(await commit.Content.ReadAsStringAsync());
+            Assert.Equal(1, commitJson.RootElement.GetProperty("imported").GetInt32());
+        }
+
+        var list = await _client.GetAsync($"/v1/admin/vocabulary/items?search={Uri.EscapeDataString(term)}");
+        list.EnsureSuccessStatusCode();
+        using var listJson = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+        var item = listJson.RootElement.GetProperty("items").EnumerateArray()
+            .Single(x => x.GetProperty("term").GetString() == term);
+        Assert.Equal("draft", item.GetProperty("status").GetString());
+        var id = item.GetProperty("id").GetString()!;
+
+        // Attempt to publish (status=active) without supplying Definition → must be rejected by the publish gate.
+        var publishBody = JsonContent.Create(new { status = "active" });
+        var publish = await _client.PutAsync($"/v1/admin/vocabulary/items/{id}", publishBody);
+        Assert.Equal(HttpStatusCode.BadRequest, publish.StatusCode);
+        var code = await ReadErrorCodeAsync(publish);
+        Assert.Equal("VOCAB_PUBLISH_GATE", code);
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_TermOnlyRow_ValidatesAsDraft()
+    {
+        var term = $"validate-draft-{Guid.NewGuid():N}";
+        var csv = $"{term}\n";
+
+        using var content = CsvContent(csv, "single.csv");
+        var response = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", content);
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(1, json.RootElement.GetProperty("validRows").GetInt32());
+        Assert.Equal(0, json.RootElement.GetProperty("invalidRows").GetInt32());
     }
 
     private static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage response)

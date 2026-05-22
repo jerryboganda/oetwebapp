@@ -6804,6 +6804,11 @@ export async function fetchAdminVocabularyImportBatch(importBatchId: string) {
   return apiRequest(`/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}`);
 }
 
+export async function backfillAdminVocabularyAudio(batchId?: string) {
+  const qs = batchId ? `?batchId=${encodeURIComponent(batchId)}` : '';
+  return apiRequest(`/v1/admin/vocabulary/audio/backfill${qs}`, { method: 'POST' });
+}
+
 export async function exportAdminVocabularyImportBatchCsv(importBatchId: string) {
   const path = `/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}/export`;
   const response = await fetchWithTimeout(resolveApiUrl(path), {

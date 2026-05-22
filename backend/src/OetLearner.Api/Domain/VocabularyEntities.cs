@@ -16,10 +16,10 @@ public class VocabularyTerm
     public string Term { get; set; } = default!;
 
     [MaxLength(1024)]
-    public string Definition { get; set; } = default!;
+    public string? Definition { get; set; }
 
     [MaxLength(2048)]
-    public string ExampleSentence { get; set; } = default!;
+    public string? ExampleSentence { get; set; }
 
     [MaxLength(1024)]
     public string? ContextNotes { get; set; }
@@ -104,7 +104,7 @@ public class VocabularyTerm
     public string? SourceProvenance { get; set; }           // Required at publish
 
     [MaxLength(16)]
-    public string Status { get; set; } = "active";          // draft|active|archived
+    public string Status { get; set; } = "draft";           // draft|active|archived
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
