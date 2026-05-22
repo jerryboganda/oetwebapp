@@ -11,6 +11,142 @@ namespace OetLearner.Api.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("""
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "DiagnosticAttemptId" character varying(64);
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "EntitlementTierAtGeneration" character varying(32) NOT NULL DEFAULT '';
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "GenerationInputsHash" character varying(128);
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "IsActive" boolean NOT NULL DEFAULT false;
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "IsPremiumPersonalized" boolean NOT NULL DEFAULT false;
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "MinutesPerDayBudget" integer NOT NULL DEFAULT 0;
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "PlanWindowEnd" date;
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "PlanWindowStart" date;
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "SubtestWeightsJson" jsonb NOT NULL DEFAULT '[]'::jsonb;
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "TemplateId" character varying(64);
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "TotalWeeks" integer NOT NULL DEFAULT 0;
+                ALTER TABLE "StudyPlans" ADD COLUMN IF NOT EXISTS "WeekNumber" integer NOT NULL DEFAULT 0;
+
+                ALTER TABLE "StudyPlanItems" ADD COLUMN IF NOT EXISTS "ActualMinutesSpent" integer;
+                ALTER TABLE "StudyPlanItems" ADD COLUMN IF NOT EXISTS "CompletedAt" timestamp with time zone;
+                ALTER TABLE "StudyPlanItems" ADD COLUMN IF NOT EXISTS "ContentRoute" character varying(512);
+                ALTER TABLE "StudyPlanItems" ADD COLUMN IF NOT EXISTS "FeedbackRating" integer;
+                ALTER TABLE "StudyPlanItems" ADD COLUMN IF NOT EXISTS "LinkedReviewItemId" character varying(64);
+                ALTER TABLE "StudyPlanItems" ADD COLUMN IF NOT EXISTS "PriorityScore" integer NOT NULL DEFAULT 0;
+                ALTER TABLE "StudyPlanItems" ADD COLUMN IF NOT EXISTS "ReplacedById" character varying(64);
+                ALTER TABLE "StudyPlanItems" ADD COLUMN IF NOT EXISTS "SlotKind" character varying(32);
+                ALTER TABLE "StudyPlanItems" ADD COLUMN IF NOT EXISTS "SourceContentId" character varying(64);
+                ALTER TABLE "StudyPlanItems" ADD COLUMN IF NOT EXISTS "TagsJson" text;
+                ALTER TABLE "StudyPlanItems" ADD COLUMN IF NOT EXISTS "WeekIndex" integer NOT NULL DEFAULT 0;
+
+                ALTER TABLE "SpeakingSessions" ADD COLUMN IF NOT EXISTS "RecommendedDrillIdsJson" character varying(1024);
+                ALTER TABLE "SpeakingSessions" ADD COLUMN IF NOT EXISTS "WarmupEndedAt" timestamp with time zone;
+                ALTER TABLE "SpeakingSessions" ADD COLUMN IF NOT EXISTS "WarmupStartedAt" timestamp with time zone;
+                ALTER TABLE "SpeakingRecordings" ADD COLUMN IF NOT EXISTS "IsWarmup" boolean NOT NULL DEFAULT false;
+                ALTER TABLE "SpeakingMockSessions" ADD COLUMN IF NOT EXISTS "BridgeStartedAt" timestamp with time zone;
+                ALTER TABLE "SpeakingMockSessions" ADD COLUMN IF NOT EXISTS "OrchestratorState" character varying(16) NOT NULL DEFAULT '';
+                ALTER TABLE "ReadingAnswers" ADD COLUMN IF NOT EXISTS "ElapsedMs" integer;
+                ALTER TABLE "ReadingAnswers" ADD COLUMN IF NOT EXISTS "TotalElapsedMs" integer;
+                ALTER TABLE "ListeningAnswers" ADD COLUMN IF NOT EXISTS "MissReason" integer;
+                ALTER TABLE "ApplicationUserAccounts" ADD COLUMN IF NOT EXISTS "Country" character varying(2);
+                ALTER TABLE "ApplicationUserAccounts" ADD COLUMN IF NOT EXISTS "PreferredCurrency" character varying(3);
+                ALTER TABLE "ApplicationUserAccounts" ADD COLUMN IF NOT EXISTS "PreferredRegion" character varying(16);
+
+                CREATE TABLE IF NOT EXISTS "GatewayRoutingConfigs" (
+                    "Id" character varying(64) NOT NULL,
+                    "Region" character varying(16) NOT NULL,
+                    "Currency" character varying(8) NOT NULL,
+                    "ProductType" character varying(32) NOT NULL,
+                    "GatewayName" character varying(32) NOT NULL,
+                    "Priority" integer NOT NULL,
+                    "IsEnabled" boolean NOT NULL,
+                    "CreatedAt" timestamp with time zone NOT NULL,
+                    "UpdatedAt" timestamp with time zone NOT NULL,
+                    "UpdatedByAdminId" character varying(64),
+                    CONSTRAINT "PK_GatewayRoutingConfigs" PRIMARY KEY ("Id")
+                );
+
+                CREATE TABLE IF NOT EXISTS "RegionPricings" (
+                    "Id" character varying(64) NOT NULL,
+                    "TargetType" character varying(32) NOT NULL,
+                    "TargetId" character varying(64) NOT NULL,
+                    "Region" character varying(16) NOT NULL,
+                    "Currency" character varying(8) NOT NULL,
+                    "PriceAmount" numeric(12,2) NOT NULL,
+                    "IsActive" boolean NOT NULL,
+                    "CreatedAt" timestamp with time zone NOT NULL,
+                    "UpdatedAt" timestamp with time zone NOT NULL,
+                    "CreatedByAdminId" character varying(64),
+                    "UpdatedByAdminId" character varying(64),
+                    CONSTRAINT "PK_RegionPricings" PRIMARY KEY ("Id")
+                );
+
+                CREATE TABLE IF NOT EXISTS "SpeakingCardBatchRequests" (
+                    "Id" character varying(64) NOT NULL,
+                    "ProfessionId" character varying(32) NOT NULL,
+                    "Count" integer NOT NULL,
+                    "GeneratedCount" integer NOT NULL,
+                    "TopicListJson" character varying(2000) NOT NULL,
+                    "DifficultyDistributionJson" character varying(500) NOT NULL,
+                    "Status" integer NOT NULL,
+                    "RequestedByAdminId" character varying(64) NOT NULL,
+                    "RequestedByAdminName" character varying(160),
+                    "IdempotencyKey" character varying(96),
+                    "Error" character varying(1024),
+                    "CreatedAt" timestamp with time zone NOT NULL,
+                    "StartedAt" timestamp with time zone,
+                    "CompletedAt" timestamp with time zone,
+                    CONSTRAINT "PK_SpeakingCardBatchRequests" PRIMARY KEY ("Id")
+                );
+
+                CREATE TABLE IF NOT EXISTS "StudyPlanTemplates" (
+                    "Id" character varying(64) NOT NULL,
+                    "Name" character varying(128) NOT NULL,
+                    "Slug" character varying(64) NOT NULL,
+                    "Description" character varying(1024),
+                    "ExamTypeCode" character varying(16) NOT NULL,
+                    "ExamFamilyCode" character varying(16) NOT NULL,
+                    "MinWeeks" integer NOT NULL,
+                    "MaxWeeks" integer NOT NULL,
+                    "TargetBand" character varying(8),
+                    "ProfessionId" character varying(32),
+                    "FocusTagsJson" jsonb NOT NULL,
+                    "DefaultMinutesPerDay" integer NOT NULL,
+                    "TemplateBodyJson" jsonb NOT NULL,
+                    "IsActive" boolean NOT NULL,
+                    "Version" integer NOT NULL,
+                    "CreatedBy" character varying(64),
+                    "CreatedAt" timestamp with time zone NOT NULL,
+                    "UpdatedAt" timestamp with time zone NOT NULL,
+                    CONSTRAINT "PK_StudyPlanTemplates" PRIMARY KEY ("Id")
+                );
+
+                CREATE TABLE IF NOT EXISTS "StudyPlanTemplateTiers" (
+                    "Id" character varying(64) NOT NULL,
+                    "TemplateId" character varying(64) NOT NULL,
+                    "TierCode" character varying(32) NOT NULL,
+                    "CreatedAt" timestamp with time zone NOT NULL,
+                    CONSTRAINT "PK_StudyPlanTemplateTiers" PRIMARY KEY ("Id")
+                );
+
+                CREATE INDEX IF NOT EXISTS "IX_StudyPlans_TemplateId" ON "StudyPlans" ("TemplateId");
+                CREATE INDEX IF NOT EXISTS "IX_StudyPlans_UserId_IsActive" ON "StudyPlans" ("UserId", "IsActive");
+                CREATE INDEX IF NOT EXISTS "IX_StudyPlanItems_LinkedReviewItemId" ON "StudyPlanItems" ("LinkedReviewItemId");
+                CREATE INDEX IF NOT EXISTS "IX_StudyPlanItems_ReplacedById" ON "StudyPlanItems" ("ReplacedById");
+                CREATE INDEX IF NOT EXISTS "IX_StudyPlanItems_StudyPlanId_WeekIndex" ON "StudyPlanItems" ("StudyPlanId", "WeekIndex");
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_GatewayRoutingConfigs_Region_Currency_ProductType_GatewayNa~" ON "GatewayRoutingConfigs" ("Region", "Currency", "ProductType", "GatewayName");
+                CREATE INDEX IF NOT EXISTS "IX_GatewayRoutingConfigs_Region_Currency_ProductType_Priority" ON "GatewayRoutingConfigs" ("Region", "Currency", "ProductType", "Priority");
+                CREATE INDEX IF NOT EXISTS "IX_RegionPricings_Region_IsActive" ON "RegionPricings" ("Region", "IsActive");
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_RegionPricings_TargetType_TargetId_Region" ON "RegionPricings" ("TargetType", "TargetId", "Region");
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_SpeakingCardBatchRequests_IdempotencyKey" ON "SpeakingCardBatchRequests" ("IdempotencyKey");
+                CREATE INDEX IF NOT EXISTS "IX_SpeakingCardBatchRequests_Status_CreatedAt" ON "SpeakingCardBatchRequests" ("Status", "CreatedAt");
+                CREATE INDEX IF NOT EXISTS "IX_StudyPlanTemplates_IsActive_ExamTypeCode" ON "StudyPlanTemplates" ("IsActive", "ExamTypeCode");
+                CREATE INDEX IF NOT EXISTS "IX_StudyPlanTemplates_IsActive_MinWeeks_MaxWeeks" ON "StudyPlanTemplates" ("IsActive", "MinWeeks", "MaxWeeks");
+                CREATE INDEX IF NOT EXISTS "IX_StudyPlanTemplates_ProfessionId" ON "StudyPlanTemplates" ("ProfessionId");
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_StudyPlanTemplates_Slug" ON "StudyPlanTemplates" ("Slug");
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_StudyPlanTemplateTiers_TemplateId_TierCode" ON "StudyPlanTemplateTiers" ("TemplateId", "TierCode");
+                """);
+
+            return;
+
             migrationBuilder.AddColumn<string>(
                 name: "DiagnosticAttemptId",
                 table: "StudyPlans",
