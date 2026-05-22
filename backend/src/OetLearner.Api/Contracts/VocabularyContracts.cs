@@ -27,6 +27,7 @@ public sealed record VocabularyTermResponse(
     string[] RelatedTerms,
     string? SourceProvenance,
     string Status,
+    string[] OetSubtestTags,
     /// <summary>
     /// Recalls Content Pack v1: year/source dimension. Multi-tag — a term may
     /// appear in several historical recall PDFs (e.g. ["old","2026"]).

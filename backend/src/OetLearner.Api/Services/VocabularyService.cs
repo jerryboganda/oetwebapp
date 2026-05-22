@@ -803,6 +803,7 @@ public class VocabularyService(
         RelatedTerms: ParseStringArray(t.RelatedTermsJson).ToArray(),
         SourceProvenance: t.SourceProvenance,
         Status: t.Status,
+        OetSubtestTags: ParseStringArray(t.OetSubtestTagsJson).ToArray(),
         RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray());
 
     private static IQueryable<VocabularyTerm> ApplyExamTypeFilter(IQueryable<VocabularyTerm> query, string? examTypeCode)
