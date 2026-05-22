@@ -64,6 +64,11 @@ export default function RecallsWordsPage() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [categoryFilters, setCategoryFilters] = useState([{ key: 'all', label: 'All categories' }]);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [catalogPage, setCatalogPage] = useState(1);
+  const CATALOG_PAGE_SIZE = 24;
+  const catalogPageCount = Math.max(1, Math.ceil(catalogTotal / CATALOG_PAGE_SIZE));
+  const catalogRangeStart = catalogTotal === 0 ? 0 : (catalogPage - 1) * CATALOG_PAGE_SIZE + 1;
+  const catalogRangeEnd = Math.min(catalogTotal, catalogPage * CATALOG_PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starOpenFor, setStarOpenFor] = useState<string | null>(null);
@@ -103,8 +108,8 @@ export default function RecallsWordsPage() {
     fetchVocabularyTerms({
       examTypeCode: 'oet',
       category: selectedCategory === 'all' ? undefined : selectedCategory,
-      page: 1,
-      pageSize: 24,
+      page: catalogPage,
+      pageSize: CATALOG_PAGE_SIZE,
     })
       .then((response) => {
         if (!active) return;
@@ -125,13 +130,25 @@ export default function RecallsWordsPage() {
     return () => {
       active = false;
     };
-  }, [selectedCategory]);
+  }, [selectedCategory, catalogPage]);
 
   function handleCategoryChange(nextCategory: string) {
     if (nextCategory === selectedCategory) return;
     setCatalogLoading(true);
     setCatalogError(null);
     setSelectedCategory(nextCategory);
+    setCatalogPage(1);
+  }
+
+  function goToCatalogPage(nextPage: number) {
+    const clamped = Math.min(catalogPageCount, Math.max(1, nextPage));
+    if (clamped === catalogPage) return;
+    setCatalogLoading(true);
+    setCatalogError(null);
+    setCatalogPage(clamped);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: window.scrollY, behavior: 'instant' as ScrollBehavior });
+    }
   }
 
   async function playTerm(term: VocabularyTerm) {
@@ -256,8 +273,13 @@ export default function RecallsWordsPage() {
             </div>
           ) : catalogTerms.length > 0 ? (
             <div className="space-y-3">
-              <div className="text-sm text-muted">
-                Showing {catalogTerms.length} of {catalogTotal} active terms for this matrix slice.
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
+                <span>
+                  Showing {catalogRangeStart}–{catalogRangeEnd} of {catalogTotal} active terms for this matrix slice.
+                </span>
+                <span aria-live="polite">
+                  Page {catalogPage} of {catalogPageCount}
+                </span>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 {catalogTerms.map((term) => {
@@ -328,6 +350,65 @@ export default function RecallsWordsPage() {
                   );
                 })}
               </div>
+              {catalogPageCount > 1 && (
+                <nav
+                  aria-label="Vocabulary catalog pagination"
+                  className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3"
+                >
+                  <button
+                    type="button"
+                    onClick={() => goToCatalogPage(catalogPage - 1)}
+                    disabled={catalogPage <= 1 || catalogLoading}
+                    className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ← Previous
+                  </button>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {Array.from({ length: catalogPageCount }, (_, i) => i + 1)
+                      .filter((n) =>
+                        n === 1 ||
+                        n === catalogPageCount ||
+                        Math.abs(n - catalogPage) <= 2,
+                      )
+                      .reduce<(number | 'gap')[]>((acc, n) => {
+                        const last = acc[acc.length - 1];
+                        if (typeof last === 'number' && n - last > 1) acc.push('gap');
+                        acc.push(n);
+                        return acc;
+                      }, [])
+                      .map((entry, idx) =>
+                        entry === 'gap' ? (
+                          <span key={`gap-${idx}`} className="px-1 text-xs text-muted">
+                            …
+                          </span>
+                        ) : (
+                          <button
+                            key={entry}
+                            type="button"
+                            aria-current={entry === catalogPage ? 'page' : undefined}
+                            onClick={() => goToCatalogPage(entry)}
+                            disabled={catalogLoading}
+                            className={`min-w-[2rem] rounded-full border px-2 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                              entry === catalogPage
+                                ? 'border-primary bg-primary text-white'
+                                : 'border-border text-muted hover:border-primary hover:text-primary'
+                            }`}
+                          >
+                            {entry}
+                          </button>
+                        ),
+                      )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => goToCatalogPage(catalogPage + 1)}
+                    disabled={catalogPage >= catalogPageCount || catalogLoading}
+                    className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next →
+                  </button>
+                </nav>
+              )}
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">

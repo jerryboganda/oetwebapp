@@ -171,14 +171,22 @@ public sealed class MediaAssetAccessService(
                         && document.ProfessionId == normalizedProfession)), ct);
 
     private Task<bool> CanLearnerAccessVocabularyAudioAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)
-        => db.VocabularyTerms
+    {
+        // The public vocabulary catalog (/v1/vocabulary/terms) returns every
+        // active term regardless of profession, so any authenticated learner
+        // can browse and click-to-hear cross-profession terms (e.g. a medicine
+        // learner viewing veterinary or occupational-therapy vocabulary). To
+        // keep the play button honest we mirror that openness: audio is
+        // accessible for any term whose status is 'active', independent of
+        // ProfessionId. The `normalizedProfession` parameter is retained for
+        // signature consistency with the other learner predicates.
+        _ = normalizedProfession;
+        return db.VocabularyTerms
             .AsNoTracking()
             .AnyAsync(term =>
                 term.AudioMediaAssetId == mediaAssetId
-                && term.Status == "active"
-                && (term.ProfessionId == null
-                    || (!string.IsNullOrWhiteSpace(normalizedProfession)
-                        && term.ProfessionId == normalizedProfession)), ct);
+                && term.Status == "active", ct);
+    }
 
     private Task<bool> CanLearnerAccessPublishedRulebookReferencePdfAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)
         => db.RulebookVersions
