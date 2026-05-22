@@ -7,45 +7,33 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Toast } from '@/components/ui/alert';
-import { Select } from '@/components/ui/form-controls';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import {
   downloadRecallDocumentMedia,
   learnerListRecallDocuments,
   type RecallDocumentLearnerDto,
-  type RecallSubtest,
 } from '@/lib/api';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const SUBTEST_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'All sections' },
-  { value: 'listening', label: 'Listening' },
-  { value: 'reading', label: 'Reading' },
-  { value: 'writing', label: 'Writing' },
-  { value: 'speaking', label: 'Speaking' },
-  { value: 'cross', label: 'Cross-cutting' },
-];
-
 export default function RecallsDocumentsPage() {
   const [items, setItems] = useState<RecallDocumentLearnerDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterSubtest, setFilterSubtest] = useState<string>('');
   const [toast, setToast] = useState<ToastState>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await learnerListRecallDocuments((filterSubtest as RecallSubtest) || undefined);
+      const data = await learnerListRecallDocuments();
       setItems(data ?? []);
     } catch (e) {
       setToast({ variant: 'error', message: `Could not load recall PDFs: ${(e as Error).message}` });
     } finally {
       setLoading(false);
     }
-  }, [filterSubtest]);
+  }, []);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -91,15 +79,6 @@ export default function RecallsDocumentsPage() {
             { icon: FileText, label: 'Documents', value: `${items.length}` },
           ]}
         />
-
-        <Card className="p-4">
-          <Select
-            label="Filter by section"
-            value={filterSubtest}
-            onChange={(e) => setFilterSubtest(e.target.value)}
-            options={SUBTEST_OPTIONS}
-          />
-        </Card>
 
         {loading ? (
           <div className="space-y-3">

@@ -49,7 +49,6 @@ export default function AdminRecallsLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
-  const [filterSubtest, setFilterSubtest] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
@@ -72,7 +71,6 @@ export default function AdminRecallsLibraryPage() {
     setLoading(true);
     try {
       const data = await adminListRecallDocuments({
-        subtest: (filterSubtest as RecallSubtest) || undefined,
         status: (filterStatus as RecallDocumentStatus) || undefined,
         page,
         pageSize,
@@ -84,7 +82,7 @@ export default function AdminRecallsLibraryPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterSubtest, filterStatus, page, pageSize]);
+  }, [filterStatus, page, pageSize]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -201,13 +199,7 @@ export default function AdminRecallsLibraryPage() {
       />
 
       <AdminRoutePanel>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <Select
-            label="Subtest"
-            value={filterSubtest}
-            onChange={(e) => { setPage(1); setFilterSubtest(e.target.value); }}
-            options={SUBTEST_OPTIONS}
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Select
             label="Status"
             value={filterStatus}

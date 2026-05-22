@@ -5,7 +5,7 @@
 export interface VocabularyTerm {
   id: string;
   term: string;
-  definition: string;
+  definition: string | null;
   exampleSentence: string;
   contextNotes: string | null;
   examTypeCode: string;
@@ -21,10 +21,6 @@ export interface VocabularyTerm {
   relatedTerms: string[];
   sourceProvenance: string | null;
   status: 'active' | 'draft' | 'archived' | string;
-  /**
-   * OET-subtest dimension for the Recalls matrix.
-   */
-  oetSubtestTags?: string[];
   /**
    * Practice-collection dimension — multi-tag of recall-set codes (`old`,
    * `2023-2025`, `2026`, …). Empty array if the term has not been classified

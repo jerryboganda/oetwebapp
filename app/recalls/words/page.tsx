@@ -8,7 +8,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, DifficultyBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import {
@@ -25,7 +25,6 @@ import {
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { playTransientAudio } from '@/lib/recalls-audio';
-import { vocabularyProvenanceLabel } from '@/lib/vocabulary-provenance';
 import type { VocabularyCategoriesResponse, VocabularyTerm } from '@/lib/types/vocabulary';
 
 const STAR_REASONS: { key: RecallsStarReason; label: string }[] = [
@@ -34,18 +33,6 @@ const STAR_REASONS: { key: RecallsStarReason; label: string }[] = [
   { key: 'meaning', label: 'Meaning' },
   { key: 'hearing', label: 'Hearing' },
   { key: 'confused', label: 'Confused' },
-];
-
-const SUBTEST_FILTERS = [
-  { key: 'all', label: 'All subtests' },
-  { key: 'listening_a', label: 'Listening A' },
-  { key: 'listening_b', label: 'Listening B' },
-  { key: 'listening_c', label: 'Listening C' },
-  { key: 'reading_a', label: 'Reading A' },
-  { key: 'reading_b', label: 'Reading B' },
-  { key: 'reading_c', label: 'Reading C' },
-  { key: 'writing', label: 'Writing' },
-  { key: 'speaking', label: 'Speaking' },
 ];
 
 interface VocabularyTermsPage {
@@ -76,7 +63,6 @@ export default function RecallsWordsPage() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [categoryFilters, setCategoryFilters] = useState([{ key: 'all', label: 'All categories' }]);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedSubtest, setSelectedSubtest] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starOpenFor, setStarOpenFor] = useState<string | null>(null);
@@ -116,7 +102,6 @@ export default function RecallsWordsPage() {
     fetchVocabularyTerms({
       examTypeCode: 'oet',
       category: selectedCategory === 'all' ? undefined : selectedCategory,
-      oetSubtestTag: selectedSubtest === 'all' ? undefined : selectedSubtest,
       page: 1,
       pageSize: 24,
     })
@@ -139,7 +124,7 @@ export default function RecallsWordsPage() {
     return () => {
       active = false;
     };
-  }, [selectedCategory, selectedSubtest]);
+  }, [selectedCategory]);
 
   function handleCategoryChange(nextCategory: string) {
     if (nextCategory === selectedCategory) return;
@@ -148,11 +133,15 @@ export default function RecallsWordsPage() {
     setSelectedCategory(nextCategory);
   }
 
-  function handleSubtestChange(nextSubtest: string) {
-    if (nextSubtest === selectedSubtest) return;
-    setCatalogLoading(true);
-    setCatalogError(null);
-    setSelectedSubtest(nextSubtest);
+  function playTerm(term: VocabularyTerm) {
+    const src = term.audioUrl
+      ? term.audioUrl
+      : term.audioMediaAssetId
+        ? `/v1/media/${term.audioMediaAssetId}/content`
+        : null;
+    if (!src) return;
+    const a = new Audio(src);
+    a.play().catch(() => {});
   }
 
   async function handleStar(it: RecallsQueueItem, reason: RecallsStarReason) {
@@ -217,8 +206,8 @@ export default function RecallsWordsPage() {
 
         <LearnerSurfaceSectionHeader
           eyebrow="Catalog matrix"
-          title="Browse active vocabulary by category and OET subtest"
-          description="Use the functional category × OET subtest filters to inspect the active recall vocabulary catalog."
+          title="Browse active vocabulary by category"
+          description="Use the functional category filter to inspect the active recall vocabulary catalog."
         />
 
         <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
@@ -243,26 +232,6 @@ export default function RecallsWordsPage() {
                 ))}
               </div>
             </fieldset>
-            <fieldset>
-              <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">OET subtest</legend>
-              <div className="flex flex-wrap gap-2">
-                {SUBTEST_FILTERS.map((filter) => (
-                  <button
-                    key={filter.key}
-                    type="button"
-                    aria-pressed={selectedSubtest === filter.key}
-                    onClick={() => handleSubtestChange(filter.key)}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                      selectedSubtest === filter.key
-                        ? 'border-info bg-info text-white'
-                        : 'border-border text-muted hover:border-info hover:text-info'
-                    }`}
-                  >
-                    {filter.label}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
           </div>
 
           {catalogError && <InlineAlert variant="warning">{catalogError}</InlineAlert>}
@@ -280,25 +249,68 @@ export default function RecallsWordsPage() {
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 {catalogTerms.map((term) => {
-                  const provenanceLabel = vocabularyProvenanceLabel(term.sourceProvenance);
+                  const hasAudio = Boolean(term.audioUrl || term.audioMediaAssetId);
+                  const definitionText =
+                    term.definition && !/^\s*\(\s*pending\b/i.test(term.definition) ? term.definition : null;
                   return (
-                    <article key={term.id} className="rounded-xl border border-border bg-background/70 p-4">
+                    <article
+                      key={term.id}
+                      role="group"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === ' ' || event.code === 'Space') {
+                          event.preventDefault();
+                          if (hasAudio) playTerm(term);
+                        }
+                      }}
+                      className="rounded-xl border border-border bg-background/70 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="font-semibold text-navy">{term.term}</h3>
-                        <Badge variant="info">{term.category}</Badge>
-                        <Badge variant="default">{term.difficulty}</Badge>
-                        {provenanceLabel && <Badge variant="warning">{provenanceLabel}</Badge>}
+                        {hasAudio ? (
+                          <button
+                            type="button"
+                            onClick={() => playTerm(term)}
+                            aria-label={`Play pronunciation of ${term.term}`}
+                            title="Play pronunciation"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary hover:bg-primary/15"
+                          >
+                            <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            aria-disabled="true"
+                            aria-label={`Audio not yet available for ${term.term}`}
+                            title="Audio not yet available"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary opacity-40 cursor-not-allowed"
+                          >
+                            <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <CategoryBadge category={term.category} size="sm" />
+                        <DifficultyBadge difficulty={term.difficulty} size="sm" />
                       </div>
-                      <p className="mt-2 text-sm text-muted">{term.definition}</p>
+                      {definitionText && <p className="mt-2 text-sm text-muted">{definitionText}</p>}
                       <p className="mt-2 text-xs italic text-muted">{term.exampleSentence}</p>
-                      {term.oetSubtestTags && term.oetSubtestTags.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-1">
-                          {term.oetSubtestTags.map((tag) => (
-                            <Badge key={tag} variant="warning">
-                              {tag.replace('_', ' ')}
-                            </Badge>
-                          ))}
-                        </div>
+                      {hasAudio ? (
+                        <button
+                          type="button"
+                          onClick={() => playTerm(term)}
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                        >
+                          <Volume2 size={12} className="h-3 w-3" aria-hidden="true" />
+                          <span>Play pronunciation</span>
+                        </button>
+                      ) : (
+                        <span
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted opacity-60 cursor-not-allowed"
+                          title="Audio not yet available"
+                        >
+                          <Volume2 size={12} className="h-3 w-3" aria-hidden="true" />
+                          <span>Audio not yet available</span>
+                        </span>
                       )}
                     </article>
                   );
@@ -307,7 +319,7 @@ export default function RecallsWordsPage() {
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">
-              No active terms match this category and subtest combination yet.
+              No active terms match this category yet.
             </div>
           )}
         </section>

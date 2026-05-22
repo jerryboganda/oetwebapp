@@ -318,8 +318,6 @@ public partial class AdminService
     {
         if (string.IsNullOrWhiteSpace(term))
             throw ApiException.Validation("VOCAB_TERM_REQUIRED", "Term is required.");
-        if (string.IsNullOrWhiteSpace(definition))
-            throw ApiException.Validation("VOCAB_DEFINITION_REQUIRED", "Definition is required.");
         if (string.IsNullOrWhiteSpace(example))
             throw ApiException.Validation("VOCAB_EXAMPLE_REQUIRED", "Example sentence is required.");
         if (string.IsNullOrWhiteSpace(category))
@@ -385,7 +383,6 @@ public partial class AdminService
     {
         var missing = new List<ApiFieldError>();
         if (string.IsNullOrWhiteSpace(term)) missing.Add(new ApiFieldError("term", "REQUIRED", "Term is required."));
-        if (string.IsNullOrWhiteSpace(definition)) missing.Add(new ApiFieldError("definition", "REQUIRED", "Definition is required."));
         if (string.IsNullOrWhiteSpace(example)) missing.Add(new ApiFieldError("exampleSentence", "REQUIRED", "Example sentence is required."));
         if (string.IsNullOrWhiteSpace(category)) missing.Add(new ApiFieldError("category", "REQUIRED", "Category is required."));
         if (string.IsNullOrWhiteSpace(sourceProvenance)) missing.Add(new ApiFieldError("sourceProvenance", "REQUIRED", "Source provenance is required before publishing."));

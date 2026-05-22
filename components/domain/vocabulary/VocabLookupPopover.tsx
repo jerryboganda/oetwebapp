@@ -292,7 +292,7 @@ function TermPanel({
   heading: string;
   word: string;
   ipa: string | null;
-  definition: string;
+  definition: string | null;
   example: string | null;
   canPlayAudio?: boolean;
   onPlayAudio?: () => void;

@@ -779,17 +779,16 @@ public class VocabularyService(
         Difficulty: t.Difficulty,
         IpaPronunciation: t.IpaPronunciation,
         AmericanSpelling: t.AmericanSpelling,
-        AudioUrl: null,
-        AudioSlowUrl: null,
-        AudioSentenceUrl: null,
-        AudioMediaAssetId: null,
+        AudioUrl: t.AudioUrl,
+        AudioSlowUrl: t.AudioSlowUrl,
+        AudioSentenceUrl: t.AudioSentenceUrl,
+        AudioMediaAssetId: t.AudioMediaAssetId,
         ImageUrl: t.ImageUrl,
         Synonyms: ParseStringArray(t.SynonymsJson).ToArray(),
         Collocations: ParseStringArray(t.CollocationsJson).ToArray(),
         RelatedTerms: ParseStringArray(t.RelatedTermsJson).ToArray(),
         SourceProvenance: t.SourceProvenance,
         Status: t.Status,
-        OetSubtestTags: ParseStringArray(t.OetSubtestTagsJson).ToArray(),
         RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray());
 
     private static IQueryable<VocabularyTerm> ApplyExamTypeFilter(IQueryable<VocabularyTerm> query, string? examTypeCode)

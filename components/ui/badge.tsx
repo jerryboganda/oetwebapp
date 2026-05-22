@@ -3,7 +3,7 @@ import { type HTMLAttributes } from 'react';
 
 /* ─── Generic Badge ─── */
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
-  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'muted' | 'outline';
+  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'muted' | 'outline' | 'violet' | 'sky' | 'rose' | 'emerald' | 'slate' | 'indigo';
   size?: 'sm' | 'md';
 }
 
@@ -15,6 +15,12 @@ const badgeVariants: Record<string, string> = {
   info: 'bg-blue-50 text-blue-700 border border-blue-200/60 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800/60',
   muted: 'bg-surface text-muted border border-border dark:bg-surface dark:text-muted dark:border-border',
   outline: 'bg-transparent text-navy border border-border',
+  violet:  'bg-violet-50 text-violet-700 border border-violet-200/60 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800/60',
+  sky:     'bg-sky-50    text-sky-700    border border-sky-200/60    dark:bg-sky-950    dark:text-sky-300    dark:border-sky-800/60',
+  rose:    'bg-rose-50   text-rose-700   border border-rose-200/60   dark:bg-rose-950   dark:text-rose-300   dark:border-rose-800/60',
+  emerald: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800/60',
+  slate:   'bg-slate-50  text-slate-700  border border-slate-200/60  dark:bg-slate-900  dark:text-slate-300  dark:border-slate-700/60',
+  indigo: 'bg-indigo-50 text-indigo-700 border border-indigo-200/60 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800/60',
 };
 
 export function Badge({ variant = 'default', size = 'sm', className, children, ...props }: BadgeProps) {
@@ -93,4 +99,34 @@ export function CriterionChip({ label, active, onClick, className }: { label: st
       {label}
     </button>
   );
+}
+
+/**
+ * Category chip — uses a stable colour assignment per functional category
+ * (conditions / anatomy / procedures / etc.). Falls back to violet.
+ */
+export function CategoryBadge({ category, size }: { category: string; size?: 'sm' | 'md' }) {
+  const label = (category || '').replace(/_/g, ' ');
+  return <Badge variant="indigo" size={size}>{label}</Badge>;
+}
+
+/**
+ * Difficulty chip — easy/medium/hard → emerald/sky/rose.
+ */
+export function DifficultyBadge({ difficulty, size }: { difficulty: string; size?: 'sm' | 'md' }) {
+  const key = (difficulty || '').toLowerCase().trim();
+  const variant: BadgeProps['variant'] =
+    key === 'easy' ? 'violet' :
+    key === 'hard' ? 'rose' :
+    key === 'medium' ? 'warning' :
+    'slate';
+  return <Badge variant={variant} size={size}>{difficulty}</Badge>;
+}
+
+/**
+ * Source / provenance chip — neutral slate so it does not compete with
+ * the category and difficulty chips.
+ */
+export function SourceBadge({ label, size }: { label: string; size?: 'sm' | 'md' }) {
+  return <Badge variant="slate" size={size}>{label}</Badge>;
 }
