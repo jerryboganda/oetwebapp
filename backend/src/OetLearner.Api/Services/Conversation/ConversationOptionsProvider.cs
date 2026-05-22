@@ -150,6 +150,9 @@ public sealed class ConversationOptionsProvider(
         if (!string.IsNullOrWhiteSpace(r.Qwen3ModelVariant)) o.Qwen3ModelVariant = r.Qwen3ModelVariant;
         if (!string.IsNullOrWhiteSpace(r.Qwen3VoiceId)) o.Qwen3VoiceId = r.Qwen3VoiceId;
         if (!string.IsNullOrWhiteSpace(r.Qwen3VoiceInstructions)) o.Qwen3VoiceInstructions = r.Qwen3VoiceInstructions;
+        if (r.Qwen3Speed.HasValue) o.Qwen3Speed = r.Qwen3Speed.Value;
+        if (r.Qwen3Pitch.HasValue) o.Qwen3Pitch = r.Qwen3Pitch.Value;
+        if (!string.IsNullOrWhiteSpace(r.Qwen3Emotion)) o.Qwen3Emotion = r.Qwen3Emotion;
 
         if (!string.IsNullOrWhiteSpace(r.GptSoVitsBaseUrl)) o.GptSoVitsBaseUrl = r.GptSoVitsBaseUrl;
         var gptsovitsKey = Unprotect(r.GptSoVitsApiKeyEncrypted);
@@ -330,6 +333,9 @@ public sealed class ConversationOptionsProvider(
         Qwen3ModelVariant = src.Qwen3ModelVariant,
         Qwen3VoiceId = src.Qwen3VoiceId,
         Qwen3VoiceInstructions = src.Qwen3VoiceInstructions,
+        Qwen3Speed = src.Qwen3Speed,
+        Qwen3Pitch = src.Qwen3Pitch,
+        Qwen3Emotion = src.Qwen3Emotion,
         GptSoVitsBaseUrl = src.GptSoVitsBaseUrl,
         GptSoVitsApiKey = src.GptSoVitsApiKey,
         GptSoVitsDefaultVoice = src.GptSoVitsDefaultVoice,

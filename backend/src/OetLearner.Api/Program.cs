@@ -789,6 +789,8 @@ builder.Services.AddScoped<VocabularyGlossService>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Vocabulary.IVocabularyAudioQueue,
     OetLearner.Api.Services.Vocabulary.VocabularyAudioQueue>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Vocabulary.VocabularyAudioWorker>();
+builder.Services.AddScoped<OetLearner.Api.Services.VoiceDesign.IVoiceDesignRegenerationService,
+    OetLearner.Api.Services.VoiceDesign.VoiceDesignRegenerationService>();
 builder.Services.AddScoped<AdaptiveDifficultyService>();
 
 // ── Phase 2 new services ──
@@ -1554,6 +1556,7 @@ app.MapExpertEndpoints();
 app.MapExpertMessagingEndpoints();
 app.MapExpertCompensationEndpoints();
 app.MapAdminEndpoints();
+app.MapVoiceDesignAdminEndpoints();
 app.MapAdminAlertEndpoints();
 app.MapAdminLaunchReadinessEndpoints();
 app.MapAiUsageAdminEndpoints();

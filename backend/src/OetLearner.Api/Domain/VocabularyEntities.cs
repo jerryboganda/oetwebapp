@@ -75,6 +75,10 @@ public class VocabularyTerm
     [MaxLength(32)] public string? AudioModelVariant { get; set; }
     public DateTimeOffset? AudioGeneratedAt { get; set; }
 
+    /// <summary>Links this term to a Voice Design bulk regeneration batch for
+    /// progress tracking and filtering. Null for ad-hoc synthesis.</summary>
+    [MaxLength(64)] public string? AudioBatchId { get; set; }
+
     [MaxLength(256)]
     public string? ImageUrl { get; set; }
 

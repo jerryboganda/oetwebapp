@@ -299,6 +299,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<StudyCommitment> StudyCommitments => Set<StudyCommitment>();
     public DbSet<LearnerCertificate> LearnerCertificates => Set<LearnerCertificate>();
 
+    // Voice Design — bulk regeneration tracking
+    public DbSet<AudioRegenerationBatch> AudioRegenerationBatches => Set<AudioRegenerationBatch>();
+
     // Content hierarchy entities
     public DbSet<ContentProgram> ContentPrograms => Set<ContentProgram>();
     public DbSet<ContentTrack> ContentTracks => Set<ContentTrack>();

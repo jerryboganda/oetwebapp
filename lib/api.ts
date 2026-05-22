@@ -12279,6 +12279,140 @@ export async function fetchInterlocutorPracticeQueue(): Promise<InterlocutorPrac
   }
 }
 
+// ── Voice Design Studio API ─────────────────────────────────────────
+
+/** Preview a voice with full design params (speed, pitch, emotion) */
+export async function previewAdminVoiceDesign(body: {
+  modelVariant: 'flash' | 'voicedesign';
+  voiceId?: string;
+  instructions?: string;
+  text: string;
+  locale?: string;
+  speed?: number;
+  pitch?: number;
+  emotion?: string;
+}): Promise<Blob> {
+  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
+  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
+  const token = await ensureFreshAccessToken();
+  const res = await fetch(`${base}/v1/admin/voice-design/preview`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    let msg = `Voice design preview failed (${res.status})`;
+    try {
+      const j = (await res.json()) as { message?: string };
+      if (j?.message) msg = j.message;
+    } catch { /* non-json error body */ }
+    throw new Error(msg);
+  }
+  return res.blob();
+}
+
+/** Bulk regenerate audio across the platform with specified voice config */
+export interface AdminAudioRegenerateRequest {
+  audioType: 'all' | 'listening' | 'vocabulary' | 'conversation';
+  scope: 'all' | 'missing' | 'different-voice';
+  modelVariant: 'flash' | 'voicedesign';
+  voiceId?: string;
+  instructions?: string;
+  speed?: number;
+  pitch?: number;
+  emotion?: string;
+  dryRun?: boolean;
+}
+
+export interface AdminAudioRegenerateBatchResult {
+  batchId: string;
+  audioType: string;
+  scope: string;
+  totalItems: number;
+  dryRun: boolean;
+  modelVariant: string;
+  voiceId?: string;
+}
+
+export async function regenerateAllAudio(
+  body: AdminAudioRegenerateRequest
+): Promise<AdminAudioRegenerateBatchResult> {
+  return apiRequest<AdminAudioRegenerateBatchResult>('/v1/admin/voice-design/regenerate', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** Get active/completed audio regeneration batches */
+export interface AdminAudioBatch {
+  batchId: string;
+  audioType: 'all' | 'listening' | 'vocabulary' | 'conversation';
+  scope: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  totalItems: number;
+  completedItems: number;
+  failedItems: number;
+  voiceId: string;
+  modelVariant: string;
+  speed: number;
+  pitch: number;
+  emotion: string;
+  startedAt: string;
+  completedAt: string | null;
+  requestedBy: string;
+}
+
+export async function getAudioRegenerationBatches(): Promise<{ batches: AdminAudioBatch[] }> {
+  return apiRequest<{ batches: AdminAudioBatch[] }>('/v1/admin/voice-design/batches');
+}
+
+/** Get progress details for a specific batch */
+export async function getAudioRegenerationBatchProgress(batchId: string): Promise<AdminAudioBatch> {
+  return apiRequest<AdminAudioBatch>(`/v1/admin/voice-design/batches/${encodeURIComponent(batchId)}`);
+}
+
+/** Cancel an in-progress batch */
+export async function cancelAudioRegenerationBatch(batchId: string): Promise<{ cancelled: boolean }> {
+  return apiRequest<{ cancelled: boolean }>(`/v1/admin/voice-design/batches/${encodeURIComponent(batchId)}/cancel`, {
+    method: 'POST',
+  });
+}
+
+/** Get the current globally configured voice settings */
+export interface AdminVoiceDesignConfig {
+  modelVariant: 'flash' | 'voicedesign';
+  voiceId: string;
+  voiceInstructions: string;
+  speed: number;
+  pitch: number;
+  emotion: string;
+  lastUpdatedAt: string | null;
+  lastUpdatedBy: string | null;
+}
+
+export async function getAdminVoiceDesignConfig(): Promise<AdminVoiceDesignConfig> {
+  return apiRequest<AdminVoiceDesignConfig>('/v1/admin/voice-design/config');
+}
+
+/** Save voice design configuration globally */
+export async function saveAdminVoiceDesignConfig(body: {
+  modelVariant: 'flash' | 'voicedesign';
+  voiceId?: string;
+  instructions?: string;
+  speed?: number;
+  pitch?: number;
+  emotion?: string;
+}): Promise<{ saved: boolean }> {
+  return apiRequest<{ saved: boolean }>('/v1/admin/voice-design/config', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // OET Speaking module re-exports
 //

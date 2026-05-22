@@ -36,6 +36,7 @@ import {
   Webhook,
   Scale,
   Mic,
+  Mic2,
   MessageSquareText,
   BookOpenText,
   Rocket,
@@ -100,6 +101,7 @@ const adminNavGroups: NavGroup[] = [
       { href: '/admin/ai-usage', label: 'AI Usage & Budget', icon: <Cpu className="w-5 h-5" />, matchPrefix: '/admin/ai-usage' },
       { href: '/admin/writing/options', label: 'Writing AI Options', icon: <Cpu className="w-5 h-5" />, matchPrefix: '/admin/writing/options' },
       { href: '/admin/writing/ai-draft', label: 'Writing AI Draft', icon: <Cpu className="w-5 h-5" />, matchPrefix: '/admin/writing/ai-draft' },
+      { href: '/admin/voice-design', label: 'Voice Design', icon: <Mic2 className="w-5 h-5" />, matchPrefix: '/admin/voice-design' },
     ],
   },
   {

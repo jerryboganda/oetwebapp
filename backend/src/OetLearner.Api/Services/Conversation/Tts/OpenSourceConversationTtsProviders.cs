@@ -192,6 +192,11 @@ public sealed class DigitalOceanQwen3TtsConversationProvider(
         var variant = NormaliseVariant(request.ModelVariant ?? options.Qwen3ModelVariant);
         string payload;
         string modelTag;
+        // Speed: per-call override → admin option → default 1.0 (range 0.25–4.0).
+        // Pitch is NOT natively supported by the Qwen3 OpenAI-compatible endpoint;
+        // for voicedesign variant it can be influenced via instructions text.
+        var speed = request.Rate ?? options.Qwen3Speed;
+
         if (variant == "voicedesign")
         {
             // qwen3-tts-vd-realtime: prompt-driven, voice MUST be "default".
@@ -207,6 +212,7 @@ public sealed class DigitalOceanQwen3TtsConversationProvider(
                 input = request.Text,
                 voice = "default",
                 instructions,
+                speed,
             });
         }
         else
@@ -226,6 +232,7 @@ public sealed class DigitalOceanQwen3TtsConversationProvider(
                 model = modelTag,
                 input = request.Text,
                 voice = voiceId,
+                speed,
             });
         }
         using var req = new HttpRequestMessage(HttpMethod.Post, url)

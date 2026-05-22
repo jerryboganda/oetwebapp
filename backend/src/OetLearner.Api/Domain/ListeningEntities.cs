@@ -242,6 +242,11 @@ public class ListeningExtract
     [MaxLength(64)]
     public string? AudioContentSha { get; set; }
 
+    // Voice Design batch tracking — records which voice/model produced this
+    // extract's current audio so "different-voice" scope filtering works.
+    [MaxLength(64)] public string? TtsVoice { get; set; }
+    [MaxLength(32)] public string? TtsModelVariant { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
@@ -874,6 +879,15 @@ public class ListeningTtsJob
     /// <summary>Earliest time at which the worker may retry this job
     /// (exponential backoff: retry 1 = +30 s, retry 2 = +2 min, retry 3 = +10 min).</summary>
     public DateTimeOffset? RetryAfter { get; set; }
+
+    // Voice Design batch overrides — set when job is created by the bulk
+    // regeneration service. The TTS worker uses these instead of admin config.
+    [MaxLength(64)] public string? BatchId { get; set; }
+    [MaxLength(64)] public string? VoiceOverride { get; set; }
+    [MaxLength(32)] public string? ModelVariantOverride { get; set; }
+    [MaxLength(1024)] public string? InstructionsOverride { get; set; }
+    public double? SpeedOverride { get; set; }
+    public double? PitchOverride { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

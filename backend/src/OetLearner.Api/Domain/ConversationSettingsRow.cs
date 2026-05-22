@@ -102,6 +102,9 @@ public class ConversationSettingsRow
     [MaxLength(32)] public string? Qwen3ModelVariant { get; set; }
     [MaxLength(64)] public string? Qwen3VoiceId { get; set; }
     public string? Qwen3VoiceInstructions { get; set; }
+    public double? Qwen3Speed { get; set; }
+    public double? Qwen3Pitch { get; set; }
+    [MaxLength(256)] public string? Qwen3Emotion { get; set; }
 
     // GPT-SoVITS
     [MaxLength(256)] public string? GptSoVitsBaseUrl { get; set; }

@@ -145,6 +145,11 @@ public class ConversationTemplate
 
     [MaxLength(64)]
     public string? UpdatedByUserId { get; set; }
+
+    // Voice Design — tracks which TTS voice/model produced the opening audio.
+    [MaxLength(64)] public string? TtsVoice { get; set; }
+    [MaxLength(32)] public string? TtsModelVariant { get; set; }
+    [MaxLength(64)] public string? OpeningAudioSha { get; set; }
 }
 
 public class ConversationEvaluation

@@ -74,6 +74,9 @@ public class ConversationOptions
     public string Qwen3ModelVariant { get; set; } = "flash";
     public string Qwen3VoiceId { get; set; } = "Cherry";
     public string Qwen3VoiceInstructions { get; set; } = string.Empty;
+    public double Qwen3Speed { get; set; } = 1.0;
+    public double Qwen3Pitch { get; set; } = 0;
+    public string Qwen3Emotion { get; set; } = string.Empty;
     public string GptSoVitsBaseUrl { get; set; } = string.Empty;
     public string GptSoVitsApiKey { get; set; } = string.Empty;
     public string GptSoVitsDefaultVoice { get; set; } = "default";
