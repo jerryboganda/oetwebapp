@@ -30,6 +30,7 @@ import {
   getAudioRegenerationBatches,
   cancelAudioRegenerationBatch,
   type AdminQwen3VoiceProbeResult,
+  type AdminAudioBatch,
 } from '@/lib/api';
 
 /* ─── Types ─── */
@@ -42,19 +43,7 @@ interface VoiceDesignSample {
   rating: number;
 }
 
-interface AudioBatch {
-  batchId: string;
-  audioType: 'all' | 'listening' | 'vocabulary' | 'conversation';
-  scope: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
-  totalItems: number;
-  completedItems: number;
-  failedItems: number;
-  voiceId: string;
-  modelVariant: string;
-  startedAt: string;
-  completedAt: string | null;
-}
+type AudioBatch = AdminAudioBatch;
 
 /* ─── Constants ─── */
 const OET_SAMPLES = [
@@ -129,7 +118,7 @@ export default function AdminVoiceDesignPage() {
     setLoadingBatches(true);
     try {
       const data = await getAudioRegenerationBatches();
-      setBatches(data);
+      setBatches(data.batches);
     } catch {
       /* silent background fetch */
     } finally {
@@ -150,8 +139,8 @@ export default function AdminVoiceDesignPage() {
     setProbing(true);
     try {
       const result = await probeAdminQwen3Voices();
-      setVoices(result);
-      setToast({ variant: 'success', message: `Loaded ${result.length} voices` });
+      setVoices(result.voices);
+      setToast({ variant: 'success', message: `Loaded ${result.voices.length} voices` });
     } catch {
       setToast({ variant: 'error', message: 'Failed to fetch voices' });
     } finally {
@@ -164,7 +153,7 @@ export default function AdminVoiceDesignPage() {
       setPlayingVoiceId(voiceId);
       const blob = await previewAdminVoiceDesign({
         voiceId,
-        variant,
+        modelVariant: variant,
         instructions: variant === 'voicedesign' ? voiceInstructions : undefined,
         speed,
         pitch,
@@ -207,7 +196,7 @@ export default function AdminVoiceDesignPage() {
       try {
         const blob = await previewAdminVoiceDesign({
           voiceId: selectedVoice,
-          variant,
+          modelVariant: variant,
           instructions: variant === 'voicedesign' ? voiceInstructions : undefined,
           speed,
           pitch,
@@ -230,8 +219,8 @@ export default function AdminVoiceDesignPage() {
 
   const handleDryRun = useCallback(async () => {
     try {
-      const result = await regenerateAllAudio({ audioType, scope, dryRun: true, voiceId: selectedVoice });
-      setDryRunResult({ count: result.count });
+      const result = await regenerateAllAudio({ audioType, scope, dryRun: true, voiceId: selectedVoice, modelVariant: variant });
+      setDryRunResult({ count: result.totalItems });
     } catch {
       setToast({ variant: 'error', message: 'Dry run failed' });
     }
@@ -241,7 +230,7 @@ export default function AdminVoiceDesignPage() {
     setConfirmModal(false);
     setRegenerating(true);
     try {
-      await regenerateAllAudio({ audioType, scope, dryRun: false, voiceId: selectedVoice });
+      await regenerateAllAudio({ audioType, scope, dryRun: false, voiceId: selectedVoice, modelVariant: variant });
       setToast({ variant: 'success', message: 'Regeneration started' });
       void fetchBatches();
     } catch {
@@ -357,15 +346,15 @@ export default function AdminVoiceDesignPage() {
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {voices.map((voice) => (
                       <div
-                        key={voice.voiceId}
-                        className={`relative rounded-xl border p-3 transition-colors ${selectedVoice === voice.voiceId ? 'border-violet-500 bg-violet-500/5' : 'border-admin-border bg-admin-surface-raised hover:border-admin-border/80'}`}
+                        key={voice.id}
+                        className={`relative rounded-xl border p-3 transition-colors ${selectedVoice === voice.id ? 'border-violet-500 bg-violet-500/5' : 'border-admin-border bg-admin-surface-raised hover:border-admin-border/80'}`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold text-admin-text">{voice.name}</p>
-                            <p className="mt-0.5 text-xs text-admin-text-muted line-clamp-2">{voice.description}</p>
+                            <p className="truncate text-sm font-bold text-admin-text">{voice.label}</p>
+                            <p className="mt-0.5 text-xs text-admin-text-muted line-clamp-2">{voice.id}</p>
                           </div>
-                          {playingVoiceId === voice.voiceId && (
+                          {playingVoiceId === voice.id && (
                             <div className="ml-2 flex items-center gap-0.5">
                               {[1, 2, 3].map((bar) => (
                                 <motion.div
@@ -392,21 +381,21 @@ export default function AdminVoiceDesignPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handlePreviewVoice(voice.voiceId)}
-                            disabled={playingVoiceId === voice.voiceId}
+                            onClick={() => handlePreviewVoice(voice.id)}
+                            disabled={playingVoiceId === voice.id}
                           >
                             <Volume2 className="mr-1 h-3.5 w-3.5" />
                             Preview
                           </Button>
                           <Button
-                            variant={selectedVoice === voice.voiceId ? 'primary' : 'secondary'}
+                            variant={selectedVoice === voice.id ? 'primary' : 'secondary'}
                             size="sm"
                             onClick={() => {
-                              setSelectedVoice(voice.voiceId);
+                              setSelectedVoice(voice.id);
                               setVoiceApproved(false);
                             }}
                           >
-                            {selectedVoice === voice.voiceId ? 'Selected' : 'Select'}
+                            {selectedVoice === voice.id ? 'Selected' : 'Select'}
                           </Button>
                         </div>
                       </div>
