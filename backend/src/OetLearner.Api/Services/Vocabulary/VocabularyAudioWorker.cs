@@ -27,12 +27,17 @@ public sealed class VocabularyAudioWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<VocabularyAudioWorker> logger) : BackgroundService
 {
-    private const int MaxConcurrency = 3;
-    private const int MaxAttempts = 5;
+    private const int MaxConcurrency = 1;
+    private const int MaxAttempts = 8;
     private const int MaxTextBytes = 4 * 1024;
+    private const int InterJobDelayMs = 1100;
     private const int MaxAudioUrlChars = 256;
 
     private readonly SemaphoreSlim _slots = new(MaxConcurrency, MaxConcurrency);
+    // Global cooldown — when the upstream provider returns HTTP 429 we delay
+    // ALL subsequent calls until this timestamp so the worker stops flooding.
+    private DateTimeOffset _nextAllowedAt = DateTimeOffset.MinValue;
+    private readonly object _gateLock = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -106,6 +111,15 @@ public sealed class VocabularyAudioWorker(
             logger.LogWarning("Vocab audio job {TermId} using mock TTS provider (placeholder audio)", job.TermId);
         }
 
+        // Respect global cooldown set by a previous 429 response.
+        DateTimeOffset gate;
+        lock (_gateLock) { gate = _nextAllowedAt; }
+        var waitMs = (int)Math.Max(0, (gate - DateTimeOffset.UtcNow).TotalMilliseconds);
+        if (waitMs > 0)
+        {
+            try { await Task.Delay(waitMs, ct).ConfigureAwait(false); } catch (OperationCanceledException) { return; }
+        }
+
         ConversationTtsResult result;
         try
         {
@@ -118,6 +132,8 @@ public sealed class VocabularyAudioWorker(
             await HandleFailureAsync(db, job, ex, ct).ConfigureAwait(false);
             return;
         }
+        // Pace successful calls to stay under DigitalOcean Inference rate limits.
+        try { await Task.Delay(InterJobDelayMs, ct).ConfigureAwait(false); } catch (OperationCanceledException) { return; }
 
         var audio = result.Audio ?? Array.Empty<byte>();
         var sha = Convert.ToHexString(SHA256.HashData(audio)).ToLowerInvariant();
@@ -199,6 +215,38 @@ public sealed class VocabularyAudioWorker(
     private async Task HandleFailureAsync(
         LearnerDbContext db, VocabularyAudioJob job, Exception ex, CancellationToken ct)
     {
+        // Treat upstream HTTP 429 as a transient throttle: long fixed backoff
+        // and DO NOT count it against MaxAttempts, otherwise a flood of 429s
+        // permanently fails legitimate jobs.
+        var isRateLimit = (ex.Message ?? string.Empty).Contains("429", StringComparison.Ordinal);
+        if (isRateLimit)
+        {
+            // Set/extend a global cooldown so other in-flight workers stop
+            // hammering the provider. 60s is enough to clear a typical token
+            // bucket without permanently starving the queue.
+            var cooldown = DateTimeOffset.UtcNow.AddSeconds(60);
+            lock (_gateLock)
+            {
+                if (cooldown > _nextAllowedAt) _nextAllowedAt = cooldown;
+            }
+            logger.LogWarning(
+                "Vocab audio job {TermId} rate-limited (429); global cooldown until {When:O}, requeueing without counting attempt",
+                job.TermId, _nextAllowedAt);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+                    await queue.EnqueueAsync(job, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception inner)
+                {
+                    logger.LogError(inner, "Failed to re-enqueue rate-limited vocab audio job {TermId}", job.TermId);
+                }
+            }, ct);
+            return;
+        }
         var nextAttempt = job.AttemptCount + 1;
         if (nextAttempt < MaxAttempts)
         {
