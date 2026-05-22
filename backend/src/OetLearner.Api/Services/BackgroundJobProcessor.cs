@@ -7,7 +7,11 @@ namespace OetLearner.Api.Services;
 public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<BackgroundJobProcessor> logger) : BackgroundService
 {
     private DateTimeOffset _lastReconciliationAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastAutoAssignAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastSlaCheckAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ReconciliationInterval = TimeSpan.FromHours(1);
+    private static readonly TimeSpan ExpertAutoAssignInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ExpertSlaCheckInterval = TimeSpan.FromSeconds(60);
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -124,6 +128,39 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             await RunSlaAlertCheckAsync(db, notifications, cancellationToken);
             await RunDripCampaignDispatchAsync(db, notifications, cancellationToken);
         }
+
+        // Expert auto-assign — runs on its own cadence so reviews flow to
+        // experts within ~30s of submission without waiting for the hourly
+        // reconciliation tick.
+        if (now - _lastAutoAssignAt >= ExpertAutoAssignInterval)
+        {
+            _lastAutoAssignAt = now;
+            try
+            {
+                var assigner = scope.ServiceProvider
+                    .GetRequiredService<OetLearner.Api.Services.Expert.IExpertAutoAssignmentService>();
+                await assigner.ProcessPendingAssignmentsAsync(cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "ExpertAutoAssignment poll failed");
+            }
+        }
+
+        if (now - _lastSlaCheckAt >= ExpertSlaCheckInterval)
+        {
+            _lastSlaCheckAt = now;
+            try
+            {
+                var assigner = scope.ServiceProvider
+                    .GetRequiredService<OetLearner.Api.Services.Expert.IExpertAutoAssignmentService>();
+                await assigner.ProcessSlaEscalationsAsync(cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "ExpertSlaEscalation poll failed");
+            }
+        }
     }
 
     private static async Task ExecuteJobAsync(IServiceProvider services, LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
@@ -208,6 +245,14 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 break;
             case JobType.DripCampaignDispatch:
                 await RunDripCampaignDispatchAsync(db, notifications, cancellationToken);
+                break;
+            case JobType.ExpertReviewAutoAssign:
+                await services.GetRequiredService<OetLearner.Api.Services.Expert.IExpertAutoAssignmentService>()
+                    .ProcessPendingAssignmentsAsync(cancellationToken);
+                break;
+            case JobType.ExpertReviewSlaEscalation:
+                await services.GetRequiredService<OetLearner.Api.Services.Expert.IExpertAutoAssignmentService>()
+                    .ProcessSlaEscalationsAsync(cancellationToken);
                 break;
         }
     }

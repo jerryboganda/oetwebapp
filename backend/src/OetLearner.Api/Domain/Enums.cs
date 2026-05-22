@@ -151,7 +151,11 @@ public enum JobType
     // ── Subscription Lifecycle & Engagement ──
     SubscriptionLifecycleCheck,          // Check upcoming renewals, expiries, past-due
     SlaAlertCheck,                       // Check approaching review deadlines
-    DripCampaignDispatch                 // Send drip campaign emails
+    DripCampaignDispatch,                // Send drip campaign emails
+
+    // ── Expert review auto-assignment (Phase 4) ──
+    ExpertReviewAutoAssign,              // Load-balance writing review requests to experts
+    ExpertReviewSlaEscalation            // Release stale assignments past SLA, re-pool for assigner
 }
 
 public enum ConfidenceBand

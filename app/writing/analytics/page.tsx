@@ -24,25 +24,48 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import { aggregateWeaknesses } from '@/lib/writing-analytics/aggregate';
-import {
-  SAMPLE_WEAKNESS_OBSERVATIONS,
-  SAMPLE_WEAKNESS_REFERENCE_DATE,
-} from '@/lib/writing-analytics/mock';
 import { paletteFor } from '@/lib/writing-criterion-colors';
-import type { WeaknessDataPoint } from '@/lib/writing-analytics/types';
+import { fetchWritingWeaknesses, type WritingWeaknessSummary } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
-function useWeaknessData() {
-  const [points, setPoints] = useState<WeaknessDataPoint[] | null>(null);
+// Maps the canonical writing-error tags to their best-fit drill route. Used by
+// the spec §14 recommendation card; surface the link only when a tag has a
+// natural drill anchor.
+const TAG_TO_DRILL: Record<string, string> = {
+  missing_key_content: '/writing/drills/relevance',
+  irrelevant_content: '/writing/drills/relevance',
+  unclear_purpose: '/writing/drills/opening',
+  informal_tone: '/writing/drills/tone',
+  abbreviation_issue: '/writing/drills/abbreviation',
+  poor_paragraphing: '/writing/drills/ordering',
+};
+
+function useWeaknessData(): {
+  status: 'loading' | 'success' | 'error';
+  summary: WritingWeaknessSummary | null;
+  error: string | null;
+} {
+  const [state, setState] = useState<{
+    status: 'loading' | 'success' | 'error';
+    summary: WritingWeaknessSummary | null;
+    error: string | null;
+  }>({ status: 'loading', summary: null, error: null });
 
   useEffect(() => {
-    // Deterministic seed; swap to API call when /v1/writing/analytics/weaknesses ships.
-    const handle = setTimeout(() => setPoints(SAMPLE_WEAKNESS_OBSERVATIONS), 250);
-    return () => clearTimeout(handle);
+    let cancelled = false;
+    fetchWritingWeaknesses(14)
+      .then((s) => {
+        if (cancelled) return;
+        setState({ status: 'success', summary: s, error: null });
+      })
+      .catch((e: Error) => {
+        if (cancelled) return;
+        setState({ status: 'error', summary: null, error: e.message || 'Failed to load analytics.' });
+      });
+    return () => { cancelled = true; };
   }, []);
 
-  return points;
+  return state;
 }
 
 function pct(n: number): string {
@@ -50,16 +73,7 @@ function pct(n: number): string {
 }
 
 export default function WritingAnalyticsPage() {
-  const points = useWeaknessData();
-
-  const summary = useMemo(() => {
-    if (!points) return null;
-    return aggregateWeaknesses(points, {
-      endDate: new Date(SAMPLE_WEAKNESS_REFERENCE_DATE),
-      trendDays: 14,
-      topN: 5,
-    });
-  }, [points]);
+  const { status, summary, error } = useWeaknessData();
 
   useEffect(() => {
     if (!summary) return;
@@ -72,6 +86,16 @@ export default function WritingAnalyticsPage() {
   const maxTrendCount = summary
     ? Math.max(1, ...summary.trend.map((b) => b.count))
     : 1;
+
+  const topTagDrillLink = useMemo(() => {
+    const top = summary?.topTags[0];
+    if (!top) return null;
+    const route = TAG_TO_DRILL[top.tag];
+    return route ? { route, label: top.label, tag: top.tag } : null;
+  }, [summary]);
+
+  const latestGrade = summary?.gradeTrend[summary.gradeTrend.length - 1] ?? null;
+  const latestPurpose = summary?.purposeTrend[summary.purposeTrend.length - 1] ?? null;
 
   return (
     <LearnerDashboardShell pageTitle="Writing Analytics">
@@ -107,7 +131,12 @@ export default function WritingAnalyticsPage() {
           }
         />
 
-        {!summary ? (
+        {status === 'error' ? (
+          <Card className="border-danger/40 bg-danger/5 p-6 text-sm text-danger">
+            <p className="font-semibold">Failed to load analytics.</p>
+            <p className="mt-1 text-xs">{error}</p>
+          </Card>
+        ) : !summary ? (
           <div className="space-y-6">
             <Skeleton className="h-44 rounded-2xl" />
             <Skeleton className="h-64 rounded-2xl" />
@@ -232,6 +261,67 @@ export default function WritingAnalyticsPage() {
                 </div>
               </Card>
             </MotionSection>
+
+            {/* Spec §14: estimated grade + purpose score snapshots */}
+            {(latestGrade || latestPurpose) && (
+              <MotionSection delayIndex={2.5}>
+                <Card className="border-border bg-surface p-6">
+                  <LearnerSurfaceSectionHeader
+                    eyebrow="Score snapshot"
+                    title="Latest AI estimate"
+                    description="Estimate only — not an official OET score. Tutor review may differ."
+                    className="mb-5"
+                  />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {latestGrade && (
+                      <div className="rounded-2xl border border-border bg-background-light p-4">
+                        <div className="text-xs font-bold uppercase tracking-wider text-muted">Estimated grade</div>
+                        <div className="mt-1 flex items-baseline gap-2">
+                          <span className="text-3xl font-bold text-navy">{latestGrade.gradeRange}</span>
+                          <span className="text-sm text-muted">({latestGrade.scoreRange})</span>
+                        </div>
+                        <div className="mt-1 text-[11px] text-muted">{latestGrade.date}</div>
+                      </div>
+                    )}
+                    {latestPurpose && (
+                      <div className="rounded-2xl border border-border bg-background-light p-4">
+                        <div className="text-xs font-bold uppercase tracking-wider text-muted">Purpose score</div>
+                        <div className="mt-1 flex items-baseline gap-2">
+                          <span className="text-3xl font-bold text-navy">
+                            {latestPurpose.score}<span className="text-sm text-muted">/{latestPurpose.maxScore}</span>
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[11px] text-muted">{latestPurpose.date}</div>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              </MotionSection>
+            )}
+
+            {/* Spec §14: recommendation card linking to the top-tag drill */}
+            {topTagDrillLink && (
+              <MotionSection delayIndex={3}>
+                <Card className="border-primary/30 bg-primary/5 p-6">
+                  <LearnerSurfaceSectionHeader
+                    eyebrow="Recommendation"
+                    title={`Practise: ${topTagDrillLink.label}`}
+                    description="Your most common weakness has a matching drill. Targeting it now usually moves the needle faster than general practice."
+                    className="mb-4"
+                  />
+                  <Link
+                    href={topTagDrillLink.route}
+                    onClick={() => analytics.track('writing_analytics_recommendation_clicked', {
+                      tag: topTagDrillLink.tag,
+                      route: topTagDrillLink.route,
+                    })}
+                    className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+                  >
+                    Open drill
+                  </Link>
+                </Card>
+              </MotionSection>
+            )}
           </>
         )}
       </main>

@@ -14,6 +14,7 @@ import { fetchWritingResult, isApiError } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingResult } from '@/lib/mock-data';
 import ProfessionRemediationCallout from '@/components/domain/profession-remediation-callout';
+import { WritingDualAssessmentSection } from '@/components/domain/writing/WritingDualAssessmentSection';
 
 function WritingResultContent() {
   const searchParams = useSearchParams();
@@ -207,6 +208,10 @@ function WritingResultContent() {
               </div>
             </div>
           </Card>
+        </MotionSection>
+
+        <MotionSection delayIndex={4.5}>
+          <WritingDualAssessmentSection evaluationId={resultId} />
         </MotionSection>
 
         <ProfessionRemediationCallout />

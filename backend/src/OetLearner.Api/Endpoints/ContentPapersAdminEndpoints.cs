@@ -53,6 +53,34 @@ public static class ContentPapersAdminEndpoints
         .RequireAuthorization("AdminContentWrite")
         .RequireRateLimiting("PerUserWrite");
 
+        // Writing-specific authoring endpoint (spec §1C / §19). Enforces the
+        // integrity acknowledgement gate. The generic POST above is left
+        // unchanged so the ZIP-import path and seeders keep working.
+        group.MapPost("/writing-task", async (
+            WritingTaskCreate dto, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var paper = await svc.CreateWritingTaskAsync(dto, adminId, ct);
+                return Results.Created($"/v1/admin/papers/{paper.Id}", ProjectPaper(paper));
+            }
+            catch (ContentIntegrityAcknowledgementRequiredException ex)
+            {
+                return Results.BadRequest(new
+                {
+                    error = ex.Message,
+                    code = "integrity_acknowledgement_required",
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        })
+        .RequireAuthorization("AdminContentWrite")
+        .RequireRateLimiting("PerUserWrite");
+
         group.MapPut("/{id}", async (
             string id, ContentPaperUpdate dto, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
         {
@@ -79,6 +107,53 @@ public static class ContentPapersAdminEndpoints
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             try { await svc.PublishAsync(id, adminId, ct); }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            return Results.NoContent();
+        })
+        .RequireAuthorization("AdminContentPublish")
+        .RequireRateLimiting("PerUserWrite");
+
+        // ── Draft → InReview → Published workflow (spec §1E) ──────────────
+        group.MapPost("/{id}/submit-for-review", async (
+            string id, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try { await svc.SubmitForReviewAsync(id, adminId, ct); }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            return Results.NoContent();
+        })
+        .RequireAuthorization("AdminContentWrite")
+        .RequireRateLimiting("PerUserWrite");
+
+        group.MapPost("/{id}/approve-publish", async (
+            string id, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try { await svc.ApproveAndPublishAsync(id, adminId, ct); }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            return Results.NoContent();
+        })
+        .RequireAuthorization("AdminContentPublish")
+        .RequireRateLimiting("PerUserWrite");
+
+        group.MapPost("/{id}/reject", async (
+            string id, ContentPaperRejectDto dto, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            if (string.IsNullOrWhiteSpace(dto.Reason))
+            {
+                return Results.BadRequest(new { error = "Rejection reason is required.", code = "rejection_reason_required" });
+            }
+            try { await svc.RejectAsync(id, adminId, dto.Reason, ct); }
             catch (InvalidOperationException ex)
             {
                 return Results.BadRequest(new { error = ex.Message });
@@ -362,6 +437,7 @@ public static class ContentPapersAdminEndpoints
         p.Difficulty, p.EstimatedDurationMinutes, status = p.Status.ToString(),
         p.PublishedRevisionId, p.CardType, p.LetterType, p.Priority, p.TagsCsv,
         p.SourceProvenance, p.CreatedAt, p.UpdatedAt, p.PublishedAt, p.ArchivedAt,
+        p.IntegrityAcknowledgedByAdminId, p.IntegrityAcknowledgedAt,
         assets = p.Assets.Select(a => new
         {
             a.Id, role = a.Role.ToString(), a.Part, a.MediaAssetId, a.Title,
@@ -384,3 +460,4 @@ public sealed record ChunkedUploadStartDto(
 
 public sealed record SpeakingStructureSaveDto(JsonElement Structure);
 public sealed record WritingStructureSaveDto(JsonElement Structure);
+public sealed record ContentPaperRejectDto(string Reason);

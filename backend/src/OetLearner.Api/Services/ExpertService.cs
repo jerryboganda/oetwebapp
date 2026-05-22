@@ -150,6 +150,71 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, I
         return new ExpertQueueResponse(pagedItems, totalCount, page, pageSize, now);
     }
 
+    /// <summary>Phase-4 endpoint backing <c>GET /v1/expert/queue/assigned-to-me</c>.
+    /// Returns review requests the auto-assigner has already pre-bound to the
+    /// calling expert (ClaimState != Released). Items are sorted by their
+    /// SLA-due timestamp so the most urgent appears first.</summary>
+    public async Task<IReadOnlyList<ExpertAssignedItemResponse>> GetAssignedToMeAsync(
+        string reviewerId, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+
+        const int slaHoursStandard = 48;
+        const int slaHoursExpress = 12;
+        var now = DateTimeOffset.UtcNow;
+
+        var rows = await (
+            from a in db.ExpertReviewAssignments.AsNoTracking()
+            where a.AssignedReviewerId == reviewerId
+               && a.ClaimState != ExpertAssignmentState.Released
+            join r in db.ReviewRequests.AsNoTracking() on a.ReviewRequestId equals r.Id
+            where r.SubtestCode == "writing" && r.State != ReviewRequestState.Completed
+            join attempt in db.Attempts.AsNoTracking() on r.AttemptId equals attempt.Id
+            join paper in db.ContentPapers.AsNoTracking() on attempt.ContentId equals paper.Id
+            join learner in db.Users.AsNoTracking() on attempt.UserId equals learner.Id into learnerJoin
+            from learner in learnerJoin.DefaultIfEmpty()
+            select new
+            {
+                Assignment = a,
+                Request = r,
+                Attempt = attempt,
+                Paper = paper,
+                LearnerDisplayName = learner != null ? learner.DisplayName : null,
+            }).ToListAsync(ct);
+
+        return rows
+            .Select(row =>
+            {
+                var slaHours = string.Equals(row.Request.TurnaroundOption, "express", StringComparison.OrdinalIgnoreCase)
+                    ? slaHoursExpress : slaHoursStandard;
+                var slaDueAt = (row.Assignment.AssignedAt ?? row.Request.CreatedAt).AddHours(slaHours);
+                var slaState = ComputeSlaState(slaDueAt, now);
+                return new ExpertAssignedItemResponse(
+                    ReviewRequestId: row.Request.Id,
+                    AttemptId: row.Attempt.Id,
+                    SubtestCode: "writing",
+                    ProfessionId: row.Paper.ProfessionId,
+                    TaskTitle: row.Paper.Title,
+                    LearnerDisplayName: row.LearnerDisplayName ?? string.Empty,
+                    LetterType: row.Paper.LetterType,
+                    AssignedAt: row.Assignment.AssignedAt ?? row.Request.CreatedAt,
+                    SlaDueAt: slaDueAt,
+                    SlaState: slaState,
+                    TurnaroundOption: row.Request.TurnaroundOption,
+                    ReviewerCompensation: row.Request.ReviewerCompensation,
+                    ClaimState: row.Assignment.ClaimState.ToString());
+            })
+            .OrderBy(x => x.SlaDueAt)
+            .ToList();
+    }
+
+    private static string ComputeSlaState(DateTimeOffset slaDueAt, DateTimeOffset now)
+    {
+        if (now >= slaDueAt) return "overdue";
+        var remaining = slaDueAt - now;
+        return remaining.TotalHours <= 6 ? "at_risk" : "on_track";
+    }
+
     public async Task<ExpertDashboardResponse> GetDashboardAsync(string reviewerId, CancellationToken ct)
     {
         var expert = await EnsureExpertAsync(reviewerId, ct);
@@ -1865,6 +1930,11 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, I
         context.ActiveAssignment.ReleasedAt = DateTimeOffset.UtcNow;
         context.ActiveAssignment.ReasonCode = "submitted";
 
+        // Phase 4 follow-up: record the SLA outcome so admins can audit
+        // on-time submissions alongside the overdue snapshots written by
+        // ExpertAutoAssignmentService.ProcessSlaEscalationsAsync.
+        WriteSubmissionSlaSnapshot(context, reviewerId);
+
         await LogExpertAuditAsync(reviewerId, context.Expert.DisplayName, auditAction, context.ReviewRequest.Id, draft.FinalCommentDraft, ct);
         await RecordExpertEventAsync(reviewerId, analyticsEvent, new { reviewRequestId = context.ReviewRequest.Id, version = draft.Version }, ct);
         await db.SaveChangesAsync(ct);
@@ -1885,6 +1955,45 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, I
 
         // ── Escalation auto-trigger: compare AI vs human scores ──
         await TryCreateEscalationAsync(context, reviewerId, request.Scores, ct);
+    }
+
+    private const int SlaHoursStandardForSubmit = 48;
+    private const int SlaHoursExpressForSubmit = 12;
+
+    /// <summary>Writes an <see cref="ExpertSlaSnapshot"/> row at submit time so
+    /// the audit trail captures both met and overdue outcomes (overdue rows
+    /// are written by the SLA-escalation background job). Idempotent enough:
+    /// each (reviewRequestId, expertId) pair gets one met snapshot per
+    /// successful submission. Failure here is non-fatal — the wider submit
+    /// transaction is more important than the audit row.</summary>
+    private void WriteSubmissionSlaSnapshot(TrackedWriteContext context, string reviewerId)
+    {
+        try
+        {
+            var assignedAt = context.ActiveAssignment.AssignedAt ?? context.ReviewRequest.CreatedAt;
+            var slaHours = string.Equals(context.ReviewRequest.TurnaroundOption, "express",
+                StringComparison.OrdinalIgnoreCase)
+                ? SlaHoursExpressForSubmit
+                : SlaHoursStandardForSubmit;
+            var slaDueAt = assignedAt.AddHours(slaHours);
+            var now = context.ReviewRequest.CompletedAt ?? DateTimeOffset.UtcNow;
+            var wasMet = now <= slaDueAt;
+
+            db.ExpertSlaSnapshots.Add(new ExpertSlaSnapshot
+            {
+                Id = $"sla-{Guid.NewGuid():N}",
+                ReviewRequestId = context.ReviewRequest.Id,
+                ExpertId = reviewerId,
+                SlaDueAt = slaDueAt,
+                WasMet = wasMet,
+                SlaState = wasMet ? "met" : "overdue",
+                CreatedAt = now,
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to write SLA snapshot for review {ReviewRequestId}", context.ReviewRequest.Id);
+        }
     }
 
     /// <summary>

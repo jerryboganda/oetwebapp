@@ -10,23 +10,21 @@ using OetLearner.Api.Services;
 namespace OetLearner.Api.Services.Content;
 
 /// <summary>
-/// One-shot startup seeder that loads the canonical OET Writing 1-6 sample
-/// papers from <c>Data/Seeds/writing-samples.v1.json</c> (extracted from the
-/// real PDF samples by <c>scripts/extract-writing-pdfs</c>).
+/// One-shot startup seeder that loads canonical OET Writing sample papers
+/// from one or more JSON files under <c>Data/Seeds/</c>. The default v1 file
+/// holds the 5-6 medicine PDFs extracted by <c>scripts/extract-writing-pdfs</c>;
+/// additional batches (e.g. multi-profession v2 stubs) are layered via the
+/// <see cref="WritingSeedOptions.SeedFilePathsCsv"/> option.
 ///
 /// The seeder is idempotent — papers are matched by <c>SourceProvenance</c>
-/// seed id and never overwritten once created. Papers are created already
-/// <see cref="ContentStatus.Published"/> with the full inline writing
-/// structure populated and a corresponding learner-facing <c>ContentItem</c>
-/// row, so they appear immediately on the learner Writing surface. Admins
-/// can still attach official PDFs after the fact via the canonical CRUD
-/// path through <see cref="IContentPaperService"/>; the asset-presence
-/// publish gate is bypassed here because seeded papers are inline-text only.
+/// seed id and never overwritten once created. Papers default to
+/// <see cref="ContentStatus.Published"/>; <see cref="WritingSeedOptions.AutoPublish"/>
+/// (and the per-file <see cref="WritingSeedOptions.AutoPublishByFile"/> override)
+/// flip them to <c>Draft</c> so stub rows stay invisible until the content team
+/// fills them in.
 ///
 /// Disabled by default. Enable per-environment with
-/// <c>Content:WritingSeed:Enabled=true</c>. Optional override
-/// <c>Content:WritingSeed:SeedFilePath</c> can point at an alternative JSON
-/// file (test hook).
+/// <c>Content:WritingSeed:Enabled=true</c>.
 /// </summary>
 public sealed class WritingSampleSeeder(
     IServiceScopeFactory scopeFactory,
@@ -50,8 +48,9 @@ public sealed class WritingSampleSeeder(
     }
 
     /// <summary>Public entry point so tests can drive the seeder without
-    /// reaching into reflection. Returns the number of rows created on this
-    /// invocation (0 when disabled, file missing, or all rows already present).</summary>
+    /// reaching into reflection. Returns the total number of rows created
+    /// across all seed files on this invocation (0 when disabled, all files
+    /// missing, or all rows already present).</summary>
     public async Task<int> SeedAsync(CancellationToken ct)
     {
         if (!options.Value.Enabled)
@@ -60,7 +59,24 @@ public sealed class WritingSampleSeeder(
             return 0;
         }
 
-        var seedFile = ResolveSeedFile();
+        var seedFiles = ResolveSeedFiles();
+        if (seedFiles.Count == 0)
+        {
+            logger.LogInformation("WritingSampleSeeder skipped — no seed files configured.");
+            return 0;
+        }
+
+        var totalCreated = 0;
+        foreach (var seedFile in seedFiles)
+        {
+            ct.ThrowIfCancellationRequested();
+            totalCreated += await SeedFromFileAsync(seedFile, ct);
+        }
+        return totalCreated;
+    }
+
+    private async Task<int> SeedFromFileAsync(string seedFile, CancellationToken ct)
+    {
         if (!File.Exists(seedFile))
         {
             logger.LogInformation("WritingSampleSeeder skipped — seed file not found at {Path}.", seedFile);
@@ -75,9 +91,11 @@ public sealed class WritingSampleSeeder(
         }
         if (doc?.Samples is null || doc.Samples.Count == 0)
         {
-            logger.LogInformation("WritingSampleSeeder: seed file has no samples.");
+            logger.LogInformation("WritingSampleSeeder: seed file {Path} has no samples.", seedFile);
             return 0;
         }
+
+        var autoPublish = ResolveAutoPublish(seedFile);
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -92,6 +110,14 @@ public sealed class WritingSampleSeeder(
                 || !WritingContentStructure.IsCanonicalLetterType(sample.LetterType))
             {
                 logger.LogWarning("WritingSampleSeeder: skipping malformed sample {Slug}.", sample.Slug);
+                continue;
+            }
+
+            if (!WritingContentStructure.IsLetterTypeAllowedForProfession(sample.Profession, sample.LetterType))
+            {
+                logger.LogWarning(
+                    "WritingSampleSeeder: skipping sample {Slug} — letter type '{LetterType}' is not allowed for profession '{Profession}'.",
+                    sample.Slug, sample.LetterType, sample.Profession);
                 continue;
             }
 
@@ -140,6 +166,8 @@ public sealed class WritingSampleSeeder(
                 [WritingContentStructure.StructureKey] = structure,
             });
 
+            var status = autoPublish ? ContentStatus.Published : ContentStatus.Draft;
+            var sourceFileName = Path.GetFileNameWithoutExtension(seedFile);
             var paper = new ContentPaper
             {
                 Id = Guid.NewGuid().ToString("N"),
@@ -153,15 +181,19 @@ public sealed class WritingSampleSeeder(
                 CardType = null,
                 LetterType = sample.LetterType,
                 Priority = 0,
-                TagsCsv = "seed,writing-samples-v1",
+                TagsCsv = $"seed,{sourceFileName}",
                 SourceProvenance = sample.SeedId,
-                Status = ContentStatus.Published,
-                PublishedAt = now,
+                Status = status,
+                PublishedAt = autoPublish ? now : null,
                 CreatedAt = now,
                 UpdatedAt = now,
                 CreatedByAdminId = SeederAdminId,
                 ExtractedTextJson = extractedTextJson,
             };
+            // PublishedRevisionId points at the latest committed revision and
+            // is required by the ContentItem FK regardless of publish status.
+            // Setting it on Draft seeds keeps the schema valid; the actual
+            // visibility gate is Status + PublishedAt.
             paper.PublishedRevisionId ??= paper.Id;
             db.ContentPapers.Add(paper);
 
@@ -169,7 +201,9 @@ public sealed class WritingSampleSeeder(
             // through the standard learner content surfaces (mirrors
             // ContentPaperService.UpsertWritingContentItemAsync but called
             // inline because we bypass the asset-presence publish gate —
-            // seeded papers are inline-text only).
+            // seeded papers are inline-text only). Draft papers still get a
+            // matching ContentItem so the admin surfaces can see them; the
+            // ContentItem status follows the paper status.
             var detail = WritingContentStructure.BuildContentItemDetail(paper);
             var criteriaFocus = SpeakingContentStructure.ReadStringList(
                 SpeakingContentStructure.ReadValue(detail, "criteriaFocus"));
@@ -186,7 +220,7 @@ public sealed class WritingSampleSeeder(
                 ScenarioType = paper.LetterType,
                 ModeSupportJson = JsonSupport.Serialize(new[] { "learning", "exam" }),
                 PublishedRevisionId = paper.PublishedRevisionId,
-                Status = ContentStatus.Published,
+                Status = status,
                 CaseNotes = WritingContentStructure.BuildCaseNotesText(detail),
                 DetailJson = JsonSupport.Serialize(detail),
                 ModelAnswerJson = JsonSupport.Serialize(WritingContentStructure.BuildModelAnswerPayload(paper)),
@@ -208,17 +242,20 @@ public sealed class WritingSampleSeeder(
                 ResourceId = paper.Id,
                 Details = $"writing-sample:{sample.Slug}",
             });
-            db.AuditEvents.Add(new AuditEvent
+            if (autoPublish)
             {
-                Id = Guid.NewGuid().ToString("N"),
-                OccurredAt = now,
-                ActorId = SeederAdminId,
-                ActorName = SeederAdminId,
-                Action = "ContentPaperPublished",
-                ResourceType = "ContentPaper",
-                ResourceId = paper.Id,
-                Details = $"writing-sample:{sample.Slug}",
-            });
+                db.AuditEvents.Add(new AuditEvent
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    OccurredAt = now,
+                    ActorId = SeederAdminId,
+                    ActorName = SeederAdminId,
+                    Action = "ContentPaperPublished",
+                    ResourceType = "ContentPaper",
+                    ResourceId = paper.Id,
+                    Details = $"writing-sample:{sample.Slug}",
+                });
+            }
             created++;
         }
 
@@ -227,21 +264,47 @@ public sealed class WritingSampleSeeder(
             await db.SaveChangesAsync(ct);
         }
         logger.LogInformation(
-            "WritingSampleSeeder complete — created {Created}, skipped {Skipped} (total {Total}).",
-            created, skipped, doc.Samples.Count);
+            "WritingSampleSeeder ({File}) complete — created {Created} (autoPublish={AutoPublish}), skipped {Skipped} (total {Total}).",
+            Path.GetFileName(seedFile), created, autoPublish, skipped, doc.Samples.Count);
         return created;
     }
 
-    private string ResolveSeedFile()
+    /// <summary>Resolves the ordered list of seed file paths from configuration.
+    /// If <see cref="WritingSeedOptions.SeedFilePathsCsv"/> is set, those paths
+    /// are used (in order). Otherwise falls back to the single
+    /// <see cref="WritingSeedOptions.SeedFilePath"/> override, or the default
+    /// <c>Data/Seeds/writing-samples.v1.json</c>.</summary>
+    private IReadOnlyList<string> ResolveSeedFiles()
     {
+        var csv = options.Value.SeedFilePathsCsv;
+        if (!string.IsNullOrWhiteSpace(csv))
+        {
+            return csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(MapToAbsolutePath)
+                .ToList();
+        }
+
         var explicitPath = options.Value.SeedFilePath;
         if (!string.IsNullOrWhiteSpace(explicitPath))
         {
-            return Path.IsPathRooted(explicitPath)
-                ? explicitPath
-                : Path.Combine(env.ContentRootPath, explicitPath);
+            return new[] { MapToAbsolutePath(explicitPath) };
         }
-        return Path.Combine(env.ContentRootPath, "Data", "Seeds", "writing-samples.v1.json");
+
+        return new[] { Path.Combine(env.ContentRootPath, "Data", "Seeds", "writing-samples.v1.json") };
+    }
+
+    private string MapToAbsolutePath(string raw)
+        => Path.IsPathRooted(raw) ? raw : Path.Combine(env.ContentRootPath, raw);
+
+    private bool ResolveAutoPublish(string seedFile)
+    {
+        var fileName = Path.GetFileName(seedFile);
+        if (options.Value.AutoPublishByFile is { Count: > 0 } map
+            && map.TryGetValue(fileName, out var perFile))
+        {
+            return perFile;
+        }
+        return options.Value.AutoPublish;
     }
 
     private static string BuildDefaultTaskPrompt(WritingSeedSample sample)
@@ -261,7 +324,7 @@ public sealed class WritingSampleSeeder(
                "Address the letter as indicated. The body of your letter should be approximately 180–200 words.";
     }
 
-    // Local DTOs matching writing-samples.v1.json shape.
+    // Local DTOs matching writing-samples.v*.json shape.
     private sealed class WritingSeedFile
     {
         public int SchemaVersion { get; set; }

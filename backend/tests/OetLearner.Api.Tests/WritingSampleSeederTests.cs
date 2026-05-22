@@ -117,6 +117,159 @@ public class WritingSampleSeederTests
         Assert.Equal(0, created);
     }
 
+    [Fact]
+    public async Task Seeder_loads_multiple_files_from_csv()
+    {
+        await using var db = CreateDb();
+        var fileA = WriteSeedFile(samples: 2);
+        var fileB = WriteSecondSeedFile();
+        var opts = new WritingSeedOptions
+        {
+            Enabled = true,
+            SeedFilePathsCsv = $"{fileA}, {fileB}",
+        };
+        var seeder = BuildSeederWithOptions(db, opts);
+
+        var created = await seeder.SeedAsync(CancellationToken.None);
+
+        Assert.Equal(3, created);
+        var papers = await db.ContentPapers.AsNoTracking().ToListAsync();
+        Assert.Equal(3, papers.Count);
+        Assert.Contains(papers, p => p.SourceProvenance == "wrt-v1-1-routine-referral");
+        Assert.Contains(papers, p => p.SourceProvenance == "wrt-v1-3-urgent-referral");
+        Assert.Contains(papers, p => p.SourceProvenance == "wrt-v2-extra-nursing");
+    }
+
+    [Fact]
+    public async Task Seeder_respects_per_file_auto_publish_override()
+    {
+        await using var db = CreateDb();
+        var fileA = WriteSeedFile(samples: 1);
+        var fileB = WriteSecondSeedFile();
+        var opts = new WritingSeedOptions
+        {
+            Enabled = true,
+            SeedFilePathsCsv = $"{fileA},{fileB}",
+            AutoPublish = true,
+            AutoPublishByFile = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+            {
+                [Path.GetFileName(fileB)] = false,
+            },
+        };
+        var seeder = BuildSeederWithOptions(db, opts);
+
+        var created = await seeder.SeedAsync(CancellationToken.None);
+        Assert.Equal(2, created);
+
+        var papers = await db.ContentPapers.AsNoTracking().ToListAsync();
+        var v1 = papers.Single(p => p.SourceProvenance == "wrt-v1-1-routine-referral");
+        var v2 = papers.Single(p => p.SourceProvenance == "wrt-v2-extra-nursing");
+        Assert.Equal(ContentStatus.Published, v1.Status);
+        Assert.NotNull(v1.PublishedAt);
+        Assert.Equal(ContentStatus.Draft, v2.Status);
+        Assert.Null(v2.PublishedAt);
+        // PublishedRevisionId is always set (required by ContentItem FK), but
+        // PublishedAt staying null is the actual signal that the paper is unpublished.
+        Assert.NotNull(v2.PublishedRevisionId);
+
+        // Audit trail: published file logs both Seeded + Published; draft logs only Seeded.
+        var v1Audits = await db.AuditEvents.AsNoTracking()
+            .Where(a => a.ResourceId == v1.Id)
+            .Select(a => a.Action)
+            .OrderBy(s => s)
+            .ToListAsync();
+        Assert.Equal(new[] { "ContentPaperPublished", "ContentPaperSeeded" }, v1Audits);
+
+        var v2Audits = await db.AuditEvents.AsNoTracking()
+            .Where(a => a.ResourceId == v2.Id)
+            .Select(a => a.Action)
+            .ToListAsync();
+        Assert.Equal(new[] { "ContentPaperSeeded" }, v2Audits);
+
+        // ContentItem status mirrors paper status.
+        var v2Item = await db.ContentItems.AsNoTracking().FirstAsync(c => c.Id == v2.Id);
+        Assert.Equal(ContentStatus.Draft, v2Item.Status);
+    }
+
+    [Fact]
+    public async Task Seeder_skips_letter_type_not_allowed_for_profession()
+    {
+        await using var db = CreateDb();
+        var dir = Path.Combine(Path.GetTempPath(), $"writing-seed-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        var seedFile = Path.Combine(dir, "writing-samples-vet.json");
+        var doc = new
+        {
+            schemaVersion = 1,
+            samples = new[]
+            {
+                new
+                {
+                    seedId = "wrt-v2-vet-bad",
+                    slug = "writing-v2-vet-bad",
+                    title = "Veterinary — should-be-blocked",
+                    profession = "veterinary",
+                    // non_medical_referral is NOT allowed for veterinary per the per-profession allow-list.
+                    letterType = "non_medical_referral",
+                    caseNotesText = "x",
+                    modelAnswerText = "y",
+                },
+                new
+                {
+                    seedId = "wrt-v2-vet-ok",
+                    slug = "writing-v2-vet-ok",
+                    title = "Veterinary — urgent",
+                    profession = "veterinary",
+                    letterType = "urgent_referral",
+                    caseNotesText = "x",
+                    modelAnswerText = "y",
+                },
+            },
+        };
+        File.WriteAllText(seedFile, JsonSerializer.Serialize(doc));
+
+        var seeder = BuildSeeder(db, seedFile, enabled: true);
+        var created = await seeder.SeedAsync(CancellationToken.None);
+
+        Assert.Equal(1, created);
+        var papers = await db.ContentPapers.AsNoTracking().ToListAsync();
+        Assert.Single(papers);
+        Assert.Equal("wrt-v2-vet-ok", papers[0].SourceProvenance);
+    }
+
+    private static string WriteSecondSeedFile()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"writing-seed-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        var file = Path.Combine(dir, "writing-samples.v2.json");
+        var doc = new
+        {
+            schemaVersion = 1,
+            samples = new[]
+            {
+                new
+                {
+                    seedId = "wrt-v2-extra-nursing",
+                    slug = "writing-v2-extra-nursing",
+                    title = "Nursing — Community Nurse Referral",
+                    profession = "nursing",
+                    letterType = "routine_referral",
+                    caseNotesText = "",
+                    modelAnswerText = "",
+                },
+            },
+        };
+        File.WriteAllText(file, JsonSerializer.Serialize(doc));
+        return file;
+    }
+
+    private static WritingSampleSeeder BuildSeederWithOptions(LearnerDbContext db, WritingSeedOptions opts)
+    {
+        var scopeFactory = new SingleDbScopeFactory(db);
+        var env = new FakeHostEnvironment(Path.GetTempPath());
+        return new WritingSampleSeeder(scopeFactory, Options.Create(opts), env, NullLogger<WritingSampleSeeder>.Instance);
+    }
+
     private static string WriteSeedFile(int samples)
     {
         var dir = Path.Combine(Path.GetTempPath(), $"writing-seed-{Guid.NewGuid():N}");

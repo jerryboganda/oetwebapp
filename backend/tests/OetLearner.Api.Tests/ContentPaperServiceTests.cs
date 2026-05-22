@@ -516,6 +516,164 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
+    public async Task Create_writing_task_requires_integrity_acknowledgement()
+    {
+        var (db, svc) = Build();
+        await Assert.ThrowsAsync<ContentIntegrityAcknowledgementRequiredException>(() =>
+            svc.CreateWritingTaskAsync(new WritingTaskCreate(
+                Title: "Medicine — Routine Referral",
+                Slug: null,
+                ProfessionId: "medicine",
+                LetterType: "routine_referral",
+                Difficulty: null,
+                EstimatedDurationMinutes: 45,
+                Priority: 0,
+                TagsCsv: null,
+                SourceProvenance: DefaultSourceProvenance,
+                IntegrityAcknowledged: false), "admin-1", default));
+        Assert.Equal(0, await db.ContentPapers.CountAsync());
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Create_writing_task_persists_integrity_metadata_when_acknowledged()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateWritingTaskAsync(new WritingTaskCreate(
+            Title: "Medicine — Routine Referral",
+            Slug: null,
+            ProfessionId: "medicine",
+            LetterType: "routine_referral",
+            Difficulty: null,
+            EstimatedDurationMinutes: 45,
+            Priority: 0,
+            TagsCsv: null,
+            SourceProvenance: DefaultSourceProvenance,
+            IntegrityAcknowledged: true), "admin-7", default);
+
+        Assert.Equal("admin-7", paper.IntegrityAcknowledgedByAdminId);
+        Assert.NotNull(paper.IntegrityAcknowledgedAt);
+        Assert.Equal(ContentStatus.Draft, paper.Status);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Create_writing_task_rejects_letter_type_not_allowed_for_profession()
+    {
+        var (db, svc) = Build();
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            svc.CreateWritingTaskAsync(new WritingTaskCreate(
+                Title: "Veterinary — bad letter type",
+                Slug: null,
+                ProfessionId: "veterinary",
+                // non_medical_referral is excluded for veterinary per WritingContentStructure allow-list.
+                LetterType: "non_medical_referral",
+                Difficulty: null,
+                EstimatedDurationMinutes: 45,
+                Priority: 0,
+                TagsCsv: null,
+                SourceProvenance: DefaultSourceProvenance,
+                IntegrityAcknowledged: true), "admin-1", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submit_for_review_requires_draft_state()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateWritingTaskAsync(new WritingTaskCreate(
+            Title: "Wf-task", Slug: null, ProfessionId: "medicine", LetterType: "routine_referral",
+            Difficulty: null, EstimatedDurationMinutes: 45, Priority: 0, TagsCsv: null,
+            SourceProvenance: DefaultSourceProvenance, IntegrityAcknowledged: true), "admin-1", default);
+
+        await svc.SubmitForReviewAsync(paper.Id, "admin-1", default);
+        var reload = await db.ContentPapers.AsNoTracking().FirstAsync(p => p.Id == paper.Id);
+        Assert.Equal(ContentStatus.InReview, reload.Status);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.SubmitForReviewAsync(paper.Id, "admin-1", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Approve_publish_requires_in_review_state()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateWritingTaskAsync(new WritingTaskCreate(
+            Title: "Wf-task", Slug: null, ProfessionId: "medicine", LetterType: "routine_referral",
+            Difficulty: null, EstimatedDurationMinutes: 45, Priority: 0, TagsCsv: null,
+            SourceProvenance: DefaultSourceProvenance, IntegrityAcknowledged: true), "admin-1", default);
+
+        // Direct Approve from Draft should be rejected.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.ApproveAndPublishAsync(paper.Id, "admin-2", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Approve_publish_transitions_in_review_to_published()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateWritingTaskAsync(new WritingTaskCreate(
+            Title: "Wf-task", Slug: null, ProfessionId: "medicine", LetterType: "routine_referral",
+            Difficulty: null, EstimatedDurationMinutes: 45, Priority: 0, TagsCsv: null,
+            SourceProvenance: DefaultSourceProvenance, IntegrityAcknowledged: true), "admin-1", default);
+        await AttachRequiredWritingAssetsAsync(db, svc, paper.Id);
+        await FullyAuthorWritingPaperAsync(db, paper.Id);
+        await svc.SubmitForReviewAsync(paper.Id, "admin-1", default);
+
+        await svc.ApproveAndPublishAsync(paper.Id, "admin-2", default);
+
+        var reload = await db.ContentPapers.AsNoTracking().FirstAsync(p => p.Id == paper.Id);
+        Assert.Equal(ContentStatus.Published, reload.Status);
+        Assert.NotNull(reload.PublishedAt);
+
+        var actions = await db.AuditEvents.AsNoTracking()
+            .Where(a => a.ResourceId == paper.Id)
+            .Select(a => a.Action)
+            .ToListAsync();
+        Assert.Contains("ContentPaperSubmittedForReview", actions);
+        Assert.Contains("ContentPaperApprovedForPublish", actions);
+        Assert.Contains("ContentPaperPublished", actions);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Reject_requires_in_review_state_and_records_reason()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateWritingTaskAsync(new WritingTaskCreate(
+            Title: "Wf-task", Slug: null, ProfessionId: "medicine", LetterType: "routine_referral",
+            Difficulty: null, EstimatedDurationMinutes: 45, Priority: 0, TagsCsv: null,
+            SourceProvenance: DefaultSourceProvenance, IntegrityAcknowledged: true), "admin-1", default);
+
+        // Reject before InReview should fail.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.RejectAsync(paper.Id, "admin-2", "Too short", default));
+
+        await svc.SubmitForReviewAsync(paper.Id, "admin-1", default);
+        await svc.RejectAsync(paper.Id, "admin-2", "Case notes incomplete", default);
+
+        var reload = await db.ContentPapers.AsNoTracking().FirstAsync(p => p.Id == paper.Id);
+        Assert.Equal(ContentStatus.Rejected, reload.Status);
+
+        var rejectAudit = await db.AuditEvents.AsNoTracking()
+            .FirstAsync(a => a.ResourceId == paper.Id && a.Action == "ContentPaperRejected");
+        Assert.Contains("Case notes incomplete", rejectAudit.Details);
+        Assert.Equal("admin-2", rejectAudit.ActorId);
+
+        // Empty reason rejected.
+        var paper2 = await svc.CreateWritingTaskAsync(new WritingTaskCreate(
+            Title: "Wf-task-2", Slug: null, ProfessionId: "medicine", LetterType: "routine_referral",
+            Difficulty: null, EstimatedDurationMinutes: 45, Priority: 0, TagsCsv: null,
+            SourceProvenance: DefaultSourceProvenance, IntegrityAcknowledged: true), "admin-1", default);
+        await svc.SubmitForReviewAsync(paper2.Id, "admin-1", default);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            svc.RejectAsync(paper2.Id, "admin-2", "   ", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task List_filters_by_subtest_and_profession_including_applies_to_all()
     {
         var (db, svc) = Build();

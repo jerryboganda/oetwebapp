@@ -69,6 +69,13 @@ public static class WritingContentStructure
     public static bool IsCanonicalLetterType(string? letterType)
         => !string.IsNullOrWhiteSpace(letterType) && CanonicalLetterTypes.Contains(letterType.Trim());
 
+    /// <summary>True when the given letter type is allowed for the given
+    /// profession. Unknown professions fall back to the full canonical set
+    /// so newly-added professions are not accidentally blocked.</summary>
+    public static bool IsLetterTypeAllowedForProfession(string? professionId, string? letterType)
+        => IsCanonicalLetterType(letterType)
+           && AllowedLetterTypesFor(professionId).Contains(letterType!.Trim());
+
     private static IReadOnlySet<string> AllowedLetterTypesFor(string? professionId)
     {
         if (!string.IsNullOrWhiteSpace(professionId)

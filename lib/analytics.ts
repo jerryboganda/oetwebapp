@@ -266,6 +266,23 @@ const TRACKED_EVENTS = [
   'speaking_voice_note_added',
   'speaking_voice_note_deleted',
   'writing_ai_pre_fill_applied',
+  // Admin writing-task authoring workflow (spec §1C / §1E / §19)
+  'admin_writing_task_authoring_started',
+  'admin_writing_task_draft_saved',
+  'admin_writing_task_submitted_for_review',
+  'admin_writing_task_approved',
+  'admin_writing_task_rejected',
+  'admin_writing_task_integrity_ack_blocked',
+  // Learner analytics recommendation deep-link (spec §14)
+  'writing_analytics_recommendation_clicked',
+  // Dual AI + Tutor assessment (spec §12.E)
+  'writing_dual_assessment_viewed',
+  'writing_tutor_score_received',
+  'writing_dual_divergence_wide_observed',
+  // Expert auto-assign "Assigned to me" queue (Phase 4)
+  'expert_assigned_queue_viewed',
+  'expert_assigned_review_opened',
+  'expert_review_sla_warning_shown',
   // Generic page view
   'page_viewed',
 ] as const;

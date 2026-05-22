@@ -133,6 +133,15 @@ public class ContentPaper
     public DateTimeOffset? PublishedAt { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }
 
+    /// <summary>Admin who acknowledged the content-integrity policy (no recalled
+    /// or leaked OET exam content). Required when an admin creates a Writing
+    /// task through the new authoring UI. Null for seeder rows and for older
+    /// rows created before the integrity gate was introduced.</summary>
+    [MaxLength(64)]
+    public string? IntegrityAcknowledgedByAdminId { get; set; }
+
+    public DateTimeOffset? IntegrityAcknowledgedAt { get; set; }
+
     // Navigation
     public ICollection<ContentPaperAsset> Assets { get; set; } = new List<ContentPaperAsset>();
 }

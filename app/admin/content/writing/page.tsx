@@ -18,8 +18,11 @@ import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import {
+  approvePublishWritingPaper,
   archiveContentPaper,
   listContentPapers,
+  rejectWritingPaper,
+  submitWritingPaperForReview,
   type ContentPaperDto,
   type PaperAssetRole,
 } from '@/lib/content-upload-api';
@@ -77,6 +80,7 @@ export default function AdminWritingPapersPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const { user } = useCurrentUser();
   const canWriteContent = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
+  const canPublishContent = hasPermission(user?.adminPermissions, AdminPermission.ContentPublish);
 
   const [status, setStatus] = useState<PageStatus>('loading');
   const [rows, setRows] = useState<ContentPaperDto[]>([]);
@@ -122,6 +126,42 @@ export default function AdminWritingPapersPage() {
       setToast({ variant: 'error', message: `Archive failed: ${(e as Error).message}` });
     }
   }, [canWriteContent, load]);
+
+  const submitForReview = useCallback(async (id: string) => {
+    if (!canWriteContent) return;
+    try {
+      await submitWritingPaperForReview(id);
+      setToast({ variant: 'success', message: 'Paper submitted for review.' });
+      await load();
+    } catch (e) {
+      setToast({ variant: 'error', message: `Submit for review failed: ${(e as Error).message}` });
+    }
+  }, [canWriteContent, load]);
+
+  const approvePublish = useCallback(async (id: string) => {
+    if (!canPublishContent) return;
+    if (!confirm('Approve and publish this writing paper? Learners will see it immediately.')) return;
+    try {
+      await approvePublishWritingPaper(id);
+      setToast({ variant: 'success', message: 'Paper approved and published.' });
+      await load();
+    } catch (e) {
+      setToast({ variant: 'error', message: `Approve & publish failed: ${(e as Error).message}` });
+    }
+  }, [canPublishContent, load]);
+
+  const reject = useCallback(async (id: string) => {
+    if (!canPublishContent) return;
+    const reason = prompt('Rejection reason (shown on audit trail):');
+    if (!reason || !reason.trim()) return;
+    try {
+      await rejectWritingPaper(id, reason.trim());
+      setToast({ variant: 'success', message: 'Paper rejected.' });
+      await load();
+    } catch (e) {
+      setToast({ variant: 'error', message: `Reject failed: ${(e as Error).message}` });
+    }
+  }, [canPublishContent, load]);
 
   const stats = useMemo(() => {
     let published = 0;
@@ -199,13 +239,36 @@ export default function AdminWritingPapersPage() {
       key: 'actions',
       header: 'Actions',
       render: (paper) => canWriteContent ? (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link
             href={`/admin/content/papers/${paper.id}`}
             className="inline-flex min-h-9 items-center rounded px-3 py-2 text-sm font-semibold text-navy hover:bg-background-light"
           >
             Edit
           </Link>
+          {paper.status === 'Draft' && (
+            <Button variant="ghost" size="sm" onClick={() => void submitForReview(paper.id)}>
+              Submit for review
+            </Button>
+          )}
+          {paper.status === 'InReview' && (
+            <Link
+              href={`/admin/writing/tasks/${paper.id}/review`}
+              className="inline-flex min-h-9 items-center rounded px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
+            >
+              Review
+            </Link>
+          )}
+          {paper.status === 'InReview' && canPublishContent && (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => void approvePublish(paper.id)}>
+                Approve &amp; publish
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => void reject(paper.id)}>
+                Reject
+              </Button>
+            </>
+          )}
           {paper.status !== 'Archived' && (
             <Button variant="ghost" size="sm" onClick={() => void archive(paper.id)}>
               <ArchiveIcon className="w-4 h-4" /> Archive
@@ -214,7 +277,7 @@ export default function AdminWritingPapersPage() {
         </div>
       ) : <span className="text-xs text-muted">Read only</span>,
     },
-  ], [archive, canWriteContent]);
+  ], [approvePublish, archive, canPublishContent, canWriteContent, reject, submitForReview]);
 
   if (!isAuthenticated || role !== 'admin') {
     return (
@@ -240,10 +303,10 @@ export default function AdminWritingPapersPage() {
           {canWriteContent ? (
             <div className="flex items-end gap-2 md:col-span-2">
               <Link
-                href="/admin/content/papers?subtest=writing"
+                href="/admin/writing/tasks/new"
                 className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600"
               >
-                <Plus className="w-4 h-4 mr-1" /> Create Writing paper
+                <Plus className="w-4 h-4 mr-1" /> Create Writing task
               </Link>
               <Link
                 href="/admin/content/papers/import"

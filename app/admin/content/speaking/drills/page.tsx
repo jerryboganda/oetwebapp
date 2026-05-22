@@ -1,7 +1,7 @@
 ﻿'use client';
 
 /**
- * OET Speaking â€” Phase 11 P11.5 â€” admin drill bank list page.
+ * OET Speaking - Phase 11 P11.5 - admin drill bank list page.
  *
  * Lists drills curated by status (draft / in-review / published / archived)
  * and lets the admin create / publish / archive / delete. Detail editing
@@ -141,13 +141,13 @@ export default function AdminSpeakingDrillsPage() {
       <div className="space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold text-slate-900">Speaking Â· drill bank</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">Speaking - drill bank</h1>
             <p className="text-slate-600">
               Curate the post-session remediation drills that the speaking analytics console
               recommends to learners after low-scoring criteria.
             </p>
           </div>
-          <Button asChild variant="outline"><Link href="/admin/content/speaking/drills/ai-draft">AI-assisted draftâ€¦</Link></Button>
+          <Button asChild variant="outline"><Link href="/admin/content/speaking/drills/ai-draft">AI-assisted draft...</Link></Button>
         </header>
 
         <Card className="space-y-4 p-4">
@@ -223,7 +223,7 @@ export default function AdminSpeakingDrillsPage() {
             />
             <div className="sm:col-span-2 flex justify-end">
               <Button type="submit" disabled={creating}>
-                {creating ? 'Creatingâ€¦' : 'Create drill'}
+                {creating ? 'Creating...' : 'Create drill'}
               </Button>
             </div>
           </form>

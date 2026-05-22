@@ -3,7 +3,7 @@
   "kind": "listening",
   "profession": "dentistry",
   "publishedAt": "2026-04-30T00:00:00Z",
-  "authoritySource": "Dr. Ahmed Hesham â€” OET Listening Authoring Rulebook v1",
+  "authoritySource": "Dr. Ahmed Hesham - OET Listening Authoring Rulebook v1",
   "sections": [
     { "id": "L01", "title": "Canonical 42-item shape", "order": 1 },
     { "id": "L02", "title": "Part A: short-answer / fill-in-the-blank", "order": 2 },
@@ -17,7 +17,7 @@
   "rules": [
     { "id": "L01.1", "section": "L01", "severity": "critical", "title": "Exactly 42 items, contiguous numbering", "body": "Every authored Listening paper has exactly 42 questions numbered 1..42 with no gaps. The shape is fixed: Part A1 (Q1-12), A2 (Q13-24), B (Q25-30), C1 (Q31-36), C2 (Q37-42).", "appliesTo": "all" },
     { "id": "L01.2", "section": "L01", "severity": "critical", "title": "24 / 6 / 12 split", "body": "Part A must contain exactly 24 short-answer items (12 in A1 + 12 in A2). Part B must contain exactly 6 three-option MCQ items. Part C must contain exactly 12 three-option MCQ items (6 in C1 + 6 in C2). Any other shape is rejected by the publish gate.", "appliesTo": "all" },
-    { "id": "L01.3", "section": "L01", "severity": "critical", "title": "30/42 â‰¡ 350/500 anchor", "body": "Listening grading uses the canonical rawâ†’scaled anchor 30/42 â‰¡ 350/500. Authors never produce or assert a scaled score; the OetScoring service computes it after submit.", "appliesTo": "all" },
+    { "id": "L01.3", "section": "L01", "severity": "critical", "title": "30/42 equiv 350/500 anchor", "body": "Listening grading uses the canonical raw->scaled anchor 30/42 equiv 350/500. Authors never produce or assert a scaled score; the OetScoring service computes it after submit.", "appliesTo": "all" },
 
     { "id": "L02.1", "section": "L02", "severity": "critical", "title": "Part A items are short-answer, never MCQ", "body": "Part A questions test note-taking from a fast consultation. They are short-answer / fill-in-the-blank only. MCQ is forbidden in Part A.", "appliesTo": "all" },
     { "id": "L02.2", "section": "L02", "severity": "major", "title": "Accept clinically-sensible spelling variants", "body": "Each Part A item should provide the canonical answer plus 0-N accepted variants (UK/US spelling, common abbreviations, hyphen/space differences). Do NOT accept clinically-different terms.", "appliesTo": "all" },

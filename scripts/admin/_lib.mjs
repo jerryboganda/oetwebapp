@@ -725,11 +725,11 @@ function _sanitizeTtsText(text) {
   // Replace curly quotes/apostrophes with ASCII equivalents.
   s = s.replace(/[\u2018\u2019\u201A\u201B]/g, "'");
   s = s.replace(/[\u201C\u201D\u201E\u201F]/g, '"');
-  // Em/en dashes, hyphen variants â†’ ASCII hyphen.
+  // Em/en dashes, hyphen variants -> ASCII hyphen.
   s = s.replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-');
-  // Ellipsis â†’ three dots.
+  // Ellipsis -> three dots.
   s = s.replace(/\u2026/g, '...');
-  // Non-breaking + thin/zero-width spaces â†’ normal space / removed.
+  // Non-breaking + thin/zero-width spaces -> normal space / removed.
   s = s.replace(/[\u00A0\u2007\u202F]/g, ' ');
   s = s.replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
   // Strip control chars except \n \r \t.

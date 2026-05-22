@@ -21,7 +21,7 @@ export type PaperAssetRole =
   | 'WarmUpQuestions'
   | 'Supplementary';
 
-export type ContentStatus = 'Draft' | 'InReview' | 'Published' | 'Archived';
+export type ContentStatus = 'Draft' | 'InReview' | 'Published' | 'Archived' | 'Rejected';
 
 export interface ContentPaperDto {
   id: string;
@@ -43,6 +43,8 @@ export interface ContentPaperDto {
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;
+  integrityAcknowledgedByAdminId: string | null;
+  integrityAcknowledgedAt: string | null;
   assets?: ContentPaperAssetDto[];
 }
 
@@ -286,6 +288,39 @@ export const archiveContentPaper = (id: string) =>
   api<void>(`/v1/admin/papers/${id}`, { method: 'DELETE' });
 export const publishContentPaper = (id: string) =>
   api<void>(`/v1/admin/papers/${id}/publish`, { method: 'POST' });
+
+// ── Writing-task authoring + lifecycle (spec §1C / §1E / §19) ───────────
+
+export interface WritingTaskCreateDto {
+  title: string;
+  slug?: string | null;
+  professionId: string;
+  letterType: string;
+  difficulty?: string | null;
+  estimatedDurationMinutes: number;
+  priority: number;
+  tagsCsv?: string | null;
+  sourceProvenance: string;
+  integrityAcknowledged: true;
+}
+
+export const createWritingPaper = (body: WritingTaskCreateDto) =>
+  api<ContentPaperDto>('/v1/admin/papers/writing-task', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const submitWritingPaperForReview = (id: string) =>
+  api<void>(`/v1/admin/papers/${id}/submit-for-review`, { method: 'POST' });
+
+export const approvePublishWritingPaper = (id: string) =>
+  api<void>(`/v1/admin/papers/${id}/approve-publish`, { method: 'POST' });
+
+export const rejectWritingPaper = (id: string, reason: string) =>
+  api<void>(`/v1/admin/papers/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
 
 export const getSpeakingStructure = (paperId: string) =>
   api<SpeakingStructureResponse>(`/v1/admin/papers/${paperId}/speaking-structure`);

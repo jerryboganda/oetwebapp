@@ -47,6 +47,24 @@ public sealed record ExpertQueueResponse(
     int PageSize,
     DateTimeOffset LastUpdatedAt);
 
+/// <summary>Item returned by <c>GET /v1/expert/queue/assigned-to-me</c> —
+/// flattened so the expert UI does not need to join the underlying
+/// review-request, attempt, and content-paper rows.</summary>
+public sealed record ExpertAssignedItemResponse(
+    string ReviewRequestId,
+    string AttemptId,
+    string SubtestCode,
+    string? ProfessionId,
+    string TaskTitle,
+    string LearnerDisplayName,
+    string? LetterType,
+    DateTimeOffset AssignedAt,
+    DateTimeOffset SlaDueAt,
+    string SlaState,
+    string TurnaroundOption,
+    decimal ReviewerCompensation,
+    string ClaimState);
+
 public sealed record ExpertArtifactStateResponse(
     string State,
     bool IsStale,

@@ -82,6 +82,7 @@ const analyticsFixture = {
   actionInsights: [
     { id: 'part_b', title: 'Review Part B performance', description: 'Part B is currently the lowest accuracy section.', tone: 'danger' },
   ],
+  distractorTraps: [],
 };
 
 describe('ReadingAnalyticsPage', () => {

@@ -3383,6 +3383,13 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset?>("IntegrityAcknowledgedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IntegrityAcknowledgedByAdminId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("LetterType")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");

@@ -41,7 +41,7 @@ export default function SpeakingSessionLiveTutorPage() {
   const [ending, setEnding] = useState(false);
   const endedRef = useRef(false);
 
-  // â”€â”€ Load session + provision room + token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Load session + provision room + token --------------------------------
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
@@ -55,7 +55,7 @@ export default function SpeakingSessionLiveTutorPage() {
         setSession(s);
 
         if (s.mode !== 'live_tutor') {
-          // Defensive â€” should only land here in live-tutor mode.
+          // Defensive - should only land here in live-tutor mode.
           router.replace(`/speaking/sessions/${sessionId}`);
           return;
         }
@@ -93,7 +93,7 @@ export default function SpeakingSessionLiveTutorPage() {
     try {
       await endSpeakingSession(session.sessionId);
     } catch (err) {
-      // We don't block navigation on the end-session failure â€” tutor
+      // We don't block navigation on the end-session failure - tutor
       // side will also finalize. Log for diagnostics.
 
       console.warn('[live-tutor] endSpeakingSession failed:', err);
@@ -106,7 +106,7 @@ export default function SpeakingSessionLiveTutorPage() {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <span className="inline-flex items-center gap-2 text-sm text-slate-500">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Connecting to the tutor roomâ€¦
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Connecting to the tutor room...
         </span>
       </div>
     );
@@ -144,16 +144,16 @@ export default function SpeakingSessionLiveTutorPage() {
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
-            Speaking Â· Live tutor
+            Speaking - Live tutor
           </p>
           <h1 className="text-2xl font-bold text-slate-900">{card.scenarioTitle}</h1>
           <p className="text-sm text-slate-600">
-            {card.setting} Â· {card.candidateRole}
+            {card.setting} - {card.candidateRole}
           </p>
         </div>
         {ending ? (
           <span className="inline-flex items-center gap-2 text-sm text-slate-500">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Wrapping upâ€¦
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Wrapping up...
           </span>
         ) : null}
       </header>
@@ -171,7 +171,7 @@ export default function SpeakingSessionLiveTutorPage() {
             <div className="flex h-full min-h-[480px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
               <span className="inline-flex items-center gap-2 text-sm text-slate-500">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                {consentAccepted ? 'Setting up the roomâ€¦' : 'Waiting for consentâ€¦'}
+                {consentAccepted ? 'Setting up the room...' : 'Waiting for consent...'}
               </span>
             </div>
           )}

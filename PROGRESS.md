@@ -1,6 +1,6 @@
 ﻿# PROGRESS — Ultrawork Completion
 
-Last updated: 2026-05-21 23:45:00 +05:00
+Last updated: 2026-05-22 02:30:20 +05:00
 
 ## Guardrails
 - No destructive git actions.
@@ -27,7 +27,15 @@ Last updated: 2026-05-21 23:45:00 +05:00
 - Improved visible speaking recorder errors for missing/blocked microphone, missing browser `MediaRecorder`, and recorder start failures.
 
 ## In Progress / Needs Validation
-- Remote validation has not yet run on `oet-dev` for these local edits.
+- Remote validation was run against an isolated `oet-dev` validation worktree at `/tmp/oet-ultra-validation` to avoid overwriting `/opt/oetwebapp` dirty work.
+- Passed remote frontend/unit validation:
+  - `ssh oet-dev "cd /tmp/oet-ultra-validation && npm test"` -> 218 files / 1395 tests passed.
+  - `ssh oet-dev "cd /tmp/oet-ultra-validation && npx tsc --noEmit && npm run lint && npm run check:encoding"` -> passed after encoding cleanup.
+  - `ssh oet-dev "cd /tmp/oet-ultra-validation && npm run build"` -> passed.
+- Backend targeted regressions fixed and passed:
+  - `AuthFlowsTests.AuthResponseContracts_SerializeAndDeserializeWithExpectedShape`
+  - `LearnerSpecRegressionTests.MockAttemptCreation_PersistsReviewSelectionAndLaunchRoutes`
+- Full backend test run still needs a clean uninterrupted completion. It initially exposed the two fixed contract regressions above, then a later full run exceeded 60 minutes with no final pass/fail summary. A follow-up diagnostic run with `--blame-hang` also exceeded its 15-minute watchdog after reaching later upload authorization tests and did not identify a new code assertion failure before timeout.
 - Mock booking max-reschedule is now code-default 2; a full persisted admin setting still needs a DB-backed settings surface if strict runtime editability is required beyond the current admin/runtime provider work.
 - LiveKit remains config-backed in `LiveKitOptions`; a full encrypted admin runtime settings panel for LiveKit secrets is still pending.
 - Typed SpeakingSession upload/assessment pipeline appears partially present already; needs remote compile/tests and targeted endpoint review before claiming complete.

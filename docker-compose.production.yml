@@ -59,7 +59,7 @@ x-learner-api-slot: &learner-api-slot
     Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-true}
     Bootstrap__SeedDemoData: ${SEED_DEMO_DATA:-false}
     # Writing-sample seeder (Data/Seeds/writing-samples.v1.json). Idempotent
-    # â€” once papers exist they are not re-seeded. Keep enabled to allow
+    # - once papers exist they are not re-seeded. Keep enabled to allow
     # safe re-runs after schema changes; disable only for destructive resets.
     Content__WritingSeed__Enabled: ${CONTENT__WRITINGSEED__ENABLED:-true}
     Proxy__TrustForwardHeaders: true
@@ -94,7 +94,7 @@ x-learner-api-slot: &learner-api-slot
     Conversation__RealtimeSttEstimatedCostUsdPerMinute: ${CONVERSATION__REALTIMESTTESTIMATEDCOSTUSDPERMINUTE:-0}
     Conversation__RealtimeSttAssumeLearnersAdult: ${CONVERSATION__REALTIMESTTASSUMELEARNERSADULT:-false}
     Conversation__RealtimeSttAllowManagedLearnerRealProvider: ${CONVERSATION__REALTIMESTTALLOWMANAGEDLEARNERREALPROVIDER:-false}
-    # Upload virus-scanning. Production MUST NOT run with Provider=noop â€” the
+    # Upload virus-scanning. Production MUST NOT run with Provider=noop - the
     # API refuses to start in that case. 'clamav' is the compose service name
     # of the sidecar above; port 3310 is clamd's default.
     UploadScanner__Provider: ${UPLOAD_SCANNER__PROVIDER:-clamav}

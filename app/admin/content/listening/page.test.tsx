@@ -39,6 +39,8 @@ function makePaper(overrides: Partial<ContentPaperDto>): ContentPaperDto {
     updatedAt: '2026-04-02T00:00:00Z',
     publishedAt: null,
     archivedAt: null,
+    integrityAcknowledgedByAdminId: null,
+    integrityAcknowledgedAt: null,
     assets: [],
     ...overrides,
   };

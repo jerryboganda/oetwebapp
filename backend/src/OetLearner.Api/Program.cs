@@ -804,6 +804,14 @@ builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationAiO
 builder.Services.AddHostedService<OetLearner.Api.Services.Conversation.ConversationAudioRetentionWorker>();
 builder.Services.AddScoped<PronunciationService>();
 builder.Services.AddScoped<WritingCoachService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingWeaknessAnalyticsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingDualAssessmentService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Expert.IExpertAssignmentNotifier,
+    OetLearner.Api.Services.Expert.ExpertAssignmentNotifier>();
+builder.Services.AddScoped<OetLearner.Api.Services.Expert.IExpertAutoAssignmentService,
+    OetLearner.Api.Services.Expert.ExpertAutoAssignmentService>();
+builder.Services.Configure<OetLearner.Api.Configuration.ExpertAutoAssignmentOptions>(
+    builder.Configuration.GetSection(OetLearner.Api.Configuration.ExpertAutoAssignmentOptions.SectionName));
 builder.Services.AddScoped<MarketplaceService>();
 
 // ── Pronunciation subsystem (Phase 2+) ───────────────────────────────────
@@ -1475,6 +1483,7 @@ app.MapAiToolsAdminEndpoints();
 app.MapAiMeEndpoints();
 OetLearner.Api.Endpoints.AiAssistantEndpoints.MapAiAssistantEndpoints(app);
 app.MapContentPapersAdminEndpoints();
+app.MapExpertAdminEndpoints();
 app.MapContentStalenessEndpoints();
 app.MapMockAdminEndpoints();
 app.MapMockEntitlementEndpoints();

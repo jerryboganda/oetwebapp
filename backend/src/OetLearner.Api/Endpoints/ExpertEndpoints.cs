@@ -59,6 +59,13 @@ public static class ExpertEndpoints
             => Results.Ok(await service.ReleaseReviewAsync(reviewRequestId, http.ExpertId(), ct)))
             .RequireRateLimiting("PerUserWrite");
 
+        // Phase 4: auto-assigned reviews currently sitting with the calling expert.
+        // The auto-assigner pre-binds writing reviews to an expert with
+        // ClaimState=Assigned; this endpoint surfaces them so the expert UI
+        // can show "Assigned to me" without going through the unclaimed queue.
+        expert.MapGet("/queue/assigned-to-me", async (HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetAssignedToMeAsync(http.ExpertId(), ct)));
+
         // Review bundles
         expert.MapGet("/reviews/{reviewRequestId}/writing", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetWritingReviewBundleAsync(reviewRequestId, http.ExpertId(), ct)));

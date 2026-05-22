@@ -18,11 +18,34 @@ namespace OetLearner.Api.Services.Content;
 public interface IContentPaperService
 {
     Task<ContentPaper> CreateAsync(ContentPaperCreate args, string adminId, CancellationToken ct);
+
+    /// <summary>Dedicated entry point for the admin Writing-authoring flow.
+    /// Enforces the content-integrity acknowledgement (spec §19) and writes
+    /// the acknowledgement metadata onto the resulting paper. Other
+    /// creation paths (ZIP import, seeders, generic /papers POST) bypass
+    /// this gate, preserving existing behavior.</summary>
+    Task<ContentPaper> CreateWritingTaskAsync(WritingTaskCreate args, string adminId, CancellationToken ct);
+
     Task<ContentPaper> UpdateAsync(string paperId, ContentPaperUpdate args, string adminId, CancellationToken ct);
     Task<ContentPaper?> GetAsync(string paperId, CancellationToken ct);
     Task<IReadOnlyList<ContentPaper>> ListAsync(ContentPaperQuery query, CancellationToken ct);
     Task ArchiveAsync(string paperId, string adminId, CancellationToken ct);
     Task PublishAsync(string paperId, string adminId, CancellationToken ct);
+
+    /// <summary>Transitions Draft → InReview. Used by the writing authoring
+    /// workflow (spec §1E) so a second reviewer can approve a paper before it
+    /// goes live. Throws when the paper is not Draft.</summary>
+    Task SubmitForReviewAsync(string paperId, string adminId, CancellationToken ct);
+
+    /// <summary>Transitions InReview → Published. Calls into the existing
+    /// publish gates (provenance, required assets, structure validation) and
+    /// records both the review-approval audit event and the publish event.
+    /// Throws when the paper is not InReview.</summary>
+    Task ApproveAndPublishAsync(string paperId, string adminId, CancellationToken ct);
+
+    /// <summary>Transitions InReview → Rejected. Records the rejection reason
+    /// on the audit trail. Throws when the paper is not InReview.</summary>
+    Task RejectAsync(string paperId, string adminId, string reason, CancellationToken ct);
 
     Task<ContentPaperAsset> AttachAssetAsync(
         string paperId, ContentPaperAssetAttach args, string adminId, CancellationToken ct);
@@ -44,7 +67,23 @@ public sealed record ContentPaperCreate(
     string? LetterType,
     int Priority,
     string? TagsCsv,
-    string? SourceProvenance);
+    string? SourceProvenance,
+    bool IntegrityAcknowledged = false);
+
+/// <summary>Input for <see cref="IContentPaperService.CreateWritingTaskAsync"/>.
+/// Carries the writing-specific authoring fields plus the mandatory
+/// integrity acknowledgement (spec §19).</summary>
+public sealed record WritingTaskCreate(
+    string Title,
+    string? Slug,
+    string ProfessionId,
+    string LetterType,
+    string? Difficulty,
+    int EstimatedDurationMinutes,
+    int Priority,
+    string? TagsCsv,
+    string SourceProvenance,
+    bool IntegrityAcknowledged);
 
 public sealed record ContentPaperUpdate(
     string? Title,
@@ -105,6 +144,8 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         if (args.AppliesToAllProfessions && !string.IsNullOrWhiteSpace(args.ProfessionId))
             throw new ArgumentException("A paper is either profession-scoped or applies-to-all; pick one.");
 
+        var subtest = args.SubtestCode.Trim().ToLowerInvariant();
+
         var slug = NormalizeSlug(args.Slug ?? args.Title);
         await EnsureSlugUnique(slug, ct);
 
@@ -112,7 +153,7 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         var paper = new ContentPaper
         {
             Id = Guid.NewGuid().ToString("N"),
-            SubtestCode = args.SubtestCode.Trim().ToLowerInvariant(),
+            SubtestCode = subtest,
             Title = args.Title.Trim(),
             Slug = slug,
             ProfessionId = string.IsNullOrWhiteSpace(args.ProfessionId) ? null : args.ProfessionId.Trim().ToLowerInvariant(),
@@ -128,11 +169,108 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
             CreatedAt = now,
             UpdatedAt = now,
             CreatedByAdminId = adminId,
+            IntegrityAcknowledgedByAdminId = args.IntegrityAcknowledged ? adminId : null,
+            IntegrityAcknowledgedAt = args.IntegrityAcknowledged ? now : null,
         };
         db.ContentPapers.Add(paper);
         await WriteAuditAsync("ContentPaperCreated", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
         return paper;
+    }
+
+    public async Task<ContentPaper> CreateWritingTaskAsync(WritingTaskCreate args, string adminId, CancellationToken ct)
+    {
+        if (!args.IntegrityAcknowledged)
+        {
+            throw new ContentIntegrityAcknowledgementRequiredException(
+                "Writing tasks require an integrity acknowledgement before creation.");
+        }
+        if (string.IsNullOrWhiteSpace(args.Title))
+            throw new ArgumentException("Title required.");
+        if (string.IsNullOrWhiteSpace(args.ProfessionId))
+            throw new ArgumentException("Profession id required for writing tasks.");
+        if (!WritingContentStructure.IsLetterTypeAllowedForProfession(args.ProfessionId, args.LetterType))
+            throw new ArgumentException(
+                $"Letter type '{args.LetterType}' is not allowed for profession '{args.ProfessionId}'.");
+        if (string.IsNullOrWhiteSpace(args.SourceProvenance))
+            throw new ArgumentException("SourceProvenance required for writing tasks.");
+
+        var paper = await CreateAsync(new ContentPaperCreate(
+            SubtestCode: "writing",
+            Title: args.Title,
+            Slug: args.Slug,
+            ProfessionId: args.ProfessionId,
+            AppliesToAllProfessions: false,
+            Difficulty: args.Difficulty,
+            EstimatedDurationMinutes: args.EstimatedDurationMinutes,
+            CardType: null,
+            LetterType: args.LetterType,
+            Priority: args.Priority,
+            TagsCsv: args.TagsCsv,
+            SourceProvenance: args.SourceProvenance,
+            IntegrityAcknowledged: true), adminId, ct);
+
+        return paper;
+    }
+
+    public async Task SubmitForReviewAsync(string paperId, string adminId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId, ct)
+            ?? throw new InvalidOperationException("Paper not found.");
+        if (paper.Status != ContentStatus.Draft)
+            throw new InvalidOperationException(
+                $"Paper must be Draft to submit for review (currently {paper.Status}).");
+
+        paper.Status = ContentStatus.InReview;
+        paper.UpdatedAt = DateTimeOffset.UtcNow;
+        await WriteAuditAsync("ContentPaperSubmittedForReview", paper.Id, paper.Title, adminId, ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task ApproveAndPublishAsync(string paperId, string adminId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId, ct)
+            ?? throw new InvalidOperationException("Paper not found.");
+        if (paper.Status != ContentStatus.InReview)
+            throw new InvalidOperationException(
+                $"Paper must be InReview to approve & publish (currently {paper.Status}).");
+
+        // Audit the approval before publish runs — keeps the reviewer ID on
+        // the trail even if a publish-gate exception aborts the transaction.
+        await WriteAuditAsync("ContentPaperApprovedForPublish", paper.Id, paper.Title, adminId, ct);
+        await db.SaveChangesAsync(ct);
+
+        // Delegate to the existing publish path so all gate logic (assets,
+        // provenance, subtest validators) is reused untouched.
+        await PublishAsync(paperId, adminId, ct);
+    }
+
+    public async Task RejectAsync(string paperId, string adminId, string reason, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("Rejection reason is required.", nameof(reason));
+
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId, ct)
+            ?? throw new InvalidOperationException("Paper not found.");
+        if (paper.Status != ContentStatus.InReview)
+            throw new InvalidOperationException(
+                $"Paper must be InReview to reject (currently {paper.Status}).");
+
+        var now = DateTimeOffset.UtcNow;
+        paper.Status = ContentStatus.Rejected;
+        paper.UpdatedAt = now;
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = now,
+            ActorId = adminId,
+            ActorName = adminId,
+            Action = "ContentPaperRejected",
+            ResourceType = "ContentPaper",
+            ResourceId = paper.Id,
+            Details = $"{paper.Title} — {reason.Trim()}",
+        });
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task<ContentPaper> UpdateAsync(string paperId, ContentPaperUpdate args, string adminId, CancellationToken ct)
@@ -493,3 +631,10 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         return Task.CompletedTask;
     }
 }
+
+/// <summary>Thrown by <see cref="ContentPaperService.CreateAsync"/> when a
+/// Writing task is created without the required integrity acknowledgement.
+/// The admin endpoint catches this and converts it into a structured
+/// <c>400 integrity_acknowledgement_required</c> response.</summary>
+public sealed class ContentIntegrityAcknowledgementRequiredException(string message)
+    : InvalidOperationException(message);
