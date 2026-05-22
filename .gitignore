@@ -133,3 +133,4 @@ _audit/
 .qa-artifacts/*
 !.qa-artifacts/scripts/
 !.qa-artifacts/scripts/**
+.qa/

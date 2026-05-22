@@ -704,24 +704,80 @@ export interface SubTestReadiness {
   bg: string;
   barColor: string;
   isWeakest?: boolean;
+  confidenceBand?: string;
+  dataPoints?: number;
+}
+
+export interface ReadinessBlocker {
+  id: string | number;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  actionHref?: string;
+  impactScore?: number;
+  severity?: 'high' | 'medium' | 'low';
+}
+
+export interface ReadinessVocabulary {
+  readiness: number;
+  target: number;
+  mastered: number;
+  masteryTarget: number;
+  accuracy30d: number;
+  dataPoints: number;
 }
 
 export interface ReadinessData {
   targetDate: string;
   weeksRemaining: number;
-  overallRisk: RiskLevel;
+  overallRisk: RiskLevel | 'Unknown';
+  overallReadiness?: number;
   recommendedStudyHours: number;
+  recommendedStudyHoursRationale?: string;
   weakestLink: string;
+  targetDateProbability?: number | null;
+  confidenceLevel?: 'Low' | 'Medium' | 'High';
+  dataPointCount?: number;
   subTests: SubTestReadiness[];
-  blockers: { id: number; title: string; description: string }[];
+  vocabulary?: ReadinessVocabulary;
+  blockers: ReadinessBlocker[];
   evidence: {
     source?: string;
     mocksCompleted: number;
     practiceQuestions: number;
     expertReviews: number;
+    vocabReviewed30d?: number;
     recentTrend: string;
     lastUpdated: string;
   };
+}
+
+export interface ReadinessHistoryPoint {
+  weekStartDate: string;
+  overall: number;
+  writing: number;
+  speaking: number;
+  reading: number;
+  listening: number;
+  vocabulary: number;
+  risk: string;
+  targetDateProbability?: number | null;
+}
+
+export interface ReadinessForecastScenario {
+  label: string;
+  hoursPerWeek: number;
+  projectedReadinessAtTarget: number;
+  probability: number;
+}
+
+export interface ReadinessForecast {
+  probability: number;
+  weeksNeeded: number;
+  weeksAvailable: number;
+  requiredImprovement: number;
+  slopePerWeek: number;
+  scenarios: ReadinessForecastScenario[];
 }
 
 export interface Submission {

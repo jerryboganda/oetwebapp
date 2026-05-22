@@ -396,8 +396,56 @@ public class ReadinessSnapshot
     public string UserId { get; set; } = default!;
 
     public DateTimeOffset ComputedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
     public string PayloadJson { get; set; } = default!;
     public int Version { get; set; } = 1;
+
+    public decimal OverallReadiness { get; set; }
+    public decimal WritingReadiness { get; set; }
+    public decimal SpeakingReadiness { get; set; }
+    public decimal ReadingReadiness { get; set; }
+    public decimal ListeningReadiness { get; set; }
+    public decimal VocabularyReadiness { get; set; }
+
+    [MaxLength(16)]
+    public string OverallRisk { get; set; } = "Unknown";
+
+    public decimal? TargetDateProbability { get; set; }
+
+    [MaxLength(32)]
+    public string? WeakestSubtest { get; set; }
+
+    public int RecommendedStudyHoursPerWeek { get; set; }
+
+    [MaxLength(16)]
+    public string ConfidenceLevel { get; set; } = "Low";
+
+    public int DataPointCount { get; set; }
+}
+
+public class ReadinessHistory
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    public DateOnly WeekStartDate { get; set; }
+    public DateTimeOffset RecordedAt { get; set; }
+
+    public decimal Overall { get; set; }
+    public decimal Writing { get; set; }
+    public decimal Speaking { get; set; }
+    public decimal Reading { get; set; }
+    public decimal Listening { get; set; }
+    public decimal Vocabulary { get; set; }
+
+    [MaxLength(16)]
+    public string Risk { get; set; } = "Unknown";
+
+    public decimal? TargetDateProbability { get; set; }
 }
 
 public class StudyPlan
@@ -421,6 +469,31 @@ public class StudyPlan
 
     [MaxLength(16)]
     public string ExamTypeCode { get; set; } = "oet";
+
+    // ── Planner engine fields (additive May 2026) ──
+    [MaxLength(64)]
+    public string? DiagnosticAttemptId { get; set; }
+
+    public int WeekNumber { get; set; } = 1;
+    public int TotalWeeks { get; set; } = 1;
+    public DateOnly? PlanWindowStart { get; set; }
+    public DateOnly? PlanWindowEnd { get; set; }
+
+    [MaxLength(64)]
+    public string? TemplateId { get; set; }
+
+    public int MinutesPerDayBudget { get; set; }
+
+    [MaxLength(128)]
+    public string? GenerationInputsHash { get; set; }
+
+    public string SubtestWeightsJson { get; set; } = "{}";
+    public bool IsPremiumPersonalized { get; set; }
+
+    [MaxLength(32)]
+    public string EntitlementTierAtGeneration { get; set; } = "free";
+
+    public bool IsActive { get; set; } = true;
 }
 
 public class StudyPlanItem
@@ -454,6 +527,31 @@ public class StudyPlanItem
 
     [MaxLength(32)]
     public string ItemType { get; set; } = default!;
+
+    // ── Planner engine fields (additive May 2026) ──
+    [MaxLength(64)]
+    public string? SourceContentId { get; set; }
+
+    [MaxLength(512)]
+    public string? ContentRoute { get; set; }
+
+    [MaxLength(64)]
+    public string? LinkedReviewItemId { get; set; }
+
+    public int PriorityScore { get; set; }
+    public int WeekIndex { get; set; }
+
+    [MaxLength(64)]
+    public string? ReplacedById { get; set; }
+
+    public int? FeedbackRating { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
+    public int? ActualMinutesSpent { get; set; }
+
+    [MaxLength(32)]
+    public string? SlotKind { get; set; }
+
+    public string? TagsJson { get; set; }
 }
 
 public class ReviewRequest
@@ -630,6 +728,12 @@ public class Subscription
     public decimal PriceAmount { get; set; }
     public string Currency { get; set; } = "AUD";
     public string Interval { get; set; } = "monthly";
+
+    /// <summary>Phase 6: when the voluntary pause ends and renewal resumes. Null when not paused.</summary>
+    public DateTimeOffset? PausedUntil { get; set; }
+
+    /// <summary>Phase 5: while in dunning grace, access continues until this timestamp.</summary>
+    public DateTimeOffset? GracePeriodUntil { get; set; }
 }
 
 public class Wallet

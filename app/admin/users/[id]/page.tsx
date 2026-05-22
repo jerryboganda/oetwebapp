@@ -353,6 +353,11 @@ export default function UserDetailPage() {
                   label="Freeze Controls"
                   className="w-auto"
                 />
+                <AdminQuickAction
+                  href={`/admin/learners/${encodeURIComponent(user.id)}/study-plan`}
+                  label="Study Plan"
+                  className="w-auto"
+                />
                 {user.availableActions.canDelete ? (
                   <Button variant="destructive" onClick={() => openLifecycleModal('delete')} loading={isMutating}>Delete</Button>
                 ) : null}

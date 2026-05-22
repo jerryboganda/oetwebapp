@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import { MotionItem } from '@/components/ui/motion-primitives';
@@ -383,6 +384,12 @@ export default function Dashboard() {
                     <p className="text-xs text-muted">
                       {liveReadiness.weeksRemaining} weeks to exam · {liveReadiness.overallRisk} risk
                     </p>
+                    <Link
+                      href="/readiness"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
+                    >
+                      View full readiness centre →
+                    </Link>
                   </CardContent>
                 </Card>
               ) : null}

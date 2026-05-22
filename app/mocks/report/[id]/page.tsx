@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { OetStatementOfResultsCard } from '@/components/domain';
 import { WeaknessNarrative } from '@/components/domain/mock-weakness-narrative';
+import { ReadinessDeltaBanner } from '@/components/domain/readiness-delta-banner';
 import { TimeAnalyticsBreakdown } from '@/components/domain/mock-time-analytics';
 import { MockVocabularyReview } from '@/components/domain/vocabulary';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -245,6 +246,11 @@ function MockReportContent() {
       backHref="/mocks"
     >
       <div className="space-y-8">
+
+        {/* Readiness delta banner — surfaces the change this mock made
+            to the learner's overall readiness and links into the
+            full readiness centre for the "see why" follow-up. */}
+        <ReadinessDeltaBanner />
 
         {/* 0. OET Statement of Results — pixel-faithful CBLA format.
             Mission-critical: this is the single place the "official" OET

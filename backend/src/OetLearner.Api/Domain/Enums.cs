@@ -48,7 +48,8 @@ public enum StudyPlanItemStatus
     InProgress,
     Completed,
     Skipped,
-    Rescheduled
+    Rescheduled,
+    Replaced
 }
 
 public enum ContentStatus
@@ -70,7 +71,9 @@ public enum SubscriptionStatus
     PastDue,
     Suspended,
     Cancelled,
-    Expired
+    Expired,
+    /// <summary>Phase 6 international expansion: voluntary pause (renewal suspended, access frozen or limited per plan rule).</summary>
+    Paused,
 }
 
 public enum FreezeApprovalMode

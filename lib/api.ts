@@ -41,6 +41,10 @@ import type {
   DiagnosticRecommendedPlan,
   DiagnosticStudyPathStep,
   ReadinessData,
+  ReadinessBlocker,
+  ReadinessHistoryPoint,
+  ReadinessForecast,
+  SubTestReadiness,
   ProgressEvidenceSummary,
   TrendPoint,
   Submission,
@@ -1638,10 +1642,21 @@ export async function fetchStudyPlan(): Promise<StudyPlanTask[]> {
   }));
 }
 
-export async function updateStudyPlanTask(taskId: string, updates: Partial<StudyPlanTask>): Promise<StudyPlanTask> {
+export interface StudyPlanTaskUpdate extends Partial<StudyPlanTask> {
+  feedbackRating?: number;
+  actualMinutesSpent?: number;
+}
+
+export async function updateStudyPlanTask(taskId: string, updates: StudyPlanTaskUpdate): Promise<StudyPlanTask> {
   let result: ApiRecord;
   if (updates.status === 'completed') {
-    result = await apiRequest(`/v1/study-plan/items/${taskId}/complete`, { method: 'POST' });
+    const body: Record<string, unknown> = {};
+    if (updates.feedbackRating !== undefined) body.feedbackRating = updates.feedbackRating;
+    if (updates.actualMinutesSpent !== undefined) body.actualMinutesSpent = updates.actualMinutesSpent;
+    result = await apiRequest(`/v1/study-plan/items/${taskId}/complete`, {
+      method: 'POST',
+      body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
+    });
   } else if (updates.status === 'not_started') {
     result = await apiRequest(`/v1/study-plan/items/${taskId}/reset`, { method: 'POST' });
   } else if (updates.dueDate) {
@@ -1650,6 +1665,47 @@ export async function updateStudyPlanTask(taskId: string, updates: Partial<Study
     result = await apiRequest(`/v1/study-plan/items/${taskId}/skip`, { method: 'POST' });
   }
 
+  return {
+    id: result.itemId,
+    title: result.title,
+    subTest: toSubTest(result.subtest),
+    duration: minutesToLabel(result.durationMinutes),
+    rationale: result.rationale,
+    dueDate: result.dueDate,
+    status: result.status,
+    section: result.section,
+    contentId: result.contentId ?? undefined,
+    type: result.itemType ?? undefined,
+    route: typeof result.route === 'string' ? result.route : undefined,
+  };
+}
+
+export interface StudyPlanSwapCandidate {
+  contentId: string | null;
+  title: string;
+  route: string;
+  durationMinutes: number;
+}
+
+export async function fetchStudyPlanSwapCandidates(taskId: string): Promise<StudyPlanSwapCandidate[]> {
+  const result = await apiRequest<ApiRecord>(`/v1/study-plan/items/${taskId}/swap`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  const candidates = (result.candidates as ApiRecord[] | undefined) ?? [];
+  return candidates.map((c) => ({
+    contentId: (c.contentId as string | null) ?? null,
+    title: String(c.title ?? ''),
+    route: String(c.route ?? ''),
+    durationMinutes: Number(c.durationMinutes ?? 0),
+  }));
+}
+
+export async function applyStudyPlanSwap(taskId: string, replacementContentId: string): Promise<StudyPlanTask> {
+  const result = await apiRequest<ApiRecord>(`/v1/study-plan/items/${taskId}/swap`, {
+    method: 'POST',
+    body: JSON.stringify({ replacementContentId }),
+  });
   return {
     id: result.itemId,
     title: result.title,
@@ -3406,33 +3462,61 @@ export async function fetchMockReadinessTrend(): Promise<MockReadinessTrend> {
   };
 }
 
-export async function fetchReadiness(): Promise<ReadinessData> {
-  const readiness = await apiRequest<ApiRecord>('/v1/readiness');
+function mapReadinessResponse(readiness: ApiRecord): ReadinessData {
   const evidence = asRecord(readiness.evidence);
+  const vocabulary = asRecord(readiness.vocabulary);
   const computedAt = toNullableString(readiness.computedAt);
 
   return {
     targetDate: readiness.targetDate,
     weeksRemaining: readiness.weeksRemaining,
     overallRisk: titleCase(readiness.overallRisk) as ReadinessData['overallRisk'],
-    recommendedStudyHours: readiness.recommendedStudyHours,
-    weakestLink: readiness.weakestLink,
-    subTests: asArray(readiness.subTests).map((item: ApiRecord) => ({
-      id: item.id,
-      name: item.name,
-      readiness: item.readiness,
-      target: item.target,
-      status: item.status,
-      color: item.name === 'Writing' ? '#e11d48' : item.name === 'Speaking' ? '#7c3aed' : item.name === 'Reading' ? '#2563eb' : '#4f46e5',
-      bg: item.name === 'Writing' ? '#fff1f2' : item.name === 'Speaking' ? '#f5f3ff' : item.name === 'Reading' ? '#eff6ff' : '#eef2ff',
-      barColor: item.name === 'Writing' ? '#fb7185' : item.name === 'Speaking' ? '#a78bfa' : item.name === 'Reading' ? '#60a5fa' : '#818cf8',
-      isWeakest: Boolean(item.isWeakest),
+    overallReadiness: typeof readiness.overallReadiness === 'number' ? readiness.overallReadiness : undefined,
+    recommendedStudyHours: readiness.recommendedStudyHoursPerWeek ?? readiness.recommendedStudyHours,
+    recommendedStudyHoursRationale: typeof readiness.recommendedStudyHoursRationale === 'string' ? readiness.recommendedStudyHoursRationale : undefined,
+    weakestLink: readiness.weakestSubtest ?? readiness.weakestLink ?? 'No readiness evidence yet',
+    targetDateProbability: typeof readiness.targetDateProbability === 'number' ? readiness.targetDateProbability : null,
+    confidenceLevel: (readiness.confidenceLevel ?? 'Low') as ReadinessData['confidenceLevel'],
+    dataPointCount: typeof readiness.dataPointCount === 'number' ? readiness.dataPointCount : 0,
+    subTests: asArray(readiness.subTests).map((item: ApiRecord) => {
+      const name = (item.name ?? item.code ?? '') as string;
+      return {
+        id: (item.code ?? item.id ?? '').toString().toLowerCase(),
+        name: name as SubTestReadiness['name'],
+        readiness: Number(item.readiness ?? item.current ?? 0),
+        target: Number(item.target ?? 70),
+        status: item.status ?? 'Unknown',
+        color: name === 'Writing' ? '#e11d48' : name === 'Speaking' ? '#7c3aed' : name === 'Reading' ? '#2563eb' : '#4f46e5',
+        bg: name === 'Writing' ? '#fff1f2' : name === 'Speaking' ? '#f5f3ff' : name === 'Reading' ? '#eff6ff' : '#eef2ff',
+        barColor: name === 'Writing' ? '#fb7185' : name === 'Speaking' ? '#a78bfa' : name === 'Reading' ? '#60a5fa' : '#818cf8',
+        isWeakest: Boolean(item.isWeakest),
+        confidenceBand: typeof item.confidenceBand === 'string' ? item.confidenceBand : undefined,
+        dataPoints: typeof item.dataPoints === 'number' ? item.dataPoints : undefined,
+      };
+    }),
+    vocabulary: vocabulary && typeof vocabulary.readiness === 'number' ? {
+      readiness: Number(vocabulary.readiness),
+      target: Number(vocabulary.target ?? 100),
+      mastered: Number(vocabulary.mastered ?? 0),
+      masteryTarget: Number(vocabulary.masteryTarget ?? 600),
+      accuracy30d: Number(vocabulary.accuracy30d ?? 0),
+      dataPoints: Number(vocabulary.dataPoints ?? 0),
+    } : undefined,
+    blockers: asArray(readiness.blockers).map((b: ApiRecord) => ({
+      id: b.id,
+      title: b.title,
+      description: b.description,
+      actionLabel: typeof b.actionLabel === 'string' ? b.actionLabel : undefined,
+      actionHref: typeof b.actionHref === 'string' ? b.actionHref : undefined,
+      impactScore: typeof b.impactScore === 'number' ? b.impactScore : undefined,
+      severity: (typeof b.severity === 'string' ? b.severity : undefined) as 'high' | 'medium' | 'low' | undefined,
     })),
-    blockers: Array.isArray(readiness.blockers) ? readiness.blockers : [],
     evidence: {
+      source: typeof evidence.source === 'string' ? evidence.source : undefined,
       mocksCompleted: Number(evidence.mocksCompleted ?? 0),
       practiceQuestions: Number(evidence.practiceQuestions ?? 0),
       expertReviews: Number(evidence.expertReviews ?? 0),
+      vocabReviewed30d: typeof evidence.vocabReviewed30d === 'number' ? evidence.vocabReviewed30d : undefined,
       recentTrend: typeof evidence.recentTrend === 'string' && evidence.recentTrend.length > 0
         ? evidence.recentTrend
         : 'Trend data will appear after more practice.',
@@ -3441,6 +3525,137 @@ export async function fetchReadiness(): Promise<ReadinessData> {
         : computedAt?.slice(0, 10) ?? 'Unknown',
     },
   };
+}
+
+export async function fetchReadiness(): Promise<ReadinessData> {
+  const readiness = await apiRequest<ApiRecord>('/v1/readiness');
+  return mapReadinessResponse(readiness);
+}
+
+export async function fetchReadinessHistory(weeks = 12): Promise<ReadinessHistoryPoint[]> {
+  const rows = await apiRequest<ApiRecord[]>(`/v1/readiness/history?weeks=${weeks}`);
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    weekStartDate: row.weekStartDate,
+    overall: Number(row.overall ?? 0),
+    writing: Number(row.writing ?? 0),
+    speaking: Number(row.speaking ?? 0),
+    reading: Number(row.reading ?? 0),
+    listening: Number(row.listening ?? 0),
+    vocabulary: Number(row.vocabulary ?? 0),
+    risk: row.risk ?? 'Unknown',
+    targetDateProbability: typeof row.targetDateProbability === 'number' ? row.targetDateProbability : null,
+  }));
+}
+
+export async function fetchReadinessBlockers(): Promise<ReadinessBlocker[]> {
+  const blockers = await apiRequest<ApiRecord[]>('/v1/readiness/blockers');
+  return (Array.isArray(blockers) ? blockers : []).map((b) => ({
+    id: b.id,
+    title: b.title,
+    description: b.description,
+    actionLabel: typeof b.actionLabel === 'string' ? b.actionLabel : undefined,
+    actionHref: typeof b.actionHref === 'string' ? b.actionHref : undefined,
+    impactScore: typeof b.impactScore === 'number' ? b.impactScore : undefined,
+    severity: (typeof b.severity === 'string' ? b.severity : undefined) as 'high' | 'medium' | 'low' | undefined,
+  }));
+}
+
+export async function fetchReadinessForecast(hoursPerWeek?: number): Promise<ReadinessForecast> {
+  const url = hoursPerWeek != null ? `/v1/readiness/forecast?hoursPerWeek=${hoursPerWeek}` : '/v1/readiness/forecast';
+  const result = await apiRequest<ApiRecord>(url);
+  return {
+    probability: Number(result.probability ?? 0),
+    weeksNeeded: Number(result.weeksNeeded ?? 0),
+    weeksAvailable: Number(result.weeksAvailable ?? 0),
+    requiredImprovement: Number(result.requiredImprovement ?? 0),
+    slopePerWeek: Number(result.slopePerWeek ?? 0),
+    scenarios: asArray(result.scenarios).map((s: ApiRecord) => ({
+      label: String(s.label ?? ''),
+      hoursPerWeek: Number(s.hoursPerWeek ?? 0),
+      projectedReadinessAtTarget: Number(s.projectedReadinessAtTarget ?? 0),
+      probability: Number(s.probability ?? 0),
+    })),
+  };
+}
+
+export async function refreshReadiness(): Promise<ReadinessData> {
+  const readiness = await apiRequest<ApiRecord>('/v1/readiness/refresh', { method: 'POST' });
+  return mapReadinessResponse(readiness);
+}
+
+export interface AdminReadinessLearnerRow {
+  userId: string;
+  displayName: string;
+  targetExamDate: string | null;
+  overallReadiness: number;
+  overallRisk: string;
+  weakestSubtest: string | null;
+  targetDateProbability: number | null;
+  computedAt: string;
+  expiresAt: string;
+}
+
+export interface AdminReadinessLearnerList {
+  page: number;
+  pageSize: number;
+  total: number;
+  items: AdminReadinessLearnerRow[];
+}
+
+export interface AdminReadinessMetrics {
+  learnersWithSnapshot: number;
+  highRisk: number;
+  moderateRisk: number;
+  lowRisk: number;
+  unknownRisk: number;
+  interventionCandidates: number;
+  staleSnapshots: number;
+  avgWriting: number;
+  avgSpeaking: number;
+  avgReading: number;
+  avgListening: number;
+  avgVocabulary: number;
+  avgOverall: number;
+  generatedAt: string;
+}
+
+export async function fetchAdminReadinessLearners(params: { risk?: string; page?: number; pageSize?: number } = {}): Promise<AdminReadinessLearnerList> {
+  const qs = new URLSearchParams();
+  if (params.risk) qs.set('risk', params.risk);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+  const url = `/v1/admin/readiness/learners${qs.toString() ? `?${qs}` : ''}`;
+  return apiRequest<AdminReadinessLearnerList>(url);
+}
+
+export async function fetchAdminReadinessLearner(userId: string): Promise<{ userId: string; displayName: string | null; targetExamDate: string | null; snapshot: ApiRecord; history: ReadinessHistoryPoint[]; reasoningTrace: string }> {
+  const result = await apiRequest<ApiRecord>(`/v1/admin/readiness/learners/${encodeURIComponent(userId)}`);
+  return {
+    userId: result.userId,
+    displayName: typeof result.displayName === 'string' ? result.displayName : null,
+    targetExamDate: typeof result.targetExamDate === 'string' ? result.targetExamDate : null,
+    snapshot: result.snapshot as ApiRecord,
+    history: Array.isArray(result.history) ? result.history.map((row: ApiRecord) => ({
+      weekStartDate: row.weekStartDate,
+      overall: Number(row.overall ?? 0),
+      writing: Number(row.writing ?? 0),
+      speaking: Number(row.speaking ?? 0),
+      reading: Number(row.reading ?? 0),
+      listening: Number(row.listening ?? 0),
+      vocabulary: Number(row.vocabulary ?? 0),
+      risk: row.risk ?? 'Unknown',
+      targetDateProbability: typeof row.targetDateProbability === 'number' ? row.targetDateProbability : null,
+    })) : [],
+    reasoningTrace: typeof result.reasoningTrace === 'string' ? result.reasoningTrace : '',
+  };
+}
+
+export async function recomputeAdminReadiness(userId: string): Promise<void> {
+  await apiRequest(`/v1/admin/readiness/learners/${encodeURIComponent(userId)}/recompute`, { method: 'POST' });
+}
+
+export async function fetchAdminReadinessMetrics(): Promise<AdminReadinessMetrics> {
+  return apiRequest<AdminReadinessMetrics>('/v1/admin/readiness/metrics');
 }
 
 export async function fetchTrendData(): Promise<TrendPoint[]> {
@@ -3937,6 +4152,35 @@ export async function createBillingCheckoutSession(input: {
 
 export async function downloadInvoice(invoiceId: string): Promise<string> {
   return fetchAuthorizedObjectUrl(`/v1/billing/invoices/${encodeURIComponent(invoiceId)}/download`);
+}
+
+export async function pauseSubscription(days?: number, reason?: string): Promise<object> {
+  return apiRequest('/v1/billing/subscription/pause', {
+    method: 'POST',
+    body: JSON.stringify({ days: days ?? null, reason: reason ?? null }),
+  });
+}
+
+export async function resumeSubscription(): Promise<object> {
+  return apiRequest('/v1/billing/subscription/resume', { method: 'POST' });
+}
+
+export interface BankAccountConfigDto {
+  id: string;
+  region: string;
+  currency: string;
+  bankName: string;
+  accountHolderName: string;
+  accountNumber?: string | null;
+  routingOrSortCode?: string | null;
+  iban?: string | null;
+  swiftBic?: string | null;
+  instructionsMarkdown?: string | null;
+  isActive?: boolean;
+}
+
+export async function fetchMyBankAccounts(): Promise<BankAccountConfigDto[]> {
+  return apiRequest<BankAccountConfigDto[]>('/v1/billing/bank-accounts/me');
 }
 
 export async function fetchTurnaroundOptions(): Promise<TurnaroundOption[]> {
@@ -12033,3 +12277,6 @@ export * from './api/speaking-sessions';
 export * from './api/speaking-live-rooms';
 export * from './api/speaking-assessments';
 export * from './api/speaking-compliance';
+export * from './api/billing-region';
+export * from './api/billing-expansion';
+export * from './api/ai-analytics';

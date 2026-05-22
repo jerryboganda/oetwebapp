@@ -29,6 +29,18 @@ public class ApplicationUserAccount
     public DateTimeOffset? AuthenticatorEnabledAt { get; set; }
     public DateTimeOffset? LastLoginAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
+
+    /// <summary>ISO 3166-1 alpha-2 country code captured at signup or via /billing/profile.</summary>
+    [MaxLength(2)]
+    public string? Country { get; set; }
+
+    /// <summary>ISO 4217 preferred currency for checkout display. Falls back to plan/wallet currency.</summary>
+    [MaxLength(3)]
+    public string? PreferredCurrency { get; set; }
+
+    /// <summary>Computed billing region (UK/GULF/EGYPT/PK/ROW). Drives gateway routing and tax.</summary>
+    [MaxLength(16)]
+    public string? PreferredRegion { get; set; }
     // H1 (security): per-account sign-in failure counter + soft lockout. The
     // IP-keyed AuthBruteforce limiter protects against volumetric attacks;
     // these columns protect against credential stuffing where the attacker

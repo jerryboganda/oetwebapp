@@ -11,15 +11,15 @@ import {
 } from '@/lib/admin-permissions';
 import { useAuth } from '@/contexts/auth-context';
 import { Children, isValidElement, cloneElement, useMemo } from 'react';
-import { 
+import {
   LayoutDashboard,
-  Library, 
+  Library,
   ClipboardList,
-  Target, 
-  Cpu, 
-  Activity, 
-  PieChart, 
-  Users, 
+  Target,
+  Cpu,
+  Activity,
+  PieChart,
+  Users,
   CreditCard,
   Bell,
   Flag,
@@ -41,6 +41,8 @@ import {
   Rocket,
   Cog,
   UserCog,
+  CalendarDays,
+  TrendingUp,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -54,6 +56,7 @@ const adminNavGroups: NavGroup[] = [
       { href: '/admin/launch-readiness', label: 'Launch Readiness', icon: <Rocket className="w-5 h-5" />, matchPrefix: '/admin/launch-readiness' },
       { href: '/admin/alerts', label: 'Alerts', icon: <Bell className="w-5 h-5" />, matchPrefix: '/admin/alerts' },
       { href: '/admin/analytics/quality', label: 'Quality Analytics', icon: <PieChart className="w-5 h-5" />, matchPrefix: '/admin/analytics' },
+      { href: '/admin/readiness', label: 'Learner Readiness', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/admin/readiness' },
       { href: '/admin/audit-logs', label: 'Audit Logs', icon: <ShieldCheck className="w-5 h-5" />, matchPrefix: '/admin/audit-logs' },
     ],
   },
@@ -62,6 +65,12 @@ const adminNavGroups: NavGroup[] = [
     items: [
       { href: '/admin/content', label: 'Content Hub', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/content' },
       { href: '/admin/content/reading/extraction', label: 'AI Extraction', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/admin/content/reading/extraction' },
+    ],
+  },
+  {
+    label: 'Learner Plans',
+    items: [
+      { href: '/admin/study-plan-templates', label: 'Study Plan Templates', icon: <CalendarDays className="w-5 h-5" />, matchPrefix: '/admin/study-plan-templates' },
     ],
   },
   {

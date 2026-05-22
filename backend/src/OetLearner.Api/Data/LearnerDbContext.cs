@@ -979,6 +979,19 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
 
         // Recall Set Tags table (partial; see LearnerDbContext.RecallSetTags.cs).
         OnModelCreatingRecallSetTags(modelBuilder);
+
+        // Billing region pricing + gateway routing (partial; see LearnerDbContext.BillingRegion.cs).
+        OnModelCreatingBillingRegion(modelBuilder);
+
+        // Study planner engine + templates (partial; see LearnerDbContext.StudyPlan.cs).
+        OnModelCreatingStudyPlan(modelBuilder);
+
+        // Churn risk + usage forecast + FX rates + pricing experiments
+        // (partial; see LearnerDbContext.ChurnAndFx.cs).
+        OnModelCreatingChurnAndFx(modelBuilder);
+
+        // Readiness snapshot + weekly history (partial; see LearnerDbContext.Readiness.cs).
+        OnModelCreatingReadiness(modelBuilder);
     }
 
     /// <summary>
@@ -1035,6 +1048,26 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.RecallSetTags.cs (partial).
     /// </summary>
     partial void OnModelCreatingRecallSetTags(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.BillingRegion.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingBillingRegion(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.ChurnAndFx.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingChurnAndFx(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.StudyPlan.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingStudyPlan(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.Readiness.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingReadiness(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Configures the Postgres system column <c>xmin</c> as an optimistic

@@ -39,6 +39,8 @@ import {
   fetchBillingQuote,
   fetchWalletTopUpTiers,
   fetchWalletTransactions,
+  pauseSubscription,
+  resumeSubscription,
 } from '@/lib/api';
 import type { WalletTopUpTier } from '@/lib/api';
 import type {
@@ -131,6 +133,7 @@ export default function BillingPage() {
   const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
   const [freezeLoadFailed, setFreezeLoadFailed] = useState(false);
   const [selectedGateway, setSelectedGateway] = useState<'stripe' | 'paypal'>('stripe');
+  const [pauseLoading, setPauseLoading] = useState(false);
 
   // Double-submit guard shared across all paid-action handlers; complements
   // the per-button busyKey for cases where rapid clicks fire before
@@ -150,6 +153,7 @@ export default function BillingPage() {
     [paymentGateway, paymentStatus],
   );
   const isFrozen = isFreezeEffective(freezeState);
+  const isPastDue = data?.status?.toLowerCase() === 'pastdue' || data?.status?.toLowerCase() === 'past_due';
   const billingMutationsBlocked = freezeLoadFailed || isFrozen;
   const billingBlockedMessage = freezeLoadFailed
     ? 'Billing actions are temporarily paused because freeze status could not be verified. Refresh the page before checkout, plan changes, or top-ups.'
@@ -331,6 +335,34 @@ export default function BillingPage() {
     }
   };
 
+  async function handlePause() {
+    setPauseLoading(true);
+    setError(null);
+    try {
+      await pauseSubscription(undefined, 'learner_requested_pause');
+      const refreshed = await fetchBilling();
+      setData(refreshed);
+    } catch (err: any) {
+      setError(err?.userMessage ?? err?.message ?? 'Failed to pause subscription.');
+    } finally {
+      setPauseLoading(false);
+    }
+  }
+
+  async function handleResume() {
+    setPauseLoading(true);
+    setError(null);
+    try {
+      await resumeSubscription();
+      const refreshed = await fetchBilling();
+      setData(refreshed);
+    } catch (err: any) {
+      setError(err?.userMessage ?? err?.message ?? 'Failed to resume subscription.');
+    } finally {
+      setPauseLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <LearnerDashboardShell pageTitle="Billing & subscriptions" backHref="/">
@@ -382,12 +414,19 @@ export default function BillingPage() {
         />
 
         {/* Status banners — only render when relevant */}
-        {(paymentBanner || isFrozen || freezeLoadFailed || error || success) && (
+        {(paymentBanner || isFrozen || isPastDue || freezeLoadFailed || error || success) && (
           <div className="space-y-2" role="status" aria-live="polite">
             {paymentBanner ? <InlineAlert variant={paymentBanner.variant}>{paymentBanner.message}</InlineAlert> : null}
             {isFrozen ? (
               <InlineAlert variant="warning">
                 Your account is frozen, so checkout, plan changes, and top-ups are paused. Billing history remains visible.
+              </InlineAlert>
+            ) : null}
+            {isPastDue ? (
+              <InlineAlert variant="error">
+                Your last payment failed. Please{' '}
+                <a href="/billing/update-card" className="underline font-medium">update your payment method</a>
+                {' '}to restore full access.
               </InlineAlert>
             ) : null}
             {freezeLoadFailed ? (
@@ -497,6 +536,15 @@ export default function BillingPage() {
                 <Button variant="outline" onClick={() => setActiveTab('invoices')}>
                   <Receipt className="h-4 w-4" /> View invoices
                 </Button>
+                {data.status === 'active' || data.status === 'Active' ? (
+                  <Button variant="outline" onClick={handlePause} disabled={pauseLoading}>
+                    {pauseLoading ? 'Pausing…' : 'Pause subscription'}
+                  </Button>
+                ) : data.status === 'paused' || data.status === 'Paused' ? (
+                  <Button variant="outline" onClick={handleResume} disabled={pauseLoading}>
+                    {pauseLoading ? 'Resuming…' : 'Resume subscription'}
+                  </Button>
+                ) : null}
               </div>
             </section>
 

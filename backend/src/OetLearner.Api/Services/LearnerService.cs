@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -53,7 +54,12 @@ public partial class LearnerService(
     IOptions<BillingOptions>? billingOptions = null,
     IOptions<StorageOptions>? storageOptions = null,
     global::OetLearner.Api.Services.IWritingEntitlementService? writingEntitlement = null,
-    OetLearner.Api.Services.Mocks.Results.IMockReportAggregationService? mockReportAggregation = null)
+    OetLearner.Api.Services.Mocks.Results.IMockReportAggregationService? mockReportAggregation = null,
+    SpacedRepetitionService? spacedRepetition = null,
+    GamificationService? gamification = null,
+    OetLearner.Api.Services.Planner.ContentPicker? studyPlanContentPicker = null,
+    OetLearner.Api.Services.Readiness.ReadinessComputationService? readinessComputation = null,
+    OetLearner.Api.Services.Billing.ICouponVariantApplicator? couponVariantApplicator = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
@@ -855,7 +861,15 @@ public partial class LearnerService(
             topWeakCriteria = evaluations
                 .SelectMany(x => JsonSupport.Deserialize<List<Dictionary<string, object?>>>(x.CriterionScoresJson, []))
                 .Take(4),
-            recommendedIntensity = new { hoursPerWeek = 12, rationale = "Your current readiness suggests concentrated writing and speaking practice over the next 6-8 weeks." },
+            recommendedIntensity = new
+            {
+                hoursPerWeek = readiness.RecommendedStudyHoursPerWeek > 0
+                    ? readiness.RecommendedStudyHoursPerWeek
+                    : ((await db.Goals.FirstOrDefaultAsync(g => g.UserId == userId, cancellationToken))?.StudyHoursPerWeek ?? 5),
+                rationale = readinessPayload.TryGetValue("recommendedStudyHoursRationale", out var rationaleObj) && rationaleObj is not null
+                    ? rationaleObj.ToString()
+                    : $"Based on current readiness ({Math.Round(readiness.OverallReadiness, 0)}/100, {readiness.OverallRisk} risk), focus the recommended weekly hours on {readiness.WeakestSubtest ?? "your weakest sub-test"}."
+            },
             firstStudyWeek = new[]
             {
                 new { day = "Day 1", action = "Writing task focused on discharge summaries", route = "/writing/tasks/wt-001" },
@@ -1000,21 +1014,96 @@ public partial class LearnerService(
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var plan = await GetActiveStudyPlanEntityAsync(userId, cancellationToken);
         plan.State = AsyncState.Queued;
-        await QueueJobAsync(JobType.StudyPlanRegeneration, resourceId: plan.Id, cancellationToken: cancellationToken);
+        var payloadJson = JsonSupport.Serialize(new { userId, trigger = "Manual" });
+        await QueueJobAsync(JobType.StudyPlanRegeneration, resourceId: plan.Id, payloadJson: payloadJson, cancellationToken: cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return new { planId = plan.Id, state = "queued", nextPollAfterMs = 2000 };
     }
 
     public async Task<object> CompleteStudyPlanItemAsync(string userId, string itemId, CancellationToken cancellationToken)
     {
+        return await CompleteStudyPlanItemInternalAsync(userId, itemId, feedbackRating: null, actualMinutesSpent: null, cancellationToken);
+    }
+
+    public async Task<object> CompleteStudyPlanItemAsync(string userId, string itemId, int? feedbackRating, int? actualMinutesSpent, CancellationToken cancellationToken)
+    {
+        return await CompleteStudyPlanItemInternalAsync(userId, itemId, feedbackRating, actualMinutesSpent, cancellationToken);
+    }
+
+    private async Task<object> CompleteStudyPlanItemInternalAsync(string userId, string itemId, int? feedbackRating, int? actualMinutesSpent, CancellationToken cancellationToken)
+    {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var item = await GetStudyPlanItemOwnedByUserAsync(userId, itemId, cancellationToken);
+        var alreadyCompleted = item.Status == StudyPlanItemStatus.Completed;
         item.Status = StudyPlanItemStatus.Completed;
+        item.CompletedAt ??= DateTimeOffset.UtcNow;
+        if (feedbackRating is not null) item.FeedbackRating = feedbackRating;
+        if (actualMinutesSpent is not null) item.ActualMinutesSpent = actualMinutesSpent;
         var plan = await db.StudyPlans.FirstAsync(x => x.Id == item.StudyPlanId, cancellationToken);
-        await RecordEventAsync(plan.UserId, "study_plan_item_completed", new { itemId = item.Id, planId = item.StudyPlanId, subtest = item.SubtestCode }, cancellationToken);
+        await RecordEventAsync(plan.UserId, "study_plan_item_completed", new { itemId = item.Id, planId = item.StudyPlanId, subtest = item.SubtestCode, feedbackRating, actualMinutesSpent }, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+
+        if (!alreadyCompleted)
+        {
+            await AwardCompletionRewardsAsync(plan.UserId, item, cancellationToken);
+            await TryRefreshReadinessAsync(plan.UserId, cancellationToken);
+        }
+
         return StudyPlanItemDto(item);
     }
+
+    private async Task TryRefreshReadinessAsync(string userId, CancellationToken cancellationToken)
+    {
+        if (readinessComputation is null) return;
+        try
+        {
+            await readinessComputation.ComputeAsync(userId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[readiness] Compute failed for user={userId}: {ex.Message}");
+        }
+    }
+
+    private async Task AwardCompletionRewardsAsync(string userId, StudyPlanItem item, CancellationToken cancellationToken)
+    {
+        // XP: scale modestly with task duration so a 5-min flashcard ≠ a 45-min mock.
+        if (gamification is not null)
+        {
+            var xp = Math.Clamp(10 + (item.DurationMinutes / 5), 10, 60);
+            try
+            {
+                await gamification.AwardXpAsync(userId, xp, $"study_plan:{item.SubtestCode}", cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // XP award is non-critical — log only.
+                Console.Error.WriteLine($"[plan-complete] XP award failed for user={userId} item={item.Id}: {ex.Message}");
+            }
+        }
+
+        // Spaced-repetition progression when this plan item linked back to a ReviewItem.
+        if (!string.IsNullOrWhiteSpace(item.LinkedReviewItemId) && spacedRepetition is not null)
+        {
+            var quality = MapFeedbackToSm2Quality(item.FeedbackRating);
+            try
+            {
+                await spacedRepetition.SubmitReviewAsync(userId, item.LinkedReviewItemId!, quality, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[plan-complete] SM-2 update failed for user={userId} review={item.LinkedReviewItemId}: {ex.Message}");
+            }
+        }
+    }
+
+    private static int MapFeedbackToSm2Quality(int? feedbackRating) => feedbackRating switch
+    {
+        1 => 5,   // "Too easy" → perfect recall
+        2 => 4,   // "Just right" → good
+        3 => 2,   // "Too hard" → hard
+        _ => 4    // No feedback → assume good
+    };
 
     public async Task<object> SkipStudyPlanItemAsync(string userId, string itemId, CancellationToken cancellationToken)
     {
@@ -1052,9 +1141,94 @@ public partial class LearnerService(
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var item = await GetStudyPlanItemOwnedByUserAsync(userId, itemId, cancellationToken);
-        item.ContentId = request.ReplacementContentId ?? item.ContentId;
+
+        // Mode 1: candidates-only — list 3 alternatives without mutating.
+        if (string.IsNullOrWhiteSpace(request.ReplacementContentId))
+        {
+            if (studyPlanContentPicker is null)
+            {
+                return new { candidates = Array.Empty<object>(), note = "ContentPicker unavailable" };
+            }
+
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+            var candidates = await studyPlanContentPicker.ResolveAlternativesAsync(item, user?.ActiveProfessionId, count: 3, cancellationToken);
+            return new
+            {
+                itemId = item.Id,
+                candidates = candidates.Select(c => new
+                {
+                    contentId = c.ContentId,
+                    title = c.Title,
+                    route = c.Route,
+                    durationMinutes = c.DurationMinutes
+                })
+            };
+        }
+
+        // Mode 2: apply swap — mark original Replaced, insert new item.
+        var replacement = await db.ContentItems
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == request.ReplacementContentId, cancellationToken);
+
+        var newItem = new StudyPlanItem
+        {
+            Id = $"plan-item-{Guid.NewGuid():N}",
+            StudyPlanId = item.StudyPlanId,
+            Title = replacement?.Title ?? item.Title,
+            SubtestCode = item.SubtestCode,
+            DurationMinutes = replacement?.EstimatedDurationMinutes > 0 ? replacement.EstimatedDurationMinutes : item.DurationMinutes,
+            Rationale = $"Swapped from \"{item.Title}\" at your request. Comparable scope and duration.",
+            DueDate = item.DueDate,
+            Status = StudyPlanItemStatus.NotStarted,
+            Section = item.Section,
+            ContentId = request.ReplacementContentId,
+            SourceContentId = request.ReplacementContentId,
+            ContentRoute = BuildRouteForReplacement(item.SubtestCode, request.ReplacementContentId, item.ItemType),
+            ItemType = item.ItemType,
+            PriorityScore = item.PriorityScore,
+            WeekIndex = item.WeekIndex,
+            SlotKind = item.SlotKind
+        };
+        db.StudyPlanItems.Add(newItem);
+
+        // Swap state: keep enum stable, mark via ReplacedById link. UI filters
+        // out items where ReplacedById is non-null so they no longer surface.
+        item.Status = StudyPlanItemStatus.Skipped;
+        item.ReplacedById = newItem.Id;
+
+        var plan = await db.StudyPlans.FirstAsync(x => x.Id == item.StudyPlanId, cancellationToken);
+        await RecordEventAsync(plan.UserId, "study_plan_item_swapped", new
+        {
+            originalItemId = item.Id,
+            newItemId = newItem.Id,
+            planId = item.StudyPlanId,
+            subtest = item.SubtestCode,
+            replacementContentId = request.ReplacementContentId
+        }, cancellationToken);
+
         await db.SaveChangesAsync(cancellationToken);
-        return StudyPlanItemDto(item);
+        return StudyPlanItemDto(newItem);
+    }
+
+    private static string BuildRouteForReplacement(string subtest, string contentId, string itemType)
+    {
+        var lower = (subtest ?? string.Empty).ToLowerInvariant();
+        if (string.Equals(itemType, "mock", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"/{lower}/mocks";
+        }
+        if (string.IsNullOrWhiteSpace(contentId))
+        {
+            return $"/{lower}";
+        }
+        return lower switch
+        {
+            "reading" => $"/reading/paper/{Uri.EscapeDataString(contentId)}",
+            "listening" => $"/listening/player/{Uri.EscapeDataString(contentId)}",
+            "writing" => $"/writing/player?taskId={Uri.EscapeDataString(contentId)}",
+            "speaking" => $"/speaking/task/{Uri.EscapeDataString(contentId)}",
+            _ => $"/{lower}"
+        };
     }
 
     public async Task<object> GetReadinessAsync(string userId, CancellationToken cancellationToken)
@@ -5381,6 +5555,15 @@ public partial class LearnerService(
     private async Task<ReadinessSnapshot> GetLatestReadinessSnapshotAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureLearnerProfileAsync(userId, cancellationToken);
+
+        // Prefer the unified ReadinessComputationService so callers always see
+        // a computed snapshot (not the legacy default stub). Falls back to
+        // direct DB read when DI isn't wired (e.g. legacy tests).
+        if (readinessComputation is not null)
+        {
+            return await readinessComputation.GetOrComputeAsync(userId, cancellationToken);
+        }
+
         var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
         var query = db.ReadinessSnapshots.Where(x => x.UserId == userId);
         ReadinessSnapshot? snapshot;
@@ -5444,9 +5627,9 @@ public partial class LearnerService(
             .FirstOrDefault();
     }
 
-    private async Task QueueJobAsync(JobType type, string? attemptId = null, string? resourceId = null, CancellationToken cancellationToken = default)
+    private async Task QueueJobAsync(JobType type, string? attemptId = null, string? resourceId = null, string? payloadJson = null, CancellationToken cancellationToken = default)
     {
-        db.BackgroundJobs.Add(new BackgroundJobItem
+        var job = new BackgroundJobItem
         {
             Id = $"job-{Guid.NewGuid():N}",
             Type = type,
@@ -5460,7 +5643,12 @@ public partial class LearnerService(
             StatusMessage = "Queued",
             Retryable = true,
             RetryAfterMs = 2000
-        });
+        };
+        if (!string.IsNullOrWhiteSpace(payloadJson))
+        {
+            job.PayloadJson = payloadJson;
+        }
+        db.BackgroundJobs.Add(job);
         await Task.CompletedTask;
     }
 
@@ -6142,6 +6330,83 @@ public partial class LearnerService(
         });
     }
 
+    private sealed record ExperimentVariant(string Code, int Weight, decimal PriceMultiplier);
+
+    /// <summary>
+    /// Looks up any running pricing experiment for the given product, deterministically
+    /// assigns the user to a variant via SHA-256 hash, persists the assignment, and
+    /// returns the assignment id and priceMultiplier. Returns (null, 1.0) if no
+    /// experiment applies or the user falls outside the rollout bucket.
+    /// </summary>
+    private async Task<(string? AssignmentId, decimal Multiplier)> TryApplyPricingExperimentAsync(
+        string userId, string targetType, string targetId, CancellationToken ct)
+    {
+        var userRegion = await db.ApplicationUserAccounts
+            .Where(u => u.Id == userId)
+            .Select(u => u.PreferredRegion)
+            .FirstOrDefaultAsync(ct);
+
+        var experiments = await db.PricingExperiments
+            .Where(e => e.Status == "running"
+                && e.TargetType == targetType
+                && e.TargetId == targetId
+                && (e.Region == "*" || e.Region == userRegion))
+            .ToListAsync(ct);
+
+        foreach (var experiment in experiments)
+        {
+            // Deterministic rollout check: SHA-256(experimentId:userId) → bucket mod 100
+            var rolloutHash = SHA256.HashData(Encoding.UTF8.GetBytes($"{experiment.Id}:{userId}"));
+            var rolloutBucket = (int)(BinaryPrimitives.ReadUInt64BigEndian(rolloutHash) % 100);
+            if (rolloutBucket >= experiment.RolloutPercent)
+                continue;
+
+            var variants = JsonSupport.Deserialize<List<ExperimentVariant>>(experiment.VariantsJson, []);
+            if (variants.Count == 0)
+                continue;
+
+            // Deterministic variant pick: SHA-256(experimentId:userId:variant) → weighted selection
+            var variantHash = SHA256.HashData(Encoding.UTF8.GetBytes($"{experiment.Id}:{userId}:variant"));
+            var totalWeight = variants.Sum(v => v.Weight);
+            if (totalWeight <= 0)
+                continue;
+            var variantBucket = (int)(BinaryPrimitives.ReadUInt64BigEndian(variantHash) % (ulong)totalWeight);
+            string assignedCode = variants[^1].Code;
+            int cumulative = 0;
+            foreach (var v in variants)
+            {
+                cumulative += v.Weight;
+                if (variantBucket < cumulative) { assignedCode = v.Code; break; }
+            }
+
+            // Upsert assignment (unique index on ExperimentId + UserId prevents duplicates)
+            var existing = await db.PricingExperimentAssignments
+                .FirstOrDefaultAsync(a => a.ExperimentId == experiment.Id && a.UserId == userId, ct);
+
+            if (existing is not null)
+            {
+                // Respect the pre-existing assignment — don't re-randomise on re-quote
+                var existingVariant = variants.FirstOrDefault(v => v.Code == existing.VariantCode);
+                return (existing.Id, existingVariant?.PriceMultiplier ?? 1m);
+            }
+
+            var assignmentId = TruncateIdentifier($"pea-{Guid.NewGuid():N}");
+            db.PricingExperimentAssignments.Add(new PricingExperimentAssignment
+            {
+                Id = assignmentId,
+                ExperimentId = experiment.Id,
+                UserId = userId,
+                VariantCode = assignedCode,
+                AssignedAt = DateTimeOffset.UtcNow,
+            });
+
+            var multiplier = variants.FirstOrDefault(v => v.Code == assignedCode)?.PriceMultiplier ?? 1m;
+            return (assignmentId, multiplier);
+        }
+
+        return (null, 1m);
+    }
+
     private static object StudyPlanItemDto(StudyPlanItem item) => new
     {
         itemId = item.Id,
@@ -6154,7 +6419,15 @@ public partial class LearnerService(
         section = item.Section,
         contentId = item.ContentId,
         itemType = item.ItemType,
-        route = StudyPlanRouteForItem(item)
+        route = string.IsNullOrWhiteSpace(item.ContentRoute) ? StudyPlanRouteForItem(item) : item.ContentRoute,
+        slotKind = item.SlotKind,
+        weekIndex = item.WeekIndex,
+        priorityScore = item.PriorityScore,
+        linkedReviewItemId = item.LinkedReviewItemId,
+        feedbackRating = item.FeedbackRating,
+        completedAt = item.CompletedAt,
+        actualMinutesSpent = item.ActualMinutesSpent,
+        replacedById = item.ReplacedById
     };
 
     private static string StudyPlanRouteForItem(StudyPlanItem item)
@@ -6904,6 +7177,22 @@ public partial class LearnerService(
                 reviewPack.Description));
         }
 
+        // Apply any running pricing experiment for this product.
+        var expTargetType = normalizedProductType is "plan_upgrade" or "plan_downgrade" ? "plan" : "addon";
+        var expTargetId = normalizedProductType is "plan_upgrade" or "plan_downgrade"
+            ? (planCode ?? string.Empty)
+            : (items.Count > 0 ? items[0].Code : string.Empty);
+        var (experimentAssignmentId, priceMultiplier) = string.IsNullOrEmpty(expTargetId)
+            ? (null, 1m)
+            : await TryApplyPricingExperimentAsync(userId, expTargetType, expTargetId, cancellationToken);
+        if (priceMultiplier != 1m && items.Count > 0)
+        {
+            subtotal = Math.Round(subtotal * priceMultiplier, 2, MidpointRounding.AwayFromZero);
+            // Reflect adjusted price in the line item so the quote response is accurate.
+            var item = items[0];
+            items[0] = item with { Amount = subtotal };
+        }
+
         BillingCoupon? coupon = null;
         decimal discount = 0m;
         var validation = new Dictionary<string, object?>
@@ -6995,13 +7284,22 @@ public partial class LearnerService(
                     [new ApiFieldError("couponCode", "user_limit", "This coupon can only be used once per user.")]);
             }
 
-            discount = coupon.DiscountType == BillingDiscountType.Percentage
-                ? Math.Round(subtotal * Math.Min(coupon.DiscountValue, 100m) / 100m, 2, MidpointRounding.AwayFromZero)
-                : Math.Round(Math.Min(coupon.DiscountValue, subtotal), 2, MidpointRounding.AwayFromZero);
-
-            if (discount > subtotal)
+            // trial_extension_days and free_months shift subscription dates post-checkout;
+            // they carry no price discount at quote time.
+            if (coupon.CouponVariant is "trial_extension_days" or "free_months")
             {
-                discount = subtotal;
+                discount = 0m;
+            }
+            else
+            {
+                discount = coupon.DiscountType == BillingDiscountType.Percentage
+                    ? Math.Round(subtotal * Math.Min(coupon.DiscountValue, 100m) / 100m, 2, MidpointRounding.AwayFromZero)
+                    : Math.Round(Math.Min(coupon.DiscountValue, subtotal), 2, MidpointRounding.AwayFromZero);
+
+                if (discount > subtotal)
+                {
+                    discount = subtotal;
+                }
             }
 
             validation["couponCode"] = coupon.Code;
@@ -7045,6 +7343,7 @@ public partial class LearnerService(
             Status = BillingQuoteStatus.Created,
             CreatedAt = now,
             ExpiresAt = now.Add(BillingQuoteDefaultLifetime),
+            ExperimentAssignmentId = experimentAssignmentId,
             SnapshotJson = JsonSupport.Serialize(new
             {
                 items,
@@ -8608,6 +8907,16 @@ public partial class LearnerService(
             }
         }
 
+        // Apply coupon variant side effects (trial extension, free months date shifts)
+        if (couponVariantApplicator is not null && !string.IsNullOrWhiteSpace(quote.CouponCode))
+        {
+            var variantCoupon = await FindBillingCouponAsync(quote.CouponCode, ct);
+            if (variantCoupon is not null)
+            {
+                couponVariantApplicator.Apply(variantCoupon, subscription);
+            }
+        }
+
         var invoiceId = TruncateIdentifier($"inv-{quote.Id}");
         var existingInvoice = await db.Invoices.FirstOrDefaultAsync(x => x.Id == invoiceId, ct);
         if (existingInvoice is null)
@@ -8644,6 +8953,19 @@ public partial class LearnerService(
 
         quote.Status = BillingQuoteStatus.Completed;
         quote.CheckoutSessionId = transaction.GatewayTransactionId;
+
+        // Mark pricing-experiment conversion if this quote was assigned to a variant.
+        if (!string.IsNullOrEmpty(quote.ExperimentAssignmentId))
+        {
+            var assignment = await db.PricingExperimentAssignments
+                .FirstOrDefaultAsync(a => a.Id == quote.ExperimentAssignmentId, ct);
+            if (assignment is not null && !assignment.Converted)
+            {
+                assignment.Converted = true;
+                assignment.ConvertedAt = now;
+                assignment.ConvertedAmount = quote.TotalAmount;
+            }
+        }
 
         await AddBillingEventIfMissingAsync(new BillingEvent
         {
@@ -9901,6 +10223,32 @@ public partial class LearnerService(
         var driftLevel = driftDays > 14 ? "severe" : driftDays > 7 ? "moderate" : driftDays > 3 ? "mild" : "on-track";
         var shouldRegenerate = driftLevel is "severe" or "moderate";
 
+        // Auto-enqueue a regen job when drift is moderate+ AND the last
+        // regen was more than 24h ago. Cooldown prevents whiplash while
+        // still rescuing learners who fall behind for days. (Phase 3b)
+        var autoRegenQueued = false;
+        if (shouldRegenerate)
+        {
+            var hoursSinceLastRegen = (DateTimeOffset.UtcNow - plan.GeneratedAt).TotalHours;
+            if (hoursSinceLastRegen >= 24)
+            {
+                var existingQueued = await db.BackgroundJobs.AnyAsync(
+                    j => j.Type == JobType.StudyPlanRegeneration
+                        && j.ResourceId == plan.Id
+                        && (j.State == AsyncState.Queued || j.State == AsyncState.Processing),
+                    ct);
+
+                if (!existingQueued)
+                {
+                    var payloadJson = JsonSupport.Serialize(new { userId, trigger = "DriftRecovery" });
+                    await QueueJobAsync(JobType.StudyPlanRegeneration, resourceId: plan.Id, payloadJson: payloadJson, cancellationToken: ct);
+                    plan.State = AsyncState.Queued;
+                    await db.SaveChangesAsync(ct);
+                    autoRegenQueued = true;
+                }
+            }
+        }
+
         // Breakdown by subtest
         var subtestDrift = items
             .GroupBy(i => i.SubtestCode)
@@ -9929,6 +10277,7 @@ public partial class LearnerService(
                 actualCompleted,
                 totalItems = total,
                 shouldRegenerate,
+                autoRegenQueued,
                 recommendation = driftLevel switch
                 {
                     "severe" => "You're significantly behind schedule. We strongly recommend regenerating your study plan to align with your current pace.",

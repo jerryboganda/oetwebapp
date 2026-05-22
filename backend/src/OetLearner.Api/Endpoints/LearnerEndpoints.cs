@@ -8,6 +8,8 @@ using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
 using OetLearner.Api.Services.Reading;
+using OetLearner.Api.Services.Readiness;
+using System.Text.Json;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -69,7 +71,7 @@ public static class LearnerEndpoints
         v1.MapPost("/study-plan/items/{itemId}/reset", async (HttpContext http, string itemId, LearnerService service, CancellationToken ct) => Results.Ok(await service.ResetStudyPlanItemAsync(http.UserId(), itemId, ct)));
         v1.MapPost("/study-plan/items/{itemId}/reschedule", async (HttpContext http, string itemId, StudyPlanRescheduleRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.RescheduleStudyPlanItemAsync(http.UserId(), itemId, request, ct)));
         v1.MapPost("/study-plan/items/{itemId}/swap", async (HttpContext http, string itemId, StudyPlanSwapRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SwapStudyPlanItemAsync(http.UserId(), itemId, request, ct)));
-        v1.MapGet("/readiness", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadinessAsync(http.UserId(), ct)));
+        // /v1/readiness moved to dedicated ReadinessEndpoints.cs (full computation engine).
         v1.MapGet("/progress", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetProgressAsync(http.UserId(), ct)));
         v1.MapGet("/submissions", async (HttpContext http, [FromQuery] string? cursor, [FromQuery] int? limit, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSubmissionsAsync(http.UserId(), cursor, limit, ct)));
         v1.MapGet("/submissions/compare", async (HttpContext http, [FromQuery] string? leftId, [FromQuery] string? rightId, LearnerService service, CancellationToken ct) => Results.Ok(await service.CompareSubmissionsAsync(http.UserId(), leftId, rightId, ct)));
@@ -355,8 +357,24 @@ public static class LearnerEndpoints
         // Exam family reference
         v1.MapGet("/reference/exam-families", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetExamFamiliesAsync(ct)));
 
-        // Target-date risk assessment
-        v1.MapGet("/learner/readiness/risk", async (HttpContext http, EngagementService engagement, CancellationToken ct) => Results.Ok(await engagement.CalculateTargetDateRiskAsync(http.UserId(), ct)));
+        // Target-date risk assessment. Projects from the unified ReadinessSnapshot
+        // (computed by ReadinessComputationService) so legacy callers receive the
+        // same risk signal as /v1/readiness instead of the disconnected EngagementService stub.
+        v1.MapGet("/learner/readiness/risk", async (HttpContext http, ReadinessComputationService readiness, CancellationToken ct) =>
+        {
+            var snapshot = await readiness.GetOrComputeAsync(http.UserId(), ct);
+            var payload = JsonSupport.Deserialize<JsonElement>(snapshot.PayloadJson, default);
+            var factors = payload.TryGetProperty("riskFactors", out var rf) && rf.ValueKind == JsonValueKind.Array
+                ? rf.Deserialize<object[]>() ?? []
+                : Array.Empty<object>();
+            return Results.Ok(new
+            {
+                riskProbability = snapshot.TargetDateProbability ?? 0m,
+                riskLevel = snapshot.OverallRisk,
+                factors,
+                recommendation = $"Focus on {snapshot.WeakestSubtest ?? "your weakest sub-test"} and aim for {snapshot.RecommendedStudyHoursPerWeek} hours of study per week."
+            });
+        });
 
         // Streak freeze
         v1.MapPost("/learner/engagement/streak-freeze", async (HttpContext http, EngagementService engagement, CancellationToken ct) =>

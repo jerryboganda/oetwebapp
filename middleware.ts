@@ -151,6 +151,28 @@ function isSponsorPortalEnabled(): boolean {
 /** Mutation methods that require CSRF validation */
 const CSRF_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/**
+ * Capture affiliate / agent attribution from URL params and persist as a cookie.
+ * Phase 8 cookie-attribution: `?ref=CODE` or `?agent=CODE` sets `oet_affiliate`
+ * for `cookieDays` (default 30). The cookie is read at signup and POSTed to
+ * /v1/affiliates/track to record the AffiliateAttribution row.
+ */
+const AFFILIATE_COOKIE = 'oet_affiliate';
+const AFFILIATE_COOKIE_DAYS = 30;
+
+function applyAffiliateCookie(request: NextRequest, response: NextResponse): NextResponse {
+  const code = request.nextUrl.searchParams.get('ref') ?? request.nextUrl.searchParams.get('agent');
+  if (!code || !/^[A-Za-z0-9_-]{2,64}$/.test(code)) return response;
+  if (request.cookies.get(AFFILIATE_COOKIE)) return response; // first-click wins
+  response.cookies.set(AFFILIATE_COOKIE, code, {
+    maxAge: AFFILIATE_COOKIE_DAYS * 24 * 60 * 60,
+    path: '/',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  });
+  return response;
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isDev = process.env.NODE_ENV !== 'production';
@@ -172,7 +194,7 @@ export function middleware(request: NextRequest) {
   // auth branch taken below.
   function withCsp(res: NextResponse): NextResponse {
     res.headers.set('Content-Security-Policy', csp);
-    return res;
+    return applyAffiliateCookie(request, res);
   }
 
   if (pathname.startsWith('/sponsor') && !isSponsorPortalEnabled()) {

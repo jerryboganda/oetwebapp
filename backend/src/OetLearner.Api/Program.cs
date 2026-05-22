@@ -580,6 +580,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.MockSectionResu
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.IMockReportAggregationService,
     OetLearner.Api.Services.Mocks.Results.MockReportAggregationService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockReadinessTrendService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Readiness.ReadinessForecastCalculator>();
+builder.Services.AddScoped<OetLearner.Api.Services.Readiness.ReadinessBlockerRules>();
+builder.Services.AddScoped<OetLearner.Api.Services.Readiness.ReadinessComputationService>();
 // Wave 2 service registrations — added by W2-A on behalf of W2-D/E/F.
 // W2-A's own services:
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockBundleReviewStageService>();
@@ -717,7 +720,46 @@ builder.Services.AddScoped<AnalyticsIngestionService>();
 builder.Services.AddSingleton<PlatformLinkService>();
 builder.Services.AddHttpClient<StripeGateway>();
 builder.Services.AddHttpClient<PayPalGateway>();
+// Phase 2 international gateways (UK + Gulf + Egypt). HTTP clients are typed so each gateway gets its own pool.
+builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.PayTabsGateway>();
+builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.PaymobGateway>();
+builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway>();
 builder.Services.AddScoped<PaymentGatewayService>();
+builder.Services.AddScoped<IPaymentGatewayProvider>(sp => sp.GetRequiredService<PaymentGatewayService>());
+// Phase 1-10 international expansion services.
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IGatewayRegistry, OetLearner.Api.Services.Billing.GatewayRegistry>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IRegionTaxResolver, OetLearner.Api.Services.Billing.TaxResolver>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IRegionDetector, OetLearner.Api.Services.Billing.RegionDetector>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IPriceResolver, OetLearner.Api.Services.Billing.PriceResolver>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IManualPaymentService, OetLearner.Api.Services.Billing.ManualPaymentService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IDunningCampaignService, OetLearner.Api.Services.Billing.DunningCampaignService>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Billing.DunningWorker>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAffiliateService, OetLearner.Api.Services.Billing.AffiliateService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingNotificationDispatcher, OetLearner.Api.Services.Billing.BillingNotificationDispatcher>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingNotificationChannel, OetLearner.Api.Services.Billing.EmailBillingChannel>();
+builder.Services.Configure<OetLearner.Api.Configuration.TwilioOptions>(builder.Configuration.GetSection("Twilio"));
+builder.Services.Configure<OetLearner.Api.Configuration.WhatsAppOptions>(builder.Configuration.GetSection("WhatsApp"));
+builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.TwilioSmsChannel>();
+builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.WhatsAppChannel>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingNotificationChannel>(sp => sp.GetRequiredService<OetLearner.Api.Services.Billing.TwilioSmsChannel>());
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingNotificationChannel>(sp => sp.GetRequiredService<OetLearner.Api.Services.Billing.WhatsAppChannel>());
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.ICouponVariantApplicator, OetLearner.Api.Services.Billing.CouponVariantApplicator>();
+// AI churn / usage forecast / analytics / FX / experiments.
+builder.Services.Configure<OetLearner.Api.Configuration.FxOptions>(builder.Configuration.GetSection("Fx"));
+builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.FxRateService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IFxRateService>(sp => sp.GetRequiredService<OetLearner.Api.Services.Billing.FxRateService>());
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IPricingExperimentService, OetLearner.Api.Services.Billing.PricingExperimentService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IChurnPredictionService, OetLearner.Api.Services.Billing.ChurnPredictionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IUsageForecastService, OetLearner.Api.Services.Billing.UsageForecastService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAiUsageAnalyticsService, OetLearner.Api.Services.Billing.AiUsageAnalyticsService>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Billing.ChurnPredictionWorker>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Billing.UsageForecastWorker>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Billing.FxRateRefreshWorker>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IRetentionActionDispatcher, OetLearner.Api.Services.Billing.RetentionActionDispatcher>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Billing.RetentionDispatchWorker>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Billing.ExperimentConversionWorker>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingMetricsService, OetLearner.Api.Services.Billing.BillingMetricsService>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Billing.BillingMetricsRollupWorker>();
 builder.Services.AddScoped<WalletService>();
 builder.Services.AddScoped<EngagementService>();
 builder.Services.AddHostedService<BackgroundJobProcessor>();
@@ -726,6 +768,19 @@ builder.Services.AddHostedService<BackgroundJobProcessor>();
 builder.Services.AddScoped<GamificationService>();
 builder.Services.AddSingleton<ISpacedRepetitionScheduler, Sm2Scheduler>();
 builder.Services.AddScoped<SpacedRepetitionService>();
+
+// ── Study planner engine (May 2026 overhaul) ──
+builder.Services.AddScoped<OetLearner.Api.Services.Planner.IStudyPlanEntitlementResolver,
+    OetLearner.Api.Services.Planner.StudyPlanEntitlementResolver>();
+builder.Services.AddScoped<OetLearner.Api.Services.Planner.StudyPlanTemplateSelector>();
+builder.Services.AddScoped<OetLearner.Api.Services.Planner.ContentPicker>();
+builder.Services.AddScoped<OetLearner.Api.Services.Planner.ReviewItemInjector>();
+builder.Services.AddScoped<OetLearner.Api.Services.Planner.IStudyPlanGenerator,
+    OetLearner.Api.Services.Planner.StudyPlanGenerator>();
+builder.Services.AddScoped<OetLearner.Api.Services.Planner.StudyPlanTemplateSeeder>();
+builder.Services.AddScoped<OetLearner.Api.Services.Planner.IPlanPersonalizer,
+    OetLearner.Api.Services.Planner.RuleBasedPlanPersonalizer>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Planner.StudyPlanReminderWorker>();
 builder.Services.AddScoped<VocabularyService>();
 builder.Services.AddScoped<VocabularyDraftService>();
 builder.Services.AddScoped<VocabularyGlossService>();
@@ -1471,7 +1526,15 @@ app.MapAuthEndpoints();
 app.MapAnalyticsEndpoints();
 app.MapNotificationEndpoints();
 app.MapLearnerEndpoints();
+app.MapStudyPlanTemplateAdminEndpoints();
+app.MapBillingRegionEndpoints();
+app.MapBillingExpansionEndpoints();
+app.MapBillingExpansionV2Endpoints();
+app.MapAffiliatePortalEndpoints();
+app.MapAiAnalyticsEndpoints();
 app.MapMockReadinessEndpoints();
+app.MapReadinessEndpoints();
+app.MapAdminReadinessEndpoints();
 app.MapMockBookingEndpoints();
 app.MapLearnerActionsEndpoints();
 app.MapExpertEndpoints();
@@ -1671,6 +1734,24 @@ if (app.Environment.IsDevelopment())
     {
         seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>()
             .LogWarning(ex, "Mock sample seeder failed (non-fatal)");
+    }
+}
+
+// Study plan template seeder — runs in all environments. Idempotent: if the
+// StudyPlanTemplates table already has rows the seeder no-ops, so admins can
+// edit/delete the starter set without re-introduction on restart. Non-fatal.
+{
+    using var seedScope = app.Services.CreateScope();
+    var templateSeeder = seedScope.ServiceProvider
+        .GetRequiredService<OetLearner.Api.Services.Planner.StudyPlanTemplateSeeder>();
+    try
+    {
+        await templateSeeder.SeedIfEmptyAsync(CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>()
+            .LogWarning(ex, "Study plan template seeder failed (non-fatal)");
     }
 }
 

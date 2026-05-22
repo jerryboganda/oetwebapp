@@ -56,7 +56,12 @@ public sealed class RolePlayCardSerializationTests : IAsyncLifetime
             billingOptions,
             TestRuntimeSettingsProvider.FromBillingOptions(billingOptions.Value));
         var paypal = new OetLearner.Api.Services.PayPalGateway(new HttpClient(), billingOptions);
-        var paymentGateways = new OetLearner.Api.Services.PaymentGatewayService(stripe, paypal);
+        var paymentGateways = new OetLearner.Api.Services.PaymentGatewayService(
+            stripe,
+            paypal,
+            new OetLearner.Api.Services.Billing.Gateways.PayTabsGateway(new HttpClient(), billingOptions),
+            new OetLearner.Api.Services.Billing.Gateways.PaymobGateway(new HttpClient(), billingOptions),
+            new OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway(new HttpClient(), billingOptions));
         var walletService = new WalletService(_db, paymentGateways, platformLinks, billingOptions);
 
         _learnerService = new LearnerService(

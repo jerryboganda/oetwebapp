@@ -9,9 +9,11 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     private DateTimeOffset _lastReconciliationAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastAutoAssignAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastSlaCheckAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastReadinessRolloverAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ReconciliationInterval = TimeSpan.FromHours(1);
     private static readonly TimeSpan ExpertAutoAssignInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ExpertSlaCheckInterval = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan ReadinessRolloverInterval = TimeSpan.FromHours(24);
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -161,6 +163,63 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 logger.LogError(ex, "ExpertSlaEscalation poll failed");
             }
         }
+
+        if (now - _lastReadinessRolloverAt >= ReadinessRolloverInterval)
+        {
+            _lastReadinessRolloverAt = now;
+            try
+            {
+                await RunReadinessRolloverAsync(scope.ServiceProvider, db, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Readiness rollover poll failed");
+            }
+        }
+    }
+
+    private static async Task RunReadinessRolloverAsync(IServiceProvider services, LearnerDbContext db, CancellationToken cancellationToken)
+    {
+        var staleCutoff = DateTimeOffset.UtcNow.AddHours(-24);
+        var recentActivityCutoff = DateTimeOffset.UtcNow.AddDays(-7);
+        var staleUserIds = await db.ReadinessSnapshots
+            .Where(s => s.ComputedAt < staleCutoff)
+            .Select(s => s.UserId)
+            .Distinct()
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        if (staleUserIds.Count == 0) return;
+
+        var activeUserIds = await db.Attempts
+            .Where(a => staleUserIds.Contains(a.UserId) && a.CompletedAt >= recentActivityCutoff)
+            .Select(a => a.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var computation = services.GetRequiredService<OetLearner.Api.Services.Readiness.ReadinessComputationService>();
+        foreach (var userId in activeUserIds)
+        {
+            try
+            {
+                await computation.ComputeAsync(userId, cancellationToken);
+            }
+            catch (Exception)
+            {
+                // swallow per-user failures so rollover continues
+            }
+        }
+
+        // Prune history beyond 26 weeks
+        var pruneCutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-26 * 7));
+        var oldRows = await db.ReadinessHistories
+            .Where(h => h.WeekStartDate < pruneCutoff)
+            .ToListAsync(cancellationToken);
+        if (oldRows.Count > 0)
+        {
+            db.ReadinessHistories.RemoveRange(oldRows);
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static async Task ExecuteJobAsync(IServiceProvider services, LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
@@ -171,7 +230,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             case JobType.WritingEvaluation:
                 await services.GetRequiredService<OetLearner.Api.Services.Writing.IWritingEvaluationPipeline>()
                     .CompleteEvaluationAsync(job, cancellationToken);
-                await CompleteWritingEvaluationSideEffectsAsync(db, notifications, job, cancellationToken);
+                await CompleteWritingEvaluationSideEffectsAsync(services, db, notifications, job, cancellationToken);
                 break;
             case JobType.SpeakingTranscription:
                 await services.GetRequiredService<ISpeakingEvaluationPipeline>()
@@ -180,17 +239,18 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             case JobType.SpeakingEvaluation:
                 await services.GetRequiredService<ISpeakingEvaluationPipeline>()
                     .CompleteEvaluationAsync(job, cancellationToken);
-                await CompleteSpeakingEvaluationSideEffectsAsync(db, notifications, job, cancellationToken);
+                await CompleteSpeakingEvaluationSideEffectsAsync(services, db, notifications, job, cancellationToken);
                 break;
             case JobType.StudyPlanRegeneration:
-                await CompleteStudyPlanRegenerationAsync(db, notifications, job, cancellationToken);
+                await CompleteStudyPlanRegenerationAsync(services, db, notifications, job, cancellationToken);
                 break;
             case JobType.MockReportGeneration:
                 await services.GetRequiredService<OetLearner.Api.Services.Mocks.Results.IMockReportAggregationService>()
                     .GenerateAsync(job, cancellationToken);
+                await CompleteMockReportSideEffectsAsync(services, db, notifications, job, cancellationToken);
                 break;
             case JobType.ReviewCompletion:
-                await CompleteReviewRequestAsync(db, notifications, job, cancellationToken);
+                await CompleteReviewRequestAsync(services, db, notifications, job, cancellationToken);
                 break;
             case JobType.FreezeStart:
                 await CompleteFreezeStartAsync(db, notifications, job, cancellationToken);
@@ -453,7 +513,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         record.EntitlementConsumed = true;
     }
 
-    private static async Task CompleteWritingEvaluationSideEffectsAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteWritingEvaluationSideEffectsAsync(IServiceProvider services, LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
 
@@ -479,7 +539,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             OccurredAt = DateTimeOffset.UtcNow
         });
 
-        var readiness = await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
+        var readiness = await RefreshReadinessAsync(services, db, attempt.UserId, cancellationToken);
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Completed, cancellationToken);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, attempt.UserId, cancellationToken);
         var evaluationVersion = (evaluation.GeneratedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString();
@@ -508,7 +568,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             cancellationToken);
     }
 
-    private static async Task CompleteSpeakingEvaluationSideEffectsAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteSpeakingEvaluationSideEffectsAsync(IServiceProvider services, LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
 
@@ -543,7 +603,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             OccurredAt = DateTimeOffset.UtcNow
         });
 
-        var readiness = await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
+        var readiness = await RefreshReadinessAsync(services, db, attempt.UserId, cancellationToken);
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Completed, cancellationToken);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, attempt.UserId, cancellationToken);
         var evaluationVersion = (evaluation.GeneratedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString();
@@ -606,33 +666,85 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         }
     }
 
-    private static async Task CompleteStudyPlanRegenerationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteStudyPlanRegenerationAsync(
+        IServiceProvider services,
+        LearnerDbContext db,
+        NotificationService notifications,
+        BackgroundJobItem job,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
-        var plan = await db.StudyPlans.FirstAsync(x => x.Id == job.ResourceId, cancellationToken);
-        plan.State = AsyncState.Completed;
-        plan.Version += 1;
-        plan.GeneratedAt = DateTimeOffset.UtcNow;
-        plan.Checkpoint = "Regenerated after your latest evaluated attempt.";
-        plan.WeakSkillFocus = "Writing conciseness and speaking fluency remain top priority.";
+        var priorPlan = await db.StudyPlans.FirstOrDefaultAsync(x => x.Id == job.ResourceId, cancellationToken);
+        if (priorPlan is null) return;
 
-        var items = await db.StudyPlanItems.Where(x => x.StudyPlanId == plan.Id).ToListAsync(cancellationToken);
-        foreach (var item in items.Where(x => x.Status == StudyPlanItemStatus.NotStarted))
+        var generator = services.GetRequiredService<OetLearner.Api.Services.Planner.IStudyPlanGenerator>();
+        var trigger = ResolveTrigger(job);
+        var result = await generator.GenerateAsync(priorPlan.UserId, trigger, cancellationToken);
+        job.ResourceId = result.PlanId;
+
+        if (result.SkippedBecauseUnchanged)
         {
-            item.DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+            // Mark prior plan back to Completed; nothing materially changed.
+            priorPlan.State = AsyncState.Completed;
+            return;
         }
 
         await notifications.CreateForLearnerAsync(
             NotificationEventKey.LearnerStudyPlanRegenerated,
-            plan.UserId,
+            priorPlan.UserId,
             "study_plan",
-            plan.Id,
-            plan.Version.ToString(),
+            result.PlanId,
+            result.Version.ToString(),
             new Dictionary<string, object?>
             {
-                ["message"] = plan.Checkpoint
+                ["message"] = $"Your study plan has been refreshed (v{result.Version}, {result.ItemsCreated} new tasks).",
+                ["templateId"] = result.TemplateId,
+                ["trigger"] = trigger.ToString()
             },
             cancellationToken);
+
+        db.AnalyticsEvents.Add(new AnalyticsEventRecord
+        {
+            Id = $"evt-{Guid.NewGuid():N}",
+            UserId = priorPlan.UserId,
+            EventName = "study_plan_generated",
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                planId = result.PlanId,
+                version = result.Version,
+                itemsCreated = result.ItemsCreated,
+                itemsPreserved = result.ItemsPreservedFromPrior,
+                templateId = result.TemplateId,
+                trigger = trigger.ToString()
+            }),
+            OccurredAt = DateTimeOffset.UtcNow
+        });
+    }
+
+    private static OetLearner.Api.Services.Planner.StudyPlanGenerationTrigger ResolveTrigger(BackgroundJobItem job)
+    {
+        if (string.IsNullOrWhiteSpace(job.PayloadJson))
+        {
+            return OetLearner.Api.Services.Planner.StudyPlanGenerationTrigger.Manual;
+        }
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(job.PayloadJson);
+            if (doc.RootElement.TryGetProperty("trigger", out var prop) && prop.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                if (Enum.TryParse<OetLearner.Api.Services.Planner.StudyPlanGenerationTrigger>(prop.GetString(), ignoreCase: true, out var parsed))
+                {
+                    return parsed;
+                }
+            }
+        }
+        catch
+        {
+            // fall through
+        }
+
+        return OetLearner.Api.Services.Planner.StudyPlanGenerationTrigger.Manual;
     }
 
     private static async Task CompleteMockReportGenerationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
@@ -962,7 +1074,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     private static string ToDisplaySubtest(string subtest)
         => string.IsNullOrWhiteSpace(subtest) ? "Mock" : char.ToUpperInvariant(subtest[0]) + subtest[1..];
 
-    private static async Task CompleteReviewRequestAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteReviewRequestAsync(IServiceProvider services, LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
         var request = await db.ReviewRequests.FirstAsync(x => x.Id == job.ResourceId, cancellationToken);
@@ -986,7 +1098,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             });
 
             // Trigger study plan regeneration after tutor review completes
-            var readiness = await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
+            var readiness = await RefreshReadinessAsync(services, db, attempt.UserId, cancellationToken);
             await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, attempt.UserId, cancellationToken);
             await notifications.CreateForLearnerAsync(
                 NotificationEventKey.LearnerReadinessUpdated,
@@ -1002,15 +1114,30 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         }
     }
 
-    private static async Task<ReadinessSnapshot> RefreshReadinessAsync(LearnerDbContext db, string userId, CancellationToken cancellationToken)
+    private static async Task<ReadinessSnapshot> RefreshReadinessAsync(IServiceProvider services, LearnerDbContext db, string userId, CancellationToken cancellationToken)
     {
-        var snapshot = await db.ReadinessSnapshots.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var payload = JsonSupport.Deserialize(snapshot.PayloadJson, new Dictionary<string, object?>());
-        payload["computedAt"] = DateTimeOffset.UtcNow;
-        snapshot.PayloadJson = JsonSupport.Serialize(payload);
-        snapshot.ComputedAt = DateTimeOffset.UtcNow;
-        snapshot.Version += 1;
-        return snapshot;
+        var computation = services.GetRequiredService<OetLearner.Api.Services.Readiness.ReadinessComputationService>();
+        return await computation.ComputeAsync(userId, cancellationToken);
+    }
+
+    private static async Task CompleteMockReportSideEffectsAsync(IServiceProvider services, LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
+        var mockAttempt = await db.MockAttempts.AsNoTracking().FirstOrDefaultAsync(x => x.Id == job.ResourceId, cancellationToken);
+        if (mockAttempt is null) return;
+
+        var readiness = await RefreshReadinessAsync(services, db, mockAttempt.UserId, cancellationToken);
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerReadinessUpdated,
+            mockAttempt.UserId,
+            "readiness_snapshot",
+            readiness.Id,
+            readiness.Version.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["message"] = "Your readiness snapshot was recalculated after your mock report finished generating."
+            },
+            cancellationToken);
     }
 
     private static async Task EmitFailureNotificationsAsync(IServiceProvider services, LearnerDbContext db, BackgroundJobItem job, Exception ex, CancellationToken cancellationToken)

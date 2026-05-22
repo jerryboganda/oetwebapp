@@ -15,7 +15,8 @@ namespace OetLearner.Api.Services;
 public class VocabularyService(
     LearnerDbContext db,
     ISpacedRepetitionScheduler scheduler,
-    GamificationService? gamification = null)
+    GamificationService? gamification = null,
+    OetLearner.Api.Services.Readiness.ReadinessComputationService? readinessComputation = null)
 {
     private const int FreeListSizeCap = 500;
 
@@ -704,6 +705,19 @@ public class VocabularyService(
 
         if (newlyMastered.Count > 0)
             await TryEvaluateAchievementsAsync(userId, "vocab_mastered", ct);
+
+        // Refresh readiness snapshot so vocabulary readiness dimension reflects this quiz.
+        if (readinessComputation is not null)
+        {
+            try
+            {
+                await readinessComputation.ComputeAsync(userId, ct);
+            }
+            catch
+            {
+                // Readiness recompute failures must not break quiz submission.
+            }
+        }
 
         // XP: 10 XP per correct answer + 25 XP completion bonus.
         var xp = result.CorrectCount * 10 + 25;
