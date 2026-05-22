@@ -26,8 +26,8 @@ public static class VoiceDesignAdminEndpoints
                 ModelVariant: opts.Qwen3ModelVariant ?? "flash",
                 VoiceId: opts.Qwen3VoiceId ?? "Cherry",
                 VoiceInstructions: opts.Qwen3VoiceInstructions ?? "",
-                Speed: opts.Qwen3Speed ?? 1.0,
-                Pitch: opts.Qwen3Pitch ?? 0,
+                Speed: opts.Qwen3Speed,
+                Pitch: opts.Qwen3Pitch,
                 Emotion: opts.Qwen3Emotion ?? "",
                 LastUpdatedAt: null,
                 LastUpdatedBy: null));
