@@ -121,7 +121,11 @@ public sealed class VocabularyAudioWorker(
 
         var audio = result.Audio ?? Array.Empty<byte>();
         var sha = Convert.ToHexString(SHA256.HashData(audio)).ToLowerInvariant();
-        var key = ContentAddressed.PublishedKey("vocabulary/audio", sha, "mp3");
+        var mime = string.IsNullOrWhiteSpace(result.MimeType) ? "audio/mpeg" : result.MimeType;
+        var ext = mime.Contains("wav", StringComparison.OrdinalIgnoreCase) ? "wav"
+                  : mime.Contains("ogg", StringComparison.OrdinalIgnoreCase) ? "ogg"
+                  : "mp3";
+        var key = ContentAddressed.PublishedKey("vocabulary/audio", sha, ext);
 
         if (!storage.Exists(key))
         {
@@ -142,9 +146,9 @@ public sealed class VocabularyAudioWorker(
             asset = new MediaAsset
             {
                 Id = "MA-" + Guid.NewGuid().ToString("N")[..12],
-                OriginalFilename = $"{Slug(job.Text)}.mp3",
-                MimeType = string.IsNullOrWhiteSpace(result.MimeType) ? "audio/mpeg" : result.MimeType,
-                Format = "mp3",
+                OriginalFilename = $"{Slug(job.Text)}.{ext}",
+                MimeType = mime,
+                Format = ext,
                 SizeBytes = audio.LongLength,
                 DurationSeconds = (int)Math.Ceiling(Math.Max(0, result.DurationMs) / 1000.0),
                 StoragePath = key,

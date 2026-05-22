@@ -118,12 +118,20 @@ public sealed class DigitalOceanQwen3TtsConversationProvider(
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ChatTtsApiKey);
 
         var url = $"{options.ChatTtsBaseUrl.TrimEnd('/')}/audio/speech";
+        // DigitalOcean's Qwen3 TTS gateway exposes only the `qwen3-tts-voicedesign`
+        // model id, which mandates a non-empty `voice` field (gateway overrides
+        // it with "default" internally) and an `instructions` prompt describing
+        // the desired voice. The model returns WAV (RIFF) audio regardless of
+        // the requested `response_format`.
+        var instructions = string.IsNullOrWhiteSpace(request.Voice)
+            ? "A clear, calm, professional English voice with neutral accent suitable for medical and clinical vocabulary pronunciation."
+            : request.Voice!;
         var payload = JsonSerializer.Serialize(new
         {
-            model = "qwen3-tts",
+            model = "qwen3-tts-voicedesign",
             input = request.Text,
-            voice = string.IsNullOrWhiteSpace(request.Voice) ? options.ChatTtsDefaultVoice : request.Voice,
-            response_format = "mp3",
+            voice = "default",
+            instructions,
         });
         using var req = new HttpRequestMessage(HttpMethod.Post, url)
         {
@@ -137,9 +145,11 @@ public sealed class DigitalOceanQwen3TtsConversationProvider(
             throw new ConversationTtsException("digitalocean_qwen3_tts_error", $"DigitalOcean Qwen3 TTS {(int)response.StatusCode}");
         }
         var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-        var mime = response.Content.Headers.ContentType?.MediaType ?? "audio/mpeg";
+        var ct2 = response.Content.Headers.ContentType?.MediaType;
+        // Qwen3 voicedesign returns WAV bytes even when content-type is octet-stream.
+        var mime = string.IsNullOrWhiteSpace(ct2) || ct2 == "application/octet-stream" ? "audio/wav" : ct2;
         return new ConversationTtsResult(bytes, mime,
-            AzureConversationTtsProvider.ApproxDurationMs(request.Text), Name, "qwen3-tts");
+            AzureConversationTtsProvider.ApproxDurationMs(request.Text), Name, "qwen3-tts-voicedesign");
     }
 }
 
