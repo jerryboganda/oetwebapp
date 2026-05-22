@@ -725,6 +725,10 @@ public record AdminConversationSettingsRequest(
     string? ChatTtsBaseUrl,
     string? ChatTtsApiKey,
     string? ChatTtsDefaultVoice,
+    // Phase Q1 — Qwen3 Voice Studio (DigitalOcean Qwen3 TTS).
+    string? Qwen3ModelVariant,
+    string? Qwen3VoiceId,
+    string? Qwen3VoiceInstructions,
     string? GptSoVitsBaseUrl,
     string? GptSoVitsApiKey,
     string? GptSoVitsDefaultVoice,
@@ -744,4 +748,24 @@ public record AdminConversationSettingsRequest(
 public record AdminConversationTtsPreviewRequest(
     string? Text,
     string? Voice,
-    string? Locale);
+    string? Locale,
+    // Phase Q1 — lets the Voice Studio preview a specific Qwen3 voice
+    // (variant + voice id OR variant + instructions prompt) without first
+    // persisting it to ConversationSettings.
+    string? ModelVariant,
+    string? Instructions);
+
+/// <summary>
+/// Phase Q1 — admin request to bulk-regenerate vocabulary audio with a
+/// pinned Qwen3 voice. <c>Scope</c> = "all" | "missing" | "different-voice".
+/// Either <c>VoiceId</c> (flash) or <c>Instructions</c> (voicedesign) must
+/// be set depending on <c>ModelVariant</c>. <c>DryRun=true</c> returns the
+/// projected job count without enqueuing.
+/// </summary>
+public record AdminVocabularyAudioRegenerateRequest(
+    string? Scope,
+    string? ModelVariant,
+    string? VoiceId,
+    string? Instructions,
+    string? ProfessionId,
+    bool? DryRun);

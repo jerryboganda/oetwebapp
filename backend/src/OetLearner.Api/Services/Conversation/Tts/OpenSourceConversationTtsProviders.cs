@@ -92,18 +92,85 @@ public sealed class ChatTtsConversationTtsProvider(
 }
 
 /// <summary>
-/// OpenAI-compatible TTS adapter for DigitalOcean Serverless Inference/Qwen
-/// deployments. It intentionally reuses the admin-editable ChatTTS endpoint
-/// fields (base URL, API key, default voice) so operators can enable this
-/// provider from the existing conversation settings page without a schema
-/// migration. The selector only uses it when admins explicitly choose
-/// <c>digitalocean-qwen3-tts</c> or when auto mode finds it configured.
+/// OpenAI-compatible TTS adapter for DigitalOcean Serverless Inference's Qwen3
+/// TTS deployment. Supports BOTH model variants:
+///   <list type="bullet">
+///     <item><c>flash</c> → preset voice catalogue (deterministic, consistent).
+///       Sends <c>{model: "qwen3-tts-flash-realtime", voice: "&lt;preset&gt;", input}</c>.</item>
+///     <item><c>voicedesign</c> → free-form prompt model.
+///       Sends <c>{model: "qwen3-tts-vd-realtime", voice: "default", input, instructions}</c>.</item>
+///   </list>
+/// The provider reuses the admin-editable ChatTTS endpoint fields (base URL,
+/// API key) so the credentials match the existing conversation settings page.
+/// The model variant + voice id + instructions live on dedicated Qwen3* options
+/// (writable from the Voice Studio panel) and can be overridden per-call via
+/// <see cref="ConversationTtsRequest.ModelVariant"/>, <see cref="ConversationTtsRequest.Voice"/>
+/// and <see cref="ConversationTtsRequest.Instructions"/> for previews +
+/// vocabulary regeneration jobs.
 /// </summary>
 public sealed class DigitalOceanQwen3TtsConversationProvider(
     IHttpClientFactory httpClientFactory,
     IConversationOptionsProvider optionsProvider,
     ILogger<DigitalOceanQwen3TtsConversationProvider> logger) : IConversationTtsProvider
 {
+    /// <summary>
+    /// Authoritative list of Qwen3-TTS-Flash preset voice ids (case-sensitive).
+    /// Sourced from Alibaba DashScope Qwen3-TTS documentation 2026-05. Used by
+    /// the admin /tts/qwen3/voices/probe endpoint as the candidate set; each id
+    /// is verified live via a 1-character synthesis attempt.
+    /// </summary>
+    public static readonly IReadOnlyList<Qwen3VoicePreset> KnownPresetVoices = new[]
+    {
+        new Qwen3VoicePreset("Cherry",      "Cherry — sunny, friendly young woman",       "female"),
+        new Qwen3VoicePreset("Serena",      "Serena — gentle young woman",                "female"),
+        new Qwen3VoicePreset("Ethan",       "Ethan — warm, energetic young man",          "male"),
+        new Qwen3VoicePreset("Chelsie",     "Chelsie — two-dimensional virtual girl",     "female"),
+        new Qwen3VoicePreset("Momo",        "Momo — playful, mischievous",                "female"),
+        new Qwen3VoicePreset("Vivian",      "Vivian — confident, cute, slightly feisty",  "female"),
+        new Qwen3VoicePreset("Moon",        "Moon — bold and handsome man (Yuebai)",      "male"),
+        new Qwen3VoicePreset("Maia",        "Maia — intellect and gentleness blended",    "female"),
+        new Qwen3VoicePreset("Kai",         "Kai — soothing audio spa for your ears",     "male"),
+        new Qwen3VoicePreset("Nofish",      "Nofish — quirky designer",                   "male"),
+        new Qwen3VoicePreset("Bella",       "Bella — bubbly, mischievous young woman",    "female"),
+        new Qwen3VoicePreset("Jennifer",    "Jennifer — premium American English female", "female"),
+        new Qwen3VoicePreset("Ryan",        "Ryan — dramatic flair, rhythmic",            "male"),
+        new Qwen3VoicePreset("Katerina",    "Katerina — mature, sophisticated woman",     "female"),
+        new Qwen3VoicePreset("Aiden",       "Aiden — friendly American young man",        "male"),
+        new Qwen3VoicePreset("Eldric Sage", "Eldric Sage — calm and wise elder",          "female"),
+        new Qwen3VoicePreset("Mia",         "Mia — gentle, delicate young woman",         "female"),
+        new Qwen3VoicePreset("Mochi",       "Mochi — clever, quick-witted young adult",   "male"),
+        new Qwen3VoicePreset("Bellona",     "Bellona — powerful, heroic woman",           "female"),
+        new Qwen3VoicePreset("Vincent",     "Vincent — raspy, smoky, mysterious",         "male"),
+        new Qwen3VoicePreset("Bunny",       "Bunny — little girl overflowing with cute",  "female"),
+        new Qwen3VoicePreset("Neil",        "Neil — professional news anchor",            "female"),
+        new Qwen3VoicePreset("Elias",       "Elias — academic instructor",                "female"),
+        new Qwen3VoicePreset("Arthur",      "Arthur — earthy, village storyteller",       "male"),
+        new Qwen3VoicePreset("Nini",        "Nini — soft, clingy, affectionate",          "female"),
+        new Qwen3VoicePreset("Seren",       "Seren — gentle, soothing, sleep voice",      "female"),
+        new Qwen3VoicePreset("Pip",         "Pip — playful boy, childlike wonder",        "male"),
+        new Qwen3VoicePreset("Stella",      "Stella — youthful, earnest teenage girl",    "female"),
+        new Qwen3VoicePreset("Bodega",      "Bodega — passionate Spanish man",            "male"),
+        new Qwen3VoicePreset("Sonrisa",     "Sonrisa — cheerful Latin American woman",    "female"),
+        new Qwen3VoicePreset("Alek",        "Alek — cold + warm Russian man",             "male"),
+        new Qwen3VoicePreset("Dolce",       "Dolce — laid-back Italian man",              "male"),
+        new Qwen3VoicePreset("Sohee",       "Sohee — warm, expressive Korean unnie",      "female"),
+        new Qwen3VoicePreset("Ono Anna",    "Ono Anna — clever, spirited childhood friend", "female"),
+        new Qwen3VoicePreset("Lenn",        "Lenn — rebellious German youth",             "male"),
+        new Qwen3VoicePreset("Emilien",     "Emilien — romantic French big brother",      "male"),
+        new Qwen3VoicePreset("Andre",       "Andre — magnetic, steady male voice",        "male"),
+        new Qwen3VoicePreset("Radio Gol",   "Radio Gol — football commentary poet",       "male"),
+        new Qwen3VoicePreset("Jada",        "Jada — Shanghai auntie (energetic)",         "female"),
+        new Qwen3VoicePreset("Dylan",       "Dylan — Beijing hutong young man",           "male"),
+        new Qwen3VoicePreset("Li",          "Li — Nanjing yoga teacher",                  "male"),
+        new Qwen3VoicePreset("Marcus",      "Marcus — Shaanxi sincere man",               "male"),
+        new Qwen3VoicePreset("Roy",         "Roy — Taiwanese humorous guy",               "male"),
+        new Qwen3VoicePreset("Peter",       "Peter — Tianjin crosstalk foil",             "male"),
+        new Qwen3VoicePreset("Sunny",       "Sunny — Sichuanese voice",                   "female"),
+        new Qwen3VoicePreset("Eric",        "Eric — Chengdu charismatic man",             "male"),
+        new Qwen3VoicePreset("Rocky",       "Rocky — Cantonese witty A Qiang",            "male"),
+        new Qwen3VoicePreset("Kiki",        "Kiki — Hong Kong best-friend energy",        "female"),
+    };
+
     private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
     public string Name => "digitalocean-qwen3-tts";
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().ChatTtsBaseUrl)
@@ -118,21 +185,49 @@ public sealed class DigitalOceanQwen3TtsConversationProvider(
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ChatTtsApiKey);
 
         var url = $"{options.ChatTtsBaseUrl.TrimEnd('/')}/audio/speech";
-        // DigitalOcean's Qwen3 TTS gateway exposes only the `qwen3-tts-voicedesign`
-        // model id, which mandates a non-empty `voice` field (gateway overrides
-        // it with "default" internally) and an `instructions` prompt describing
-        // the desired voice. The model returns WAV (RIFF) audio regardless of
-        // the requested `response_format`.
-        var instructions = string.IsNullOrWhiteSpace(request.Voice)
-            ? "A clear, calm, professional English voice with neutral accent suitable for medical and clinical vocabulary pronunciation."
-            : request.Voice!;
-        var payload = JsonSerializer.Serialize(new
+
+        // Per-call overrides win over admin-configured options. This is how the
+        // Voice Studio "Preview" button + the vocabulary regenerate worker pin
+        // a specific voice for a single synthesis without mutating settings.
+        var variant = NormaliseVariant(request.ModelVariant ?? options.Qwen3ModelVariant);
+        string payload;
+        string modelTag;
+        if (variant == "voicedesign")
         {
-            model = "qwen3-tts-voicedesign",
-            input = request.Text,
-            voice = "default",
-            instructions,
-        });
+            // qwen3-tts-vd-realtime: prompt-driven, voice MUST be "default".
+            var instructions = !string.IsNullOrWhiteSpace(request.Instructions)
+                ? request.Instructions!
+                : !string.IsNullOrWhiteSpace(options.Qwen3VoiceInstructions)
+                    ? options.Qwen3VoiceInstructions
+                    : "A clear, calm, professional English voice with neutral accent suitable for medical and clinical vocabulary pronunciation.";
+            modelTag = "qwen3-tts-vd-realtime";
+            payload = JsonSerializer.Serialize(new
+            {
+                model = modelTag,
+                input = request.Text,
+                voice = "default",
+                instructions,
+            });
+        }
+        else
+        {
+            // qwen3-tts-flash-realtime: preset voice catalogue.
+            // request.Voice may be either a preset id (probe / preview path) OR
+            // legacy free-text from the old admin UI — in the latter case fall
+            // back to the configured preset.
+            var voiceId = !string.IsNullOrWhiteSpace(request.Voice) && IsKnownPreset(request.Voice)
+                ? request.Voice!
+                : !string.IsNullOrWhiteSpace(options.Qwen3VoiceId) && IsKnownPreset(options.Qwen3VoiceId)
+                    ? options.Qwen3VoiceId
+                    : "Cherry";
+            modelTag = "qwen3-tts-flash-realtime";
+            payload = JsonSerializer.Serialize(new
+            {
+                model = modelTag,
+                input = request.Text,
+                voice = voiceId,
+            });
+        }
         using var req = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json"),
@@ -141,17 +236,38 @@ public sealed class DigitalOceanQwen3TtsConversationProvider(
         if (!response.IsSuccessStatusCode)
         {
             var err = await response.Content.ReadAsStringAsync(ct);
-            logger.LogWarning("DigitalOcean Qwen3 TTS {Status}: {Err}", (int)response.StatusCode, err);
+            logger.LogWarning("DigitalOcean Qwen3 TTS {Status} ({Variant}): {Err}", (int)response.StatusCode, variant, err);
             throw new ConversationTtsException("digitalocean_qwen3_tts_error", $"DigitalOcean Qwen3 TTS {(int)response.StatusCode}");
         }
         var bytes = await response.Content.ReadAsByteArrayAsync(ct);
         var ct2 = response.Content.Headers.ContentType?.MediaType;
-        // Qwen3 voicedesign returns WAV bytes even when content-type is octet-stream.
+        // Qwen3 returns WAV (RIFF) bytes even when content-type is octet-stream.
         var mime = string.IsNullOrWhiteSpace(ct2) || ct2 == "application/octet-stream" ? "audio/wav" : ct2;
         return new ConversationTtsResult(bytes, mime,
-            AzureConversationTtsProvider.ApproxDurationMs(request.Text), Name, "qwen3-tts-voicedesign");
+            AzureConversationTtsProvider.ApproxDurationMs(request.Text), Name, modelTag);
+    }
+
+    private static string NormaliseVariant(string? v)
+    {
+        if (string.IsNullOrWhiteSpace(v)) return "flash";
+        var lower = v.Trim().ToLowerInvariant();
+        return lower switch
+        {
+            "voicedesign" or "voice-design" or "vd" or "qwen3-tts-vd-realtime" or "qwen3-tts-voicedesign" => "voicedesign",
+            _ => "flash",
+        };
+    }
+
+    private static bool IsKnownPreset(string voiceId)
+    {
+        foreach (var v in KnownPresetVoices)
+            if (string.Equals(v.Id, voiceId, StringComparison.Ordinal)) return true;
+        return false;
     }
 }
+
+/// <summary>Qwen3 flash preset voice descriptor — used by the admin /probe endpoint.</summary>
+public sealed record Qwen3VoicePreset(string Id, string Label, string Gender);
 
 public sealed class GptSoVitsConversationTtsProvider(
     IHttpClientFactory httpClientFactory,

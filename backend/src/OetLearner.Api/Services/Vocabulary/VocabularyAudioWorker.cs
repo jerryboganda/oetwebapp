@@ -124,7 +124,14 @@ public sealed class VocabularyAudioWorker(
         try
         {
             result = await provider.SynthesizeAsync(
-                new ConversationTtsRequest(job.Text, job.Voice ?? string.Empty, job.Locale ?? "en-GB"),
+                new ConversationTtsRequest(
+                    job.Text,
+                    job.Voice ?? string.Empty,
+                    job.Locale ?? "en-GB",
+                    Rate: null,
+                    Pitch: null,
+                    ModelVariant: job.ModelVariant,
+                    Instructions: job.Instructions),
                 ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -156,6 +163,13 @@ public sealed class VocabularyAudioWorker(
             return;
         }
 
+        // Capture the previous asset id BEFORE we reassign so we can
+        // ref-count and hard-delete it once the new asset is committed and
+        // no other rows still point at it. Critical for Voice Studio
+        // regeneration runs — otherwise old (bad-quality) audio bytes
+        // remain in storage indefinitely.
+        var previousAssetId = term.AudioMediaAssetId;
+
         var asset = await db.MediaAssets.FirstOrDefaultAsync(m => m.Sha256 == sha, ct).ConfigureAwait(false);
         if (asset is null)
         {
@@ -184,6 +198,23 @@ public sealed class VocabularyAudioWorker(
         {
             term.AudioUrl = url.Length > MaxAudioUrlChars ? url[..MaxAudioUrlChars] : url;
         }
+        // Provenance — lets the admin filter "regenerate where voice ≠ current"
+        // without re-listening to every term. AudioVoice for Qwen3 voicedesign
+        // is a SHA-8 of the instructions prompt so prompt changes register as
+        // a different voice.
+        term.AudioProvider = provider.Name;
+        term.AudioModelVariant = job.ModelVariant;
+        if (string.Equals(job.ModelVariant, "voicedesign", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(job.Instructions))
+        {
+            var promptHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(job.Instructions!))).ToLowerInvariant();
+            term.AudioVoice = "vd-" + promptHash[..8];
+        }
+        else
+        {
+            term.AudioVoice = job.Voice;
+        }
+        term.AudioGeneratedAt = DateTimeOffset.UtcNow;
         term.UpdatedAt = DateTimeOffset.UtcNow;
 
         db.AuditEvents.Add(new AuditEvent
@@ -210,6 +241,74 @@ public sealed class VocabularyAudioWorker(
         logger.LogInformation(
             "Vocab audio job {TermId} stored ({Bytes} bytes, sha {Sha}) via {Provider}",
             job.TermId, audio.LongLength, sha[..8], provider.Name);
+
+        // Best-effort orphaned-asset sweep — if the term used to point at a
+        // DIFFERENT MediaAsset and nothing else still references it, hard-delete
+        // both the DB row and the underlying storage object. Mirrors the
+        // canonical refcount check in MediaEndpoints.DeleteAsync().
+        if (!string.IsNullOrWhiteSpace(previousAssetId) && previousAssetId != asset.Id)
+        {
+            try
+            {
+                await TryDeleteOrphanedAssetAsync(db, storage, previousAssetId!, job.TermId, job.BatchId, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Storage cleanup is non-fatal — log and continue. The new
+                // audio is already live and audible to learners.
+                logger.LogWarning(ex, "Vocab audio job {TermId}: failed to sweep previous asset {Old}", job.TermId, previousAssetId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Delete a MediaAsset row + storage object IF nothing else still
+    /// references it. Mirrors the refcount tables checked by the public
+    /// /v1/media/{id} DELETE endpoint, plus the vocabulary cross-check.
+    /// </summary>
+    private async Task TryDeleteOrphanedAssetAsync(
+        LearnerDbContext db, IFileStorage storage, string assetId, string sourceTermId, string batchId, CancellationToken ct)
+    {
+        var asset = await db.MediaAssets.FirstOrDefaultAsync(m => m.Id == assetId, ct).ConfigureAwait(false);
+        if (asset is null) return;
+
+        var stillUsed = await db.VocabularyTerms.AnyAsync(t => t.AudioMediaAssetId == assetId, ct).ConfigureAwait(false)
+            || await db.ContentPaperAssets.AnyAsync(link => link.MediaAssetId == assetId, ct).ConfigureAwait(false)
+            || await db.WritingAttemptAssets.AnyAsync(link => link.MediaAssetId == assetId, ct).ConfigureAwait(false)
+            || await db.ReviewVoiceNotes.AnyAsync(note => note.MediaAssetId == assetId, ct).ConfigureAwait(false)
+            || await db.RecallDocuments.AnyAsync(doc => doc.MediaAssetId == assetId, ct).ConfigureAwait(false)
+            || await db.RulebookVersions.AnyAsync(rb => rb.ReferencePdfAssetId == assetId, ct).ConfigureAwait(false)
+            || await db.ResultTemplateAssets.AnyAsync(rt => rt.MediaAssetId == assetId, ct).ConfigureAwait(false)
+            || await db.SpeakingSharedResources.AnyAsync(sr => sr.MediaAssetId == assetId, ct).ConfigureAwait(false);
+
+        if (stillUsed)
+        {
+            logger.LogDebug("Vocab audio orphan-sweep: asset {AssetId} still referenced — keeping", assetId);
+            return;
+        }
+
+        var storagePath = asset.StoragePath;
+        db.MediaAssets.Remove(asset);
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"AUD-{Guid.NewGuid():N}",
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = "system",
+            ActorName = "vocab-audio-worker",
+            Action = "VocabAudioMediaAssetDeleted",
+            ResourceType = "MediaAsset",
+            ResourceId = assetId,
+            Details = JsonSerializer.Serialize(new
+            {
+                reason = "orphaned_after_regenerate",
+                supersededByTerm = sourceTermId,
+                batchId,
+                storagePath,
+            }),
+        });
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        try { storage.Delete(storagePath); }
+        catch (Exception ex) { logger.LogWarning(ex, "Vocab audio orphan-sweep: storage delete failed for {Path}", storagePath); }
     }
 
     private async Task HandleFailureAsync(

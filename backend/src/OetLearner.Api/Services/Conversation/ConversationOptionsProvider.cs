@@ -145,6 +145,12 @@ public sealed class ConversationOptionsProvider(
         if (!string.IsNullOrEmpty(chatKey)) o.ChatTtsApiKey = chatKey;
         if (!string.IsNullOrWhiteSpace(r.ChatTtsDefaultVoice)) o.ChatTtsDefaultVoice = r.ChatTtsDefaultVoice;
 
+        // Phase Q1 — Qwen3 Voice Studio overrides. Instructions are NOT a
+        // secret (free-form voice description), so no encryption layer.
+        if (!string.IsNullOrWhiteSpace(r.Qwen3ModelVariant)) o.Qwen3ModelVariant = r.Qwen3ModelVariant;
+        if (!string.IsNullOrWhiteSpace(r.Qwen3VoiceId)) o.Qwen3VoiceId = r.Qwen3VoiceId;
+        if (!string.IsNullOrWhiteSpace(r.Qwen3VoiceInstructions)) o.Qwen3VoiceInstructions = r.Qwen3VoiceInstructions;
+
         if (!string.IsNullOrWhiteSpace(r.GptSoVitsBaseUrl)) o.GptSoVitsBaseUrl = r.GptSoVitsBaseUrl;
         var gptsovitsKey = Unprotect(r.GptSoVitsApiKeyEncrypted);
         if (!string.IsNullOrEmpty(gptsovitsKey)) o.GptSoVitsApiKey = gptsovitsKey;
@@ -321,6 +327,9 @@ public sealed class ConversationOptionsProvider(
         ChatTtsBaseUrl = src.ChatTtsBaseUrl,
         ChatTtsApiKey = src.ChatTtsApiKey,
         ChatTtsDefaultVoice = src.ChatTtsDefaultVoice,
+        Qwen3ModelVariant = src.Qwen3ModelVariant,
+        Qwen3VoiceId = src.Qwen3VoiceId,
+        Qwen3VoiceInstructions = src.Qwen3VoiceInstructions,
         GptSoVitsBaseUrl = src.GptSoVitsBaseUrl,
         GptSoVitsApiKey = src.GptSoVitsApiKey,
         GptSoVitsDefaultVoice = src.GptSoVitsDefaultVoice,

@@ -89,6 +89,20 @@ public class ConversationSettingsRow
     public string? ChatTtsApiKeyEncrypted { get; set; }
     [MaxLength(64)] public string? ChatTtsDefaultVoice { get; set; }
 
+    // DigitalOcean Qwen3 TTS Voice Studio (Phase Q1 — 2026-05-24).
+    // Reuses ChatTtsBaseUrl / ChatTtsApiKey for the gateway credentials,
+    // but adds three Qwen3-specific knobs so admins can pin a consistent
+    // voice across vocabulary audio regeneration runs.
+    //  - <c>Qwen3ModelVariant</c>: "flash" (preset voice) or "voicedesign" (prompt).
+    //  - <c>Qwen3VoiceId</c>: case-sensitive preset id when variant = "flash"
+    //    (e.g. "Cherry", "Ethan", "Jada"). Ignored for voicedesign.
+    //  - <c>Qwen3VoiceInstructions</c>: free-form natural-language voice
+    //    description for voicedesign (≤ 100 chars per Alibaba spec).
+    //    Unbounded text column so the prompt is not silently truncated.
+    [MaxLength(32)] public string? Qwen3ModelVariant { get; set; }
+    [MaxLength(64)] public string? Qwen3VoiceId { get; set; }
+    public string? Qwen3VoiceInstructions { get; set; }
+
     // GPT-SoVITS
     [MaxLength(256)] public string? GptSoVitsBaseUrl { get; set; }
     public string? GptSoVitsApiKeyEncrypted { get; set; }

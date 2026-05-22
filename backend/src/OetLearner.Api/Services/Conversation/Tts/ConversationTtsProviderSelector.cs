@@ -6,6 +6,15 @@ public interface IConversationTtsProviderSelector
 {
     Task<IConversationTtsProvider?> TrySelectAsync(CancellationToken ct = default);
     Task<bool> IsTtsDisabledAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Resolve a specific provider by name without consulting the admin
+    /// TtsProvider preference. Used by the Voice Studio probe/preview
+    /// endpoints so admins can audition the Qwen3 provider even when the
+    /// active TtsProvider is something else. Returns the provider only if
+    /// it is registered AND configured.
+    /// </summary>
+    Task<IConversationTtsProvider?> TrySelectAsync(string providerName, CancellationToken ct = default);
 }
 
 public sealed class ConversationTtsProviderSelector(
@@ -46,5 +55,15 @@ public sealed class ConversationTtsProviderSelector(
             if (p is { IsConfigured: true }) return p;
         }
         return Find("mock");
+    }
+
+    public Task<IConversationTtsProvider?> TrySelectAsync(string providerName, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(providerName)) return Task.FromResult<IConversationTtsProvider?>(null);
+        var p = providers.FirstOrDefault(x => string.Equals(x.Name, providerName, StringComparison.OrdinalIgnoreCase));
+        if (p is null) return Task.FromResult<IConversationTtsProvider?>(null);
+        if (!p.IsConfigured && !string.Equals(p.Name, "mock", StringComparison.OrdinalIgnoreCase))
+            return Task.FromResult<IConversationTtsProvider?>(null);
+        return Task.FromResult<IConversationTtsProvider?>(p);
     }
 }

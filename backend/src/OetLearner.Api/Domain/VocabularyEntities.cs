@@ -61,6 +61,20 @@ public class VocabularyTerm
     [MaxLength(64)]
     public string? AudioMediaAssetId { get; set; }
 
+    // Audio provenance — recorded by the VocabularyAudioWorker so admins can
+    // filter "regenerate where voice ≠ current" without re-listening to every
+    // term. Set whenever the worker successfully writes (or rewrites) audio.
+    //   AudioProvider       e.g. "digitalocean-qwen3-tts" | "azure" | "elevenlabs"
+    //   AudioVoice          for Qwen3 flash: voice id ("Cherry"). For Qwen3
+    //                       voicedesign: SHA-8 prefix of the instructions prompt
+    //                       so different prompts compare as different voices.
+    //   AudioModelVariant   "flash" | "voicedesign" for Qwen3; null for others.
+    //   AudioGeneratedAt    UTC timestamp of the last successful synthesis.
+    [MaxLength(32)] public string? AudioProvider { get; set; }
+    [MaxLength(64)] public string? AudioVoice { get; set; }
+    [MaxLength(32)] public string? AudioModelVariant { get; set; }
+    public DateTimeOffset? AudioGeneratedAt { get; set; }
+
     [MaxLength(256)]
     public string? ImageUrl { get; set; }
 

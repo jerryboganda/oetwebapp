@@ -8615,7 +8615,7 @@ export async function updateAdminLaunchReadinessSettings(
   });
 }
 
-export async function adminConversationTtsPreview(body: { text?: string; voice?: string; locale?: string }) {
+export async function adminConversationTtsPreview(body: { text?: string; voice?: string; locale?: string; modelVariant?: string; instructions?: string }) {
   const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
   const { ensureFreshAccessToken } = await import('@/lib/auth-client');
   const token = await ensureFreshAccessToken();
@@ -8630,6 +8630,91 @@ export async function adminConversationTtsPreview(body: { text?: string; voice?:
   });
   if (!res.ok) throw new Error(`TTS preview failed (${res.status})`);
   return res.blob();
+}
+
+// ── Qwen3 Voice Studio (Phase Q1) ──────────────────────────────────
+// Probe the 46 known flash-preset voices so the admin can audition each
+// one in the UI. Each probe synthesises a 1-char clip server-side via the
+// already-registered Qwen3 provider (concurrency-capped). Returns voice
+// metadata + an availability flag + the synthesis time so the admin can
+// see at a glance which presets are healthy on the upstream provider.
+export interface AdminQwen3VoiceProbeResult {
+  id: string;
+  label: string;
+  gender: 'male' | 'female' | 'neutral' | string;
+  available: boolean;
+  errorMessage?: string | null;
+  durationMs?: number | null;
+  bytes?: number;
+}
+
+export async function probeAdminQwen3Voices(): Promise<{ voices: AdminQwen3VoiceProbeResult[] }> {
+  return apiRequest<{ voices: AdminQwen3VoiceProbeResult[] }>('/v1/admin/conversation/tts/qwen3/voices/probe');
+}
+
+// Per-voice preview — returns a Blob the caller can wrap in an Audio() and
+// play. Reuses the same admin DTO as the generic TTS preview so the
+// backend handler can stay simple.
+export async function previewAdminQwen3Voice(body: {
+  modelVariant: 'flash' | 'voicedesign';
+  voiceId?: string;
+  instructions?: string;
+  text?: string;
+  locale?: string;
+}): Promise<Blob> {
+  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
+  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
+  const token = await ensureFreshAccessToken();
+  const res = await fetch(`${base}/v1/admin/conversation/tts/qwen3/preview-voice`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      modelVariant: body.modelVariant,
+      voice: body.voiceId ?? '',
+      instructions: body.instructions ?? '',
+      text: body.text ?? '',
+      locale: body.locale ?? 'en-GB',
+    }),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    let msg = `Qwen3 preview failed (${res.status})`;
+    try {
+      const j = (await res.json()) as { message?: string };
+      if (j?.message) msg = j.message;
+    } catch { /* non-json error body */ }
+    throw new Error(msg);
+  }
+  return res.blob();
+}
+
+// Bulk regenerate vocabulary audio with a pinned voice. dryRun=true returns
+// the projected count without enqueuing — used by the confirm modal so the
+// admin sees exactly how many terms will be (re)synthesised before they
+// commit.
+export interface AdminVocabularyAudioRegenerateResult {
+  batchId: string;
+  queuedCount: number;
+  scope: 'all' | 'missing' | 'different-voice';
+  dryRun: boolean;
+  modelVariant: 'flash' | 'voicedesign';
+}
+
+export async function regenerateVocabularyAudio(body: {
+  scope: 'all' | 'missing' | 'different-voice';
+  modelVariant: 'flash' | 'voicedesign';
+  voiceId?: string;
+  instructions?: string;
+  professionId?: string;
+  dryRun?: boolean;
+}): Promise<AdminVocabularyAudioRegenerateResult> {
+  return apiRequest<AdminVocabularyAudioRegenerateResult>('/v1/admin/vocabulary/audio/regenerate', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 export async function fetchAdminConversationSessions(params?: {

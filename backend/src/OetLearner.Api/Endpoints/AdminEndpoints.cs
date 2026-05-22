@@ -1303,6 +1303,19 @@ public static class AdminEndpoints
                 if (request.CosyVoiceDefaultVoice is not null) row.CosyVoiceDefaultVoice = request.CosyVoiceDefaultVoice;
                 if (request.ChatTtsBaseUrl is not null) row.ChatTtsBaseUrl = request.ChatTtsBaseUrl;
                 if (request.ChatTtsDefaultVoice is not null) row.ChatTtsDefaultVoice = request.ChatTtsDefaultVoice;
+                // Phase Q1 — Qwen3 Voice Studio. Variant is normalised at
+                // provider call time (flash | voicedesign); accept anything
+                // here for forward-compat and let the provider normalise.
+                if (request.Qwen3ModelVariant is not null) row.Qwen3ModelVariant = request.Qwen3ModelVariant;
+                if (request.Qwen3VoiceId is not null) row.Qwen3VoiceId = request.Qwen3VoiceId;
+                if (request.Qwen3VoiceInstructions is not null)
+                {
+                    // Hard cap at 1000 chars — the model spec recommends ≤ 100
+                    // but we leave headroom for verbose admins; the database
+                    // column is unbounded text so storage isn't the limit.
+                    var ins = request.Qwen3VoiceInstructions;
+                    row.Qwen3VoiceInstructions = ins.Length > 1000 ? ins[..1000] : ins;
+                }
                 if (request.GptSoVitsBaseUrl is not null) row.GptSoVitsBaseUrl = request.GptSoVitsBaseUrl;
                 if (request.GptSoVitsDefaultVoice is not null) row.GptSoVitsDefaultVoice = request.GptSoVitsDefaultVoice;
                 if (request.MaxAudioBytes.HasValue) row.MaxAudioBytes = request.MaxAudioBytes;
@@ -1468,13 +1481,134 @@ public static class AdminEndpoints
                 var voice = request.Voice ?? "";
                 var locale = string.IsNullOrWhiteSpace(request.Locale) ? "en-GB" : request.Locale;
                 var result = await provider.SynthesizeAsync(
-                    new OetLearner.Api.Services.Conversation.Tts.ConversationTtsRequest(text, voice, locale),
+                    new OetLearner.Api.Services.Conversation.Tts.ConversationTtsRequest(
+                        text, voice, locale,
+                        ModelVariant: request.ModelVariant,
+                        Instructions: request.Instructions),
                     ct);
                 if (result.Audio.Length == 0) return Results.NoContent();
                 return Results.File(result.Audio, result.MimeType, "tts-preview.mp3");
             })
             .RequireRateLimiting("PerUserWrite")
             .WithAdminRead("AdminContentRead");
+
+        // ── Qwen3 Voice Studio (Phase Q1) ───────────────────
+        // Probe the 46 known flash-preset voice ids by synthesising 1 char.
+        // Concurrency-limited so we don't trip the DO Inference rate limit.
+        admin.MapGet("/conversation/tts/qwen3/voices/probe", async (
+                OetLearner.Api.Services.Conversation.Tts.IConversationTtsProviderSelector selector,
+                CancellationToken ct) =>
+            {
+                // Find the Qwen3 provider specifically (it may not be the
+                // currently-active one if admin is auditioning).
+                var provider = await selector.TrySelectAsync("digitalocean-qwen3-tts", ct).ConfigureAwait(false);
+                if (provider is null) return Results.BadRequest(new { error = "qwen3_not_configured", message = "Set ChatTTS Base URL + API Key first." });
+                var presets = OetLearner.Api.Services.Conversation.Tts.DigitalOceanQwen3TtsConversationProvider.KnownPresetVoices;
+                using var gate = new System.Threading.SemaphoreSlim(4, 4);
+                var probes = presets.Select(async preset =>
+                {
+                    await gate.WaitAsync(ct).ConfigureAwait(false);
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    try
+                    {
+                        var res = await provider.SynthesizeAsync(
+                            new OetLearner.Api.Services.Conversation.Tts.ConversationTtsRequest(
+                                "Hi", preset.Id, "en-GB", ModelVariant: "flash"),
+                            ct).ConfigureAwait(false);
+                        sw.Stop();
+                        return new { id = preset.Id, label = preset.Label, gender = preset.Gender, available = res.Audio.Length > 0, errorMessage = (string?)null, durationMs = (long?)sw.ElapsedMilliseconds, bytes = res.Audio.Length };
+                    }
+                    catch (Exception ex)
+                    {
+                        sw.Stop();
+                        var msg = ex.Message ?? "unknown";
+                        if (msg.Length > 200) msg = msg[..200];
+                        return new { id = preset.Id, label = preset.Label, gender = preset.Gender, available = false, errorMessage = (string?)msg, durationMs = (long?)sw.ElapsedMilliseconds, bytes = 0 };
+                    }
+                    finally { gate.Release(); }
+                }).ToList();
+                var results = await Task.WhenAll(probes).ConfigureAwait(false);
+                return Results.Ok(new { voices = results });
+            })
+            .RequireRateLimiting("PerUserWrite")
+            .WithAdminRead("AdminContentRead");
+
+        // Per-voice preview — lets the admin audition a flash preset OR a
+        // voicedesign prompt before committing it to settings or pressing
+        // "Regenerate". Reuses the AdminConversationTtsPreviewRequest DTO.
+        admin.MapPost("/conversation/tts/qwen3/preview-voice", async (
+                OetLearner.Api.Contracts.AdminConversationTtsPreviewRequest request,
+                OetLearner.Api.Services.Conversation.Tts.IConversationTtsProviderSelector selector,
+                CancellationToken ct) =>
+            {
+                var provider = await selector.TrySelectAsync("digitalocean-qwen3-tts", ct).ConfigureAwait(false);
+                if (provider is null) return Results.BadRequest(new { error = "qwen3_not_configured" });
+                var text = string.IsNullOrWhiteSpace(request.Text)
+                    ? "Good morning. Take a deep breath in, then slowly let it out."
+                    : request.Text;
+                var locale = string.IsNullOrWhiteSpace(request.Locale) ? "en-GB" : request.Locale;
+                var voice = request.Voice ?? string.Empty;
+                try
+                {
+                    var res = await provider.SynthesizeAsync(
+                        new OetLearner.Api.Services.Conversation.Tts.ConversationTtsRequest(
+                            text, voice, locale,
+                            ModelVariant: request.ModelVariant,
+                            Instructions: request.Instructions),
+                        ct).ConfigureAwait(false);
+                    if (res.Audio.Length == 0) return Results.NoContent();
+                    return Results.File(res.Audio, res.MimeType, "qwen3-preview.wav");
+                }
+                catch (Exception ex)
+                {
+                    return Results.BadRequest(new { error = "qwen3_preview_failed", message = ex.Message });
+                }
+            })
+            .RequireRateLimiting("PerUserWrite")
+            .WithAdminRead("AdminContentRead");
+
+        // Bulk regenerate vocabulary audio with a pinned Qwen3 voice. The
+        // worker handles the per-term TTS + hard-deletes the orphaned old
+        // MediaAsset rows so storage doesn't grow unbounded.
+        admin.MapPost("/vocabulary/audio/regenerate", async (
+                HttpContext http,
+                OetLearner.Api.Contracts.AdminVocabularyAudioRegenerateRequest request,
+                AdminService service,
+                OetLearner.Api.Data.LearnerDbContext db,
+                CancellationToken ct) =>
+            {
+                if (request is null) return Results.BadRequest(new { error = "missing_body" });
+                try
+                {
+                    var result = await service.EnqueueVocabularyAudioRegenerateAsync(
+                        scope: request.Scope ?? "missing",
+                        modelVariant: request.ModelVariant ?? "flash",
+                        voiceId: request.VoiceId,
+                        instructions: request.Instructions,
+                        professionId: request.ProfessionId,
+                        dryRun: request.DryRun ?? false,
+                        ct: ct);
+                    if (request.DryRun != true)
+                    {
+                        db.AuditEvents.Add(new OetLearner.Api.Domain.AuditEvent
+                        {
+                            Id = $"AUD-{Guid.NewGuid():N}",
+                            OccurredAt = DateTimeOffset.UtcNow,
+                            ActorId = http.AdminId(),
+                            ActorName = http.AdminName(),
+                            Action = "VocabAudioRegenerateRequested",
+                            ResourceType = "VocabularyTerm",
+                            ResourceId = "*",
+                            Details = JsonSupport.Serialize(new { request.Scope, request.ModelVariant, request.VoiceId, hasInstructions = !string.IsNullOrWhiteSpace(request.Instructions), request.ProfessionId, result }),
+                        });
+                        await db.SaveChangesAsync(ct);
+                    }
+                    return Results.Ok(result);
+                }
+                catch (ArgumentException ex) { return Results.BadRequest(new { error = "invalid_request", message = ex.Message }); }
+            })
+            .RequireRateLimiting("PerUserWrite")
+            .WithAdminWrite("AdminContentWrite");
 
         // ── Pronunciation Drill Admin CRUD ──────────────────
 

@@ -65,6 +65,15 @@ public class ConversationOptions
     public string ChatTtsBaseUrl { get; set; } = string.Empty;
     public string ChatTtsApiKey { get; set; } = string.Empty;
     public string ChatTtsDefaultVoice { get; set; } = "default";
+
+    // DigitalOcean Qwen3 TTS — Voice Studio overrides (Phase Q1).
+    // Variant: "flash" → preset voice catalogue (use Qwen3VoiceId).
+    //          "voicedesign" → free-form prompt (use Qwen3VoiceInstructions).
+    // Defaults pick a sensible flash preset so vocabulary audio is consistent
+    // out of the box even before an admin opens the Voice Studio.
+    public string Qwen3ModelVariant { get; set; } = "flash";
+    public string Qwen3VoiceId { get; set; } = "Cherry";
+    public string Qwen3VoiceInstructions { get; set; } = string.Empty;
     public string GptSoVitsBaseUrl { get; set; } = string.Empty;
     public string GptSoVitsApiKey { get; set; } = string.Empty;
     public string GptSoVitsDefaultVoice { get; set; } = "default";

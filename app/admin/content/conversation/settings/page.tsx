@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Save, Volume2, Settings as SettingsIcon, ArrowLeft } from 'lucide-react';
+import { AlertTriangle, Save, Volume2, Settings as SettingsIcon, ArrowLeft, RefreshCw, Sparkles, Mic2 } from 'lucide-react';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
@@ -12,10 +12,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Modal } from '@/components/ui/modal';
 import {
   fetchAdminConversationSettings,
   updateAdminConversationSettings,
   adminConversationTtsPreview,
+  probeAdminQwen3Voices,
+  previewAdminQwen3Voice,
+  regenerateVocabularyAudio,
+  type AdminQwen3VoiceProbeResult,
+  type AdminVocabularyAudioRegenerateResult,
 } from '@/lib/api';
 
 type Settings = {
@@ -64,6 +70,9 @@ type Settings = {
   cosyVoiceDefaultVoice?: string;
   chatTtsBaseUrl?: string;
   chatTtsDefaultVoice?: string;
+  qwen3ModelVariant?: 'flash' | 'voicedesign' | string;
+  qwen3VoiceId?: string;
+  qwen3VoiceInstructions?: string;
   gptSoVitsBaseUrl?: string;
   gptSoVitsDefaultVoice?: string;
   maxAudioBytes?: number;
@@ -421,12 +430,30 @@ export default function AdminConversationSettingsPage() {
                   <Input label="ChatTTS Base URL" value={String(v('chatTtsBaseUrl') ?? '')} onChange={(e) => setField('chatTtsBaseUrl', e.target.value)} />
                   <Input label="ChatTTS Default Voice" value={String(v('chatTtsDefaultVoice') ?? '')} onChange={(e) => setField('chatTtsDefaultVoice', e.target.value)} />
                   <Input label="DigitalOcean Qwen3 TTS Base URL" value={String(v('chatTtsBaseUrl') ?? '')} onChange={(e) => setField('chatTtsBaseUrl', e.target.value)} placeholder="https://<endpoint>/v1" />
-                  <Input label="DigitalOcean Qwen3 TTS Voice" value={String(v('chatTtsDefaultVoice') ?? '')} onChange={(e) => setField('chatTtsDefaultVoice', e.target.value)} placeholder="alloy" />
                   <KeyInput label="GPT-SoVITS API Key" present={settings.gptSoVitsApiKeyPresent} draftKey="gptSoVitsApiKey" draft={draft} set={setSecret} />
                   <Input label="GPT-SoVITS Base URL" value={String(v('gptSoVitsBaseUrl') ?? '')} onChange={(e) => setField('gptSoVitsBaseUrl', e.target.value)} />
                   <Input label="GPT-SoVITS Default Voice" value={String(v('gptSoVitsDefaultVoice') ?? '')} onChange={(e) => setField('gptSoVitsDefaultVoice', e.target.value)} />
                 </Grid>
               </Section>
+
+              {/* ── Qwen3 Voice Studio (Phase Q1) ──────────────── */}
+              <Qwen3VoiceStudio
+                variant={String(v('qwen3ModelVariant') ?? 'flash')}
+                voiceId={String(v('qwen3VoiceId') ?? '')}
+                instructions={String(v('qwen3VoiceInstructions') ?? '')}
+                onChangeVariant={(val) => setField('qwen3ModelVariant', val)}
+                onChangeVoice={(val) => setField('qwen3VoiceId', val)}
+                onChangeInstructions={(val) => setField('qwen3VoiceInstructions', val)}
+                onToast={setToast}
+              />
+
+              {/* ── Regenerate Vocabulary Audio (Phase Q1) ────────── */}
+              <RegenerateVocabularyAudioPanel
+                variant={(String(v('qwen3ModelVariant') ?? 'flash') === 'voicedesign' ? 'voicedesign' : 'flash')}
+                voiceId={String(v('qwen3VoiceId') ?? '')}
+                instructions={String(v('qwen3VoiceInstructions') ?? '')}
+                onToast={setToast}
+              />
             </div>
           )}
         </AdminRoutePanel>
@@ -477,5 +504,349 @@ function KeyInput({
         className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
       />
     </div>
+  );
+}
+
+// ── Qwen3 Voice Studio (Phase Q1) ─────────────────────────────────────
+// Lets the admin fetch all 46 known flash-preset voices, audition each
+// one, and pin the platform-wide active voice. When the variant is
+// "voicedesign" we show a free-text instructions box instead of the
+// preset grid because that model is prompt-driven (note: voicedesign
+// outputs are inconsistent across calls — this is why "flash" + a single
+// preset is the recommended setting for production audio generation).
+function Qwen3VoiceStudio({
+  variant,
+  voiceId,
+  instructions,
+  onChangeVariant,
+  onChangeVoice,
+  onChangeInstructions,
+  onToast,
+}: {
+  variant: string;
+  voiceId: string;
+  instructions: string;
+  onChangeVariant: (v: 'flash' | 'voicedesign') => void;
+  onChangeVoice: (v: string) => void;
+  onChangeInstructions: (v: string) => void;
+  onToast: (t: { variant: 'success' | 'error'; message: string }) => void;
+}) {
+  const [probing, setProbing] = useState(false);
+  const [voices, setVoices] = useState<AdminQwen3VoiceProbeResult[] | null>(null);
+  const [previewing, setPreviewing] = useState<string | null>(null);
+  const normalisedVariant: 'flash' | 'voicedesign' =
+    variant === 'voicedesign' ? 'voicedesign' : 'flash';
+
+  async function handleFetchVoices() {
+    setProbing(true);
+    try {
+      const res = await probeAdminQwen3Voices();
+      setVoices(res.voices);
+      const ok = res.voices.filter((v) => v.available).length;
+      onToast({ variant: 'success', message: `Probed ${res.voices.length} voices — ${ok} available.` });
+    } catch (err) {
+      onToast({ variant: 'error', message: err instanceof Error ? err.message : 'Voice probe failed.' });
+    } finally {
+      setProbing(false);
+    }
+  }
+
+  async function handlePreview(id: string) {
+    setPreviewing(id);
+    try {
+      const blob = await previewAdminQwen3Voice({
+        modelVariant: 'flash',
+        voiceId: id,
+        text: 'Good morning. Take a deep breath in, then slowly let it out.',
+        locale: 'en-GB',
+      });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      await audio.play();
+    } catch (err) {
+      onToast({ variant: 'error', message: err instanceof Error ? err.message : 'Preview failed.' });
+    } finally {
+      setPreviewing(null);
+    }
+  }
+
+  async function handleVoicedesignPreview() {
+    if (!instructions.trim()) {
+      onToast({ variant: 'error', message: 'Enter voicedesign instructions first.' });
+      return;
+    }
+    setPreviewing('__voicedesign__');
+    try {
+      const blob = await previewAdminQwen3Voice({
+        modelVariant: 'voicedesign',
+        instructions,
+        text: 'Good morning. Take a deep breath in, then slowly let it out.',
+        locale: 'en-GB',
+      });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      await audio.play();
+    } catch (err) {
+      onToast({ variant: 'error', message: err instanceof Error ? err.message : 'Preview failed.' });
+    } finally {
+      setPreviewing(null);
+    }
+  }
+
+  return (
+    <section>
+      <h3 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-muted">
+        <Mic2 className="h-3.5 w-3.5" /> Qwen3 Voice Studio
+      </h3>
+      <div className="space-y-3">
+        <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-800/60 dark:bg-blue-950/30 dark:text-blue-100">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <strong>flash</strong> uses a fixed preset voice (deterministic, consistent — recommended). <strong>voicedesign</strong> is prompt-driven and outputs vary between calls; use only when no preset matches your need.
+          </span>
+        </div>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">Model Variant</span>
+          <select
+            value={normalisedVariant}
+            onChange={(e) => onChangeVariant(e.target.value as 'flash' | 'voicedesign')}
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+          >
+            <option value="flash">flash (preset voices — consistent)</option>
+            <option value="voicedesign">voicedesign (instructions — variable)</option>
+          </select>
+        </label>
+
+        {normalisedVariant === 'flash' && (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" onClick={handleFetchVoices} disabled={probing}>
+                <RefreshCw className={`mr-1 h-4 w-4 ${probing ? 'animate-spin' : ''}`} />
+                {probing ? 'Probing 46 voices…' : 'Fetch Voices'}
+              </Button>
+              {voiceId && (
+                <span className="text-xs text-muted">
+                  Current: <code className="rounded bg-surface px-1.5 py-0.5">{voiceId}</code>
+                </span>
+              )}
+            </div>
+            {voices && voices.length > 0 && (
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {voices.map((vc) => {
+                  const isSelected = vc.id === voiceId;
+                  return (
+                    <div
+                      key={vc.id}
+                      className={`rounded-xl border p-3 ${
+                        isSelected ? 'border-primary bg-primary/5' : 'border-border bg-surface'
+                      } ${!vc.available ? 'opacity-60' : ''}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-medium">{vc.label}</div>
+                          <div className="text-xs text-muted">
+                            {vc.id} · {vc.gender}
+                          </div>
+                        </div>
+                        {vc.available ? (
+                          <Badge variant="success" size="sm">ok</Badge>
+                        ) : (
+                          <Badge variant="danger" size="sm">down</Badge>
+                        )}
+                      </div>
+                      {!vc.available && vc.errorMessage && (
+                        <div className="mt-1 truncate text-xs text-danger" title={vc.errorMessage}>
+                          {vc.errorMessage}
+                        </div>
+                      )}
+                      <div className="mt-2 flex items-center gap-2">
+                        <Button
+                          variant={isSelected ? 'primary' : 'secondary'}
+                          size="sm"
+                          onClick={() => onChangeVoice(vc.id)}
+                          disabled={!vc.available}
+                        >
+                          {isSelected ? 'Selected' : 'Select'}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handlePreview(vc.id)}
+                          disabled={!vc.available || previewing === vc.id}
+                        >
+                          <Volume2 className="mr-1 h-3.5 w-3.5" />
+                          {previewing === vc.id ? '…' : 'Preview'}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {voices && voices.length === 0 && (
+              <p className="text-sm text-muted">No voices returned by the probe.</p>
+            )}
+          </>
+        )}
+
+        {normalisedVariant === 'voicedesign' && (
+          <div className="space-y-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">
+                Voice Instructions (≤ 1000 chars; spec recommends ≤ 100)
+              </span>
+              <textarea
+                value={instructions}
+                onChange={(e) => onChangeInstructions(e.target.value.slice(0, 1000))}
+                rows={4}
+                placeholder="A warm, calm British nurse in her 30s speaking gently and clearly."
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+              />
+              <span className="mt-1 block text-right text-xs text-muted">{instructions.length} / 1000</span>
+            </label>
+            <Button variant="secondary" onClick={handleVoicedesignPreview} disabled={previewing === '__voicedesign__'}>
+              <Volume2 className="mr-1 h-4 w-4" />
+              {previewing === '__voicedesign__' ? 'Synthesising…' : 'Preview voicedesign'}
+            </Button>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ── Regenerate Vocabulary Audio (Phase Q1) ───────────────────────────
+// Bulk action: re-synthesises vocabulary audio using the currently
+// configured Qwen3 voice. Always runs a dry-run first so the admin sees
+// the projected job count and confirms in a modal before enqueueing.
+function RegenerateVocabularyAudioPanel({
+  variant,
+  voiceId,
+  instructions,
+  onToast,
+}: {
+  variant: 'flash' | 'voicedesign';
+  voiceId: string;
+  instructions: string;
+  onToast: (t: { variant: 'success' | 'error'; message: string }) => void;
+}) {
+  const [scope, setScope] = useState<'all' | 'missing' | 'different-voice'>('missing');
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<AdminVocabularyAudioRegenerateResult | null>(null);
+
+  const disabled = useMemo(() => {
+    if (variant === 'flash' && !voiceId) return 'Select a Qwen3 voice first.';
+    if (variant === 'voicedesign' && !instructions.trim()) return 'Set voicedesign instructions first.';
+    return null;
+  }, [variant, voiceId, instructions]);
+
+  async function handleDryRun() {
+    if (disabled) {
+      onToast({ variant: 'error', message: disabled });
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await regenerateVocabularyAudio({
+        scope,
+        modelVariant: variant,
+        voiceId: variant === 'flash' ? voiceId : undefined,
+        instructions: variant === 'voicedesign' ? instructions : undefined,
+        dryRun: true,
+      });
+      setConfirm(res);
+    } catch (err) {
+      onToast({ variant: 'error', message: err instanceof Error ? err.message : 'Dry-run failed.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCommit() {
+    if (!confirm) return;
+    setBusy(true);
+    try {
+      const res = await regenerateVocabularyAudio({
+        scope,
+        modelVariant: variant,
+        voiceId: variant === 'flash' ? voiceId : undefined,
+        instructions: variant === 'voicedesign' ? instructions : undefined,
+        dryRun: false,
+      });
+      onToast({
+        variant: 'success',
+        message: `Queued ${res.queuedCount} terms for regeneration (batch ${res.batchId}). Worker drains in background.`,
+      });
+      setConfirm(null);
+    } catch (err) {
+      onToast({ variant: 'error', message: err instanceof Error ? err.message : 'Enqueue failed.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <h3 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-muted">
+        <RefreshCw className="h-3.5 w-3.5" /> Regenerate Vocabulary Audio
+      </h3>
+      <div className="space-y-3">
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Re-synthesises learner-facing vocabulary audio with the Qwen3 voice configured above. Old MediaAsset rows are hard-deleted from storage once the new audio is committed and no other content references them. Capped at 10,000 terms per click.
+          </span>
+        </div>
+        <fieldset className="space-y-1">
+          <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Scope</legend>
+          {([
+            ['missing', 'Only terms with NO audio'],
+            ['different-voice', 'Terms whose current voice ≠ selected voice'],
+            ['all', 'ALL active vocabulary terms (heavy)'],
+          ] as const).map(([val, label]) => (
+            <label key={val} className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="regen-scope"
+                value={val}
+                checked={scope === val}
+                onChange={() => setScope(val)}
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+        <Button variant="primary" onClick={handleDryRun} disabled={busy}>
+          <RefreshCw className={`mr-1 h-4 w-4 ${busy ? 'animate-spin' : ''}`} />
+          {busy ? 'Counting…' : 'Preview count'}
+        </Button>
+      </div>
+
+      <Modal open={confirm !== null} onClose={() => setConfirm(null)} title="Confirm vocabulary audio regeneration">
+        {confirm && (
+          <div className="space-y-3 text-sm">
+            <p>
+              This will enqueue <strong>{confirm.queuedCount.toLocaleString()}</strong> vocabulary terms for re-synthesis
+              using <code className="rounded bg-surface px-1.5 py-0.5">{variant}</code>
+              {variant === 'flash' && voiceId && (
+                <> with voice <code className="rounded bg-surface px-1.5 py-0.5">{voiceId}</code></>
+              )}
+              .
+            </p>
+            <p className="text-xs text-muted">
+              Worker drains the queue in the background (1 in-flight, 8 retries, 429 cooldown). Old audio remains audible to learners until the new audio is committed for each term.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setConfirm(null)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleCommit} disabled={busy || confirm.queuedCount === 0}>
+                {busy ? 'Enqueuing…' : `Enqueue ${confirm.queuedCount.toLocaleString()} jobs`}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </section>
   );
 }

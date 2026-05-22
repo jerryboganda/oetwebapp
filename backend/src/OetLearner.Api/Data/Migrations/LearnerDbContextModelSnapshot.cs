@@ -4171,6 +4171,17 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("Qwen3ModelVariant")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Qwen3VoiceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Qwen3VoiceInstructions")
+                        .HasColumnType("text");
+
                     b.Property<string>("CosyVoiceApiKeyEncrypted")
                         .HasColumnType("text");
 
@@ -15673,6 +15684,21 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("AudioMediaAssetId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AudioProvider")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("AudioVoice")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AudioModelVariant")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset?>("AudioGeneratedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("AudioSentenceUrl")
                         .HasMaxLength(256)
