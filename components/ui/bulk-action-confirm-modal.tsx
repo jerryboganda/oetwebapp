@@ -1,70 +1,53 @@
 'use client';
 
-import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
-import { Modal } from './modal';
 import { Button } from './button';
+import { Modal } from './modal';
 
 interface BulkActionConfirmModalProps {
   open: boolean;
-  onClose: () => void;
   title: string;
   description: string;
   confirmLabel?: string;
-  variant?: 'danger' | 'primary';
-  count: number;
-  onConfirm: () => Promise<void>;
+  cancelLabel?: string;
+  destructive?: boolean;
+  loading?: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
 }
 
 export function BulkActionConfirmModal({
   open,
-  onClose,
   title,
   description,
   confirmLabel = 'Confirm',
-  variant = 'danger',
-  count,
+  cancelLabel = 'Cancel',
+  destructive,
+  loading,
   onConfirm,
+  onClose,
 }: BulkActionConfirmModalProps) {
-  const [loading, setLoading] = useState(false);
-
-  async function handleConfirm() {
-    setLoading(true);
-    try {
-      await onConfirm();
-    } finally {
-      setLoading(false);
-      onClose();
-    }
-  }
-
   return (
-    <Modal open={open} onClose={onClose} title={title} size="sm">
-      <div className="space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
-            <AlertTriangle className="h-5 w-5 text-red-600" />
-          </div>
-          <div className="text-sm text-muted">
-            <p>{description}</p>
-            <p className="mt-2 font-semibold text-navy">
-              This will affect {count} {count === 1 ? 'item' : 'items'}.
-            </p>
-          </div>
+    <Modal open={open} onClose={loading ? () => {} : onClose} title={title} size="sm">
+      <div className="space-y-5">
+        <div className="flex gap-3 rounded-xl border border-border bg-background-light p-4">
+          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <p className="text-sm leading-6 text-muted">{description}</p>
         </div>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="secondary" size="sm" onClick={onClose} disabled={loading}>
-            Cancel
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
+            {cancelLabel}
           </Button>
           <Button
-            variant={variant === 'danger' ? 'destructive' : 'primary'}
-            size="sm"
-            onClick={handleConfirm}
-            disabled={loading}
+            type="button"
+            variant={destructive ? 'destructive' : 'primary'}
+            loading={loading}
+            onClick={onConfirm}
           >
-            {loading ? 'Processing…' : confirmLabel}
+            {confirmLabel}
           </Button>
         </div>
       </div>

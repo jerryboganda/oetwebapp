@@ -337,6 +337,18 @@ public sealed record AdminVocabularyImportRollbackResponse(
     IReadOnlyList<string> Errors
 );
 
+public sealed record AdminVocabularyBulkDeleteRequest(
+    IReadOnlyList<string> ItemIds
+);
+
+public sealed record AdminVocabularyBulkDeleteResponse(
+    int TotalRequested,
+    int Deleted,
+    int Archived,
+    int Failed,
+    IReadOnlyList<string> Errors
+);
+
 public sealed record AdminVocabularyImportReconciliationFieldMismatch(
     string Field,
     string? Expected,

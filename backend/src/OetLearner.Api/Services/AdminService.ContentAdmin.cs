@@ -553,6 +553,62 @@ public partial class AdminService
         return new { id = itemId, archived = false, deleted = true };
     }
 
+    public async Task<AdminVocabularyBulkDeleteResponse> DeleteVocabularyItemsBulkAsync(
+        string adminId, string adminName, AdminVocabularyBulkDeleteRequest request, CancellationToken ct)
+    {
+        var requestedIds = request.ItemIds
+            .Select(id => id.Trim())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (requestedIds.Count == 0)
+            throw ApiException.Validation("VOCABULARY_BULK_DELETE_EMPTY", "Select at least one vocabulary item to delete.");
+
+        if (requestedIds.Count > 200)
+            throw ApiException.Validation("VOCABULARY_BULK_DELETE_LIMIT", "Bulk delete is limited to 200 vocabulary items at a time.");
+
+        var deleted = 0;
+        var archived = 0;
+        var errors = new List<string>();
+
+        foreach (var itemId in requestedIds)
+        {
+            var entity = await db.VocabularyTerms.FirstOrDefaultAsync(x => x.Id == itemId, ct);
+            if (entity is null)
+            {
+                errors.Add($"{itemId}: not found");
+                continue;
+            }
+
+            var referenced = await db.LearnerVocabularies.AnyAsync(lv => lv.TermId == itemId, ct);
+            if (referenced)
+            {
+                entity.Status = "archived";
+                entity.UpdatedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(ct);
+                await LogAuditAsync(adminId, adminName, "Archived", "VocabularyTerm", itemId,
+                    $"Bulk archived vocabulary item (referenced by learners): {entity.Term}", ct);
+                archived++;
+                continue;
+            }
+
+            var term = entity.Term;
+            db.VocabularyTerms.Remove(entity);
+            await db.SaveChangesAsync(ct);
+            await LogAuditAsync(adminId, adminName, "Deleted", "VocabularyTerm", itemId,
+                $"Bulk deleted vocabulary item: {term}", ct);
+            deleted++;
+        }
+
+        return new AdminVocabularyBulkDeleteResponse(
+            TotalRequested: request.ItemIds.Count,
+            Deleted: deleted,
+            Archived: archived,
+            Failed: errors.Count,
+            Errors: errors);
+    }
+
     // ── CSV import (RFC-4180 aware) ─────────────────────────────────────
 
     public async Task<AdminVocabularyImportPreviewResponse> PreviewVocabularyImportAsync(

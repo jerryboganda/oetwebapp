@@ -6986,6 +6986,21 @@ export async function deleteAdminVocabularyItem(itemId: string) {
   });
 }
 
+export type AdminVocabularyBulkDeleteResponse = {
+  totalRequested: number;
+  deleted: number;
+  archived: number;
+  failed: number;
+  errors: string[];
+};
+
+export async function deleteAdminVocabularyItems(itemIds: string[]): Promise<AdminVocabularyBulkDeleteResponse> {
+  return apiRequest('/v1/admin/vocabulary/items/bulk-delete', {
+    method: 'POST',
+    body: JSON.stringify({ itemIds }),
+  }) as Promise<AdminVocabularyBulkDeleteResponse>;
+}
+
 export async function fetchAdminVocabularyCategories(params?: { examTypeCode?: string; professionId?: string }) {
   const p = new URLSearchParams();
   if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);

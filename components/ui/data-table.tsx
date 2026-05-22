@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 
 import { cn } from '@/lib/utils';
@@ -48,7 +48,7 @@ interface DataTableProps<T> {
   selectable?: boolean;
   /** Controlled set of selected row keys. */
   selectedKeys?: Set<string>;
-  /** Called when selection changes. */
+  /** Called when row selection changes. */
   onSelectionChange?: (keys: Set<string>) => void;
 }
 
@@ -62,34 +62,36 @@ export function DataTable<T>({
   className,
   'aria-label': ariaLabel,
   virtualize,
-  selectable,
+  selectable = false,
   selectedKeys,
   onSelectionChange,
 }: DataTableProps<T>) {
-  const allKeys = data.map((row, idx) => keyExtractor(row, idx));
-  const allSelected = selectable && selectedKeys ? allKeys.length > 0 && allKeys.every((k) => selectedKeys.has(k)) : false;
-  const someSelected = selectable && selectedKeys ? allKeys.some((k) => selectedKeys.has(k)) && !allSelected : false;
+  const rowKeys = useMemo(() => data.map((row, idx) => keyExtractor(row, idx)), [data, keyExtractor]);
+  const selectedRowKeys = selectedKeys ?? new Set<string>();
+  const allSelected = selectable && rowKeys.length > 0 && rowKeys.every((key) => selectedRowKeys.has(key));
+  const someSelected = selectable && rowKeys.some((key) => selectedRowKeys.has(key)) && !allSelected;
 
-  const toggleAll = useCallback(() => {
-    if (!onSelectionChange || !selectedKeys) return;
+  const toggleAll = () => {
+    if (!onSelectionChange) return;
+    const next = new Set(selectedRowKeys);
     if (allSelected) {
-      const next = new Set(selectedKeys);
-      allKeys.forEach((k) => next.delete(k));
-      onSelectionChange(next);
+      rowKeys.forEach((key) => next.delete(key));
     } else {
-      const next = new Set(selectedKeys);
-      allKeys.forEach((k) => next.add(k));
-      onSelectionChange(next);
+      rowKeys.forEach((key) => next.add(key));
     }
-  }, [allKeys, allSelected, onSelectionChange, selectedKeys]);
-
-  const toggleRow = useCallback((key: string) => {
-    if (!onSelectionChange || !selectedKeys) return;
-    const next = new Set(selectedKeys);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
     onSelectionChange(next);
-  }, [onSelectionChange, selectedKeys]);
+  };
+
+  const toggleRow = (rowKey: string) => {
+    if (!onSelectionChange) return;
+    const next = new Set(selectedRowKeys);
+    if (next.has(rowKey)) {
+      next.delete(rowKey);
+    } else {
+      next.add(rowKey);
+    }
+    onSelectionChange(next);
+  };
 
   if (data.length === 0) {
     return (
@@ -104,8 +106,21 @@ export function DataTable<T>({
   const displayColumns = mobileColumns.length > 0 ? mobileColumns : columns;
   const primaryColumn = displayColumns[0] ?? columns[0];
 
+  const renderSelectionCheckbox = (rowKey: string, checked: boolean, label: string) => (
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={() => toggleRow(rowKey)}
+      onClick={(event) => event.stopPropagation()}
+      aria-label={label}
+      className="h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-primary/30"
+    />
+  );
+
   const renderDefaultMobileCard = (row: T, index: number) => {
     const rowKey = keyExtractor(row, index);
+
+    const isSelected = selectedRowKeys.has(rowKey);
 
     return (
       <Card
@@ -125,10 +140,18 @@ export function DataTable<T>({
             onRowClick(row, event);
           }
         }}
-        className={cn(onRowClick && 'cursor-pointer focus-visible:bg-primary/[0.03]')}
+        className={cn(
+          onRowClick && 'cursor-pointer focus-visible:bg-primary/[0.03]',
+          isSelected && 'ring-2 ring-primary/40',
+        )}
       >
         <div className="space-y-3">
           <div className="flex items-start justify-between gap-3">
+            {selectable ? (
+              <div className="pt-1">
+                {renderSelectionCheckbox(rowKey, isSelected, `Select row ${rowKey}`)}
+              </div>
+            ) : null}
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
                 {primaryColumn?.header ?? 'Item'}
@@ -165,57 +188,56 @@ export function DataTable<T>({
   return (
     <div className={cn('overflow-hidden rounded-2xl border border-border bg-surface shadow-sm', className)}>
       <div className="md:hidden p-3">
-        {selectable && data.length > 0 && (
-          <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-background-light">
+        {selectable ? (
+          <label className="mb-3 flex items-center gap-2 rounded-xl bg-background-light px-3 py-2 text-sm font-semibold text-navy">
             <input
               type="checkbox"
               checked={allSelected}
-              ref={(el) => { if (el) el.indeterminate = someSelected; }}
+              ref={(element) => {
+                if (element) element.indeterminate = someSelected;
+              }}
               onChange={toggleAll}
-              aria-label="Select all"
-              className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30 cursor-pointer"
+              aria-label="Select all rows"
+              className="h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-primary/30"
             />
-            <span className="text-xs text-muted font-medium">Select all</span>
-          </div>
-        )}
+            Select all
+          </label>
+        ) : null}
         {data.map((row, idx) => {
           const rowKey = keyExtractor(row, idx);
-          const isSelected = selectable && selectedKeys?.has(rowKey);
+          const isSelected = selectedRowKeys.has(rowKey);
 
           if (hasMobileCardView) {
             return (
-              <div key={rowKey} className={cn('relative', isSelected && 'ring-2 ring-primary/40 rounded-xl')}>
-                {selectable && (
-                  <div className="absolute top-3 left-3 z-10">
-                    <input
-                      type="checkbox"
-                      checked={isSelected || false}
-                      onChange={() => toggleRow(rowKey)}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label={`Select ${rowKey}`}
-                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30 cursor-pointer"
-                    />
-                  </div>
+              <Card
+                key={rowKey}
+                hoverable={Boolean(onRowClick)}
+                padding="md"
+                role={onRowClick ? 'button' : 'group'}
+                tabIndex={onRowClick ? 0 : undefined}
+                data-row-key={rowKey}
+                onClick={(event) => onRowClick?.(row, event)}
+                onKeyDown={(event) => {
+                  if (!onRowClick) return;
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onRowClick(row, event);
+                  }
+                }}
+                className={cn(
+                  onRowClick && 'cursor-pointer focus-visible:bg-primary/[0.03]',
+                  isSelected && 'ring-2 ring-primary/40',
                 )}
-                <Card
-                  hoverable={Boolean(onRowClick)}
-                  padding="md"
-                  role={onRowClick ? 'button' : 'group'}
-                  tabIndex={onRowClick ? 0 : undefined}
-                  data-row-key={rowKey}
-                  onClick={(event) => onRowClick?.(row, event)}
-                  onKeyDown={(event) => {
-                    if (!onRowClick) return;
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      onRowClick(row, event);
-                    }
-                  }}
-                  className={cn(onRowClick && 'cursor-pointer focus-visible:bg-primary/[0.03]', selectable && 'pl-10')}
-                >
-                  {mobileCardRender?.(row, idx)}
-                </Card>
-              </div>
+              >
+                <div className="flex items-start gap-3">
+                  {selectable ? (
+                    <div className="pt-1">
+                      {renderSelectionCheckbox(rowKey, isSelected, `Select row ${rowKey}`)}
+                    </div>
+                  ) : null}
+                  <div className="min-w-0 flex-1">{mobileCardRender?.(row, idx)}</div>
+                </div>
+              </Card>
             );
           }
 
@@ -232,24 +254,32 @@ export function DataTable<T>({
             onRowClick={onRowClick}
             ariaLabel={ariaLabel}
             options={virtualize}
+            selectable={selectable}
+            selectedKeys={selectedRowKeys}
+            allSelected={allSelected}
+            someSelected={someSelected}
+            onToggleAll={toggleAll}
+            onToggleRow={toggleRow}
           />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-full text-sm" aria-label={ariaLabel}>
               <thead className="bg-background-light">
                 <tr className="border-b border-border/60">
-                  {selectable && (
-                    <th scope="col" className="border-b border-border py-2 px-3 w-10">
+                  {selectable ? (
+                    <th scope="col" className="w-10 border-b border-border py-2 px-3 text-left">
                       <input
                         type="checkbox"
                         checked={allSelected}
-                        ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                        ref={(element) => {
+                          if (element) element.indeterminate = someSelected;
+                        }}
                         onChange={toggleAll}
                         aria-label="Select all rows"
-                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30 cursor-pointer"
+                        className="h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-primary/30"
                       />
                     </th>
-                  )}
+                  ) : null}
                   {columns.map((column) => (
                     <th
                       key={column.key}
@@ -269,7 +299,8 @@ export function DataTable<T>({
               <tbody className="divide-y divide-border bg-surface">
                 {data.map((row, idx) => {
                   const rowKey = keyExtractor(row, idx);
-                  const isSelected = selectable && selectedKeys?.has(rowKey);
+                  const isSelected = selectedRowKeys.has(rowKey);
+
                   return (
                   <tr
                     key={rowKey}
@@ -289,18 +320,11 @@ export function DataTable<T>({
                       isSelected && 'bg-primary/[0.05]',
                     )}
                   >
-                    {selectable && (
-                      <td className="px-3 py-3 w-10 align-middle">
-                        <input
-                          type="checkbox"
-                          checked={isSelected || false}
-                          onChange={() => toggleRow(rowKey)}
-                          onClick={(e) => e.stopPropagation()}
-                          aria-label={`Select row ${rowKey}`}
-                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30 cursor-pointer"
-                        />
+                    {selectable ? (
+                      <td className="w-10 px-3 py-3 align-middle">
+                        {renderSelectionCheckbox(rowKey, isSelected, `Select row ${rowKey}`)}
                       </td>
-                    )}
+                    ) : null}
                     {columns.map((column) => (
                       <td
                         key={column.key}
@@ -332,6 +356,12 @@ interface VirtualizedDesktopViewProps<T> {
   onRowClick?: (row: T, event: RowActivationEvent) => void;
   ariaLabel?: string;
   options: DataTableVirtualizeOptions;
+  selectable: boolean;
+  selectedKeys: Set<string>;
+  allSelected: boolean;
+  someSelected: boolean;
+  onToggleAll: () => void;
+  onToggleRow: (rowKey: string) => void;
 }
 
 function VirtualizedDesktopView<T>({
@@ -341,6 +371,12 @@ function VirtualizedDesktopView<T>({
   onRowClick,
   ariaLabel,
   options,
+  selectable,
+  selectedKeys,
+  allSelected,
+  someSelected,
+  onToggleAll,
+  onToggleRow,
 }: VirtualizedDesktopViewProps<T>) {
   const { rowHeight, containerHeight = 640, overscan = 8 } = options;
   const parentRef = useRef<HTMLDivElement>(null);
@@ -355,8 +391,8 @@ function VirtualizedDesktopView<T>({
     overscan,
   });
 
-  const columnCount = columns.length;
-  const gridTemplate = `repeat(${columnCount}, minmax(0, 1fr))`;
+  const columnCount = columns.length + (selectable ? 1 : 0);
+  const gridTemplate = selectable ? `40px repeat(${columns.length}, minmax(0, 1fr))` : `repeat(${columnCount}, minmax(0, 1fr))`;
 
   return (
     <div
@@ -372,6 +408,20 @@ function VirtualizedDesktopView<T>({
         className="sticky top-0 z-10 border-b border-border bg-background-light"
       >
         <div role="row" className="grid" style={{ gridTemplateColumns: gridTemplate }}>
+          {selectable ? (
+            <div role="columnheader" className="border-b border-border py-2 px-3">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                ref={(element) => {
+                  if (element) element.indeterminate = someSelected;
+                }}
+                onChange={onToggleAll}
+                aria-label="Select all rows"
+                className="h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-primary/30"
+              />
+            </div>
+          ) : null}
           {columns.map((column) => (
             <div
               key={column.key}
@@ -392,6 +442,7 @@ function VirtualizedDesktopView<T>({
           const row = data[virtualRow.index];
           if (!row) return null;
           const rowKey = keyExtractor(row, virtualRow.index);
+          const isSelected = selectedKeys.has(rowKey);
           return (
             <div
               key={rowKey}
@@ -409,6 +460,7 @@ function VirtualizedDesktopView<T>({
               className={cn(
                 'grid border-b border-border/30 hover:bg-background-light/70 transition-colors focus:outline-none',
                 onRowClick && 'cursor-pointer focus-visible:bg-primary/[0.03]',
+                isSelected && 'bg-primary/[0.05]',
               )}
               style={{
                 position: 'absolute',
@@ -420,6 +472,18 @@ function VirtualizedDesktopView<T>({
                 gridTemplateColumns: gridTemplate,
               }}
             >
+              {selectable ? (
+                <div role="cell" className="px-3 py-3 align-middle">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleRow(rowKey)}
+                    onClick={(event) => event.stopPropagation()}
+                    aria-label={`Select row ${rowKey}`}
+                    className="h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-primary/30"
+                  />
+                </div>
+              ) : null}
               {columns.map((column) => (
                 <div
                   key={column.key}

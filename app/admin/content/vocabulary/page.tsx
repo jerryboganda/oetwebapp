@@ -14,9 +14,11 @@ import { Toast } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-error';
 import { Pagination } from '@/components/ui/pagination';
 import { BulkActionBar } from '@/components/ui/bulk-action-bar';
+import { BulkActionConfirmModal } from '@/components/ui/bulk-action-confirm-modal';
 import {
   fetchAdminVocabularyItems,
   deleteAdminVocabularyItem,
+  deleteAdminVocabularyItems,
   fetchAdminVocabularyCategories,
   fetchAdminVocabularyRecallSets,
   type AdminRecallSetSummary,
@@ -57,6 +59,8 @@ export default function AdminVocabularyPage() {
   const [recallSets, setRecallSets] = useState<AdminRecallSetSummary[]>([]);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     fetchAdminVocabularyCategories()
@@ -88,6 +92,7 @@ export default function AdminVocabularyPage() {
         const data = res as ListResponse;
         setRows(data.items ?? []);
         setTotal(data.total ?? 0);
+        setSelectedKeys(new Set());
       } catch {
         if (!cancelled) setToast({ variant: 'error', message: 'Failed to load vocabulary items.' });
       } finally {
@@ -105,6 +110,31 @@ export default function AdminVocabularyPage() {
       setRows(prev => prev.filter(r => r.id !== id));
     } catch {
       setToast({ variant: 'error', message: `Failed to delete "${term}".` });
+    }
+  }
+
+  async function handleBulkDelete() {
+    const itemIds = Array.from(selectedKeys);
+    if (itemIds.length === 0) return;
+
+    setBulkDeleting(true);
+    try {
+      const result = await deleteAdminVocabularyItems(itemIds);
+      const removed = new Set(itemIds);
+      setRows(prev => prev.filter(row => !removed.has(row.id)));
+      setTotal(prev => Math.max(0, prev - result.deleted - result.archived));
+      setSelectedKeys(new Set());
+      setConfirmBulkDelete(false);
+      const archivedMessage = result.archived > 0 ? ` ${result.archived} archived because learners reference them.` : '';
+      const failedMessage = result.failed > 0 ? ` ${result.failed} failed.` : '';
+      setToast({
+        variant: result.failed > 0 ? 'error' : 'success',
+        message: `Bulk delete complete: ${result.deleted} deleted.${archivedMessage}${failedMessage}`,
+      });
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to delete selected vocabulary terms.' });
+    } finally {
+      setBulkDeleting(false);
     }
   }
 
@@ -147,6 +177,11 @@ export default function AdminVocabularyPage() {
     },
   ], []);
 
+  const selectedRows = useMemo(
+    () => rows.filter(row => selectedKeys.has(row.id)),
+    [rows, selectedKeys],
+  );
+
   const pageStatus = loading ? 'loading' : rows.length === 0 ? 'empty' : 'success';
 
   return (
@@ -154,6 +189,16 @@ export default function AdminVocabularyPage() {
       {toast && (
         <Toast variant={toast.variant === 'error' ? 'error' : 'success'} message={toast.message} onClose={() => setToast(null)} />
       )}
+      <BulkActionConfirmModal
+        open={confirmBulkDelete}
+        title="Delete selected vocabulary terms"
+        description={`Delete ${selectedKeys.size} selected vocabulary ${selectedKeys.size === 1 ? 'term' : 'terms'}? Terms referenced by learners will be archived instead of permanently deleted.`}
+        confirmLabel="Delete selected"
+        destructive
+        loading={bulkDeleting}
+        onConfirm={handleBulkDelete}
+        onClose={() => setConfirmBulkDelete(false)}
+      />
       <AdminRouteWorkspace>
         <AdminRouteSectionHeader
           eyebrow="CMS"
@@ -250,12 +295,28 @@ export default function AdminVocabularyPage() {
           )}
 
           <AsyncStateWrapper status={pageStatus}>
-            <DataTable columns={columns} data={rows} keyExtractor={(r) => r.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+            <DataTable
+              columns={columns}
+              data={rows}
+              keyExtractor={(r) => r.id}
+              selectable
+              selectedKeys={selectedKeys}
+              onSelectionChange={setSelectedKeys}
+            />
             <BulkActionBar
               selectedCount={selectedKeys.size}
+              totalCount={rows.length}
               onClearSelection={() => setSelectedKeys(new Set())}
               actions={[
-                { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
+                {
+                  key: 'delete',
+                  label: 'Delete selected',
+                  icon: <Trash2 className="h-4 w-4" aria-hidden="true" />,
+                  variant: 'danger',
+                  disabled: selectedRows.length === 0,
+                  loading: bulkDeleting,
+                  onClick: () => setConfirmBulkDelete(true),
+                },
               ]}
             />
             <Pagination

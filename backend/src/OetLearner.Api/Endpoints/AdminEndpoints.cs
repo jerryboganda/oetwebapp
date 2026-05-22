@@ -1055,6 +1055,11 @@ public static class AdminEndpoints
             => Results.Ok(await service.UpdateVocabularyItemAsync(http.AdminId(), http.AdminName(), itemId, request, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/vocabulary/items/bulk-delete", async (HttpContext http, AdminVocabularyBulkDeleteRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.DeleteVocabularyItemsBulkAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .RequireRateLimiting("PerUserWrite")
+            .WithAdminWrite("AdminContentWrite");
+
         admin.MapDelete("/vocabulary/items/{itemId}", async (string itemId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.DeleteVocabularyItemAsync(http.AdminId(), http.AdminName(), itemId, ct)))
             .WithAdminWrite("AdminContentWrite");
