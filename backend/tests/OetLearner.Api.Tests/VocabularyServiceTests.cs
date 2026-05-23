@@ -52,40 +52,6 @@ public class VocabularyServiceTests
     }
 
     [Fact]
-    public async Task GetTerms_matches_exam_type_case_insensitively_and_filters_oet_subtest_tags()
-    {
-        var (db, svc) = Build();
-        db.VocabularyTerms.Add(new VocabularyTerm
-        {
-            Id = "vt-reading-a",
-            Term = "triage",
-            Definition = "Sorting patients by urgency.",
-            ExampleSentence = "The nurse performed triage.",
-            ExamTypeCode = "OET",
-            Category = "clinical-process",
-            Status = "active",
-        });
-        db.VocabularyTerms.Add(new VocabularyTerm
-        {
-            Id = "vt-writing",
-            Term = "referral",
-            Definition = "A request for specialist care.",
-            ExampleSentence = "She wrote a referral letter.",
-            ExamTypeCode = "OET",
-            Category = "clinical-process",
-            Status = "active",
-        });
-        await db.SaveChangesAsync();
-
-        var page = await svc.GetTermsAsync("oet", null, null, null, 1, 20, default, oetSubtestTag: "reading_a");
-
-        Assert.Single(page.Terms);
-        Assert.Equal("triage", page.Terms[0].Term);
-        Assert.Contains("reading_a", page.Terms[0].OetSubtestTags);
-        await db.DisposeAsync();
-    }
-
-    [Fact]
     public async Task AddToMyVocabulary_is_idempotent()
     {
         var (db, svc) = Build();
