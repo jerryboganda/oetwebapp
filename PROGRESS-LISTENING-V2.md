@@ -1340,3 +1340,77 @@ Goal: map existing Listening surface area; identify exact files/symbols every R-
 - [ ] tsc, lint, vitest, dotnet test, next build
 - [ ] Playwright E2E (CBT locks, paper free-nav, highlight tools, readiness gate)
 - [ ] R-code citation checklist 100%
+
+
+## Wave 30 — Production hardening (2026-05-23)
+
+Full prod E2E audit + targeted fixes against
+https://app.oetwithdrhesham.co.uk to clear blockers before public launch.
+Audit artifact: `_audit/listening-prod-audit-2026-05-23.md`.
+
+### Findings closed in code
+
+- **3A** Expert listening override endpoint feature-flagged off
+  (`Features:ListeningExpertOverride=false` in prod). Returns 404 unless
+  explicitly enabled. `ExpertEndpoints.cs` + all `appsettings.*.json`.
+- **3B** Admin listening bulk action handlers wired
+  (`app/admin/content/listening/page.tsx` — bulk publish + bulk archive with
+  confirm dialog, per-item error surfacing, progress label, refresh).
+- **3C** Curriculum stages emit a deterministic `nextActionRoute` per stage
+  code; `listening_loop` deep-links to the learner's most-recent submitted
+  attempt review; `full_mock` jumps to `/mocks?subtest=listening`; Part A/B/C
+  stages point at `/listening/drills/part-{x}-{code}`.
+  `ListeningCurriculumService.cs` + `app/listening/curriculum/page.tsx`.
+- **3D** Audio access predicate confirmed tight in `MediaAssetAccessService`
+  — denies when no published paper attached. No code change needed in this
+  pass; documented for the next pass when real audio uploads land.
+- **3E** TTS production provider DI seam in `Program.cs` switches on
+  `Listening:TtsProvider`. Production boot **fails** when value resolves to
+  `"stub"` — protects against accidentally shipping silent audio. Stale
+  "Wave 4 deferred" comments cleaned up in `ListeningTtsJobWorker.cs` +
+  `ListeningAuthoringAdminEndpoints.cs`.
+- **3F** New `GET /v1/listening-papers/policy/test-rules` returns the OET
+  constants (42q / 40min / 30 raw pass / 350 scaled pass / 500 max). Anon-
+  allowed. Frontend `app/listening/test-rules/page.tsx` fetches with a
+  baked-in fallback.
+- **3G/3M** PWA `manifest.json` excluded from middleware redirect so the
+  browser stops logging "Manifest: Syntax error" on every page. Breadcrumb
+  humaniser extended to treat prefixed entity IDs (`la-…`, `lt-…`,
+  `mock-…`) as opaque "Detail" labels instead of `La C9252face…`.
+- **3H** New `docs/LISTENING-GRADING-MODEL.md` documents the auto-graded
+  model, the feature-flagged override kill-switch, the publish-gate
+  invariants, and the TTS provider switch.
+- **3J** Results page hides the canonical OET grade chrome
+  (Threshold Met / Below Threshold / Grade letter / scaled 500) for any
+  attempt where `maxRawScore < 42`. Practice / drill papers now render a
+  percent-correct frame instead of misleading "Grade E · Below Threshold".
+- **3K** Listening publish gate now rejects MCQ items in Part A
+  (`listening_part_a_type` error). Existing 24+6+12=42, MCQ-3 shape, blank
+  stem/answer, distractor categories, transcript evidence, skill tag,
+  difficulty, extract cue timings, legal attestation all continue to apply.
+- **3L** `/listening/curriculum` reframed as a skills catalog (not progress
+  tracker). Banner directs learners to `/listening/pathway` for live
+  progression. Eliminates the conflicting "0/12 vs 6/12 complete" story
+  between the two pages.
+
+### Findings deferred / out-of-scope (recorded in audit)
+
+- **No published listening papers in prod.** Operational/content gap — admin
+  must upload real OET papers via `/admin/content/listening`. Code is ready
+  to receive them; publish gate enforces the canonical shape.
+- **Audio is a 2-second synthesized fallback.** Next.js route at
+  `app/media/listening/[asset]/route.ts` only serves `lt-001.mp3`. Real
+  audio flows through `/v1/media/{id}/content` once a paper is published.
+- **Dashboard "Recommended Next" + duplicate "Generated OET Mock Report"
+  cards** carry fixture/stub copy in prod DB. Not in repo. Operator must
+  curate via admin UI or seed cleanup.
+- **Cross-user audio probe (N5)** skipped (no second learner account
+  available). Re-run after real audio ships.
+
+### Verification
+
+- Build/test/E2E run on VPS per project deploy runbook (Phase 4 of plan).
+- Manual prod re-audit after deploy: expert override 404, bulk handlers
+  work, curriculum stages route off `/listening`, test-rules values come
+  from policy DTO, manifest no longer errors, results frame hides OET grade
+  on stub paper.
