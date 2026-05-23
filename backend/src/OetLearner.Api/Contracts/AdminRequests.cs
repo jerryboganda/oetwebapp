@@ -550,8 +550,7 @@ public record AdminVocabularyItemCreateRequest(
     string? ProfessionId,
     string? Category,
     string? Pronunciation,
-    string? ExampleSentence,
-    string? Difficulty);
+    string? ExampleSentence);
 
 public record AdminVocabularyItemUpdateRequest(
     string? Term,
@@ -560,7 +559,6 @@ public record AdminVocabularyItemUpdateRequest(
     string? Category,
     string? Pronunciation,
     string? ExampleSentence,
-    string? Difficulty,
     string? Status);
 
 // ── Conversation Template Admin ──

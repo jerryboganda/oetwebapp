@@ -82,14 +82,14 @@ describe('Vocabulary browse page', () => {
         {
           id: 'vt-001', term: 'dyspnoea',
           definition: 'Difficulty breathing.',
-          category: 'symptoms', difficulty: 'medium',
+          category: 'symptoms',
           exampleSentence: 'She had dyspnoea on exertion.',
           ipaPronunciation: '/dɪspˈniːə/', audioUrl: null,
         },
         {
           id: 'vt-002', term: 'hypertension',
           definition: 'High blood pressure.',
-          category: 'conditions', difficulty: 'easy',
+          category: 'conditions',
           exampleSentence: 'He has hypertension.',
           ipaPronunciation: '/ˌhaɪpəˈtɛnʃən/', audioUrl: null,
         },

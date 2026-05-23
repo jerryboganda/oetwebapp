@@ -14,7 +14,6 @@ public sealed record VocabularyTermResponse(
     string ExamTypeCode,
     string? ProfessionId,
     string Category,
-    string Difficulty,
     string? IpaPronunciation,
     string? AmericanSpelling,
     string? AudioUrl,
@@ -27,7 +26,6 @@ public sealed record VocabularyTermResponse(
     string[] RelatedTerms,
     string? SourceProvenance,
     string Status,
-    string[] OetSubtestTags,
     /// <summary>
     /// Recalls Content Pack v1: year/source dimension. Multi-tag — a term may
     /// appear in several historical recall PDFs (e.g. ["old","2026"]).
@@ -57,7 +55,6 @@ public sealed record VocabularyTermSummary(
     string Term,
     string Definition,
     string Category,
-    string Difficulty,
     string? IpaPronunciation,
     string? AmericanSpelling,
     string? AudioUrl,
@@ -247,7 +244,6 @@ public sealed record AdminVocabularyItemCreateRequestV2(
     string ExamTypeCode,
     string? ProfessionId,
     string Category,
-    string? Difficulty,
     string? IpaPronunciation,
     string? AmericanSpelling,
     string? AudioUrl,
@@ -261,7 +257,6 @@ public sealed record AdminVocabularyItemCreateRequestV2(
     IReadOnlyList<string>? RecallSetCodes,
     IReadOnlyList<string>? CommonMistakes,
     IReadOnlyList<string>? SimilarSounding,
-    IReadOnlyList<string>? OetSubtestTags,
     string? SourceProvenance,
     string? Status
 );
@@ -274,7 +269,6 @@ public sealed record AdminVocabularyItemUpdateRequestV2(
     string? ExamTypeCode,
     string? ProfessionId,
     string? Category,
-    string? Difficulty,
     string? IpaPronunciation,
     string? AmericanSpelling,
     string? AudioUrl,
@@ -288,7 +282,6 @@ public sealed record AdminVocabularyItemUpdateRequestV2(
     IReadOnlyList<string>? RecallSetCodes,
     IReadOnlyList<string>? CommonMistakes,
     IReadOnlyList<string>? SimilarSounding,
-    IReadOnlyList<string>? OetSubtestTags,
     string? SourceProvenance,
     string? Status
 );
@@ -299,7 +292,6 @@ public sealed record AdminVocabularyImportPreviewRow(
     string? Term,
     string? Definition,
     string? Category,
-    string? Difficulty,
     string? ProfessionId,
     string? AmericanSpelling,
     string? ExampleSentence,

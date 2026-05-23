@@ -30,7 +30,6 @@ type PreviewRow = {
   term: string | null;
   definition: string | null;
   category: string | null;
-  difficulty: string | null;
   professionId: string | null;
   americanSpelling: string | null;
   exampleSentence: string | null;

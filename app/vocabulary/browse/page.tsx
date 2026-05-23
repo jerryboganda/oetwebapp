@@ -9,7 +9,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge, CategoryBadge, DifficultyBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge } from '@/components/ui/badge';
 import {
   fetchVocabularyTerms,
   addToMyVocabulary,
@@ -37,7 +37,7 @@ async function cacheVocabularyToIndexedDb(terms: unknown[]) {
   } catch {/* offline cache is best-effort */}
 }
 
-type TermRow = Pick<VocabularyTerm, 'id' | 'term' | 'definition' | 'category' | 'difficulty' | 'exampleSentence' | 'ipaPronunciation' | 'sourceProvenance'>;
+type TermRow = Pick<VocabularyTerm, 'id' | 'term' | 'definition' | 'category' | 'exampleSentence' | 'ipaPronunciation' | 'sourceProvenance'>;
 
 export default function BrowseVocabularyPage() {
   const [terms, setTerms] = useState<TermRow[]>([]);
@@ -254,7 +254,6 @@ export default function BrowseVocabularyPage() {
                     </div>
                     <div className="mb-2 flex flex-wrap items-center gap-1.5">
                       <CategoryBadge category={term.category} size="sm" />
-                      <DifficultyBadge difficulty={term.difficulty} size="sm" />
                     </div>
                     <p className="text-sm leading-relaxed text-muted">{term.definition}</p>
                     {term.exampleSentence && <p className="mt-1.5 text-xs italic leading-relaxed text-muted/80">&quot;{term.exampleSentence}&quot;</p>}

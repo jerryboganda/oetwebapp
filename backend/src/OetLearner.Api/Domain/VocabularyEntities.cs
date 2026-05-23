@@ -33,9 +33,6 @@ public class VocabularyTerm
     [MaxLength(64)]
     public string Category { get; set; } = default!;
 
-    [MaxLength(16)]
-    public string Difficulty { get; set; } = "medium";
-
     // ── Phase V1 additions ──────────────────────────────────────────────
     // IPA pronunciation string. Separate from AudioUrl (which is a playable URL).
     [MaxLength(64)]
@@ -98,15 +95,6 @@ public class VocabularyTerm
     /// word-recognition quiz mode. JSON array of strings.
     /// </summary>
     public string SimilarSoundingJson { get; set; } = "[]";
-
-    /// <summary>
-    /// Recalls Content Pack v1 (2026-05-05): the OET-subtest dimension of the
-    /// matrix tag system (the functional dimension lives in <see cref="Category"/>).
-    /// JSON array of subtest codes, e.g. ["listening_a", "reading_c"].
-    /// Allowed values: listening_a, listening_b, listening_c, reading_a,
-    /// reading_b, reading_c, writing, speaking.
-    /// </summary>
-    public string OetSubtestTagsJson { get; set; } = "[]";
 
     /// <summary>
     /// Recalls Content Pack v1 (2026-05-05): the year/source dimension of the

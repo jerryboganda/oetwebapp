@@ -163,7 +163,6 @@ public sealed class VocabularyDraftService(
                 ExamTypeCode = request.ExamTypeCode,
                 ProfessionId = request.ProfessionId,
                 Category = draft.Category,
-                Difficulty = draft.Difficulty,
                 IpaPronunciation = draft.IpaPronunciation,
                 SynonymsJson = JsonSerializer.Serialize(draft.Synonyms ?? Array.Empty<string>()),
                 CollocationsJson = JsonSerializer.Serialize(draft.Collocations ?? Array.Empty<string>()),

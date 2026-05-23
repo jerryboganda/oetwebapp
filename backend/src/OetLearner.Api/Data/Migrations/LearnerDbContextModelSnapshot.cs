@@ -17405,11 +17405,6 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
-                    b.Property<string>("Difficulty")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
                     b.Property<string>("ExamTypeCode")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -17426,10 +17421,6 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("IpaPronunciation")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
-
-                    b.Property<string>("OetSubtestTagsJson")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<string>("ProfessionId")
                         .HasMaxLength(32)

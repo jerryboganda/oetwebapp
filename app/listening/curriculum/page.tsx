@@ -25,6 +25,8 @@ interface CurriculumStage {
   estimatedMinutes: number;
   locked: boolean;
   completed: boolean;
+  nextActionLabel: string;
+  nextActionRoute: string;
 }
 
 interface CurriculumDto {
@@ -127,11 +129,15 @@ function StageCard({ stage }: { stage: CurriculumStage }) {
       <h3 className="font-semibold text-slate-900 dark:text-slate-100">{stage.title}</h3>
       <p className="text-sm text-slate-600 dark:text-slate-300">{stage.focus}</p>
       <span className="mt-auto text-xs text-slate-500">≈ {stage.estimatedMinutes} min</span>
+      {!stage.locked && !stage.completed && stage.nextActionLabel && (
+        <span className="text-xs font-medium text-indigo-600 dark:text-indigo-300">
+          {stage.nextActionLabel} →
+        </span>
+      )}
     </div>
   );
 
-  if (stage.locked || stage.completed) return body;
-  // Available: link to the Listening hub for now (drill routing lands when
-  // stages are tied to concrete drill ids in a follow-up).
-  return <Link href="/listening" className="block">{body}</Link>;
+  if (stage.locked) return body;
+  const route = stage.nextActionRoute || '/listening';
+  return <Link href={route} className="block">{body}</Link>;
 }

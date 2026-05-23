@@ -28,7 +28,6 @@ public sealed class VocabularyAudioWorkerTests
             Term = "haemorrhage",
             ExamTypeCode = "oet",
             Category = "clinical",
-            Difficulty = "medium",
             Status = "active",
         });
         await fixture.Db.SaveChangesAsync();
@@ -59,19 +58,19 @@ public sealed class VocabularyAudioWorkerTests
             new VocabularyTerm
             {
                 Id = "VOC-A", Term = "alpha", ExamTypeCode = "oet", Category = "c",
-                Difficulty = "medium", Status = "active",
+                Status = "active",
                 SourceProvenance = "batch=B1;source=admin-vocabulary-import",
             },
             new VocabularyTerm
             {
                 Id = "VOC-B", Term = "beta", ExamTypeCode = "oet", Category = "c",
-                Difficulty = "medium", Status = "active",
+                Status = "active",
                 SourceProvenance = "batch=B1;source=admin-vocabulary-import",
             },
             new VocabularyTerm
             {
                 Id = "VOC-C", Term = "gamma", ExamTypeCode = "oet", Category = "c",
-                Difficulty = "medium", Status = "active",
+                Status = "active",
                 SourceProvenance = "batch=B1;source=admin-vocabulary-import",
                 AudioMediaAssetId = "MA-existing",
                 AudioUrl = "/media/file/existing.mp3",
@@ -102,7 +101,6 @@ public sealed class VocabularyAudioWorkerTests
             Term = "stethoscope",
             ExamTypeCode = "oet",
             Category = "clinical",
-            Difficulty = "medium",
             Status = "active",
         });
         await fixture.Db.SaveChangesAsync();

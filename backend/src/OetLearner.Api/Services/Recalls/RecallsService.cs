@@ -690,7 +690,6 @@ public sealed class RecallsService(
                         Definition = row.Definition,
                         ExampleSentence = row.ExampleSentence ?? string.Empty,
                         Category = row.Category ?? "general",
-                        Difficulty = row.Difficulty ?? "medium",
                         IpaPronunciation = row.Ipa,
                         AmericanSpelling = row.AmericanSpelling,
                         SynonymsJson = synonyms,
@@ -706,7 +705,6 @@ public sealed class RecallsService(
                     existing.Definition = row.Definition;
                     if (!string.IsNullOrWhiteSpace(row.ExampleSentence)) existing.ExampleSentence = row.ExampleSentence!;
                     if (!string.IsNullOrWhiteSpace(row.Category)) existing.Category = row.Category!;
-                    if (!string.IsNullOrWhiteSpace(row.Difficulty)) existing.Difficulty = row.Difficulty!;
                     if (!string.IsNullOrWhiteSpace(row.Ipa)) existing.IpaPronunciation = row.Ipa;
                     if (!string.IsNullOrWhiteSpace(row.AmericanSpelling)) existing.AmericanSpelling = row.AmericanSpelling;
                     if (!string.IsNullOrWhiteSpace(row.SynonymsCsv)) existing.SynonymsJson = synonyms;

@@ -100,6 +100,9 @@ public static class ExpertEndpoints
             => Results.Ok(await service.SubmitSpeakingReviewAsync(reviewRequestId, http.ExpertId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
 
+        // Listening is fully auto-graded — see docs/LISTENING-GRADING-MODEL.md. This
+        // override endpoint is a feature-flagged kill-switch only; it returns 404
+        // unless Features:ListeningExpertOverride=true. No expert UI consumes it.
         expert.MapPut("/listening/attempts/{attemptId}/questions/{questionId}/score-override", async (
             string attemptId,
             string questionId,
@@ -107,8 +110,13 @@ public static class ExpertEndpoints
             HttpContext http,
             LearnerDbContext db,
             ListeningGradingService grading,
+            IConfiguration config,
             CancellationToken ct) =>
         {
+            if (!config.GetValue<bool>("Features:ListeningExpertOverride", false))
+            {
+                return Results.NotFound();
+            }
             var expertId = http.ExpertId();
             var expertName = await db.ExpertUsers.AsNoTracking()
                 .Where(expert => expert.Id == expertId)
@@ -125,7 +133,7 @@ public static class ExpertEndpoints
         })
             .RequireRateLimiting("PerUserWrite")
             .WithName("OverrideListeningAttemptScore")
-            .WithSummary("Apply a post-submission human score override to one Listening answer");
+            .WithSummary("Apply a post-submission human score override to one Listening answer (feature-flagged off in prod)");
 
         // Rework
         expert.MapPost("/reviews/{reviewRequestId}/rework", async (string reviewRequestId, HttpContext http, ExpertReworkRequest request, ExpertService service, CancellationToken ct)

@@ -22,7 +22,6 @@ type DraftTerm = {
   exampleSentence: string;
   contextNotes: string | null;
   category: string;
-  difficulty: string;
   ipaPronunciation: string | null;
   synonyms: string[];
   collocations: string[];
@@ -41,7 +40,6 @@ export default function AdminVocabularyAiDraftPage() {
   const [examTypeCode] = useState('oet');
   const [professionId, setProfessionId] = useState('');
   const [category, setCategory] = useState('medical');
-  const [difficulty, setDifficulty] = useState('medium');
   const [seedPrompt, setSeedPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<DraftResponse | null>(null);
@@ -59,7 +57,6 @@ export default function AdminVocabularyAiDraftPage() {
         examTypeCode,
         professionId: professionId || null,
         category,
-        difficulty,
         seedPrompt,
       });
       const d = res as DraftResponse;
@@ -147,14 +144,7 @@ export default function AdminVocabularyAiDraftPage() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Difficulty</label>
-                <select aria-label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
-                </select>
-              </div>
+
             </div>
 
             <div>
@@ -215,7 +205,6 @@ export default function AdminVocabularyAiDraftPage() {
                             <span className="font-bold text-navy">{d.term}</span>
                             {d.ipaPronunciation && <span className="text-xs italic text-muted">{d.ipaPronunciation}</span>}
                             <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">{d.category.replace(/_/g, ' ')}</span>
-                            <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">{d.difficulty}</span>
                           </div>
                           <p className="mt-1 text-sm text-navy">{d.definition}</p>
                           {d.exampleSentence && <p className="mt-1 text-xs italic text-muted">&quot;{d.exampleSentence}&quot;</p>}

@@ -212,7 +212,6 @@ public static class RecallsContentSeeder
         e.Definition = Truncate(raw.Definition!.Trim(), 1024);
         e.ExampleSentence = Truncate(raw.ExampleSentence!.Trim(), 2048);
         e.Category = Truncate((raw.Category ?? "general").Trim().ToLowerInvariant(), 64);
-        e.Difficulty = NormaliseDifficulty(raw.Difficulty) ?? "medium";
         e.IpaPronunciation = Truncate(raw.Ipa, 64);
         e.AmericanSpelling = Truncate(raw.AmericanSpelling, 128);
         e.ContextNotes = Truncate(raw.ContextNotes, 1024);
@@ -221,7 +220,6 @@ public static class RecallsContentSeeder
         e.RelatedTermsJson = SerialiseList(raw.RelatedTerms);
         e.CommonMistakesJson = SerialiseList(raw.CommonMistakes);
         e.SimilarSoundingJson = SerialiseList(raw.SimilarSounding);
-        e.OetSubtestTagsJson = SerialiseList(NormaliseOetSubtestTags(raw.OetSubtestTags, out _).ToList());
         e.SourceProvenance = Truncate(provenance, 512);
         if (isInsert || string.IsNullOrWhiteSpace(e.Status))
         {

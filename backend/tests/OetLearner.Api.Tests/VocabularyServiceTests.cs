@@ -31,7 +31,6 @@ public class VocabularyServiceTests
                 ExampleSentence = $"Example using term{idNum}.",
                 ExamTypeCode = "oet",
                 Category = category,
-                Difficulty = "medium",
                 Status = "active",
             });
         }
@@ -64,9 +63,7 @@ public class VocabularyServiceTests
             ExampleSentence = "The nurse performed triage.",
             ExamTypeCode = "OET",
             Category = "clinical-process",
-            Difficulty = "medium",
             Status = "active",
-            OetSubtestTagsJson = """["reading_a","speaking"]""",
         });
         db.VocabularyTerms.Add(new VocabularyTerm
         {
@@ -76,9 +73,7 @@ public class VocabularyServiceTests
             ExampleSentence = "She wrote a referral letter.",
             ExamTypeCode = "OET",
             Category = "clinical-process",
-            Difficulty = "medium",
             Status = "active",
-            OetSubtestTagsJson = """["writing"]""",
         });
         await db.SaveChangesAsync();
 
@@ -242,7 +237,7 @@ public class VocabularyServiceTests
         {
             Id = "vt-unique", Term = "hypertension",
             Definition = "High BP.", ExampleSentence = "He has hypertension.",
-            ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", Status = "active",
+            ExamTypeCode = "oet", Category = "medical", Status = "active",
         });
         await db.SaveChangesAsync();
 
@@ -262,13 +257,13 @@ public class VocabularyServiceTests
         {
             Id = "vt-a", Term = "hypertension",
             Definition = "High BP.", ExampleSentence = "x.",
-            ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", Status = "active",
+            ExamTypeCode = "oet", Category = "medical", Status = "active",
         });
         db.VocabularyTerms.Add(new VocabularyTerm
         {
             Id = "vt-b", Term = "hypoxia",
             Definition = "Low O2.", ExampleSentence = "x.",
-            ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", Status = "active",
+            ExamTypeCode = "oet", Category = "medical", Status = "active",
         });
         await db.SaveChangesAsync();
 

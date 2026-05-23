@@ -84,7 +84,6 @@ public class RecallSetTagSeederTests
             ExampleSentence = "The patient reported dizziness.",
             ExamTypeCode = "oet",
             Category = "symptom",
-            Difficulty = "medium",
             Status = "active",
             RecallSetCodesJson = "[]",
         });

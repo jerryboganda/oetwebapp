@@ -27,7 +27,9 @@ public sealed record ListeningCurriculumStageDto(
     string PartHint,                  // "Part A" | "Part B" | "Part C" | "Mock"
     int EstimatedMinutes,
     bool Locked,
-    bool Completed);
+    bool Completed,
+    string NextActionLabel,           // CTA label for the stage's primary action.
+    string NextActionRoute);          // Absolute app-relative path (e.g. /listening/drills/part-a-numbers_units).
 
 public sealed record ListeningCurriculumDto(
     string Headline,
@@ -67,6 +69,15 @@ public sealed class ListeningCurriculumService(LearnerDbContext db) : IListening
             .CountAsync(ct);
         var attempts = genericAttempts + relationalAttempts;
 
+        // Resolve the learner's most-recent submitted Listening attempt id once
+        // so the `listening_loop` stage can deep-link to its review page. Falls
+        // back to the hub if the learner has never submitted.
+        var latestAttemptId = await db.ListeningAttempts.AsNoTracking()
+            .Where(a => a.UserId == userId && a.Status == ListeningAttemptStatus.Submitted)
+            .OrderByDescending(a => a.SubmittedAt ?? a.StartedAt)
+            .Select(a => a.Id)
+            .FirstOrDefaultAsync(ct);
+
         var stages = new List<ListeningCurriculumStageDto>(Catalog.Length);
         for (var i = 0; i < Catalog.Length; i++)
         {
@@ -77,6 +88,7 @@ public sealed class ListeningCurriculumService(LearnerDbContext db) : IListening
             var completed = attempts > i;
             // Lock stages that come after the next not-completed one + 1.
             var locked = i > attempts + 1;
+            var (label, route) = ResolveStageAction(c.Code, c.PartHint, latestAttemptId);
             stages.Add(new ListeningCurriculumStageDto(
                 Order: i + 1,
                 Code: c.Code,
@@ -85,7 +97,9 @@ public sealed class ListeningCurriculumService(LearnerDbContext db) : IListening
                 PartHint: c.PartHint,
                 EstimatedMinutes: c.Minutes,
                 Locked: locked,
-                Completed: completed));
+                Completed: completed,
+                NextActionLabel: label,
+                NextActionRoute: route));
         }
 
         return new ListeningCurriculumDto(
@@ -96,4 +110,25 @@ public sealed class ListeningCurriculumService(LearnerDbContext db) : IListening
             TotalStages: stages.Count,
             Stages: stages);
     }
+
+    // Stage code → (CTA label, deep-link route). Routes degrade gracefully on
+    // the frontend: an unknown drill id renders the drill empty-state, an
+    // unknown mock is caught by the mocks page, an absent latest attempt falls
+    // back to the hub. The drill-id naming convention is
+    // `{part-prefix}-{stage-code}` so seeders can register drills incrementally
+    // without changing routes.
+    private static (string Label, string Route) ResolveStageAction(string code, string partHint, string? latestAttemptId) => code switch
+    {
+        "listening_loop" => latestAttemptId is null or { Length: 0 }
+            ? ("Submit a Listening attempt first", "/listening")
+            : ("Open the listening loop on your last attempt", $"/listening/review/{latestAttemptId}"),
+        "full_mock" => ("Take a full Listening mock", "/mocks?subtest=listening"),
+        _ => partHint switch
+        {
+            "Part A" => ("Open Part A drill", $"/listening/drills/part-a-{code}"),
+            "Part B" => ("Open Part B drill", $"/listening/drills/part-b-{code}"),
+            "Part C" => ("Open Part C drill", $"/listening/drills/part-c-{code}"),
+            _        => ("Open drill", $"/listening/drills/{code}"),
+        },
+    };
 }

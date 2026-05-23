@@ -246,7 +246,6 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
             ExamTypeCode = "oet",
             ProfessionId = "medicine",
             Category = "spelling",
-            Difficulty = "medium",
             IpaPronunciation = "/əˈniːmiə/",
             AudioUrl = "/media/recalls/tts/cached-word.wav",
             AudioMediaAssetId = "media-audio-bypass-test",

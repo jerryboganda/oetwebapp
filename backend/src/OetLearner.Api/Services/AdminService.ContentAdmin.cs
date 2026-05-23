@@ -174,7 +174,6 @@ public partial class AdminService
                 v.Definition,
                 v.ProfessionId,
                 v.Category,
-                v.Difficulty,
                 v.ExampleSentence,
                 v.AmericanSpelling,
                 v.Status
@@ -197,7 +196,6 @@ public partial class AdminService
             v.ExamTypeCode,
             v.ProfessionId,
             v.Category,
-            v.Difficulty,
             v.IpaPronunciation,
             v.AmericanSpelling,
             v.AudioUrl,
@@ -211,7 +209,6 @@ public partial class AdminService
             v.RecallSetCodesJson,
             v.CommonMistakesJson,
             v.SimilarSoundingJson,
-            v.OetSubtestTagsJson,
             v.SourceProvenance,
             v.Status,
             v.CreatedAt,
@@ -237,7 +234,6 @@ public partial class AdminService
             ExamTypeCode = ExamCodes.Normalize(request.ExamTypeCode),
             ProfessionId = request.ProfessionId,
             Category = request.Category.Trim(),
-            Difficulty = request.Difficulty ?? "medium",
             IpaPronunciation = request.IpaPronunciation,
             AmericanSpelling = CleanOptional(request.AmericanSpelling),
             AudioUrl = CleanOptional(request.AudioUrl),
@@ -251,7 +247,6 @@ public partial class AdminService
             RecallSetCodesJson = JsonSupport.Serialize(NormaliseRecallSetCodes(request.RecallSetCodes)),
             CommonMistakesJson = JsonSupport.Serialize(request.CommonMistakes ?? Array.Empty<string>()),
             SimilarSoundingJson = JsonSupport.Serialize(request.SimilarSounding ?? Array.Empty<string>()),
-            OetSubtestTagsJson = JsonSupport.Serialize(NormaliseOetSubtestTags(request.OetSubtestTags)),
             SourceProvenance = request.SourceProvenance,
             Status = string.IsNullOrWhiteSpace(request.Status) ? "draft" : request.Status,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -278,7 +273,6 @@ public partial class AdminService
         if (request.ExamTypeCode is not null) entity.ExamTypeCode = ExamCodes.Normalize(request.ExamTypeCode);
         if (request.ProfessionId is not null) entity.ProfessionId = request.ProfessionId;
         if (request.Category is not null) entity.Category = request.Category;
-        if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
         if (request.IpaPronunciation is not null) entity.IpaPronunciation = request.IpaPronunciation;
         if (request.AmericanSpelling is not null) entity.AmericanSpelling = CleanOptional(request.AmericanSpelling);
         if (request.AudioUrl is not null) entity.AudioUrl = CleanOptional(request.AudioUrl);
@@ -292,7 +286,6 @@ public partial class AdminService
         if (request.RecallSetCodes is not null) entity.RecallSetCodesJson = JsonSupport.Serialize(NormaliseRecallSetCodes(request.RecallSetCodes));
         if (request.CommonMistakes is not null) entity.CommonMistakesJson = JsonSupport.Serialize(request.CommonMistakes);
         if (request.SimilarSounding is not null) entity.SimilarSoundingJson = JsonSupport.Serialize(request.SimilarSounding);
-        if (request.OetSubtestTags is not null) entity.OetSubtestTagsJson = JsonSupport.Serialize(NormaliseOetSubtestTags(request.OetSubtestTags));
         if (request.SourceProvenance is not null) entity.SourceProvenance = request.SourceProvenance;
 
         if (request.Status is not null)
@@ -332,18 +325,6 @@ public partial class AdminService
     private static void EnforceVocabularyPublishGate(VocabularyTerm e)
         => EnforceVocabularyPublishGate(e.Term, e.Definition, e.ExampleSentence, e.Category, e.SourceProvenance, e.IpaPronunciation, e.AudioUrl);
 
-    /// <summary>
-    /// Allowed OET subtest tags. Mirrors the canonical question-set vocabulary
-    /// surfaced in the learner UI; reject anything outside this list to keep
-    /// admin-supplied tags trustworthy.
-    /// </summary>
-    private static readonly HashSet<string> AllowedOetSubtestTags = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "listening_a", "listening_b", "listening_c",
-        "reading_a", "reading_b", "reading_c",
-        "writing", "speaking",
-    };
-
     private static IReadOnlyList<string> NormaliseRecallSetCodes(IReadOnlyList<string>? codes)
     {
         if (codes is null || codes.Count == 0) return Array.Empty<string>();
@@ -356,23 +337,6 @@ public partial class AdminService
                 throw ApiException.Validation("VOCAB_RECALL_SET_INVALID",
                     $"Unknown recall-set code '{raw}'. Allowed: {string.Join(", ", OetLearner.Api.Domain.RecallSetCodes.All)}.");
             if (seen.Add(normalised)) result.Add(normalised);
-        }
-        return result;
-    }
-
-    private static IReadOnlyList<string> NormaliseOetSubtestTags(IReadOnlyList<string>? tags)
-    {
-        if (tags is null || tags.Count == 0) return Array.Empty<string>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var result = new List<string>(tags.Count);
-        foreach (var raw in tags)
-        {
-            if (string.IsNullOrWhiteSpace(raw)) continue;
-            var lower = raw.Trim().ToLowerInvariant();
-            if (!AllowedOetSubtestTags.Contains(lower))
-                throw ApiException.Validation("VOCAB_OET_SUBTEST_TAG_INVALID",
-                    $"Unknown OET subtest tag '{raw}'. Allowed: {string.Join(", ", AllowedOetSubtestTags)}.");
-            if (seen.Add(lower)) result.Add(lower);
         }
         return result;
     }
@@ -674,7 +638,6 @@ public partial class AdminService
                 Term: r.Term,
                 Definition: r.Definition,
                 Category: r.Category,
-                Difficulty: r.Difficulty,
                 ProfessionId: r.ProfessionId,
                 AmericanSpelling: r.AmericanSpelling,
                 ExampleSentence: r.ExampleSentence,
@@ -1001,7 +964,6 @@ public partial class AdminService
                 v.ExamTypeCode,
                 v.ProfessionId,
                 v.Category,
-                v.Difficulty,
                 v.IpaPronunciation,
                 v.AmericanSpelling,
                 v.AudioUrl,
@@ -1025,7 +987,7 @@ public partial class AdminService
         var rows = await GetVocabularyImportBatchRowsAsync(batchId, ct);
 
         var builder = new StringBuilder();
-        builder.AppendLine("ImportBatchId,Id,Term,Definition,ExampleSentence,ContextNotes,ExamTypeCode,ProfessionId,Category,Difficulty,IpaPronunciation,AmericanSpelling,AudioUrl,AudioSlowUrl,AudioSentenceUrl,AudioMediaAssetId,ImageUrl,SynonymsJson,CollocationsJson,RelatedTermsJson,SourceProvenance,Status,CreatedAt,UpdatedAt");
+        builder.AppendLine("ImportBatchId,Id,Term,Definition,ExampleSentence,ContextNotes,ExamTypeCode,ProfessionId,Category,IpaPronunciation,AmericanSpelling,AudioUrl,AudioSlowUrl,AudioSentenceUrl,AudioMediaAssetId,ImageUrl,SynonymsJson,CollocationsJson,RelatedTermsJson,SourceProvenance,Status,CreatedAt,UpdatedAt");
         foreach (var row in rows)
         {
             builder.AppendJoin(',',
@@ -1038,7 +1000,6 @@ public partial class AdminService
                 EscapeCsv(row.ExamTypeCode),
                 EscapeCsv(row.ProfessionId),
                 EscapeCsv(row.Category),
-                EscapeCsv(row.Difficulty),
                 EscapeCsv(row.IpaPronunciation),
                 EscapeCsv(row.AmericanSpelling),
                 EscapeCsv(row.AudioUrl),
@@ -1264,7 +1225,6 @@ public partial class AdminService
             // bucket so they remain discoverable in the admin UI without
             // forcing the uploader to pick a category up-front.
             Category = CleanOptional(row.Category) ?? "recall-term",
-            Difficulty = CleanOptional(row.Difficulty) ?? "medium",
             IpaPronunciation = CleanOptional(row.IpaPronunciation),
             AmericanSpelling = CleanOptional(row.AmericanSpelling),
             AudioUrl = CleanOptional(row.AudioUrl),
@@ -1303,8 +1263,6 @@ public partial class AdminService
             existing.ProfessionId = CleanOptional(row.ProfessionId);
         if (!string.IsNullOrWhiteSpace(row.Category))
             existing.Category = CleanOptional(row.Category) ?? existing.Category;
-        if (!string.IsNullOrWhiteSpace(row.Difficulty))
-            existing.Difficulty = CleanOptional(row.Difficulty) ?? existing.Difficulty;
         if (!string.IsNullOrWhiteSpace(row.IpaPronunciation))
             existing.IpaPronunciation = CleanOptional(row.IpaPronunciation);
         if (!string.IsNullOrWhiteSpace(row.AmericanSpelling))
@@ -1614,7 +1572,6 @@ public partial class AdminService
         if (TrimmedLength(r.ExamTypeCode) > 16) return (false, "Exam type code exceeds 16 characters.");
         if (TrimmedLength(r.ProfessionId) > 32) return (false, "Profession id exceeds 32 characters.");
         if (TrimmedLength(r.Category) > 64) return (false, "Category exceeds 64 characters.");
-        if (TrimmedLength(r.Difficulty) > 16) return (false, "Difficulty exceeds 16 characters.");
         if (TrimmedLength(r.IpaPronunciation) > 64) return (false, "IPA pronunciation exceeds 64 characters.");
         if (TrimmedLength(r.AmericanSpelling) > 128) return (false, "American spelling exceeds 128 characters.");
         if (TrimmedLength(r.AudioUrl) > 256) return (false, "Audio URL exceeds 256 characters.");
@@ -1640,13 +1597,6 @@ public partial class AdminService
             var category = r.Category!.Trim();
             if (!ApprovedVocabularyCategories.Contains(category))
                 return (false, $"Unknown category '{category}'. Use an approved vocabulary taxonomy value or record editorial approval before import.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(r.Difficulty))
-        {
-            var difficulty = r.Difficulty!.Trim();
-            if (!ApprovedVocabularyDifficulties.Contains(difficulty))
-                return (false, $"Unknown difficulty '{difficulty}'. Use easy, medium, or hard.");
         }
 
         var examTypeCode = ExamCodes.Normalize(r.ExamTypeCode);
@@ -1690,11 +1640,6 @@ public partial class AdminService
         // term-only CSV path. The publish gate still enforces medical-category
         // pronunciation rules separately, so this is safe to expose.
         "recall-term"
-    };
-
-    private static readonly HashSet<string> ApprovedVocabularyDifficulties = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "easy", "medium", "hard"
     };
 
     private sealed record VocabularyImportValidationContext(
@@ -2038,7 +1983,6 @@ public partial class AdminService
         Compare("examTypeCode", expected.ExamTypeCode, storedRow.ExamTypeCode);
         Compare("professionId", expected.ProfessionId, storedRow.ProfessionId);
         Compare("category", expected.Category, storedRow.Category);
-        Compare("difficulty", expected.Difficulty, storedRow.Difficulty);
         Compare("ipaPronunciation", expected.IpaPronunciation, storedRow.IpaPronunciation);
         Compare("americanSpelling", expected.AmericanSpelling, storedRow.AmericanSpelling);
         Compare("audioUrl", expected.AudioUrl, storedRow.AudioUrl);

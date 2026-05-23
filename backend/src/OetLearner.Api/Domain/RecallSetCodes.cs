@@ -3,8 +3,7 @@ namespace OetLearner.Api.Domain;
 /// <summary>
 /// Canonical registry of "recall set" tags — the practice-collection dimension of the
 /// matrix tag system, orthogonal to <see cref="VocabularyTerm.Category"/> (which
-/// is the functional dimension) and <see cref="VocabularyTerm.OetSubtestTagsJson"/>
-/// (which is the OET-subtest dimension).
+/// is the functional dimension).
 ///
 /// A vocabulary term may carry zero or more recall-set codes (multi-tag): the
 /// same term (e.g. "headaches") may appear in multiple practice collections,

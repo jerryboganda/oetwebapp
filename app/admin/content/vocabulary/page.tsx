@@ -30,7 +30,6 @@ type VocabRow = {
   definition: string;
   professionId: string | null;
   category: string;
-  difficulty: string;
   exampleSentence: string | null;
   status: 'draft' | 'active' | 'archived';
 };
@@ -151,7 +150,6 @@ export default function AdminVocabularyPage() {
     },
     { key: 'category', header: 'Category', render: (row) => <span className="capitalize text-sm">{row.category.replace(/_/g, ' ')}</span> },
     { key: 'profession', header: 'Profession', render: (row) => <span className="text-sm capitalize">{row.professionId ?? '—'}</span>, hideOnMobile: true },
-    { key: 'difficulty', header: 'Difficulty', render: (row) => <span className="text-sm capitalize">{row.difficulty}</span>, hideOnMobile: true },
     {
       key: 'status',
       header: 'Status',

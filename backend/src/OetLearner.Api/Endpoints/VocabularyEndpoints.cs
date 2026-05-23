@@ -19,7 +19,6 @@ public static class VocabularyEndpoints
             [FromQuery] string? profession,
             [FromQuery] string? search,
             [FromQuery] string? recallSet,
-            [FromQuery] string? oetSubtestTag,
             [FromQuery] int page,
             [FromQuery] int pageSize,
             VocabularyService svc, CancellationToken ct) =>
@@ -29,8 +28,7 @@ public static class VocabularyEndpoints
                 page <= 0 ? 1 : page,
                 pageSize <= 0 ? 20 : Math.Min(pageSize, 100),
                 ct,
-                recallSet,
-                oetSubtestTag)));
+                recallSet)));
 
         // Recall-set registry (year/source dimension). Public to authenticated
         // learners so the browse + recalls UI can render filter chips.

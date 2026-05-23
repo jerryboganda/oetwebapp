@@ -18,7 +18,6 @@ type Detail = {
   examTypeCode: string;
   professionId: string | null;
   category: string;
-  difficulty: string;
   ipaPronunciation: string | null;
   americanSpelling: string | null;
   audioUrl: string | null;
@@ -32,7 +31,6 @@ type Detail = {
   recallSetCodesJson: string;
   commonMistakesJson: string;
   similarSoundingJson: string;
-  oetSubtestTagsJson: string;
   sourceProvenance: string | null;
   status: 'draft' | 'active' | 'archived';
 };
@@ -88,7 +86,6 @@ export default function AdminVocabularyEditPage() {
     examTypeCode: detail.examTypeCode,
     professionId: detail.professionId ?? '',
     category: detail.category,
-    difficulty: detail.difficulty,
     ipaPronunciation: detail.ipaPronunciation ?? '',
     americanSpelling: detail.americanSpelling ?? '',
     audioUrl: detail.audioUrl ?? '',
@@ -102,7 +99,6 @@ export default function AdminVocabularyEditPage() {
     recallSetCodes: parseJsonArray(detail.recallSetCodesJson),
     commonMistakes: parseJsonArray(detail.commonMistakesJson),
     similarSounding: parseJsonArray(detail.similarSoundingJson),
-    oetSubtestTags: parseJsonArray(detail.oetSubtestTagsJson),
     sourceProvenance: detail.sourceProvenance ?? '',
     status: detail.status,
   };
@@ -116,7 +112,6 @@ export default function AdminVocabularyEditPage() {
       examTypeCode: values.examTypeCode,
       professionId: values.professionId || null,
       category: values.category,
-      difficulty: values.difficulty,
       ipaPronunciation: values.ipaPronunciation,
       americanSpelling: values.americanSpelling,
       audioUrl: values.audioUrl,
@@ -130,7 +125,6 @@ export default function AdminVocabularyEditPage() {
       recallSetCodes: values.recallSetCodes,
       commonMistakes: values.commonMistakes,
       similarSounding: values.similarSounding,
-      oetSubtestTags: values.oetSubtestTags,
       sourceProvenance: values.sourceProvenance,
       status: values.status,
     });

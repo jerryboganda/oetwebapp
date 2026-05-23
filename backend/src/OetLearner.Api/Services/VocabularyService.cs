@@ -30,8 +30,7 @@ public class VocabularyService(
         int page,
         int pageSize,
         CancellationToken ct,
-        string? recallSet = null,
-        string? oetSubtestTag = null)
+        string? recallSet = null)
     {
         examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
@@ -53,12 +52,7 @@ public class VocabularyService(
             query = query.Where(t => t.RecallSetCodesJson.Contains(needle));
         }
 
-        var normalisedSubtestTag = NormaliseOetSubtestTag(oetSubtestTag);
-        if (normalisedSubtestTag is not null)
-        {
-            var needle = $"\"{normalisedSubtestTag}\"";
-            query = query.Where(t => t.OetSubtestTagsJson.Contains(needle));
-        }
+
 
         var total = await query.CountAsync(ct);
         var items = await query.OrderBy(t => t.Term)
@@ -790,7 +784,6 @@ public class VocabularyService(
         ExamTypeCode: t.ExamTypeCode,
         ProfessionId: t.ProfessionId,
         Category: t.Category,
-        Difficulty: t.Difficulty,
         IpaPronunciation: t.IpaPronunciation,
         AmericanSpelling: t.AmericanSpelling,
         AudioUrl: t.AudioUrl,
@@ -803,7 +796,6 @@ public class VocabularyService(
         RelatedTerms: ParseStringArray(t.RelatedTermsJson).ToArray(),
         SourceProvenance: t.SourceProvenance,
         Status: t.Status,
-        OetSubtestTags: ParseStringArray(t.OetSubtestTagsJson).ToArray(),
         RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray());
 
     private static IQueryable<VocabularyTerm> ApplyExamTypeFilter(IQueryable<VocabularyTerm> query, string? examTypeCode)
@@ -819,23 +811,11 @@ public class VocabularyService(
             ? null
             : examTypeCode.Trim().ToLowerInvariant();
 
-    private static string? NormaliseOetSubtestTag(string? tag)
-    {
-        if (string.IsNullOrWhiteSpace(tag)) return null;
-        var normalised = tag.Trim().ToLowerInvariant();
-        return normalised is "listening_a" or "listening_b" or "listening_c"
-            or "reading_a" or "reading_b" or "reading_c"
-            or "writing" or "speaking"
-            ? normalised
-            : null;
-    }
-
     private static VocabularyTermSummary MapSummary(VocabularyTerm t) => new(
         Id: t.Id,
         Term: t.Term,
         Definition: t.Definition,
         Category: t.Category,
-        Difficulty: t.Difficulty,
         IpaPronunciation: t.IpaPronunciation,
         AmericanSpelling: t.AmericanSpelling,
         AudioUrl: null,

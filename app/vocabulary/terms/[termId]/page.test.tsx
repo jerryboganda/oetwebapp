@@ -71,7 +71,6 @@ const fullTerm = {
   examTypeCode: 'oet',
   professionId: null,
   category: 'symptoms',
-  difficulty: 'medium',
   ipaPronunciation: '/dɪspˈniːə/',
   audioUrl: null,
   audioMediaAssetId: null,

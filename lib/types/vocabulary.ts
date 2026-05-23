@@ -11,7 +11,6 @@ export interface VocabularyTerm {
   examTypeCode: string;
   professionId: string | null;
   category: string;
-  difficulty: 'easy' | 'medium' | 'hard' | string;
   ipaPronunciation: string | null;
   audioUrl: string | null;
   audioMediaAssetId: string | null;
@@ -27,11 +26,6 @@ export interface VocabularyTerm {
    * into any practice collection label yet.
    */
   recallSetCodes?: string[];
-  /**
-   * OET subtest relevance tags — e.g. `["listening_a", "writing", "speaking"]`.
-   * Populated by admin; empty array if unclassified.
-   */
-  oetSubtestTags?: string[];
 }
 
 export interface VocabularyTermSummary {
@@ -39,7 +33,6 @@ export interface VocabularyTermSummary {
   term: string;
   definition: string;
   category: string;
-  difficulty: string;
   ipaPronunciation: string | null;
   audioUrl: string | null;
   exampleSentence: string | null;

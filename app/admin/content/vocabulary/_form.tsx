@@ -23,7 +23,6 @@ export type VocabFormValues = {
   examTypeCode: string;
   professionId: string;
   category: string;
-  difficulty: string;
   ipaPronunciation: string;
   americanSpelling: string;
   audioUrl: string;
@@ -37,7 +36,6 @@ export type VocabFormValues = {
   recallSetCodes: string[];
   commonMistakes: string[];
   similarSounding: string[];
-  oetSubtestTags: string[];
   sourceProvenance: string;
   status: 'draft' | 'active' | 'archived';
 };
@@ -98,7 +96,6 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
     examTypeCode: initial?.examTypeCode ?? 'oet',
     professionId: initial?.professionId ?? '',
     category: initial?.category ?? 'medical',
-    difficulty: initial?.difficulty ?? 'medium',
     ipaPronunciation: initial?.ipaPronunciation ?? '',
     americanSpelling: initial?.americanSpelling ?? '',
     audioUrl: initial?.audioUrl ?? '',
@@ -112,7 +109,6 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
     recallSetCodes: initial?.recallSetCodes ?? [],
     commonMistakes: initial?.commonMistakes ?? [],
     similarSounding: initial?.similarSounding ?? [],
-    oetSubtestTags: initial?.oetSubtestTags ?? [],
     // Default provenance for admin-authored vocab entries so the publish gate
     // can run without the field being rendered. Preserves the existing
     // initial-value behaviour when the API returns an explicit value.

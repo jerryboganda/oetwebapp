@@ -20,6 +20,7 @@ import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import {
   archiveContentPaper,
   listContentPapers,
+  publishContentPaper,
   type ContentPaperDto,
   type PaperAssetRole,
 } from '@/lib/content-upload-api';
@@ -76,6 +77,7 @@ export default function AdminListeningPapersPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [search, setSearch] = useState('');
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!isAuthenticated || role !== 'admin') return;
@@ -111,6 +113,49 @@ export default function AdminListeningPapersPage() {
       setToast({ variant: 'error', message: `Archive failed: ${(e as Error).message}` });
     }
   }, [canWriteContent, load]);
+
+  const runBulk = useCallback(async (
+    action: 'archive' | 'publish',
+    op: (id: string) => Promise<unknown>,
+  ) => {
+    if (!canWriteContent || bulkBusy || selectedKeys.size === 0) return;
+    const ids = Array.from(selectedKeys);
+    const selectedPapers = rows.filter((p) => selectedKeys.has(p.id));
+    const titles = selectedPapers.map((p) => `• ${p.title}`).join('\n');
+    const verb = action === 'archive' ? 'Archive' : 'Publish';
+    const consequence = action === 'archive'
+      ? 'Learners will no longer see them.'
+      : 'They become visible to entitled learners immediately.';
+    if (!confirm(`${verb} ${ids.length} listening paper${ids.length === 1 ? '' : 's'}?\n\n${titles}\n\n${consequence}`)) {
+      return;
+    }
+    setBulkBusy(true);
+    const failures: string[] = [];
+    for (const id of ids) {
+      try {
+        await op(id);
+      } catch (e) {
+        const paper = selectedPapers.find((p) => p.id === id);
+        failures.push(`${paper?.title ?? id}: ${(e as Error).message}`);
+      }
+    }
+    setBulkBusy(false);
+    setSelectedKeys(new Set());
+    if (failures.length === 0) {
+      setToast({ variant: 'success', message: `${verb}d ${ids.length} paper${ids.length === 1 ? '' : 's'}.` });
+    } else if (failures.length === ids.length) {
+      setToast({ variant: 'error', message: `${verb} failed for all ${ids.length}: ${failures[0]}` });
+    } else {
+      setToast({
+        variant: 'error',
+        message: `${verb}d ${ids.length - failures.length} of ${ids.length}. First failure: ${failures[0]}`,
+      });
+    }
+    await load();
+  }, [bulkBusy, canWriteContent, load, rows, selectedKeys]);
+
+  const bulkArchive = useCallback(() => { void runBulk('archive', archiveContentPaper); }, [runBulk]);
+  const bulkPublish = useCallback(() => { void runBulk('publish', publishContentPaper); }, [runBulk]);
 
   const stats = useMemo(() => {
     let published = 0;
@@ -257,8 +302,8 @@ export default function AdminListeningPapersPage() {
             selectedCount={selectedKeys.size}
             onClearSelection={() => setSelectedKeys(new Set())}
             actions={[
-              { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
-              { key: 'publish', label: 'Publish selected', onClick: () => {} },
+              { key: 'archive', label: bulkBusy ? 'Archiving…' : 'Archive selected', variant: 'danger', onClick: bulkArchive },
+              { key: 'publish', label: bulkBusy ? 'Publishing…' : 'Publish selected', onClick: bulkPublish },
             ]}
           />
         </AdminRoutePanel>

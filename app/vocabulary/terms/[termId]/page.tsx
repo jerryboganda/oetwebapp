@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Volume2, Plus, CheckCircle2, Trash2, Flame } from 'lucide-react';
+import { ArrowLeft, BookOpen, Volume2, Plus, CheckCircle2, Trash2 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge, CategoryBadge, DifficultyBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge } from '@/components/ui/badge';
 import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 import {
   fetchVocabularyTerm,
@@ -149,7 +149,6 @@ export default function VocabularyTermDetailPage() {
           description={term.ipaPronunciation ?? term.category.replace(/_/g, ' ')}
           icon={BookOpen}
           highlights={[
-            { icon: Flame, label: 'Difficulty', value: term.difficulty },
             { icon: BookOpen, label: 'Category', value: term.category.replace(/_/g, ' ') },
           ]}
         />
@@ -292,7 +291,6 @@ export default function VocabularyTermDetailPage() {
               <div>Exam: <span className="font-medium text-navy">{term.examTypeCode.toUpperCase()}</span></div>
               {term.professionId && <div>Profession: <span className="font-medium text-navy capitalize">{term.professionId}</span></div>}
               <div className="flex items-center gap-2">Category: <CategoryBadge category={term.category} size="sm" /></div>
-              <div className="flex items-center gap-2">Difficulty: <DifficultyBadge difficulty={term.difficulty} size="sm" /></div>
             </div>
           </Card>
         </div>

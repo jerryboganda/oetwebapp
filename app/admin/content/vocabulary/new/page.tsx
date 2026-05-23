@@ -13,7 +13,6 @@ export default function AdminVocabularyNewPage() {
       examTypeCode: values.examTypeCode,
       professionId: values.professionId || null,
       category: values.category,
-      difficulty: values.difficulty,
       ipaPronunciation: values.ipaPronunciation || undefined,
       americanSpelling: values.americanSpelling || undefined,
       audioUrl: values.audioUrl || undefined,
@@ -27,7 +26,6 @@ export default function AdminVocabularyNewPage() {
       recallSetCodes: values.recallSetCodes,
       commonMistakes: values.commonMistakes,
       similarSounding: values.similarSounding,
-      oetSubtestTags: values.oetSubtestTags,
       sourceProvenance: values.sourceProvenance || undefined,
       status: values.status,
     });
