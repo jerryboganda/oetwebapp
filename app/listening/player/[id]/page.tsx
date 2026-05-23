@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, CheckCircle2, ChevronRight, Loader2, Volume2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, Loader2, StickyNote, Volume2 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +48,7 @@ import { resolveBlockedSeekTarget, shouldResumeAfterBlockedPause } from '@/lib/l
 import { listeningV2Api, type AdvanceResult, type ListeningV2SessionState } from '@/lib/listening/v2-api';
 import { presentationModeFromSession } from '@/lib/listening/modes';
 import { ListeningPlayerSkinShell } from '@/components/domain/listening/player/skins/ListeningPlayerSkinShell';
+import { NotePanel } from '@/components/domain/listening/NotePanel';
 
 const FIRST_STRICT_STATE: ListeningFsmState = 'a1_preview';
 
@@ -140,6 +141,7 @@ function PlayerContent() {
   const attemptIdFromRoute = searchParams?.get('attemptId');
   const pathwayStage = searchParams?.get('pathwayStage') ?? null;
   const drillId = searchParams?.get('drill');
+  const focusParam = searchParams?.get('focus') ?? null;
   // Mocks V2 — when this player is launched as a section of a mock attempt,
   // BuildLaunchRoute writes mockAttemptId/mockSectionId/mockMode/strictness
   // onto the URL. After grading we POST to completeMockSection so the mock
@@ -235,6 +237,23 @@ function PlayerContent() {
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const sectionMotion = getSurfaceMotion('section', reducedMotion);
   const listMotion = getSurfaceMotion('list', reducedMotion);
+  const [isNotePanelOpen, setIsNotePanelOpen] = useState(false);
+
+  // Press N to toggle the notes panel (only in non-exam modes)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (mode === 'exam' || mode === 'home') return;
+      if (event.key === 'n' || event.key === 'N') {
+        // Don't trigger when typing in an input/textarea
+        const tag = (event.target as HTMLElement)?.tagName?.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        setIsNotePanelOpen((prev) => !prev);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [mode]);
+
   const strictReadinessRequired = mode === 'exam'
     || mode === 'home'
     || session?.modePolicy.mode === 'exam'
@@ -586,8 +605,15 @@ function PlayerContent() {
   const extracts = session?.paper.extracts ?? [];
   const sectionsInPaper = useMemo<ListeningSectionCode[]>(() => {
     if (!sectionGroups) return [];
-    return LISTENING_SECTION_SEQUENCE.filter((code) => sectionGroups[code].length > 0);
-  }, [sectionGroups]);
+    let sections = LISTENING_SECTION_SEQUENCE.filter((code) => sectionGroups[code].length > 0);
+    // Focus filtering: restrict visible sections when launched from Part Practice links
+    if (focusParam === 'part-a') {
+      sections = sections.filter((code) => code === 'A1' || code === 'A2');
+    } else if (focusParam === 'parts-bc') {
+      sections = sections.filter((code) => code === 'B' || code === 'C1' || code === 'C2');
+    }
+    return sections;
+  }, [sectionGroups, focusParam]);
   const currentSection: ListeningSectionCode | null = sectionsInPaper[currentSectionIndex] ?? null;
   const freeNavigationEnabled = session?.modePolicy.freeNavigation === true;
   const allPartsReviewEnabled = freeNavigationEnabled && session?.modePolicy.printableBooklet === true;
@@ -1149,20 +1175,40 @@ function PlayerContent() {
           />
         ) : (
           <motion.div {...listMotion} className="space-y-8">
-            <ListeningAudioTransport
-              isPlaying={isPlaying}
-              progressSeconds={progress}
-              durationSeconds={duration}
-              canScrub={session.modePolicy.canScrub !== false}
-              isPreviewPhase={phase === 'preview'}
-              audioState={audioState}
-              saveState={saveState}
-              answeredCount={answeredCount}
-              totalQuestions={session.questions.length}
-              attemptSecondsRemaining={attemptSecondsRemaining}
-              onTogglePlayPause={togglePlayPause}
-              onScrub={handleScrub}
-            />
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <ListeningAudioTransport
+                  isPlaying={isPlaying}
+                  progressSeconds={progress}
+                  durationSeconds={duration}
+                  canScrub={session.modePolicy.canScrub !== false}
+                  isPreviewPhase={phase === 'preview'}
+                  audioState={audioState}
+                  saveState={saveState}
+                  answeredCount={answeredCount}
+                  totalQuestions={session.questions.length}
+                  attemptSecondsRemaining={attemptSecondsRemaining}
+                  onTogglePlayPause={togglePlayPause}
+                  onScrub={handleScrub}
+                />
+              </div>
+              {mode !== 'exam' && mode !== 'home' ? (
+                <button
+                  type="button"
+                  onClick={() => setIsNotePanelOpen((prev) => !prev)}
+                  aria-label={isNotePanelOpen ? 'Close notes' : 'Open notes'}
+                  title="Notes (N)"
+                  className={`mt-1 flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                    isNotePanelOpen
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-surface text-muted hover:border-primary/50 hover:text-navy'
+                  }`}
+                >
+                  <StickyNote className="h-4 w-4" />
+                  <span>Notes</span>
+                </button>
+              ) : null}
+            </div>
 
             {/* C8e — practice mode disclosure: replay is allowed in this
                 mode but the real CBLA exam plays once. */}
@@ -1447,6 +1493,16 @@ function PlayerContent() {
           </div>
         ) : null}
       </div>
+
+      {/* Notes panel — learning/practice modes only */}
+      {mode !== 'exam' && mode !== 'home' && attempt?.attemptId ? (
+        <NotePanel
+          attemptId={attempt.attemptId}
+          currentPositionMs={Math.round(progress * 1000)}
+          isOpen={isNotePanelOpen}
+          onClose={() => setIsNotePanelOpen(false)}
+        />
+      ) : null}
     </AppShell>
     </ListeningPlayerSkinShell>
   );

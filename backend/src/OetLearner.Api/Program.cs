@@ -159,6 +159,9 @@ builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize =
         OetLearner.Api.Services.Conversation.ConversationRealtimeTransportLimits.MaximumReceiveMessageBytes;
+    // Keep under Nginx Proxy Manager's default 60s proxy_read_timeout to prevent 504s
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(45);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
 });
 builder.Services.AddSingleton<IWebPushDispatcher, WebPushDispatcher>();
 builder.Services.AddHttpClient<IMobilePushDispatcher, MobilePushDispatcher>();
@@ -713,6 +716,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningSessionSer
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningGradingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningPathwayProgressService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.TeacherClassService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExpertService, OetLearner.Api.Services.Listening.ListeningExpertService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPolicyService, OetLearner.Api.Services.Listening.ListeningPolicyService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningV2BackfillService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAnalyticsService, OetLearner.Api.Services.Reading.ReadingAnalyticsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi, OetLearner.Api.Services.Reading.GroundedReadingExtractionAi>();
@@ -1641,6 +1646,8 @@ app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
 app.MapListeningLearnerEndpoints();
 app.MapListeningV2Endpoints();
+app.MapListeningExpertEndpoints();
+app.MapListeningPolicyAdminEndpoints();
 app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
 app.MapRecallsEndpoints();

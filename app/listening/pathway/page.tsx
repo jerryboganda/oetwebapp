@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, CheckCircle2, Headphones, Target } from 'lucide-react';
+import { Activity, ArrowRight, CheckCircle2, Headphones, Target } from 'lucide-react';
+import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Card } from '@/components/ui/card';
@@ -104,6 +105,27 @@ export default function ListeningPathwayPage() {
                 <div className="h-full rounded-full bg-primary" style={{ width: `${progressPercent}%` }} />
               </div>
             </Card>
+
+            {summary.completed === 0 && (
+              <Card className="border-primary/30 bg-primary/5 p-6">
+                <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-bold text-navy">Start your Listening Diagnostic</h2>
+                    <p className="text-sm leading-relaxed text-muted">
+                      A short placement test to identify your strengths and unlock the right pathway stages.
+                    </p>
+                  </div>
+                  <Link
+                    href={stages[0]?.actionHref ?? '/diagnostic/listening'}
+                    className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                  >
+                    <Target className="h-4 w-4" aria-hidden />
+                    Start Diagnostic Test
+                    <ArrowRight className="h-4 w-4" aria-hidden />
+                  </Link>
+                </div>
+              </Card>
+            )}
 
             <PathwayBoard stages={stages} />
           </>
