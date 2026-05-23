@@ -786,9 +786,9 @@ public class VocabularyService(
         Category: t.Category,
         IpaPronunciation: t.IpaPronunciation,
         AmericanSpelling: t.AmericanSpelling,
-        AudioUrl: IsInternalRecallAudioPath(t.AudioUrl) ? null : t.AudioUrl,
-        AudioSlowUrl: IsInternalRecallAudioPath(t.AudioSlowUrl) ? null : t.AudioSlowUrl,
-        AudioSentenceUrl: IsInternalRecallAudioPath(t.AudioSentenceUrl) ? null : t.AudioSentenceUrl,
+        AudioUrl: IsInternalAudioReference(t.AudioUrl) ? null : t.AudioUrl,
+        AudioSlowUrl: IsInternalAudioReference(t.AudioSlowUrl) ? null : t.AudioSlowUrl,
+        AudioSentenceUrl: IsInternalAudioReference(t.AudioSentenceUrl) ? null : t.AudioSentenceUrl,
         AudioMediaAssetId: null,
         ImageUrl: t.ImageUrl,
         Synonyms: ParseStringArray(t.SynonymsJson).ToArray(),
@@ -798,10 +798,10 @@ public class VocabularyService(
         Status: t.Status,
         RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray());
 
-    private static bool IsInternalRecallAudioPath(string? audioUrl)
+    private static bool IsInternalAudioReference(string? audioUrl)
         => !string.IsNullOrWhiteSpace(audioUrl)
-           && (audioUrl.StartsWith("recalls/audio/", StringComparison.OrdinalIgnoreCase)
-               || audioUrl.StartsWith("/media/recalls/", StringComparison.OrdinalIgnoreCase));
+           && (audioUrl.StartsWith("/", StringComparison.Ordinal)
+               || !Uri.TryCreate(audioUrl, UriKind.Absolute, out _));
 
     private static IQueryable<VocabularyTerm> ApplyExamTypeFilter(IQueryable<VocabularyTerm> query, string? examTypeCode)
     {

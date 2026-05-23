@@ -26,9 +26,7 @@ public sealed class ElevenLabsConversationTtsProvider(
         var model = string.IsNullOrWhiteSpace(request.ModelVariant)
             ? (string.IsNullOrWhiteSpace(options.ElevenLabsModel) ? "eleven_multilingual_v2" : options.ElevenLabsModel)
             : request.ModelVariant;
-        var outputFormat = string.IsNullOrWhiteSpace(options.ElevenLabsOutputFormat)
-            ? "mp3_44100_128"
-            : options.ElevenLabsOutputFormat;
+        var outputFormat = NormalizeMp3OutputFormat(options.ElevenLabsOutputFormat);
         var url = $"https://api.elevenlabs.io/v1/text-to-speech/{Uri.EscapeDataString(voice)}?output_format={Uri.EscapeDataString(outputFormat)}";
 
         var dictionaryLocators = !string.IsNullOrWhiteSpace(options.ElevenLabsPronunciationDictionaryId)
@@ -78,4 +76,10 @@ public sealed class ElevenLabsConversationTtsProvider(
         return new ConversationTtsResult(bytes, "audio/mpeg",
             AzureConversationTtsProvider.ApproxDurationMs(request.Text), Name, $"elevenlabs voice={voice}");
     }
+
+    private static string NormalizeMp3OutputFormat(string? outputFormat)
+        => !string.IsNullOrWhiteSpace(outputFormat)
+           && outputFormat.StartsWith("mp3_", StringComparison.OrdinalIgnoreCase)
+            ? outputFormat.Trim()
+            : "mp3_44100_128";
 }

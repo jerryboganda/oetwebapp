@@ -71,7 +71,7 @@ public static class VoiceDesignAdminEndpoints
             if (request.Emotion is not null) row.Qwen3Emotion = request.Emotion;
             if (request.ElevenLabsDefaultVoiceId is not null) row.ElevenLabsDefaultVoiceId = request.ElevenLabsDefaultVoiceId;
             if (request.ElevenLabsModel is not null) row.ElevenLabsModel = request.ElevenLabsModel;
-            if (request.ElevenLabsOutputFormat is not null) row.ElevenLabsOutputFormat = request.ElevenLabsOutputFormat;
+            if (request.ElevenLabsOutputFormat is not null) row.ElevenLabsOutputFormat = NormalizeMp3OutputFormat(request.ElevenLabsOutputFormat);
             if (request.ElevenLabsPronunciationDictionaryId is not null) row.ElevenLabsPronunciationDictionaryId = request.ElevenLabsPronunciationDictionaryId;
             if (request.ElevenLabsPronunciationDictionaryVersionId is not null) row.ElevenLabsPronunciationDictionaryVersionId = request.ElevenLabsPronunciationDictionaryVersionId;
             if (request.ElevenLabsStability.HasValue) row.ElevenLabsStability = request.ElevenLabsStability;
@@ -248,4 +248,10 @@ public static class VoiceDesignAdminEndpoints
             return null;
         }
     }
+
+    private static string NormalizeMp3OutputFormat(string? outputFormat)
+        => !string.IsNullOrWhiteSpace(outputFormat)
+           && outputFormat.StartsWith("mp3_", StringComparison.OrdinalIgnoreCase)
+            ? outputFormat.Trim()
+            : "mp3_44100_128";
 }

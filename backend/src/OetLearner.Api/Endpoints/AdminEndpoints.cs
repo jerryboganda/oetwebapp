@@ -1311,7 +1311,7 @@ public static class AdminEndpoints
                 if (request.ElevenLabsSttTokenTtlSeconds.HasValue) row.ElevenLabsSttTokenTtlSeconds = request.ElevenLabsSttTokenTtlSeconds;
                 if (request.ElevenLabsDefaultVoiceId is not null) row.ElevenLabsDefaultVoiceId = request.ElevenLabsDefaultVoiceId;
                 if (request.ElevenLabsModel is not null) row.ElevenLabsModel = request.ElevenLabsModel;
-                if (request.ElevenLabsOutputFormat is not null) row.ElevenLabsOutputFormat = request.ElevenLabsOutputFormat;
+                if (request.ElevenLabsOutputFormat is not null) row.ElevenLabsOutputFormat = NormalizeElevenLabsOutputFormat(request.ElevenLabsOutputFormat);
                 if (request.ElevenLabsPronunciationDictionaryId is not null) row.ElevenLabsPronunciationDictionaryId = request.ElevenLabsPronunciationDictionaryId;
                 if (request.ElevenLabsPronunciationDictionaryVersionId is not null) row.ElevenLabsPronunciationDictionaryVersionId = request.ElevenLabsPronunciationDictionaryVersionId;
                 if (request.ElevenLabsStability.HasValue) row.ElevenLabsStability = request.ElevenLabsStability;
@@ -2056,6 +2056,11 @@ public static class AdminEndpoints
             "distributed" => "distributed",
             _ => throw ApiException.Validation("REALTIME_TOPOLOGY", "Realtime STT provider topology must be unconfigured, single-instance, single-region-sticky, or distributed."),
         };
+
+    private static string NormalizeElevenLabsOutputFormat(string outputFormat)
+        => outputFormat.Trim().StartsWith("mp3_", StringComparison.OrdinalIgnoreCase)
+            ? outputFormat.Trim()
+            : "mp3_44100_128";
 
     private static void ValidateConversationSettingsRequest(AdminConversationSettingsRequest request)
     {

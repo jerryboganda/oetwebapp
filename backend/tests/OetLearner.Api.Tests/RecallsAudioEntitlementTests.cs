@@ -141,6 +141,8 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
     private static void AssertNoCachedAudioLeak(string payload)
     {
         Assert.DoesNotContain("/media/recalls/tts/", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("recalls/audio/", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("vocabulary/audio/", payload, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("cached-word", payload, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("cached-sentence", payload, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("media-audio-bypass-test", payload, StringComparison.OrdinalIgnoreCase);
