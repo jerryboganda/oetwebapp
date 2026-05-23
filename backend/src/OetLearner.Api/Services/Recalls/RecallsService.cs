@@ -237,10 +237,14 @@ public sealed class RecallsService(
         {
             var asset = await db.MediaAssets.AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == term.AudioMediaAssetId, ct);
-            if (asset is not null && storage.Exists(asset.StoragePath))
+            if (asset is { Status: MediaAssetStatus.Ready } && storage.Exists(asset.StoragePath))
             {
                 return new RecallsAudioResponse(asset.StoragePath, term.AudioProvider ?? "stored", ContentTypeFor(asset.StoragePath));
             }
+
+            throw ApiException.NotFound(
+                "AUDIO_NOT_READY",
+                "Recall pronunciation audio has not been generated yet. Ask an admin to run the recall audio backfill.");
         }
 
         var existing = normalizedSpeed switch
@@ -249,8 +253,15 @@ public sealed class RecallsService(
             "sentence" => term.AudioSentenceUrl,
             _ => term.AudioUrl,
         };
-        if (existing is { Length: > 0 } existingKey && IsStoredAudioKey(existingKey) && storage.Exists(existingKey))
-            return new RecallsAudioResponse(existingKey, term.AudioProvider ?? "stored", ContentTypeFor(existingKey));
+        if (existing is { Length: > 0 } existingKey && IsStoredAudioKey(existingKey))
+        {
+            var asset = await db.MediaAssets.AsNoTracking()
+                .FirstOrDefaultAsync(m => m.StoragePath == existingKey && m.Status == MediaAssetStatus.Ready, ct);
+            if (asset is not null && storage.Exists(asset.StoragePath))
+            {
+                return new RecallsAudioResponse(asset.StoragePath, term.AudioProvider ?? "stored", ContentTypeFor(asset.StoragePath));
+            }
+        }
 
         throw ApiException.NotFound(
             "AUDIO_NOT_READY",

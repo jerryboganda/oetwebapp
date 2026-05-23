@@ -1,4 +1,4 @@
-﻿using OetLearner.Api.Domain;
+using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services;
 
@@ -41,9 +41,9 @@ public static partial class SeedData
                 UpdatedAt = DateTimeOffset.UtcNow,
             };
 
-        // â”€â”€ PROCEDURES (70 terms) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── PROCEDURES (70 terms) ──────────────────────────────────────────
         yield return V("appendicectomy", "Surgical removal of the appendix.", "An urgent laparoscopic appendicectomy was performed for acute appendicitis.", "procedures", synonyms: new[] { "appendectomy" });
-        yield return V("cholecystectomy", "Surgical removal of the gallbladder.", "Laparoscopic cholecystectomy was arranged for symptomatic gallstones.", "procedures", ipa: "/ËŒkÉ’lÉªsÉªsËˆtÉ›ktÉ™mi/");
+        yield return V("cholecystectomy", "Surgical removal of the gallbladder.", "Laparoscopic cholecystectomy was arranged for symptomatic gallstones.", "procedures", ipa: "/ˌkɒlɪsɪsˈtɛktəmi/");
         yield return V("hysterectomy", "Surgical removal of the uterus.", "A total abdominal hysterectomy was performed for heavy menstrual bleeding.", "procedures");
         yield return V("mastectomy", "Surgical removal of a breast.", "A right mastectomy was performed with sentinel node biopsy.", "procedures");
         yield return V("lumpectomy", "Surgical removal of a lump, especially in breast tissue.", "A wide local excision lumpectomy was followed by adjuvant radiotherapy.", "procedures");
@@ -65,7 +65,7 @@ public static partial class SeedData
         yield return V("cystoscopy", "Endoscopic examination of the bladder.", "Cystoscopy excluded bladder malignancy.", "procedures");
         yield return V("arthroscopy", "Endoscopic examination of a joint.", "Knee arthroscopy allowed for meniscal repair.", "procedures");
         yield return V("biopsy", "Removal of a small sample of tissue for diagnostic examination.", "An ultrasound-guided liver biopsy confirmed the diagnosis.", "procedures");
-        yield return V("aspiration", "The removal of fluid or tissue by suction.", "Therapeutic aspiration of the pleural effusion provided symptomatic relief.", "procedures", contextNotes: "'Aspiration' also denotes inhalation of foreign material â€” context disambiguates.");
+        yield return V("aspiration", "The removal of fluid or tissue by suction.", "Therapeutic aspiration of the pleural effusion provided symptomatic relief.", "procedures", contextNotes: "'Aspiration' also denotes inhalation of foreign material — context disambiguates.");
         yield return V("paracentesis", "Needle drainage of ascitic fluid from the peritoneal cavity.", "Therapeutic paracentesis drained 4 L of ascitic fluid.", "procedures");
         yield return V("thoracocentesis", "Needle drainage of pleural fluid from the pleural cavity.", "Ultrasound-guided thoracocentesis confirmed an exudative effusion.", "procedures");
         yield return V("lumbar puncture", "A procedure to collect cerebrospinal fluid from the lower back.", "A lumbar puncture excluded bacterial meningitis.", "procedures");
@@ -95,7 +95,7 @@ public static partial class SeedData
         yield return V("dressing change", "The process of changing a wound dressing under aseptic technique.", "A dressing change every 48 hours was arranged.", "procedures");
         yield return V("wound irrigation", "Flushing of a wound with fluid to remove debris or contaminants.", "Wound irrigation with sterile saline preceded closure.", "procedures");
         yield return V("suturing", "Closing a wound with stitches.", "Suturing was performed in layers under local anaesthesia.", "procedures");
-        yield return V("debridement", "Removal of dead, damaged, or infected tissue from a wound.", "Sharp debridement was performed at the bedside.", "procedures", ipa: "/dÉªËˆbriËdmÉ’Ìƒ/");
+        yield return V("debridement", "Removal of dead, damaged, or infected tissue from a wound.", "Sharp debridement was performed at the bedside.", "procedures", ipa: "/dɪˈbriːdmɒ̃/");
         yield return V("amputation", "Surgical removal of a limb or extremity.", "Below-knee amputation was undertaken for non-salvageable ischaemia.", "procedures");
         yield return V("fracture reduction", "Realignment of a broken bone into normal position.", "Closed fracture reduction was performed under sedation.", "procedures");
         yield return V("fixation", "The stabilisation of a fracture, internally or externally.", "Open reduction and internal fixation was required for the complex tibial plateau fracture.", "procedures");
@@ -113,7 +113,7 @@ public static partial class SeedData
         yield return V("echocardiogram", "Ultrasound imaging of the heart.", "A transthoracic echocardiogram demonstrated preserved systolic function.", "procedures");
         yield return V("electroencephalogram", "A recording of the electrical activity of the brain.", "An electroencephalogram was obtained during a provocation study.", "procedures", synonyms: new[] { "EEG" });
 
-        // â”€â”€ DIAGNOSTICS / INVESTIGATIONS (50 terms) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── DIAGNOSTICS / INVESTIGATIONS (50 terms) ────────────────────────
         yield return V("X-ray", "An imaging technique using ionising radiation to produce images.", "A chest X-ray was obtained on admission.", "diagnostics");
         yield return V("ultrasound", "An imaging technique using sound waves.", "An abdominal ultrasound ruled out cholelithiasis.", "diagnostics");
         yield return V("CT scan", "Computed tomography; cross-sectional imaging using X-rays.", "A non-contrast CT scan of the head excluded haemorrhage.", "diagnostics");
@@ -164,7 +164,7 @@ public static partial class SeedData
         yield return V("nerve conduction study", "A test of electrical conduction through peripheral nerves.", "Nerve conduction studies confirmed carpal tunnel syndrome.", "diagnostics");
         yield return V("EMG", "Electromyography; measures electrical activity of skeletal muscle.", "An EMG was requested to assess for myopathy.", "diagnostics", synonyms: new[] { "electromyography" });
 
-        // â”€â”€ CLINICAL COMMUNICATION (80 terms) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── CLINICAL COMMUNICATION (80 terms) ──────────────────────────────
         yield return V("contraindicated", "Not recommended due to potential harm.", "NSAIDs are contraindicated in patients with active peptic ulcer disease.", "clinical_communication", synonyms: new[] { "unsafe", "inadvisable" });
         yield return V("indication", "A valid reason to use a particular treatment.", "The indication for anticoagulation is secondary prevention.", "clinical_communication");
         yield return V("dosage", "The prescribed amount of a medicine.", "The dosage was reduced in renal impairment.", "clinical_communication");

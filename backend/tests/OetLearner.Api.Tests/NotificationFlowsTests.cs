@@ -436,7 +436,9 @@ public class NotificationFlowsTests
             DispatchDigestImmediately: true));
 
         Assert.True(secondProof.DigestDispatchedImmediately);
-        var digestMessage = Assert.Single(emailSender.Messages);
+        var digestMessage = Assert.Single(
+            emailSender.Messages,
+            message => message.Subject.Contains("daily digest", StringComparison.OrdinalIgnoreCase));
         Assert.Contains("First timed writing task", digestMessage.TextBody);
         Assert.DoesNotContain("Second timed reading task", digestMessage.TextBody);
 

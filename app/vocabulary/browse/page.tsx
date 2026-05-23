@@ -21,7 +21,6 @@ import {
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
-import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 import type { VocabularyTerm, VocabularyCategoriesResponse } from '@/lib/types/vocabulary';
 
 // Mobile offline cache — lazy, best-effort; skipped in SSR and when IndexedDB is unavailable.
@@ -81,7 +80,6 @@ export default function BrowseVocabularyPage() {
   }, [category, page, pageSize, recallSet, search]);
 
   useEffect(() => {
-    preloadVoices();
     analytics.track('vocab_browse_viewed');
     // Load categories once on mount.
     fetchVocabularyCategories({ examTypeCode: 'oet' })
@@ -118,19 +116,14 @@ export default function BrowseVocabularyPage() {
     }
   }
 
-  async function playAudio(termId: string, termText?: string) {
-    const response = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
-    if (response) {
-      playTransientAudio(response.url);
-      return;
-    }
-    // Fallback: browser TTS when audio is blocked or unavailable
-    if (termText && isBrowserTtsAvailable()) {
-      try {
-        await speakTerm(termText);
-      } catch {
-        // Best-effort
+  async function playAudio(termId: string) {
+    try {
+      const response = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
+      if (response) {
+        playTransientAudio(response.url);
       }
+    } catch {
+      setError('Pronunciation audio is not ready yet.');
     }
   }
 
@@ -245,7 +238,7 @@ export default function BrowseVocabularyPage() {
                         <span className="text-xs italic text-muted">{term.ipaPronunciation}</span>
                       )}
                       <button
-                        onClick={() => void playAudio(term.id, term.term)}
+                        onClick={() => void playAudio(term.id)}
                         className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20"
                         aria-label={`Play pronunciation of ${term.term}`}
                       >

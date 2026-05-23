@@ -659,6 +659,31 @@ describe('apiClient', () => {
     expect(headers!.get('Content-Type')).toBeNull();
   });
 
+  it('uploads ElevenLabs pronunciation dictionaries through the backend proxy client', async () => {
+    let url = '';
+    let headers: Headers | null = null;
+    let body: BodyInit | null | undefined;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      url = String(input);
+      headers = new Headers(init?.headers);
+      body = init?.body;
+      return new Response(JSON.stringify({ dictionaryId: 'dict-1', versionId: 'version-1' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const file = new File(['<lexicon />'], 'terms.pls', { type: 'application/pls+xml' });
+    const { uploadElevenLabsPronunciationDictionary } = await import('../api');
+    const response = await uploadElevenLabsPronunciationDictionary(file, 'Recall terms');
+
+    expect(response).toEqual({ dictionaryId: 'dict-1', versionId: 'version-1' });
+    expect(url).toContain('/api/backend/v1/admin/voice-design/elevenlabs/dictionary');
+    expect(headers).not.toBeNull();
+    expect(headers!.get('Content-Type')).toBeNull();
+    expect(body).toBeInstanceOf(FormData);
+  });
+
   it('sends DELETE requests through the centralized client', async () => {
     let method = '';
     globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {

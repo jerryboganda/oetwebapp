@@ -75,7 +75,7 @@ public static class VoiceDesignAdminEndpoints
             if (request.Speed is not null) row.Qwen3Speed = request.Speed;
             if (request.Pitch is not null) row.Qwen3Pitch = request.Pitch;
             if (request.Emotion is not null) row.Qwen3Emotion = request.Emotion;
-            if (request.ElevenLabsTtsBaseUrl is not null) row.ElevenLabsTtsBaseUrl = NormalizeElevenLabsBaseUrl(request.ElevenLabsTtsBaseUrl);
+            if (request.ElevenLabsTtsBaseUrl is not null) row.ElevenLabsTtsBaseUrl = ElevenLabsApiEndpoint.NormalizeBaseUrl(request.ElevenLabsTtsBaseUrl);
             if (request.ElevenLabsDefaultVoiceId is not null) row.ElevenLabsDefaultVoiceId = request.ElevenLabsDefaultVoiceId;
             if (request.ElevenLabsModel is not null) row.ElevenLabsModel = request.ElevenLabsModel;
             if (request.ElevenLabsOutputFormat is not null) row.ElevenLabsOutputFormat = NormalizeMp3OutputFormat(request.ElevenLabsOutputFormat);
@@ -147,7 +147,7 @@ public static class VoiceDesignAdminEndpoints
             form.Add(new StringContent(string.IsNullOrWhiteSpace(name) ? Path.GetFileNameWithoutExtension(file.FileName) : name.Trim()), "name");
 
             var client = httpClientFactory.CreateClient("ConversationElevenLabsClient");
-            var baseUrl = NormalizeElevenLabsBaseUrl(options.ElevenLabsTtsBaseUrl);
+            var baseUrl = ElevenLabsApiEndpoint.NormalizeBaseUrl(options.ElevenLabsTtsBaseUrl);
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/pronunciation-dictionaries/add-from-file");
             request.Headers.Add("xi-api-key", options.ElevenLabsApiKey);
             request.Content = form;
@@ -309,19 +309,6 @@ public static class VoiceDesignAdminEndpoints
            && outputFormat.StartsWith("mp3_", StringComparison.OrdinalIgnoreCase)
             ? outputFormat.Trim()
             : "mp3_44100_128";
-
-    private static string NormalizeElevenLabsBaseUrl(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return "https://api.elevenlabs.io/v1";
-        var normalized = value.Trim().TrimEnd('/');
-        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
-        {
-            throw ApiException.Validation("elevenlabs_tts_base_url_invalid", "ElevenLabs API base URL must be an absolute HTTP or HTTPS URL.");
-        }
-
-        return normalized;
-    }
 
     private static async Task<string?> ValidatePlsAsync(IFormFile file, CancellationToken ct)
     {

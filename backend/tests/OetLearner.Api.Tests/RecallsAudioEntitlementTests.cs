@@ -89,6 +89,71 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData(MediaAssetStatus.Processing)]
+    [InlineData(MediaAssetStatus.Failed)]
+    [InlineData(MediaAssetStatus.Quarantined)]
+    public async Task Audio_denies_non_ready_recall_media_even_for_active_subscriber(MediaAssetStatus mediaStatus)
+    {
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
+        var (termId, _) = await SeedVocabularyCardWithMediaAsync(learnerId, mediaStatus: mediaStatus);
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/recalls/audio/{termId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Audio_streams_legacy_stored_key_only_when_matching_media_asset_is_ready()
+    {
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
+        var (termId, _) = await SeedVocabularyCardWithMediaAsync(learnerId);
+        await ClearAudioMediaAssetIdAsync(termId);
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/recalls/audio/{termId}");
+
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, payload);
+        Assert.Equal("audio/wav", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Theory]
+    [InlineData(MediaAssetStatus.Processing)]
+    [InlineData(MediaAssetStatus.Failed)]
+    [InlineData(MediaAssetStatus.Quarantined)]
+    public async Task Audio_denies_legacy_stored_key_without_ready_media_asset(MediaAssetStatus mediaStatus)
+    {
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
+        var (termId, _) = await SeedVocabularyCardWithMediaAsync(learnerId, mediaStatus: mediaStatus);
+        await ClearAudioMediaAssetIdAsync(termId);
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/recalls/audio/{termId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("slow", MediaAssetStatus.Failed)]
+    [InlineData("sentence", MediaAssetStatus.Quarantined)]
+    public async Task Audio_denies_variant_stored_keys_without_ready_media_asset(string speed, MediaAssetStatus mediaStatus)
+    {
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
+        var (termId, _) = await SeedVocabularyCardWithMediaAsync(learnerId);
+        await SeedVariantMediaAsync(termId, speed, mediaStatus);
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/recalls/audio/{termId}?speed={speed}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     [Fact]
     public async Task Audio_returns_402_for_frozen_active_subscriber()
     {
@@ -264,7 +329,10 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
         return termId;
     }
 
-    private async Task<(string TermId, string MediaAssetId)> SeedVocabularyCardWithMediaAsync(string learnerId, string recallSetCodesJson = "[\"2026\"]")
+    private async Task<(string TermId, string MediaAssetId)> SeedVocabularyCardWithMediaAsync(
+        string learnerId,
+        string recallSetCodesJson = "[\"2026\"]",
+        MediaAssetStatus mediaStatus = MediaAssetStatus.Ready)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -288,13 +356,16 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
             SizeBytes = 8,
             DurationSeconds = 1,
             StoragePath = storageKey,
-            Status = MediaAssetStatus.Ready,
+            Status = mediaStatus,
             Sha256 = Guid.NewGuid().ToString("N"),
             MediaKind = "audio",
             UploadedBy = "test",
             UploadedAt = now,
             ProcessedAt = now,
         });
+
+        var slowStorageKey = $"recalls/audio/{termId}-slow.wav";
+        var sentenceStorageKey = $"recalls/audio/{termId}-sentence.wav";
 
         db.VocabularyTerms.Add(new VocabularyTerm
         {
@@ -309,8 +380,8 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
             AudioUrl = storageKey,
             AudioMediaAssetId = mediaAssetId,
             RecallSetCodesJson = recallSetCodesJson,
-            AudioSlowUrl = "recalls/audio/cached-word-slow.wav",
-            AudioSentenceUrl = "recalls/audio/cached-sentence.wav",
+            AudioSlowUrl = slowStorageKey,
+            AudioSentenceUrl = sentenceStorageKey,
             Status = "active",
             CreatedAt = now,
             UpdatedAt = now
@@ -328,5 +399,50 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
 
         await db.SaveChangesAsync();
         return (termId, mediaAssetId);
+    }
+
+    private async Task ClearAudioMediaAssetIdAsync(string termId)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var term = await db.VocabularyTerms.SingleAsync(t => t.Id == termId);
+        term.AudioMediaAssetId = null;
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedVariantMediaAsync(string termId, string speed, MediaAssetStatus mediaStatus)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var term = await db.VocabularyTerms.AsNoTracking().SingleAsync(t => t.Id == termId);
+        var storageKey = speed == "sentence" ? term.AudioSentenceUrl : term.AudioSlowUrl;
+        Assert.False(string.IsNullOrWhiteSpace(storageKey));
+
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        await using (var stream = new MemoryStream(new byte[] { 82, 73, 70, 70, 5, 6, 7, 8 }))
+        {
+            await storage.WriteAsync(storageKey!, stream, CancellationToken.None);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = $"media-audio-variant-test-{Guid.NewGuid():N}",
+            OriginalFilename = $"{termId}-{speed}.wav",
+            MimeType = "audio/wav",
+            Format = "wav",
+            SizeBytes = 8,
+            DurationSeconds = 1,
+            StoragePath = storageKey!,
+            Status = mediaStatus,
+            Sha256 = Guid.NewGuid().ToString("N"),
+            MediaKind = "audio",
+            UploadedBy = "test",
+            UploadedAt = now,
+            ProcessedAt = now,
+        });
+        await db.SaveChangesAsync();
     }
 }

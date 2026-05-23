@@ -14,7 +14,6 @@ import { fetchRecallsAudio, fetchVocabQuiz, submitVocabQuiz } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
-import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 import type { VocabularyQuizQuestion, VocabularyQuizResult } from '@/lib/types/vocabulary';
 
 const QUIZ_FORMATS = [
@@ -48,7 +47,6 @@ function VocabQuizContent() {
   const startedAtRef = useRef<number>(0);
 
   useEffect(() => {
-    preloadVoices();
     analytics.track('vocab_quiz_viewed', { format });
     void loadQuiz(format);
   }, [format]);
@@ -147,18 +145,14 @@ function VocabQuizContent() {
     }
   }
 
-  async function playAudio(termId: string, fallbackText?: string) {
-    const response = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
-    if (response) {
-      playTransientAudio(response.url);
-      return;
-    }
-    if (fallbackText && isBrowserTtsAvailable()) {
-      try {
-        await speakTerm(fallbackText);
-      } catch {
-        // Best-effort
+  async function playAudio(termId: string) {
+    try {
+      const response = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
+      if (response) {
+        playTransientAudio(response.url);
       }
+    } catch {
+      setError('Pronunciation audio is not ready yet.');
     }
   }
 
@@ -287,7 +281,7 @@ function VocabQuizContent() {
             </div>
             {q.format === 'audio_recognition' && (
               <button
-                onClick={() => void playAudio(q.termId, q.correctAnswer)}
+                onClick={() => void playAudio(q.termId)}
                 className="mt-4 inline-flex items-center gap-2 rounded-full border border-primary bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
                 aria-label="Play audio again"
               >

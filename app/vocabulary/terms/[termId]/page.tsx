@@ -10,7 +10,6 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge, CategoryBadge } from '@/components/ui/badge';
-import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 import {
   fetchVocabularyTerm,
   fetchMyVocabulary,
@@ -43,7 +42,6 @@ export default function VocabularyTermDetailPage() {
   const { guardAudio, modal: audioUpgradeModal } = useRecallsAudioUpgrade();
 
   useEffect(() => {
-    preloadVoices();
     if (!termId) return;
     analytics.track('vocab_term_detail_viewed', { termId });
     void loadAll(termId);
@@ -104,13 +102,9 @@ export default function VocabularyTermDetailPage() {
       const response = await guardAudio(() => fetchRecallsAudio(term.id, 'normal'), { termId: term.id });
       if (response) {
         playTransientAudio(response.url);
-        return;
       }
     } catch {
-      // Audio asset unavailable — fall through to browser TTS
-    }
-    if (isBrowserTtsAvailable()) {
-      speakTerm(term.term);
+      setError('Pronunciation audio is not ready yet.');
     }
   }
 

@@ -22,6 +22,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _databaseName = $"oet-learner-tests-{Guid.NewGuid():N}";
     private readonly bool _useFirstPartyAuth;
     private readonly Dictionary<string, string?> _previousEnvironmentValues = new();
+    private readonly Dictionary<string, string?>? _firstPartyConfiguration;
 
     public TestWebApplicationFactory()
         : this(useFirstPartyAuth: false)
@@ -49,7 +50,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             return;
         }
 
-        var settings = new Dictionary<string, string?>
+        _firstPartyConfiguration = new Dictionary<string, string?>
         {
             ["ConnectionStrings:DefaultConnection"] = $"InMemory:{_databaseName}",
             ["Auth:UseDevelopmentAuth"] = "false",
@@ -70,7 +71,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             [$"{AuthTokenOptions.SectionName}:AuthenticatorIssuer"] = "OET Learner"
         };
 
-        foreach (var (key, value) in settings)
+        foreach (var (key, value) in _firstPartyConfiguration)
         {
             var environmentVariableName = ToEnvironmentVariableName(key);
             _previousEnvironmentValues[environmentVariableName] = Environment.GetEnvironmentVariable(environmentVariableName);
@@ -92,8 +93,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         {
             for (var i = services.Count - 1; i >= 0; i--)
             {
-                if (services[i].ServiceType == typeof(IHostedService)
-                    && services[i].ImplementationType != typeof(BackgroundJobProcessor))
+                if (IsLongRunningHostedWorker(services[i]))
                 {
                     services.RemoveAt(i);
                 }
@@ -111,6 +111,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
         if (_useFirstPartyAuth)
         {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(_firstPartyConfiguration!);
+            });
+
             return;
         }
 
@@ -128,6 +133,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             });
         });
     }
+
+    private static bool IsLongRunningHostedWorker(ServiceDescriptor descriptor)
+        => descriptor.ServiceType == typeof(IHostedService)
+           && descriptor.ImplementationType is { } implementationType
+           && typeof(BackgroundService).IsAssignableFrom(implementationType);
 
     public HttpClient CreateAuthenticatedClient(string email, string password, string? expectedRole = null)
     {
@@ -160,6 +170,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         if (currentUser is null)
         {
             throw new InvalidOperationException("Expected current-user details for the seeded auth account.");
+        }
+
+        if (!string.Equals(currentUser.Email, email, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Expected seeded auth client for {email} to resolve the same email, but '/v1/auth/me' returned '{currentUser.Email}'.");
         }
 
         if ((string.Equals(currentUser.Role, "expert", StringComparison.Ordinal)

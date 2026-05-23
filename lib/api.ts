@@ -12468,28 +12468,14 @@ export async function uploadElevenLabsPronunciationDictionary(
   file: File,
   name?: string,
 ): Promise<{ dictionaryId: string; versionId: string | null }> {
-  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const token = await ensureFreshAccessToken();
   const form = new FormData();
   form.append('file', file);
   if (name?.trim()) form.append('name', name.trim());
 
-  const response = await fetch(`${base}/v1/admin/voice-design/elevenlabs/dictionary`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: form,
-    credentials: 'include',
-  });
-  if (!response.ok) {
-    let message = `Dictionary upload failed (${response.status})`;
-    try {
-      const error = (await response.json()) as { message?: string; title?: string };
-      message = error.message ?? error.title ?? message;
-    } catch { /* non-json */ }
-    throw new Error(message);
-  }
-  return response.json() as Promise<{ dictionaryId: string; versionId: string | null }>;
+  return apiClient.postForm<{ dictionaryId: string; versionId: string | null }>(
+    '/v1/admin/voice-design/elevenlabs/dictionary',
+    form,
+  );
 }
 
 export async function startAdminRecallsAudioBackfill(

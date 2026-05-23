@@ -15,6 +15,7 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
         new("/v1/admin/vocabulary/import/preview", "POST", "AdminContentRead", "PerUserWrite"),
         new("/v1/admin/vocabulary/import", "POST", "AdminContentWrite", "PerUserWrite"),
         new("/v1/admin/vocabulary/import/batches/{importBatchId}/reconcile", "POST", "AdminContentRead", "PerUserWrite"),
+        new("/v1/admin/voice-design/elevenlabs/dictionary", "POST", "AdminAiConfig", "PerUserWrite"),
         new("/v1/pronunciation/drills/{drillId}/attempt/{attemptId}/audio", "POST", "LearnerOnly", "PerUserWrite"),
         new("/v1/media/upload", "POST", null, "PerUserWrite"),
         new("/v1/admin/uploads/{uploadId}/parts/{partNumber:int}", "PUT", "AdminContentWrite", "PerUserWrite"),

@@ -388,7 +388,10 @@ public sealed class VoiceDesignRegenerationService(
     private async Task RecomputeProgressAsync(AudioRegenerationBatch batch, CancellationToken ct)
     {
         var vocabCompleted = await db.VocabularyTerms
-            .CountAsync(t => t.AudioBatchId == batch.Id && t.AudioMediaAssetId != null, ct);
+            .CountAsync(t => t.AudioBatchId == batch.Id
+                             && t.AudioMediaAssetId != null
+                             && db.MediaAssets.Any(asset => asset.Id == t.AudioMediaAssetId
+                                                            && asset.Status == MediaAssetStatus.Ready), ct);
         var listeningCompleted = await db.ListeningTtsJobs
             .CountAsync(j => j.BatchId == batch.Id && j.Status == ListeningTtsJobStatus.Completed, ct);
         var listeningFailed = await db.ListeningTtsJobs

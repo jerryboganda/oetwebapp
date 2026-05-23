@@ -16,7 +16,6 @@ import { fetchDueFlashcards, fetchRecallsAudio, submitFlashcardReview } from '@/
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
-import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 import type { VocabularyFlashcard } from '@/lib/types/vocabulary';
 
 const QUALITY_OPTIONS = [
@@ -40,7 +39,6 @@ export default function FlashcardsPage() {
   const { guardAudio, modal: audioUpgradeModal } = useRecallsAudioUpgrade();
 
   useEffect(() => {
-    preloadVoices();
     analytics.track('flashcards_viewed');
     fetchDueFlashcards(20).then(data => {
       const loadedCards = Array.isArray(data) ? data : (data as { cards?: VocabularyFlashcard[] }).cards ?? [];
@@ -75,18 +73,13 @@ export default function FlashcardsPage() {
   }
 
   async function playAudio(termId: string) {
-    const response = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
-    if (response) {
-      playTransientAudio(response.url);
-      return;
-    }
-    if (isBrowserTtsAvailable()) {
-      try {
-        const term = cards[current]?.term;
-        if (term) await speakTerm(term);
-      } catch {
-        // Best-effort
+    try {
+      const response = await guardAudio(() => fetchRecallsAudio(termId, 'normal'), { termId });
+      if (response) {
+        playTransientAudio(response.url);
       }
+    } catch {
+      setError('Pronunciation audio is not ready yet.');
     }
   }
 
