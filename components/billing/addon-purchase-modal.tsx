@@ -40,6 +40,7 @@ export function AddonPurchaseModal({
 
   useEffect(() => {
     if (!open || !addOnCode) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus('loading');
     setQuote(null);
     setSelectedParent(null);

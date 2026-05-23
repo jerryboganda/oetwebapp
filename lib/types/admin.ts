@@ -351,6 +351,23 @@ export interface AdminBillingPlan {
   archivedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  // OET 2026 catalog fields
+  originalPriceGbp?: number | null;
+  accessDurationDays?: number;
+  writingAddonsEnabled?: boolean;
+  speakingAddonsEnabled?: boolean;
+  tutorBookDiscountEnabled?: boolean;
+  profession?: string;
+  productCategory?: string;
+  dashboardModules?: string[];
+  bundledWritingAssessments?: number;
+  bundledSpeakingSessions?: number;
+  bundledAiCredits?: number;
+  bundledTutorBook?: boolean;
+  bundledBasicEnglish?: boolean;
+  isDraft?: boolean;
+  extensionAllowed?: boolean;
+  recallUpdatesEnabled?: boolean;
 }
 
 export interface AdminBillingInvoice {
@@ -585,6 +602,13 @@ export interface AdminBillingAddOn {
   grantEntitlements: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  // OET 2026 catalog fields
+  originalPriceGbp?: number | null;
+  addonKind?: string;
+  requiresEligibleParent?: boolean;
+  eligibilityFlag?: string;
+  lettersGranted?: number;
+  sessionsGranted?: number;
 }
 
 export interface AdminBillingCoupon {
@@ -1053,4 +1077,84 @@ export interface AdminBusinessIntelligenceData {
   cohortAnalysis: AdminCohortAnalysisData | null;
   contentEffectiveness: AdminContentEffectivenessData | null;
   expertEfficiency: AdminExpertEfficiencyData | null;
+}
+
+// ── OET 2026 catalog public types ──────────────────────────────────────
+
+export interface PublicCatalogPlanRow {
+  code: string;
+  name: string;
+  description?: string;
+  price: number;
+  originalPrice?: number | null;
+  currency: string;
+  accessDurationDays: number;
+  productCategory: string;
+  profession: string;
+  writingAddonsEnabled: boolean;
+  speakingAddonsEnabled: boolean;
+  tutorBookDiscountEnabled: boolean;
+  bundledWritingAssessments: number;
+  bundledSpeakingSessions: number;
+  bundledAiCredits: number;
+  bundledTutorBook: boolean;
+  bundledBasicEnglish: boolean;
+  dashboardModules: string[];
+  displayOrder: number;
+}
+
+export interface PublicCatalogAddOnRow {
+  code: string;
+  name: string;
+  description?: string;
+  price: number;
+  originalPrice?: number | null;
+  currency: string;
+  addonKind: string;
+  eligibilityFlag: string;
+  lettersGranted: number;
+  sessionsGranted: number;
+  isStackable: boolean;
+  displayOrder: number;
+}
+
+export interface PublicCatalogResponse {
+  plans: PublicCatalogPlanRow[];
+  addOns: PublicCatalogAddOnRow[];
+  currency: string;
+}
+
+export interface AddonEligibleParent {
+  subscriptionId: string;
+  planCode: string;
+  planName: string;
+  expiresAt?: string | null;
+}
+
+export interface AddonQuoteResponse {
+  eligible: boolean;
+  addOnCode: string;
+  addOnName: string;
+  addonKind?: string | null;
+  requiredFlag?: string | null;
+  eligibleParents: AddonEligibleParent[];
+  reason?: string | null;
+  redirectSku?: string | null;
+}
+
+export interface EligibilityMatrixRow {
+  code: string;
+  name: string;
+  profession: string;
+  productCategory: string;
+  isDraft: boolean;
+  isVisible: boolean;
+  writingAddonsEnabled: boolean;
+  speakingAddonsEnabled: boolean;
+  tutorBookDiscountEnabled: boolean;
+  eligibleAddOnCodes: string[];
+}
+
+export interface EligibilityMatrixResponse {
+  plans: EligibilityMatrixRow[];
 }

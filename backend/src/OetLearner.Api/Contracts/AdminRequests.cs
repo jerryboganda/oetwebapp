@@ -760,6 +760,7 @@ public record AdminConversationSettingsRequest(
     bool? ElevenLabsSttEnableProviderLogging,
     int? ElevenLabsSttTokenTtlSeconds,
     string? ElevenLabsApiKey,
+    string? ElevenLabsTtsBaseUrl,
     string? ElevenLabsDefaultVoiceId,
     string? ElevenLabsModel,
     string? ElevenLabsOutputFormat,

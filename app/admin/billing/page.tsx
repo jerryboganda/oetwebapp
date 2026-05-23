@@ -96,6 +96,23 @@ interface BillingPlanFormState {
   status: string;
   includedSubtestsText: string;
   entitlementsJson: string;
+  // OET 2026 catalog fields
+  originalPriceGbp: string;
+  accessDurationDays: string;
+  writingAddonsEnabled: boolean;
+  speakingAddonsEnabled: boolean;
+  tutorBookDiscountEnabled: boolean;
+  profession: string;
+  productCategory: string;
+  dashboardModulesText: string;
+  bundledWritingAssessments: string;
+  bundledSpeakingSessions: string;
+  bundledAiCredits: string;
+  bundledTutorBook: boolean;
+  bundledBasicEnglish: boolean;
+  isDraft: boolean;
+  extensionAllowed: boolean;
+  recallUpdatesEnabled: boolean;
 }
 
 interface BillingAddOnFormState {
@@ -116,6 +133,13 @@ interface BillingAddOnFormState {
   status: string;
   compatiblePlanCodesText: string;
   grantEntitlementsJson: string;
+  // OET 2026 catalog fields
+  originalPriceGbp: string;
+  addonKind: string;
+  requiresEligibleParent: boolean;
+  eligibilityFlag: string;
+  lettersGranted: string;
+  sessionsGranted: string;
 }
 
 interface BillingCouponFormState {
@@ -156,6 +180,22 @@ const defaultPlanForm: BillingPlanFormState = {
   status: 'active',
   includedSubtestsText: 'writing, speaking',
   entitlementsJson: '{}',
+  originalPriceGbp: '',
+  accessDurationDays: '180',
+  writingAddonsEnabled: false,
+  speakingAddonsEnabled: false,
+  tutorBookDiscountEnabled: false,
+  profession: 'all',
+  productCategory: '',
+  dashboardModulesText: '',
+  bundledWritingAssessments: '0',
+  bundledSpeakingSessions: '0',
+  bundledAiCredits: '0',
+  bundledTutorBook: false,
+  bundledBasicEnglish: false,
+  isDraft: false,
+  extensionAllowed: true,
+  recallUpdatesEnabled: false,
 };
 
 const defaultAddOnForm: BillingAddOnFormState = {
@@ -176,6 +216,12 @@ const defaultAddOnForm: BillingAddOnFormState = {
   status: 'active',
   compatiblePlanCodesText: '',
   grantEntitlementsJson: '{}',
+  originalPriceGbp: '',
+  addonKind: '',
+  requiresEligibleParent: false,
+  eligibilityFlag: '',
+  lettersGranted: '0',
+  sessionsGranted: '0',
 };
 
 const defaultCouponForm: BillingCouponFormState = {
@@ -439,6 +485,22 @@ function toPlanForm(plan: AdminBillingPlan): BillingPlanFormState {
     status: plan.status,
     includedSubtestsText: (plan.includedSubtests ?? []).join(', '),
     entitlementsJson: JSON.stringify(plan.entitlements ?? {}, null, 2),
+    originalPriceGbp: plan.originalPriceGbp == null ? '' : String(plan.originalPriceGbp),
+    accessDurationDays: String(plan.accessDurationDays ?? 180),
+    writingAddonsEnabled: plan.writingAddonsEnabled ?? false,
+    speakingAddonsEnabled: plan.speakingAddonsEnabled ?? false,
+    tutorBookDiscountEnabled: plan.tutorBookDiscountEnabled ?? false,
+    profession: plan.profession ?? 'all',
+    productCategory: plan.productCategory ?? '',
+    dashboardModulesText: (plan.dashboardModules ?? []).join(', '),
+    bundledWritingAssessments: String(plan.bundledWritingAssessments ?? 0),
+    bundledSpeakingSessions: String(plan.bundledSpeakingSessions ?? 0),
+    bundledAiCredits: String(plan.bundledAiCredits ?? 0),
+    bundledTutorBook: plan.bundledTutorBook ?? false,
+    bundledBasicEnglish: plan.bundledBasicEnglish ?? false,
+    isDraft: plan.isDraft ?? false,
+    extensionAllowed: plan.extensionAllowed ?? true,
+    recallUpdatesEnabled: plan.recallUpdatesEnabled ?? false,
   };
 }
 
@@ -461,6 +523,12 @@ function toAddOnForm(addOn: AdminBillingAddOn): BillingAddOnFormState {
     status: addOn.status,
     compatiblePlanCodesText: (addOn.compatiblePlanCodes ?? []).join(', '),
     grantEntitlementsJson: JSON.stringify(addOn.grantEntitlements ?? {}, null, 2),
+    originalPriceGbp: addOn.originalPriceGbp == null ? '' : String(addOn.originalPriceGbp),
+    addonKind: addOn.addonKind ?? '',
+    requiresEligibleParent: addOn.requiresEligibleParent ?? false,
+    eligibilityFlag: addOn.eligibilityFlag ?? '',
+    lettersGranted: String(addOn.lettersGranted ?? 0),
+    sessionsGranted: String(addOn.sessionsGranted ?? 0),
   };
 }
 
@@ -2050,6 +2118,23 @@ export default function BillingPage() {
         status: planForm.status,
         includedSubtestsJson: jsonList(planForm.includedSubtestsText),
         entitlementsJson: safeJsonObject(planForm.entitlementsJson),
+        // OET 2026 catalog fields
+        originalPriceGbp: planForm.originalPriceGbp.trim() === '' ? null : toNumber(planForm.originalPriceGbp),
+        accessDurationDays: toNumber(planForm.accessDurationDays, 180),
+        writingAddonsEnabled: planForm.writingAddonsEnabled,
+        speakingAddonsEnabled: planForm.speakingAddonsEnabled,
+        tutorBookDiscountEnabled: planForm.tutorBookDiscountEnabled,
+        profession: planForm.profession,
+        productCategory: planForm.productCategory,
+        dashboardModulesJson: jsonList(planForm.dashboardModulesText),
+        bundledWritingAssessments: toNumber(planForm.bundledWritingAssessments),
+        bundledSpeakingSessions: toNumber(planForm.bundledSpeakingSessions),
+        bundledAiCredits: toNumber(planForm.bundledAiCredits),
+        bundledTutorBook: planForm.bundledTutorBook,
+        bundledBasicEnglish: planForm.bundledBasicEnglish,
+        isDraft: planForm.isDraft,
+        extensionAllowed: planForm.extensionAllowed,
+        recallUpdatesEnabled: planForm.recallUpdatesEnabled,
       };
 
       if (editingPlanId) {
@@ -2110,6 +2195,13 @@ export default function BillingPage() {
         status: addOnForm.status,
         compatiblePlanCodesJson: jsonList(addOnForm.compatiblePlanCodesText),
         grantEntitlementsJson: safeJsonObject(addOnForm.grantEntitlementsJson),
+        // OET 2026 catalog fields
+        originalPriceGbp: addOnForm.originalPriceGbp.trim() === '' ? null : toNumber(addOnForm.originalPriceGbp),
+        addonKind: addOnForm.addonKind,
+        requiresEligibleParent: addOnForm.requiresEligibleParent,
+        eligibilityFlag: addOnForm.eligibilityFlag,
+        lettersGranted: toNumber(addOnForm.lettersGranted),
+        sessionsGranted: toNumber(addOnForm.sessionsGranted),
       };
 
       if (editingAddOnId) {
@@ -2905,6 +2997,70 @@ export default function BillingPage() {
 
           <Textarea label="Entitlements JSON" value={planForm.entitlementsJson} onChange={(event) => setPlanForm((current) => ({ ...current, entitlementsJson: event.target.value }))} hint="Advanced. Edit the panel above for the standard content-gating fields." />
 
+          <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-900/40 dark:bg-amber-900/10">
+            <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">OET 2026 catalog fields</h4>
+            <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300/80">
+              Controls the public catalogue layout, the three add-on eligibility flags, and bundled grants applied on subscription activation.
+            </p>
+            <div className="mt-3 grid gap-4 md:grid-cols-3">
+              <Input label="Original price £ (was)" type="number" min={0} step="0.01" value={planForm.originalPriceGbp} onChange={(event) => setPlanForm((current) => ({ ...current, originalPriceGbp: event.target.value }))} hint="Strikethrough price. Blank = none." />
+              <Input label="Access duration (days)" type="number" min={0} value={planForm.accessDurationDays} onChange={(event) => setPlanForm((current) => ({ ...current, accessDurationDays: event.target.value }))} hint="180 = 6 months. 9999 = permanent." />
+              <Select label="Profession" value={planForm.profession} onChange={(event) => setPlanForm((current) => ({ ...current, profession: event.target.value }))}
+                options={[
+                  { value: 'all', label: 'All disciplines' },
+                  { value: 'medicine', label: 'Medicine' },
+                  { value: 'nursing', label: 'Nursing' },
+                  { value: 'pharmacy', label: 'Pharmacy' },
+                ]}
+              />
+            </div>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <Select label="Product category" value={planForm.productCategory} onChange={(event) => setPlanForm((current) => ({ ...current, productCategory: event.target.value }))}
+                options={[
+                  { value: '', label: '— Select —' },
+                  { value: 'full_course', label: 'Full course' },
+                  { value: 'full_course_bundle', label: 'Full course bundle' },
+                  { value: 'crash_course', label: 'Crash course' },
+                  { value: 'crash_course_bundle', label: 'Crash course bundle' },
+                  { value: 'writing_crash', label: 'Writing crash course' },
+                  { value: 'writing_crash_bundle', label: 'Writing crash bundle' },
+                  { value: 'speaking_crash', label: 'Speaking crash course' },
+                  { value: 'speaking_session', label: 'Speaking session' },
+                  { value: 'combo_double', label: 'Combo — Double Special' },
+                  { value: 'combo_mega', label: 'Combo — Mega Special' },
+                  { value: 'foundation', label: 'Foundation' },
+                  { value: 'book', label: 'Book' },
+                ]}
+              />
+              <Input label="Dashboard modules" value={planForm.dashboardModulesText} onChange={(event) => setPlanForm((current) => ({ ...current, dashboardModulesText: event.target.value }))} hint="Comma-separated module slugs unlocked on dashboard." />
+            </div>
+            <div className="mt-4 rounded-md border border-amber-300/40 bg-white/60 p-3 dark:border-amber-700/40 dark:bg-amber-950/20">
+              <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">Three add-on eligibility flags</p>
+              <div className="mt-2 flex flex-wrap gap-4">
+                <Checkbox label="W — Writing letter assessment add-ons" checked={planForm.writingAddonsEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, writingAddonsEnabled: event.target.checked }))} />
+                <Checkbox label="S — Speaking session add-ons" checked={planForm.speakingAddonsEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, speakingAddonsEnabled: event.target.checked }))} />
+                <Checkbox label="TB £32 — Discounted Tutor Book add-on" checked={planForm.tutorBookDiscountEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, tutorBookDiscountEnabled: event.target.checked }))} />
+              </div>
+            </div>
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">Bundled grants on activation</p>
+              <div className="mt-2 grid gap-3 md:grid-cols-3">
+                <Input label="Writing assessments" type="number" min={0} value={planForm.bundledWritingAssessments} onChange={(event) => setPlanForm((current) => ({ ...current, bundledWritingAssessments: event.target.value }))} />
+                <Input label="Speaking sessions" type="number" min={0} value={planForm.bundledSpeakingSessions} onChange={(event) => setPlanForm((current) => ({ ...current, bundledSpeakingSessions: event.target.value }))} />
+                <Input label="AI credits" type="number" min={0} value={planForm.bundledAiCredits} onChange={(event) => setPlanForm((current) => ({ ...current, bundledAiCredits: event.target.value }))} />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-4">
+                <Checkbox label="Bundle includes Tutor Book" checked={planForm.bundledTutorBook} onChange={(event) => setPlanForm((current) => ({ ...current, bundledTutorBook: event.target.checked }))} />
+                <Checkbox label="Bundle includes Basic English foundation" checked={planForm.bundledBasicEnglish} onChange={(event) => setPlanForm((current) => ({ ...current, bundledBasicEnglish: event.target.checked }))} />
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-4">
+              <Checkbox label="Draft (hidden from public catalogue)" checked={planForm.isDraft} onChange={(event) => setPlanForm((current) => ({ ...current, isDraft: event.target.checked }))} />
+              <Checkbox label="Extension allowed" checked={planForm.extensionAllowed} onChange={(event) => setPlanForm((current) => ({ ...current, extensionAllowed: event.target.checked }))} />
+              <Checkbox label="Recall updates enabled" checked={planForm.recallUpdatesEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, recallUpdatesEnabled: event.target.checked }))} />
+            </div>
+          </div>
+
           <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button
               variant="outline"
@@ -2979,6 +3135,40 @@ export default function BillingPage() {
           </div>
           <Input label="Compatible plan codes" value={addOnForm.compatiblePlanCodesText} onChange={(event) => setAddOnForm((current) => ({ ...current, compatiblePlanCodesText: event.target.value }))} hint="Comma-separated codes" />
           <Textarea label="Grant entitlements JSON" value={addOnForm.grantEntitlementsJson} onChange={(event) => setAddOnForm((current) => ({ ...current, grantEntitlementsJson: event.target.value }))} />
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-900/40 dark:bg-amber-900/10">
+            <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">OET 2026 catalog fields</h4>
+            <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300/80">
+              Controls "was £X" strikethrough, parent-eligibility enforcement, and per-purchase entitlement increments.
+            </p>
+            <div className="mt-3 grid gap-4 md:grid-cols-3">
+              <Input label="Original price £ (was)" type="number" min={0} step="0.01" value={addOnForm.originalPriceGbp} onChange={(event) => setAddOnForm((current) => ({ ...current, originalPriceGbp: event.target.value }))} hint="Blank = no strikethrough." />
+              <Select label="Add-on kind" value={addOnForm.addonKind} onChange={(event) => setAddOnForm((current) => ({ ...current, addonKind: event.target.value }))}
+                options={[
+                  { value: '', label: '— Select —' },
+                  { value: 'writing_assessments', label: 'Writing assessments' },
+                  { value: 'speaking_sessions', label: 'Speaking sessions' },
+                  { value: 'tutor_book', label: 'Tutor Book' },
+                  { value: 'other', label: 'Other' },
+                ]}
+              />
+              <Select label="Eligibility flag (parent must have)" value={addOnForm.eligibilityFlag} onChange={(event) => setAddOnForm((current) => ({ ...current, eligibilityFlag: event.target.value }))}
+                options={[
+                  { value: '', label: '— None —' },
+                  { value: 'writing_addons', label: 'writing_addons' },
+                  { value: 'speaking_addons', label: 'speaking_addons' },
+                  { value: 'tutor_book_discount', label: 'tutor_book_discount' },
+                ]}
+              />
+            </div>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <Input label="Letters granted per purchase" type="number" min={0} value={addOnForm.lettersGranted} onChange={(event) => setAddOnForm((current) => ({ ...current, lettersGranted: event.target.value }))} />
+              <Input label="Sessions granted per purchase" type="number" min={0} value={addOnForm.sessionsGranted} onChange={(event) => setAddOnForm((current) => ({ ...current, sessionsGranted: event.target.value }))} />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-4">
+              <Checkbox label="Requires eligible parent enrolment" checked={addOnForm.requiresEligibleParent} onChange={(event) => setAddOnForm((current) => ({ ...current, requiresEligibleParent: event.target.checked }))} />
+            </div>
+          </div>
 
           <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button

@@ -719,7 +719,6 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi,
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionService, OetLearner.Api.Services.Reading.ReadingExtractionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPathwayService, OetLearner.Api.Services.Reading.ReadingPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService, OetLearner.Api.Services.Reading.ReadingReviewService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Recalls.IRecallsTtsService, OetLearner.Api.Services.Recalls.RecallsTtsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.IWritingPdfService, OetLearner.Api.Services.WritingPdfService>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingEvaluationPipeline, OetLearner.Api.Services.Writing.WritingEvaluationPipeline>();

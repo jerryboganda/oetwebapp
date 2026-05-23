@@ -79,6 +79,8 @@ export interface ContentPackage {
   professionId?: string;
   instructionLanguage: string;
   billingPlanId?: string;
+  /** OET 2026 — set for marketing cards of pure add-on SKUs. Mutually exclusive with billingPlanId. */
+  billingAddOnId?: string;
   status: ContentStatus;
   thumbnailUrl?: string;
   comparisonFeatures: string[];

@@ -5136,6 +5136,25 @@ function normalizeBillingCode(value: string): string {
     .slice(0, 64) || 'custom-plan';
 }
 
+export interface AdminBillingPlanOet2026Fields {
+  originalPriceGbp?: number | null;
+  accessDurationDays?: number;
+  writingAddonsEnabled?: boolean;
+  speakingAddonsEnabled?: boolean;
+  tutorBookDiscountEnabled?: boolean;
+  profession?: string;
+  productCategory?: string;
+  dashboardModulesJson?: string;
+  bundledWritingAssessments?: number;
+  bundledSpeakingSessions?: number;
+  bundledAiCredits?: number;
+  bundledTutorBook?: boolean;
+  bundledBasicEnglish?: boolean;
+  isDraft?: boolean;
+  extensionAllowed?: boolean;
+  recallUpdatesEnabled?: boolean;
+}
+
 export async function createAdminBillingPlan(payload: {
   code?: string;
   name: string;
@@ -5152,7 +5171,7 @@ export async function createAdminBillingPlan(payload: {
   status?: string;
   includedSubtestsJson?: string;
   entitlementsJson?: string;
-}) {
+} & AdminBillingPlanOet2026Fields) {
   return apiRequest('/v1/admin/billing/plans', {
     method: 'POST',
     body: JSON.stringify({
@@ -5171,6 +5190,22 @@ export async function createAdminBillingPlan(payload: {
       status: payload.status ?? 'active',
       includedSubtestsJson: payload.includedSubtestsJson ?? '[]',
       entitlementsJson: payload.entitlementsJson ?? '{}',
+      originalPriceGbp: payload.originalPriceGbp ?? null,
+      accessDurationDays: payload.accessDurationDays ?? null,
+      writingAddonsEnabled: payload.writingAddonsEnabled ?? null,
+      speakingAddonsEnabled: payload.speakingAddonsEnabled ?? null,
+      tutorBookDiscountEnabled: payload.tutorBookDiscountEnabled ?? null,
+      profession: payload.profession ?? null,
+      productCategory: payload.productCategory ?? null,
+      dashboardModulesJson: payload.dashboardModulesJson ?? null,
+      bundledWritingAssessments: payload.bundledWritingAssessments ?? null,
+      bundledSpeakingSessions: payload.bundledSpeakingSessions ?? null,
+      bundledAiCredits: payload.bundledAiCredits ?? null,
+      bundledTutorBook: payload.bundledTutorBook ?? null,
+      bundledBasicEnglish: payload.bundledBasicEnglish ?? null,
+      isDraft: payload.isDraft ?? null,
+      extensionAllowed: payload.extensionAllowed ?? null,
+      recallUpdatesEnabled: payload.recallUpdatesEnabled ?? null,
     }),
   });
 }
@@ -5191,7 +5226,7 @@ export async function updateAdminBillingPlan(planId: string, payload: {
   status?: string;
   includedSubtestsJson?: string;
   entitlementsJson?: string;
-}) {
+} & AdminBillingPlanOet2026Fields) {
   return apiRequest(`/v1/admin/billing/plans/${encodeURIComponent(planId)}`, {
     method: 'PUT',
     body: JSON.stringify({
@@ -5210,6 +5245,22 @@ export async function updateAdminBillingPlan(planId: string, payload: {
       status: payload.status ?? 'active',
       includedSubtestsJson: payload.includedSubtestsJson ?? '[]',
       entitlementsJson: payload.entitlementsJson ?? '{}',
+      originalPriceGbp: payload.originalPriceGbp ?? null,
+      accessDurationDays: payload.accessDurationDays ?? null,
+      writingAddonsEnabled: payload.writingAddonsEnabled ?? null,
+      speakingAddonsEnabled: payload.speakingAddonsEnabled ?? null,
+      tutorBookDiscountEnabled: payload.tutorBookDiscountEnabled ?? null,
+      profession: payload.profession ?? null,
+      productCategory: payload.productCategory ?? null,
+      dashboardModulesJson: payload.dashboardModulesJson ?? null,
+      bundledWritingAssessments: payload.bundledWritingAssessments ?? null,
+      bundledSpeakingSessions: payload.bundledSpeakingSessions ?? null,
+      bundledAiCredits: payload.bundledAiCredits ?? null,
+      bundledTutorBook: payload.bundledTutorBook ?? null,
+      bundledBasicEnglish: payload.bundledBasicEnglish ?? null,
+      isDraft: payload.isDraft ?? null,
+      extensionAllowed: payload.extensionAllowed ?? null,
+      recallUpdatesEnabled: payload.recallUpdatesEnabled ?? null,
     }),
   });
 }
@@ -5221,6 +5272,15 @@ export async function fetchAdminBillingAddOns(params?: { status?: string }) {
 
 export async function fetchAdminBillingAddOnVersions(addOnId: string) {
   return apiRequest(`/v1/admin/billing/add-ons/${encodeURIComponent(addOnId)}/versions`);
+}
+
+export interface AdminBillingAddOnOet2026Fields {
+  originalPriceGbp?: number | null;
+  addonKind?: string;
+  requiresEligibleParent?: boolean;
+  eligibilityFlag?: string;
+  lettersGranted?: number;
+  sessionsGranted?: number;
 }
 
 export async function createAdminBillingAddOn(payload: {
@@ -5241,7 +5301,7 @@ export async function createAdminBillingAddOn(payload: {
   status?: string;
   compatiblePlanCodesJson?: string;
   grantEntitlementsJson?: string;
-}) {
+} & AdminBillingAddOnOet2026Fields) {
   return apiRequest('/v1/admin/billing/add-ons', {
     method: 'POST',
     body: JSON.stringify({
@@ -5262,6 +5322,12 @@ export async function createAdminBillingAddOn(payload: {
       status: payload.status ?? 'active',
       compatiblePlanCodesJson: payload.compatiblePlanCodesJson ?? '[]',
       grantEntitlementsJson: payload.grantEntitlementsJson ?? '{}',
+      originalPriceGbp: payload.originalPriceGbp ?? null,
+      addonKind: payload.addonKind ?? null,
+      requiresEligibleParent: payload.requiresEligibleParent ?? null,
+      eligibilityFlag: payload.eligibilityFlag ?? null,
+      lettersGranted: payload.lettersGranted ?? null,
+      sessionsGranted: payload.sessionsGranted ?? null,
     }),
   });
 }
@@ -5284,7 +5350,7 @@ export async function updateAdminBillingAddOn(addOnId: string, payload: {
   status?: string;
   compatiblePlanCodesJson?: string;
   grantEntitlementsJson?: string;
-}) {
+} & AdminBillingAddOnOet2026Fields) {
   return apiRequest(`/v1/admin/billing/add-ons/${encodeURIComponent(addOnId)}`, {
     method: 'PUT',
     body: JSON.stringify({
@@ -5305,8 +5371,70 @@ export async function updateAdminBillingAddOn(addOnId: string, payload: {
       status: payload.status ?? 'active',
       compatiblePlanCodesJson: payload.compatiblePlanCodesJson ?? '[]',
       grantEntitlementsJson: payload.grantEntitlementsJson ?? '{}',
+      originalPriceGbp: payload.originalPriceGbp ?? null,
+      addonKind: payload.addonKind ?? null,
+      requiresEligibleParent: payload.requiresEligibleParent ?? null,
+      eligibilityFlag: payload.eligibilityFlag ?? null,
+      lettersGranted: payload.lettersGranted ?? null,
+      sessionsGranted: payload.sessionsGranted ?? null,
     }),
   });
+}
+
+// ── OET 2026 catalog API ─────────────────────────────────────────────────
+
+export async function fetchPublicCatalog(): Promise<import('./types/admin').PublicCatalogResponse> {
+  return apiRequest('/v1/catalog/pricing');
+}
+
+export async function quoteAddonEligibility(addOnCode: string): Promise<import('./types/admin').AddonQuoteResponse> {
+  return apiRequest('/v1/billing/quote/addon', {
+    method: 'POST',
+    body: JSON.stringify({ addOnCode }),
+  });
+}
+
+export async function fetchEligibilityMatrix(): Promise<import('./types/admin').EligibilityMatrixResponse> {
+  return apiRequest('/v1/admin/billing/eligibility/matrix');
+}
+
+// ── Tutor Book API ───────────────────────────────────────────────────────
+
+export interface TutorBookAudioScript {
+  chapter: string;
+  title: string;
+  audioUrl: string;
+  transcriptUrl?: string | null;
+}
+
+export interface TutorBookUpdate {
+  id: string;
+  title: string;
+  bodyMarkdown: string;
+  publishedAt: string;
+  audience: string;
+}
+
+export interface TutorBookTelegramResponse {
+  inviteUrl: string | null;
+}
+
+export async function fetchTutorBookAudioScripts(): Promise<TutorBookAudioScript[]> {
+  return apiRequest('/v1/tutor-book/audio-scripts');
+}
+
+export async function fetchTutorBookUpdates(): Promise<TutorBookUpdate[]> {
+  return apiRequest('/v1/tutor-book/updates');
+}
+
+export async function fetchTutorBookTelegram(): Promise<TutorBookTelegramResponse> {
+  return apiRequest('/v1/tutor-book/telegram');
+}
+
+/** Returns the absolute URL for the watermarked PDF download. */
+export function tutorBookDownloadUrl(): string {
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5199';
+  return `${base.replace(/\/$/, '')}/v1/tutor-book/download`;
 }
 
 export async function fetchAdminBillingCoupons(params?: { status?: string }) {
@@ -12241,6 +12369,13 @@ export async function cancelAudioRegenerationBatch(batchId: string): Promise<{ c
   });
 }
 
+/** Retry failed or incomplete recall audio jobs in a batch */
+export async function retryAudioRegenerationBatch(batchId: string): Promise<AdminAudioBatch> {
+  return apiRequest<AdminAudioBatch>(`/v1/admin/voice-design/batches/${encodeURIComponent(batchId)}/retry`, {
+    method: 'POST',
+  });
+}
+
 /** Get the current globally configured voice settings */
 export interface AdminVoiceDesignConfig {
   modelVariant: 'flash' | 'voicedesign';
@@ -12249,6 +12384,7 @@ export interface AdminVoiceDesignConfig {
   speed: number;
   pitch: number;
   emotion: string;
+  elevenLabsTtsBaseUrl: string;
   elevenLabsDefaultVoiceId: string;
   elevenLabsModel: string;
   elevenLabsOutputFormat: string;
@@ -12276,6 +12412,7 @@ export async function saveAdminVoiceDesignConfig(body: {
   pitch?: number;
   emotion?: string;
   elevenLabsApiKey?: string;
+  elevenLabsTtsBaseUrl?: string;
   elevenLabsDefaultVoiceId?: string;
   elevenLabsModel?: string;
   elevenLabsOutputFormat?: string;
