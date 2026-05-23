@@ -12172,14 +12172,16 @@ export async function previewAdminVoiceDesign(body: {
 
 /** Bulk regenerate audio across the platform with specified voice config */
 export interface AdminAudioRegenerateRequest {
-  audioType: 'all' | 'listening' | 'vocabulary' | 'conversation';
+  audioType: 'all' | 'listening' | 'vocabulary' | 'conversation' | 'recalls';
   scope: 'all' | 'missing' | 'different-voice';
-  modelVariant: 'flash' | 'voicedesign';
+  modelVariant?: 'flash' | 'voicedesign' | string;
   voiceId?: string;
   instructions?: string;
   speed?: number;
   pitch?: number;
   emotion?: string;
+  providerName?: string;
+  forceRegenerate?: boolean;
   dryRun?: boolean;
 }
 
@@ -12191,6 +12193,7 @@ export interface AdminAudioRegenerateBatchResult {
   dryRun: boolean;
   modelVariant: string;
   voiceId?: string;
+  providerName?: string | null;
 }
 
 export async function regenerateAllAudio(
@@ -12205,7 +12208,7 @@ export async function regenerateAllAudio(
 /** Get active/completed audio regeneration batches */
 export interface AdminAudioBatch {
   batchId: string;
-  audioType: 'all' | 'listening' | 'vocabulary' | 'conversation';
+  audioType: 'all' | 'listening' | 'vocabulary' | 'conversation' | 'recalls';
   scope: string;
   status: 'running' | 'completed' | 'failed' | 'cancelled';
   totalItems: number;
@@ -12213,6 +12216,7 @@ export interface AdminAudioBatch {
   failedItems: number;
   voiceId: string;
   modelVariant: string;
+  providerName: string;
   speed: number;
   pitch: number;
   emotion: string;
@@ -12245,6 +12249,16 @@ export interface AdminVoiceDesignConfig {
   speed: number;
   pitch: number;
   emotion: string;
+  elevenLabsDefaultVoiceId: string;
+  elevenLabsModel: string;
+  elevenLabsOutputFormat: string;
+  elevenLabsPronunciationDictionaryId: string | null;
+  elevenLabsPronunciationDictionaryVersionId: string | null;
+  elevenLabsStability: number;
+  elevenLabsSimilarityBoost: number;
+  elevenLabsStyle: number;
+  elevenLabsUseSpeakerBoost: boolean;
+  elevenLabsApiKeyPresent: boolean;
   lastUpdatedAt: string | null;
   lastUpdatedBy: string | null;
 }
@@ -12261,11 +12275,62 @@ export async function saveAdminVoiceDesignConfig(body: {
   speed?: number;
   pitch?: number;
   emotion?: string;
+  elevenLabsApiKey?: string;
+  elevenLabsDefaultVoiceId?: string;
+  elevenLabsModel?: string;
+  elevenLabsOutputFormat?: string;
+  elevenLabsPronunciationDictionaryId?: string;
+  elevenLabsPronunciationDictionaryVersionId?: string;
+  elevenLabsStability?: number;
+  elevenLabsSimilarityBoost?: number;
+  elevenLabsStyle?: number;
+  elevenLabsUseSpeakerBoost?: boolean;
 }): Promise<{ saved: boolean }> {
   return apiRequest<{ saved: boolean }>('/v1/admin/voice-design/config', {
     method: 'PUT',
     body: JSON.stringify(body),
   });
+}
+
+export async function uploadElevenLabsPronunciationDictionary(
+  file: File,
+  name?: string,
+): Promise<{ dictionaryId: string; versionId: string | null }> {
+  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
+  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
+  const token = await ensureFreshAccessToken();
+  const form = new FormData();
+  form.append('file', file);
+  if (name?.trim()) form.append('name', name.trim());
+
+  const response = await fetch(`${base}/v1/admin/voice-design/elevenlabs/dictionary`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    let message = `Dictionary upload failed (${response.status})`;
+    try {
+      const error = (await response.json()) as { message?: string; title?: string };
+      message = error.message ?? error.title ?? message;
+    } catch { /* non-json */ }
+    throw new Error(message);
+  }
+  return response.json() as Promise<{ dictionaryId: string; versionId: string | null }>;
+}
+
+export async function startAdminRecallsAudioBackfill(
+  body: Omit<AdminAudioRegenerateRequest, 'audioType'>,
+): Promise<AdminAudioRegenerateBatchResult> {
+  return apiRequest<AdminAudioRegenerateBatchResult>('/v1/admin/recalls/audio/backfill', {
+    method: 'POST',
+    body: JSON.stringify({ ...body, audioType: 'recalls', providerName: body.providerName ?? 'elevenlabs' }),
+  });
+}
+
+export async function getAdminRecallsAudioBatchProgress(batchId: string): Promise<AdminAudioBatch> {
+  return apiRequest<AdminAudioBatch>(`/v1/admin/recalls/audio/batches/${encodeURIComponent(batchId)}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

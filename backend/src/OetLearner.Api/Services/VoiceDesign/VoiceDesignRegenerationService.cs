@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
+using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Vocabulary;
 
 namespace OetLearner.Api.Services.VoiceDesign;
@@ -9,15 +11,31 @@ namespace OetLearner.Api.Services.VoiceDesign;
 public sealed class VoiceDesignRegenerationService(
     LearnerDbContext db,
     IVocabularyAudioQueue vocabularyQueue,
+    IConversationOptionsProvider optionsProvider,
     ILogger<VoiceDesignRegenerationService> logger) : IVoiceDesignRegenerationService
 {
     public async Task<AdminAudioRegenerateBatchResult> EnqueueBulkRegenerationAsync(
         AdminAudioRegenerateRequest request, string requestedBy, CancellationToken ct)
     {
         var batchId = $"vd-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString()[..8]}";
-        var modelVariant = request.ModelVariant ?? "flash";
-        var voiceId = request.VoiceId ?? "Cherry";
+        if (string.Equals(request.AudioType, "conversation", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "conversation_audio_regeneration_not_supported",
+                "Conversation template audio regeneration is not supported by this batch worker yet.");
+        }
+
+        var isRecallBatch = string.Equals(request.AudioType, "recalls", StringComparison.OrdinalIgnoreCase);
+        var options = await optionsProvider.GetAsync(ct);
+        var providerName = isRecallBatch
+            ? "elevenlabs"
+            : request.ProviderName ?? "digitalocean-qwen3-tts";
+        var modelVariant = request.ModelVariant
+            ?? (isRecallBatch ? options.ElevenLabsModel : "flash");
+        var voiceId = request.VoiceId
+            ?? (isRecallBatch ? options.ElevenLabsDefaultVoiceId : "Cherry");
         var isDryRun = request.DryRun ?? false;
+        var forceRegenerate = request.ForceRegenerate ?? false;
 
         int totalItems = 0;
 
@@ -48,20 +66,26 @@ public sealed class VoiceDesignRegenerationService(
 
         if (request.AudioType is "all" or "conversation")
         {
-            var convQuery = db.ConversationTemplates.Where(t => t.Status == "published");
-            convQuery = request.Scope switch
+            // Intentionally excluded until conversation audio has a dedicated
+            // queue/worker. Counting it here would create batches that cannot finish.
+        }
+
+        if (request.AudioType is "recalls")
+        {
+            var recallQuery = ActiveRecallTerms();
+            recallQuery = request.Scope switch
             {
-                "missing" => convQuery.Where(t => t.OpeningAudioSha == null),
-                "different-voice" => convQuery.Where(t => t.TtsVoice != voiceId || t.TtsModelVariant != modelVariant),
-                _ => convQuery,
+                "missing" => recallQuery.Where(t => t.AudioMediaAssetId == null),
+                "different-voice" => recallQuery.Where(t => t.AudioVoice != voiceId || t.AudioModelVariant != modelVariant || t.AudioProvider != providerName),
+                _ => recallQuery,
             };
-            totalItems += await convQuery.CountAsync(ct);
+            totalItems += await recallQuery.CountAsync(ct);
         }
 
         if (isDryRun)
         {
             return new AdminAudioRegenerateBatchResult(batchId, request.AudioType, request.Scope,
-                totalItems, true, modelVariant, voiceId);
+                totalItems, true, modelVariant, voiceId, providerName);
         }
 
         // Persist the batch record
@@ -76,6 +100,7 @@ public sealed class VoiceDesignRegenerationService(
             FailedItems = 0,
             VoiceId = voiceId,
             ModelVariant = modelVariant,
+            ProviderName = providerName,
             Speed = request.Speed ?? 1.0,
             Pitch = request.Pitch ?? 0,
             Emotion = request.Emotion ?? "",
@@ -109,7 +134,9 @@ public sealed class VoiceDesignRegenerationService(
                     Locale: "en-GB",
                     BatchId: batchId,
                     ModelVariant: modelVariant,
-                    Instructions: request.Instructions), ct);
+                        Instructions: request.Instructions,
+                        ProviderName: request.ProviderName,
+                        ForceRegenerate: forceRegenerate), ct);
             }
             logger.LogInformation("Enqueued {Count} vocabulary terms for batch {BatchId}", vocabTerms.Count, batchId);
         }
@@ -148,8 +175,36 @@ public sealed class VoiceDesignRegenerationService(
             logger.LogInformation("Created {Count} listening TTS jobs for batch {BatchId}", extracts.Count, batchId);
         }
 
+        if (request.AudioType is "recalls")
+        {
+            var recallTerms = await ActiveRecallTerms()
+                .Where(t => request.Scope == "missing"
+                    ? t.AudioMediaAssetId == null
+                    : request.Scope == "different-voice"
+                        ? (t.AudioVoice != voiceId || t.AudioModelVariant != modelVariant || t.AudioProvider != providerName)
+                        : true)
+                .Select(t => new { t.Id, t.Term })
+                .Take(50_000)
+                .ToListAsync(ct);
+
+            foreach (var term in recallTerms)
+            {
+                await vocabularyQueue.EnqueueAsync(new VocabularyAudioJob(
+                    TermId: term.Id,
+                    Text: term.Term,
+                    Voice: voiceId,
+                    Locale: "en-GB",
+                    BatchId: batchId,
+                    ModelVariant: modelVariant,
+                    Instructions: request.Instructions,
+                    ProviderName: providerName,
+                    ForceRegenerate: forceRegenerate), ct);
+            }
+            logger.LogInformation("Enqueued {Count} recall terms for ElevenLabs batch {BatchId}", recallTerms.Count, batchId);
+        }
+
         return new AdminAudioRegenerateBatchResult(batchId, request.AudioType, request.Scope,
-            totalItems, false, modelVariant, voiceId);
+            totalItems, false, modelVariant, voiceId, providerName);
     }
 
     public async Task<IReadOnlyList<AdminAudioBatchDto>> GetBatchesAsync(CancellationToken ct)
@@ -159,10 +214,15 @@ public sealed class VoiceDesignRegenerationService(
             .Take(20)
             .ToListAsync(ct);
 
+        foreach (var batch in batches)
+        {
+            await RecomputeProgressAsync(batch, ct);
+        }
+
         return batches.Select(b => new AdminAudioBatchDto(
             b.Id, b.AudioType, b.Scope, b.Status,
             b.TotalItems, b.CompletedItems, b.FailedItems,
-            b.VoiceId, b.ModelVariant, b.Speed, b.Pitch, b.Emotion,
+            b.VoiceId, b.ModelVariant, b.ProviderName, b.Speed, b.Pitch, b.Emotion,
             b.StartedAt.ToString("o"), b.CompletedAt?.ToString("o"),
             b.RequestedBy)).ToList();
     }
@@ -172,28 +232,12 @@ public sealed class VoiceDesignRegenerationService(
         var b = await db.AudioRegenerationBatches.FindAsync([batchId], ct);
         if (b is null) return null;
 
-        // Recompute progress from actual job state
-        var vocabCompleted = await db.VocabularyTerms
-            .CountAsync(t => t.AudioBatchId == batchId && t.AudioMediaAssetId != null, ct);
-        var listeningCompleted = await db.ListeningTtsJobs
-            .CountAsync(j => j.BatchId == batchId && j.Status == ListeningTtsJobStatus.Completed, ct);
-        var listeningFailed = await db.ListeningTtsJobs
-            .CountAsync(j => j.BatchId == batchId && j.Status == ListeningTtsJobStatus.Failed, ct);
-
-        b.CompletedItems = vocabCompleted + listeningCompleted;
-        b.FailedItems = listeningFailed;
-
-        if (b.CompletedItems + b.FailedItems >= b.TotalItems && b.Status == "running")
-        {
-            b.Status = "completed";
-            b.CompletedAt = DateTime.UtcNow;
-        }
-        await db.SaveChangesAsync(ct);
+        await RecomputeProgressAsync(b, ct);
 
         return new AdminAudioBatchDto(
             b.Id, b.AudioType, b.Scope, b.Status,
             b.TotalItems, b.CompletedItems, b.FailedItems,
-            b.VoiceId, b.ModelVariant, b.Speed, b.Pitch, b.Emotion,
+            b.VoiceId, b.ModelVariant, b.ProviderName, b.Speed, b.Pitch, b.Emotion,
             b.StartedAt.ToString("o"), b.CompletedAt?.ToString("o"),
             b.RequestedBy);
     }
@@ -216,5 +260,33 @@ public sealed class VoiceDesignRegenerationService(
         await db.SaveChangesAsync(ct);
         logger.LogInformation("Cancelled batch {BatchId}", batchId);
         return true;
+    }
+
+    private IQueryable<VocabularyTerm> ActiveRecallTerms()
+        => db.VocabularyTerms.Where(t =>
+            t.Status == "active"
+            && t.RecallSetCodesJson != null
+            && t.RecallSetCodesJson != ""
+            && t.RecallSetCodesJson != "[]");
+
+    private async Task RecomputeProgressAsync(AudioRegenerationBatch batch, CancellationToken ct)
+    {
+        var vocabCompleted = await db.VocabularyTerms
+            .CountAsync(t => t.AudioBatchId == batch.Id && t.AudioMediaAssetId != null, ct);
+        var listeningCompleted = await db.ListeningTtsJobs
+            .CountAsync(j => j.BatchId == batch.Id && j.Status == ListeningTtsJobStatus.Completed, ct);
+        var listeningFailed = await db.ListeningTtsJobs
+            .CountAsync(j => j.BatchId == batch.Id && j.Status == ListeningTtsJobStatus.Failed, ct);
+
+        batch.CompletedItems = vocabCompleted + listeningCompleted;
+        batch.FailedItems = Math.Max(batch.FailedItems, listeningFailed);
+
+        if (batch.CompletedItems + batch.FailedItems >= batch.TotalItems && batch.Status == "running")
+        {
+            batch.Status = "completed";
+            batch.CompletedAt = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 }

@@ -78,6 +78,13 @@ public class ConversationSettingsRow
     public string? ElevenLabsApiKeyEncrypted { get; set; }
     [MaxLength(64)] public string? ElevenLabsDefaultVoiceId { get; set; }
     [MaxLength(64)] public string? ElevenLabsModel { get; set; }
+    [MaxLength(64)] public string? ElevenLabsOutputFormat { get; set; }
+    [MaxLength(128)] public string? ElevenLabsPronunciationDictionaryId { get; set; }
+    [MaxLength(128)] public string? ElevenLabsPronunciationDictionaryVersionId { get; set; }
+    public double? ElevenLabsStability { get; set; }
+    public double? ElevenLabsSimilarityBoost { get; set; }
+    public double? ElevenLabsStyle { get; set; }
+    public bool? ElevenLabsUseSpeakerBoost { get; set; }
 
     // CosyVoice
     [MaxLength(256)] public string? CosyVoiceBaseUrl { get; set; }

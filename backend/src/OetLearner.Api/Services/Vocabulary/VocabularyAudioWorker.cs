@@ -75,34 +75,82 @@ public sealed class VocabularyAudioWorker(
     /// </summary>
     public async Task ProcessOneAsync(VocabularyAudioJob job, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(job.Text))
-        {
-            logger.LogInformation("Vocab audio job {TermId} skipped — empty text", job.TermId);
-            return;
-        }
-
-        if (Encoding.UTF8.GetByteCount(job.Text) > MaxTextBytes)
-        {
-            logger.LogWarning("Vocab audio job {TermId} skipped — text exceeds {Max} bytes", job.TermId, MaxTextBytes);
-            return;
-        }
-
         await using var scope = scopeFactory.CreateAsyncScope();
         var sp = scope.ServiceProvider;
         var db = sp.GetRequiredService<LearnerDbContext>();
         var selector = sp.GetRequiredService<IConversationTtsProviderSelector>();
         var storage = sp.GetRequiredService<IFileStorage>();
 
-        if (await selector.IsTtsDisabledAsync(ct).ConfigureAwait(false))
+        var isRecallBatch = await IsRecallBatchAsync(db, job.BatchId, ct).ConfigureAwait(false);
+        if (isRecallBatch && !string.Equals(job.ProviderName, "elevenlabs", StringComparison.OrdinalIgnoreCase))
         {
-            logger.LogInformation("Vocab audio job {TermId} dropped — TTS provider is off", job.TermId);
+            logger.LogWarning("Vocab audio job {TermId} skipped — recall batch {BatchId} requires ElevenLabs", job.TermId, job.BatchId);
+            await MarkBatchFailureAsync(db, job, "invalid_recall_audio_provider", ct).ConfigureAwait(false);
             return;
         }
 
-        var provider = await selector.TrySelectAsync(ct).ConfigureAwait(false);
+        if (await IsBatchCancelledAsync(db, job.BatchId, ct).ConfigureAwait(false))
+        {
+            logger.LogInformation("Vocab audio job {TermId} skipped — batch {BatchId} is cancelled", job.TermId, job.BatchId);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(job.Text))
+        {
+            logger.LogInformation("Vocab audio job {TermId} skipped — empty text", job.TermId);
+            await MarkBatchFailureAsync(db, job, "empty_text", ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (Encoding.UTF8.GetByteCount(job.Text) > MaxTextBytes)
+        {
+            logger.LogWarning("Vocab audio job {TermId} skipped — text exceeds {Max} bytes", job.TermId, MaxTextBytes);
+            await MarkBatchFailureAsync(db, job, "text_too_large", ct).ConfigureAwait(false);
+            return;
+        }
+
+        var term = await db.VocabularyTerms.FirstOrDefaultAsync(t => t.Id == job.TermId, ct).ConfigureAwait(false);
+        if (term is null)
+        {
+            logger.LogWarning("Vocab audio job {TermId} dropped — term not found", job.TermId);
+            await MarkBatchFailureAsync(db, job, "term_not_found", ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (!job.ForceRegenerate
+            && !string.IsNullOrWhiteSpace(term.AudioMediaAssetId)
+            && !string.IsNullOrWhiteSpace(term.AudioUrl)
+            && IsStoredAudioKey(term.AudioUrl)
+            && storage.Exists(term.AudioUrl))
+        {
+            term.AudioBatchId = job.BatchId;
+            term.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            logger.LogInformation("Vocab audio job {TermId} skipped — stored audio already exists", job.TermId);
+            return;
+        }
+
+        IConversationTtsProvider? provider;
+        if (!string.IsNullOrWhiteSpace(job.ProviderName))
+        {
+            provider = await selector.TrySelectAsync(job.ProviderName, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            if (await selector.IsTtsDisabledAsync(ct).ConfigureAwait(false))
+            {
+                logger.LogInformation("Vocab audio job {TermId} dropped — TTS provider is off", job.TermId);
+                await MarkBatchFailureAsync(db, job, "tts_provider_off", ct).ConfigureAwait(false);
+                return;
+            }
+
+            provider = await selector.TrySelectAsync(ct).ConfigureAwait(false);
+        }
+
         if (provider is null)
         {
             logger.LogInformation("Vocab audio job {TermId} dropped — no TTS provider available", job.TermId);
+            await MarkBatchFailureAsync(db, job, "tts_provider_unavailable", ct).ConfigureAwait(false);
             return;
         }
 
@@ -118,6 +166,12 @@ public sealed class VocabularyAudioWorker(
         if (waitMs > 0)
         {
             try { await Task.Delay(waitMs, ct).ConfigureAwait(false); } catch (OperationCanceledException) { return; }
+        }
+
+        if (await IsBatchCancelledAsync(db, job.BatchId, ct).ConfigureAwait(false))
+        {
+            logger.LogInformation("Vocab audio job {TermId} skipped — batch {BatchId} was cancelled before synthesis", job.TermId, job.BatchId);
+            return;
         }
 
         ConversationTtsResult result;
@@ -148,19 +202,14 @@ public sealed class VocabularyAudioWorker(
         var ext = mime.Contains("wav", StringComparison.OrdinalIgnoreCase) ? "wav"
                   : mime.Contains("ogg", StringComparison.OrdinalIgnoreCase) ? "ogg"
                   : "mp3";
-        var key = ContentAddressed.PublishedKey("vocabulary/audio", sha, ext);
+        var key = isRecallBatch && string.Equals(provider.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase)
+            ? $"recalls/audio/{Slug(job.TermId)}-{sha[..16]}.{ext}"
+            : ContentAddressed.PublishedKey("vocabulary/audio", sha, ext);
 
         if (!storage.Exists(key))
         {
             await using var ms = new MemoryStream(audio);
             await storage.WriteAsync(key, ms, ct).ConfigureAwait(false);
-        }
-
-        var term = await db.VocabularyTerms.FirstOrDefaultAsync(t => t.Id == job.TermId, ct).ConfigureAwait(false);
-        if (term is null)
-        {
-            logger.LogWarning("Vocab audio job {TermId} dropped — term not found", job.TermId);
-            return;
         }
 
         // Capture the previous asset id BEFORE we reassign so we can
@@ -170,13 +219,15 @@ public sealed class VocabularyAudioWorker(
         // remain in storage indefinitely.
         var previousAssetId = term.AudioMediaAssetId;
 
-        var asset = await db.MediaAssets.FirstOrDefaultAsync(m => m.Sha256 == sha, ct).ConfigureAwait(false);
+        var asset = await db.MediaAssets.FirstOrDefaultAsync(m => m.StoragePath == key, ct).ConfigureAwait(false);
         if (asset is null)
         {
             asset = new MediaAsset
             {
                 Id = "MA-" + Guid.NewGuid().ToString("N")[..12],
-                OriginalFilename = $"{Slug(job.Text)}.{ext}",
+                OriginalFilename = isRecallBatch && string.Equals(provider.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase)
+                    ? $"{job.TermId}.{ext}"
+                    : $"{Slug(job.Text)}.{ext}",
                 MimeType = mime,
                 Format = ext,
                 SizeBytes = audio.LongLength,
@@ -193,11 +244,8 @@ public sealed class VocabularyAudioWorker(
         }
 
         term.AudioMediaAssetId = asset.Id;
-        var url = storage.ResolveReadUrl(key, TimeSpan.FromDays(7))?.ToString();
-        if (!string.IsNullOrWhiteSpace(url))
-        {
-            term.AudioUrl = url.Length > MaxAudioUrlChars ? url[..MaxAudioUrlChars] : url;
-        }
+        term.AudioUrl = key.Length > MaxAudioUrlChars ? key[..MaxAudioUrlChars] : key;
+        term.AudioBatchId = job.BatchId;
         // Provenance — lets the admin filter "regenerate where voice ≠ current"
         // without re-listening to every term. AudioVoice for Qwen3 voicedesign
         // is a SHA-8 of the instructions prompt so prompt changes register as
@@ -388,8 +436,60 @@ public sealed class VocabularyAudioWorker(
             }),
         });
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await MarkBatchFailureAsync(db, job, "provider_error", ct).ConfigureAwait(false);
         logger.LogError(ex, "Vocab audio job {TermId} permanently failed after {Attempts} attempts",
             job.TermId, nextAttempt);
+    }
+
+    private static bool IsStoredAudioKey(string value)
+        => !string.IsNullOrWhiteSpace(value)
+           && !value.StartsWith("/", StringComparison.Ordinal)
+           && !Uri.TryCreate(value, UriKind.Absolute, out _);
+
+    private static async Task<bool> IsBatchCancelledAsync(LearnerDbContext db, string batchId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(batchId)) return false;
+        return await db.AudioRegenerationBatches
+            .AnyAsync(b => b.Id == batchId && b.Status == "cancelled", ct)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<bool> IsRecallBatchAsync(LearnerDbContext db, string batchId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(batchId)) return false;
+        return await db.AudioRegenerationBatches
+            .AnyAsync(b => b.Id == batchId && b.AudioType == "recalls", ct)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task MarkBatchFailureAsync(
+        LearnerDbContext db, VocabularyAudioJob job, string reason, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(job.BatchId)) return;
+
+        var batch = await db.AudioRegenerationBatches
+            .FirstOrDefaultAsync(b => b.Id == job.BatchId, ct)
+            .ConfigureAwait(false);
+        if (batch is null || batch.Status != "running") return;
+
+        batch.FailedItems += 1;
+        if (batch.CompletedItems + batch.FailedItems >= batch.TotalItems)
+        {
+            batch.Status = "completed";
+            batch.CompletedAt = DateTime.UtcNow;
+        }
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"AUD-{Guid.NewGuid():N}",
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = "system",
+            ActorName = "vocab-audio-worker",
+            Action = "VocabAudioSkipped",
+            ResourceType = "VocabularyTerm",
+            ResourceId = job.TermId,
+            Details = JsonSerializer.Serialize(new { batchId = job.BatchId, reason }),
+        });
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     private static string Slug(string s)

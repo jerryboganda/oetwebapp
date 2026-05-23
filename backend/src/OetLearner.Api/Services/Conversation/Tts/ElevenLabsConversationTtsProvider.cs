@@ -20,20 +20,51 @@ public sealed class ElevenLabsConversationTtsProvider(
     {
         if (!IsConfigured) throw new InvalidOperationException("ElevenLabs not configured.");
 
+        var options = ReadOptions();
         var client = httpClientFactory.CreateClient("ConversationElevenLabsClient");
-        var voice = string.IsNullOrWhiteSpace(request.Voice) ? ReadOptions().ElevenLabsDefaultVoiceId : request.Voice;
-        var model = string.IsNullOrWhiteSpace(ReadOptions().ElevenLabsModel) ? "eleven_multilingual_v2" : ReadOptions().ElevenLabsModel;
-        var url = $"https://api.elevenlabs.io/v1/text-to-speech/{Uri.EscapeDataString(voice)}";
+        var voice = string.IsNullOrWhiteSpace(request.Voice) ? options.ElevenLabsDefaultVoiceId : request.Voice;
+        var model = string.IsNullOrWhiteSpace(request.ModelVariant)
+            ? (string.IsNullOrWhiteSpace(options.ElevenLabsModel) ? "eleven_multilingual_v2" : options.ElevenLabsModel)
+            : request.ModelVariant;
+        var outputFormat = string.IsNullOrWhiteSpace(options.ElevenLabsOutputFormat)
+            ? "mp3_44100_128"
+            : options.ElevenLabsOutputFormat;
+        var url = $"https://api.elevenlabs.io/v1/text-to-speech/{Uri.EscapeDataString(voice)}?output_format={Uri.EscapeDataString(outputFormat)}";
 
-        var payload = JsonSerializer.Serialize(new
+        var dictionaryLocators = !string.IsNullOrWhiteSpace(options.ElevenLabsPronunciationDictionaryId)
+            ? new[]
+            {
+                new
+                {
+                    pronunciation_dictionary_id = options.ElevenLabsPronunciationDictionaryId,
+                    version_id = string.IsNullOrWhiteSpace(options.ElevenLabsPronunciationDictionaryVersionId)
+                        ? null
+                        : options.ElevenLabsPronunciationDictionaryVersionId,
+                },
+            }
+            : null;
+
+        var payloadMap = new Dictionary<string, object?>
         {
-            text = request.Text,
-            model_id = model,
-            voice_settings = new { stability = 0.5, similarity_boost = 0.75, style = 0.0, use_speaker_boost = true },
-        });
+            ["text"] = request.Text,
+            ["model_id"] = model,
+            ["voice_settings"] = new
+            {
+                stability = options.ElevenLabsStability,
+                similarity_boost = options.ElevenLabsSimilarityBoost,
+                style = options.ElevenLabsStyle,
+                use_speaker_boost = options.ElevenLabsUseSpeakerBoost,
+            },
+        };
+        if (dictionaryLocators is not null)
+        {
+            payloadMap["pronunciation_dictionary_locators"] = dictionaryLocators;
+        }
+
+        var payload = JsonSerializer.Serialize(payloadMap);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
-        req.Headers.Add("xi-api-key", ReadOptions().ElevenLabsApiKey);
+        req.Headers.Add("xi-api-key", options.ElevenLabsApiKey);
         req.Headers.Add("Accept", "audio/mpeg");
         req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 

@@ -1,10 +1,10 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Recalls;
-using OetLearner.Api.Domain;
+using OetLearner.Api.Services.VoiceDesign;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -104,122 +104,77 @@ public static class RecallsEndpoints
             Results.Ok(await svc.GetRevisionPlanAsync(http.UserId(), ct)));
 
         // Admin-only: CSV bulk upload of vocabulary terms (spec §8).
-        var adminRecalls = app.MapGroup("/v1/admin/recalls").RequireAuthorization("AdminContentWrite");
+        var adminRecalls = app.MapGroup("/v1/admin/recalls")
+            .RequireAuthorization("AdminOnly")
+            .RequireRateLimiting("PerUser");
         adminRecalls.MapPost("/bulk-upload", () =>
             Results.Json(new
             {
                 code = "legacy_recalls_import_disabled",
                 message = "Legacy Recalls bulk upload is disabled for production safety. Use /v1/admin/vocabulary/import/preview and /v1/admin/vocabulary/import with dryRun first."
             }, statusCode: StatusCodes.Status409Conflict))
-            .RequireRateLimiting("PerUserWrite");
+            .WithAdminWrite("AdminContentWrite");
 
-        // Recalls Content Pack v1 (2026-05-05): one-shot ElevenLabs (or any
-        // configured ConversationTtsProvider) audio backfill for terms in a
-        // given profession that don't yet have AudioUrl. Idempotent — skips
-        // terms that already have audio. Bounded by `limit` (default 50) so a
-        // single call cannot accidentally rack up unbounded ElevenLabs spend.
-        adminRecalls.MapPost("/tts/backfill", async (
-            [FromQuery] string profession,
-            [FromQuery] int? limit,
-            [FromQuery] bool? sentence,
-            [FromQuery] bool? execute,
+        adminRecalls.MapPost("/audio/backfill", async (
+            [FromBody] AdminAudioRegenerateRequest? request,
             HttpContext http,
-            IRecallsTtsService tts,
-            OetLearner.Api.Data.LearnerDbContext db,
+            IVoiceDesignRegenerationService regenService,
             CancellationToken ct) =>
         {
-            if (string.IsNullOrWhiteSpace(profession))
-                return Results.BadRequest(new { code = "profession_required" });
-            var cap = Math.Clamp(limit ?? 50, 1, 200);
-            var includeSentence = sentence ?? false;
-            var shouldExecute = execute == true;
+            var body = request ?? new AdminAudioRegenerateRequest(
+                AudioType: "recalls",
+                Scope: "missing",
+                ModelVariant: null,
+                VoiceId: null,
+                Instructions: null,
+                Speed: null,
+                Pitch: null,
+                Emotion: null,
+                ProviderName: "elevenlabs",
+                ForceRegenerate: false,
+                DryRun: false);
 
-            var prof = profession.Trim().ToLowerInvariant();
-            var query = db.VocabularyTerms.Where(t =>
-                t.ProfessionId == prof &&
-                (t.AudioUrl == null || t.AudioUrl == ""));
-            var batch = await query.OrderBy(t => t.Term).Take(cap).ToListAsync(ct);
-
-            if (!shouldExecute)
+            body = body with
             {
-                var remainingPreview = await db.VocabularyTerms.CountAsync(t =>
-                    t.ProfessionId == prof &&
-                    (t.AudioUrl == null || t.AudioUrl == ""), ct);
+                AudioType = "recalls",
+                ProviderName = "elevenlabs",
+            };
+            var userId = http.User.FindFirst("sub")?.Value ?? http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var result = await regenService.EnqueueBulkRegenerationAsync(body, userId, ct);
+            return Results.Ok(result);
+        }).WithAdminWrite("AdminAiConfig");
 
-                return Results.Ok(new
-                {
-                    profession = prof,
-                    dryRun = true,
-                    considered = batch.Count,
-                    generated = 0,
-                    failed = 0,
-                    remaining = remainingPreview,
-                    message = "Pass execute=true to generate and persist Recalls TTS audio."
-                });
-            }
+        adminRecalls.MapGet("/audio/batches/{batchId}", async (
+            string batchId,
+            IVoiceDesignRegenerationService regenService,
+            CancellationToken ct) =>
+        {
+            var batch = await regenService.GetBatchProgressAsync(batchId, ct);
+            return batch is null ? Results.NotFound() : Results.Ok(batch);
+        }).WithAdminRead("AdminAiConfig");
 
-            var generated = 0;
-            var failed = 0;
-            foreach (var term in batch)
-            {
-                try
-                {
-                    var word = await tts.GenerateWordAsync(
-                        term.Term,
-                        new RecallsTtsOptions(Locale: "en-GB", Speed: "normal", Voice: ""),
-                        ct);
-                    term.AudioUrl = word.Url;
-
-                    if (includeSentence && !string.IsNullOrWhiteSpace(term.ExampleSentence))
-                    {
-                        var sentAudio = await tts.GenerateSentenceAsync(
-                            term.ExampleSentence,
-                            new RecallsTtsOptions(Locale: "en-GB", Speed: "normal", Voice: ""),
-                            ct);
-                        term.AudioSentenceUrl = sentAudio.Url;
-                    }
-
-                    var slow = await tts.GenerateWordAsync(
-                        term.Term,
-                        new RecallsTtsOptions(Locale: "en-GB", Speed: "slow", Voice: ""),
-                        ct);
-                    term.AudioSlowUrl = slow.Url;
-
-                    term.UpdatedAt = DateTimeOffset.UtcNow;
-                    generated++;
-                }
-                catch
-                {
-                    failed++;
-                }
-            }
-            db.AuditEvents.Add(new AuditEvent
-            {
-                Id = $"audit-{Guid.NewGuid():N}",
-                OccurredAt = DateTimeOffset.UtcNow,
-                ActorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system",
-                ActorName = http.User.Identity?.Name ?? "admin",
-                Action = "RecallsTtsBackfill",
-                ResourceType = "VocabularyTerm",
-                ResourceId = prof,
-                Details = $"profession={prof};considered={batch.Count};generated={generated};failed={failed};sentence={(includeSentence ? "1" : "0")}",
-            });
-            await db.SaveChangesAsync(ct);
-
-            var remaining = await db.VocabularyTerms.CountAsync(t =>
-                t.ProfessionId == prof &&
-                (t.AudioUrl == null || t.AudioUrl == ""), ct);
-
-            return Results.Ok(new
-            {
-                profession = prof,
-                considered = batch.Count,
-                generated,
-                failed,
-                remaining,
-            });
-        })
-            .RequireRateLimiting("PerUserWrite");
+        adminRecalls.MapPost("/tts/backfill", async (
+            [FromQuery] bool? execute,
+            HttpContext http,
+            IVoiceDesignRegenerationService regenService,
+            CancellationToken ct) =>
+        {
+            var body = new AdminAudioRegenerateRequest(
+                AudioType: "recalls",
+                Scope: "missing",
+                ModelVariant: null,
+                VoiceId: null,
+                Instructions: null,
+                Speed: null,
+                Pitch: null,
+                Emotion: null,
+                ProviderName: "elevenlabs",
+                ForceRegenerate: false,
+                DryRun: execute != true);
+            var userId = http.User.FindFirst("sub")?.Value ?? http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var result = await regenService.EnqueueBulkRegenerationAsync(body, userId, ct);
+            return Results.Ok(result);
+        }).WithAdminWrite("AdminAiConfig");
 
         return app;
     }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Services.Conversation;
@@ -13,15 +14,18 @@ public static class VoiceDesignAdminEndpoints
     public static IEndpointRouteBuilder MapVoiceDesignAdminEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/v1/admin/voice-design")
-            .RequireAuthorization("admin")
+            .RequireAuthorization("AdminOnly")
+            .RequireRateLimiting("PerUser")
             .WithTags("Admin – Voice Design");
 
         // GET /config — current global voice design configuration
         group.MapGet("/config", async (
+            LearnerDbContext db,
             IConversationOptionsProvider optionsProvider,
             CancellationToken ct) =>
         {
             var opts = await optionsProvider.GetAsync(ct);
+            var row = await db.ConversationSettings.AsNoTracking().FirstOrDefaultAsync(r => r.Id == "default", ct);
             return Results.Ok(new AdminVoiceDesignConfigResponse(
                 ModelVariant: opts.Qwen3ModelVariant ?? "flash",
                 VoiceId: opts.Qwen3VoiceId ?? "Cherry",
@@ -29,18 +33,33 @@ public static class VoiceDesignAdminEndpoints
                 Speed: opts.Qwen3Speed,
                 Pitch: opts.Qwen3Pitch,
                 Emotion: opts.Qwen3Emotion ?? "",
-                LastUpdatedAt: null,
-                LastUpdatedBy: null));
-        });
+                ElevenLabsDefaultVoiceId: opts.ElevenLabsDefaultVoiceId,
+                ElevenLabsModel: opts.ElevenLabsModel,
+                ElevenLabsOutputFormat: opts.ElevenLabsOutputFormat,
+                ElevenLabsPronunciationDictionaryId: opts.ElevenLabsPronunciationDictionaryId,
+                ElevenLabsPronunciationDictionaryVersionId: opts.ElevenLabsPronunciationDictionaryVersionId,
+                ElevenLabsStability: opts.ElevenLabsStability,
+                ElevenLabsSimilarityBoost: opts.ElevenLabsSimilarityBoost,
+                ElevenLabsStyle: opts.ElevenLabsStyle,
+                ElevenLabsUseSpeakerBoost: opts.ElevenLabsUseSpeakerBoost,
+                ElevenLabsApiKeyPresent: !string.IsNullOrWhiteSpace(opts.ElevenLabsApiKey),
+                LastUpdatedAt: row?.UpdatedAt.ToString("o"),
+                LastUpdatedBy: row?.UpdatedByUserName ?? row?.UpdatedByUserId));
+        }).WithAdminRead("AdminAiConfig");
 
         // PUT /config — save voice design config globally
         group.MapPut("/config", async (
             [FromBody] AdminVoiceDesignConfigRequest request,
             LearnerDbContext db,
+            IConversationOptionsProvider optionsProvider,
             CancellationToken ct) =>
         {
-            var row = await db.ConversationSettings.FirstOrDefaultAsync(ct)
-                ?? new Domain.ConversationSettingsRow();
+            var row = await db.ConversationSettings.FirstOrDefaultAsync(r => r.Id == "default", ct);
+            if (row is null)
+            {
+                row = new Domain.ConversationSettingsRow { Id = "default" };
+                db.ConversationSettings.Add(row);
+            }
 
             if (request.ModelVariant is not null) row.Qwen3ModelVariant = request.ModelVariant;
             if (request.VoiceId is not null) row.Qwen3VoiceId = request.VoiceId;
@@ -50,12 +69,85 @@ public static class VoiceDesignAdminEndpoints
             if (request.Speed is not null) row.Qwen3Speed = request.Speed;
             if (request.Pitch is not null) row.Qwen3Pitch = request.Pitch;
             if (request.Emotion is not null) row.Qwen3Emotion = request.Emotion;
+            if (request.ElevenLabsDefaultVoiceId is not null) row.ElevenLabsDefaultVoiceId = request.ElevenLabsDefaultVoiceId;
+            if (request.ElevenLabsModel is not null) row.ElevenLabsModel = request.ElevenLabsModel;
+            if (request.ElevenLabsOutputFormat is not null) row.ElevenLabsOutputFormat = request.ElevenLabsOutputFormat;
+            if (request.ElevenLabsPronunciationDictionaryId is not null) row.ElevenLabsPronunciationDictionaryId = request.ElevenLabsPronunciationDictionaryId;
+            if (request.ElevenLabsPronunciationDictionaryVersionId is not null) row.ElevenLabsPronunciationDictionaryVersionId = request.ElevenLabsPronunciationDictionaryVersionId;
+            if (request.ElevenLabsStability.HasValue) row.ElevenLabsStability = request.ElevenLabsStability;
+            if (request.ElevenLabsSimilarityBoost.HasValue) row.ElevenLabsSimilarityBoost = request.ElevenLabsSimilarityBoost;
+            if (request.ElevenLabsStyle.HasValue) row.ElevenLabsStyle = request.ElevenLabsStyle;
+            if (request.ElevenLabsUseSpeakerBoost.HasValue) row.ElevenLabsUseSpeakerBoost = request.ElevenLabsUseSpeakerBoost;
+            if (request.ElevenLabsApiKey is not null)
+            {
+                var provider = (ConversationOptionsProvider)optionsProvider;
+                row.ElevenLabsApiKeyEncrypted = request.ElevenLabsApiKey.Length == 0
+                    ? null
+                    : provider.Protect(request.ElevenLabsApiKey);
+            }
+            row.UpdatedAt = DateTimeOffset.UtcNow;
 
-            if (row.Id == default) db.ConversationSettings.Add(row);
             await db.SaveChangesAsync(ct);
+            optionsProvider.Invalidate();
 
             return Results.Ok(new { saved = true });
-        });
+        }).WithAdminWrite("AdminAiConfig");
+
+        group.MapPost("/elevenlabs/dictionary", async (
+            IFormFile file,
+            [FromForm] string? name,
+            LearnerDbContext db,
+            IHttpClientFactory httpClientFactory,
+            IConversationOptionsProvider optionsProvider,
+            CancellationToken ct) =>
+        {
+            if (file.Length <= 0) return Results.BadRequest(new { code = "empty_dictionary_file" });
+            if (file.Length > 1024 * 1024) return Results.BadRequest(new { code = "dictionary_file_too_large" });
+            if (!string.Equals(Path.GetExtension(file.FileName), ".pls", StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { code = "dictionary_file_must_be_pls" });
+
+            var options = await optionsProvider.GetAsync(ct);
+            if (string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
+                return Results.Problem("ElevenLabs API key is not configured.", statusCode: StatusCodes.Status409Conflict);
+
+            using var form = new MultipartFormDataContent();
+            await using var stream = file.OpenReadStream();
+            using var fileContent = new StreamContent(stream);
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pls+xml");
+            form.Add(fileContent, "file", file.FileName);
+            form.Add(new StringContent(string.IsNullOrWhiteSpace(name) ? Path.GetFileNameWithoutExtension(file.FileName) : name.Trim()), "name");
+
+            var client = httpClientFactory.CreateClient("ConversationElevenLabsClient");
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.elevenlabs.io/v1/pronunciation-dictionaries/add-from-file");
+            request.Headers.Add("xi-api-key", options.ElevenLabsApiKey);
+            request.Content = form;
+            using var response = await client.SendAsync(request, ct);
+            var responseText = await response.Content.ReadAsStringAsync(ct);
+            if (!response.IsSuccessStatusCode)
+                return Results.Problem($"ElevenLabs dictionary upload failed ({(int)response.StatusCode}).", statusCode: StatusCodes.Status502BadGateway);
+
+            var dictionaryId = TryReadString(responseText, "id")
+                ?? TryReadString(responseText, "pronunciation_dictionary_id");
+            var versionId = TryReadString(responseText, "version_id")
+                ?? TryReadNestedString(responseText, "version", "id")
+                ?? TryReadNestedString(responseText, "latest_version", "id");
+            if (string.IsNullOrWhiteSpace(dictionaryId))
+                return Results.Problem("ElevenLabs dictionary upload response did not include an id.", statusCode: StatusCodes.Status502BadGateway);
+
+            var row = await db.ConversationSettings.FirstOrDefaultAsync(r => r.Id == "default", ct);
+            if (row is null)
+            {
+                row = new Domain.ConversationSettingsRow { Id = "default" };
+                db.ConversationSettings.Add(row);
+            }
+            row.ElevenLabsPronunciationDictionaryId = dictionaryId;
+            row.ElevenLabsPronunciationDictionaryVersionId = versionId;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            optionsProvider.Invalidate();
+
+            return Results.Ok(new { dictionaryId, versionId });
+        }).DisableAntiforgery().WithAdminWrite("AdminAiConfig");
 
         // POST /preview — preview voice with full params
         group.MapPost("/preview", async (
@@ -78,7 +170,7 @@ public static class VoiceDesignAdminEndpoints
 
             var result = await provider.SynthesizeAsync(ttsReq, ct);
             return Results.File(result.Audio, result.MimeType, "preview.wav");
-        });
+        }).WithAdminRead("AdminAiConfig");
 
         // POST /regenerate — bulk regenerate audio across platform
         group.MapPost("/regenerate", async (
@@ -90,7 +182,7 @@ public static class VoiceDesignAdminEndpoints
             var userId = httpContext.User.FindFirst("sub")?.Value ?? "system";
             var result = await regenService.EnqueueBulkRegenerationAsync(request, userId, ct);
             return Results.Ok(result);
-        });
+        }).WithAdminWrite("AdminAiConfig");
 
         // GET /batches — list all regeneration batches
         group.MapGet("/batches", async (
@@ -99,7 +191,7 @@ public static class VoiceDesignAdminEndpoints
         {
             var batches = await regenService.GetBatchesAsync(ct);
             return Results.Ok(new { batches });
-        });
+        }).WithAdminRead("AdminAiConfig");
 
         // GET /batches/{batchId} — get batch progress
         group.MapGet("/batches/{batchId}", async (
@@ -109,7 +201,7 @@ public static class VoiceDesignAdminEndpoints
         {
             var batch = await regenService.GetBatchProgressAsync(batchId, ct);
             return batch is null ? Results.NotFound() : Results.Ok(batch);
-        });
+        }).WithAdminRead("AdminAiConfig");
 
         // POST /batches/{batchId}/cancel — cancel an in-progress batch
         group.MapPost("/batches/{batchId}/cancel", async (
@@ -119,8 +211,41 @@ public static class VoiceDesignAdminEndpoints
         {
             var cancelled = await regenService.CancelBatchAsync(batchId, ct);
             return Results.Ok(new { cancelled });
-        });
+        }).WithAdminWrite("AdminAiConfig");
 
         return app;
+    }
+
+    private static string? TryReadString(string json, string property)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? TryReadNestedString(string json, string parent, string child)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.TryGetProperty(parent, out var parentValue)
+                && parentValue.ValueKind == JsonValueKind.Object
+                && parentValue.TryGetProperty(child, out var childValue)
+                && childValue.ValueKind == JsonValueKind.String
+                ? childValue.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }
