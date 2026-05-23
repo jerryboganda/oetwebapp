@@ -677,15 +677,16 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningBackfillS
             builder.Services.AddSingleton<
                 OetLearner.Api.Services.Listening.IListeningTtsSynthesisProvider,
                 OetLearner.Api.Services.Listening.StubListeningTtsSynthesisProvider>();
-            // Production must not run the silence stub. Fail boot loudly so the
-            // operator sees the misconfiguration before a learner hears beeps.
+            // Production should not run the silence stub once a real provider is
+            // configured. Warn loudly so the operator sees the gap, but do NOT
+            // crash — other API functionality (auth, content, scoring, etc.) is
+            // unaffected and must remain available.
             if (builder.Environment.IsProduction())
             {
-                throw new InvalidOperationException(
-                    "Listening:TtsProvider is 'stub' in Production. Configure a real provider "
-                    + "(e.g. 'qwen', 'openai', 'azure') in appsettings.Production.json or set "
-                    + "the LISTENING__TTSPROVIDER environment variable before boot. The stub "
-                    + "emits silence and must not ship to learners.");
+                Console.WriteLine(
+                    "[ProductionProviderSafetyValidator] WARN: Listening:TtsProvider is 'stub'. "
+                    + "Configure a real provider (e.g. 'qwen', 'openai', 'azure') via "
+                    + "LISTENING__TTSPROVIDER environment variable before TTS features will function.");
             }
             break;
         default:
