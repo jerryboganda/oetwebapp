@@ -134,6 +134,13 @@ public sealed class ConversationOptionsProvider(
         if (!string.IsNullOrEmpty(elevenKey)) o.ElevenLabsApiKey = elevenKey;
         if (!string.IsNullOrWhiteSpace(r.ElevenLabsDefaultVoiceId)) o.ElevenLabsDefaultVoiceId = r.ElevenLabsDefaultVoiceId;
         if (!string.IsNullOrWhiteSpace(r.ElevenLabsModel)) o.ElevenLabsModel = r.ElevenLabsModel;
+        if (!string.IsNullOrWhiteSpace(r.ElevenLabsOutputFormat)) o.ElevenLabsOutputFormat = r.ElevenLabsOutputFormat;
+        if (!string.IsNullOrWhiteSpace(r.ElevenLabsPronunciationDictionaryId)) o.ElevenLabsPronunciationDictionaryId = r.ElevenLabsPronunciationDictionaryId;
+        if (!string.IsNullOrWhiteSpace(r.ElevenLabsPronunciationDictionaryVersionId)) o.ElevenLabsPronunciationDictionaryVersionId = r.ElevenLabsPronunciationDictionaryVersionId;
+        if (r.ElevenLabsStability.HasValue) o.ElevenLabsStability = r.ElevenLabsStability.Value;
+        if (r.ElevenLabsSimilarityBoost.HasValue) o.ElevenLabsSimilarityBoost = r.ElevenLabsSimilarityBoost.Value;
+        if (r.ElevenLabsStyle.HasValue) o.ElevenLabsStyle = r.ElevenLabsStyle.Value;
+        if (r.ElevenLabsUseSpeakerBoost.HasValue) o.ElevenLabsUseSpeakerBoost = r.ElevenLabsUseSpeakerBoost.Value;
 
         if (!string.IsNullOrWhiteSpace(r.CosyVoiceBaseUrl)) o.CosyVoiceBaseUrl = r.CosyVoiceBaseUrl;
         var cosyKey = Unprotect(r.CosyVoiceApiKeyEncrypted);
@@ -324,6 +331,13 @@ public sealed class ConversationOptionsProvider(
         ElevenLabsApiKey = src.ElevenLabsApiKey,
         ElevenLabsDefaultVoiceId = src.ElevenLabsDefaultVoiceId,
         ElevenLabsModel = src.ElevenLabsModel,
+        ElevenLabsOutputFormat = src.ElevenLabsOutputFormat,
+        ElevenLabsPronunciationDictionaryId = src.ElevenLabsPronunciationDictionaryId,
+        ElevenLabsPronunciationDictionaryVersionId = src.ElevenLabsPronunciationDictionaryVersionId,
+        ElevenLabsStability = src.ElevenLabsStability,
+        ElevenLabsSimilarityBoost = src.ElevenLabsSimilarityBoost,
+        ElevenLabsStyle = src.ElevenLabsStyle,
+        ElevenLabsUseSpeakerBoost = src.ElevenLabsUseSpeakerBoost,
         CosyVoiceBaseUrl = src.CosyVoiceBaseUrl,
         CosyVoiceApiKey = src.CosyVoiceApiKey,
         CosyVoiceDefaultVoice = src.CosyVoiceDefaultVoice,

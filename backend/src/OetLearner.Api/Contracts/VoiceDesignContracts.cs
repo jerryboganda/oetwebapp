@@ -6,7 +6,17 @@ public record AdminVoiceDesignConfigRequest(
     string? Instructions,
     double? Speed,
     double? Pitch,
-    string? Emotion);
+    string? Emotion,
+    string? ElevenLabsApiKey,
+    string? ElevenLabsDefaultVoiceId,
+    string? ElevenLabsModel,
+    string? ElevenLabsOutputFormat,
+    string? ElevenLabsPronunciationDictionaryId,
+    string? ElevenLabsPronunciationDictionaryVersionId,
+    double? ElevenLabsStability,
+    double? ElevenLabsSimilarityBoost,
+    double? ElevenLabsStyle,
+    bool? ElevenLabsUseSpeakerBoost);
 
 public record AdminVoiceDesignConfigResponse(
     string ModelVariant,
@@ -15,6 +25,16 @@ public record AdminVoiceDesignConfigResponse(
     double Speed,
     double Pitch,
     string Emotion,
+    string ElevenLabsDefaultVoiceId,
+    string ElevenLabsModel,
+    string ElevenLabsOutputFormat,
+    string? ElevenLabsPronunciationDictionaryId,
+    string? ElevenLabsPronunciationDictionaryVersionId,
+    double ElevenLabsStability,
+    double ElevenLabsSimilarityBoost,
+    double ElevenLabsStyle,
+    bool ElevenLabsUseSpeakerBoost,
+    bool ElevenLabsApiKeyPresent,
     string? LastUpdatedAt,
     string? LastUpdatedBy);
 
@@ -29,7 +49,7 @@ public record AdminVoiceDesignPreviewRequest(
     string? Emotion);
 
 public record AdminAudioRegenerateRequest(
-    string AudioType,     // "all" | "listening" | "vocabulary" | "conversation"
+    string AudioType,     // "all" | "listening" | "vocabulary" | "conversation" | "recalls"
     string Scope,         // "all" | "missing" | "different-voice"
     string? ModelVariant,
     string? VoiceId,
@@ -37,6 +57,8 @@ public record AdminAudioRegenerateRequest(
     double? Speed,
     double? Pitch,
     string? Emotion,
+    string? ProviderName,
+    bool? ForceRegenerate,
     bool? DryRun);
 
 public record AdminAudioRegenerateBatchResult(
@@ -46,7 +68,8 @@ public record AdminAudioRegenerateBatchResult(
     int TotalItems,
     bool DryRun,
     string ModelVariant,
-    string? VoiceId);
+    string? VoiceId,
+    string? ProviderName = null);
 
 public record AdminAudioBatchDto(
     string BatchId,
@@ -58,6 +81,7 @@ public record AdminAudioBatchDto(
     int FailedItems,
     string VoiceId,
     string ModelVariant,
+    string ProviderName,
     double Speed,
     double Pitch,
     string Emotion,

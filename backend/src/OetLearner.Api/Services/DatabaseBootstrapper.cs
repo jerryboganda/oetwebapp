@@ -52,6 +52,7 @@ public static class DatabaseBootstrapper
         await EnsureExpertSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureAttemptSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureVocabularySchemaCompatibilityAsync(db, cancellationToken);
+        await EnsureVoiceDesignSchemaCompatibilityAsync(db, cancellationToken);
         await EnsurePronunciationSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureFreezePolicyAsync(db, cancellationToken);
 
@@ -486,6 +487,41 @@ public static class DatabaseBootstrapper
         await db.Database.ExecuteSqlRawAsync(
             """UPDATE "LearnerPronunciationProgress" SET "Ease" = 2.5 WHERE "Ease" IS NULL OR "Ease" <= 0;""",
             cancellationToken);
+    }
+
+    private static async Task EnsureVoiceDesignSchemaCompatibilityAsync(LearnerDbContext db, CancellationToken cancellationToken)
+    {
+        if (!db.Database.IsRelational()) return;
+
+        var providerName = db.Database.ProviderName ?? string.Empty;
+        if (db.Database.IsNpgsql())
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE IF EXISTS "AudioRegenerationBatches" ADD COLUMN IF NOT EXISTS "ProviderName" character varying(64) NOT NULL DEFAULT 'digitalocean-qwen3-tts';
+                ALTER TABLE IF EXISTS "ConversationSettings" ADD COLUMN IF NOT EXISTS "ElevenLabsOutputFormat" character varying(64);
+                ALTER TABLE IF EXISTS "ConversationSettings" ADD COLUMN IF NOT EXISTS "ElevenLabsPronunciationDictionaryId" character varying(128);
+                ALTER TABLE IF EXISTS "ConversationSettings" ADD COLUMN IF NOT EXISTS "ElevenLabsPronunciationDictionaryVersionId" character varying(128);
+                ALTER TABLE IF EXISTS "ConversationSettings" ADD COLUMN IF NOT EXISTS "ElevenLabsStability" double precision;
+                ALTER TABLE IF EXISTS "ConversationSettings" ADD COLUMN IF NOT EXISTS "ElevenLabsSimilarityBoost" double precision;
+                ALTER TABLE IF EXISTS "ConversationSettings" ADD COLUMN IF NOT EXISTS "ElevenLabsStyle" double precision;
+                ALTER TABLE IF EXISTS "ConversationSettings" ADD COLUMN IF NOT EXISTS "ElevenLabsUseSpeakerBoost" boolean;
+                """,
+                cancellationToken);
+            return;
+        }
+
+        if (providerName.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            await AddSqliteColumnIfMissingAsync(db, "AudioRegenerationBatches", @"""ProviderName"" TEXT NOT NULL DEFAULT 'digitalocean-qwen3-tts'", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsOutputFormat"" TEXT NULL", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsPronunciationDictionaryId"" TEXT NULL", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsPronunciationDictionaryVersionId"" TEXT NULL", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsStability"" REAL NULL", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsSimilarityBoost"" REAL NULL", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsStyle"" REAL NULL", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsUseSpeakerBoost"" INTEGER NULL", cancellationToken);
+        }
     }
 
     private static async Task EnsureVocabularySchemaCompatibilityAsync(LearnerDbContext db, CancellationToken cancellationToken)

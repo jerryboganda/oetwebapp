@@ -29,6 +29,9 @@ import {
   regenerateAllAudio,
   getAudioRegenerationBatches,
   cancelAudioRegenerationBatch,
+  getAdminVoiceDesignConfig,
+  saveAdminVoiceDesignConfig,
+  uploadElevenLabsPronunciationDictionary,
   type AdminQwen3VoiceProbeResult,
   type AdminAudioBatch,
 } from '@/lib/api';
@@ -45,6 +48,20 @@ interface VoiceDesignSample {
 
 type AudioBatch = AdminAudioBatch;
 
+interface ElevenLabsRecallSettings {
+  apiKey: string;
+  apiKeyPresent: boolean;
+  voiceId: string;
+  model: string;
+  outputFormat: string;
+  dictionaryId: string;
+  dictionaryVersionId: string;
+  stability: number;
+  similarityBoost: number;
+  style: number;
+  useSpeakerBoost: boolean;
+}
+
 /* ─── Constants ─── */
 const OET_SAMPLES = [
   'Good morning, Mrs Johnson. I\'m going to check your blood pressure today.',
@@ -53,6 +70,20 @@ const OET_SAMPLES = [
   'I\'d like to refer you to a specialist for further investigation.',
   'The results show elevated levels which may indicate an underlying condition.',
 ];
+
+const DEFAULT_ELEVEN_SETTINGS: ElevenLabsRecallSettings = {
+  apiKey: '',
+  apiKeyPresent: false,
+  voiceId: '21m00Tcm4TlvDq8ikWAM',
+  model: 'eleven_multilingual_v2',
+  outputFormat: 'mp3_44100_128',
+  dictionaryId: '',
+  dictionaryVersionId: '',
+  stability: 0.45,
+  similarityBoost: 0.85,
+  style: 0,
+  useSpeakerBoost: true,
+};
 
 /* ─── Section Collapse Hook ─── */
 function useCollapsible(initial = true) {
@@ -82,11 +113,15 @@ export default function AdminVoiceDesignPage() {
   const [customSampleText, setCustomSampleText] = useState('');
 
   // Regeneration state
-  const [audioType, setAudioType] = useState<'all' | 'listening' | 'vocabulary' | 'conversation'>('all');
+  const [audioType, setAudioType] = useState<'all' | 'listening' | 'vocabulary' | 'conversation' | 'recalls'>('recalls');
   const [scope, setScope] = useState<'all' | 'missing' | 'different-voice'>('all');
   const [dryRunResult, setDryRunResult] = useState<{ count: number } | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [confirmModal, setConfirmModal] = useState(false);
+  const [elevenSettings, setElevenSettings] = useState<ElevenLabsRecallSettings>(DEFAULT_ELEVEN_SETTINGS);
+  const [dictionaryFile, setDictionaryFile] = useState<File | null>(null);
+  const [savingEleven, setSavingEleven] = useState(false);
+  const [uploadingDictionary, setUploadingDictionary] = useState(false);
 
   // Job tracking
   const [batches, setBatches] = useState<AudioBatch[]>([]);
@@ -99,6 +134,7 @@ export default function AdminVoiceDesignPage() {
   const voiceBrowser = useCollapsible(true);
   const voiceControls = useCollapsible(true);
   const previewPanel = useCollapsible(true);
+  const recallAudio = useCollapsible(true);
   const bulkRegen = useCollapsible(true);
   const jobTracker = useCollapsible(true);
 
@@ -133,6 +169,71 @@ export default function AdminVoiceDesignPage() {
       if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
     };
   }, [fetchBatches]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const config = await getAdminVoiceDesignConfig();
+        if (cancelled) return;
+        setVariant(config.modelVariant);
+        setSelectedVoice(config.voiceId);
+        setVoiceInstructions(config.voiceInstructions);
+        setSpeed(config.speed);
+        setPitch(config.pitch);
+        setEmotion(config.emotion);
+        setElevenSettings({
+          apiKey: '',
+          apiKeyPresent: config.elevenLabsApiKeyPresent,
+          voiceId: config.elevenLabsDefaultVoiceId || DEFAULT_ELEVEN_SETTINGS.voiceId,
+          model: config.elevenLabsModel || DEFAULT_ELEVEN_SETTINGS.model,
+          outputFormat: config.elevenLabsOutputFormat || DEFAULT_ELEVEN_SETTINGS.outputFormat,
+          dictionaryId: config.elevenLabsPronunciationDictionaryId ?? '',
+          dictionaryVersionId: config.elevenLabsPronunciationDictionaryVersionId ?? '',
+          stability: config.elevenLabsStability,
+          similarityBoost: config.elevenLabsSimilarityBoost,
+          style: config.elevenLabsStyle,
+          useSpeakerBoost: config.elevenLabsUseSpeakerBoost,
+        });
+      } catch {
+        setToast({ variant: 'error', message: 'Failed to load voice settings' });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const updateElevenSettings = useCallback(<K extends keyof ElevenLabsRecallSettings>(
+    key: K,
+    value: ElevenLabsRecallSettings[K],
+  ) => {
+    setElevenSettings((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const buildRegenerationPayload = useCallback((dryRun: boolean) => {
+    if (audioType === 'recalls') {
+      return {
+        audioType,
+        scope,
+        dryRun,
+        providerName: 'elevenlabs',
+        modelVariant: elevenSettings.model,
+        voiceId: elevenSettings.voiceId,
+        forceRegenerate: scope === 'all',
+      } as const;
+    }
+
+    return {
+      audioType,
+      scope,
+      dryRun,
+      voiceId: selectedVoice,
+      modelVariant: variant,
+      instructions: variant === 'voicedesign' ? voiceInstructions : undefined,
+      speed,
+      pitch,
+      emotion: emotion || undefined,
+    } as const;
+  }, [audioType, scope, elevenSettings.model, elevenSettings.voiceId, selectedVoice, variant, voiceInstructions, speed, pitch, emotion]);
 
   // ─── Handlers ───
   const handleFetchVoices = useCallback(async () => {
@@ -219,18 +320,18 @@ export default function AdminVoiceDesignPage() {
 
   const handleDryRun = useCallback(async () => {
     try {
-      const result = await regenerateAllAudio({ audioType, scope, dryRun: true, voiceId: selectedVoice, modelVariant: variant });
+      const result = await regenerateAllAudio(buildRegenerationPayload(true));
       setDryRunResult({ count: result.totalItems });
     } catch {
       setToast({ variant: 'error', message: 'Dry run failed' });
     }
-  }, [audioType, scope, selectedVoice]);
+  }, [buildRegenerationPayload]);
 
   const handleStartRegeneration = useCallback(async () => {
     setConfirmModal(false);
     setRegenerating(true);
     try {
-      await regenerateAllAudio({ audioType, scope, dryRun: false, voiceId: selectedVoice, modelVariant: variant });
+      await regenerateAllAudio(buildRegenerationPayload(false));
       setToast({ variant: 'success', message: 'Regeneration started' });
       void fetchBatches();
     } catch {
@@ -238,7 +339,60 @@ export default function AdminVoiceDesignPage() {
     } finally {
       setRegenerating(false);
     }
-  }, [audioType, scope, selectedVoice, fetchBatches]);
+  }, [buildRegenerationPayload, fetchBatches]);
+
+  const handleSaveElevenSettings = useCallback(async () => {
+    setSavingEleven(true);
+    try {
+      await saveAdminVoiceDesignConfig({
+        modelVariant: variant,
+        voiceId: selectedVoice,
+        instructions: voiceInstructions,
+        speed,
+        pitch,
+        emotion,
+        ...(elevenSettings.apiKey.trim() ? { elevenLabsApiKey: elevenSettings.apiKey.trim() } : {}),
+        elevenLabsDefaultVoiceId: elevenSettings.voiceId.trim(),
+        elevenLabsModel: elevenSettings.model.trim(),
+        elevenLabsOutputFormat: elevenSettings.outputFormat.trim(),
+        elevenLabsPronunciationDictionaryId: elevenSettings.dictionaryId.trim(),
+        elevenLabsPronunciationDictionaryVersionId: elevenSettings.dictionaryVersionId.trim(),
+        elevenLabsStability: elevenSettings.stability,
+        elevenLabsSimilarityBoost: elevenSettings.similarityBoost,
+        elevenLabsStyle: elevenSettings.style,
+        elevenLabsUseSpeakerBoost: elevenSettings.useSpeakerBoost,
+      });
+      setElevenSettings((prev) => ({
+        ...prev,
+        apiKey: '',
+        apiKeyPresent: prev.apiKeyPresent || Boolean(prev.apiKey.trim()),
+      }));
+      setToast({ variant: 'success', message: 'ElevenLabs recall settings saved' });
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to save ElevenLabs settings' });
+    } finally {
+      setSavingEleven(false);
+    }
+  }, [variant, selectedVoice, voiceInstructions, speed, pitch, emotion, elevenSettings]);
+
+  const handleUploadDictionary = useCallback(async () => {
+    if (!dictionaryFile) return;
+    setUploadingDictionary(true);
+    try {
+      const result = await uploadElevenLabsPronunciationDictionary(dictionaryFile, dictionaryFile.name.replace(/\.pls$/i, ''));
+      setElevenSettings((prev) => ({
+        ...prev,
+        dictionaryId: result.dictionaryId,
+        dictionaryVersionId: result.versionId ?? '',
+      }));
+      setDictionaryFile(null);
+      setToast({ variant: 'success', message: 'Pronunciation dictionary uploaded' });
+    } catch {
+      setToast({ variant: 'error', message: 'Dictionary upload failed' });
+    } finally {
+      setUploadingDictionary(false);
+    }
+  }, [dictionaryFile]);
 
   const handleCancelBatch = useCallback(async (batchId: string) => {
     try {
@@ -271,6 +425,12 @@ export default function AdminVoiceDesignPage() {
   const successRate = batches.length > 0
     ? Math.round((batches.reduce((s, b) => s + b.completedItems, 0) / Math.max(1, batches.reduce((s, b) => s + b.totalItems, 0))) * 100)
     : 0;
+  const canPreviewCount = audioType === 'recalls'
+    ? Boolean(elevenSettings.voiceId.trim())
+    : Boolean(selectedVoice);
+  const canStartRegeneration = audioType === 'recalls'
+    ? Boolean(dryRunResult) && !regenerating
+    : voiceApproved && Boolean(dryRunResult) && !regenerating;
 
   return (
     <AdminRouteWorkspace>
@@ -629,6 +789,139 @@ export default function AdminVoiceDesignPage() {
         </AnimatePresence>
       </AdminRoutePanel>
 
+      {/* ─── Section 4: ElevenLabs Recall Audio ─── */}
+      <AdminRoutePanel title="ElevenLabs Recall Audio" className="overflow-visible">
+        <SectionToggle label="ElevenLabs Recall Audio" open={recallAudio.open} onToggle={recallAudio.toggle} />
+        <AnimatePresence initial={false}>
+          {recallAudio.open && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="grid gap-4 p-4 lg:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={elevenSettings.apiKeyPresent ? 'success' : 'warning'} size="sm">
+                      {elevenSettings.apiKeyPresent ? 'API key saved' : 'API key missing'}
+                    </Badge>
+                    {elevenSettings.dictionaryId && <Badge variant="violet" size="sm">PLS linked</Badge>}
+                  </div>
+                  <label className="block space-y-1.5">
+                    <span className="text-xs font-bold text-admin-text-muted">ElevenLabs API Key</span>
+                    <input
+                      type="password"
+                      value={elevenSettings.apiKey}
+                      onChange={(event) => updateElevenSettings('apiKey', event.target.value)}
+                      placeholder={elevenSettings.apiKeyPresent ? 'Saved. Enter a new key to rotate.' : 'Paste API key'}
+                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                    />
+                  </label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold text-admin-text-muted">Voice ID</span>
+                      <input
+                        type="text"
+                        value={elevenSettings.voiceId}
+                        onChange={(event) => updateElevenSettings('voiceId', event.target.value)}
+                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      />
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold text-admin-text-muted">Model</span>
+                      <input
+                        type="text"
+                        value={elevenSettings.model}
+                        onChange={(event) => updateElevenSettings('model', event.target.value)}
+                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      />
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold text-admin-text-muted">Output Format</span>
+                      <input
+                        type="text"
+                        value={elevenSettings.outputFormat}
+                        onChange={(event) => updateElevenSettings('outputFormat', event.target.value)}
+                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      />
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold text-admin-text-muted">Dictionary Version</span>
+                      <input
+                        type="text"
+                        value={elevenSettings.dictionaryVersionId}
+                        onChange={(event) => updateElevenSettings('dictionaryVersionId', event.target.value)}
+                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      />
+                    </label>
+                  </div>
+                  <label className="block space-y-1.5">
+                    <span className="text-xs font-bold text-admin-text-muted">Dictionary ID</span>
+                    <input
+                      type="text"
+                      value={elevenSettings.dictionaryId}
+                      onChange={(event) => updateElevenSettings('dictionaryId', event.target.value)}
+                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                    />
+                  </label>
+                </div>
+
+                <div className="space-y-4">
+                  {([
+                    ['stability', 'Stability', elevenSettings.stability, 0, 1, 0.01],
+                    ['similarityBoost', 'Similarity', elevenSettings.similarityBoost, 0, 1, 0.01],
+                    ['style', 'Style', elevenSettings.style, 0, 1, 0.01],
+                  ] as const).map(([key, label, value, min, max, step]) => (
+                    <label key={key} className="block space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-admin-text-muted">{label}</span>
+                        <span className="text-sm font-bold text-admin-text">{value.toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={min}
+                        max={max}
+                        step={step}
+                        value={value}
+                        onChange={(event) => updateElevenSettings(key, Number(event.target.value))}
+                        className="w-full accent-violet-500"
+                      />
+                    </label>
+                  ))}
+                  <label className="flex items-center gap-2 rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={elevenSettings.useSpeakerBoost}
+                      onChange={(event) => updateElevenSettings('useSpeakerBoost', event.target.checked)}
+                      className="accent-violet-500"
+                    />
+                    <span className="text-sm text-admin-text">Use speaker boost</span>
+                  </label>
+                  <div className="space-y-2 rounded-lg border border-admin-border bg-admin-surface-raised p-3">
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold text-admin-text-muted">PLS Dictionary</span>
+                      <input
+                        type="file"
+                        accept=".pls,application/pls+xml,text/xml,application/xml"
+                        onChange={(event) => setDictionaryFile(event.target.files?.[0] ?? null)}
+                        className="block w-full text-xs text-admin-text file:mr-3 file:rounded-md file:border-0 file:bg-violet-600 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white"
+                      />
+                    </label>
+                    <Button variant="secondary" size="sm" loading={uploadingDictionary} disabled={!dictionaryFile} onClick={handleUploadDictionary}>
+                      Upload PLS
+                    </Button>
+                  </div>
+                  <Button variant="primary" size="sm" loading={savingEleven} onClick={handleSaveElevenSettings}>
+                    Save ElevenLabs Settings
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </AdminRoutePanel>
+
       {/* ─── Section 4: Bulk Regeneration ─── */}
       <AdminRoutePanel title="Bulk Regeneration" className="overflow-visible">
         <SectionToggle label="Bulk Regeneration" open={bulkRegen.open} onToggle={bulkRegen.toggle} />
@@ -646,10 +939,10 @@ export default function AdminVoiceDesignPage() {
                   <legend className="text-xs font-bold text-admin-text-muted">Audio Type</legend>
                   <div className="space-y-1.5">
                     {([
-                      ['all', 'All Platform Audio (listening + vocabulary + recalls)'],
+                      ['recalls', 'Recall Words Only (ElevenLabs)'],
+                      ['all', 'All Platform Audio (listening + vocabulary)'],
                       ['listening', 'Listening Module Only'],
-                      ['vocabulary', 'Vocabulary/Recalls Only'],
-                      ['conversation', 'Conversation Templates Only'],
+                      ['vocabulary', 'Vocabulary Module Only'],
                     ] as const).map(([value, label]) => (
                       <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 hover:bg-admin-surface-raised/80">
                         <input
@@ -702,14 +995,14 @@ export default function AdminVoiceDesignPage() {
 
                 {/* Action Buttons */}
                 <div className="flex gap-3">
-                  <Button variant="secondary" size="sm" onClick={handleDryRun} disabled={!selectedVoice}>
+                  <Button variant="secondary" size="sm" onClick={handleDryRun} disabled={!canPreviewCount}>
                     <Settings2 className="mr-1.5 h-3.5 w-3.5" />
                     Preview Count
                   </Button>
                   <Button
                     variant="primary"
                     size="sm"
-                    disabled={!voiceApproved || !dryRunResult || regenerating}
+                    disabled={!canStartRegeneration}
                     loading={regenerating}
                     onClick={() => setConfirmModal(true)}
                   >
@@ -717,7 +1010,7 @@ export default function AdminVoiceDesignPage() {
                   </Button>
                 </div>
 
-                {!voiceApproved && (
+                {audioType !== 'recalls' && !voiceApproved && (
                   <p className="text-xs text-amber-400">Voice must be approved before starting regeneration.</p>
                 )}
               </div>
@@ -912,6 +1205,7 @@ function BatchCard({ batch, onCancel }: { batch: AudioBatch; onCancel?: (id: str
       {/* Meta */}
       <div className="flex flex-wrap gap-3 text-xs text-admin-text-muted">
         <span>Voice: {batch.voiceId}</span>
+        <span>Provider: {batch.providerName}</span>
         <span>Started: {new Date(batch.startedAt).toLocaleTimeString()}</span>
         {batch.failedItems > 0 && (
           <button

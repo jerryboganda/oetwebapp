@@ -59,6 +59,13 @@ public class ConversationOptions
     public string ElevenLabsApiKey { get; set; } = string.Empty;
     public string ElevenLabsDefaultVoiceId { get; set; } = "21m00Tcm4TlvDq8ikWAM";
     public string ElevenLabsModel { get; set; } = "eleven_multilingual_v2";
+    public string ElevenLabsOutputFormat { get; set; } = "mp3_44100_128";
+    public string? ElevenLabsPronunciationDictionaryId { get; set; }
+    public string? ElevenLabsPronunciationDictionaryVersionId { get; set; }
+    public double ElevenLabsStability { get; set; } = 0.45;
+    public double ElevenLabsSimilarityBoost { get; set; } = 0.85;
+    public double ElevenLabsStyle { get; set; } = 0;
+    public bool ElevenLabsUseSpeakerBoost { get; set; } = true;
     public string CosyVoiceBaseUrl { get; set; } = string.Empty;
     public string CosyVoiceApiKey { get; set; } = string.Empty;
     public string CosyVoiceDefaultVoice { get; set; } = "default";

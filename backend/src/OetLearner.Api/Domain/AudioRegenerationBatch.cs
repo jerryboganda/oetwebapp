@@ -11,7 +11,7 @@ public class AudioRegenerationBatch
     public string Id { get; set; } = string.Empty;
 
     [Required, MaxLength(32)]
-    public string AudioType { get; set; } = "all"; // all | listening | vocabulary | conversation
+    public string AudioType { get; set; } = "all"; // all | listening | vocabulary | conversation | recalls
 
     [Required, MaxLength(32)]
     public string Scope { get; set; } = "all"; // all | missing | different-voice
@@ -28,6 +28,9 @@ public class AudioRegenerationBatch
 
     [MaxLength(32)]
     public string ModelVariant { get; set; } = "flash";
+
+    [MaxLength(64)]
+    public string ProviderName { get; set; } = "digitalocean-qwen3-tts";
 
     public double Speed { get; set; } = 1.0;
     public double Pitch { get; set; } = 0;

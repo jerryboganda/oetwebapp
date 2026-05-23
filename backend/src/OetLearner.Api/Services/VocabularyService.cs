@@ -786,10 +786,10 @@ public class VocabularyService(
         Category: t.Category,
         IpaPronunciation: t.IpaPronunciation,
         AmericanSpelling: t.AmericanSpelling,
-        AudioUrl: t.AudioUrl,
-        AudioSlowUrl: t.AudioSlowUrl,
-        AudioSentenceUrl: t.AudioSentenceUrl,
-        AudioMediaAssetId: t.AudioMediaAssetId,
+        AudioUrl: IsInternalAudioReference(t.AudioUrl) ? null : t.AudioUrl,
+        AudioSlowUrl: IsInternalAudioReference(t.AudioSlowUrl) ? null : t.AudioSlowUrl,
+        AudioSentenceUrl: IsInternalAudioReference(t.AudioSentenceUrl) ? null : t.AudioSentenceUrl,
+        AudioMediaAssetId: null,
         ImageUrl: t.ImageUrl,
         Synonyms: ParseStringArray(t.SynonymsJson).ToArray(),
         Collocations: ParseStringArray(t.CollocationsJson).ToArray(),
@@ -797,6 +797,11 @@ public class VocabularyService(
         SourceProvenance: t.SourceProvenance,
         Status: t.Status,
         RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray());
+
+    private static bool IsInternalAudioReference(string? audioUrl)
+        => !string.IsNullOrWhiteSpace(audioUrl)
+           && (audioUrl.StartsWith("/", StringComparison.Ordinal)
+               || !Uri.TryCreate(audioUrl, UriKind.Absolute, out _));
 
     private static IQueryable<VocabularyTerm> ApplyExamTypeFilter(IQueryable<VocabularyTerm> query, string? examTypeCode)
     {

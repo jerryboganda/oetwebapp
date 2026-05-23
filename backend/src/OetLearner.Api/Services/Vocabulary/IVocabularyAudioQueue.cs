@@ -18,7 +18,9 @@ public sealed record VocabularyAudioJob(
     // "regenerate vocabulary audio" admin endpoint so a single run can rewrite
     // every term to a specific preset voice or voicedesign prompt.
     string? ModelVariant = null,
-    string? Instructions = null);
+    string? Instructions = null,
+    string? ProviderName = null,
+    bool ForceRegenerate = false);
 
 /// <summary>
 /// Unbounded multi-writer / multi-reader queue (Channel-backed) used to

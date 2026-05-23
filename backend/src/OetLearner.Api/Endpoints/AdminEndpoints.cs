@@ -1213,6 +1213,13 @@ public static class AdminEndpoints
                     merged.ElevenLabsSttTokenTtlSeconds,
                     merged.ElevenLabsDefaultVoiceId,
                     merged.ElevenLabsModel,
+                    merged.ElevenLabsOutputFormat,
+                    merged.ElevenLabsPronunciationDictionaryId,
+                    merged.ElevenLabsPronunciationDictionaryVersionId,
+                    merged.ElevenLabsStability,
+                    merged.ElevenLabsSimilarityBoost,
+                    merged.ElevenLabsStyle,
+                    merged.ElevenLabsUseSpeakerBoost,
                     merged.CosyVoiceBaseUrl,
                     merged.CosyVoiceDefaultVoice,
                     merged.ChatTtsBaseUrl,
@@ -1304,6 +1311,13 @@ public static class AdminEndpoints
                 if (request.ElevenLabsSttTokenTtlSeconds.HasValue) row.ElevenLabsSttTokenTtlSeconds = request.ElevenLabsSttTokenTtlSeconds;
                 if (request.ElevenLabsDefaultVoiceId is not null) row.ElevenLabsDefaultVoiceId = request.ElevenLabsDefaultVoiceId;
                 if (request.ElevenLabsModel is not null) row.ElevenLabsModel = request.ElevenLabsModel;
+                if (request.ElevenLabsOutputFormat is not null) row.ElevenLabsOutputFormat = NormalizeElevenLabsOutputFormat(request.ElevenLabsOutputFormat);
+                if (request.ElevenLabsPronunciationDictionaryId is not null) row.ElevenLabsPronunciationDictionaryId = request.ElevenLabsPronunciationDictionaryId;
+                if (request.ElevenLabsPronunciationDictionaryVersionId is not null) row.ElevenLabsPronunciationDictionaryVersionId = request.ElevenLabsPronunciationDictionaryVersionId;
+                if (request.ElevenLabsStability.HasValue) row.ElevenLabsStability = request.ElevenLabsStability;
+                if (request.ElevenLabsSimilarityBoost.HasValue) row.ElevenLabsSimilarityBoost = request.ElevenLabsSimilarityBoost;
+                if (request.ElevenLabsStyle.HasValue) row.ElevenLabsStyle = request.ElevenLabsStyle;
+                if (request.ElevenLabsUseSpeakerBoost.HasValue) row.ElevenLabsUseSpeakerBoost = request.ElevenLabsUseSpeakerBoost;
                 if (request.CosyVoiceBaseUrl is not null) row.CosyVoiceBaseUrl = request.CosyVoiceBaseUrl;
                 if (request.CosyVoiceDefaultVoice is not null) row.CosyVoiceDefaultVoice = request.CosyVoiceDefaultVoice;
                 if (request.ChatTtsBaseUrl is not null) row.ChatTtsBaseUrl = request.ChatTtsBaseUrl;
@@ -2042,6 +2056,11 @@ public static class AdminEndpoints
             "distributed" => "distributed",
             _ => throw ApiException.Validation("REALTIME_TOPOLOGY", "Realtime STT provider topology must be unconfigured, single-instance, single-region-sticky, or distributed."),
         };
+
+    private static string NormalizeElevenLabsOutputFormat(string outputFormat)
+        => outputFormat.Trim().StartsWith("mp3_", StringComparison.OrdinalIgnoreCase)
+            ? outputFormat.Trim()
+            : "mp3_44100_128";
 
     private static void ValidateConversationSettingsRequest(AdminConversationSettingsRequest request)
     {

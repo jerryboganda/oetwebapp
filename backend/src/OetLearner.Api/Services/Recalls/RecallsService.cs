@@ -16,7 +16,6 @@ namespace OetLearner.Api.Services.Recalls;
 /// </summary>
 public sealed class RecallsService(
     LearnerDbContext db,
-    IRecallsTtsService tts,
     IFileStorage storage,
     IAiGatewayService gateway)
 {
@@ -222,6 +221,16 @@ public sealed class RecallsService(
         var term = await db.VocabularyTerms.FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw ApiException.NotFound("TERM_NOT_FOUND", "Term not found.");
 
+        if (normalizedSpeed == "normal" && !string.IsNullOrWhiteSpace(term.AudioMediaAssetId))
+        {
+            var asset = await db.MediaAssets.AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == term.AudioMediaAssetId, ct);
+            if (asset is not null && storage.Exists(asset.StoragePath))
+            {
+                return new RecallsAudioResponse(asset.StoragePath, term.AudioProvider ?? "stored", ContentTypeFor(asset.StoragePath));
+            }
+        }
+
         var existing = normalizedSpeed switch
         {
             "slow" => term.AudioSlowUrl,
@@ -229,28 +238,11 @@ public sealed class RecallsService(
             _ => term.AudioUrl,
         };
         if (existing is { Length: > 0 } existingKey && IsStoredAudioKey(existingKey) && storage.Exists(existingKey))
-            return new RecallsAudioResponse(existingKey, "cached", ContentTypeFor(existingKey));
+            return new RecallsAudioResponse(existingKey, term.AudioProvider ?? "stored", ContentTypeFor(existingKey));
 
-        RecallsTtsResult result;
-        if (normalizedSpeed == "sentence")
-        {
-            result = await tts.GenerateSentenceAsync(
-                term.ExampleSentence ?? term.Term,
-                new RecallsTtsOptions(Speed: "normal"), ct);
-            term.AudioSentenceUrl = result.Url;
-        }
-        else
-        {
-            result = await tts.GenerateWordAsync(
-                term.Term,
-                new RecallsTtsOptions(Speed: normalizedSpeed),
-                ct);
-            if (normalizedSpeed == "slow") term.AudioSlowUrl = result.Url;
-            else term.AudioUrl = result.Url;
-        }
-        term.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return new RecallsAudioResponse(result.Url, result.Provider, result.ContentType);
+        throw ApiException.NotFound(
+            "AUDIO_NOT_READY",
+            "Recall pronunciation audio has not been generated yet. Ask an admin to run the recall audio backfill.");
     }
 
     private static bool IsStoredAudioKey(string value)

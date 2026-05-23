@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -140,6 +141,8 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
     private static void AssertNoCachedAudioLeak(string payload)
     {
         Assert.DoesNotContain("/media/recalls/tts/", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("recalls/audio/", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("vocabulary/audio/", payload, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("cached-word", payload, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("cached-sentence", payload, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("media-audio-bypass-test", payload, StringComparison.OrdinalIgnoreCase);
@@ -236,6 +239,30 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
         await db.Database.EnsureCreatedAsync();
         var now = DateTimeOffset.UtcNow;
         var termId = $"term-{Guid.NewGuid():N}";
+        var mediaAssetId = $"media-audio-bypass-test-{Guid.NewGuid():N}";
+        var storageKey = $"recalls/audio/{termId}.wav";
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        await using (var stream = new MemoryStream(new byte[] { 82, 73, 70, 70, 1, 2, 3, 4 }))
+        {
+            await storage.WriteAsync(storageKey, stream, CancellationToken.None);
+        }
+
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = mediaAssetId,
+            OriginalFilename = $"{termId}.wav",
+            MimeType = "audio/wav",
+            Format = "wav",
+            SizeBytes = 8,
+            DurationSeconds = 1,
+            StoragePath = storageKey,
+            Status = MediaAssetStatus.Ready,
+            Sha256 = Guid.NewGuid().ToString("N"),
+            MediaKind = "audio",
+            UploadedBy = "test",
+            UploadedAt = now,
+            ProcessedAt = now,
+        });
 
         db.VocabularyTerms.Add(new VocabularyTerm
         {
@@ -247,10 +274,10 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
             ProfessionId = "medicine",
             Category = "spelling",
             IpaPronunciation = "/əˈniːmiə/",
-            AudioUrl = "/media/recalls/tts/cached-word.wav",
-            AudioMediaAssetId = "media-audio-bypass-test",
-            AudioSlowUrl = "/media/recalls/tts/cached-word-slow.wav",
-            AudioSentenceUrl = "/media/recalls/tts/cached-sentence.wav",
+            AudioUrl = storageKey,
+            AudioMediaAssetId = mediaAssetId,
+            AudioSlowUrl = "recalls/audio/cached-word-slow.wav",
+            AudioSentenceUrl = "recalls/audio/cached-sentence.wav",
             Status = "active",
             CreatedAt = now,
             UpdatedAt = now
