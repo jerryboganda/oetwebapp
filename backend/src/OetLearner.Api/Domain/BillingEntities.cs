@@ -98,6 +98,20 @@ public class BillingAddOn
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    // ── OET 2026 catalog fields (Wave 1 — conditional add-on eligibility) ───────────
+    public decimal? OriginalPriceGbp { get; set; }
+
+    [MaxLength(32)]
+    public string AddonKind { get; set; } = string.Empty;
+
+    public bool RequiresEligibleParent { get; set; }
+
+    [MaxLength(32)]
+    public string EligibilityFlag { get; set; } = string.Empty;
+
+    public int LettersGranted { get; set; }
+    public int SessionsGranted { get; set; }
 }
 
 /// <summary>Immutable managed add-on catalog snapshot.</summary>
@@ -160,6 +174,20 @@ public class BillingAddOnVersion
     public string? CreatedByAdminName { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    // ── OET 2026 catalog fields (immutable snapshot) ────────────────────────────────
+    public decimal? OriginalPriceGbp { get; set; }
+
+    [MaxLength(32)]
+    public string AddonKind { get; set; } = string.Empty;
+
+    public bool RequiresEligibleParent { get; set; }
+
+    [MaxLength(32)]
+    public string EligibilityFlag { get; set; } = string.Empty;
+
+    public int LettersGranted { get; set; }
+    public int SessionsGranted { get; set; }
 }
 
 /// <summary>Promo code or discount rule that can be applied at checkout.</summary>

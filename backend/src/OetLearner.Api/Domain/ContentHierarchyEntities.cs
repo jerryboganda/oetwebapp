@@ -185,6 +185,10 @@ public class ContentPackage
     [MaxLength(64)]
     public string? BillingPlanId { get; set; }   // links to existing BillingPlan
 
+    /// <summary>OET 2026 — link to BillingAddOn for add-on-only marketing cards. Mutually exclusive with BillingPlanId.</summary>
+    [MaxLength(64)]
+    public string? BillingAddOnId { get; set; }
+
     public ContentStatus Status { get; set; }
 
     [MaxLength(512)]
