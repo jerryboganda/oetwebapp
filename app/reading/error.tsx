@@ -11,7 +11,12 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error('[Reading Practice Error]', error);
+    // P0-K 2026-05 hardening: dev-only console; Sentry captures via Next.js
+    // built-in error boundary instrumentation in production.
+    if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.error('[Reading Practice Error]', error);
+    }
   }, [error]);
 
   return (

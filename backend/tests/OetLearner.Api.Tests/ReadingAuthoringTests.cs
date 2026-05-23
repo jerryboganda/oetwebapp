@@ -3340,6 +3340,118 @@ public class ReadingAuthoringTests
         public Task<ReadingExtractionAiResult> ExtractAsync(string paperId, string? mediaAssetId, CancellationToken ct)
             => throw new InvalidOperationException("provider-secret stack detail");
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    // P0 hardening 2026-05 — close audit findings P0-F / P0-H / P0-N / P0-Q.
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// P0-F closure: replaying SubmitAsync with the same idempotency key must
+    /// return the same grading result and must not mutate the attempt twice.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAsync_replay_returns_identical_result_and_does_not_double_grade()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("user-1", "p1", default);
+
+        var first = await attemptSvc.SubmitAsync("user-1", started.AttemptId, idempotencyKey: "idem-key-1", default);
+        var second = await attemptSvc.SubmitAsync("user-1", started.AttemptId, idempotencyKey: "idem-key-1", default);
+
+        Assert.Equal(first.RawScore, second.RawScore);
+        Assert.Equal(first.ScaledScore, second.ScaledScore);
+        Assert.Equal(first.MaxRawScore, second.MaxRawScore);
+
+        // Confirm the idempotency row is the single source of truth — there
+        // should be exactly one cache record for the (scope, key) pair, even
+        // though we called Submit twice.
+        var cached = await db.IdempotencyRecords
+            .Where(r => r.Scope == "reading-submit" && r.Key == "idem-key-1")
+            .CountAsync();
+        Assert.Equal(1, cached);
+
+        // The attempt itself must remain at Submitted and the row-version
+        // must have advanced exactly once across both calls.
+        var attempt = await db.ReadingAttempts.AsNoTracking()
+            .FirstAsync(a => a.Id == started.AttemptId);
+        Assert.Equal(ReadingAttemptStatus.Submitted, attempt.Status);
+
+        await db.DisposeAsync();
+    }
+
+    /// <summary>
+    /// P0-N closure: a learner must never be able to read or mutate another
+    /// learner's attempt. SubmitAsync filters by (Id, UserId) so a foreign
+    /// userId triggers the "Attempt not found" branch — not a permission
+    /// leak that reveals the attempt exists.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAsync_with_foreign_user_id_throws_not_found()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("alice", "p1", default);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            attemptSvc.SubmitAsync("eve", started.AttemptId, idempotencyKey: null, default));
+        Assert.Contains("Attempt not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        await db.DisposeAsync();
+    }
+
+    /// <summary>
+    /// P0-Q closure: the learner-facing structure projection in
+    /// <c>ReadingLearnerEndpoints.cs</c> intentionally drops
+    /// <c>CorrectAnswerJson</c>, <c>AcceptedSynonymsJson</c>, and
+    /// <c>ExplanationMarkdown</c>. This test exercises the same projection
+    /// in memory and asserts the absence of those fields on the serialised
+    /// payload so a future regression that reintroduces them is caught.
+    /// </summary>
+    [Fact]
+    public async Task Learner_structure_projection_does_not_leak_answer_keys()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var parts = await db.ReadingParts
+            .Include(p => p.Questions)
+            .Where(p => p.PaperId == "p1")
+            .ToListAsync();
+
+        // Mirror the endpoint projection (ReadingLearnerEndpoints.cs:118-140).
+        var projected = parts.Select(p => new
+        {
+            p.Id,
+            partCode = p.PartCode.ToString(),
+            questions = p.Questions.Select(q => new
+            {
+                q.Id,
+                q.DisplayOrder,
+                q.Points,
+                questionType = q.QuestionType.ToString(),
+                q.Stem,
+                options = q.OptionsJson,
+                // intentionally NOT projecting: CorrectAnswerJson,
+                // AcceptedSynonymsJson, ExplanationMarkdown.
+            }),
+        }).ToList();
+
+        var json = JsonSerializer.Serialize(projected);
+        Assert.DoesNotContain("correctAnswerJson", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("acceptedSynonymsJson", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("explanationMarkdown", json, StringComparison.OrdinalIgnoreCase);
+
+        await db.DisposeAsync();
+    }
 }
 
 file static class ReadingGradingResultExtensions

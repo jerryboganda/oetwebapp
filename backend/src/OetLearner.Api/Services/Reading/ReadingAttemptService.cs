@@ -450,56 +450,101 @@ public sealed class ReadingAttemptService(
         // P0-H 2026-05 hardening: TotalElapsedMs increment must be atomic at
         // DB level so two tabs autosaving the same question do not race and
         // lose increments. Strategy:
-        //   1. Try INSERT (race-safe via UX_ReadingAnswer_Attempt_Question unique
-        //      constraint). One writer wins, the other catches DbUpdateException
-        //      and falls through to UPDATE.
-        //   2. UPDATE uses ExecuteUpdateAsync (SET col = col + @delta) so the
-        //      accumulator is incremented by the database, not by EF
+        //   1. Fast-path SELECT: if the (attempt, question) row already
+        //      exists, jump straight to UPDATE. Saves a doomed INSERT on the
+        //      common hot path and side-steps the EF Core in-memory
+        //      provider's lack of unique-index enforcement (relational
+        //      providers still close the race via the unique index).
+        //   2. INSERT path: catch DbUpdateException for the case where a
+        //      concurrent writer inserted between our SELECT and our INSERT,
+        //      then fall through to the UPDATE path.
+        //   3. UPDATE uses ExecuteUpdateAsync (SET col = col + @delta) so
+        //      the accumulator is incremented by the database, not by EF
         //      change-tracking after a read.
         var existingAnswerCount = await db.ReadingAnswers
             .CountAsync(a => a.ReadingAttemptId == attemptId, ct);
+        var existingRowId = await db.ReadingAnswers
+            .Where(a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId)
+            .Select(a => a.Id)
+            .FirstOrDefaultAsync(ct);
         var isNewAnswer = false;
-        var newId = Guid.NewGuid().ToString("N");
 
-        try
+        if (existingRowId is null)
         {
-            var insertRow = new ReadingAnswer
+            try
             {
-                Id = newId,
-                ReadingAttemptId = attemptId,
-                ReadingQuestionId = questionId,
-                UserAnswerJson = userAnswerJson,
-                AnsweredAt = now,
-                ElapsedMs = sanitisedElapsedMs,
-                TotalElapsedMs = sanitisedElapsedMs,
-                CreatedAt = now,
-                UpdatedAt = now,
-            };
-            db.ReadingAnswers.Add(insertRow);
-            await db.SaveChangesAsync(ct);
-            isNewAnswer = true;
+                var insertRow = new ReadingAnswer
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ReadingAttemptId = attemptId,
+                    ReadingQuestionId = questionId,
+                    UserAnswerJson = userAnswerJson,
+                    AnsweredAt = now,
+                    ElapsedMs = sanitisedElapsedMs,
+                    TotalElapsedMs = sanitisedElapsedMs,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                };
+                db.ReadingAnswers.Add(insertRow);
+                await db.SaveChangesAsync(ct);
+                isNewAnswer = true;
+            }
+            catch (DbUpdateException)
+            {
+                // Concurrent insert beat us. Fall through to UPDATE.
+                db.ChangeTracker.Clear();
+                existingRowId = await db.ReadingAnswers
+                    .Where(a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId)
+                    .Select(a => a.Id)
+                    .FirstOrDefaultAsync(ct);
+            }
         }
-        catch (DbUpdateException)
+
+        if (!isNewAnswer && existingRowId is not null)
         {
-            // Concurrent insert beat us, or row already existed. Switch to
-            // atomic update path.
-            db.ChangeTracker.Clear();
             var deltaSql = sanitisedElapsedMs ?? 0;
-            var rowsAffected = await db.ReadingAnswers
-                .Where(a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(a => a.UserAnswerJson, _ => userAnswerJson)
-                    .SetProperty(a => a.AnsweredAt, _ => now)
-                    .SetProperty(a => a.UpdatedAt, _ => now)
-                    .SetProperty(a => a.IsCorrect, _ => (bool?)null)
-                    .SetProperty(a => a.PointsEarned, _ => 0)
-                    .SetProperty(a => a.ElapsedMs, _ => sanitisedElapsedMs)
-                    .SetProperty(a => a.TotalElapsedMs, a => (a.TotalElapsedMs ?? 0) + deltaSql),
-                    ct);
-            if (rowsAffected == 0)
+
+            // ExecuteUpdateAsync is the atomic, race-safe path on Postgres
+            // (and every other relational provider). The EF Core in-memory
+            // provider does NOT support it, so we fall back to a tracked
+            // load + save there. In-memory tests don't exercise concurrent
+            // writes anyway, so the lack of atomicity is acceptable in that
+            // path; production is on Postgres.
+            if (db.Database.IsRelational())
             {
-                throw new InvalidOperationException(
-                    "Failed to persist Reading answer (concurrent delete?).");
+                var rowsAffected = await db.ReadingAnswers
+                    .Where(a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(a => a.UserAnswerJson, _ => userAnswerJson)
+                        .SetProperty(a => a.AnsweredAt, _ => now)
+                        .SetProperty(a => a.UpdatedAt, _ => now)
+                        .SetProperty(a => a.IsCorrect, _ => (bool?)null)
+                        .SetProperty(a => a.PointsEarned, _ => 0)
+                        .SetProperty(a => a.ElapsedMs, _ => sanitisedElapsedMs)
+                        .SetProperty(a => a.TotalElapsedMs, a => (a.TotalElapsedMs ?? 0) + deltaSql),
+                        ct);
+                if (rowsAffected == 0)
+                {
+                    throw new InvalidOperationException(
+                        "Failed to persist Reading answer (concurrent delete?).");
+                }
+            }
+            else
+            {
+                var tracked = await db.ReadingAnswers.FirstOrDefaultAsync(
+                    a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId, ct)
+                    ?? throw new InvalidOperationException(
+                        "Failed to persist Reading answer (concurrent delete?).");
+                tracked.UserAnswerJson = userAnswerJson;
+                tracked.AnsweredAt = now;
+                tracked.UpdatedAt = now;
+                tracked.IsCorrect = null;
+                tracked.PointsEarned = 0;
+                if (sanitisedElapsedMs is int delta)
+                {
+                    tracked.ElapsedMs = delta;
+                    tracked.TotalElapsedMs = (tracked.TotalElapsedMs ?? 0) + delta;
+                }
             }
         }
 

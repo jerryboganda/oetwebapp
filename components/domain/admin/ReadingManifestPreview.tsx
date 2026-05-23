@@ -2,6 +2,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import type { ReadingStructureManifestDto } from '@/lib/reading-authoring-api';
+import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 
 /**
  * Phase 4 closure — read-only preview of a Reading manifest, used by the
@@ -52,8 +53,9 @@ export function ReadingManifestPreview({ manifest }: { manifest: ReadingStructur
                   ) : null}
                   <div
                     className="mt-2 max-h-32 overflow-y-auto text-xs text-foreground"
-                    // bodyHtml is admin-authored content already sanitised on the backend.
-                    dangerouslySetInnerHTML={{ __html: text.bodyHtml || '' }}
+                    // Defense-in-depth: backend sanitises, but apply the same
+                    // allow-list here too so admin preview matches learner view.
+                    dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml || '') }}
                   />
                 </div>
               ))}

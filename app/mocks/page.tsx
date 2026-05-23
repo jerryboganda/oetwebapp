@@ -547,9 +547,13 @@ export default function MockCenter() {
                     description:
                       emptyState.description ??
                       'Once an admin publishes a bundle it will appear here with its real section order.',
-                    primaryAction: emptyState.route
+                    // DEF-005 fix 2026-05: never expose /admin/* routes to
+                    // learners — those produce a 403 trap on click. Fall back
+                    // to the learner study plan when the backend hints at
+                    // an admin destination.
+                    primaryAction: emptyState.route && !emptyState.route.startsWith('/admin/')
                       ? { label: 'Go to dashboard', href: emptyState.route }
-                      : undefined,
+                      : { label: 'Open Study Plan', href: '/study-plan' },
                   }}
                 />
               </MotionSection>

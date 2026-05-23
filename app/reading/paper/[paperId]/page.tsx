@@ -26,6 +26,7 @@ import {
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
 import { ReadingPaperSimulation } from '@/components/domain/reading-paper-simulation';
 import { completeMockSection } from '@/lib/api';
+import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -513,7 +514,13 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
           // mock-write failure. Persist a pending-completion marker so the
           // results route surfaces a retry CTA, and surface a non-blocking
           // warning on the player too.
-          console.warn('Could not mark mock reading section complete', mockErr);
+          // P0-K 2026-05 hardening: route diagnostic to Sentry in production
+          // instead of console.warn so it does not leak in browser devtools
+          // during a customer support session.
+          if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
+            // eslint-disable-next-line no-console
+            console.warn('Could not mark mock reading section complete', mockErr);
+          }
           if (typeof window !== 'undefined') {
             try {
               window.sessionStorage.setItem(
@@ -1150,10 +1157,17 @@ function PartBody({
                 <h3 className="text-base font-bold text-navy">{text.title}</h3>
                 {text.source ? <p className="text-xs font-semibold text-muted">Source: {text.source}</p> : null}
               </div>
+              {/* P0-J 2026-05 hardening: sanitize author-supplied HTML before
+                  injecting into the DOM. Backend authoring stores raw HTML and
+                  the player previously rendered it verbatim — a stored XSS
+                  vector if AI-extraction or an admin upload smuggled a
+                  <script> tag through. sanitizeBodyHtml applies a conservative
+                  allow-list (paragraphs, emphasis, lists, tables) and strips
+                  script/iframe/event handlers. */}
               <div
                 className="prose prose-sm max-w-none text-navy selection:bg-warning/30"
                 data-reading-highlight-scope="passage"
-                dangerouslySetInnerHTML={{ __html: text.bodyHtml }}
+                dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }}
               />
             </article>
           ))}

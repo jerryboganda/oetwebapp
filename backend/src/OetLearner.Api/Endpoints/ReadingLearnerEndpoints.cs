@@ -227,7 +227,13 @@ public static class ReadingLearnerEndpoints
             {
                 return Results.BadRequest(new { code = "reading_answer_rejected", error = ex.Message, message = ex.Message });
             }
-        });
+        }).RequireRateLimiting("PerUserWrite");
+        // P0-B6 2026-05 hardening: autosave was the only write endpoint in
+        // the Reading surface without a rate limit. A misbehaving client
+        // (stuck retry loop, hostile script) could spam ~36 000 writes per
+        // attempt-hour and bloat the DB. The shared PerUserWrite policy
+        // enforces a per-user ceiling consistent with submit / break /
+        // error-bank deletion.
 
         // ── Submit ─────────────────────────────────────────────────────────
         group.MapPost("/attempts/{attemptId}/submit", async (

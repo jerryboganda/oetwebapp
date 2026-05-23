@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { ReadingLearnerStructureDto, ReadingQuestionLearnerDto } from '@/lib/reading-authoring-api';
+import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 import {
   buildPartABookletPages,
   buildPartBCBookletPages,
@@ -219,7 +220,7 @@ export function ReadingPaperBookletPage({ page, textById }: { page: ReadingPaper
         return (
           <div key={text.id} className="space-y-2">
             <h4 className="text-base font-bold text-navy">{text.title}</h4>
-            <div className="prose prose-sm max-w-none text-navy selection:bg-warning/30" dangerouslySetInnerHTML={{ __html: text.bodyHtml }} />
+            <div className="prose prose-sm max-w-none text-navy selection:bg-warning/30" dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }} />
           </div>
         );
       })}

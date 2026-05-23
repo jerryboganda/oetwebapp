@@ -172,6 +172,44 @@ export interface ReadingValidationReport {
   counts: { partACount: number; partBCount: number; partCCount: number; totalPoints: number };
 }
 
+/**
+ * Mirrors `ReadingResolvedPolicy` in
+ * `backend/src/OetLearner.Api/Services/Reading/ReadingPolicyService.cs:31`.
+ *
+ * Surfaced 1:1 by the backend on `POST /v1/reading-papers/papers/{id}/attempts`
+ * and on the resume endpoint so the player can render the timer, accessibility
+ * panel, and rate-limit hints from the same snapshot the server graded with.
+ * Adding this type closes API-contract drift P0-L (May 2026 audit closure).
+ */
+export interface ReadingResolvedPolicy {
+  attemptsPerPaperPerUser: number;
+  attemptCooldownMinutes: number;
+  partATimerStrictness: string;
+  partATimerMinutes: number;
+  partBCTimerMinutes: number;
+  gracePeriodSeconds: number;
+  onExpirySubmitPolicy: string;
+  countdownWarnings: number[];
+  enabledQuestionTypes: string[];
+  shortAnswerNormalisation: string;
+  shortAnswerAcceptSynonyms: boolean;
+  matchingAllowPartialCredit: boolean;
+  unknownTypeFallbackPolicy: string;
+  showExplanationsAfterSubmit: boolean;
+  showExplanationsOnlyIfWrong: boolean;
+  showCorrectAnswerOnReview: boolean;
+  submitRateLimitPerMinute: number;
+  autosaveRateLimitPerMinute: number;
+  extraTimeEntitlementPct: number;
+  allowMultipleConcurrentAttempts: boolean;
+  allowPausingAttempt: boolean;
+  allowResumeAfterExpiry: boolean;
+  allowPaperReadingMode: boolean;
+  fontScaleUserControl: boolean;
+  highContrastMode: boolean;
+  screenReaderOptimised: boolean;
+}
+
 export interface ReadingAttemptStarted {
   attemptId: string;
   startedAt: string;
@@ -188,6 +226,11 @@ export interface ReadingAttemptStarted {
   partBCTimerPausedAt: string | null;
   partBCPausedSeconds: number;
   partABreakMaxSeconds: number;
+  /** Policy snapshot the backend captured at attempt-start. Drift fix
+   *  P0-L 2026-05: previously omitted from this DTO, so the player ignored
+   *  the per-user accessibility / rate-limit hints the server already
+   *  resolved. Always present in fresh attempts. */
+  policy?: ReadingResolvedPolicy;
 }
 
 export interface ReadingAttemptBreakState {
