@@ -76,6 +76,7 @@ public class ConversationSettingsRow
 
     // ElevenLabs
     public string? ElevenLabsApiKeyEncrypted { get; set; }
+    [MaxLength(256)] public string? ElevenLabsTtsBaseUrl { get; set; }
     [MaxLength(64)] public string? ElevenLabsDefaultVoiceId { get; set; }
     [MaxLength(64)] public string? ElevenLabsModel { get; set; }
     [MaxLength(64)] public string? ElevenLabsOutputFormat { get; set; }

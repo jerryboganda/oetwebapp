@@ -1991,6 +1991,26 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Submit_hashes_overlong_caller_supplied_idempotency_key()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var customKey = new string('x', 256);
+        await attemptSvc.SubmitAsync("u1", started.AttemptId, customKey, default);
+
+        var record = await db.IdempotencyRecords
+            .SingleAsync(r => r.Scope == "reading-submit");
+        Assert.True(record.Key.Length <= 128);
+        Assert.StartsWith($"u1:{started.AttemptId}:sha256:", record.Key);
+        Assert.DoesNotContain(customKey, record.Key, StringComparison.Ordinal);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Submit_namespaces_caller_supplied_idempotency_key_by_attempt_owner()
     {
         var (db, structure, _, _, attemptSvc) = Build();

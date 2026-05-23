@@ -43,6 +43,8 @@ public sealed class VocabularyAudioWorker(
     {
         try
         {
+            await ResumeRunningRecallBatchesAsync(stoppingToken).ConfigureAwait(false);
+
             await foreach (var job in queue.ReadAllAsync(stoppingToken).ConfigureAwait(false))
             {
                 await _slots.WaitAsync(stoppingToken).ConfigureAwait(false);
@@ -75,6 +77,8 @@ public sealed class VocabularyAudioWorker(
     /// </summary>
     public async Task ProcessOneAsync(VocabularyAudioJob job, CancellationToken ct)
     {
+        try
+        {
         await using var scope = scopeFactory.CreateAsyncScope();
         var sp = scope.ServiceProvider;
         var db = sp.GetRequiredService<LearnerDbContext>();
@@ -117,11 +121,21 @@ public sealed class VocabularyAudioWorker(
             return;
         }
 
+        var isRecallTerm = IsRecallTerm(term);
+        var isRecallAudioJob = isRecallBatch || isRecallTerm;
+        if (isRecallAudioJob && !string.Equals(job.ProviderName, "elevenlabs", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogWarning("Vocab audio job {TermId} skipped — recall terms require ElevenLabs", job.TermId);
+            await MarkBatchFailureAsync(db, job, "invalid_recall_audio_provider", ct).ConfigureAwait(false);
+            return;
+        }
+
         if (!job.ForceRegenerate
             && !string.IsNullOrWhiteSpace(term.AudioMediaAssetId)
             && !string.IsNullOrWhiteSpace(term.AudioUrl)
             && IsStoredAudioKey(term.AudioUrl)
-            && storage.Exists(term.AudioUrl))
+            && storage.Exists(term.AudioUrl)
+            && CanReuseExistingAudio(term, job, isRecallAudioJob))
         {
             term.AudioBatchId = job.BatchId;
             term.UpdatedAt = DateTimeOffset.UtcNow;
@@ -151,6 +165,13 @@ public sealed class VocabularyAudioWorker(
         {
             logger.LogInformation("Vocab audio job {TermId} dropped — no TTS provider available", job.TermId);
             await MarkBatchFailureAsync(db, job, "tts_provider_unavailable", ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (isRecallAudioJob && !string.Equals(provider.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogWarning("Vocab audio job {TermId} skipped — selected provider {Provider} is not allowed for recall audio", job.TermId, provider.Name);
+            await MarkBatchFailureAsync(db, job, "invalid_recall_audio_provider", ct).ConfigureAwait(false);
             return;
         }
 
@@ -196,14 +217,21 @@ public sealed class VocabularyAudioWorker(
         // Pace successful calls to stay under DigitalOcean Inference rate limits.
         try { await Task.Delay(InterJobDelayMs, ct).ConfigureAwait(false); } catch (OperationCanceledException) { return; }
 
+        if (await IsBatchCancelledAsync(db, job.BatchId, ct).ConfigureAwait(false))
+        {
+            logger.LogInformation("Vocab audio job {TermId} skipped — batch {BatchId} was cancelled before storage", job.TermId, job.BatchId);
+            return;
+        }
+
         var audio = result.Audio ?? Array.Empty<byte>();
         var sha = Convert.ToHexString(SHA256.HashData(audio)).ToLowerInvariant();
         var mime = string.IsNullOrWhiteSpace(result.MimeType) ? "audio/mpeg" : result.MimeType;
         var ext = mime.Contains("wav", StringComparison.OrdinalIgnoreCase) ? "wav"
                   : mime.Contains("ogg", StringComparison.OrdinalIgnoreCase) ? "ogg"
                   : "mp3";
-        var key = isRecallBatch && string.Equals(provider.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase)
-            ? $"recalls/audio/{Slug(job.TermId)}-{sha[..16]}.{ext}"
+        var recallCode = isRecallAudioJob ? FirstRecallSetCode(term.RecallSetCodesJson) : null;
+        var key = isRecallAudioJob && string.Equals(provider.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase)
+            ? $"recalls/audio/{Slug(recallCode ?? "recall")}-{Slug(job.TermId)}-{sha[..16]}.{ext}"
             : ContentAddressed.PublishedKey("vocabulary/audio", sha, ext);
 
         if (!storage.Exists(key))
@@ -225,8 +253,8 @@ public sealed class VocabularyAudioWorker(
             asset = new MediaAsset
             {
                 Id = "MA-" + Guid.NewGuid().ToString("N")[..12],
-                OriginalFilename = isRecallBatch && string.Equals(provider.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase)
-                    ? $"{job.TermId}.{ext}"
+                OriginalFilename = isRecallAudioJob && string.Equals(provider.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase)
+                    ? $"{Slug(recallCode ?? "recall")}-{job.TermId}.{ext}"
                     : $"{Slug(job.Text)}.{ext}",
                 MimeType = mime,
                 Format = ext,
@@ -285,6 +313,13 @@ public sealed class VocabularyAudioWorker(
             }),
         });
 
+        if (await IsBatchCancelledAsync(db, job.BatchId, ct).ConfigureAwait(false))
+        {
+            storage.Delete(key);
+            logger.LogInformation("Vocab audio job {TermId} generated audio was discarded because batch {BatchId} was cancelled", job.TermId, job.BatchId);
+            return;
+        }
+
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         logger.LogInformation(
             "Vocab audio job {TermId} stored ({Bytes} bytes, sha {Sha}) via {Provider}",
@@ -306,6 +341,13 @@ public sealed class VocabularyAudioWorker(
                 // audio is already live and audible to learners.
                 logger.LogWarning(ex, "Vocab audio job {TermId}: failed to sweep previous asset {Old}", job.TermId, previousAssetId);
             }
+        }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await HandleFailureAsync(db, job, ex, ct).ConfigureAwait(false);
         }
     }
 
@@ -445,6 +487,117 @@ public sealed class VocabularyAudioWorker(
         => !string.IsNullOrWhiteSpace(value)
            && !value.StartsWith("/", StringComparison.Ordinal)
            && !Uri.TryCreate(value, UriKind.Absolute, out _);
+
+    private async Task ResumeRunningRecallBatchesAsync(CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+
+        var batches = await db.AudioRegenerationBatches
+            .AsNoTracking()
+            .Where(batch => batch.AudioType == "recalls" && batch.Status == "running")
+            .OrderBy(batch => batch.StartedAt)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        foreach (var batch in batches)
+        {
+            var terms = await BuildRecallResumeQuery(db, batch)
+                .OrderBy(term => term.Id)
+                .Take(10_000)
+                .Select(term => new { term.Id, term.Term })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+            var enqueued = 0;
+            foreach (var term in terms)
+            {
+                if (string.IsNullOrWhiteSpace(term.Term)) continue;
+                await queue.EnqueueAsync(new VocabularyAudioJob(
+                    TermId: term.Id,
+                    Text: term.Term,
+                    Voice: batch.VoiceId,
+                    Locale: "en-GB",
+                    BatchId: batch.Id,
+                    ModelVariant: batch.ModelVariant,
+                    Instructions: batch.Instructions,
+                    ProviderName: "elevenlabs"), ct).ConfigureAwait(false);
+                enqueued++;
+            }
+
+            if (enqueued > 0)
+            {
+                logger.LogInformation("Re-enqueued {Count} unfinished ElevenLabs recall audio jobs for batch {BatchId}", enqueued, batch.Id);
+            }
+        }
+    }
+
+    private static IQueryable<VocabularyTerm> BuildRecallResumeQuery(LearnerDbContext db, AudioRegenerationBatch batch)
+    {
+        var query = db.VocabularyTerms.AsNoTracking()
+            .Where(term => term.Status != "archived"
+                && term.RecallSetCodesJson != null
+                && term.RecallSetCodesJson != ""
+                && term.RecallSetCodesJson != "[]");
+
+        var scope = (batch.Scope ?? "missing").Trim().ToLowerInvariant();
+        if (scope == "different-voice")
+        {
+            query = query.Where(term =>
+                term.AudioProvider != "elevenlabs"
+                || term.AudioModelVariant != batch.ModelVariant
+                || term.AudioVoice != batch.VoiceId
+                || term.AudioVoice == null);
+        }
+        else if (scope != "all")
+        {
+            query = query.Where(term =>
+                term.AudioMediaAssetId == null
+                || term.AudioUrl == null
+                || term.AudioUrl == ""
+                || !db.MediaAssets.Any(asset => asset.Id == term.AudioMediaAssetId && asset.Status == MediaAssetStatus.Ready));
+        }
+
+        return query.Where(term =>
+            term.AudioBatchId != batch.Id
+            || term.AudioMediaAssetId == null
+            || term.AudioUrl == null
+            || term.AudioUrl == "");
+    }
+
+    private static bool IsRecallTerm(VocabularyTerm term)
+        => !string.IsNullOrWhiteSpace(term.RecallSetCodesJson)
+           && term.RecallSetCodesJson != "[]";
+
+    private static bool CanReuseExistingAudio(VocabularyTerm term, VocabularyAudioJob job, bool isRecallAudioJob)
+    {
+        if (!isRecallAudioJob) return true;
+
+        if (!string.Equals(term.AudioProvider, "elevenlabs", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!string.IsNullOrWhiteSpace(job.ModelVariant)
+            && !string.Equals(term.AudioModelVariant, job.ModelVariant, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!string.IsNullOrWhiteSpace(job.Voice)
+            && !string.Equals(term.AudioVoice, job.Voice, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return true;
+    }
+
+    private static string? FirstRecallSetCode(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "[]") return null;
+        try
+        {
+            var codes = JsonSerializer.Deserialize<string[]>(json);
+            return codes?.FirstOrDefault(code => !string.IsNullOrWhiteSpace(code));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     private static async Task<bool> IsBatchCancelledAsync(LearnerDbContext db, string batchId, CancellationToken ct)
     {

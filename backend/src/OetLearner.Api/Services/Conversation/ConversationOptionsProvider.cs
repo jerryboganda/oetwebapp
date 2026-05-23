@@ -132,6 +132,7 @@ public sealed class ConversationOptionsProvider(
 
         var elevenKey = Unprotect(r.ElevenLabsApiKeyEncrypted);
         if (!string.IsNullOrEmpty(elevenKey)) o.ElevenLabsApiKey = elevenKey;
+        if (!string.IsNullOrWhiteSpace(r.ElevenLabsTtsBaseUrl)) o.ElevenLabsTtsBaseUrl = r.ElevenLabsTtsBaseUrl;
         if (!string.IsNullOrWhiteSpace(r.ElevenLabsDefaultVoiceId)) o.ElevenLabsDefaultVoiceId = r.ElevenLabsDefaultVoiceId;
         if (!string.IsNullOrWhiteSpace(r.ElevenLabsModel)) o.ElevenLabsModel = r.ElevenLabsModel;
         if (!string.IsNullOrWhiteSpace(r.ElevenLabsOutputFormat)) o.ElevenLabsOutputFormat = r.ElevenLabsOutputFormat;
@@ -329,6 +330,7 @@ public sealed class ConversationOptionsProvider(
         TtsProvider = src.TtsProvider,
         AzureTtsDefaultVoice = src.AzureTtsDefaultVoice,
         ElevenLabsApiKey = src.ElevenLabsApiKey,
+        ElevenLabsTtsBaseUrl = src.ElevenLabsTtsBaseUrl,
         ElevenLabsDefaultVoiceId = src.ElevenLabsDefaultVoiceId,
         ElevenLabsModel = src.ElevenLabsModel,
         ElevenLabsOutputFormat = src.ElevenLabsOutputFormat,

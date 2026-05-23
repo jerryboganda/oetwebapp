@@ -60,8 +60,33 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
         Assert.Equal("audio/wav", response.Content.Headers.ContentType?.MediaType);
         Assert.Contains("private", response.Headers.CacheControl?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        Assert.True(response.Headers.TryGetValues("X-Recalls-Tts-Provider", out var providers));
-        Assert.NotEmpty(providers);
+        Assert.False(response.Headers.Contains("X-Recalls-Tts-Provider"));
+    }
+
+    [Fact]
+    public async Task Audio_denies_non_recall_terms_even_for_active_subscriber()
+    {
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
+        var termId = await SeedVocabularyCardAsync(learnerId, recallSetCodesJson: "[]");
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/recalls/audio/{termId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Generic_media_endpoint_denies_recall_audio_media_for_learner()
+    {
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
+        var (_, mediaAssetId) = await SeedVocabularyCardWithMediaAsync(learnerId);
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/media/{mediaAssetId}/content");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -233,7 +258,13 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
         await db.SaveChangesAsync();
     }
 
-    private async Task<string> SeedVocabularyCardAsync(string learnerId)
+    private async Task<string> SeedVocabularyCardAsync(string learnerId, string recallSetCodesJson = "[\"2026\"]")
+    {
+        var (termId, _) = await SeedVocabularyCardWithMediaAsync(learnerId, recallSetCodesJson);
+        return termId;
+    }
+
+    private async Task<(string TermId, string MediaAssetId)> SeedVocabularyCardWithMediaAsync(string learnerId, string recallSetCodesJson = "[\"2026\"]")
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -277,6 +308,7 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
             IpaPronunciation = "/əˈniːmiə/",
             AudioUrl = storageKey,
             AudioMediaAssetId = mediaAssetId,
+            RecallSetCodesJson = recallSetCodesJson,
             AudioSlowUrl = "recalls/audio/cached-word-slow.wav",
             AudioSentenceUrl = "recalls/audio/cached-sentence.wav",
             Status = "active",
@@ -295,6 +327,6 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
         });
 
         await db.SaveChangesAsync();
-        return termId;
+        return (termId, mediaAssetId);
     }
 }

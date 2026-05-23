@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using System.Text.Json;
+using System.Xml;
+using System.Xml.Linq;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Conversation.Tts;
 using OetLearner.Api.Services.VoiceDesign;
@@ -33,6 +37,7 @@ public static class VoiceDesignAdminEndpoints
                 Speed: opts.Qwen3Speed,
                 Pitch: opts.Qwen3Pitch,
                 Emotion: opts.Qwen3Emotion ?? "",
+                ElevenLabsTtsBaseUrl: opts.ElevenLabsTtsBaseUrl,
                 ElevenLabsDefaultVoiceId: opts.ElevenLabsDefaultVoiceId,
                 ElevenLabsModel: opts.ElevenLabsModel,
                 ElevenLabsOutputFormat: opts.ElevenLabsOutputFormat,
@@ -51,6 +56,7 @@ public static class VoiceDesignAdminEndpoints
         group.MapPut("/config", async (
             [FromBody] AdminVoiceDesignConfigRequest request,
             LearnerDbContext db,
+            HttpContext httpContext,
             IConversationOptionsProvider optionsProvider,
             CancellationToken ct) =>
         {
@@ -69,6 +75,7 @@ public static class VoiceDesignAdminEndpoints
             if (request.Speed is not null) row.Qwen3Speed = request.Speed;
             if (request.Pitch is not null) row.Qwen3Pitch = request.Pitch;
             if (request.Emotion is not null) row.Qwen3Emotion = request.Emotion;
+            if (request.ElevenLabsTtsBaseUrl is not null) row.ElevenLabsTtsBaseUrl = NormalizeElevenLabsBaseUrl(request.ElevenLabsTtsBaseUrl);
             if (request.ElevenLabsDefaultVoiceId is not null) row.ElevenLabsDefaultVoiceId = request.ElevenLabsDefaultVoiceId;
             if (request.ElevenLabsModel is not null) row.ElevenLabsModel = request.ElevenLabsModel;
             if (request.ElevenLabsOutputFormat is not null) row.ElevenLabsOutputFormat = NormalizeMp3OutputFormat(request.ElevenLabsOutputFormat);
@@ -86,6 +93,24 @@ public static class VoiceDesignAdminEndpoints
                     : provider.Protect(request.ElevenLabsApiKey);
             }
             row.UpdatedAt = DateTimeOffset.UtcNow;
+            row.UpdatedByUserId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? httpContext.User.FindFirst("sub")?.Value;
+            row.UpdatedByUserName = httpContext.User.Identity?.Name ?? row.UpdatedByUserId;
+
+            db.AuditEvents.Add(new Domain.AuditEvent
+            {
+                Id = $"AUD-{Guid.NewGuid():N}",
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = row.UpdatedByUserId ?? "system",
+                ActorName = row.UpdatedByUserName ?? "system",
+                Action = "VoiceDesignSettingsUpdated",
+                ResourceType = "ConversationSettings",
+                ResourceId = row.Id,
+                Details = JsonSerializer.Serialize(new
+                {
+                    changed = "voice-design-config",
+                    elevenLabsApiKeyProvided = request.ElevenLabsApiKey is not null && request.ElevenLabsApiKey.Length > 0,
+                }),
+            });
 
             await db.SaveChangesAsync(ct);
             optionsProvider.Invalidate();
@@ -99,12 +124,16 @@ public static class VoiceDesignAdminEndpoints
             LearnerDbContext db,
             IHttpClientFactory httpClientFactory,
             IConversationOptionsProvider optionsProvider,
+            HttpContext httpContext,
             CancellationToken ct) =>
         {
             if (file.Length <= 0) return Results.BadRequest(new { code = "empty_dictionary_file" });
             if (file.Length > 1024 * 1024) return Results.BadRequest(new { code = "dictionary_file_too_large" });
             if (!string.Equals(Path.GetExtension(file.FileName), ".pls", StringComparison.OrdinalIgnoreCase))
                 return Results.BadRequest(new { code = "dictionary_file_must_be_pls" });
+
+            var plsValidation = await ValidatePlsAsync(file, ct);
+            if (plsValidation is not null) return Results.BadRequest(new { code = plsValidation });
 
             var options = await optionsProvider.GetAsync(ct);
             if (string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
@@ -118,7 +147,8 @@ public static class VoiceDesignAdminEndpoints
             form.Add(new StringContent(string.IsNullOrWhiteSpace(name) ? Path.GetFileNameWithoutExtension(file.FileName) : name.Trim()), "name");
 
             var client = httpClientFactory.CreateClient("ConversationElevenLabsClient");
-            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.elevenlabs.io/v1/pronunciation-dictionaries/add-from-file");
+            var baseUrl = NormalizeElevenLabsBaseUrl(options.ElevenLabsTtsBaseUrl);
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/pronunciation-dictionaries/add-from-file");
             request.Headers.Add("xi-api-key", options.ElevenLabsApiKey);
             request.Content = form;
             using var response = await client.SendAsync(request, ct);
@@ -143,6 +173,19 @@ public static class VoiceDesignAdminEndpoints
             row.ElevenLabsPronunciationDictionaryId = dictionaryId;
             row.ElevenLabsPronunciationDictionaryVersionId = versionId;
             row.UpdatedAt = DateTimeOffset.UtcNow;
+            row.UpdatedByUserId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? httpContext.User.FindFirst("sub")?.Value;
+            row.UpdatedByUserName = httpContext.User.Identity?.Name ?? row.UpdatedByUserId;
+            db.AuditEvents.Add(new Domain.AuditEvent
+            {
+                Id = $"AUD-{Guid.NewGuid():N}",
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = row.UpdatedByUserId ?? "system",
+                ActorName = row.UpdatedByUserName ?? "system",
+                Action = "ElevenLabsPronunciationDictionaryUploaded",
+                ResourceType = "ConversationSettings",
+                ResourceId = row.Id,
+                Details = JsonSerializer.Serialize(new { dictionaryId, versionId, filename = file.FileName }),
+            });
             await db.SaveChangesAsync(ct);
             optionsProvider.Invalidate();
 
@@ -213,6 +256,18 @@ public static class VoiceDesignAdminEndpoints
             return Results.Ok(new { cancelled });
         }).WithAdminWrite("AdminAiConfig");
 
+        // POST /batches/{batchId}/retry — re-enqueue failed or incomplete recall audio jobs
+        group.MapPost("/batches/{batchId}/retry", async (
+            string batchId,
+            IVoiceDesignRegenerationService regenService,
+            HttpContext httpContext,
+            CancellationToken ct) =>
+        {
+            var userId = httpContext.User.FindFirst("sub")?.Value ?? "system";
+            var batch = await regenService.RetryFailedBatchAsync(batchId, userId, ct);
+            return batch is null ? Results.NotFound() : Results.Ok(batch);
+        }).WithAdminWrite("AdminAiConfig");
+
         return app;
     }
 
@@ -254,4 +309,42 @@ public static class VoiceDesignAdminEndpoints
            && outputFormat.StartsWith("mp3_", StringComparison.OrdinalIgnoreCase)
             ? outputFormat.Trim()
             : "mp3_44100_128";
+
+    private static string NormalizeElevenLabsBaseUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "https://api.elevenlabs.io/v1";
+        var normalized = value.Trim().TrimEnd('/');
+        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        {
+            throw ApiException.Validation("elevenlabs_tts_base_url_invalid", "ElevenLabs API base URL must be an absolute HTTP or HTTPS URL.");
+        }
+
+        return normalized;
+    }
+
+    private static async Task<string?> ValidatePlsAsync(IFormFile file, CancellationToken ct)
+    {
+        try
+        {
+            var settings = new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+                MaxCharactersInDocument = 1024 * 1024,
+            };
+            await using var stream = file.OpenReadStream();
+            using var reader = XmlReader.Create(stream, settings);
+            var document = await XDocument.LoadAsync(reader, LoadOptions.None, ct);
+            if (!string.Equals(document.Root?.Name.LocalName, "lexicon", StringComparison.OrdinalIgnoreCase))
+                return "dictionary_file_invalid_pls_root";
+            if (document.Descendants().Count() > 10_000)
+                return "dictionary_file_too_many_entries";
+            return null;
+        }
+        catch (XmlException)
+        {
+            return "dictionary_file_invalid_xml";
+        }
+    }
 }

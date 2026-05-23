@@ -4724,6 +4724,27 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("ElevenLabsOutputFormat")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ElevenLabsPronunciationDictionaryId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ElevenLabsPronunciationDictionaryVersionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<double?>("ElevenLabsSimilarityBoost")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("ElevenLabsStability")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("ElevenLabsStyle")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("ElevenLabsSttApiKeyEncrypted")
                         .HasColumnType("text");
 
@@ -4756,6 +4777,13 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<int?>("ElevenLabsSttTokenTtlSeconds")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ElevenLabsTtsBaseUrl")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<bool?>("ElevenLabsUseSpeakerBoost")
+                        .HasColumnType("boolean");
 
                     b.Property<bool?>("Enabled")
                         .HasColumnType("boolean");

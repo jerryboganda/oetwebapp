@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -34,11 +35,85 @@ public static class Oet2026CatalogEndpoints
         var billing = v1.MapGroup("/billing").RequireAuthorization();
         billing.MapPost("/quote/addon", QuoteAddonEligibility);
 
+        // Per-user entitlement snapshot — drives dashboard module visibility +
+        // add-on widget gating (Wave 4.6).
+        var me = v1.MapGroup("/me").RequireAuthorization();
+        me.MapGet("/entitlement-snapshot", MyEntitlementSnapshot);
+
         // Admin eligibility matrix.
         var admin = v1.MapGroup("/admin/billing");
         admin.MapGet("/eligibility/matrix", AdminEligibilityMatrix).RequireAuthorization("AdminBillingRead");
+        // Re-seed catalog button (Wave 3.4).
+        admin.MapPost("/catalog/seed-oet-2026", AdminReseedOet2026Catalog).RequireAuthorization("AdminBillingCatalogWrite");
 
         return app;
+    }
+
+    // ── Per-user entitlement snapshot ────────────────────────────────────
+
+    private sealed record EntitlementSnapshotResponse(
+        bool HasEligibleSubscription,
+        string Tier,
+        string? PlanCode,
+        string? ProductCategory,
+        IReadOnlyList<string> EnabledModules,
+        bool WritingAddonsEnabled,
+        bool SpeakingAddonsEnabled,
+        bool TutorBookDiscountEnabled,
+        int WritingAssessmentsRemaining,
+        int SpeakingSessionsRemaining,
+        int AiCreditsRemaining,
+        bool TutorBookUnlocked,
+        bool BasicEnglishUnlocked,
+        DateTimeOffset? ExpiresAt,
+        bool IsFrozen);
+
+    private static async Task<Ok<EntitlementSnapshotResponse>> MyEntitlementSnapshot(
+        HttpContext http,
+        IEffectiveEntitlementResolver resolver,
+        CancellationToken ct)
+    {
+        var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var snapshot = await resolver.ResolveAsync(userId, ct);
+        return TypedResults.Ok(new EntitlementSnapshotResponse(
+            snapshot.HasEligibleSubscription,
+            snapshot.Tier,
+            snapshot.PlanCode,
+            snapshot.ProductCategory,
+            snapshot.EnabledModules,
+            snapshot.WritingAddonsEnabled,
+            snapshot.SpeakingAddonsEnabled,
+            snapshot.TutorBookDiscountEnabled,
+            snapshot.WritingAssessmentsRemaining,
+            snapshot.SpeakingSessionsRemaining,
+            snapshot.AiCreditsRemaining,
+            snapshot.TutorBookUnlocked,
+            snapshot.BasicEnglishUnlocked,
+            snapshot.ExpiresAt,
+            snapshot.IsFrozen));
+    }
+
+    private sealed record ReseedResponse(int PlansCreated, int PlansUpdated, int AddOnsCreated, int AddOnsUpdated, int PackagesCreated, int PackagesUpdated);
+
+    private static async Task<Results<Ok<ReseedResponse>, BadRequest<string>>> AdminReseedOet2026Catalog(
+        Oet2026CatalogSeeder seeder,
+        CancellationToken ct)
+    {
+        try
+        {
+            var result = await seeder.SeedAsync(ct);
+            return TypedResults.Ok(new ReseedResponse(
+                result.PlansCreated,
+                result.PlansUpdated,
+                result.AddOnsCreated,
+                result.AddOnsUpdated,
+                result.PackagesCreated,
+                result.PackagesUpdated));
+        }
+        catch (Exception ex)
+        {
+            return TypedResults.BadRequest($"Seed failed: {ex.Message}");
+        }
     }
 
     // ── Public catalog pricing ────────────────────────────────────────────

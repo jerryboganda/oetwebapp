@@ -65,9 +65,9 @@ public sealed class MediaAssetAccessService(
 
         var normalizedProfession = profession?.Trim().ToLowerInvariant();
 
-        if (await CanLearnerAccessVocabularyAudioAsync(media.Id, normalizedProfession, ct))
+        if (await IsVocabularyAudioAsync(media.Id, ct))
         {
-            return true;
+            return false;
         }
 
         if (await CanLearnerAccessPublishedRulebookReferencePdfAsync(media.Id, normalizedProfession, ct))
@@ -155,22 +155,14 @@ public sealed class MediaAssetAccessService(
                 preview.MediaAssetId == mediaAssetId
                 && preview.Status == ContentStatus.Published, ct);
 
-    private Task<bool> CanLearnerAccessVocabularyAudioAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)
+    private Task<bool> IsVocabularyAudioAsync(string mediaAssetId, CancellationToken ct)
     {
-        // The public vocabulary catalog (/v1/vocabulary/terms) returns every
-        // active term regardless of profession, so any authenticated learner
-        // can browse and click-to-hear cross-profession terms (e.g. a medicine
-        // learner viewing veterinary or occupational-therapy vocabulary). To
-        // keep the play button honest we mirror that openness: audio is
-        // accessible for any term whose status is 'active', independent of
-        // ProfessionId. The `normalizedProfession` parameter is retained for
-        // signature consistency with the other learner predicates.
-        _ = normalizedProfession;
+        // Vocabulary/recall audio has its own paid, no-store streaming endpoint.
+        // Do not allow learners to bypass that entitlement gate through /v1/media.
         return db.VocabularyTerms
             .AsNoTracking()
             .AnyAsync(term =>
-                term.AudioMediaAssetId == mediaAssetId
-                && term.Status == "active", ct);
+                term.AudioMediaAssetId == mediaAssetId, ct);
     }
 
     private Task<bool> CanLearnerAccessPublishedRulebookReferencePdfAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)

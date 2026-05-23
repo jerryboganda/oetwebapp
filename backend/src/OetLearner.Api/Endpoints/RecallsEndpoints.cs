@@ -67,10 +67,9 @@ public static class RecallsEndpoints
                     statusCode: StatusCodes.Status402PaymentRequired);
             }
 
-            var audio = await svc.EnsureAudioAsync(termId, speed ?? "normal", ct);
+            var audio = await svc.EnsureAudioAsync(userId, termId, speed ?? "normal", ct);
             if (!storage.Exists(audio.StorageKey)) return Results.NotFound();
 
-            http.Response.Headers["X-Recalls-Tts-Provider"] = audio.Provider;
             var stream = await storage.OpenReadAsync(audio.StorageKey, ct);
             return Results.Stream(stream, audio.ContentType, enableRangeProcessing: false);
         });

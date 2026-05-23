@@ -1,9 +1,12 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations;
 
+[DbContext(typeof(LearnerDbContext))]
 [Migration("20260608001000_AddRecallAudioElevenLabsSettings")]
 public partial class AddRecallAudioElevenLabsSettings : Migration
 {
@@ -16,6 +19,13 @@ public partial class AddRecallAudioElevenLabsSettings : Migration
             maxLength: 64,
             nullable: false,
             defaultValue: "digitalocean-qwen3-tts");
+
+        migrationBuilder.AddColumn<string>(
+            name: "ElevenLabsTtsBaseUrl",
+            table: "ConversationSettings",
+            type: "character varying(256)",
+            maxLength: 256,
+            nullable: true);
 
         migrationBuilder.AddColumn<string>(
             name: "ElevenLabsOutputFormat",
@@ -66,6 +76,7 @@ public partial class AddRecallAudioElevenLabsSettings : Migration
     protected override void Down(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.DropColumn(name: "ProviderName", table: "AudioRegenerationBatches");
+        migrationBuilder.DropColumn(name: "ElevenLabsTtsBaseUrl", table: "ConversationSettings");
         migrationBuilder.DropColumn(name: "ElevenLabsOutputFormat", table: "ConversationSettings");
         migrationBuilder.DropColumn(name: "ElevenLabsPronunciationDictionaryId", table: "ConversationSettings");
         migrationBuilder.DropColumn(name: "ElevenLabsPronunciationDictionaryVersionId", table: "ConversationSettings");

@@ -1115,6 +1115,34 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Content.ContentTextExt
 builder.Services.Configure<WritingSeedOptions>(
     builder.Configuration.GetSection(WritingSeedOptions.SectionName));
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.WritingSampleSeeder>();
+
+// OET 2026 catalog seeder — startup load of 20+ BillingPlans + 7 BillingAddOns +
+// matching ContentPackages from Data/Seeds/oet-2026-catalog.json. Disabled by
+// default; enable with Content:Oet2026Catalog:Enabled=true. Idempotent UPSERT
+// on Code.
+builder.Services.Configure<Oet2026CatalogSeedOptions>(
+    builder.Configuration.GetSection(Oet2026CatalogSeedOptions.SectionName));
+// Register as singleton + hosted service so the admin reseed endpoint can
+// resolve the same instance.
+builder.Services.AddSingleton<OetLearner.Api.Services.Billing.Oet2026CatalogSeeder>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<OetLearner.Api.Services.Billing.Oet2026CatalogSeeder>());
+
+// Add-on eligibility service — enforces three-flag rule + Tutor Book
+// double-charge guard. Called from /v1/billing/quote/addon and the
+// checkout session creator.
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAddonEligibilityService,
+    OetLearner.Api.Services.Billing.AddonEligibilityService>();
+
+// Add-on grant processor — applies / reverses entitlement grants after
+// successful payment / refund webhook. Idempotent on (subscription_id,
+// addon_version_id, payment_event_id).
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAddonGrantProcessor,
+    OetLearner.Api.Services.Billing.AddonGrantProcessor>();
+
+// Tutor Book watermarking — stamps PDF with buyer + HMAC fingerprint so
+// leaks are traceable.
+builder.Services.AddSingleton<OetLearner.Api.Services.TutorBook.ITutorBookWatermarkService,
+    OetLearner.Api.Services.TutorBook.TutorBookWatermarkService>();
 // Reading Authoring subsystem (Slices R1–R7).
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingStructureService,
     OetLearner.Api.Services.Reading.ReadingStructureService>();
@@ -1570,6 +1598,8 @@ app.MapStudyPlanTemplateAdminEndpoints();
 app.MapBillingRegionEndpoints();
 app.MapBillingExpansionEndpoints();
 app.MapBillingExpansionV2Endpoints();
+app.MapOet2026CatalogEndpoints();
+app.MapTutorBookEndpoints();
 app.MapAffiliatePortalEndpoints();
 app.MapAiAnalyticsEndpoints();
 app.MapMockReadinessEndpoints();

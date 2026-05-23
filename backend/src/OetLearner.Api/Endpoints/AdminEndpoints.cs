@@ -1211,6 +1211,7 @@ public static class AdminEndpoints
                     merged.ElevenLabsSttKeytermsCsv,
                     merged.ElevenLabsSttEnableProviderLogging,
                     merged.ElevenLabsSttTokenTtlSeconds,
+                    merged.ElevenLabsTtsBaseUrl,
                     merged.ElevenLabsDefaultVoiceId,
                     merged.ElevenLabsModel,
                     merged.ElevenLabsOutputFormat,
@@ -1309,6 +1310,7 @@ public static class AdminEndpoints
                 if (request.ElevenLabsSttKeytermsCsv is not null) row.ElevenLabsSttKeytermsCsv = request.ElevenLabsSttKeytermsCsv;
                 if (request.ElevenLabsSttEnableProviderLogging.HasValue) row.ElevenLabsSttEnableProviderLogging = request.ElevenLabsSttEnableProviderLogging;
                 if (request.ElevenLabsSttTokenTtlSeconds.HasValue) row.ElevenLabsSttTokenTtlSeconds = request.ElevenLabsSttTokenTtlSeconds;
+                if (request.ElevenLabsTtsBaseUrl is not null) row.ElevenLabsTtsBaseUrl = NormalizeElevenLabsBaseUrl(request.ElevenLabsTtsBaseUrl);
                 if (request.ElevenLabsDefaultVoiceId is not null) row.ElevenLabsDefaultVoiceId = request.ElevenLabsDefaultVoiceId;
                 if (request.ElevenLabsModel is not null) row.ElevenLabsModel = request.ElevenLabsModel;
                 if (request.ElevenLabsOutputFormat is not null) row.ElevenLabsOutputFormat = NormalizeElevenLabsOutputFormat(request.ElevenLabsOutputFormat);
@@ -2061,6 +2063,19 @@ public static class AdminEndpoints
         => outputFormat.Trim().StartsWith("mp3_", StringComparison.OrdinalIgnoreCase)
             ? outputFormat.Trim()
             : "mp3_44100_128";
+
+    private static string NormalizeElevenLabsBaseUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "https://api.elevenlabs.io/v1";
+        var normalized = value.Trim().TrimEnd('/');
+        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        {
+            throw ApiException.Validation("elevenlabs_tts_base_url_invalid", "ElevenLabs API base URL must be an absolute HTTP or HTTPS URL.");
+        }
+
+        return normalized;
+    }
 
     private static void ValidateConversationSettingsRequest(AdminConversationSettingsRequest request)
     {

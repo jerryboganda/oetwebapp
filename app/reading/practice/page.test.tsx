@@ -6,7 +6,9 @@ const {
   mockGetReadingErrorBank,
   mockGetReadingDrillCatalogue,
   mockGetReadingPathway,
+  mockStartReadingDrill,
   mockStartReadingErrorBankRetest,
+  mockStartReadingMiniTest,
   mockUseAuth,
   mockRouterPush,
   mockSearchParams,
@@ -15,7 +17,9 @@ const {
   mockGetReadingErrorBank: vi.fn(),
   mockGetReadingDrillCatalogue: vi.fn(),
   mockGetReadingPathway: vi.fn(),
+  mockStartReadingDrill: vi.fn(),
   mockStartReadingErrorBankRetest: vi.fn(),
+  mockStartReadingMiniTest: vi.fn(),
   mockUseAuth: vi.fn(),
   mockRouterPush: vi.fn(),
   mockSearchParams: { current: new URLSearchParams() },
@@ -66,10 +70,10 @@ vi.mock('@/lib/reading-authoring-api', () => ({
   getReadingErrorBank: mockGetReadingErrorBank,
   getReadingHome: mockGetReadingHome,
   getReadingPathway: mockGetReadingPathway,
-  startReadingDrill: vi.fn(),
+  startReadingDrill: mockStartReadingDrill,
   startReadingErrorBankRetest: mockStartReadingErrorBankRetest,
   startReadingLearningAttempt: vi.fn(),
-  startReadingMiniTest: vi.fn(),
+  startReadingMiniTest: mockStartReadingMiniTest,
 }));
 
 import ReadingPracticePage from './page';
@@ -124,6 +128,20 @@ describe('Reading practice page', () => {
     expect(mockStartReadingErrorBankRetest).toHaveBeenCalledWith({ partCode: 'A', limit: 10 });
     expect(mockRouterPush).toHaveBeenCalledWith('/reading/paper/paper-1/player?attemptId=retest-1');
   });
+
+  it('does not launch a pathway drill when the recommended paper is locked', async () => {
+    const user = userEvent.setup();
+    mockGetReadingHome.mockResolvedValue(buildHome({ locked: true }));
+    mockGetReadingPathway.mockResolvedValue(buildPathway({ kind: 'start_drill', label: 'Repair Part A scanning', drillCode: 'part-a-scan' }));
+
+    render(<ReadingPracticePage />);
+
+    await user.click(await screen.findByRole('button', { name: /view packages/i }));
+
+    expect(mockStartReadingDrill).not.toHaveBeenCalled();
+    expect(mockStartReadingMiniTest).not.toHaveBeenCalled();
+    expect(mockRouterPush).toHaveBeenCalledWith('/billing');
+  });
 });
 
 function buildHome(opts?: { locked?: boolean }) {
@@ -177,5 +195,31 @@ function buildErrorEntry(overrides: Partial<{ id: string; partCode: 'A' | 'B' | 
     questionType: 'ShortAnswer',
     skillTag: 'scan',
     paper: { id: 'paper-1', title: 'Reading Sample Paper 1', slug: 'reading-sample-paper-1' },
+  };
+}
+
+function buildPathway(overrides: Partial<{
+  kind: 'start_diagnostic' | 'start_drill' | 'start_mini_test' | 'start_mock' | 'review_results' | 'book_exam';
+  label: string;
+  drillCode: string | null;
+  paperId: string | null;
+}>) {
+  return {
+    stage: 'drilling',
+    headline: 'Repair Reading gaps',
+    bestScaledScore: null,
+    openErrorBankCount: 2,
+    submittedExamAttempts: 1,
+    submittedPracticeAttempts: 1,
+    submittedReadingMockAttempts: 0,
+    weakestSkillTag: 'scan',
+    nextAction: {
+      kind: overrides.kind ?? 'start_drill',
+      label: overrides.label ?? 'Start drill',
+      drillCode: overrides.drillCode ?? 'part-a-scan',
+      paperId: overrides.paperId ?? 'paper-1',
+      route: '/reading/practice',
+    },
+    milestones: [],
   };
 }

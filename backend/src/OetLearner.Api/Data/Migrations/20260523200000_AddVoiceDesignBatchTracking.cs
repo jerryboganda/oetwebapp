@@ -1,10 +1,13 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations;
 
+[DbContext(typeof(LearnerDbContext))]
 [Migration("20260523200000_AddVoiceDesignBatchTracking")]
 public partial class AddVoiceDesignBatchTracking : Migration
 {
@@ -63,6 +66,21 @@ public partial class AddVoiceDesignBatchTracking : Migration
             nullable: true);
 
         // 3. ListeningTtsJobs — add batch tracking + voice override columns
+        migrationBuilder.Sql("""
+            CREATE TABLE IF NOT EXISTS "ListeningTtsJobs" (
+                "Id" character varying(64) NOT NULL,
+                "ExtractId" character varying(64) NOT NULL,
+                "RequestedBy" character varying(64) NOT NULL,
+                "Status" integer NOT NULL DEFAULT 0,
+                "RetryCount" integer NOT NULL DEFAULT 0,
+                "ErrorMessage" character varying(2048) NULL,
+                "RetryAfter" timestamp with time zone NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                CONSTRAINT "PK_ListeningTtsJobs" PRIMARY KEY ("Id")
+            );
+            """);
+
         migrationBuilder.AddColumn<string>(
             name: "BatchId",
             table: "ListeningTtsJobs",

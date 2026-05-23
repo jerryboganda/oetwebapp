@@ -776,7 +776,7 @@ public partial class AdminService
             {
                 var newRows = await db.VocabularyTerms.AsNoTracking()
                     .Where(t => importedTermIds.Contains(t.Id))
-                    .Select(t => new { t.Id, t.Term, t.AudioUrl, t.AudioMediaAssetId })
+                    .Select(t => new { t.Id, t.Term, t.AudioUrl, t.AudioMediaAssetId, t.RecallSetCodesJson })
                     .ToListAsync(ct);
                 foreach (var row in newRows)
                 {
@@ -789,7 +789,10 @@ public partial class AdminService
                             Text: row.Term,
                             Voice: null,
                             Locale: "en-GB",
-                            BatchId: batchId),
+                            BatchId: batchId,
+                            ProviderName: string.IsNullOrWhiteSpace(TryExtractRecallSetCodeFromStored(row.RecallSetCodesJson))
+                                ? null
+                                : "elevenlabs"),
                         ct);
                 }
             }
@@ -812,7 +815,9 @@ public partial class AdminService
             return new { enqueued = 0, skipped = "queue-not-configured" };
 
         IQueryable<VocabularyTerm> query = db.VocabularyTerms.AsNoTracking()
-            .Where(t => t.AudioMediaAssetId == null && (t.AudioUrl == null || t.AudioUrl == ""));
+            .Where(t => t.AudioMediaAssetId == null
+                && (t.AudioUrl == null || t.AudioUrl == "")
+                && (t.RecallSetCodesJson == null || t.RecallSetCodesJson == "" || t.RecallSetCodesJson == "[]"));
 
         var normalised = string.IsNullOrWhiteSpace(batchId) ? null : batchId.Trim();
         if (!string.IsNullOrEmpty(normalised))
@@ -892,7 +897,8 @@ public partial class AdminService
         }
 
         IQueryable<VocabularyTerm> query = db.VocabularyTerms.AsNoTracking()
-            .Where(t => t.Status == "active");
+            .Where(t => t.Status == "active"
+                && (t.RecallSetCodesJson == null || t.RecallSetCodesJson == "" || t.RecallSetCodesJson == "[]"));
 
         if (!string.IsNullOrWhiteSpace(professionId))
             query = query.Where(t => t.ProfessionId == professionId);

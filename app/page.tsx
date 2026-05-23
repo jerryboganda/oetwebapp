@@ -39,8 +39,9 @@ import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { PronunciationDashboardTile } from '@/components/domain/pronunciation';
 import { SafeRichText } from '@/components/domain/grammar/grammar-content-renderer';
 import { AsyncStateWrapper } from '@/components/state';
+import { DashboardAddonsWidget } from '@/components/learner/dashboard-addons-widget';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
-import { learnerGetScoringPolicy, type ScoringPolicyLearnerDto } from '@/lib/api';
+import { learnerGetScoringPolicy, fetchMyEntitlementSnapshot, type ScoringPolicyLearnerDto, type MyEntitlementSnapshot } from '@/lib/api';
 import type { SubTest } from '@/lib/mock-data';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
@@ -75,6 +76,7 @@ export default function Dashboard() {
   const { data, error, reload, status } = useDashboardHome();
   const [scoringPolicy, setScoringPolicy] = useState<ScoringPolicyLearnerDto | null>(null);
   const [scoringExpanded, setScoringExpanded] = useState(false);
+  const [entitlement, setEntitlement] = useState<MyEntitlementSnapshot | null>(null);
   const { home, profile, readiness, tasks, engagement, loadedAt } = data;
   const freeze = home?.freeze?.currentFreeze ?? null;
 
@@ -99,6 +101,13 @@ export default function Dashboard() {
       })
       .catch(() => {
         if (!cancelled) setScoringPolicy(null);
+      });
+    fetchMyEntitlementSnapshot()
+      .then((snapshot) => {
+        if (!cancelled) setEntitlement(snapshot);
+      })
+      .catch(() => {
+        if (!cancelled) setEntitlement(null);
       });
     return () => { cancelled = true; };
   }, []);
@@ -428,6 +437,14 @@ export default function Dashboard() {
               <AiUsageWidget />
 
               <PronunciationDashboardTile />
+
+              {/* OET 2026 — conditional dashboard add-on widget. Hides itself when
+                  all three eligibility flags on the active enrolment are false. */}
+              <DashboardAddonsWidget
+                writingAddonsEnabled={entitlement?.writingAddonsEnabled ?? false}
+                speakingAddonsEnabled={entitlement?.speakingAddonsEnabled ?? false}
+                tutorBookDiscountEnabled={entitlement?.tutorBookDiscountEnabled ?? false}
+              />
 
               {scoringPolicy ? (
                 <Card>

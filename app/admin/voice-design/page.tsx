@@ -29,6 +29,7 @@ import {
   regenerateAllAudio,
   getAudioRegenerationBatches,
   cancelAudioRegenerationBatch,
+  retryAudioRegenerationBatch,
   getAdminVoiceDesignConfig,
   saveAdminVoiceDesignConfig,
   uploadElevenLabsPronunciationDictionary,
@@ -51,6 +52,7 @@ type AudioBatch = AdminAudioBatch;
 interface ElevenLabsRecallSettings {
   apiKey: string;
   apiKeyPresent: boolean;
+  baseUrl: string;
   voiceId: string;
   model: string;
   outputFormat: string;
@@ -74,6 +76,7 @@ const OET_SAMPLES = [
 const DEFAULT_ELEVEN_SETTINGS: ElevenLabsRecallSettings = {
   apiKey: '',
   apiKeyPresent: false,
+  baseUrl: 'https://api.elevenlabs.io/v1',
   voiceId: '21m00Tcm4TlvDq8ikWAM',
   model: 'eleven_multilingual_v2',
   outputFormat: 'mp3_44100_128',
@@ -119,6 +122,7 @@ export default function AdminVoiceDesignPage() {
   const [regenerating, setRegenerating] = useState(false);
   const [confirmModal, setConfirmModal] = useState(false);
   const [elevenSettings, setElevenSettings] = useState<ElevenLabsRecallSettings>(DEFAULT_ELEVEN_SETTINGS);
+  const [savedElevenSettings, setSavedElevenSettings] = useState<ElevenLabsRecallSettings>(DEFAULT_ELEVEN_SETTINGS);
   const [dictionaryFile, setDictionaryFile] = useState<File | null>(null);
   const [savingEleven, setSavingEleven] = useState(false);
   const [uploadingDictionary, setUploadingDictionary] = useState(false);
@@ -182,9 +186,10 @@ export default function AdminVoiceDesignPage() {
         setSpeed(config.speed);
         setPitch(config.pitch);
         setEmotion(config.emotion);
-        setElevenSettings({
+        const loadedElevenSettings = {
           apiKey: '',
           apiKeyPresent: config.elevenLabsApiKeyPresent,
+          baseUrl: config.elevenLabsTtsBaseUrl || DEFAULT_ELEVEN_SETTINGS.baseUrl,
           voiceId: config.elevenLabsDefaultVoiceId || DEFAULT_ELEVEN_SETTINGS.voiceId,
           model: config.elevenLabsModel || DEFAULT_ELEVEN_SETTINGS.model,
           outputFormat: config.elevenLabsOutputFormat || DEFAULT_ELEVEN_SETTINGS.outputFormat,
@@ -194,7 +199,9 @@ export default function AdminVoiceDesignPage() {
           similarityBoost: config.elevenLabsSimilarityBoost,
           style: config.elevenLabsStyle,
           useSpeakerBoost: config.elevenLabsUseSpeakerBoost,
-        });
+        };
+        setElevenSettings(loadedElevenSettings);
+        setSavedElevenSettings(loadedElevenSettings);
       } catch {
         setToast({ variant: 'error', message: 'Failed to load voice settings' });
       }
@@ -352,6 +359,7 @@ export default function AdminVoiceDesignPage() {
         pitch,
         emotion,
         ...(elevenSettings.apiKey.trim() ? { elevenLabsApiKey: elevenSettings.apiKey.trim() } : {}),
+        elevenLabsTtsBaseUrl: elevenSettings.baseUrl.trim(),
         elevenLabsDefaultVoiceId: elevenSettings.voiceId.trim(),
         elevenLabsModel: elevenSettings.model.trim(),
         elevenLabsOutputFormat: elevenSettings.outputFormat.trim(),
@@ -366,6 +374,11 @@ export default function AdminVoiceDesignPage() {
         ...prev,
         apiKey: '',
         apiKeyPresent: prev.apiKeyPresent || Boolean(prev.apiKey.trim()),
+      }));
+      setSavedElevenSettings((prev) => ({
+        ...elevenSettings,
+        apiKey: '',
+        apiKeyPresent: prev.apiKeyPresent || Boolean(elevenSettings.apiKey.trim()),
       }));
       setToast({ variant: 'success', message: 'ElevenLabs recall settings saved' });
     } catch {
@@ -404,6 +417,16 @@ export default function AdminVoiceDesignPage() {
     }
   }, [fetchBatches]);
 
+  const handleRetryBatch = useCallback(async (batchId: string) => {
+    try {
+      await retryAudioRegenerationBatch(batchId);
+      setToast({ variant: 'success', message: 'Retry started' });
+      void fetchBatches();
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to retry batch' });
+    }
+  }, [fetchBatches]);
+
   const handleRateSample = useCallback((sampleId: string, rating: number) => {
     setSamples((prev) => prev.map((s) => (s.id === sampleId ? { ...s, rating } : s)));
   }, []);
@@ -428,8 +451,15 @@ export default function AdminVoiceDesignPage() {
   const canPreviewCount = audioType === 'recalls'
     ? Boolean(elevenSettings.voiceId.trim())
     : Boolean(selectedVoice);
+  const elevenSettingsDirty = JSON.stringify({ ...elevenSettings, apiKey: '' }) !== JSON.stringify({ ...savedElevenSettings, apiKey: '' })
+    || Boolean(elevenSettings.apiKey.trim());
+  const recallsSettingsReady = Boolean(elevenSettings.apiKeyPresent)
+    && Boolean(elevenSettings.voiceId.trim())
+    && Boolean(elevenSettings.baseUrl.trim())
+    && Boolean(elevenSettings.model.trim())
+    && !elevenSettingsDirty;
   const canStartRegeneration = audioType === 'recalls'
-    ? Boolean(dryRunResult) && !regenerating
+    ? Boolean(dryRunResult) && recallsSettingsReady && !regenerating
     : voiceApproved && Boolean(dryRunResult) && !regenerating;
 
   return (
@@ -818,6 +848,15 @@ export default function AdminVoiceDesignPage() {
                       className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                     />
                   </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-xs font-bold text-admin-text-muted">ElevenLabs API Base URL</span>
+                    <input
+                      type="url"
+                      value={elevenSettings.baseUrl}
+                      onChange={(event) => updateElevenSettings('baseUrl', event.target.value)}
+                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                    />
+                  </label>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-1.5">
                       <span className="text-xs font-bold text-admin-text-muted">Voice ID</span>
@@ -995,7 +1034,12 @@ export default function AdminVoiceDesignPage() {
 
                 {/* Action Buttons */}
                 <div className="flex gap-3">
-                  <Button variant="secondary" size="sm" onClick={handleDryRun} disabled={!canPreviewCount}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleDryRun}
+                    disabled={!canPreviewCount || (audioType === 'recalls' && !recallsSettingsReady)}
+                  >
                     <Settings2 className="mr-1.5 h-3.5 w-3.5" />
                     Preview Count
                   </Button>
@@ -1012,6 +1056,9 @@ export default function AdminVoiceDesignPage() {
 
                 {audioType !== 'recalls' && !voiceApproved && (
                   <p className="text-xs text-amber-400">Voice must be approved before starting regeneration.</p>
+                )}
+                {audioType === 'recalls' && !recallsSettingsReady && (
+                  <p className="text-xs text-amber-400">Save a valid ElevenLabs API key, voice, model, and dictionary settings before previewing or starting recall audio.</p>
                 )}
               </div>
             </motion.div>
@@ -1061,7 +1108,7 @@ export default function AdminVoiceDesignPage() {
                   <div className="space-y-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-admin-text-muted">Active</h4>
                     {activeBatches.map((batch) => (
-                      <BatchCard key={batch.batchId} batch={batch} onCancel={handleCancelBatch} />
+                      <BatchCard key={batch.batchId} batch={batch} onCancel={handleCancelBatch} onRetry={handleRetryBatch} />
                     ))}
                   </div>
                 )}
@@ -1071,7 +1118,7 @@ export default function AdminVoiceDesignPage() {
                   <div className="space-y-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-admin-text-muted">History (last 10)</h4>
                     {completedBatches.map((batch) => (
-                      <BatchCard key={batch.batchId} batch={batch} />
+                      <BatchCard key={batch.batchId} batch={batch} onRetry={handleRetryBatch} />
                     ))}
                   </div>
                 )}
@@ -1091,7 +1138,7 @@ export default function AdminVoiceDesignPage() {
           <div className="rounded-xl border border-admin-border bg-admin-surface-raised p-4 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-admin-text-muted">Voice:</span>
-              <span className="font-bold text-admin-text">{selectedVoice}</span>
+              <span className="font-bold text-admin-text">{audioType === 'recalls' ? elevenSettings.voiceId : selectedVoice}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-admin-text-muted">Audio Type:</span>
@@ -1161,7 +1208,7 @@ function SectionToggle({ label, open, onToggle }: { label: string; open: boolean
   );
 }
 
-function BatchCard({ batch, onCancel }: { batch: AudioBatch; onCancel?: (id: string) => void }) {
+function BatchCard({ batch, onCancel, onRetry }: { batch: AudioBatch; onCancel?: (id: string) => void; onRetry?: (id: string) => void }) {
   const progress = batch.totalItems > 0 ? Math.round((batch.completedItems / batch.totalItems) * 100) : 0;
   const [showErrors, setShowErrors] = useState(false);
 
@@ -1180,12 +1227,20 @@ function BatchCard({ batch, onCancel }: { batch: AudioBatch; onCancel?: (id: str
           <Badge variant={statusBadgeVariant} size="sm">{batch.status}</Badge>
           <Badge variant="muted" size="sm">{batch.audioType}</Badge>
         </div>
-        {batch.status === 'running' && onCancel && (
-          <Button variant="ghost" size="sm" onClick={() => onCancel(batch.batchId)}>
-            <XCircle className="mr-1 h-3.5 w-3.5" />
-            Cancel
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {batch.audioType === 'recalls' && batch.status !== 'running' && batch.failedItems > 0 && onRetry && (
+            <Button variant="secondary" size="sm" onClick={() => onRetry(batch.batchId)}>
+              <RefreshCw className="mr-1 h-3.5 w-3.5" />
+              Retry failed
+            </Button>
+          )}
+          {batch.status === 'running' && onCancel && (
+            <Button variant="ghost" size="sm" onClick={() => onCancel(batch.batchId)}>
+              <XCircle className="mr-1 h-3.5 w-3.5" />
+              Cancel
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Progress Bar */}

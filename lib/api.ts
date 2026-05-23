@@ -5398,6 +5398,41 @@ export async function fetchEligibilityMatrix(): Promise<import('./types/admin').
   return apiRequest('/v1/admin/billing/eligibility/matrix');
 }
 
+export interface MyEntitlementSnapshot {
+  hasEligibleSubscription: boolean;
+  tier: string;
+  planCode?: string | null;
+  productCategory?: string | null;
+  enabledModules: string[];
+  writingAddonsEnabled: boolean;
+  speakingAddonsEnabled: boolean;
+  tutorBookDiscountEnabled: boolean;
+  writingAssessmentsRemaining: number;
+  speakingSessionsRemaining: number;
+  aiCreditsRemaining: number;
+  tutorBookUnlocked: boolean;
+  basicEnglishUnlocked: boolean;
+  expiresAt?: string | null;
+  isFrozen: boolean;
+}
+
+export async function fetchMyEntitlementSnapshot(): Promise<MyEntitlementSnapshot> {
+  return apiRequest('/v1/me/entitlement-snapshot');
+}
+
+export interface Oet2026ReseedResponse {
+  plansCreated: number;
+  plansUpdated: number;
+  addOnsCreated: number;
+  addOnsUpdated: number;
+  packagesCreated: number;
+  packagesUpdated: number;
+}
+
+export async function reseedOet2026Catalog(): Promise<Oet2026ReseedResponse> {
+  return apiRequest('/v1/admin/billing/catalog/seed-oet-2026', { method: 'POST' });
+}
+
 // ── Tutor Book API ───────────────────────────────────────────────────────
 
 export interface TutorBookAudioScript {

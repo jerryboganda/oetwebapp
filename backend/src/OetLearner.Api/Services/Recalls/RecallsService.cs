@@ -208,7 +208,7 @@ public sealed class RecallsService(
     }
 
     public async Task<RecallsAudioResponse> EnsureAudioAsync(
-        string termId, string speed, CancellationToken ct)
+        string userId, string termId, string speed, CancellationToken ct)
     {
         var normalizedSpeed = string.IsNullOrWhiteSpace(speed)
             ? "normal"
@@ -218,7 +218,19 @@ public sealed class RecallsService(
             throw ApiException.Validation("INVALID_AUDIO_SPEED", "Speed must be normal, slow, or sentence.");
         }
 
-        var term = await db.VocabularyTerms.FirstOrDefaultAsync(t => t.Id == termId, ct)
+        var learnerProfession = await db.Users.AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => user.ActiveProfessionId)
+            .SingleOrDefaultAsync(ct);
+        var normalizedProfession = learnerProfession?.Trim().ToLowerInvariant();
+
+        var term = await db.VocabularyTerms.FirstOrDefaultAsync(t =>
+                t.Id == termId
+                && t.Status == "active"
+                && t.RecallSetCodesJson != null
+                && t.RecallSetCodesJson != ""
+                && t.RecallSetCodesJson != "[]"
+                && (t.ProfessionId == null || t.ProfessionId == normalizedProfession), ct)
             ?? throw ApiException.NotFound("TERM_NOT_FOUND", "Term not found.");
 
         if (normalizedSpeed == "normal" && !string.IsNullOrWhiteSpace(term.AudioMediaAssetId))

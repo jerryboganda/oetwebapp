@@ -20,6 +20,7 @@ export function ReadinessForecastSimulator({ open, onClose, initialForecast }: R
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetchReadinessForecast(hours)
       .then((res) => {

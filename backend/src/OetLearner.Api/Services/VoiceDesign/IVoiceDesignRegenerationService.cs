@@ -9,4 +9,5 @@ public interface IVoiceDesignRegenerationService
     Task<IReadOnlyList<AdminAudioBatchDto>> GetBatchesAsync(CancellationToken ct);
     Task<AdminAudioBatchDto?> GetBatchProgressAsync(string batchId, CancellationToken ct);
     Task<bool> CancelBatchAsync(string batchId, CancellationToken ct);
+    Task<AdminAudioBatchDto?> RetryFailedBatchAsync(string batchId, string requestedBy, CancellationToken ct);
 }

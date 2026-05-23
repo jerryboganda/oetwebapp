@@ -115,6 +115,121 @@ public sealed class VocabularyAudioWorkerTests
         Assert.Empty(fixture.Db.MediaAssets.AsNoTracking().ToList());
     }
 
+    [Fact]
+    public async Task RecallTermsRejectNonElevenLabsJobs()
+    {
+        await using var fixture = await Fixture.CreateAsync(ttsProvider: "mock");
+        fixture.Db.VocabularyTerms.Add(new VocabularyTerm
+        {
+            Id = "VOC-RECALL-BLOCKED",
+            Term = "anaemia",
+            ExamTypeCode = "oet",
+            Category = "recall",
+            Status = "active",
+            RecallSetCodesJson = "[\"2026\"]",
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        await fixture.Worker.ProcessOneAsync(
+            new VocabularyAudioJob("VOC-RECALL-BLOCKED", "anaemia", null, "en-GB", "batch-2"),
+            CancellationToken.None);
+
+        var term = await fixture.Db.VocabularyTerms.AsNoTracking().FirstAsync(t => t.Id == "VOC-RECALL-BLOCKED");
+        Assert.Null(term.AudioMediaAssetId);
+        Assert.Null(term.AudioUrl);
+    }
+
+    [Fact]
+    public async Task RecallTermsUseElevenLabsStorageKeyAndProvenance()
+    {
+        await using var fixture = await Fixture.CreateAsync(ttsProvider: "elevenlabs");
+        fixture.Db.VocabularyTerms.Add(new VocabularyTerm
+        {
+            Id = "VOC-RECALL-001",
+            Term = "haemorrhage",
+            ExamTypeCode = "oet",
+            Category = "recall",
+            Status = "active",
+            RecallSetCodesJson = "[\"2026\"]",
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        await fixture.Worker.ProcessOneAsync(
+            new VocabularyAudioJob(
+                TermId: "VOC-RECALL-001",
+                Text: "haemorrhage",
+                Voice: "voice-abc",
+                Locale: "en-GB",
+                BatchId: "batch-3",
+                ModelVariant: "eleven_multilingual_v2",
+                ProviderName: "elevenlabs"),
+            CancellationToken.None);
+
+        var term = await fixture.Db.VocabularyTerms.AsNoTracking().FirstAsync(t => t.Id == "VOC-RECALL-001");
+        Assert.Equal("elevenlabs", term.AudioProvider);
+        Assert.Equal("voice-abc", term.AudioVoice);
+        Assert.StartsWith("recalls/audio/2026-voc-recall-001-", term.AudioUrl, StringComparison.Ordinal);
+        Assert.NotNull(term.AudioMediaAssetId);
+    }
+
+    [Fact]
+    public async Task RecallTermWithNonElevenLabsExistingAudioRegenerates()
+    {
+        await using var fixture = await Fixture.CreateAsync(ttsProvider: "elevenlabs");
+        var storage = fixture.Root.GetRequiredService<IFileStorage>();
+        const string existingKey = "recalls/audio/old-voc-recall-002.wav";
+        await using (var stream = new MemoryStream(new byte[] { 1, 2, 3 }))
+        {
+            await storage.WriteAsync(existingKey, stream, CancellationToken.None);
+        }
+
+        fixture.Db.VocabularyTerms.Add(new VocabularyTerm
+        {
+            Id = "VOC-RECALL-002",
+            Term = "tachycardia",
+            ExamTypeCode = "oet",
+            Category = "recall",
+            Status = "active",
+            RecallSetCodesJson = "[\"old\"]",
+            AudioMediaAssetId = "media-old",
+            AudioUrl = existingKey,
+            AudioProvider = "mock",
+            AudioVoice = "old-voice",
+        });
+        fixture.Db.MediaAssets.Add(new MediaAsset
+        {
+            Id = "media-old",
+            OriginalFilename = "old.wav",
+            MimeType = "audio/wav",
+            Format = "wav",
+            SizeBytes = 3,
+            StoragePath = existingKey,
+            Status = MediaAssetStatus.Ready,
+            Sha256 = "oldsha",
+            MediaKind = "audio",
+            UploadedBy = "test",
+            UploadedAt = DateTimeOffset.UtcNow,
+            ProcessedAt = DateTimeOffset.UtcNow,
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        await fixture.Worker.ProcessOneAsync(
+            new VocabularyAudioJob(
+                TermId: "VOC-RECALL-002",
+                Text: "tachycardia",
+                Voice: "voice-new",
+                Locale: "en-GB",
+                BatchId: "batch-4",
+                ModelVariant: "eleven_multilingual_v2",
+                ProviderName: "elevenlabs"),
+            CancellationToken.None);
+
+        var term = await fixture.Db.VocabularyTerms.AsNoTracking().FirstAsync(t => t.Id == "VOC-RECALL-002");
+        Assert.Equal("elevenlabs", term.AudioProvider);
+        Assert.Equal("voice-new", term.AudioVoice);
+        Assert.NotEqual(existingKey, term.AudioUrl);
+    }
+
     // ─────────────────────────────────────────────────────────────────────
 
     private sealed class Fixture : IAsyncDisposable
@@ -142,7 +257,14 @@ public sealed class VocabularyAudioWorkerTests
 
             services.AddSingleton<IConversationOptionsProvider>(
                 new StubOptionsProvider(new ConversationOptions { TtsProvider = ttsProvider }));
-            services.AddScoped<IConversationTtsProvider, MockConversationTtsProvider>();
+            if (string.Equals(ttsProvider, "elevenlabs", StringComparison.OrdinalIgnoreCase))
+            {
+                services.AddScoped<IConversationTtsProvider, TestElevenLabsTtsProvider>();
+            }
+            else
+            {
+                services.AddScoped<IConversationTtsProvider, MockConversationTtsProvider>();
+            }
             services.AddScoped<IConversationTtsProviderSelector, ConversationTtsProviderSelector>();
 
             services.AddSingleton<IVocabularyAudioQueue, VocabularyAudioQueue>();
@@ -194,5 +316,19 @@ public sealed class VocabularyAudioWorkerTests
         public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
         public string ContentRootPath { get; set; } = root;
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
+    private sealed class TestElevenLabsTtsProvider : IConversationTtsProvider
+    {
+        public string Name => "elevenlabs";
+        public bool IsConfigured => true;
+
+        public Task<ConversationTtsResult> SynthesizeAsync(ConversationTtsRequest request, CancellationToken ct)
+            => Task.FromResult(new ConversationTtsResult(
+                new byte[] { 0x49, 0x44, 0x33, 1, 2, 3 },
+                "audio/mpeg",
+                500,
+                Name,
+                "test elevenlabs"));
     }
 }

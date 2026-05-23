@@ -19,7 +19,6 @@ import {
   fetchVocabularyCategories,
   fetchVocabularyTerms,
   fetchVocabularyRecallSets,
-  fetchAuthorizedObjectUrl,
   isApiError,
   type RecallsTodayResponse,
   type RecallsQueueItem,
@@ -29,7 +28,6 @@ import {
 import { analytics } from '@/lib/analytics';
 import { playTransientAudio } from '@/lib/recalls-audio';
 import type { VocabularyCategoriesResponse, VocabularyTerm } from '@/lib/types/vocabulary';
-import { speakTerm, isBrowserTtsAvailable, preloadVoices } from '@/lib/browser-tts';
 import { Pagination } from '@/components/ui/pagination';
 
 const STAR_REASONS: { key: RecallsStarReason; label: string }[] = [
@@ -82,7 +80,6 @@ export default function RecallsWordsPage() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   useEffect(() => {
-    preloadVoices();
     analytics.track('recalls_words_viewed');
     Promise.all([fetchRecallsToday(), fetchRecallsQueue(40)])
       .then(([t, q]) => {
@@ -172,29 +169,14 @@ export default function RecallsWordsPage() {
   }
 
   async function playTerm(term: VocabularyTerm) {
-    // Prefer canonical audio asset when available
-    const path = term.audioMediaAssetId
-      ? `/v1/media/${term.audioMediaAssetId}/content`
-      : term.audioUrl
-        ? term.audioUrl
-        : null;
-    if (path) {
-      try {
-        const objectUrl = await fetchAuthorizedObjectUrl(path);
-        const a = new Audio(objectUrl);
-        a.addEventListener('ended', () => URL.revokeObjectURL(objectUrl), { once: true });
-        await a.play().catch(() => {});
-        return;
-      } catch (err) {
-        console.error('[recalls/words] playTerm asset failed, falling back to browser TTS:', err);
-      }
-    }
-    // Fallback: browser-native TTS
-    if (isBrowserTtsAvailable()) {
-      try {
-        await speakTerm(term.term);
-      } catch {
-        // Best-effort — browser TTS not critical
+    try {
+      const url = (await fetchRecallsAudio(term.id, 'normal')).url;
+      playTransientAudio(url);
+      analytics.track('recalls_word_audio_played', { termId: term.id });
+    } catch (err) {
+      if (isApiError(err) && (err.status === 402 || err.status === 403)) {
+        analytics.track('recalls_word_audio_blocked', { termId: term.id, status: err.status });
+        setShowUpgradeModal(true);
       }
     }
   }
@@ -336,7 +318,6 @@ export default function RecallsWordsPage() {
             <div className="space-y-3">
               <div className="grid gap-3 md:grid-cols-2">
                 {catalogTerms.map((term) => {
-                  const hasAudio = Boolean(term.audioUrl || term.audioMediaAssetId);
                   const definitionText =
                     term.definition && !/^\s*\(\s*pending\b/i.test(term.definition) ? term.definition : null;
                   return (
@@ -358,7 +339,7 @@ export default function RecallsWordsPage() {
                           type="button"
                           onClick={() => playTerm(term)}
                           aria-label={`Play pronunciation of ${term.term}`}
-                          title={hasAudio ? 'Play pronunciation' : 'Play with browser TTS'}
+                          title="Play pronunciation"
                           className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20 group-hover:bg-primary/15"
                         >
                           <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />

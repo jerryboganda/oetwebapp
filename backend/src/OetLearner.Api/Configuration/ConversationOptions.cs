@@ -57,6 +57,7 @@ public class ConversationOptions
     public string TtsProvider { get; set; } = "auto";
     public string AzureTtsDefaultVoice { get; set; } = "en-GB-SoniaNeural";
     public string ElevenLabsApiKey { get; set; } = string.Empty;
+    public string ElevenLabsTtsBaseUrl { get; set; } = "https://api.elevenlabs.io/v1";
     public string ElevenLabsDefaultVoiceId { get; set; } = "21m00Tcm4TlvDq8ikWAM";
     public string ElevenLabsModel { get; set; } = "eleven_multilingual_v2";
     public string ElevenLabsOutputFormat { get; set; } = "mp3_44100_128";

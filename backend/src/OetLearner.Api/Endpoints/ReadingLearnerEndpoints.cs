@@ -52,9 +52,13 @@ public static class ReadingLearnerEndpoints
             IContentEntitlementService entitlements,
             CancellationToken ct) =>
         {
+            var globalPolicy = await policyService.GetGlobalAsync(ct);
             var paper = await db.ContentPapers.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == paperId && p.Status == ContentStatus.Published, ct);
-            if (paper is null || !string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefaultAsync(p => p.Id == paperId
+                    && p.SubtestCode == "reading"
+                    && (p.Status == ContentStatus.Published
+                        || (globalPolicy.AllowAttemptOnArchivedPaper && p.Status == ContentStatus.Archived)), ct);
+            if (paper is null)
                 return Results.NotFound();
 
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)

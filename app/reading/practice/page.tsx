@@ -84,6 +84,7 @@ export default function ReadingPracticePage() {
   // `${paperId}::${kind}` (or just `kind` for cross-paper retest).
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [drillPaperId, setDrillPaperId] = useState<string | null>(null);
+  const accessiblePapers = useMemo(() => papersWithAccess(home?.papers ?? []), [home?.papers]);
 
   // ── Deep-link support: /reading/practice?focus=A|B|C&tab=errors ─────────
   const searchParams = useSearchParams();
@@ -198,20 +199,31 @@ export default function ReadingPracticePage() {
     try {
       switch (nextAction.kind) {
         case 'start_drill': {
-          if (nextAction.paperId && nextAction.drillCode) {
-            const started = await startReadingDrill(nextAction.paperId, nextAction.drillCode);
+          if (nextAction.drillCode) {
+            const paperId = accessiblePapers.find((paper) => paper.id === nextAction.paperId)?.id
+              ?? accessiblePapers[0]?.id
+              ?? null;
+            if (!paperId) {
+              router.push('/billing');
+              return;
+            }
+            const started = await startReadingDrill(paperId, nextAction.drillCode);
             router.push(started.playerRoute);
             return;
           }
           break;
         }
         case 'start_mini_test': {
-          if (nextAction.paperId) {
-            const started = await startReadingMiniTest(nextAction.paperId, 10);
-            router.push(started.playerRoute);
+          const paperId = accessiblePapers.find((paper) => paper.id === nextAction.paperId)?.id
+            ?? accessiblePapers[0]?.id
+            ?? null;
+          if (!paperId) {
+            router.push('/billing');
             return;
           }
-          break;
+          const started = await startReadingMiniTest(paperId, 10);
+          router.push(started.playerRoute);
+          return;
         }
         case 'start_diagnostic':
         case 'start_mock':
@@ -231,7 +243,7 @@ export default function ReadingPracticePage() {
     } finally {
       setBusyKey(null);
     }
-  }, [pathway, router]);
+  }, [accessiblePapers, pathway, router]);
 
   const handleClearEntry = useCallback(
     async (entryId: string) => {
@@ -276,8 +288,6 @@ export default function ReadingPracticePage() {
     return focusPart ? all.filter((e) => e.partCode === focusPart) : all;
   }, [errorBank, focusPart]);
 
-  const accessiblePapers = useMemo(() => papersWithAccess(home?.papers ?? []), [home?.papers]);
-
   useEffect(() => {
     if (accessiblePapers.length === 0) return;
     if (!drillPaperId || !accessiblePapers.some((paper) => paper.id === drillPaperId)) {
@@ -308,6 +318,9 @@ export default function ReadingPracticePage() {
   const selectedDrillPaperAvailable = accessiblePapers.some((paper) => paper.id === drillPaperId);
   const openErrorCount = errorBank?.totals.open ?? 0;
   const visibleErrorCount = focusPart ? filteredErrorEntries.length : openErrorCount;
+  const pathwayNeedsAccessiblePaper = pathway?.nextAction.kind === 'start_drill'
+    || pathway?.nextAction.kind === 'start_mini_test';
+  const pathwayPackageRequired = Boolean(pathwayNeedsAccessiblePaper && accessiblePapers.length === 0);
 
   return (
     <LearnerDashboardShell>
@@ -378,7 +391,7 @@ export default function ReadingPracticePage() {
                   disabled={busyKey === 'pathway'}
                   onClick={() => void handlePathwayAction()}
                 >
-                  {busyKey === 'pathway' ? 'Starting…' : pathway.nextAction.label}{' '}
+                  {busyKey === 'pathway' ? 'Starting…' : pathwayPackageRequired ? 'View packages' : pathway.nextAction.label}{' '}
                   <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
                 </Button>
               </div>

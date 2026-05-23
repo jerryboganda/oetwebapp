@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
@@ -119,6 +121,7 @@ public sealed class ReadingAttemptService(
     ILogger<ReadingAttemptService> logger) : IReadingAttemptService
 {
     public const int PartABreakMaxSeconds = 600;
+    private const int MaxIdempotencyRecordKeyLength = 128;
 
     public Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct)
         => StartInModeAsync(userId, paperId, ReadingAttemptMode.Exam, scopeJson: null, ct);
@@ -696,7 +699,15 @@ public sealed class ReadingAttemptService(
         var suffix = string.IsNullOrWhiteSpace(callerSuppliedKey)
             ? "default"
             : callerSuppliedKey.Trim();
-        return $"{userId}:{attemptId}:{suffix}";
+        var rawKey = $"{userId}:{attemptId}:{suffix}";
+        if (rawKey.Length <= MaxIdempotencyRecordKeyLength)
+            return rawKey;
+
+        var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawKey))).ToLowerInvariant();
+        var scopedDigestKey = $"{userId}:{attemptId}:sha256:{digest}";
+        return scopedDigestKey.Length <= MaxIdempotencyRecordKeyLength
+            ? scopedDigestKey
+            : $"sha256:{digest}";
     }
 
     private static bool IsActiveUserOverride(ReadingUserPolicyOverride? userOverride)

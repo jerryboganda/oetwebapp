@@ -3,6 +3,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Vocabulary;
 
@@ -12,6 +13,7 @@ public sealed class VoiceDesignRegenerationService(
     LearnerDbContext db,
     IVocabularyAudioQueue vocabularyQueue,
     IConversationOptionsProvider optionsProvider,
+    IFileStorage storage,
     ILogger<VoiceDesignRegenerationService> logger) : IVoiceDesignRegenerationService
 {
     public async Task<AdminAudioRegenerateBatchResult> EnqueueBulkRegenerationAsync(
@@ -36,6 +38,13 @@ public sealed class VoiceDesignRegenerationService(
             ?? (isRecallBatch ? options.ElevenLabsDefaultVoiceId : "Cherry");
         var isDryRun = request.DryRun ?? false;
         var forceRegenerate = request.ForceRegenerate ?? false;
+
+        if (isRecallBatch && string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
+        {
+            throw ApiException.Validation(
+                "elevenlabs_api_key_required",
+                "Save an ElevenLabs API key in Admin Settings before starting recall audio generation.");
+        }
 
         int totalItems = 0;
 
@@ -72,14 +81,7 @@ public sealed class VoiceDesignRegenerationService(
 
         if (request.AudioType is "recalls")
         {
-            var recallQuery = ActiveRecallTerms();
-            recallQuery = request.Scope switch
-            {
-                "missing" => recallQuery.Where(t => t.AudioMediaAssetId == null),
-                "different-voice" => recallQuery.Where(t => t.AudioVoice != voiceId || t.AudioModelVariant != modelVariant || t.AudioProvider != providerName),
-                _ => recallQuery,
-            };
-            totalItems += await recallQuery.CountAsync(ct);
+            totalItems += (await GetRecallAudioCandidatesAsync(request.Scope, voiceId, modelVariant, providerName, retryOnly: false, batchId: null, ct)).Count;
         }
 
         if (isDryRun)
@@ -177,15 +179,7 @@ public sealed class VoiceDesignRegenerationService(
 
         if (request.AudioType is "recalls")
         {
-            var recallTerms = await ActiveRecallTerms()
-                .Where(t => request.Scope == "missing"
-                    ? t.AudioMediaAssetId == null
-                    : request.Scope == "different-voice"
-                        ? (t.AudioVoice != voiceId || t.AudioModelVariant != modelVariant || t.AudioProvider != providerName)
-                        : true)
-                .Select(t => new { t.Id, t.Term })
-                .Take(50_000)
-                .ToListAsync(ct);
+            var recallTerms = await GetRecallAudioCandidatesAsync(request.Scope, voiceId, modelVariant, providerName, retryOnly: false, batchId: null, ct);
 
             foreach (var term in recallTerms)
             {
@@ -262,12 +256,134 @@ public sealed class VoiceDesignRegenerationService(
         return true;
     }
 
-    private IQueryable<VocabularyTerm> ActiveRecallTerms()
+    public async Task<AdminAudioBatchDto?> RetryFailedBatchAsync(string batchId, string requestedBy, CancellationToken ct)
+    {
+        var batch = await db.AudioRegenerationBatches.FindAsync([batchId], ct);
+        if (batch is null || batch.AudioType != "recalls") return null;
+
+        await RecomputeProgressAsync(batch, ct);
+
+        var retryTerms = await GetRecallAudioCandidatesAsync(
+            batch.Scope,
+            batch.VoiceId,
+            batch.ModelVariant,
+            batch.ProviderName ?? "elevenlabs",
+            retryOnly: true,
+            batchId: batch.Id,
+            ct);
+
+        batch.Status = "running";
+        batch.CompletedAt = null;
+        batch.FailedItems = 0;
+        batch.TotalItems = batch.CompletedItems + retryTerms.Count;
+        batch.RequestedBy = requestedBy;
+        await db.SaveChangesAsync(ct);
+
+        foreach (var term in retryTerms)
+        {
+            await vocabularyQueue.EnqueueAsync(new VocabularyAudioJob(
+                TermId: term.Id,
+                Text: term.Term,
+                Voice: batch.VoiceId,
+                Locale: "en-GB",
+                BatchId: batch.Id,
+                ModelVariant: batch.ModelVariant,
+                Instructions: batch.Instructions,
+                ProviderName: "elevenlabs",
+                ForceRegenerate: false), ct);
+        }
+
+        logger.LogInformation("Re-enqueued {Count} failed/missing recall terms for batch {BatchId}", retryTerms.Count, batch.Id);
+        return await GetBatchProgressAsync(batch.Id, ct);
+    }
+
+    private IQueryable<VocabularyTerm> RecallTermsForGeneration()
         => db.VocabularyTerms.Where(t =>
-            t.Status == "active"
+            t.Status != "archived"
             && t.RecallSetCodesJson != null
             && t.RecallSetCodesJson != ""
             && t.RecallSetCodesJson != "[]");
+
+    private async Task<List<RecallAudioCandidate>> GetRecallAudioCandidatesAsync(
+        string? scope,
+        string? voiceId,
+        string? modelVariant,
+        string? providerName,
+        bool retryOnly,
+        string? batchId,
+        CancellationToken ct)
+    {
+        var rows = await RecallTermsForGeneration()
+            .OrderBy(t => t.Id)
+            .Take(50_000)
+            .Select(t => new RecallAudioCandidateRow(
+                t.Id,
+                t.Term,
+                t.AudioUrl,
+                t.AudioMediaAssetId,
+                t.AudioProvider,
+                t.AudioVoice,
+                t.AudioModelVariant,
+                t.AudioBatchId,
+                t.AudioMediaAssetId != null && db.MediaAssets.Any(asset => asset.Id == t.AudioMediaAssetId && asset.Status == MediaAssetStatus.Ready)))
+            .ToListAsync(ct);
+
+        var normalizedScope = string.IsNullOrWhiteSpace(scope) ? "missing" : scope.Trim().ToLowerInvariant();
+        var candidates = rows.Where(row => normalizedScope switch
+        {
+            "all" => true,
+            "different-voice" => IsMissingStoredAudio(row)
+                || !MatchesRecallAudioProvenance(row, voiceId, modelVariant, providerName),
+            _ => IsMissingStoredAudio(row),
+        });
+
+        if (retryOnly)
+        {
+            candidates = candidates.Where(row =>
+                IsMissingStoredAudio(row)
+                || !MatchesRecallAudioProvenance(row, voiceId, modelVariant, providerName)
+                || !string.Equals(row.AudioBatchId, batchId, StringComparison.Ordinal));
+        }
+
+        return candidates
+            .Where(row => !string.IsNullOrWhiteSpace(row.Term))
+            .Select(row => new RecallAudioCandidate(row.Id, row.Term))
+            .ToList();
+    }
+
+    private bool IsMissingStoredAudio(RecallAudioCandidateRow row)
+        => string.IsNullOrWhiteSpace(row.AudioMediaAssetId)
+           || string.IsNullOrWhiteSpace(row.AudioUrl)
+           || !row.MediaAssetReady
+           || !IsStoredAudioKey(row.AudioUrl)
+           || !storage.Exists(row.AudioUrl!);
+
+    private static bool MatchesRecallAudioProvenance(
+        RecallAudioCandidateRow row,
+        string? voiceId,
+        string? modelVariant,
+        string? providerName)
+        => string.Equals(row.AudioProvider, providerName ?? "elevenlabs", StringComparison.OrdinalIgnoreCase)
+           && (string.IsNullOrWhiteSpace(modelVariant) || string.Equals(row.AudioModelVariant, modelVariant, StringComparison.OrdinalIgnoreCase))
+           && (string.IsNullOrWhiteSpace(voiceId) || string.Equals(row.AudioVoice, voiceId, StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsStoredAudioKey(string value)
+        => !string.IsNullOrWhiteSpace(value)
+           && !value.StartsWith("/", StringComparison.Ordinal)
+           && !Uri.TryCreate(value, UriKind.Absolute, out _);
+
+    private sealed record RecallAudioCandidate(string Id, string Term);
+
+    private sealed record RecallAudioCandidateRow(
+        string Id,
+        string Term,
+        string? AudioUrl,
+        string? AudioMediaAssetId,
+        string? AudioProvider,
+        string? AudioVoice,
+        string? AudioModelVariant,
+        string? AudioBatchId,
+        bool MediaAssetReady);
 
     private async Task RecomputeProgressAsync(AudioRegenerationBatch batch, CancellationToken ct)
     {

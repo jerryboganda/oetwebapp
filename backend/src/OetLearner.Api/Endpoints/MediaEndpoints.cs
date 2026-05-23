@@ -255,6 +255,8 @@ public static class MediaEndpoints
         if (!await access.CanAccessAsync(http.User, media, ct)) return Results.NotFound();
 
         if (!storage.Exists(media.StoragePath)) return Results.NotFound();
+        http.Response.Headers.CacheControl = "private, no-store";
+        http.Response.Headers.Vary = "Authorization";
         var stream = await storage.OpenReadAsync(media.StoragePath, ct);
         return Results.Stream(stream, media.MimeType, media.OriginalFilename);
     }

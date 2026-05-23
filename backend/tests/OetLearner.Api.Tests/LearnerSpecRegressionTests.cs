@@ -793,6 +793,48 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     }
 
     [Fact]
+    public async Task ReadingStructure_UsesArchivedPaperPolicy_ForLearnerPlayer()
+    {
+        const string paperId = "archived-reading-structure-regression";
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            await SeedDiagnosticReadingPaperAsync(
+                db,
+                paperId,
+                "Archived Reading Structure Regression Paper",
+                "access:free",
+                priority: 100,
+                appliesToAllProfessions: true,
+                professionId: null,
+                status: ContentStatus.Archived);
+        }
+
+        var previousAllowArchived = await SetAllowArchivedReadingAttemptsAsync(false);
+        try
+        {
+            using var client = await CreateClientForUserAsync("archived-reading-structure-user");
+            var blocked = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/structure");
+            Assert.Equal(HttpStatusCode.NotFound, blocked.StatusCode);
+
+            await SetAllowArchivedReadingAttemptsAsync(true);
+
+            var allowed = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/structure");
+            allowed.EnsureSuccessStatusCode();
+
+            var payload = await allowed.Content.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(payload);
+            Assert.Equal(paperId, json.RootElement.GetProperty("paper").GetProperty("id").GetString());
+            Assert.DoesNotContain("correctAnswer", payload, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            await SetAllowArchivedReadingAttemptsAsync(previousAllowArchived);
+        }
+    }
+
+    [Fact]
     public async Task CompletedEvaluation_RegeneratesTheStudyPlan()
     {
         using var client = await CreateClientForUserAsync("study-plan-user");
@@ -891,6 +933,17 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
         client.DefaultRequestHeaders.Add("X-Debug-Name", userId);
         return client;
+    }
+
+    private async Task<bool> SetAllowArchivedReadingAttemptsAsync(bool allow)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var policyService = scope.ServiceProvider.GetRequiredService<IReadingPolicyService>();
+        var current = await policyService.GetGlobalAsync(default);
+        var previous = current.AllowAttemptOnArchivedPaper;
+        current.AllowAttemptOnArchivedPaper = allow;
+        await policyService.UpsertGlobalAsync(current, "regression-test", default);
+        return previous;
     }
 
     private async Task<string> SeedPublishedFullMockBundleAsync(string userId, int walletCredits)
@@ -1049,7 +1102,8 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         string tagsCsv,
         int priority,
         bool appliesToAllProfessions,
-        string? professionId)
+        string? professionId,
+        ContentStatus status = ContentStatus.Published)
     {
         var now = DateTimeOffset.UtcNow;
         var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId);
@@ -1065,7 +1119,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
                 ProfessionId = professionId,
                 Difficulty = "standard",
                 EstimatedDurationMinutes = 60,
-                Status = ContentStatus.Published,
+                Status = status,
                 SourceProvenance = "Regression test content supplied by platform owner for internal practice use.",
                 TagsCsv = tagsCsv,
                 Priority = priority,
@@ -1082,7 +1136,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             paper.ProfessionId = professionId;
             paper.TagsCsv = tagsCsv;
             paper.Priority = priority;
-            paper.Status = ContentStatus.Published;
+            paper.Status = status;
             paper.UpdatedAt = now;
             paper.PublishedAt ??= now;
             await db.SaveChangesAsync();
