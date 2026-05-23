@@ -58,16 +58,33 @@ output
 mempalace.yaml
 entities.json
 VPS All in One File.md
-backend
+backend/**/bin
+backend/**/obj
+backend/tests
 pages
 speaking markdown (2).md
-*.txt
-*.log
-*.xml
-*.yaml
-*.sh
+*.png
+*.dump
+Listening*
+01-*.png
+02-*.png
+03-*.png
+04-*.png
+05-*.png
+06-*.png
+07-*.png
+08-*.png
+09-*.png
+1*.png
+admin-*.png
+after-*.png
+invite-*.png
+
+# Test/config files not needed in production image
 playwright.*.ts
 vitest.*.ts
+vitest.setup.ts
 eslint.config.mjs
 *.test.ts
 *.test.tsx
+middleware.test.ts
