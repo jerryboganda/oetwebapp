@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, UserCheck, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -39,7 +39,7 @@ const CRITERIA: { code: WritingDualCriterionCode; label: string }[] = [
 export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000 }: Props) {
   const [data, setData] = useState<WritingDualAssessment | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [trackedTutorArrival, setTrackedTutorArrival] = useState(false);
+  const trackedTutorArrival = useRef(false);
 
   useEffect(() => {
     if (!evaluationId) return;
@@ -69,14 +69,14 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
 
   // Fire `writing_tutor_score_received` exactly once when the tutor track flips on.
   useEffect(() => {
-    if (!data || trackedTutorArrival) return;
+    if (!data || trackedTutorArrival.current) return;
     if (data.tutor) {
       analytics.track('writing_tutor_score_received', {
         evaluationId: data.evaluationId,
         tutorId: data.tutor.tutorId,
         agreementBand: data.divergence?.agreementBand ?? null,
       });
-      setTrackedTutorArrival(true);
+      trackedTutorArrival.current = true;
       if (data.divergence?.agreementBand === 'wide') {
         analytics.track('writing_dual_divergence_wide_observed', {
           evaluationId: data.evaluationId,
@@ -84,7 +84,7 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
         });
       }
     }
-  }, [data, trackedTutorArrival]);
+  }, [data]);
 
   useEffect(() => {
     if (!data) return;
