@@ -884,7 +884,14 @@ describe('Admin Non-Editor Pages', () => {
       pageSize: 50,
     });
     expect(screen.getByText(/Showing 1.50 of 75 payment transactions/)).toBeInTheDocument();
-    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+    // Pagination component now renders numbered page buttons rather than a
+    // literal "Page X of Y" label. With pageSize=50 and total=75 we expect
+    // page 1 marked current and a page-2 button reachable.
+    const paginationNav = screen.getByRole('navigation', { name: 'Pagination' });
+    expect(paginationNav).toBeInTheDocument();
+    const page1 = await screen.findByRole('button', { name: '1', current: 'page' });
+    expect(page1).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2' })).toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER_RAW_PROVIDER_METADATA')).not.toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: /^provider lifecycle signals$/i })).toBeInTheDocument();
     expect(screen.getAllByText('checkout.session.completed').length).toBeGreaterThan(0);

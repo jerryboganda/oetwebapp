@@ -1,9 +1,10 @@
 import { screen } from '@testing-library/react';
-const { mockAddToMyVocabulary, mockFetchMockReport, mockFetchVocabularyTerms, mockLearnerGetActiveResultTemplate, mockTrack } = vi.hoisted(() => ({
+const { mockAddToMyVocabulary, mockFetchMockReport, mockFetchVocabularyTerms, mockLearnerGetActiveResultTemplate, mockFetchReadiness, mockTrack } = vi.hoisted(() => ({
   mockAddToMyVocabulary: vi.fn(),
   mockFetchMockReport: vi.fn(),
   mockFetchVocabularyTerms: vi.fn(),
   mockLearnerGetActiveResultTemplate: vi.fn(),
+  mockFetchReadiness: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -29,6 +30,9 @@ vi.mock('@/lib/api', () => ({
   fetchMockReport: mockFetchMockReport,
   fetchVocabularyTerms: mockFetchVocabularyTerms,
   learnerGetActiveResultTemplate: mockLearnerGetActiveResultTemplate,
+  // ReadinessDeltaBanner mounts inside the mock-report page and calls
+  // fetchReadiness(). Mock it so the test doesn't throw at component mount.
+  fetchReadiness: mockFetchReadiness,
 }));
 
 import MockReportPage from './page';
@@ -68,6 +72,10 @@ describe('Mock report page', () => {
     mockLearnerGetActiveResultTemplate.mockResolvedValue(null);
     mockFetchVocabularyTerms.mockResolvedValue([]);
     mockAddToMyVocabulary.mockResolvedValue({});
+    mockFetchReadiness.mockResolvedValue({
+      overallReadiness: 65,
+      overallRisk: 'Medium',
+    });
   });
 
   it('renders through the shared learner dashboard shell without a second page-root width wrapper', async () => {
