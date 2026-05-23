@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, Archive as ArchiveIcon, CheckCircle2, XCircle } from 'lucide-react';
+import { Headphones, Plus, Archive as ArchiveIcon, CheckCircle2, XCircle, Settings } from 'lucide-react';
 import {
   AdminRoutePanel,
   AdminRouteSectionHeader,
@@ -279,6 +279,12 @@ export default function AdminListeningPapersPage() {
                 className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy transition hover:bg-background-light"
               >
                 Bulk ZIP import
+              </Link>
+              <Link
+                href="/admin/content/listening/policy"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy transition hover:bg-background-light"
+              >
+                <Settings className="w-4 h-4 mr-1" /> Policy Settings
               </Link>
             </div>
           ) : null}

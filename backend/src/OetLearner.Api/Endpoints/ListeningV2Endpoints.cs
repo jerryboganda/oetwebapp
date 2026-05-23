@@ -27,6 +27,10 @@ public static class ListeningV2Endpoints
     public sealed record SaveAnnotationsRequest(string? AnnotationsJson);
     public sealed record AnnotationsDto(string? AnnotationsJson);
 
+    public sealed record CreateNoteRequest(string? ExtractId, int? TranscriptMs, string Text);
+    public sealed record UpdateNoteRequest(string Text);
+    public sealed record NoteDto(Guid Id, string? ExtractId, int? TranscriptMs, string Text, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+
     public static IEndpointRouteBuilder MapListeningV2Endpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/v1/listening/v2")
@@ -156,6 +160,149 @@ public static class ListeningV2Endpoints
         })
         .WithName("GetListeningV2Annotations")
         .WithSummary("Listening V2 — read the learner's saved annotations payload.");
+
+        // ─── Attempt Notes ───
+        group.MapGet("/attempts/{attemptId}/notes", async (
+            string attemptId, HttpContext http,
+            Data.LearnerDbContext db, CancellationToken ct) =>
+        {
+            var userId = http.UserId();
+            var attempt = await db.Set<Domain.ListeningAttempt>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == attemptId, ct);
+            if (attempt is null) return Results.NotFound();
+            if (attempt.UserId != userId) return Results.Forbid();
+
+            var rawNotes = await db.ListeningAttemptNotes
+                .AsNoTracking()
+                .Where(n => n.ListeningAttemptId == attemptId)
+                .OrderBy(n => n.CreatedAt)
+                .ToListAsync(ct);
+
+            var notes = rawNotes.Select(n => new NoteDto(
+                Guid.Parse(n.Id),
+                string.IsNullOrEmpty(n.ListeningExtractId) ? null : n.ListeningExtractId,
+                n.TranscriptMs,
+                n.Text,
+                n.CreatedAt,
+                n.UpdatedAt)).ToList();
+
+            return Results.Ok(notes);
+        })
+        .WithName("GetListeningV2Notes")
+        .WithSummary("Listening V2 — list learner notes for an attempt");
+
+        group.MapPost("/attempts/{attemptId}/notes", async (
+            string attemptId, CreateNoteRequest req, HttpContext http,
+            Data.LearnerDbContext db, CancellationToken ct) =>
+        {
+            var userId = http.UserId();
+            var attempt = await db.Set<Domain.ListeningAttempt>()
+                .FirstOrDefaultAsync(a => a.Id == attemptId, ct);
+            if (attempt is null) return Results.NotFound();
+            if (attempt.UserId != userId) return Results.Forbid();
+
+            if (req.Text is null || req.Text.Length > 4096)
+                return Results.BadRequest(new { error = "Text must be between 1 and 4096 characters." });
+
+            var now = DateTimeOffset.UtcNow;
+            var note = new Domain.ListeningAttemptNote
+            {
+                Id = Guid.NewGuid().ToString(),
+                ListeningAttemptId = attemptId,
+                ListeningExtractId = req.ExtractId ?? string.Empty,
+                TranscriptMs = req.TranscriptMs,
+                Text = req.Text,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.ListeningAttemptNotes.Add(note);
+            await db.SaveChangesAsync(ct);
+
+            var dto = new NoteDto(
+                Guid.Parse(note.Id),
+                string.IsNullOrEmpty(note.ListeningExtractId) ? null : note.ListeningExtractId,
+                note.TranscriptMs,
+                note.Text,
+                note.CreatedAt,
+                note.UpdatedAt);
+
+            return Results.Created($"/v1/listening/v2/attempts/{attemptId}/notes/{note.Id}", dto);
+        })
+        .RequireRateLimiting("PerUserWrite")
+        .WithName("CreateListeningV2Note")
+        .WithSummary("Listening V2 — create a learner note on an attempt")
+        .Produces<NoteDto>(StatusCodes.Status201Created)
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPut("/attempts/{attemptId}/notes/{noteId}", async (
+            string attemptId, string noteId, UpdateNoteRequest req, HttpContext http,
+            Data.LearnerDbContext db, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(noteId, out _)) return Results.NotFound();
+            var userId = http.UserId();
+            var attempt = await db.Set<Domain.ListeningAttempt>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == attemptId, ct);
+            if (attempt is null) return Results.NotFound();
+            if (attempt.UserId != userId) return Results.Forbid();
+
+            if (req.Text is null || req.Text.Length > 4096)
+                return Results.BadRequest(new { error = "Text must be between 1 and 4096 characters." });
+
+            var note = await db.ListeningAttemptNotes
+                .FirstOrDefaultAsync(n => n.Id == noteId && n.ListeningAttemptId == attemptId, ct);
+            if (note is null) return Results.NotFound();
+
+            note.Text = req.Text;
+            note.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new NoteDto(
+                Guid.Parse(note.Id),
+                string.IsNullOrEmpty(note.ListeningExtractId) ? null : note.ListeningExtractId,
+                note.TranscriptMs,
+                note.Text,
+                note.CreatedAt,
+                note.UpdatedAt));
+        })
+        .RequireRateLimiting("PerUserWrite")
+        .WithName("UpdateListeningV2Note")
+        .WithSummary("Listening V2 — update the text of a learner note")
+        .Produces<NoteDto>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound);
+
+        group.MapDelete("/attempts/{attemptId}/notes/{noteId}", async (
+            string attemptId, string noteId, HttpContext http,
+            Data.LearnerDbContext db, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(noteId, out _)) return Results.NotFound();
+            var userId = http.UserId();
+            var attempt = await db.Set<Domain.ListeningAttempt>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == attemptId, ct);
+            if (attempt is null) return Results.NotFound();
+            if (attempt.UserId != userId) return Results.Forbid();
+
+            var note = await db.ListeningAttemptNotes
+                .FirstOrDefaultAsync(n => n.Id == noteId && n.ListeningAttemptId == attemptId, ct);
+            if (note is null) return Results.NotFound();
+
+            db.ListeningAttemptNotes.Remove(note);
+            await db.SaveChangesAsync(ct);
+
+            return Results.NoContent();
+        })
+        .RequireRateLimiting("PerUserWrite")
+        .WithName("DeleteListeningV2Note")
+        .WithSummary("Listening V2 — delete a learner note")
+        .Produces(StatusCodes.Status204NoContent)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound);
 
         group.MapPost("/attempts/{attemptId}/audio-resume", async (
             string attemptId, AudioResumeRequest req, HttpContext http,

@@ -2864,7 +2864,25 @@ public partial class AdminService(
 
         await db.SaveChangesAsync(ct);
 
-        var inviteChallenge = await emailOtpService.RequestPasswordResetOtpAsync(email, ct);
+        // Email send gets its own 10-second deadline so a slow/misconfigured
+        // email provider never blocks the invite response. If it fails, the
+        // admin receives the temporary password directly as a fallback.
+        OtpChallengeResponse? inviteChallenge = null;
+        using var emailCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        emailCts.CancelAfter(TimeSpan.FromSeconds(10));
+        try
+        {
+            inviteChallenge = await emailOtpService.RequestPasswordResetOtpAsync(email, emailCts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Email provider timed out; admin receives temp password instead.
+        }
+        catch (Exception)
+        {
+            // Email send failed; admin receives temp password instead.
+        }
+
         await LogAuditAsync(adminId, adminName, "Invited User", "User", userId, $"Invited {role}: {email}", ct);
         await CommitIfOwnedAsync(tx, ct);
 
@@ -2873,7 +2891,8 @@ public partial class AdminService(
             id = userId,
             email,
             role,
-            invitation = new
+            temporaryPassword = inviteChallenge is null ? tempPassword : (string?)null,
+            invitation = inviteChallenge is null ? null : new
             {
                 purpose = inviteChallenge.Purpose,
                 deliveryChannel = inviteChallenge.DeliveryChannel,

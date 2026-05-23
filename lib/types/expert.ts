@@ -11,7 +11,7 @@ export type ReviewStatus =
   | 'overdue' 
   | 'blocked';
 
-export type SubmissionType = 'writing' | 'speaking';
+export type SubmissionType = 'writing' | 'speaking' | 'listening';
 
 export type Profession = 'medicine' | 'nursing' | 'dentistry' | 'pharmacy' | 'physiotherapy' | 'veterinary' | 'occupational_therapy' | 'dietetics' | 'speech_pathology' | 'radiography' | 'podiatry' | 'optometry';
 
@@ -598,4 +598,58 @@ export interface ExpertPayoutItem {
   status: string;
   createdAt: string;
   approvedAt?: string | null;
+}
+
+// ── Listening expert review types ──
+
+export interface ListeningExpertAttemptSummary {
+  attemptId: string;
+  learnerId: string;
+  learnerDisplayName: string;
+  paperId: string;
+  paperTitle: string;
+  submittedAt: string;
+  rawScore: number;
+  scaledScore: number;
+  maxRawScore: number;
+  hasFeedback: boolean;
+}
+
+export interface ListeningExpertAnswerItem {
+  questionNumber: number;
+  partCode: string; // 'A1'|'A2'|'B'|'C1'|'C2'
+  stem: string;
+  userAnswer: string | null;
+  correctAnswer: string;
+  isCorrect: boolean;
+  transcriptEvidence: string | null;
+  existingComment?: string;
+}
+
+export interface ListeningExpertBundle {
+  attemptId: string;
+  learnerId: string;
+  learnerDisplayName: string;
+  paperTitle: string;
+  submittedAt: string;
+  rawScore: number;
+  scaledScore: number;
+  maxRawScore: number;
+  answers: ListeningExpertAnswerItem[];
+  existingFeedback?: {
+    overallFeedbackMarkdown: string;
+    perQuestionFeedbackJson?: string;
+    recommendedAreasJson?: string;
+    rawScoreOverride?: number;
+    scoreOverrideReason?: string;
+    submittedAt: string;
+  };
+}
+
+export interface SubmitListeningFeedbackRequest {
+  overallFeedback: string;
+  perQuestionFeedback?: Array<{ questionNumber: number; comment: string }>;
+  recommendedAreas?: string[];
+  rawScoreOverride?: number;
+  scoreOverrideReason?: string;
 }

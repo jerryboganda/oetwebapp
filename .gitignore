@@ -45,6 +45,7 @@ tsconfig.tsbuildinfo
 
 # Local/temp artifacts
 .local-deploy/
+.local-docker/
 .deploy/
 .opencode/*.tmp
 Contactppp.png

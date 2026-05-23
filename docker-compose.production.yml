@@ -52,6 +52,7 @@ x-learner-api-slot: &learner-api-slot
     Billing__Stripe__CancelUrl: ${BILLING__STRIPE__CANCELURL}
     Billing__Stripe__WebhookSecret: ${BILLING__STRIPE__WEBHOOKSECRET}
     Platform__PublicApiBaseUrl: ${PUBLIC_API_BASE_URL}
+    Platform__PublicWebBaseUrl: ${APP_URL}
     Platform__FallbackEmailDomain: ${FALLBACK_EMAIL_DOMAIN:-example.invalid}
     Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL}
     Storage__LocalRootPath: /var/opt/oet-learner/storage

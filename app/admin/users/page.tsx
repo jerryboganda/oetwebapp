@@ -360,10 +360,10 @@ export default function UsersPage() {
       await reloadUsers();
       setIsInviteOpen(false);
       setInviteForm(defaultInviteForm);
-      setToast({
-        variant: 'success',
-        message: `Invitation sent to ${result.email}. Setup expires ${new Date(result.invitation.expiresAt).toLocaleString()}.`,
-      });
+      const successMsg = result.temporaryPassword
+        ? `Account created for ${result.email}. Email delivery failed — temporary password: ${result.temporaryPassword}`
+        : `Invitation sent to ${result.email}. Setup expires ${new Date(result.invitation!.expiresAt).toLocaleString()}.`;
+      setToast({ variant: 'success', message: successMsg });
     } catch (error) {
       console.error(error);
       setToast({ variant: 'error', message: 'Unable to send this invitation.' });

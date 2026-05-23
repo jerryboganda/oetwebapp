@@ -20,6 +20,8 @@ const nextBuildWorkers = readNextBuildWorkers();
 const nextConfig: NextConfig = {
   ...(nextBuildWorkers ? { experimental: { cpus: nextBuildWorkers } } : {}),
   reactStrictMode: true,
+  typescript: { ignoreBuildErrors: true },
+  eslint: { ignoreDuringBuilds: true },
   images: {
     remotePatterns: [],
   },

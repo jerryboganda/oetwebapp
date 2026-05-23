@@ -63,6 +63,8 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<NotificationSuppression> NotificationSuppressions => Set<NotificationSuppression>();
     public DbSet<SubscriptionItem> SubscriptionItems => Set<SubscriptionItem>();
     public DbSet<BillingAddOn> BillingAddOns => Set<BillingAddOn>();
+    public DbSet<TutorBookUpdate> TutorBookUpdates => Set<TutorBookUpdate>();
+    public DbSet<TutorBookAudioScript> TutorBookAudioScripts => Set<TutorBookAudioScript>();
     public DbSet<BillingAddOnVersion> BillingAddOnVersions => Set<BillingAddOnVersion>();
     public DbSet<BillingCoupon> BillingCoupons => Set<BillingCoupon>();
     public DbSet<BillingCouponVersion> BillingCouponVersions => Set<BillingCouponVersion>();
@@ -274,6 +276,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<TeacherClass> TeacherClasses => Set<TeacherClass>();
     public DbSet<TeacherClassMember> TeacherClassMembers => Set<TeacherClassMember>();
     public DbSet<ListeningAttemptNote> ListeningAttemptNotes => Set<ListeningAttemptNote>();
+    public DbSet<ListeningExpertFeedback> ListeningExpertFeedbacks => Set<ListeningExpertFeedback>();
     public DbSet<ListeningTtsJob> ListeningTtsJobs => Set<ListeningTtsJob>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<BillingPlanVersion> BillingPlanVersions => Set<BillingPlanVersion>();
@@ -962,6 +965,13 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             .HasOne<ListeningAttempt>()
             .WithMany()
             .HasForeignKey(n => n.ListeningAttemptId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // ── ListeningExpertFeedback — FK to ListeningAttempt (cascade) ──
+        modelBuilder.Entity<ListeningExpertFeedback>()
+            .HasOne(f => f.Attempt)
+            .WithMany()
+            .HasForeignKey(f => f.AttemptId)
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<TeacherClassMember>()

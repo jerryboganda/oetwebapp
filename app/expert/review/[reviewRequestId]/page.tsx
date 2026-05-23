@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchSpeakingReviewDetail, fetchWritingReviewDetail, isApiError } from '@/lib/api';
+import { getListeningExpertBundle } from '@/lib/expert-listening-api';
 
 export default function ExpertReviewRedirectPage() {
   const params = useParams();
@@ -39,13 +40,25 @@ export default function ExpertReviewRedirectPage() {
             router.replace(`/expert/review/speaking/${reviewId}`);
           }
         } catch (speakingError) {
-          if (!cancelled) {
-            const fallbackError = isApiError(speakingError)
-              ? speakingError.userMessage
-              : isApiError(writingError)
-                ? writingError.userMessage
-                : 'We could not resolve this review workspace.';
-            setError(fallbackError);
+          if (cancelled) return;
+
+          try {
+            await getListeningExpertBundle(reviewId);
+            if (!cancelled) {
+              router.replace(`/expert/review/listening/${reviewId}`);
+            }
+          } catch (listeningError) {
+            if (!cancelled) {
+              const fallbackError =
+                isApiError(listeningError)
+                  ? listeningError.userMessage
+                  : isApiError(speakingError)
+                    ? speakingError.userMessage
+                    : isApiError(writingError)
+                      ? writingError.userMessage
+                      : 'We could not resolve this review workspace.';
+              setError(fallbackError);
+            }
           }
         }
       }

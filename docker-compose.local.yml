@@ -1,0 +1,121 @@
+# Local Docker Desktop deployment — mirrors production with simplified networking.
+# Usage:
+#   docker compose -f docker-compose.local.yml up --build -d
+#   Then restore DB: see .local-docker/README.md
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: oet-local-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - '5432:5432'
+    volumes:
+      - oet_local_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  learner-api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: oet-local-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      Auth__UseDevelopmentAuth: '${AUTH_USE_DEVELOPMENT_AUTH}'
+      Auth__AllowDevelopmentAuthInProduction: '${AUTH_ALLOW_DEVELOPMENT_AUTH_IN_PRODUCTION}'
+      Platform__PublicApiBaseUrl: ${PUBLIC_API_BASE_URL}
+      Platform__PublicWebBaseUrl: ${APP_URL:-http://localhost:3000}
+      Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL}
+      Billing__Stripe__SecretKey: ${BILLING__STRIPE__SECRETKEY}
+      Billing__Stripe__SuccessUrl: ${BILLING__STRIPE__SUCCESSURL}
+      Billing__Stripe__CancelUrl: ${BILLING__STRIPE__CANCELURL}
+      Billing__Stripe__WebhookSecret: ${BILLING__STRIPE__WEBHOOKSECRET}
+      Billing__AllowSandboxFallbacks: '${BILLING__ALLOWSANDBOXFALLBACKS}'
+      Bootstrap__AutoMigrate: '${AUTO_MIGRATE}'
+      Bootstrap__SeedDemoData: '${SEED_DEMO_DATA}'
+      Bootstrap__ExpertEmail: ${BOOTSTRAP_EXPERT_EMAIL}
+      Bootstrap__ExpertPassword: ${BOOTSTRAP_EXPERT_PASSWORD}
+      Bootstrap__ExpertDisplayName: ${BOOTSTRAP_EXPERT_DISPLAY_NAME}
+      AuthTokens__Issuer: ${AUTHTOKENS__ISSUER}
+      AuthTokens__Audience: ${AUTHTOKENS__AUDIENCE}
+      AuthTokens__AccessTokenSigningKey: ${AUTHTOKENS__ACCESSTOKENSIGNINGKEY}
+      AuthTokens__RefreshTokenSigningKey: ${AUTHTOKENS__REFRESHTOKENSIGNINGKEY}
+      AuthTokens__AccessTokenLifetime: ${AUTHTOKENS__ACCESSTOKENLIFETIME}
+      AuthTokens__RefreshTokenLifetime: ${AUTHTOKENS__REFRESHTOKENLIFETIME}
+      AuthTokens__OtpLifetime: ${AUTHTOKENS__OTPLIFETIME}
+      AuthTokens__AuthenticatorIssuer: ${AUTHTOKENS__AUTHENTICATORISSUER}
+      Brevo__Enabled: '${BREVO__ENABLED}'
+      Brevo__ApiKey: ${BREVO__APIKEY}
+      Brevo__BaseUrl: ${BREVO__BASEURL}
+      Brevo__FromEmail: ${BREVO__FROMEMAIL}
+      Brevo__FromName: ${BREVO__FROMNAME}
+      Brevo__EmailVerificationTemplateId: ${BREVO__EMAILVERIFICATIONTEMPLATEID}
+      Brevo__PasswordResetTemplateId: ${BREVO__PASSWORDRESETTEMPLATEID}
+      Brevo__WebhookSecret: ${BREVO__WEBHOOKSECRET}
+      Smtp__Enabled: '${SMTP__ENABLED}'
+      Smtp__Host: ${SMTP__HOST}
+      Smtp__Port: '${SMTP__PORT}'
+      Smtp__Username: ${SMTP__USERNAME}
+      Smtp__Password: ${SMTP__PASSWORD}
+      Smtp__EnableSsl: '${SMTP__ENABLESSL}'
+      Smtp__FromEmail: ${SMTP__FROMEMAIL}
+      Smtp__FromName: ${SMTP__FROMNAME}
+      Ai__ApiKey: ${AI__APIKEY}
+      Ai__BaseUrl: ${AI__BASEURL}
+      Ai__ProviderId: ${AI__PROVIDERID}
+      Ai__DefaultModel: ${AI__DEFAULTMODEL}
+      Ai__DefaultTemperature: '${AI__DEFAULTTEMPERATURE}'
+      Ai__DefaultMaxTokens: '${AI__DEFAULTMAXTOKENS}'
+      Ai__ReasoningEffort: ${AI__REASONINGEFFORT}
+      Pronunciation__Provider: ${PRONUNCIATION__PROVIDER}
+      Pronunciation__AzureSpeechKey: ${PRONUNCIATION__AZURESPEECHKEY}
+      Pronunciation__AzureSpeechRegion: ${PRONUNCIATION__AZURESPEECHREGION}
+      Conversation__Enabled: '${CONVERSATION__ENABLED}'
+      Conversation__AsrProvider: ${CONVERSATION__ASRPROVIDER}
+      Conversation__DeepgramApiKey: ${CONVERSATION__DEEPGRAMAPIKEY}
+      Conversation__TtsProvider: ${CONVERSATION__TTSPROVIDER}
+      Conversation__ElevenLabsApiKey: ${CONVERSATION__ELEVENLABSAPIKEY}
+      Conversation__RealtimeAsrProvider: ${CONVERSATION__REALTIMEASRPROVIDER}
+      Conversation__ChatTtsBaseUrl: ${CONVERSATION__CHATTTSBASEURL}
+      Conversation__ChatTtsApiKey: ${CONVERSATION__CHATTTSAPIKEY}
+      Conversation__ChatTtsDefaultVoice: ${CONVERSATION__CHATTTSDEFAULTVOICE}
+      MaxUploadBytes: '${MAX_UPLOAD_BYTES}'
+      Features__EnableSwagger: 'true'
+    ports:
+      - '8080:8080'
+    volumes:
+      - oet_local_storage:/var/opt/oet-learner/storage
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+        APP_URL: http://localhost:3000
+    container_name: oet-local-web
+    depends_on:
+      learner-api:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+      APP_URL: http://localhost:3000
+      NODE_ENV: production
+    ports:
+      - '3000:3000'
+
+volumes:
+  oet_local_pgdata:
+  oet_local_storage:

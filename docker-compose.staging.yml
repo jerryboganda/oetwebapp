@@ -98,6 +98,7 @@ services:
       Billing__Stripe__CancelUrl: ${BILLING__STRIPE__CANCELURL:-https://staging.oetwithdrhesham.co.uk/billing/cancel}
       Billing__Stripe__WebhookSecret: ${BILLING__STRIPE__WEBHOOKSECRET:-}
       Platform__PublicApiBaseUrl: ${PUBLIC_API_BASE_URL}
+      Platform__PublicWebBaseUrl: ${APP_URL}
       Platform__FallbackEmailDomain: ${FALLBACK_EMAIL_DOMAIN:-staging.example.invalid}
       Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL:-https://staging.oetwithdrhesham.co.uk}
       Storage__LocalRootPath: /var/opt/oet-learner/storage

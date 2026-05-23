@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, ListChecks, XCircle } from 'lucide-react';
+import { ArrowLeft, BrainCircuit, CheckCircle2, ListChecks, XCircle } from 'lucide-react';
 import {
   AdminRoutePanel,
   AdminRouteSectionHeader,
@@ -134,12 +134,21 @@ export default function AdminListeningStructurePage() {
         description={`Paper ${paperId ?? ''}. 42-question canonical map (A1 + A2 + B + C1 + C2). Edit any question via the per-question form.`}
       />
 
-      <Button variant="ghost" className="gap-2" asChild>
-        <Link href="/admin/content/listening">
-          <ArrowLeft className="h-4 w-4" />
-          Back to papers
-        </Link>
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="ghost" className="gap-2" asChild>
+          <Link href="/admin/content/listening">
+            <ArrowLeft className="h-4 w-4" />
+            Back to papers
+          </Link>
+        </Button>
+
+        <Button variant="outline" className="gap-2" asChild>
+          <Link href={`/admin/content/listening/${paperId}/extractions`}>
+            <BrainCircuit className="h-4 w-4" />
+            AI Extractions
+          </Link>
+        </Button>
+      </div>
 
       {state === 'loading' && <Skeleton className="h-48 rounded-2xl" />}
       {state === 'error' && error && <InlineAlert variant="error">{error}</InlineAlert>}

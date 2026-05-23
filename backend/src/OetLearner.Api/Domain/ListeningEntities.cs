@@ -893,6 +893,32 @@ public class ListeningTtsJob
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+/// <summary>Expert/tutor feedback submitted on a completed listening attempt.</summary>
+[Index(nameof(AttemptId))]
+public sealed class ListeningExpertFeedback
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    [MaxLength(64)]
+    public string AttemptId { get; set; } = string.Empty;
+    [MaxLength(64)]
+    public string ExpertId { get; set; } = string.Empty;
+    public string OverallFeedbackMarkdown { get; set; } = string.Empty;
+    /// <summary>JSON array: [{questionNumber: int, comment: string}]</summary>
+    public string? PerQuestionFeedbackJson { get; set; }
+    /// <summary>JSON array of skill tag strings for recommended practice areas.</summary>
+    public string? RecommendedAreasJson { get; set; }
+    /// <summary>Expert raw score override. Null = accept auto-grade.</summary>
+    public int? RawScoreOverride { get; set; }
+    [MaxLength(512)]
+    public string? ScoreOverrideReason { get; set; }
+    public DateTimeOffset SubmittedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? UpdatedAt { get; set; }
+    // Nav
+    public ListeningAttempt Attempt { get; set; } = null!;
+}
+
 /// <summary>
 /// Listening V2 — Learning-mode learner notes per attempt. Stored relationally
 /// (rather than in <c>ListeningAttempt.AnnotationsJson</c>) because notes are

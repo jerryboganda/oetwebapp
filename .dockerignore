@@ -33,3 +33,41 @@ dev*.log
 .env.production
 .DS_Store
 tsconfig.tsbuildinfo
+
+# Large non-app content (reduces Docker context)
+Project Real Content
+_extracted
+_audit
+copilot-worktrees
+tools
+ops
+scripts
+tests
+docs
+playwright
+playwright-report-prod
+.local-docker
+repomix-output.xml
+*.md
+!README.md
+electron
+$sdkRoot
+_vps_*.sh
+*.dump
+output
+mempalace.yaml
+entities.json
+VPS All in One File.md
+backend
+pages
+speaking markdown (2).md
+*.txt
+*.log
+*.xml
+*.yaml
+*.sh
+playwright.*.ts
+vitest.*.ts
+eslint.config.mjs
+*.test.ts
+*.test.tsx

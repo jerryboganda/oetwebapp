@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { AppShell, ExpertDashboardShell, type MobileMenuSection } from '@/components/layout';
 import type { NavItem } from '@/components/layout/sidebar';
-import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket, MessageSquare, DollarSign } from 'lucide-react';
+import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket, MessageSquare, DollarSign, Headphones } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
 
@@ -11,6 +11,7 @@ const expertNavItems: NavItem[] = [
   { href: '/expert', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/expert', exact: true },
   { href: '/expert/queue', label: 'Review Queue', icon: <Inbox className="w-5 h-5" />, matchPrefix: '/expert/queue', exact: true },
   { href: '/expert/queue/assigned', label: 'Assigned to me', icon: <Inbox className="w-5 h-5" />, matchPrefix: '/expert/queue/assigned' },
+  { href: '/expert/listening', label: 'Listening Reviews', icon: <Headphones className="w-5 h-5" />, matchPrefix: '/expert/listening' },
   { href: '/expert/calibration', label: 'Calibration', icon: <CheckCircle className="w-5 h-5" />, matchPrefix: '/expert/calibration' },
   { href: '/expert/metrics', label: 'Metrics', icon: <BarChart3 className="w-5 h-5" />, matchPrefix: '/expert/metrics' },
   { href: '/expert/schedule', label: 'Schedule', icon: <CalendarClock className="w-5 h-5" />, matchPrefix: '/expert/schedule' },
@@ -68,6 +69,10 @@ function getExpertPageTitle(pathname: string | null): string | undefined {
     return 'Onboarding';
   }
 
+  if (pathname.startsWith('/expert/listening')) {
+    return 'Listening Reviews';
+  }
+
   return undefined;
 }
 
@@ -93,17 +98,17 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
     const sections: MobileMenuSection[] = [
       {
         label: 'Review',
-        items: [expertNavItems[0], expertNavItems[1], expertNavItems[2]],
+        items: [expertNavItems[0], expertNavItems[1], expertNavItems[2], expertNavItems[3]],
       },
       {
         label: 'Performance',
-        items: [expertNavItems[3], expertNavItems[4], expertNavItems[5]],
+        items: [expertNavItems[4], expertNavItems[5], expertNavItems[6]],
       },
     ];
     if (showOnboarding) {
       sections[0] = {
         label: 'Review',
-        items: [expertNavItems[0], onboardingNavItem, expertNavItems[1], expertNavItems[2]],
+        items: [expertNavItems[0], onboardingNavItem, expertNavItems[1], expertNavItems[2], expertNavItems[3]],
       };
     }
     return sections;

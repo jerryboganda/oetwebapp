@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileLock2, Quote, Target, Volume2, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileLock2, GraduationCap, Quote, Tag, Target, Volume2, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -11,6 +11,8 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { SelectionToVocab } from '@/components/domain/vocabulary';
 import { analytics } from '@/lib/analytics';
 import { getListeningReview, type ListeningReviewDto } from '@/lib/listening-api';
+import { getListeningExpertFeedback } from '@/lib/expert-listening-api';
+import type { ListeningExpertBundle } from '@/lib/types/expert';
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -80,12 +82,19 @@ export default function ListeningReviewPage() {
   const [review, setReview] = useState<ListeningReviewDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tutorFeedback, setTutorFeedback] = useState<ListeningExpertBundle['existingFeedback'] | null>(null);
 
   useEffect(() => {
     if (!attemptId) return;
     analytics.track('content_view', { page: 'listening-review', attemptId });
-    getListeningReview(attemptId)
-      .then(setReview)
+    Promise.all([
+      getListeningReview(attemptId),
+      getListeningExpertFeedback(attemptId),
+    ])
+      .then(([reviewData, feedback]) => {
+        setReview(reviewData);
+        setTutorFeedback(feedback ?? null);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load transcript-backed review.'))
       .finally(() => setLoading(false));
   }, [attemptId]);
@@ -333,6 +342,102 @@ export default function ListeningReviewPage() {
                     Open recommended drill
                   </Button>
                 </div>
+              </section>
+            ) : null}
+
+            {tutorFeedback ? (
+              <section className="rounded-2xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
+                <div className="mb-5 flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                    <GraduationCap className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-navy">Tutor Feedback</h2>
+                    <p className="text-xs text-muted">
+                      Submitted{' '}
+                      {new Date(tutorFeedback.submittedAt).toLocaleDateString(
+                        undefined,
+                        { year: 'numeric', month: 'long', day: 'numeric' },
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Overall feedback — rendered as pre-wrap to preserve markdown line breaks */}
+                <div className="rounded-2xl border border-primary/10 bg-white p-5 text-sm leading-relaxed text-navy whitespace-pre-wrap">
+                  {tutorFeedback.overallFeedbackMarkdown}
+                </div>
+
+                {/* Per-question comments */}
+                {tutorFeedback.perQuestionFeedbackJson && (() => {
+                  let perQ: Array<{ questionNumber: number; comment: string }> = [];
+                  try {
+                    perQ = JSON.parse(tutorFeedback.perQuestionFeedbackJson) as typeof perQ;
+                  } catch {
+                    return null;
+                  }
+                  if (!Array.isArray(perQ) || perQ.length === 0) return null;
+                  return (
+                    <div className="mt-4">
+                      <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">
+                        Per-Question Comments
+                      </h3>
+                      <div className="space-y-2">
+                        {perQ.map(({ questionNumber, comment }) => (
+                          <div
+                            key={questionNumber}
+                            className="flex gap-3 rounded-xl border border-primary/10 bg-white p-3 text-sm"
+                          >
+                            <span className="shrink-0 font-bold text-primary">
+                              Q{questionNumber}
+                            </span>
+                            <span className="text-navy">{comment}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Recommended areas */}
+                {tutorFeedback.recommendedAreasJson && (() => {
+                  let areas: string[] = [];
+                  try {
+                    areas = JSON.parse(tutorFeedback.recommendedAreasJson) as string[];
+                  } catch {
+                    return null;
+                  }
+                  if (!Array.isArray(areas) || areas.length === 0) return null;
+                  return (
+                    <div className="mt-4">
+                      <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted">
+                        Recommended Practice Areas
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {areas.map((area) => (
+                          <span
+                            key={area}
+                            className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+                          >
+                            <Tag className="h-3 w-3" />
+                            {area.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Score override note */}
+                {tutorFeedback.rawScoreOverride != null && (
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <span className="font-semibold">Score adjusted by tutor: </span>
+                    {tutorFeedback.rawScoreOverride}
+                    {tutorFeedback.scoreOverrideReason
+                      ? ` — ${tutorFeedback.scoreOverrideReason}`
+                      : ''}
+                  </div>
+                )}
               </section>
             ) : null}
           </>
