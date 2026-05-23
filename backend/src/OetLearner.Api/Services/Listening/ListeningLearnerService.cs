@@ -269,7 +269,7 @@ public sealed class ListeningLearnerService(
             featuredTasks,
             activeAttempts,
             recentResults,
-            partCollections = BuildPartCollections(paperDtos, featuredTasks),
+            partCollections = BuildPartCollections(paperDtos, featuredTasks, papers.FirstOrDefault()?.Id),
             transcriptBackedReview = new
             {
                 title = "Transcript-backed review",
@@ -2111,9 +2111,15 @@ public sealed class ListeningLearnerService(
         };
     }
 
-    private static List<object> BuildPartCollections(IReadOnlyCollection<object> paperDtos, IReadOnlyCollection<object> featuredTasks)
+    private static List<object> BuildPartCollections(IReadOnlyCollection<object> paperDtos, IReadOnlyCollection<object> featuredTasks, string? firstPaperId)
     {
         var readyCount = paperDtos.Count + featuredTasks.Count;
+        var partARoute = readyCount > 0 && firstPaperId is not null
+            ? $"/listening/player/{Uri.EscapeDataString(firstPaperId)}?mode=practice&focus=part-a"
+            : null;
+        var partBCRoute = readyCount > 0 && firstPaperId is not null
+            ? $"/listening/player/{Uri.EscapeDataString(firstPaperId)}?mode=practice&focus=parts-bc"
+            : null;
         return
         [
             new
@@ -2122,7 +2128,7 @@ public sealed class ListeningLearnerService(
                 title = "Part A detail capture",
                 description = "Consultation-note accuracy, numbers, units, and clinical details.",
                 available = readyCount > 0,
-                route = readyCount > 0 ? "/listening" : null
+                route = partARoute
             },
             new
             {
@@ -2130,7 +2136,7 @@ public sealed class ListeningLearnerService(
                 title = "Parts B/C decision control",
                 description = "Purpose, attitude, distractors, and final recommendation control.",
                 available = readyCount > 0,
-                route = readyCount > 0 ? "/listening" : null
+                route = partBCRoute
             }
         ];
     }
