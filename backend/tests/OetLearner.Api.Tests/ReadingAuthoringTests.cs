@@ -626,103 +626,6 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
-    public async Task Media_access_allows_published_recall_documents_for_matching_learner_profession()
-    {
-        using var factory = new TestWebApplicationFactory();
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        await db.Database.EnsureCreatedAsync();
-        var now = DateTimeOffset.UtcNow;
-
-        db.MediaAssets.AddRange(
-            new MediaAsset
-            {
-                Id = "media-recall-all",
-                OriginalFilename = "all-recalls.pdf",
-                MimeType = "application/pdf",
-                Format = "pdf",
-                SizeBytes = 1024,
-                StoragePath = "recalls/all.pdf",
-                Status = MediaAssetStatus.Ready,
-                UploadedAt = now,
-            },
-            new MediaAsset
-            {
-                Id = "media-recall-medicine",
-                OriginalFilename = "medicine-recalls.pdf",
-                MimeType = "application/pdf",
-                Format = "pdf",
-                SizeBytes = 1024,
-                StoragePath = "recalls/medicine.pdf",
-                Status = MediaAssetStatus.Ready,
-                UploadedAt = now,
-            },
-            new MediaAsset
-            {
-                Id = "media-recall-nursing",
-                OriginalFilename = "nursing-recalls.pdf",
-                MimeType = "application/pdf",
-                Format = "pdf",
-                SizeBytes = 1024,
-                StoragePath = "recalls/nursing.pdf",
-                Status = MediaAssetStatus.Ready,
-                UploadedAt = now,
-            });
-        db.RecallDocuments.AddRange(
-            new RecallDocument
-            {
-                Id = "recall-all",
-                Title = "All recalls",
-                SubtestCode = "reading",
-                PeriodLabel = "2026 Q1",
-                MediaAssetId = "media-recall-all",
-                Status = ContentStatus.Published,
-                CreatedAt = now,
-                UpdatedAt = now,
-                PublishedAt = now,
-            },
-            new RecallDocument
-            {
-                Id = "recall-medicine",
-                Title = "Medicine recalls",
-                SubtestCode = "reading",
-                PeriodLabel = "2026 Q1",
-                ProfessionId = "medicine",
-                MediaAssetId = "media-recall-medicine",
-                Status = ContentStatus.Published,
-                CreatedAt = now,
-                UpdatedAt = now,
-                PublishedAt = now,
-            },
-            new RecallDocument
-            {
-                Id = "recall-nursing",
-                Title = "Nursing recalls",
-                SubtestCode = "reading",
-                PeriodLabel = "2026 Q1",
-                ProfessionId = "nursing",
-                MediaAssetId = "media-recall-nursing",
-                Status = ContentStatus.Published,
-                CreatedAt = now,
-                UpdatedAt = now,
-                PublishedAt = now,
-            });
-        await db.SaveChangesAsync();
-
-        var access = scope.ServiceProvider.GetRequiredService<MediaAssetAccessService>();
-        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, "mock-user-001"),
-            new Claim(ClaimTypes.Role, ApplicationUserRoles.Learner),
-            new Claim("prof", "medicine"),
-        }, "Test"));
-
-        Assert.True(await access.CanAccessAsync(principal, "media-recall-all", default));
-        Assert.True(await access.CanAccessAsync(principal, "media-recall-medicine", default));
-        Assert.False(await access.CanAccessAsync(principal, "media-recall-nursing", default));
-    }
-
-    [Fact]
     public async Task Media_access_allows_published_rulebook_reference_pdf_for_matching_learner_profession()
     {
         using var factory = new TestWebApplicationFactory();
@@ -912,18 +815,6 @@ public class ReadingAuthoringTests
             },
             new MediaAsset
             {
-                Id = "media-recall-delete",
-                OriginalFilename = "recall.pdf",
-                MimeType = "application/pdf",
-                Format = "pdf",
-                SizeBytes = 1024,
-                StoragePath = "content/recall.pdf",
-                Status = MediaAssetStatus.Ready,
-                UploadedBy = "admin-delete",
-                UploadedAt = now,
-            },
-            new MediaAsset
-            {
                 Id = "media-rulebook-delete",
                 OriginalFilename = "rulebook.pdf",
                 MimeType = "application/pdf",
@@ -982,19 +873,6 @@ public class ReadingAuthoringTests
             Title = "Question paper",
             CreatedAt = now,
         });
-        db.RecallDocuments.Add(new RecallDocument
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Title = "Recall",
-            SubtestCode = "reading",
-            PeriodLabel = "2026 Q1",
-            ProfessionId = null,
-            MediaAssetId = "media-recall-delete",
-            Status = ContentStatus.Published,
-            CreatedAt = now,
-            UpdatedAt = now,
-            PublishedAt = now,
-        });
         db.RulebookVersions.Add(new RulebookVersion
         {
             Id = "rulebook-delete-guard",
@@ -1035,13 +913,11 @@ public class ReadingAuthoringTests
         client.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
 
         using var paperResponse = await client.DeleteAsync("/v1/media/media-paper-delete");
-        using var recallResponse = await client.DeleteAsync("/v1/media/media-recall-delete");
         using var rulebookResponse = await client.DeleteAsync("/v1/media/media-rulebook-delete");
         using var resultTemplateResponse = await client.DeleteAsync("/v1/media/media-result-template-delete");
         using var speakingSharedResponse = await client.DeleteAsync("/v1/media/media-speaking-shared-delete");
 
         Assert.Equal(HttpStatusCode.Conflict, paperResponse.StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, recallResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, rulebookResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, resultTemplateResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, speakingSharedResponse.StatusCode);
@@ -1140,30 +1016,6 @@ public class ReadingAuthoringTests
         using var response = await client.PostAsync("/v1/admin/rulebooks/rulebook-pdf-published/reference-pdf", form);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task Real_content_import_rejects_non_pdf_recall_bytes_before_media_promotion()
-    {
-        using var factory = new TestWebApplicationFactory();
-        await using var scope = factory.Services.CreateAsyncScope();
-        var importer = scope.ServiceProvider.GetRequiredService<RealContentFolderImporter>();
-        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
-        await WriteStorageBytesAsync(storage, "staging/import/bad-recall.pdf", Encoding.UTF8.GetBytes("not a pdf"));
-
-        var proposal = new RealContentProposal
-        {
-            Target = RealContentTarget.RecallDocument,
-            Title = "Bad Recall",
-            Subtest = "reading",
-            SourcePath = "Recalls/bad-recall.pdf",
-            StagedStorageKey = "staging/import/bad-recall.pdf",
-        };
-
-        var result = await importer.CommitAsync("admin-import", new[] { proposal }, canPublishContent: false, CancellationToken.None);
-
-        Assert.Empty(result.Created);
-        Assert.Contains(result.Errors, error => error.Contains("Unrecognised file format", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

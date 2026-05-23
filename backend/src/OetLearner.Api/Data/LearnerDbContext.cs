@@ -975,9 +975,6 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // safe under account-anonymisation. The unique (UserId, StageCode)
         // index already exists via the [Index] attribute on the entity.
 
-        // Recall PDF library tables (partial; see LearnerDbContext.RecallDocuments.cs).
-        OnModelCreatingRecallDocuments(modelBuilder);
-
         // Scoring Policy table (partial; see LearnerDbContext.ScoringPolicy.cs).
         OnModelCreatingScoringPolicy(modelBuilder);
 
@@ -1021,11 +1018,6 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Readiness snapshot + weekly history (partial; see LearnerDbContext.Readiness.cs).
         OnModelCreatingReadiness(modelBuilder);
     }
-
-    /// <summary>
-    /// Defined in <see cref="LearnerDbContext"/>.RecallDocuments.cs (partial).
-    /// </summary>
-    partial void OnModelCreatingRecallDocuments(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.ScoringPolicy.cs (partial).

@@ -13134,74 +13134,6 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("RecallBookmarks");
                 });
 
-            modelBuilder.Entity("OetLearner.Api.Domain.RecallDocument", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTimeOffset?>("ArchivedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DescriptionMarkdown")
-                        .HasColumnType("text");
-
-                    b.Property<string>("MediaAssetId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("PeriodLabel")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("ProfessionId")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<DateTimeOffset?>("PublishedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("SubtestCode")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UploadedByUserId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MediaAssetId");
-
-                    b.HasIndex("ProfessionId", "Status");
-
-                    b.HasIndex("Status", "SortOrder");
-
-                    b.HasIndex("SubtestCode", "Status");
-
-                    b.ToTable("RecallDocuments");
-                });
-
             modelBuilder.Entity("OetLearner.Api.Domain.RecallSetTag", b =>
                 {
                     b.Property<string>("Code")
@@ -18371,17 +18303,6 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Part");
-                });
-
-            modelBuilder.Entity("OetLearner.Api.Domain.RecallDocument", b =>
-                {
-                    b.HasOne("OetLearner.Api.Domain.MediaAsset", "MediaAsset")
-                        .WithMany()
-                        .HasForeignKey("MediaAssetId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("MediaAsset");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.RefreshTokenRecord", b =>

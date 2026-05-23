@@ -2,23 +2,59 @@
 
 // Phase 9 of LISTENING-MODULE-PLAN.md
 // ─────────────────────────────────────────────────────────────────────────────
-// Pre-flight Listening test-rules lesson. This is a static, learner-facing
-// briefing that loads before someone enters paper-mode (or any first attempt
-// at a real Listening mock) so they go in knowing exactly how the OET
-// Listening sub-test works: one play, no negative marking, MCQ + gap-fill
-// item types, exam-integrity rules, and recommended in-test strategy.
+// Pre-flight Listening test-rules lesson. This is a learner-facing briefing
+// that loads before someone enters paper-mode (or any first attempt at a real
+// Listening mock) so they go in knowing exactly how the OET Listening sub-
+// test works: one play, no negative marking, MCQ + gap-fill item types, exam-
+// integrity rules, and recommended in-test strategy.
+//
+// The numeric constants (42 questions / 40 min / 30-raw pass / 350-scaled
+// pass) are fetched from the anonymous-allowed policy endpoint so spec
+// changes don't require a code deploy. The page falls back to baked-in
+// defaults if the fetch fails.
 //
 // Routing: linked from the Listening home page CTA and from the player
 // pre-roll. Anonymous-allowed (no learner data is fetched here).
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, CheckCircle2, Headphones, Pencil, ShieldCheck, Timer, Volume2 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceCard } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { MotionItem } from '@/components/ui/motion-primitives';
+import { getListeningTestRulesPolicy, type ListeningTestRulesPolicyDto } from '@/lib/listening-api';
+
+const DEFAULT_RULES: ListeningTestRulesPolicyDto = {
+  questionCount: 42,
+  durationMinutes: 40,
+  partA: { items: 24, extracts: 2, itemType: 'short-answer' },
+  partB: { items: 6, extracts: 6, itemType: 'mcq-3-option' },
+  partC: { items: 12, extracts: 2, itemType: 'mcq-3-option' },
+  passRawAnchor: 30,
+  passScaledAnchor: 350,
+  scaledMax: 500,
+};
+
+function numberWord(n: number): string {
+  const words: Record<number, string> = {
+    40: 'Forty', 41: 'Forty-one', 42: 'Forty-two', 43: 'Forty-three',
+    44: 'Forty-four', 45: 'Forty-five', 50: 'Fifty', 60: 'Sixty',
+  };
+  return words[n] ?? n.toString();
+}
 
 export default function ListeningTestRulesPage() {
+  const [rules, setRules] = useState<ListeningTestRulesPolicyDto>(DEFAULT_RULES);
+
+  useEffect(() => {
+    let cancelled = false;
+    getListeningTestRulesPolicy()
+      .then((data) => { if (!cancelled) setRules(data); })
+      .catch(() => { /* swallow — DEFAULT_RULES already rendered */ });
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <LearnerDashboardShell>
       <div className="space-y-8">
@@ -31,10 +67,10 @@ export default function ListeningTestRulesPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <RuleCard
             icon={Timer}
-            title="One play. Forty-two questions. ~40 minutes."
+            title={`One play. ${numberWord(rules.questionCount)} questions. ~${rules.durationMinutes} minutes.`}
             points={[
               'You hear the audio ONCE. There is no rewind in paper mode.',
-              'Three parts: A (24 short-answers, 2 consultations), B (6 MCQs, workplace extracts), C (12 MCQs, 2 presentations).',
+              `Three parts: A (${rules.partA.items} short-answers, ${rules.partA.extracts} consultations), B (${rules.partB.items} MCQs, workplace extracts), C (${rules.partC.items} MCQs, ${rules.partC.extracts} presentations).`,
               'You write answers on the question paper as you listen, then transfer them at the end (in real OET).',
             ]}
           />
@@ -43,13 +79,13 @@ export default function ListeningTestRulesPage() {
             title="No negative marking"
             points={[
               'A wrong answer scores zero. A blank answer scores zero. Always write something.',
-              '30/42 raw ≡ 350/500 scaled. Pass = 350.',
+              `${rules.passRawAnchor}/${rules.questionCount} raw ≡ ${rules.passScaledAnchor}/${rules.scaledMax} scaled. Pass = ${rules.passScaledAnchor}.`,
               'Spelling that does not change the meaning is accepted (e.g. "discharge" / "dischare" both pass; "discharge" vs "discarded" do not).',
             ]}
           />
           <RuleCard
             icon={Pencil}
-            title="Part A — gap-fill (24 items)"
+            title={`Part A — gap-fill (${rules.partA.items} items)`}
             points={[
               'Listen for the exact word the speaker says. Re-using the words from the gap stem is the safest bet.',
               'Numbers, dosages, dates, and units count exactly: "5 mg" ≠ "5 g".',

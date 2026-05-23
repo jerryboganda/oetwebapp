@@ -377,6 +377,24 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 export const getListeningHome = () =>
   api<ListeningHomeDto>('/v1/listening/home');
 
+// Public OET Listening test-rules constants. Anonymous-allowed on the backend
+// — the /listening/test-rules page sources its 42-q / 40-min / 30-pass / 350-
+// scaled-pass numbers from here so future spec changes don't require a code
+// deploy. Page falls back to its static copy if this fetch fails.
+export interface ListeningTestRulesPolicyDto {
+  questionCount: number;
+  durationMinutes: number;
+  partA: { items: number; extracts: number; itemType: string };
+  partB: { items: number; extracts: number; itemType: string };
+  partC: { items: number; extracts: number; itemType: string };
+  passRawAnchor: number;
+  passScaledAnchor: number;
+  scaledMax: number;
+}
+
+export const getListeningTestRulesPolicy = () =>
+  api<ListeningTestRulesPolicyDto>('/v1/listening-papers/policy/test-rules');
+
 export type ListeningSessionMode = 'practice' | 'exam' | 'home' | 'paper' | 'diagnostic';
 
 export function getListeningSession(

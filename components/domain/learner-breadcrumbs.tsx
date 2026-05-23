@@ -51,7 +51,14 @@ const routeLabelOverrides: Record<string, string> = {
 };
 
 function humanizeSegment(segment: string) {
+  // Hex / UUID-ish detail id (e.g. c9252face1f74936...).
   if (/^[0-9a-f-]{8,}$/i.test(segment)) {
+    return 'Detail';
+  }
+  // Prefixed entity id (e.g. la-c9252face1f74936..., lt-001, mock-abc123,
+  // expert-001). Treat as opaque detail label rather than mangling the
+  // raw id into the breadcrumb text.
+  if (/^[a-z]{1,16}-[0-9a-z-]{3,}$/i.test(segment) && /\d/.test(segment)) {
     return 'Detail';
   }
 

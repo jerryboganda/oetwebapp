@@ -236,10 +236,11 @@ public static class ListeningAuthoringAdminEndpoints
             return Results.Ok(report);
         });
 
-        // Wave 4 — TTS synthesis. Reads the extract's transcript segments
-        // Wave 4 deferred — enqueues a ListeningTtsJob so the background worker
-        // (ListeningTtsJobWorker) handles synthesis asynchronously. The endpoint
-        // returns 202 Accepted with the job ID immediately; the client polls
+        // TTS synthesis. Enqueues a ListeningTtsJob so the background worker
+        // (ListeningTtsJobWorker) reads the extract's transcript segments and
+        // synthesises audio asynchronously via whichever provider is registered
+        // in Program.cs. The endpoint returns 202 Accepted with the job ID
+        // immediately; the client polls
         // GET /v1/admin/papers/{id}/listening/extracts/{eid}/synthesize/{jobId}.
         group.MapPost("/extracts/{extractId}/synthesize", async (
             string paperId,

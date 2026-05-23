@@ -14,7 +14,7 @@ namespace OetLearner.Api.Services.Content;
 /// <summary>
 /// Parses an uploaded ZIP that mirrors the user's `Project Real Content/`
 /// folder layout and emits one proposal per target row (ContentPaper,
-/// RecallDocument, ResultTemplateAsset, SpeakingSharedResource, ScoringPolicy,
+/// ResultTemplateAsset, SpeakingSharedResource, ScoringPolicy,
 /// RulebookVersion reference-PDF attachment).
 ///
 /// The importer is intentionally tolerant of the casual folder names in the
@@ -112,10 +112,6 @@ public sealed class RealContentFolderImporter
                 else if (topName.StartsWith("speaking"))
                 {
                     ParseSpeakingGroup(group.Select(g => g.Entry).ToList(), proposals, issues);
-                }
-                else if (topName.StartsWith("recalls"))
-                {
-                    ParseRecallsGroup(group.Select(g => g.Entry).ToList(), proposals, issues);
                 }
                 else if (topName.Contains("table format") || topName.Contains("result"))
                 {
@@ -456,33 +452,6 @@ public sealed class RealContentFolderImporter
         }
     }
 
-    private static void ParseRecallsGroup(IReadOnlyList<ZipArchiveEntry> entries, List<RealContentProposal> proposals, List<string> issues)
-    {
-        foreach (var e in entries.Where(x => x.FullName.ToLowerInvariant().EndsWith(".pdf")))
-        {
-            var nm = Path.GetFileName(e.FullName);
-            var lower = nm.ToLowerInvariant();
-            var period = "Archive";
-            var rxYear = new Regex(@"(20\d{2})", RegexOptions.Compiled);
-            var years = rxYear.Matches(nm).Select(m => m.Value).Distinct().ToList();
-            if (years.Count == 1) period = years[0];
-            else if (years.Count > 1) period = $"{years.First()}-{years.Last()}";
-            else if (lower.Contains("old")) period = "Old";
-            proposals.Add(new RealContentProposal
-            {
-                Target = RealContentTarget.RecallDocument,
-                Title = Path.GetFileNameWithoutExtension(nm),
-                Subtest = lower.Contains("listening") ? "listening"
-                    : lower.Contains("reading") ? "reading"
-                    : lower.Contains("writing") ? "writing"
-                    : lower.Contains("speaking") ? "speaking"
-                    : "cross",
-                PeriodLabel = period,
-                SourcePath = NormalizePath(e.FullName),
-            });
-        }
-    }
-
     private static void ParseResultTablesGroup(IReadOnlyList<ZipArchiveEntry> entries, List<RealContentProposal> proposals, List<string> issues)
     {
         var seq = 1;
@@ -642,9 +611,6 @@ public sealed class RealContentFolderImporter
                     case RealContentTarget.SpeakingPaper:
                         await CommitPaperAsync(adminId, p, now, created, errors, ct);
                         break;
-                    case RealContentTarget.RecallDocument:
-                        await CommitRecallAsync(adminId, p, now, created, errors, ct);
-                        break;
                     case RealContentTarget.ResultTemplate:
                         await CommitResultTemplateAsync(adminId, p, now, created, errors, ct);
                         break;
@@ -783,28 +749,6 @@ public sealed class RealContentFolderImporter
             });
         }
         created.Add(new RealContentCreatedRow { Target = p.Target, Id = paperId, Title = paper.Title });
-    }
-
-    private async Task CommitRecallAsync(string adminId, RealContentProposal p, DateTimeOffset now,
-        List<RealContentCreatedRow> created, List<string> errors, CancellationToken ct)
-    {
-        if (p.StagedStorageKey is null) { errors.Add($"Recall not staged: {p.SourcePath}"); return; }
-        var (mediaId, _, _) = await EnsureMediaAssetAsync(adminId, p, p.StagedStorageKey, ct);
-        var id = $"rcl_{Guid.NewGuid():N}";
-        _db.Set<RecallDocument>().Add(new RecallDocument
-        {
-            Id = id,
-            Title = p.Title,
-            SubtestCode = p.Subtest ?? "cross",
-            PeriodLabel = p.PeriodLabel ?? "Archive",
-            MediaAssetId = mediaId,
-            Status = ContentStatus.Draft,
-            UploadedByUserId = adminId,
-            CreatedAt = now,
-            UpdatedAt = now,
-        });
-        AddAuditEvent(adminId, "RealContentRecallImported", "RecallDocument", id, p.Title);
-        created.Add(new RealContentCreatedRow { Target = p.Target, Id = id, Title = p.Title });
     }
 
     private async Task CommitResultTemplateAsync(string adminId, RealContentProposal p, DateTimeOffset now,
@@ -975,7 +919,6 @@ public enum RealContentTarget
     ReadingPaper,
     WritingPaper,
     SpeakingPaper,
-    RecallDocument,
     ResultTemplate,
     SpeakingSharedResource,
     RulebookReferencePdf,

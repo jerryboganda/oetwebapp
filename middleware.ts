@@ -247,6 +247,14 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot|css|js|map)$).*)',
+    // Skip:
+    //  - /api routes (proxied separately)
+    //  - Next.js internal static + image optimizer paths
+    //  - favicon, robots, manifest, common PWA + static asset extensions
+    //  - JSON files served from /public (e.g. manifest.json, well-known)
+    // Without skipping manifest.json the middleware redirects it to /sign-in
+    // when the user is anonymous, browser then parses the HTML as JSON and
+    // logs a "Manifest: Syntax error" in the console on every page load.
+    '/((?!api|_next/static|_next/image|favicon\\.ico|manifest\\.json|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot|css|js|map|json)$).*)',
   ],
 };

@@ -37,7 +37,6 @@ describe('AdminContentHubPage', () => {
     expect(screen.getByRole('heading', { name: 'Content Hub' })).toBeInTheDocument();
     expect(screen.getByText('Content Library')).toBeInTheDocument();
     expect(screen.getByText('Content Papers')).toBeInTheDocument();
-    expect(screen.getByText('Recalls Library')).toBeInTheDocument();
     expect(screen.getByText('Item Analytics')).toBeInTheDocument();
     expect(screen.getByText('Grammar Lessons')).toBeInTheDocument();
     expect(screen.getByText('Scoring System')).toBeInTheDocument();
@@ -58,7 +57,6 @@ describe('AdminContentHubPage', () => {
     expect(screen.getByText('Bulk Import')).toBeInTheDocument();
     expect(screen.getByText('Paper ZIP Import')).toBeInTheDocument();
     expect(screen.getByText('AI Generation')).toBeInTheDocument();
-    expect(screen.getByText('Recalls Library')).toBeInTheDocument();
     expect(screen.getByText('Item Analytics')).toBeInTheDocument();
     expect(screen.getByText('Scoring System')).toBeInTheDocument();
     expect(screen.getByText('Quality Review')).toBeInTheDocument();

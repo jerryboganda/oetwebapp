@@ -232,6 +232,17 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Every Listening item requires a non-empty correct answer; {blankAnswers} item(s) are missing one."));
         }
 
+        // Part A is note-completion (short-answer) only per OET spec — MCQ
+        // items in Part A break the canonical UX and grading rubric.
+        var partAItemsWithWrongType = rows.Count(row =>
+            (row.PartCode == ListeningPartCode.A1 || row.PartCode == ListeningPartCode.A2)
+            && row.QuestionType != ListeningQuestionType.ShortAnswer);
+        if (partAItemsWithWrongType > 0)
+        {
+            warnings.Add(new("listening_part_a_type", "error",
+                $"Part A items must be short-answer (note-completion); {partAItemsWithWrongType} item(s) use a different question type."));
+        }
+
         var partBItemsWithoutThreeOptions = rows.Count(row => row.PartCode == ListeningPartCode.B
             && !HasValidMcqShape(row.QuestionType, ReadJsonString(row.CorrectAnswerJson), row.Options));
         if (partBItemsWithoutThreeOptions > 0)
@@ -341,6 +352,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
 
         int a = 0, b = 0, c = 0;
         int a1 = 0, a2 = 0, c1 = 0, c2 = 0;
+        var partAItemsWithWrongType = 0;
         var partBItemsWithoutThreeOptions = 0;
         var partCItemsWithoutThreeOptions = 0;
         var blankAnswers = 0;
@@ -384,6 +396,14 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 a++;
                 if (partCode == "A1") a1++;
                 else if (partCode == "A2") a2++;
+                // Part A is short-answer (note-completion) only — see relational
+                // path for the matching rule.
+                var qType = ReadString(q, "type") ?? ReadString(q, "questionType");
+                if (!string.IsNullOrWhiteSpace(qType)
+                    && !string.Equals(qType.Trim(), "short_answer", StringComparison.OrdinalIgnoreCase))
+                {
+                    partAItemsWithWrongType++;
+                }
             }
             else if (partCode.StartsWith("B", StringComparison.Ordinal))
             {
@@ -433,6 +453,12 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             warnings.Add(new("listening_blank_answers", "error",
                 $"Every Listening item requires a non-empty correct answer; {blankAnswers} item(s) are missing one."));
+        }
+
+        if (partAItemsWithWrongType > 0)
+        {
+            warnings.Add(new("listening_part_a_type", "error",
+                $"Part A items must be short-answer (note-completion); {partAItemsWithWrongType} item(s) use a different question type."));
         }
 
         if (partBItemsWithoutThreeOptions > 0)

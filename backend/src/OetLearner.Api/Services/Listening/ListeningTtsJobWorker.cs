@@ -5,7 +5,7 @@ using OetLearner.Api.Domain;
 namespace OetLearner.Api.Services.Listening;
 
 // ═════════════════════════════════════════════════════════════════════════════
-// ListeningTtsJobWorker — Wave 4 deferred.
+// ListeningTtsJobWorker.
 //
 // Polls `ListeningTtsJobs` for Pending items and calls ListeningTtsService
 // to synthesise audio. Follows the same pattern as other hosted workers in
@@ -13,6 +13,9 @@ namespace OetLearner.Api.Services.Listening;
 //
 // Back-off schedule: retry 1 → +30 s, retry 2 → +2 min, retry 3 → +10 min.
 // After 3 failures the job is permanently Failed (admin must re-enqueue).
+// Provider used for synthesis is selected in Program.cs via the
+// `Listening:TtsProvider` configuration switch (stub for dev/CI, real provider
+// for production).
 // ═════════════════════════════════════════════════════════════════════════════
 
 public sealed class ListeningTtsJobWorker(

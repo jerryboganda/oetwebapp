@@ -65,11 +65,6 @@ public sealed class MediaAssetAccessService(
 
         var normalizedProfession = profession?.Trim().ToLowerInvariant();
 
-        if (await CanLearnerAccessRecallDocumentAsync(media.Id, normalizedProfession, ct))
-        {
-            return true;
-        }
-
         if (await CanLearnerAccessVocabularyAudioAsync(media.Id, normalizedProfession, ct))
         {
             return true;
@@ -159,16 +154,6 @@ public sealed class MediaAssetAccessService(
             .AnyAsync(preview =>
                 preview.MediaAssetId == mediaAssetId
                 && preview.Status == ContentStatus.Published, ct);
-
-    private Task<bool> CanLearnerAccessRecallDocumentAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)
-        => db.RecallDocuments
-            .AsNoTracking()
-            .AnyAsync(document =>
-                document.MediaAssetId == mediaAssetId
-                && document.Status == ContentStatus.Published
-                && (document.ProfessionId == null
-                    || (!string.IsNullOrWhiteSpace(normalizedProfession)
-                        && document.ProfessionId == normalizedProfession)), ct);
 
     private Task<bool> CanLearnerAccessVocabularyAudioAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)
     {

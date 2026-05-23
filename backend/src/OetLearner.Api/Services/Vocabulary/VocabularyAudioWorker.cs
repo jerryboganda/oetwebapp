@@ -276,7 +276,6 @@ public sealed class VocabularyAudioWorker(
             || await db.ContentPaperAssets.AnyAsync(link => link.MediaAssetId == assetId, ct).ConfigureAwait(false)
             || await db.WritingAttemptAssets.AnyAsync(link => link.MediaAssetId == assetId, ct).ConfigureAwait(false)
             || await db.ReviewVoiceNotes.AnyAsync(note => note.MediaAssetId == assetId, ct).ConfigureAwait(false)
-            || await db.RecallDocuments.AnyAsync(doc => doc.MediaAssetId == assetId, ct).ConfigureAwait(false)
             || await db.RulebookVersions.AnyAsync(rb => rb.ReferencePdfAssetId == assetId, ct).ConfigureAwait(false)
             || await db.ResultTemplateAssets.AnyAsync(rt => rt.MediaAssetId == assetId, ct).ConfigureAwait(false)
             || await db.SpeakingSharedResources.AnyAsync(sr => sr.MediaAssetId == assetId, ct).ConfigureAwait(false);

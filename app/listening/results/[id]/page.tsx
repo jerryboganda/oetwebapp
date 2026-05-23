@@ -117,26 +117,55 @@ function ListeningResultsContent() {
     );
   }
 
+  // A full OET Listening paper has 42 items (24 A + 6 B + 12 C). Anything
+  // smaller is a drill / mini-test / starter — applying the official OET
+  // grade + 350-pass threshold to those produces a misleading "Grade E ·
+  // Below Threshold" because the 42-item scaling is hardwired. For non-full
+  // papers show a practice-score frame (percent correct, no OET grade letter,
+  // no pass/fail badge).
+  const isFullOetPaper = result.maxRawScore >= 42;
+  const percentCorrect = result.maxRawScore > 0
+    ? Math.round((result.rawScore / result.maxRawScore) * 100)
+    : 0;
+
   return (
     <LearnerDashboardShell pageTitle="Listening Results" subtitle={result.paper.title} backHref="/listening">
       <div className="space-y-8 pb-24">
         <MotionSection
           className="rounded-2xl border border-border bg-surface p-8 shadow-sm sm:p-10"
         >
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-widest text-muted">Canonical OET Listening Score</p>
-              <h2 className="mt-2 text-3xl font-black text-navy">{result.scoreDisplay}</h2>
-              <p className="mt-3 max-w-2xl text-sm text-muted">
-                This is graded against the official answer key. A pass on Listening is 30/42 (350/500, Grade B).
-              </p>
+          {isFullOetPaper ? (
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Canonical OET Listening Score</p>
+                <h2 className="mt-2 text-3xl font-black text-navy">{result.scoreDisplay}</h2>
+                <p className="mt-3 max-w-2xl text-sm text-muted">
+                  This is graded against the official answer key. A pass on Listening is 30/42 (350/500, Grade B).
+                </p>
+              </div>
+              <div className={`rounded-2xl border p-5 text-center ${result.passed ? 'border-success/20 bg-success/10 text-success' : 'border-danger/20 bg-danger/10 text-danger'}`}>
+                <p className="text-xs font-black uppercase tracking-widest">{result.passed ? 'Threshold Met' : 'Below Threshold'}</p>
+                <p className="mt-2 text-4xl font-black">Grade {result.grade}</p>
+                <p className="mt-1 text-sm">{result.scaledScore} / 500</p>
+              </div>
             </div>
-            <div className={`rounded-2xl border p-5 text-center ${result.passed ? 'border-success/20 bg-success/10 text-success' : 'border-danger/20 bg-danger/10 text-danger'}`}>
-              <p className="text-xs font-black uppercase tracking-widest">{result.passed ? 'Threshold Met' : 'Below Threshold'}</p>
-              <p className="mt-2 text-4xl font-black">Grade {result.grade}</p>
-              <p className="mt-1 text-sm">{result.scaledScore} / 500</p>
+          ) : (
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Practice Score</p>
+                <h2 className="mt-2 text-3xl font-black text-navy">{result.rawScore} / {result.maxRawScore} correct ({percentCorrect}%)</h2>
+                <p className="mt-3 max-w-2xl text-sm text-muted">
+                  This is a drill / starter paper, not a full OET Listening test. Official OET grade and 350/500 scaled
+                  pass mark only apply to full 42-item papers.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-border bg-background-light p-5 text-center text-navy">
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Practice</p>
+                <p className="mt-2 text-4xl font-black">{percentCorrect}%</p>
+                <p className="mt-1 text-sm text-muted">{result.rawScore} of {result.maxRawScore}</p>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-2xl border border-border bg-background-light p-4">

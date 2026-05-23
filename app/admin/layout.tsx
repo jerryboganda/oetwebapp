@@ -155,7 +155,6 @@ function isContentWorkspace(pathname: string | null) {
     'conversation',
     'library',
     'mocks',
-    'recalls-library',
     'scoring-system',
     'analytics',
     'quality',
@@ -205,10 +204,6 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/content/mocks')) {
     return 'Mock Bundles';
-  }
-
-  if (pathname.startsWith('/admin/content/recalls-library')) {
-    return 'Recalls Library';
   }
 
   if (pathname.startsWith('/admin/content/scoring-system')) {

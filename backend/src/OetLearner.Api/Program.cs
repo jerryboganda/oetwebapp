@@ -663,17 +663,42 @@ builder.Services.AddScoped<OetLearner.Api.Services.IContentStalenessService, Oet
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAnalyticsService, OetLearner.Api.Services.Listening.ListeningAnalyticsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAuthoringService, OetLearner.Api.Services.Listening.ListeningAuthoringService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningBackfillService, OetLearner.Api.Services.Listening.ListeningBackfillService>();
-// Wave 4 — TTS synthesis. The stub provider emits silence so the pipeline
-// can run in dev/CI without TTS credentials. Replace with a DigitalOcean
-// Qwen3 / OpenAI implementation by swapping the IListeningTtsSynthesisProvider
-// registration; ListeningTtsService is provider-agnostic.
-builder.Services.AddSingleton<
-    OetLearner.Api.Services.Listening.IListeningTtsSynthesisProvider,
-    OetLearner.Api.Services.Listening.StubListeningTtsSynthesisProvider>();
+// Listening TTS synthesis. The DI seam picks between provider implementations
+// based on appsettings `Listening:TtsProvider`. Supported values:
+//   "stub"  — emits silence, in-process, no creds (default in dev/CI).
+//   real providers (e.g. "qwen", "openai", "azure") plug in here when wired.
+// The full synthesis pipeline (segment concat, SHA-256, IFileStorage write,
+// audit log) is provider-agnostic and lives in ListeningTtsService.
+{
+    var ttsProvider = (builder.Configuration["Listening:TtsProvider"] ?? "stub").Trim().ToLowerInvariant();
+    switch (ttsProvider)
+    {
+        case "stub":
+            builder.Services.AddSingleton<
+                OetLearner.Api.Services.Listening.IListeningTtsSynthesisProvider,
+                OetLearner.Api.Services.Listening.StubListeningTtsSynthesisProvider>();
+            // Production must not run the silence stub. Fail boot loudly so the
+            // operator sees the misconfiguration before a learner hears beeps.
+            if (builder.Environment.IsProduction())
+            {
+                throw new InvalidOperationException(
+                    "Listening:TtsProvider is 'stub' in Production. Configure a real provider "
+                    + "(e.g. 'qwen', 'openai', 'azure') in appsettings.Production.json or set "
+                    + "the LISTENING__TTSPROVIDER environment variable before boot. The stub "
+                    + "emits silence and must not ship to learners.");
+            }
+            break;
+        default:
+            throw new InvalidOperationException(
+                $"Listening:TtsProvider '{ttsProvider}' is not registered. Add the provider's "
+                + "DI registration above this switch or set the value to 'stub' for dev/CI.");
+    }
+}
 builder.Services.AddScoped<
     OetLearner.Api.Services.Listening.IListeningTtsService,
     OetLearner.Api.Services.Listening.ListeningTtsService>();
-// Wave 4 deferred — TTS background job worker (polls ListeningTtsJobs table).
+// TTS background job worker (polls ListeningTtsJobs table, runs synthesise
+// jobs through whichever provider is registered above).
 builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningTtsJobWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningCurriculumService, OetLearner.Api.Services.Listening.ListeningCurriculumService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionAi, OetLearner.Api.Services.Listening.GroundedListeningExtractionAi>();
@@ -1589,7 +1614,6 @@ app.MapListeningV2Endpoints();
 app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
 app.MapRecallsEndpoints();
-app.MapRecallDocumentsEndpoints();
 app.MapScoringPolicyEndpoints();
 app.MapRulebookReferencePdfEndpoints();
 app.MapResultTemplatesEndpoints();

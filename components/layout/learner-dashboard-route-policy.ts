@@ -51,7 +51,6 @@ export const INCLUDED_LEARNER_DASHBOARD_PAGE_PATHS = [
   'app/recalls/words/page.tsx',
   'app/recalls/cards/page.tsx',
   'app/recalls/library/page.tsx',
-  'app/recalls/documents/page.tsx',
   'app/strategies/page.tsx',
   'app/strategies/[id]/page.tsx',
 ] as const;

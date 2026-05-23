@@ -99,12 +99,7 @@ const hubSections: HubSection[] = [
         description: 'Bundle Listening + Reading + Writing + Speaking into a complete OET mock paper.',
         icon: <ScrollText className="h-5 w-5" />,
       },
-      {
-        href: '/admin/content/recalls-library',
-        label: 'Recalls Library',
-        description: 'Upload and publish admin-curated recall PDF digests for learner revision.',
-        icon: <Library className="h-5 w-5" />,
-      },
+
       {
         href: '/admin/content/speaking/shared-resources',
         label: 'Speaking Shared Resources',

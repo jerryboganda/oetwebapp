@@ -72,10 +72,18 @@ export default function ListeningCurriculumPage() {
     <LearnerDashboardShell>
       <div className="space-y-8">
         <LearnerPageHero
-          eyebrow="Listening · Curriculum"
-          title="Your 12-stage Listening pathway"
-          description="From numbers and dosages through MCQ trap-spotting to a full one-play mock — work through each stage in order."
+          eyebrow="Listening · Skills Catalog"
+          title="The 12-stage Listening skills catalog"
+          description="What each Listening skill trains and which drill to open next. For your live progression status, open the Pathway dashboard instead."
         />
+
+        <InlineAlert variant="info">
+          Tracking actual progress lives on the{' '}
+          <Link href="/listening/pathway" className="font-semibold underline">
+            Listening Pathway
+          </Link>{' '}
+          page. This catalog is a skill reference — every card jumps straight to the matching drill.
+        </InlineAlert>
 
         {loading && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -92,8 +100,8 @@ export default function ListeningCurriculumPage() {
                 kind: 'insight',
                 sourceType: 'frontend_navigation',
                 accent: 'indigo',
-                title: data.headline,
-                description: `${data.completedStages} of ${data.totalStages} stages complete.`,
+                title: 'Twelve Listening skills to drill, in order',
+                description: 'Browse below and open any unlocked skill to launch its drill. Progression lives on the Pathway page.',
               }}
             />
 

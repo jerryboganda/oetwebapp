@@ -108,7 +108,7 @@ export default function AdminRealContentFolderImportPage() {
         icon={FolderUp}
         accent="navy"
         title="Real Content folder importer"
-        description="Drop the zipped Project Real Content folder. The system parses Listening/Reading/Writing/Speaking samples, recall PDFs, result-table images, rulebook PDFs, and the Scoring System file — then lets you review + commit them all as Drafts."
+        description="Drop the zipped Project Real Content folder. The system parses Listening/Reading/Writing/Speaking samples, result-table images, rulebook PDFs, and the Scoring System file — then lets you review + commit them all as Drafts."
         aside={null}
       />
 
@@ -246,7 +246,7 @@ export default function AdminRealContentFolderImportPage() {
             </div>
           ) : null}
           <p className="text-xs text-muted">
-            Drafts are now in each respective admin page. Open Recalls Library, Result Templates, Speaking Shared Resources, Scoring System, and the per-paper admin pages to publish them.
+            Drafts are now in each respective admin page. Open Result Templates, Speaking Shared Resources, Scoring System, and the per-paper admin pages to publish them.
           </p>
         </Card>
       ) : null}

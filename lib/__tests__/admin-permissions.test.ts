@@ -66,11 +66,6 @@ describe('sidebarPermissionMap', () => {
     expect(sidebarPermissionMap['/admin/content/import']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/content/papers/import']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/content/generation']).toEqual([AdminPermission.ContentWrite]);
-    expect(sidebarPermissionMap['/admin/content/recalls-library']).toEqual([
-      AdminPermission.ContentRead,
-      AdminPermission.ContentWrite,
-      AdminPermission.ContentPublish,
-    ]);
     expect(sidebarPermissionMap['/admin/content/scoring-system']).toEqual([
       AdminPermission.ContentRead,
       AdminPermission.ContentWrite,

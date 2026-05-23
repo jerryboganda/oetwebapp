@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
-import { Brain, Layers, BookOpen, HelpCircle, Headphones, Flame, Sparkles, ArrowRight, Calendar, FileText } from 'lucide-react';
+import { Brain, Layers, BookOpen, HelpCircle, Headphones, Flame, Sparkles, ArrowRight } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -87,15 +87,6 @@ export default function RecallsHomePage() {
       description: 'See what is improving, what is mastered, and which clinical topics need work.',
       icon: <Headphones className="h-6 w-6" />,
       tile: 'bg-purple-50 text-purple-700',
-      badge: null,
-    },
-    {
-      href: '/recalls/documents',
-      eyebrow: 'Documents',
-      title: 'Recall PDF digests',
-      description: 'Read and download recent tutor-uploaded OET recall documents for revision.',
-      icon: <FileText className="h-6 w-6" />,
-      tile: 'bg-amber-50 text-amber-700',
       badge: null,
     },
   ];

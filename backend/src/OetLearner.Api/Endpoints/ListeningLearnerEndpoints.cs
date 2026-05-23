@@ -11,6 +11,25 @@ public static class ListeningLearnerEndpoints
 
     public static IEndpointRouteBuilder MapListeningLearnerEndpoints(this IEndpointRouteBuilder app)
     {
+        // ── Public test-rules constants (anonymous-allowed) ──
+        // Surfaces OET-spec numbers (42 q, 30 raw pass, 350 scaled pass, etc.)
+        // so the /listening/test-rules page can source them from the API
+        // instead of hard-coding them in JSX. No learner data is read here.
+        app.MapGet("/v1/listening-papers/policy/test-rules", () => Results.Ok(new
+        {
+            questionCount = OetScoring.ListeningReadingRawMax,
+            durationMinutes = 40,
+            partA = new { items = 24, extracts = 2, itemType = "short-answer" },
+            partB = new { items = 6, extracts = 6, itemType = "mcq-3-option" },
+            partC = new { items = 12, extracts = 2, itemType = "mcq-3-option" },
+            passRawAnchor = OetScoring.ListeningReadingRawPass,
+            passScaledAnchor = OetScoring.ScaledPassGradeB,
+            scaledMax = OetScoring.ScaledMax,
+        }))
+            .AllowAnonymous()
+            .WithName("GetListeningTestRulesPolicy")
+            .WithSummary("OET Listening test-rules constants (anonymous-allowed)");
+
         var group = app.MapGroup("/v1/listening-papers")
             .RequireAuthorization("LearnerOnly")
             .RequireRateLimiting("PerUser");
