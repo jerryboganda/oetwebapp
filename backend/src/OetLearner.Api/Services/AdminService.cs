@@ -247,7 +247,8 @@ public partial class AdminService(
         string? DiagnosticMockEntitlement,
         string? Status,
         string? IncludedSubtestsJson,
-        string? EntitlementsJson);
+        string? EntitlementsJson,
+        Oet2026PlanFields Oet2026);
 
     private sealed record BillingAddOnCatalogInput(
         string Code,
@@ -266,7 +267,74 @@ public partial class AdminService(
         int? MaxQuantity,
         string? Status,
         string? CompatiblePlanCodesJson,
-        string? GrantEntitlementsJson);
+        string? GrantEntitlementsJson,
+        Oet2026AddOnFields Oet2026);
+
+    /// <summary>OET 2026 catalog optional fields for plans.</summary>
+    private sealed record Oet2026PlanFields(
+        decimal? OriginalPriceGbp,
+        int? AccessDurationDays,
+        bool? WritingAddonsEnabled,
+        bool? SpeakingAddonsEnabled,
+        bool? TutorBookDiscountEnabled,
+        string? Profession,
+        string? ProductCategory,
+        string? DashboardModulesJson,
+        int? BundledWritingAssessments,
+        int? BundledSpeakingSessions,
+        int? BundledAiCredits,
+        bool? BundledTutorBook,
+        bool? BundledBasicEnglish,
+        bool? IsDraft,
+        bool? ExtensionAllowed,
+        bool? RecallUpdatesEnabled)
+    {
+        public static Oet2026PlanFields Empty { get; } = new(
+            null, null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null);
+    }
+
+    /// <summary>OET 2026 catalog optional fields for add-ons.</summary>
+    private sealed record Oet2026AddOnFields(
+        decimal? OriginalPriceGbp,
+        string? AddonKind,
+        bool? RequiresEligibleParent,
+        string? EligibilityFlag,
+        int? LettersGranted,
+        int? SessionsGranted)
+    {
+        public static Oet2026AddOnFields Empty { get; } = new(null, null, null, null, null, null);
+    }
+
+    private static void ApplyOet2026Fields(BillingPlan plan, Oet2026PlanFields fields)
+    {
+        if (fields.OriginalPriceGbp.HasValue) plan.OriginalPriceGbp = fields.OriginalPriceGbp.Value <= 0 ? null : fields.OriginalPriceGbp;
+        if (fields.AccessDurationDays.HasValue) plan.AccessDurationDays = Math.Max(0, fields.AccessDurationDays.Value);
+        if (fields.WritingAddonsEnabled.HasValue) plan.WritingAddonsEnabled = fields.WritingAddonsEnabled.Value;
+        if (fields.SpeakingAddonsEnabled.HasValue) plan.SpeakingAddonsEnabled = fields.SpeakingAddonsEnabled.Value;
+        if (fields.TutorBookDiscountEnabled.HasValue) plan.TutorBookDiscountEnabled = fields.TutorBookDiscountEnabled.Value;
+        if (!string.IsNullOrWhiteSpace(fields.Profession)) plan.Profession = fields.Profession.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(fields.ProductCategory)) plan.ProductCategory = fields.ProductCategory.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(fields.DashboardModulesJson)) plan.DashboardModulesJson = fields.DashboardModulesJson;
+        if (fields.BundledWritingAssessments.HasValue) plan.BundledWritingAssessments = Math.Max(0, fields.BundledWritingAssessments.Value);
+        if (fields.BundledSpeakingSessions.HasValue) plan.BundledSpeakingSessions = Math.Max(0, fields.BundledSpeakingSessions.Value);
+        if (fields.BundledAiCredits.HasValue) plan.BundledAiCredits = Math.Max(0, fields.BundledAiCredits.Value);
+        if (fields.BundledTutorBook.HasValue) plan.BundledTutorBook = fields.BundledTutorBook.Value;
+        if (fields.BundledBasicEnglish.HasValue) plan.BundledBasicEnglish = fields.BundledBasicEnglish.Value;
+        if (fields.IsDraft.HasValue) plan.IsDraft = fields.IsDraft.Value;
+        if (fields.ExtensionAllowed.HasValue) plan.ExtensionAllowed = fields.ExtensionAllowed.Value;
+        if (fields.RecallUpdatesEnabled.HasValue) plan.RecallUpdatesEnabled = fields.RecallUpdatesEnabled.Value;
+    }
+
+    private static void ApplyOet2026Fields(BillingAddOn addOn, Oet2026AddOnFields fields)
+    {
+        if (fields.OriginalPriceGbp.HasValue) addOn.OriginalPriceGbp = fields.OriginalPriceGbp.Value <= 0 ? null : fields.OriginalPriceGbp;
+        if (!string.IsNullOrWhiteSpace(fields.AddonKind)) addOn.AddonKind = fields.AddonKind.Trim().ToLowerInvariant();
+        if (fields.RequiresEligibleParent.HasValue) addOn.RequiresEligibleParent = fields.RequiresEligibleParent.Value;
+        if (!string.IsNullOrWhiteSpace(fields.EligibilityFlag)) addOn.EligibilityFlag = fields.EligibilityFlag.Trim().ToLowerInvariant();
+        if (fields.LettersGranted.HasValue) addOn.LettersGranted = Math.Max(0, fields.LettersGranted.Value);
+        if (fields.SessionsGranted.HasValue) addOn.SessionsGranted = Math.Max(0, fields.SessionsGranted.Value);
+    }
 
     private sealed record BillingCouponCatalogInput(
         string Code,
@@ -304,7 +372,8 @@ public partial class AdminService(
         string DiagnosticMockEntitlement,
         BillingPlanStatus Status,
         string IncludedSubtestsJson,
-        string EntitlementsJson);
+        string EntitlementsJson,
+        Oet2026PlanFields Oet2026);
 
     private sealed record ValidatedBillingAddOnCatalog(
         string Code,
@@ -323,7 +392,8 @@ public partial class AdminService(
         int? MaxQuantity,
         BillingAddOnStatus Status,
         string CompatiblePlanCodesJson,
-        string GrantEntitlementsJson);
+        string GrantEntitlementsJson,
+        Oet2026AddOnFields Oet2026);
 
     private sealed record ValidatedBillingCouponCatalog(
         string Code,
@@ -361,7 +431,24 @@ public partial class AdminService(
         request.DiagnosticMockEntitlement,
         request.Status,
         request.IncludedSubtestsJson,
-        request.EntitlementsJson);
+        request.EntitlementsJson,
+        new Oet2026PlanFields(
+            request.OriginalPriceGbp,
+            request.AccessDurationDays,
+            request.WritingAddonsEnabled,
+            request.SpeakingAddonsEnabled,
+            request.TutorBookDiscountEnabled,
+            request.Profession,
+            request.ProductCategory,
+            request.DashboardModulesJson,
+            request.BundledWritingAssessments,
+            request.BundledSpeakingSessions,
+            request.BundledAiCredits,
+            request.BundledTutorBook,
+            request.BundledBasicEnglish,
+            request.IsDraft,
+            request.ExtensionAllowed,
+            request.RecallUpdatesEnabled));
 
     private static BillingPlanCatalogInput ToBillingPlanCatalogInput(AdminBillingPlanUpdateRequest request) => new(
         request.Code,
@@ -379,7 +466,24 @@ public partial class AdminService(
         request.DiagnosticMockEntitlement,
         request.Status,
         request.IncludedSubtestsJson,
-        request.EntitlementsJson);
+        request.EntitlementsJson,
+        new Oet2026PlanFields(
+            request.OriginalPriceGbp,
+            request.AccessDurationDays,
+            request.WritingAddonsEnabled,
+            request.SpeakingAddonsEnabled,
+            request.TutorBookDiscountEnabled,
+            request.Profession,
+            request.ProductCategory,
+            request.DashboardModulesJson,
+            request.BundledWritingAssessments,
+            request.BundledSpeakingSessions,
+            request.BundledAiCredits,
+            request.BundledTutorBook,
+            request.BundledBasicEnglish,
+            request.IsDraft,
+            request.ExtensionAllowed,
+            request.RecallUpdatesEnabled));
 
     private static BillingAddOnCatalogInput ToBillingAddOnCatalogInput(AdminBillingAddOnCreateRequest request) => new(
         request.Code,
@@ -398,7 +502,14 @@ public partial class AdminService(
         request.MaxQuantity,
         request.Status,
         request.CompatiblePlanCodesJson,
-        request.GrantEntitlementsJson);
+        request.GrantEntitlementsJson,
+        new Oet2026AddOnFields(
+            request.OriginalPriceGbp,
+            request.AddonKind,
+            request.RequiresEligibleParent,
+            request.EligibilityFlag,
+            request.LettersGranted,
+            request.SessionsGranted));
 
     private static BillingAddOnCatalogInput ToBillingAddOnCatalogInput(AdminBillingAddOnUpdateRequest request) => new(
         request.Code,
@@ -417,7 +528,14 @@ public partial class AdminService(
         request.MaxQuantity,
         request.Status,
         request.CompatiblePlanCodesJson,
-        request.GrantEntitlementsJson);
+        request.GrantEntitlementsJson,
+        new Oet2026AddOnFields(
+            request.OriginalPriceGbp,
+            request.AddonKind,
+            request.RequiresEligibleParent,
+            request.EligibilityFlag,
+            request.LettersGranted,
+            request.SessionsGranted));
 
     private static BillingCouponCatalogInput ToBillingCouponCatalogInput(AdminBillingCouponCreateRequest request) => new(
         request.Code,
@@ -783,7 +901,8 @@ public partial class AdminService(
             diagnosticMockEntitlement,
             status,
             includedSubtests.Json,
-            entitlementsJson);
+            entitlementsJson,
+            request.Oet2026);
     }
 
     private async Task<ValidatedBillingAddOnCatalog> ValidateBillingAddOnCatalogAsync(
@@ -873,7 +992,8 @@ public partial class AdminService(
             request.MaxQuantity,
             status,
             compatiblePlanCodes.Json,
-            grantEntitlementsJson);
+            grantEntitlementsJson,
+            request.Oet2026);
     }
 
     private async Task<ValidatedBillingCouponCatalog> ValidateBillingCouponCatalogAsync(
@@ -1160,7 +1280,24 @@ public partial class AdminService(
         entitlements = JsonSupport.Deserialize<Dictionary<string, object?>>(plan.EntitlementsJson, new Dictionary<string, object?>()),
         archivedAt = plan.ArchivedAt,
         plan.UpdatedAt,
-        plan.CreatedAt
+        plan.CreatedAt,
+        // OET 2026 catalog fields
+        originalPriceGbp = plan.OriginalPriceGbp,
+        accessDurationDays = plan.AccessDurationDays,
+        writingAddonsEnabled = plan.WritingAddonsEnabled,
+        speakingAddonsEnabled = plan.SpeakingAddonsEnabled,
+        tutorBookDiscountEnabled = plan.TutorBookDiscountEnabled,
+        profession = plan.Profession,
+        productCategory = plan.ProductCategory,
+        dashboardModules = JsonSupport.Deserialize<List<string>>(plan.DashboardModulesJson, []),
+        bundledWritingAssessments = plan.BundledWritingAssessments,
+        bundledSpeakingSessions = plan.BundledSpeakingSessions,
+        bundledAiCredits = plan.BundledAiCredits,
+        bundledTutorBook = plan.BundledTutorBook,
+        bundledBasicEnglish = plan.BundledBasicEnglish,
+        isDraft = plan.IsDraft,
+        extensionAllowed = plan.ExtensionAllowed,
+        recallUpdatesEnabled = plan.RecallUpdatesEnabled
     };
 
     private static object MapBillingAddOn(BillingAddOn addOn, BillingCatalogVersionMetadata? versionMetadata = null) => new
@@ -1189,7 +1326,14 @@ public partial class AdminService(
         compatiblePlanCodes = JsonSupport.Deserialize<List<string>>(addOn.CompatiblePlanCodesJson, []),
         grantEntitlements = JsonSupport.Deserialize<Dictionary<string, object?>>(addOn.GrantEntitlementsJson, new Dictionary<string, object?>()),
         addOn.CreatedAt,
-        addOn.UpdatedAt
+        addOn.UpdatedAt,
+        // OET 2026 catalog fields
+        originalPriceGbp = addOn.OriginalPriceGbp,
+        addonKind = addOn.AddonKind,
+        requiresEligibleParent = addOn.RequiresEligibleParent,
+        eligibilityFlag = addOn.EligibilityFlag,
+        lettersGranted = addOn.LettersGranted,
+        sessionsGranted = addOn.SessionsGranted
     };
 
     private static object MapBillingCoupon(BillingCoupon coupon, BillingCatalogVersionMetadata? versionMetadata = null) => new
@@ -1244,7 +1388,24 @@ public partial class AdminService(
         ArchivedAt = plan.ArchivedAt,
         CreatedByAdminId = adminId,
         CreatedByAdminName = adminName,
-        CreatedAt = createdAt
+        CreatedAt = createdAt,
+        // OET 2026 catalog fields — frozen onto immutable snapshot
+        OriginalPriceGbp = plan.OriginalPriceGbp,
+        AccessDurationDays = plan.AccessDurationDays,
+        WritingAddonsEnabled = plan.WritingAddonsEnabled,
+        SpeakingAddonsEnabled = plan.SpeakingAddonsEnabled,
+        TutorBookDiscountEnabled = plan.TutorBookDiscountEnabled,
+        Profession = plan.Profession,
+        ProductCategory = plan.ProductCategory,
+        DashboardModulesJson = plan.DashboardModulesJson,
+        BundledWritingAssessments = plan.BundledWritingAssessments,
+        BundledSpeakingSessions = plan.BundledSpeakingSessions,
+        BundledAiCredits = plan.BundledAiCredits,
+        BundledTutorBook = plan.BundledTutorBook,
+        BundledBasicEnglish = plan.BundledBasicEnglish,
+        IsDraft = plan.IsDraft,
+        ExtensionAllowed = plan.ExtensionAllowed,
+        RecallUpdatesEnabled = plan.RecallUpdatesEnabled,
     };
 
     private static BillingAddOnVersion CreateBillingAddOnVersion(BillingAddOn addOn, int versionNumber, string? adminId, string? adminName, DateTimeOffset createdAt) => new()
@@ -1271,7 +1432,14 @@ public partial class AdminService(
         DisplayOrder = addOn.DisplayOrder,
         CreatedByAdminId = adminId,
         CreatedByAdminName = adminName,
-        CreatedAt = createdAt
+        CreatedAt = createdAt,
+        // OET 2026 catalog fields
+        OriginalPriceGbp = addOn.OriginalPriceGbp,
+        AddonKind = addOn.AddonKind,
+        RequiresEligibleParent = addOn.RequiresEligibleParent,
+        EligibilityFlag = addOn.EligibilityFlag,
+        LettersGranted = addOn.LettersGranted,
+        SessionsGranted = addOn.SessionsGranted,
     };
 
     private static BillingCouponVersion CreateBillingCouponVersion(BillingCoupon coupon, int versionNumber, string? adminId, string? adminName, DateTimeOffset createdAt) => new()
@@ -3586,6 +3754,7 @@ public partial class AdminService(
             CreatedAt = now,
             UpdatedAt = now
         };
+        ApplyOet2026Fields(plan, validated.Oet2026);
 
         var version = CreateBillingPlanVersion(plan, 1, adminId, adminName, now);
         plan.ActiveVersionId = version.Id;
@@ -3626,6 +3795,7 @@ public partial class AdminService(
         plan.Status = validated.Status;
         plan.ArchivedAt = plan.Status == BillingPlanStatus.Archived ? now : plan.ArchivedAt;
         plan.UpdatedAt = now;
+        ApplyOet2026Fields(plan, validated.Oet2026);
 
         var version = CreateBillingPlanVersion(plan, latestVersionNumber + 1, adminId, adminName, now);
         plan.ActiveVersionId = version.Id;
@@ -3699,6 +3869,7 @@ public partial class AdminService(
             CreatedAt = now,
             UpdatedAt = now
         };
+        ApplyOet2026Fields(addOn, validated.Oet2026);
 
         var version = CreateBillingAddOnVersion(addOn, 1, adminId, adminName, now);
         addOn.ActiveVersionId = version.Id;
@@ -3738,6 +3909,7 @@ public partial class AdminService(
         addOn.CompatiblePlanCodesJson = validated.CompatiblePlanCodesJson;
         addOn.GrantEntitlementsJson = validated.GrantEntitlementsJson;
         addOn.UpdatedAt = now;
+        ApplyOet2026Fields(addOn, validated.Oet2026);
 
         var version = CreateBillingAddOnVersion(addOn, latestVersionNumber + 1, adminId, adminName, now);
         addOn.ActiveVersionId = version.Id;

@@ -26,6 +26,7 @@ import {
   BookOpen,
   CheckCircle2,
   Clock,
+  Lock,
   Sparkles,
   Trash2,
   TrendingUp,
@@ -41,6 +42,7 @@ import {
   LearnerSurfaceCard,
   LearnerSurfaceSectionHeader,
 } from '@/components/domain';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { useAuth } from '@/contexts/auth-context';
 import {
   clearReadingErrorBankEntry,
@@ -59,6 +61,14 @@ import {
   type ReadingPathwaySnapshot,
 } from '@/lib/reading-authoring-api';
 
+function isPaperAccessible(paper: ReadingHomePaperDto): boolean {
+  return paper.entitlement?.allowed !== false;
+}
+
+function papersWithAccess(papers: ReadingHomePaperDto[]): ReadingHomePaperDto[] {
+  return papers.filter(isPaperAccessible);
+}
+
 export default function ReadingPracticePage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -74,6 +84,14 @@ export default function ReadingPracticePage() {
   // `${paperId}::${kind}` (or just `kind` for cross-paper retest).
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [drillPaperId, setDrillPaperId] = useState<string | null>(null);
+
+  // ── Deep-link support: /reading/practice?focus=A|B|C&tab=errors ─────────
+  const searchParams = useSearchParams();
+  const focusParamRaw = searchParams?.get('focus') ?? null;
+  const focusPart = focusParamRaw === 'A' || focusParamRaw === 'B' || focusParamRaw === 'C'
+    ? focusParamRaw
+    : null;
+  const tabParam = searchParams?.get('tab') ?? null;
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -92,8 +110,8 @@ export default function ReadingPracticePage() {
       void getReadingPathway()
         .then((snap) => setPathway(snap))
         .catch(() => setPathway(null));
-      // Default the drill paper picker to the first published paper, if any.
-      setDrillPaperId((current) => current ?? homeData?.papers?.[0]?.id ?? null);
+      // Default the drill paper picker to the first accessible paper, if any.
+      setDrillPaperId((current) => current ?? homeData?.papers?.find((paper) => isPaperAccessible(paper))?.id ?? null);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Could not load practice hub.');
     } finally {
@@ -109,6 +127,10 @@ export default function ReadingPracticePage() {
 
   const handleStartLearning = useCallback(
     async (paper: ReadingHomePaperDto) => {
+      if (!isPaperAccessible(paper)) {
+        setErrorMsg('This Reading paper is locked for your current package. Open packages to unlock it.');
+        return;
+      }
       setStartingPaperId(paper.id);
       setErrorMsg(null);
       try {
@@ -159,13 +181,13 @@ export default function ReadingPracticePage() {
     setBusyKey('retest');
     setErrorMsg(null);
     try {
-      const started = await startReadingErrorBankRetest({ limit: 10 });
+      const started = await startReadingErrorBankRetest({ partCode: focusPart ?? undefined, limit: 10 });
       router.push(started.playerRoute);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Could not start retest.');
       setBusyKey(null);
     }
-  }, [router]);
+  }, [focusPart, router]);
 
   // ── Pathway: convert the recommended next action into a real launcher.
   const handlePathwayAction = useCallback(async () => {
@@ -237,14 +259,6 @@ export default function ReadingPracticePage() {
     [],
   );
 
-  // ── Deep-link support: /reading/practice?focus=A|B|C&tab=errors ─────────
-  const searchParams = useSearchParams();
-  const focusParamRaw = searchParams?.get('focus') ?? null;
-  const focusPart = focusParamRaw === 'A' || focusParamRaw === 'B' || focusParamRaw === 'C'
-    ? focusParamRaw
-    : null;
-  const tabParam = searchParams?.get('tab') ?? null;
-
   const errorBankSectionRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (tabParam === 'errors' && !loading && errorBankSectionRef.current) {
@@ -261,6 +275,15 @@ export default function ReadingPracticePage() {
     const all = errorBank?.entries ?? [];
     return focusPart ? all.filter((e) => e.partCode === focusPart) : all;
   }, [errorBank, focusPart]);
+
+  const accessiblePapers = useMemo(() => papersWithAccess(home?.papers ?? []), [home?.papers]);
+
+  useEffect(() => {
+    if (accessiblePapers.length === 0) return;
+    if (!drillPaperId || !accessiblePapers.some((paper) => paper.id === drillPaperId)) {
+      setDrillPaperId(accessiblePapers[0]?.id ?? null);
+    }
+  }, [accessiblePapers, drillPaperId]);
 
   if (authLoading || (loading && !home && !errorBank)) {
     return (
@@ -282,7 +305,9 @@ export default function ReadingPracticePage() {
   }
 
   const papers = home?.papers ?? [];
+  const selectedDrillPaperAvailable = accessiblePapers.some((paper) => paper.id === drillPaperId);
   const openErrorCount = errorBank?.totals.open ?? 0;
+  const visibleErrorCount = focusPart ? filteredErrorEntries.length : openErrorCount;
 
   return (
     <LearnerDashboardShell>
@@ -375,37 +400,49 @@ export default function ReadingPracticePage() {
             </InlineAlert>
           ) : (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              {papers.map((paper, idx) => (
-                <MotionItem key={paper.id} delayIndex={idx}>
-                  <LearnerSurfaceCard
-                    card={{
-                      kind: 'navigation',
-                      sourceType: 'frontend_navigation',
-                      accent: 'blue',
-                      eyebrow: 'READING',
-                      eyebrowIcon: BookOpen,
-                      title: paper.title,
-                      description: `Difficulty: ${paper.difficulty} · ${paper.partACount + paper.partBCount + paper.partCCount} questions`,
-                      metaItems: [
-                        { icon: Clock, label: `${paper.estimatedDurationMinutes ?? 60} min` },
-                      ],
-                    }}
-                  >
-                    <div className="mt-4 flex items-center justify-between gap-3">
-                      <Badge variant="info">Learning Mode</Badge>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={startingPaperId === paper.id}
-                        onClick={() => void handleStartLearning(paper)}
-                      >
-                        {startingPaperId === paper.id ? 'Starting…' : 'Start untimed'}{' '}
-                        <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
-                      </Button>
-                    </div>
-                  </LearnerSurfaceCard>
-                </MotionItem>
-              ))}
+              {papers.map((paper, idx) => {
+                const locked = !isPaperAccessible(paper);
+                return (
+                  <MotionItem key={paper.id} delayIndex={idx}>
+                    <LearnerSurfaceCard
+                      card={{
+                        kind: 'navigation',
+                        sourceType: 'frontend_navigation',
+                        accent: locked ? 'amber' : 'blue',
+                        eyebrow: locked ? 'PACKAGE REQUIRED' : 'READING',
+                        eyebrowIcon: locked ? Lock : BookOpen,
+                        title: paper.title,
+                        description: locked
+                          ? 'This structured Reading paper is ready, but your current package does not include Learning Mode access yet.'
+                          : `Difficulty: ${paper.difficulty} · ${paper.partACount + paper.partBCount + paper.partCCount} questions`,
+                        metaItems: [
+                          { icon: Clock, label: `${paper.estimatedDurationMinutes ?? 60} min` },
+                          ...(locked && paper.entitlement?.requiredScope ? [{ icon: Lock, label: paper.entitlement.requiredScope }] : []),
+                        ],
+                      }}
+                    >
+                      <div className="mt-4 flex items-center justify-between gap-3">
+                        <Badge variant={locked ? 'warning' : 'info'}>{locked ? 'Locked' : 'Learning Mode'}</Badge>
+                        {locked ? (
+                          <Button asChild variant="outline" size="sm">
+                            <Link href="/billing">View packages</Link>
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={startingPaperId === paper.id}
+                            onClick={() => void handleStartLearning(paper)}
+                          >
+                            {startingPaperId === paper.id ? 'Starting…' : 'Start untimed'}{' '}
+                            <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
+                          </Button>
+                        )}
+                      </div>
+                    </LearnerSurfaceCard>
+                  </MotionItem>
+                );
+              })}
             </div>
           )}
         </section>
@@ -498,9 +535,21 @@ export default function ReadingPracticePage() {
             className="mb-5"
           />
           {papers.length === 0 || !drillCatalogue ? (
-            <InlineAlert variant="info">
-              Drills will appear once at least one Reading paper is published.
-            </InlineAlert>
+            <LearnerEmptyState
+              compact
+              icon={BookOpen}
+              title="Drills are not available yet"
+              description="Drills will appear once at least one Reading paper is published and eligible for your package."
+              primaryAction={{ label: 'Back to Reading', href: '/reading', variant: 'outline' }}
+            />
+          ) : accessiblePapers.length === 0 ? (
+            <LearnerEmptyState
+              compact
+              icon={Lock}
+              title="Practice papers are locked"
+              description="Your current package does not include the available structured Reading papers yet."
+              primaryAction={{ label: 'View packages', href: '/billing' }}
+            />
           ) : (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
@@ -513,7 +562,7 @@ export default function ReadingPracticePage() {
                   value={drillPaperId ?? ''}
                   onChange={(e) => setDrillPaperId(e.target.value || null)}
                 >
-                  {papers.map((p) => (
+                  {accessiblePapers.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.title}
                     </option>
@@ -546,8 +595,8 @@ export default function ReadingPracticePage() {
                           <Button
                             variant="primary"
                             size="sm"
-                            disabled={!drillPaperId || busy}
-                            onClick={() => drillPaperId && void handleStartDrill(drillPaperId, d.code)}
+                            disabled={!drillPaperId || !selectedDrillPaperAvailable || busy}
+                            onClick={() => drillPaperId && selectedDrillPaperAvailable && void handleStartDrill(drillPaperId, d.code)}
                           >
                             {busy ? 'Starting…' : 'Start drill'}
                             <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
@@ -571,9 +620,21 @@ export default function ReadingPracticePage() {
             className="mb-5"
           />
           {papers.length === 0 || !drillCatalogue ? (
-            <InlineAlert variant="info">
-              Mini-tests will appear once at least one Reading paper is published.
-            </InlineAlert>
+            <LearnerEmptyState
+              compact
+              icon={BookOpen}
+              title="Mini-tests are not available yet"
+              description="Mini-tests will appear once at least one Reading paper is published and eligible for your package."
+              primaryAction={{ label: 'Back to Reading', href: '/reading', variant: 'outline' }}
+            />
+          ) : accessiblePapers.length === 0 ? (
+            <LearnerEmptyState
+              compact
+              icon={Lock}
+              title="Mini-tests are locked"
+              description="Unlock a structured Reading paper package before starting timed mini-tests."
+              primaryAction={{ label: 'View packages', href: '/billing' }}
+            />
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {drillCatalogue.miniTests.map((m, idx) => {
@@ -597,8 +658,8 @@ export default function ReadingPracticePage() {
                         <Button
                           variant="primary"
                           size="sm"
-                          disabled={!drillPaperId || busy}
-                          onClick={() => drillPaperId && void handleStartMiniTest(drillPaperId, m.minutes)}
+                          disabled={!drillPaperId || !selectedDrillPaperAvailable || busy}
+                          onClick={() => drillPaperId && selectedDrillPaperAvailable && void handleStartMiniTest(drillPaperId, m.minutes)}
                         >
                           {busy ? 'Starting…' : 'Start'}
                           <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
@@ -613,7 +674,7 @@ export default function ReadingPracticePage() {
         </section>
 
         {/* ── Error Bank Retest ──────────────────────────────── */}
-        {openErrorCount > 0 ? (
+        {visibleErrorCount > 0 ? (
           <section>
             <LearnerSurfaceSectionHeader
               eyebrow="Targeted retest"
@@ -627,12 +688,12 @@ export default function ReadingPracticePage() {
                 onClick={() => void handleErrorBankRetest()}
                 disabled={busyKey === 'retest'}
               >
-                {busyKey === 'retest' ? 'Building retest…' : `Retest up to 10 open misses`}
+                {busyKey === 'retest' ? 'Building retest…' : `Retest up to ${Math.min(10, visibleErrorCount)} ${focusPart ? `Part ${focusPart} ` : ''}open miss${Math.min(10, visibleErrorCount) === 1 ? '' : 'es'}`}
                 <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
               </Button>
               <span className="text-sm text-slate-600">
-                Pulls from the {openErrorCount} open question
-                {openErrorCount === 1 ? '' : 's'} above.
+                Pulls from the {visibleErrorCount} visible open question
+                {visibleErrorCount === 1 ? '' : 's'} above.
               </span>
             </div>
           </section>

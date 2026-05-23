@@ -22,7 +22,7 @@ namespace OetLearner.Api.Services.Reading;
 //   "drilling"    — open error-bank ≥ 5 OR best scaled < 300 → drill weakest skill.
 //   "mini_tests"  — error-bank cleared + best scaled ∈ [300, 350) → mini-tests.
 //   "mock_ready"  — best scaled ≥ 350 + < 1 reading-mock attempt → take a mock.
-//   "exam_ready"  — best mock-scaled ≥ 350 (last 3 attempts) → ready to book.
+//   "exam_ready"  — best mock-section scaled ≥ 350 (last 3 attempts) → ready to book.
 //
 // Recommended action shape: a structured ReadingPathwayAction the FE can pass
 // straight back to the existing practice-start endpoints.
@@ -107,14 +107,38 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
                 .FirstOrDefaultAsync(ct);
         }
 
-        // ── Reading-related mock attempts ─────────────────────────────────
-        var readingMockCount = await db.MockAttempts
+        // ── Reading-related mock evidence ─────────────────────────────────
+        // MockAttempt transitions through Submitted → Evaluating → Completed,
+        // while the score lives on MockSectionAttempt. Use section evidence so
+        // pathway readiness only reaches exam_ready after a scored Reading mock
+        // section actually passes the canonical Reading threshold.
+        var readingMockEvidence = await db.MockSectionAttempts
             .AsNoTracking()
-            .CountAsync(m => m.UserId == userId
-                && m.State == AttemptState.Submitted
-                && (m.SubtestCode == "reading"
-                    || m.MockType == "full"
-                    || m.SubtestCode == null), ct);
+            .Where(section => section.MockAttempt != null
+                && section.MockAttempt.UserId == userId
+                && section.SubtestCode == "reading"
+                && (section.State == AttemptState.Submitted
+                    || section.State == AttemptState.Evaluating
+                    || section.State == AttemptState.Completed))
+            .OrderByDescending(section => section.CompletedAt ?? section.SubmittedAt ?? section.StartedAt ?? DateTimeOffset.MinValue)
+            .Select(section => new
+            {
+                section.MockAttemptId,
+                section.ScaledScore,
+            })
+            .ToListAsync(ct);
+
+        var readingMockCount = readingMockEvidence
+            .Select(section => section.MockAttemptId)
+            .Distinct()
+            .Count();
+        var bestRecentMockScaled = readingMockEvidence
+            .Where(section => section.ScaledScore.HasValue)
+            .Take(3)
+            .Select(section => section.ScaledScore!.Value)
+            .DefaultIfEmpty()
+            .Max();
+        var hasPassingReadingMock = bestRecentMockScaled >= OetScoring.ScaledPassGradeB;
 
         // ── A published paper to anchor the recommended action ────────────
         var anchorPaperId = await db.ContentPapers
@@ -181,7 +205,7 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
                 PaperId: anchorPaperId,
                 Route: "/mocks?subtest=reading");
         }
-        else
+        else if (hasPassingReadingMock)
         {
             stage = "exam_ready";
             nextAction = new ReadingPathwayAction(
@@ -190,6 +214,16 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
                 DrillCode: null,
                 PaperId: null,
                 Route: "/exam-booking");
+        }
+        else
+        {
+            stage = "drilling";
+            nextAction = new ReadingPathwayAction(
+                Kind: "review_results",
+                Label: "Review your latest Reading mock gaps",
+                DrillCode: null,
+                PaperId: anchorPaperId,
+                Route: "/mocks");
         }
 
         var headline = stage switch
@@ -215,7 +249,7 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
             new("scaled_350", $"Reach {OetScoring.ScaledPassGradeB} scaled in an Exam attempt",
                 bestScaled is int s && OetScoring.IsListeningReadingPassByScaled(s), bestScaled, OetScoring.ScaledPassGradeB),
             new("first_mock_pass", "Pass your first Reading mock",
-                readingMockCount >= 1, readingMockCount, 1),
+                hasPassingReadingMock, hasPassingReadingMock ? 1 : 0, 1),
         };
 
         return new ReadingPathwaySnapshot(

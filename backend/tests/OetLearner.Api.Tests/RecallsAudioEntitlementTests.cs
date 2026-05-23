@@ -55,7 +55,8 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
         using var client = CreateLearnerClient(learnerId);
         var response = await client.GetAsync($"/v1/recalls/audio/{termId}");
 
-        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, payload);
         Assert.Equal("audio/wav", response.Content.Headers.ContentType?.MediaType);
         Assert.Contains("private", response.Headers.CacheControl?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);

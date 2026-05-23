@@ -302,7 +302,7 @@ export function ReadingPartBCBooklet({
             return text ? (
               <article key={text.id} className="rounded-md border border-border/60 bg-surface p-4">
                 <h3 className="text-base font-bold text-navy">{text.title}</h3>
-                <div className="prose prose-sm mt-3 max-w-none text-navy selection:bg-warning/30" dangerouslySetInnerHTML={{ __html: text.bodyHtml }} />
+                <div className="prose prose-sm mt-3 max-w-none text-navy selection:bg-warning/30" dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }} />
               </article>
             ) : null;
           })}
@@ -325,7 +325,7 @@ export function ReadingPaperMcqCircles({ question, value, locked, onChange }: { 
       {options.map((option, index) => {
         const letter = option.value || String.fromCharCode(65 + index);
         return (
-          <label key={`${question.id}-${letter}`} className="flex min-h-10 cursor-pointer items-center gap-3 rounded-md border border-border bg-background-light px-3 py-2 text-sm">
+          <label key={`${question.id}-${letter}`} className="flex min-h-10 cursor-pointer items-center gap-3 rounded-md border border-border bg-background-light px-3 py-2 text-sm transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
             <input className="sr-only" type="radio" name={question.id} disabled={locked} checked={value === letter} onChange={() => onChange(letter)} />
             <span className={cn('flex h-6 w-6 items-center justify-center rounded-full border-2 border-navy text-xs font-black', value === letter && 'bg-navy text-white')}>{letter}</span>
             <span className="leading-6 text-navy">{option.label}</span>

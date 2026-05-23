@@ -92,6 +92,10 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
     {
         var g = await GetGlobalAsync(ct);
         var o = string.IsNullOrWhiteSpace(userId) ? null : await GetUserOverrideAsync(userId, ct);
+        if (o?.ExpiresAt is DateTimeOffset expiresAt && expiresAt <= DateTimeOffset.UtcNow)
+        {
+            o = null;
+        }
 
         // Extra-time entitlement bumps timers.
         var extraPct = o?.ExtraTimeEntitlementPct ?? 0;

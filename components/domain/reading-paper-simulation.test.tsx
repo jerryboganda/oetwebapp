@@ -94,6 +94,37 @@ describe('ReadingPaperSimulation', () => {
     expect(screen.getByRole('heading', { name: /parts b and c combined booklet/i })).toBeInTheDocument();
     expect(screen.getByRole('timer', { name: /b\/c wall timer, 40:00 remaining/i })).toBeInTheDocument();
   });
+
+  it('sanitizes Part B and C passage HTML in paper view', async () => {
+    const user = userEvent.setup();
+    const structure = buildStructure();
+    structure.parts[1].texts[0].bodyHtml = '<p>Policy extract.</p><img src="x" onerror="alert(1)"><script>alert(2)</script>';
+    structure.parts[2].texts[0].bodyHtml = '<p>Journal extract.</p><a href="javascript:alert(3)">unsafe</a>';
+
+    const { container } = render(
+      <ReadingPaperSimulation
+        structure={structure}
+        answers={{}}
+        partADeadlineAt={partADeadlineAt}
+        partBCDeadlineAt={partBCDeadlineAt}
+        nowMs={baseNow + 20 * 60_000}
+        locked={false}
+        onAnswerChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Policy extract.')).toBeInTheDocument();
+    expect(container.innerHTML).not.toContain('<script');
+    expect(container.innerHTML).not.toContain('onerror');
+    expect(container.innerHTML).not.toContain('javascript:');
+
+    await user.click(screen.getByRole('button', { name: /next/i }));
+
+    expect(screen.getByText('Journal extract.')).toBeInTheDocument();
+    expect(container.innerHTML).not.toContain('<script');
+    expect(container.innerHTML).not.toContain('onerror');
+    expect(container.innerHTML).not.toContain('javascript:');
+  });
 });
 
 function buildStructure(): ReadingLearnerStructureDto {

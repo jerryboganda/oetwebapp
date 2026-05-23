@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { IconUser, IconUserPlus } from "@tabler/icons-react";
-import { AUTH_ROUTES } from "@/lib/auth/routes";
+import { appendAuthNextParam, AUTH_ROUTES } from "@/lib/auth/routes";
 import styles from "./auth-screen-shell.module.scss";
 
 interface AuthModeSwitchProps {
@@ -25,6 +26,9 @@ const switchItems = [
 ] as const;
 
 export function AuthModeSwitch({ mode }: AuthModeSwitchProps) {
+  const searchParams = useSearchParams();
+  const nextPath = searchParams?.get("next") ?? null;
+
   return (
     <div className={styles.switcher} aria-label="Authentication mode switch">
       {switchItems.map((item) => {
@@ -34,7 +38,7 @@ export function AuthModeSwitch({ mode }: AuthModeSwitchProps) {
         return (
           <Link
             key={item.key}
-            href={item.href}
+            href={appendAuthNextParam(item.href, nextPath)}
             className={`${styles.switcherLink} ${
               isActive ? styles.switcherActive : ""
             }`}

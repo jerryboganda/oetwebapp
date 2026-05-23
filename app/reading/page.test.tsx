@@ -100,7 +100,7 @@ describe('Reading page', () => {
   });
 
   it('renders targeted Reading next actions from safe drills', async () => {
-    mockGetReadingHome.mockResolvedValueOnce({
+    mockGetReadingHome.mockResolvedValue({
       intro: 'Reading practice uses full structured papers.',
       papers: [],
       activeAttempts: [],
@@ -136,6 +136,47 @@ describe('Reading page', () => {
       'href',
       '/reading/paper/paper-1/results?attemptId=attempt-1#part-breakdown',
     );
+  });
+
+  it('shows expired Reading attempts as fresh-start actions', async () => {
+    mockGetReadingHome.mockResolvedValueOnce({
+      intro: 'Reading practice uses full structured papers.',
+      papers: [],
+      activeAttempts: [
+        {
+          attemptId: 'attempt-expired',
+          paperId: 'paper-1',
+          paperTitle: 'Reading Sample Paper 1',
+          status: 'InProgress',
+          startedAt: '2026-05-12T10:00:00Z',
+          deadlineAt: '2026-05-12T11:00:00Z',
+          partADeadlineAt: '2026-05-12T10:15:00Z',
+          partBCDeadlineAt: '2026-05-12T11:00:00Z',
+          answeredCount: 12,
+          totalQuestions: 42,
+          canResume: false,
+          route: '/reading/paper/paper-1/player?attemptId=attempt-expired',
+        },
+      ],
+      recentResults: [],
+      policy: {
+        partATimerMinutes: 15,
+        partBCTimerMinutes: 45,
+        allowPausingAttempt: false,
+        allowResumeAfterExpiry: false,
+        showCorrectAnswerOnReview: true,
+        showExplanationsAfterSubmit: true,
+        allowPaperReadingMode: true,
+      },
+      safeDrills: [],
+    });
+
+    render(<ReadingPage />);
+
+    expect(await screen.findAllByText('Expired')).toHaveLength(2);
+    expect(screen.getByText(/past its answer window/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /start fresh paper/i })).toHaveAttribute('href', '/reading/paper/paper-1');
+    expect(screen.queryByRole('link', { name: /resume attempt/i })).not.toBeInTheDocument();
   });
 
   it('uses scaled score rather than raw score for recent Reading evidence', async () => {

@@ -261,7 +261,24 @@ public record AdminBillingPlanCreateRequest(
     string? DiagnosticMockEntitlement = null,
     string? Status = null,
     string? IncludedSubtestsJson = null,
-    string? EntitlementsJson = null);
+    string? EntitlementsJson = null,
+    // ── OET 2026 catalog fields (optional — backward compatible) ──
+    decimal? OriginalPriceGbp = null,
+    int? AccessDurationDays = null,
+    bool? WritingAddonsEnabled = null,
+    bool? SpeakingAddonsEnabled = null,
+    bool? TutorBookDiscountEnabled = null,
+    string? Profession = null,
+    string? ProductCategory = null,
+    string? DashboardModulesJson = null,
+    int? BundledWritingAssessments = null,
+    int? BundledSpeakingSessions = null,
+    int? BundledAiCredits = null,
+    bool? BundledTutorBook = null,
+    bool? BundledBasicEnglish = null,
+    bool? IsDraft = null,
+    bool? ExtensionAllowed = null,
+    bool? RecallUpdatesEnabled = null);
 
 public record AdminBillingPlanUpdateRequest(
     string Code,
@@ -279,7 +296,23 @@ public record AdminBillingPlanUpdateRequest(
     string? DiagnosticMockEntitlement = null,
     string? Status = null,
     string? IncludedSubtestsJson = null,
-    string? EntitlementsJson = null);
+    string? EntitlementsJson = null,
+    decimal? OriginalPriceGbp = null,
+    int? AccessDurationDays = null,
+    bool? WritingAddonsEnabled = null,
+    bool? SpeakingAddonsEnabled = null,
+    bool? TutorBookDiscountEnabled = null,
+    string? Profession = null,
+    string? ProductCategory = null,
+    string? DashboardModulesJson = null,
+    int? BundledWritingAssessments = null,
+    int? BundledSpeakingSessions = null,
+    int? BundledAiCredits = null,
+    bool? BundledTutorBook = null,
+    bool? BundledBasicEnglish = null,
+    bool? IsDraft = null,
+    bool? ExtensionAllowed = null,
+    bool? RecallUpdatesEnabled = null);
 
 public record AdminBillingAddOnCreateRequest(
     string Code,
@@ -298,7 +331,13 @@ public record AdminBillingAddOnCreateRequest(
     int? MaxQuantity,
     string? Status = null,
     string? CompatiblePlanCodesJson = null,
-    string? GrantEntitlementsJson = null);
+    string? GrantEntitlementsJson = null,
+    decimal? OriginalPriceGbp = null,
+    string? AddonKind = null,
+    bool? RequiresEligibleParent = null,
+    string? EligibilityFlag = null,
+    int? LettersGranted = null,
+    int? SessionsGranted = null);
 
 public record AdminBillingAddOnUpdateRequest(
     string Code,
@@ -317,7 +356,13 @@ public record AdminBillingAddOnUpdateRequest(
     int? MaxQuantity,
     string? Status = null,
     string? CompatiblePlanCodesJson = null,
-    string? GrantEntitlementsJson = null);
+    string? GrantEntitlementsJson = null,
+    decimal? OriginalPriceGbp = null,
+    string? AddonKind = null,
+    bool? RequiresEligibleParent = null,
+    string? EligibilityFlag = null,
+    int? LettersGranted = null,
+    int? SessionsGranted = null);
 
 public record AdminBillingCouponCreateRequest(
     string Code,

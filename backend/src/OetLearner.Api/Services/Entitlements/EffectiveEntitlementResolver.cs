@@ -25,7 +25,21 @@ public sealed record EffectiveEntitlementSnapshot(
     string? AiQuotaPlanCodeSource,
     IReadOnlyList<string> ActiveAddOnCodes,
     bool IsFrozen,
-    IReadOnlyList<string> Trace);
+    IReadOnlyList<string> Trace)
+{
+    // ── OET 2026 catalog extensions ─────────────────────────────────────────
+    public IReadOnlyList<string> EnabledModules { get; init; } = Array.Empty<string>();
+    public bool WritingAddonsEnabled { get; init; }
+    public bool SpeakingAddonsEnabled { get; init; }
+    public bool TutorBookDiscountEnabled { get; init; }
+    public int WritingAssessmentsRemaining { get; init; }
+    public int SpeakingSessionsRemaining { get; init; }
+    public int AiCreditsRemaining { get; init; }
+    public bool TutorBookUnlocked { get; init; }
+    public bool BasicEnglishUnlocked { get; init; }
+    public DateTimeOffset? ExpiresAt { get; init; }
+    public string? ProductCategory { get; init; }
+}
 
 public sealed class EffectiveEntitlementResolver(
     LearnerDbContext db,
@@ -149,7 +163,7 @@ public sealed class EffectiveEntitlementResolver(
             trace.Add("freeze.active");
         }
 
-        return new EffectiveEntitlementSnapshot(
+        var snapshot = new EffectiveEntitlementSnapshot(
             userId,
             HasEligibleSubscription: eligible,
             IsTrial: isTrial,
@@ -164,6 +178,50 @@ public sealed class EffectiveEntitlementResolver(
             ActiveAddOnCodes: addOnCodes,
             IsFrozen: isFrozen,
             Trace: trace);
+
+        if (eligible && plan is not null)
+        {
+            snapshot = snapshot with
+            {
+                EnabledModules = ParseDashboardModules(plan.DashboardModulesJson),
+                WritingAddonsEnabled = plan.WritingAddonsEnabled,
+                SpeakingAddonsEnabled = plan.SpeakingAddonsEnabled,
+                TutorBookDiscountEnabled = plan.TutorBookDiscountEnabled,
+                WritingAssessmentsRemaining = subscription.WritingAssessmentsRemaining,
+                SpeakingSessionsRemaining = subscription.SpeakingSessionsRemaining,
+                AiCreditsRemaining = subscription.AiCreditsRemaining,
+                TutorBookUnlocked = subscription.TutorBookUnlocked,
+                BasicEnglishUnlocked = subscription.BasicEnglishUnlocked,
+                ExpiresAt = subscription.ExpiresAt,
+                ProductCategory = string.IsNullOrEmpty(plan.ProductCategory) ? null : plan.ProductCategory,
+            };
+        }
+
+        return snapshot;
+    }
+
+    private static IReadOnlyList<string> ParseDashboardModules(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return Array.Empty<string>();
+            var list = new List<string>(doc.RootElement.GetArrayLength());
+            foreach (var element in doc.RootElement.EnumerateArray())
+            {
+                if (element.ValueKind == JsonValueKind.String)
+                {
+                    var value = element.GetString();
+                    if (!string.IsNullOrWhiteSpace(value)) list.Add(value.Trim());
+                }
+            }
+            return list;
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<string>();
+        }
     }
 
     private static bool IsValidJsonObject(string json)

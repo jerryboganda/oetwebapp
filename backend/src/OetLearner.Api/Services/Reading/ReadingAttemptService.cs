@@ -149,9 +149,13 @@ public sealed class ReadingAttemptService(
         }
 
         var isPracticeMode = mode != ReadingAttemptMode.Exam;
+        var globalPolicy = await policyService.GetGlobalAsync(ct);
 
         var paper = await db.ContentPapers.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == paperId && p.Status == ContentStatus.Published, ct)
+            .FirstOrDefaultAsync(p => p.Id == paperId
+                && p.SubtestCode == "reading"
+                && (p.Status == ContentStatus.Published
+                    || (globalPolicy.AllowAttemptOnArchivedPaper && p.Status == ContentStatus.Archived)), ct)
             ?? throw new InvalidOperationException("Paper not found.");
 
         if (!await CanLearnerSeePaperAsync(userId, paper, ct))
@@ -164,7 +168,6 @@ public sealed class ReadingAttemptService(
         await entitlements.RequireAccessAsync(userId, paper, ct);
 
         var policy = await policyService.ResolveForUserAsync(userId, ct);
-        var globalPolicy = await policyService.GetGlobalAsync(ct);
 
         // Gate 1: archived paper
         if (paper.Status == ContentStatus.Archived && !globalPolicy.AllowAttemptOnArchivedPaper)
@@ -172,7 +175,7 @@ public sealed class ReadingAttemptService(
 
         // Gate 2: user-level block
         var userOverride = await policyService.GetUserOverrideAsync(userId, ct);
-        if (userOverride is { BlockAttempts: true })
+        if (IsActiveUserOverride(userOverride) && userOverride is { BlockAttempts: true })
             throw new InvalidOperationException(
                 userOverride.Reason ?? "Your account is blocked from starting Reading attempts.");
 
@@ -576,12 +579,14 @@ public sealed class ReadingAttemptService(
         string? idempotencyKey = null,
         CancellationToken ct = default)
     {
-        // Build deterministic key when caller did not pass one. The header
-        // path lets retries from a different tab / process collide on the
-        // same row and skip re-grading.
-        var key = !string.IsNullOrWhiteSpace(idempotencyKey)
-            ? idempotencyKey!.Trim()
-            : $"{userId}:{attemptId}";
+        var attempt = await db.ReadingAttempts
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
+            ?? throw new InvalidOperationException("Attempt not found.");
+
+        // Build the replay key only after ownership is proven. Client keys
+        // are namespaced by user + attempt so a guessed/reused header cannot
+        // return another learner's cached grading result.
+        var key = BuildSubmitIdempotencyKey(userId, attemptId, idempotencyKey);
 
         // Fast path — cached grading result from a previous successful submit.
         var existingRecord = await db.IdempotencyRecords.AsNoTracking()
@@ -595,10 +600,6 @@ public sealed class ReadingAttemptService(
             logger.LogWarning(
                 "Reading submit idempotency record {Key} unreadable; re-grading.", key);
         }
-
-        var attempt = await db.ReadingAttempts
-            .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
-            ?? throw new InvalidOperationException("Attempt not found.");
 
         if (attempt.Status is ReadingAttemptStatus.Submitted)
         {
@@ -686,6 +687,21 @@ public sealed class ReadingAttemptService(
             return null;
         }
     }
+
+    private static string BuildSubmitIdempotencyKey(
+        string userId,
+        string attemptId,
+        string? callerSuppliedKey)
+    {
+        var suffix = string.IsNullOrWhiteSpace(callerSuppliedKey)
+            ? "default"
+            : callerSuppliedKey.Trim();
+        return $"{userId}:{attemptId}:{suffix}";
+    }
+
+    private static bool IsActiveUserOverride(ReadingUserPolicyOverride? userOverride)
+        => userOverride is not null
+            && (userOverride.ExpiresAt is null || userOverride.ExpiresAt > DateTimeOffset.UtcNow);
 
     private static DateTimeOffset ResolveAnswerWindowDeadline(
         ReadingAttempt attempt,

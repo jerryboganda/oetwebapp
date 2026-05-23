@@ -22,7 +22,7 @@ import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { PasswordField } from '@/components/auth/password-field';
 import { buildExternalAuthStartHref, registerLearner } from '@/lib/auth-client';
 import { captureAttribution, readAttribution } from '@/lib/attribution';
-import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
+import { appendAuthNextParam, AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
 import {
   signupPayloadSchema,
   type SignupPayloadFormValues,
@@ -69,6 +69,7 @@ export function RegisterForm() {
   const externalEmail = searchParams?.get('email') ?? '';
   const externalFirstName = searchParams?.get('firstName') ?? '';
   const externalLastName = searchParams?.get('lastName') ?? '';
+  const signInHref = appendAuthNextParam(flowLinks.primary, nextPath);
 
   const socials = useMemo(
     () =>
@@ -269,7 +270,7 @@ export function RegisterForm() {
       footer={
         <>
           Already have an account?{' '}
-          <Link className={styles.link} href={flowLinks.primary}>
+          <Link className={styles.link} href={signInHref}>
             Sign in
           </Link>
         </>
@@ -512,7 +513,7 @@ export function RegisterForm() {
               Back
             </button>
           ) : (
-            <Link href={flowLinks.primary} className={styles.secondaryButton}>
+            <Link href={signInHref} className={styles.secondaryButton}>
               Sign in instead
             </Link>
           )}

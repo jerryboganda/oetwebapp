@@ -48,10 +48,10 @@ public static class TutorBookEndpoints
             .FirstOrDefaultAsync(ct);
         if (subscription is null) return TypedResults.Forbid();
 
-        var user = await db.ApplicationUserAccounts.AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == userId, ct);
-        var buyerName = user?.DisplayName ?? user?.Email ?? "OET Learner";
-        var buyerEmail = user?.Email ?? "learner@oetwithdrhesham.co.uk";
+        var learner = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var account = await db.ApplicationUserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var buyerName = learner?.DisplayName ?? account?.Email ?? "OET Learner";
+        var buyerEmail = learner?.Email ?? account?.Email ?? "learner@oetwithdrhesham.co.uk";
 
         var (bytes, filename) = await watermark.GetWatermarkedAsync(buyerName, buyerEmail, subscription.StartedAt, ct);
         return TypedResults.File(bytes, "application/pdf", filename);

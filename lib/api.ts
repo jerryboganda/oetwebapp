@@ -1638,7 +1638,7 @@ export async function fetchStudyPlan(): Promise<StudyPlanTask[]> {
     section: item.section,
     contentId: item.contentId ?? undefined,
     type: item.itemType ?? undefined,
-    route: typeof item.route === 'string' ? item.route : undefined,
+    route: typeof item.route === 'string' ? normalizeAppRoute(item.route) : undefined,
   }));
 }
 

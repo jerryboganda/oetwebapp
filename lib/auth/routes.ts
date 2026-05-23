@@ -52,3 +52,17 @@ export function getAuthFlowLinks(screen: AuthScreenKey): {
       };
   }
 }
+
+export function appendAuthNextParam(href: string, nextPath?: string | null): string {
+  const normalizedNext = nextPath?.trim();
+  if (!normalizedNext || !normalizedNext.startsWith('/') || normalizedNext.startsWith('//')) {
+    return href;
+  }
+
+  const [pathname, query = ''] = href.split('?');
+  const params = new URLSearchParams(query);
+  params.set('next', normalizedNext);
+
+  const nextQuery = params.toString();
+  return nextQuery ? `${pathname}?${nextQuery}` : pathname;
+}

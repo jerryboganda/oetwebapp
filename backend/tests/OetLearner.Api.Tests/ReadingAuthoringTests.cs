@@ -1903,6 +1903,26 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Start_ignores_expired_user_override_BlockAttempts_true()
+    {
+        var (db, structure, policy, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        await policy.UpsertUserOverrideAsync("u1", new ReadingUserPolicyOverride
+        {
+            UserId = "u1", BlockAttempts = true, Reason = "Expired hold",
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1), UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1),
+        }, "admin", default);
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+
+        Assert.False(string.IsNullOrWhiteSpace(started.AttemptId));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Submit_is_idempotent_on_replay()
     {
         var (db, structure, _, _, attemptSvc) = Build();
@@ -1948,9 +1968,9 @@ public class ReadingAuthoringTests
     [Fact]
     public async Task Submit_honours_caller_supplied_idempotency_key()
     {
-        // Phase 1 closure — a caller-supplied Idempotency-Key header takes
-        // precedence over the deterministic key so retries from different
-        // user-agent generations can still collide on the cache row.
+        // Phase 1 closure — a caller-supplied Idempotency-Key header is still
+        // honoured, but it is namespaced by user + attempt to avoid cross-user
+        // cache collisions.
         var (db, structure, _, _, attemptSvc) = Build();
         await SeedPaperAsync(db, "p1");
         await structure.EnsureCanonicalPartsAsync("p1", default);
@@ -1962,10 +1982,38 @@ public class ReadingAuthoringTests
         var second = await attemptSvc.SubmitAsync("u1", started.AttemptId, customKey, default);
 
         Assert.Equal(first.RawScore, second.RawScore);
+        var expectedKey = $"u1:{started.AttemptId}:{customKey}";
         var records = await db.IdempotencyRecords
-            .Where(r => r.Scope == "reading-submit" && r.Key == customKey)
+            .Where(r => r.Scope == "reading-submit" && r.Key == expectedKey)
             .ToListAsync();
         Assert.Single(records);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submit_namespaces_caller_supplied_idempotency_key_by_attempt_owner()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var alice = await attemptSvc.StartAsync("alice", "p1", default);
+        var bob = await attemptSvc.StartAsync("bob", "p1", default);
+        var customKey = "same-browser-retry-key";
+
+        await attemptSvc.SubmitAsync("alice", alice.AttemptId, customKey, default);
+        await attemptSvc.SubmitAsync("bob", bob.AttemptId, customKey, default);
+
+        var keys = await db.IdempotencyRecords
+            .Where(r => r.Scope == "reading-submit")
+            .Select(r => r.Key)
+            .OrderBy(k => k)
+            .ToListAsync();
+
+        Assert.Contains($"alice:{alice.AttemptId}:{customKey}", keys);
+        Assert.Contains($"bob:{bob.AttemptId}:{customKey}", keys);
+        Assert.Equal(2, keys.Count);
         await db.DisposeAsync();
     }
 
@@ -2338,6 +2386,84 @@ public class ReadingAuthoringTests
         attempt.DeadlineAt = DateTimeOffset.UtcNow.AddHours(1);
         await db.SaveChangesAsync();
         await attemptSvc.ResumePartABreakAsync(userId, attemptId, default);
+    }
+
+    private static async Task AnswerAllReadingQuestionsAsync(
+        LearnerDbContext db,
+        ReadingAttemptService attemptSvc,
+        string userId,
+        string attemptId,
+        bool correct)
+    {
+        var questions = await db.ReadingQuestions
+            .AsNoTracking()
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1")
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
+            .ToListAsync();
+
+        foreach (var question in questions.Where(q => q.Part!.PartCode == ReadingPartCode.A))
+        {
+            await attemptSvc.SaveAnswerAsync(userId, attemptId, question.Id, correct ? question.CorrectAnswerJson : "\"WRONG\"", default);
+        }
+
+        await ResumeExamPartBCAsync(db, attemptSvc, userId, attemptId);
+
+        foreach (var question in questions.Where(q => q.Part!.PartCode != ReadingPartCode.A))
+        {
+            await attemptSvc.SaveAnswerAsync(userId, attemptId, question.Id, correct ? question.CorrectAnswerJson : "\"WRONG\"", default);
+        }
+    }
+
+    private static void SeedReadingMockSection(LearnerDbContext db, string userId, int scaledScore)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var mockAttempt = new MockAttempt
+        {
+            Id = $"mock-{Guid.NewGuid():N}",
+            UserId = userId,
+            MockBundleId = "bundle-reading-pathway",
+            MockType = "full",
+            State = AttemptState.Completed,
+            StartedAt = now.AddHours(-1),
+            SubmittedAt = now.AddMinutes(-5),
+            CompletedAt = now,
+            ConfigJson = "{}",
+        };
+
+        var bundleSection = new MockBundleSection
+        {
+            Id = $"bundle-section-{Guid.NewGuid():N}",
+            MockBundleId = "bundle-reading-pathway",
+            SectionOrder = 1,
+            SubtestCode = "reading",
+            ContentPaperId = "p1",
+            TimeLimitMinutes = 60,
+            CreatedAt = now,
+        };
+
+        db.MockAttempts.Add(mockAttempt);
+        db.MockBundleSections.Add(bundleSection);
+        db.MockSectionAttempts.Add(new MockSectionAttempt
+        {
+            Id = $"mock-section-{Guid.NewGuid():N}",
+            MockAttemptId = mockAttempt.Id,
+            MockAttempt = mockAttempt,
+            MockBundleSectionId = bundleSection.Id,
+            MockBundleSection = bundleSection,
+            SubtestCode = "reading",
+            ContentPaperId = "p1",
+            LaunchRoute = "/mocks",
+            State = AttemptState.Completed,
+            RawScore = 30,
+            RawScoreMax = 42,
+            ScaledScore = scaledScore,
+            Grade = scaledScore >= OetScoring.ScaledPassGradeB ? "B" : "C+",
+            StartedAt = now.AddHours(-1),
+            SubmittedAt = now.AddMinutes(-5),
+            CompletedAt = now,
+        });
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -3173,6 +3299,55 @@ public class ReadingAuthoringTests
         await db.DisposeAsync();
     }
 
+    [Fact]
+    public async Task Pathway_uses_scored_reading_mock_section_for_exam_ready()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var run = await attemptSvc.StartAsync("u1", "p1", default);
+        await AnswerAllReadingQuestionsAsync(db, attemptSvc, "u1", run.AttemptId, correct: true);
+        await attemptSvc.SubmitAsync("u1", run.AttemptId, default);
+        SeedReadingMockSection(db, "u1", scaledScore: OetScoring.ScaledPassGradeB);
+        await db.SaveChangesAsync();
+
+        var pathway = new OetLearner.Api.Services.Reading.ReadingPathwayService(db);
+        var snapshot = await pathway.GetPathwayAsync("u1", default);
+
+        Assert.Equal("exam_ready", snapshot.Stage);
+        Assert.Equal("book_exam", snapshot.NextAction.Kind);
+        Assert.Equal(1, snapshot.SubmittedReadingMockAttempts);
+        Assert.Contains(snapshot.Milestones, m => m.Code == "first_mock_pass" && m.Achieved);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Pathway_routes_to_review_when_reading_mock_section_does_not_pass()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var run = await attemptSvc.StartAsync("u1", "p1", default);
+        await AnswerAllReadingQuestionsAsync(db, attemptSvc, "u1", run.AttemptId, correct: true);
+        await attemptSvc.SubmitAsync("u1", run.AttemptId, default);
+        SeedReadingMockSection(db, "u1", scaledScore: OetScoring.ScaledPassGradeB - 1);
+        await db.SaveChangesAsync();
+
+        var pathway = new OetLearner.Api.Services.Reading.ReadingPathwayService(db);
+        var snapshot = await pathway.GetPathwayAsync("u1", default);
+
+        Assert.Equal("drilling", snapshot.Stage);
+        Assert.Equal("review_results", snapshot.NextAction.Kind);
+        Assert.Equal("/mocks", snapshot.NextAction.Route);
+        Assert.Equal(1, snapshot.SubmittedReadingMockAttempts);
+        Assert.Contains(snapshot.Milestones, m => m.Code == "first_mock_pass" && !m.Achieved);
+        await db.DisposeAsync();
+    }
+
     private sealed class RawPayloadReadingExtractionAi : IReadingExtractionAi
     {
         public async Task<ReadingExtractionAiResult> ExtractAsync(string paperId, string? mediaAssetId, CancellationToken ct)
@@ -3222,7 +3397,7 @@ public class ReadingAuthoringTests
         // should be exactly one cache record for the (scope, key) pair, even
         // though we called Submit twice.
         var cached = await db.IdempotencyRecords
-            .Where(r => r.Scope == "reading-submit" && r.Key == "idem-key-1")
+            .Where(r => r.Scope == "reading-submit" && r.Key == $"user-1:{started.AttemptId}:idem-key-1")
             .CountAsync();
         Assert.Equal(1, cached);
 

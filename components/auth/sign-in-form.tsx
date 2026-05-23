@@ -17,7 +17,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { buildExternalAuthStartHref } from '@/lib/auth-client';
 import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
 import { resolveAuthenticatedDestination } from '@/lib/auth-routes';
-import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
+import { appendAuthNextParam, AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 
 interface SignInFormProps {
@@ -68,6 +68,8 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
   const { signIn } = useAuth();
   const { externalAuthProviders = [] } = useSignupCatalog();
   const flowLinks = getAuthFlowLinks('signIn');
+  const signUpHref = appendAuthNextParam(flowLinks.primary, nextHref);
+  const forgotPasswordHref = appendAuthNextParam(flowLinks.secondary, nextHref);
   const [email, setEmail] = useState(initialEmail ?? '');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -174,7 +176,7 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
       footer={
         <>
           New here?{' '}
-          <Link className={styles.link} href={flowLinks.primary}>
+          <Link className={styles.link} href={signUpHref}>
             Create an account
           </Link>
         </>
@@ -237,7 +239,7 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
             <span>Remember Me</span>
           </label>
 
-          <Link className={styles.link} href={flowLinks.secondary}>
+          <Link className={styles.link} href={forgotPasswordHref}>
             Forgot password?
           </Link>
         </div>

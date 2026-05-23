@@ -315,31 +315,36 @@ export default function ReadingHome() {
 }
 
 function ActiveAttemptsSection({ attempts }: { attempts: ReadingHomeAttemptDto[] }) {
+  const resumableAttempts = attempts.filter((attempt) => attempt.canResume);
+  const expiredAttempts = attempts.filter((attempt) => !attempt.canResume);
+
   return (
     <section>
       <LearnerSurfaceSectionHeader
         eyebrow="Continue"
-        title={attempts.length > 1 ? 'Active Reading attempts' : 'Active Reading attempt'}
-        description="Resume your saved work from the structured player."
+        title={attempts.length > 1 ? 'Reading attempts needing attention' : 'Reading attempt needing attention'}
+        description="Resume saved work while the timer window is open, or resolve expired attempts with a fresh paper."
         className="mb-5"
       />
       <div className={`grid grid-cols-1 gap-6 ${attempts.length > 1 ? 'md:grid-cols-2' : ''}`}>
-        {attempts.map((attempt, index) => {
+        {[...resumableAttempts, ...expiredAttempts].map((attempt, index) => {
           const card: LearnerSurfaceCardModel = {
             kind: 'status',
             sourceType: 'backend_summary',
-            accent: 'emerald',
-            eyebrow: 'Resume',
-            eyebrowIcon: PlayCircle,
+            accent: attempt.canResume ? 'emerald' : 'amber',
+            eyebrow: attempt.canResume ? 'Resume' : 'Expired',
+            eyebrowIcon: attempt.canResume ? PlayCircle : Clock,
             title: attempt.paperTitle,
-            description: 'An in-progress Reading attempt is open. Resume it before the timer window closes.',
+            description: attempt.canResume
+              ? 'An in-progress Reading attempt is open. Resume it before the timer window closes.'
+              : 'This attempt is past its answer window. Start a fresh attempt so the result evidence stays exam-faithful.',
             metaItems: [
               { icon: ListChecks, label: `${attempt.answeredCount}/${attempt.totalQuestions} answered` },
-              { icon: Clock, label: attempt.deadlineAt ? `Ends ${formatTime(attempt.deadlineAt)}` : 'Timer active' },
+              { icon: Clock, label: attempt.deadlineAt ? `${attempt.canResume ? 'Ends' : 'Ended'} ${formatTime(attempt.deadlineAt)}` : 'Timer unavailable' },
             ],
             primaryAction: {
-              label: 'Resume attempt',
-              href: attempt.route,
+              label: attempt.canResume ? 'Resume attempt' : 'Start fresh paper',
+              href: attempt.canResume ? attempt.route : `/reading/paper/${attempt.paperId}`,
             },
             statusLabel: attempt.canResume ? 'In progress' : 'Expired',
           };
