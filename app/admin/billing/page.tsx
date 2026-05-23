@@ -3139,7 +3139,7 @@ export default function BillingPage() {
           <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-900/40 dark:bg-amber-900/10">
             <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">OET 2026 catalog fields</h4>
             <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300/80">
-              Controls "was £X" strikethrough, parent-eligibility enforcement, and per-purchase entitlement increments.
+              Controls &quot;was £X&quot; strikethrough, parent-eligibility enforcement, and per-purchase entitlement increments.
             </p>
             <div className="mt-3 grid gap-4 md:grid-cols-3">
               <Input label="Original price £ (was)" type="number" min={0} step="0.01" value={addOnForm.originalPriceGbp} onChange={(event) => setAddOnForm((current) => ({ ...current, originalPriceGbp: event.target.value }))} hint="Blank = no strikethrough." />
