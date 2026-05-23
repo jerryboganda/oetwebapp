@@ -181,7 +181,6 @@ public static class MediaEndpoints
         var isInUse = await db.ContentPaperAssets.AnyAsync(link => link.MediaAssetId == asset.Id, ct)
             || await db.WritingAttemptAssets.AnyAsync(link => link.MediaAssetId == asset.Id, ct)
             || await db.ReviewVoiceNotes.AnyAsync(note => note.MediaAssetId == asset.Id, ct)
-            || await db.RecallDocuments.AnyAsync(document => document.MediaAssetId == asset.Id, ct)
             || await db.RulebookVersions.AnyAsync(rulebook => rulebook.ReferencePdfAssetId == asset.Id, ct)
             || await db.ResultTemplateAssets.AnyAsync(template => template.MediaAssetId == asset.Id, ct)
             || await db.SpeakingSharedResources.AnyAsync(resource => resource.MediaAssetId == asset.Id, ct);
