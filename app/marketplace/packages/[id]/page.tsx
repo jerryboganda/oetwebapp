@@ -109,7 +109,7 @@ export default function PackageDetailPage() {
       <section className="px-4 py-14">
         <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <h2 className="text-xl font-bold">What you'll get</h2>
+            <h2 className="text-xl font-bold">What you&apos;ll get</h2>
             <ul className="mt-4 space-y-2">
               {plan.dashboardModules.map((module) => (
                 <li key={module} className="flex items-start gap-2 text-sm">
