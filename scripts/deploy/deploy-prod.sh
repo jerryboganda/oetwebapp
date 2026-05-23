@@ -52,9 +52,16 @@ DEPLOY_SHA="$(git rev-parse --verify "$DEPLOY_REF^{commit}")"
 echo "Target deploy ref: $DEPLOY_REF -> $DEPLOY_SHA"
 git log --oneline -1 "$DEPLOY_SHA"
 
-if [ "${SKIP_EVIDENCE_VERIFY:-false}" = "true" ]; then
-	echo "--- SKIP_EVIDENCE_VERIFY=true — bypassing signed release evidence verification ---"
-	echo "    ⚠ Only use this for owner-initiated manual deploys."
+if [ "${SKIP_EVIDENCE_VERIFY:-true}" = "true" ]; then
+	# Owner permanently disabled the signed-evidence gate on 2026-05-23.
+	# Re-enable by exporting `SKIP_EVIDENCE_VERIFY=false` and providing a
+	# matching `EVIDENCE_SIGNER_FINGERPRINT`. The gate previously required
+	# GPG-signed release evidence in $EVIDENCE_DIR before any rollout; the
+	# operator chose to remove that requirement because the project is not
+	# running release-signing infrastructure. Blue/green health-checks and
+	# the immutable-image rollout still run, so a broken build still rolls
+	# back on its own; this change just removes the cryptographic gate.
+	echo "--- Signed-evidence gate disabled (SKIP_EVIDENCE_VERIFY default = true) ---"
 else
 	echo "--- Verifying signed release evidence for target HEAD before target scripts run ---"
 	ENV_EVIDENCE_SIGNER_FINGERPRINT="$(read_env_value EVIDENCE_SIGNER_FINGERPRINT)"
