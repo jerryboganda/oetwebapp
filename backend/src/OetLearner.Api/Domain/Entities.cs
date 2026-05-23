@@ -734,6 +734,14 @@ public class Subscription
 
     /// <summary>Phase 5: while in dunning grace, access continues until this timestamp.</summary>
     public DateTimeOffset? GracePeriodUntil { get; set; }
+
+    // ── OET 2026 catalog entitlement counters (Wave 1 — 27-SKU portfolio) ───────────
+    public DateTimeOffset? ExpiresAt { get; set; }
+    public int WritingAssessmentsRemaining { get; set; }
+    public int SpeakingSessionsRemaining { get; set; }
+    public int AiCreditsRemaining { get; set; }
+    public bool TutorBookUnlocked { get; set; }
+    public bool BasicEnglishUnlocked { get; set; }
 }
 
 public class Wallet

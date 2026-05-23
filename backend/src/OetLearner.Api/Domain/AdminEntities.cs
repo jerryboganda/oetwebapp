@@ -361,6 +361,31 @@ public class BillingPlan
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    // ── OET 2026 catalog fields (Wave 1 — 27-SKU portfolio) ─────────────────────────
+    public decimal? OriginalPriceGbp { get; set; }
+    public int AccessDurationDays { get; set; } = 180;
+    public bool WritingAddonsEnabled { get; set; }
+    public bool SpeakingAddonsEnabled { get; set; }
+    public bool TutorBookDiscountEnabled { get; set; }
+
+    [MaxLength(32)]
+    public string Profession { get; set; } = "all";
+
+    [MaxLength(32)]
+    public string ProductCategory { get; set; } = string.Empty;
+
+    [MaxLength(2048)]
+    public string DashboardModulesJson { get; set; } = "[]";
+
+    public int BundledWritingAssessments { get; set; }
+    public int BundledSpeakingSessions { get; set; }
+    public int BundledAiCredits { get; set; }
+    public bool BundledTutorBook { get; set; }
+    public bool BundledBasicEnglish { get; set; }
+    public bool IsDraft { get; set; }
+    public bool ExtensionAllowed { get; set; } = true;
+    public bool RecallUpdatesEnabled { get; set; }
 }
 
 /// <summary>Immutable billing plan catalog snapshot.</summary>
@@ -421,6 +446,31 @@ public class BillingPlanVersion
     public string? CreatedByAdminName { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    // ── OET 2026 catalog fields (immutable snapshot mirrors the live entity) ────────
+    public decimal? OriginalPriceGbp { get; set; }
+    public int AccessDurationDays { get; set; } = 180;
+    public bool WritingAddonsEnabled { get; set; }
+    public bool SpeakingAddonsEnabled { get; set; }
+    public bool TutorBookDiscountEnabled { get; set; }
+
+    [MaxLength(32)]
+    public string Profession { get; set; } = "all";
+
+    [MaxLength(32)]
+    public string ProductCategory { get; set; } = string.Empty;
+
+    [MaxLength(2048)]
+    public string DashboardModulesJson { get; set; } = "[]";
+
+    public int BundledWritingAssessments { get; set; }
+    public int BundledSpeakingSessions { get; set; }
+    public int BundledAiCredits { get; set; }
+    public bool BundledTutorBook { get; set; }
+    public bool BundledBasicEnglish { get; set; }
+    public bool IsDraft { get; set; }
+    public bool ExtensionAllowed { get; set; } = true;
+    public bool RecallUpdatesEnabled { get; set; }
 }
 
 /// <summary>Admin-initiated AI content generation job.</summary>
