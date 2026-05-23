@@ -222,6 +222,15 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/study-plan-templates/:id/preview': [AdminPermission.ContentRead],
   '/admin/study-plan-templates/new': [AdminPermission.ContentWrite],
   '/admin/learners/:userId/study-plan': [AdminPermission.UsersRead],
+  '/admin/learners/:param/study-plan': [AdminPermission.UsersRead],
+  // Newly added admin surfaces — explicit permission mapping for route-permission test
+  '/admin/ai-analytics': [AdminPermission.AiConfig],
+  '/admin/fx-rates': [AdminPermission.BillingRead],
+  '/admin/pricing-experiments': [AdminPermission.BillingRead],
+  '/admin/readiness': [AdminPermission.SystemAdmin],
+  '/admin/readiness/:param': [AdminPermission.SystemAdmin],
+  '/admin/readiness/metrics': [AdminPermission.SystemAdmin],
+  '/admin/voice-design': [AdminPermission.AiConfig],
 };
 
 function normalizeAdminPath(pathname: string | null | undefined): string {
