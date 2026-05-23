@@ -269,7 +269,7 @@ public sealed class ListeningLearnerService(
             featuredTasks,
             activeAttempts,
             recentResults,
-            partCollections = BuildPartCollections(paperDtos, featuredTasks, papers.FirstOrDefault()?.Id),
+            partCollections = BuildPartCollections(paperDtos, featuredTasks, papers.FirstOrDefault()?.Id ?? legacyTasks.FirstOrDefault()?.Id),
             transcriptBackedReview = new
             {
                 title = "Transcript-backed review",
