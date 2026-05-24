@@ -169,22 +169,20 @@ public sealed record ListeningAuthoredSpeaker(
 
 public sealed class ListeningAuthoringService(
     LearnerDbContext db,
-    IListeningBackfillService? backfill = null) : IListeningAuthoringService
+    IListeningBackfillService backfill) : IListeningAuthoringService
 {
     private const string QuestionsKey = "listeningQuestions";
 
     /// <summary>
     /// Gap W4: when relational ListeningQuestion rows already exist for a
     /// paper, re-run the backfill so the projected rows track the JSON blob
-    /// after every Approve / Replace / Patch. No-op when the optional
-    /// dependency is not wired (tests without a backfill mock) or when no
-    /// relational rows exist yet. If learner attempts already exist, backfill
-    /// refuses to rewrite relational rows; surface that as a conflict so JSON
-    /// and relational runtime state cannot silently diverge.
+    /// after every Approve / Replace / Patch. No-op when no relational rows
+    /// exist yet. If learner attempts already exist, backfill refuses to
+    /// rewrite relational rows; surface that as a conflict so JSON and
+    /// relational runtime state cannot silently diverge.
     /// </summary>
     private async Task ResyncRelationalIfNeededAsync(string paperId, string adminId, CancellationToken ct)
     {
-        if (backfill is null) return;
         var hasRelational = await HasRelationalProjectionAsync(paperId, ct);
         if (!hasRelational) return;
         var report = await backfill.BackfillPaperAsync(paperId, adminId, ct);
@@ -198,7 +196,6 @@ public sealed class ListeningAuthoringService(
 
     private async Task EnsureRelationalResyncCanRunBeforeMutationAsync(string paperId, CancellationToken ct)
     {
-        if (backfill is null) return;
         var hasRelational = await HasRelationalProjectionAsync(paperId, ct);
         if (!hasRelational) return;
         var hasAttempts = await db.ListeningAttempts.AnyAsync(a => a.PaperId == paperId, ct);
@@ -240,6 +237,16 @@ public sealed class ListeningAuthoringService(
         var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
 
+        // H6: Enforce SourceProvenance at content-mutation time (not only at publish).
+        // This prevents content from being written without an attestation of origin.
+        if (string.IsNullOrWhiteSpace(paper.SourceProvenance))
+        {
+            throw ApiException.Validation(
+                "listening_provenance_required",
+                "SourceProvenance must be set before uploading or modifying paper content. " +
+                "Set the content source attestation on the paper first.");
+        }
+
         // Deserialize whatever ExtractedTextJson currently holds so we don't
         // clobber sibling keys (e.g. an AI-extraction pipeline may have stored
         // metadata, transcripts, audio offsets etc. alongside listeningQuestions).
@@ -272,6 +279,7 @@ public sealed class ListeningAuthoringService(
 
         paper.ExtractedTextJson = JsonSerializer.Serialize(root);
         paper.UpdatedAt = DateTimeOffset.UtcNow;
+        paper.RowVersion++;
 
         db.AuditEvents.Add(new AuditEvent
         {
@@ -292,7 +300,15 @@ public sealed class ListeningAuthoringService(
             }),
         });
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw ApiException.Conflict("content_paper_concurrent_update",
+                "This paper was modified by another admin. Reload and retry.");
+        }
 
         // Gap W4: keep relational ListeningQuestion / ListeningQuestionOption
         // rows in sync with the JSON blob so the publish gate (relational-first)
@@ -387,6 +403,7 @@ public sealed class ListeningAuthoringService(
 
         paper.ExtractedTextJson = JsonSerializer.Serialize(root);
         paper.UpdatedAt = DateTimeOffset.UtcNow;
+        paper.RowVersion++;
 
         db.AuditEvents.Add(new AuditEvent
         {
@@ -406,7 +423,15 @@ public sealed class ListeningAuthoringService(
             }),
         });
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw ApiException.Conflict("content_paper_concurrent_update",
+                "This paper was modified by another admin. Reload and retry.");
+        }
         await ResyncRelationalIfNeededAsync(paperId, adminId, ct);
         if (tx is not null) await tx.CommitAsync(ct);
         return normalized;
@@ -790,6 +815,7 @@ public sealed class ListeningAuthoringService(
             items.OrderBy(q => q.Number).ToList(), CamelJson);
         paper.ExtractedTextJson = JsonSerializer.Serialize(root);
         paper.UpdatedAt = DateTimeOffset.UtcNow;
+        paper.RowVersion++;
 
         // Mirror into the relational ListeningQuestion row when one exists,
         // so authored learner attempts that already read from the relational
@@ -824,7 +850,15 @@ public sealed class ListeningAuthoringService(
             })),
         });
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw ApiException.Conflict("content_paper_concurrent_update",
+                "This paper was modified by another admin. Reload and retry.");
+        }
 
         // Gap W4: refresh relational mirror so per-question patches surface
         // immediately in publish-gate counts and learner-facing relational reads.
@@ -890,6 +924,7 @@ public sealed class ListeningAuthoringService(
         root[ExtractsKey] = JsonSerializer.SerializeToElement(serialised, CamelJson);
         paper.ExtractedTextJson = JsonSerializer.Serialize(root);
         paper.UpdatedAt = DateTimeOffset.UtcNow;
+        paper.RowVersion++;
 
         db.AuditEvents.Add(new AuditEvent
         {
@@ -910,7 +945,15 @@ public sealed class ListeningAuthoringService(
             })),
         });
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw ApiException.Conflict("content_paper_concurrent_update",
+                "This paper was modified by another admin. Reload and retry.");
+        }
 
         // Gap W4: same resync after extract metadata patches so accent /
         // speakers / audio window changes propagate to the relational mirror.

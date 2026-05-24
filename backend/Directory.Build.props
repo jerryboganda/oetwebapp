@@ -1,0 +1,18 @@
+<Project>
+  <!--
+    Reduce Roslyn language-server memory usage in VS Code.
+    Source generators and analyzers are disabled during design-time builds
+    (DesignTimeBuild=true). They still run normally in CLI builds (dotnet build/publish).
+  -->
+  <PropertyGroup Condition="'$(DesignTimeBuild)' == 'true' OR '$(BuildingProject)' != 'true'">
+    <!-- Disable source generators in IDE to cut Roslyn memory by ~40% -->
+    <EmitCompilerGeneratedFiles>false</EmitCompilerGeneratedFiles>
+    <!-- Use workstation GC (lower memory ceiling) instead of server GC in tooling -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Analyzers run in CI (dotnet build), not in editor hover/completion -->
+    <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+  </PropertyGroup>
+</Project>

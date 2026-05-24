@@ -487,6 +487,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             // Per repo memory ef-core-sqlite-translation.md: NEVER LINQ-into
             // any of these columns. Reads must materialise the row first then
             // parse client-side. SQLite test harness keeps them as TEXT.
+            modelBuilder.Entity<ListeningAttempt>().Property(x => x.RowVersion).IsConcurrencyToken();
             modelBuilder.Entity<ListeningAttempt>().Property(x => x.NavigationStateJson).HasColumnType("jsonb");
             modelBuilder.Entity<ListeningAttempt>().Property(x => x.AudioCueTimelineJson).HasColumnType("jsonb");
             modelBuilder.Entity<ListeningAttempt>().Property(x => x.TechReadinessJson).HasColumnType("jsonb");
@@ -636,6 +637,8 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Content Paper subsystem (Slice 1). Cascade delete: removing a paper
         // also removes its asset links, but NOT the underlying MediaAsset
         // (same file may be referenced by other papers under SHA dedup).
+        modelBuilder.Entity<ContentPaper>()
+            .Property(e => e.RowVersion).IsConcurrencyToken();
         modelBuilder.Entity<ContentPaperAsset>()
             .HasOne(x => x.Paper)
             .WithMany(p => p.Assets)

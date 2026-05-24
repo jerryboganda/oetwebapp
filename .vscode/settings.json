@@ -83,10 +83,22 @@
   "git.autorefresh": false,
   "git.decorations.enabled": false,
 
-  // Disable heavy C# background analysis for non-backend work
+  // ═══════════════ C# / ROSLYN MEMORY CONTROLS ═══════════════
+  // Only load the main backend solution — prevents Roslyn from
+  // discovering stray .csproj files (extract-writing-pdfs etc.)
+  "dotnet.defaultSolution": "backend/OetLearner.sln",
+  // Disable full-solution analysis — only analyze open files
   "dotnet.backgroundAnalysis.analyzerDiagnosticsScope": "openFiles",
   "dotnet.backgroundAnalysis.compilerDiagnosticsScope": "openFiles",
   "omnisharp.enableRoslynAnalyzers": false,
+  // Cap Roslyn server memory via environment (GC Server mode off)
+  "dotnet.server.startTimeout": 60000,
+  // Disable source generators in editor (they run at build time anyway)
+  "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": false,
+  "csharp.inlayHints.enableInlayHintsForTypes": false,
+  "csharp.inlayHints.enableInlayHintsForParameters": false,
+  "csharp.inlayHints.enableInlayHintsForLambdaParameterTypes": false,
+  "csharp.inlayHints.enableInlayHintsForImplicitObjectCreation": false,
   "github.copilot.chat.codeGeneration.useInstructionFiles": true,
   "github.copilot.chat.codeGeneration.instructions": [
     { "file": "AGENTS.md" },

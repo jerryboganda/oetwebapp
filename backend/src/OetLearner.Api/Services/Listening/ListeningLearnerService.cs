@@ -538,7 +538,9 @@ public sealed class ListeningLearnerService(
             }
             await EnsureRelationalAttemptCanMutateAsync(relationalAttempt, ct);
             relationalAttempt.LastActivityAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(ct);
+            relationalAttempt.RowVersion++;
+            try { await db.SaveChangesAsync(ct); }
+            catch (DbUpdateConcurrencyException) { /* heartbeat is best-effort; retry on next tick */ }
             return new { attemptId = relationalAttempt.Id, elapsedSeconds = request.ElapsedSeconds, lastClientSyncAt = relationalAttempt.LastActivityAt };
         }
 
@@ -789,6 +791,17 @@ public sealed class ListeningLearnerService(
         var policy = await ResolveListeningPolicyAsync(ct);
         var now = DateTimeOffset.UtcNow;
         var isExamLike = IsExamMode(normalizedMode);
+
+        // H11: Server-verify audio asset exists before allowing exam-mode attempt start.
+        // The client shows audioAvailable but a race or stale cache could let a learner
+        // start an attempt for a paper whose audio has been deleted or never uploaded.
+        if (isExamLike && string.IsNullOrWhiteSpace(source.AudioUrl))
+        {
+            throw ApiException.Conflict(
+                "listening_audio_asset_missing",
+                "This Listening paper has no audio asset configured. Cannot start exam-mode attempt.");
+        }
+
         var attempt = new ListeningAttempt
         {
             Id = $"lat-{Guid.NewGuid():N}",
@@ -841,9 +854,26 @@ public sealed class ListeningLearnerService(
         await EnsureRelationalAttemptCanMutateAsync(attempt, ct);
         var question = await db.ListeningQuestions.AsNoTracking()
             .Where(q => q.Id == questionId && q.PaperId == attempt.PaperId)
-            .Select(q => new { q.Id })
+            .Select(q => new { q.Id, q.Part!.PartCode })
             .FirstOrDefaultAsync(ct)
             ?? throw ApiException.Validation("listening_question_not_found", "This question does not belong to the Listening attempt.");
+
+        // H10 fix: In strict/exam mode, reject answer saves for locked sections.
+        if (attempt.Mode is ListeningAttemptMode.Exam or ListeningAttemptMode.Home)
+        {
+            var navState = ParseNavigation(attempt.NavigationStateJson);
+            if (navState?.Locks is { Length: > 0 })
+            {
+                var questionPartString = question.PartCode.ToString();
+                if (navState.Locks.Any(lockState =>
+                    string.Equals(ListeningFsmTransitions.PartFor(lockState), questionPartString, StringComparison.Ordinal)))
+                {
+                    throw ApiException.Validation(
+                        "listening_section_locked",
+                        $"Cannot modify answers in part {questionPartString} \u2014 this section is locked in the current exam mode.");
+                }
+            }
+        }
 
         var now = DateTimeOffset.UtcNow;
         var row = await db.ListeningAnswers
@@ -870,7 +900,13 @@ public sealed class ListeningLearnerService(
         }
 
         attempt.LastActivityAt = now;
-        await db.SaveChangesAsync(ct);
+        attempt.RowVersion++;
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw ApiException.Conflict("listening_attempt_concurrent_update",
+                "This attempt was modified by another process. Please retry.");
+        }
     }
 
     private async Task<object> SubmitRelationalAttemptAsync(
@@ -895,6 +931,29 @@ public sealed class ListeningLearnerService(
         MarkExpiredIfDeadlinePassed(attempt);
         var acceptsFinalAnswers = attempt.Status == ListeningAttemptStatus.InProgress;
         EnsureRelationalAttemptCanSubmit(attempt);
+
+        // B5 fix: In strict exam modes, refuse submit unless FSM has reached
+        // the final-review state (learner must have progressed through all sections).
+        if (attempt.Mode is ListeningAttemptMode.Exam or ListeningAttemptMode.Home)
+        {
+            var navState = ParseNavigation(attempt.NavigationStateJson);
+            if (navState is not null && !string.IsNullOrEmpty(navState.State))
+            {
+                var allowedSubmitStates = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ListeningFsmTransitions.C2Review,
+                    ListeningFsmTransitions.C2FinalReview,
+                    ListeningFsmTransitions.Submitted,
+                };
+                if (!allowedSubmitStates.Contains(navState.State))
+                {
+                    throw ApiException.Validation(
+                        "listening_submit_fsm_not_ready",
+                        $"Cannot submit in strict mode from state '{navState.State}'. Complete all sections first.");
+                }
+            }
+        }
+
         if (acceptsFinalAnswers && finalAnswers is { Count: > 0 })
         {
             await ApplyFinalRelationalAnswersAsync(attempt, source, finalAnswers, ct);
@@ -920,6 +979,7 @@ public sealed class ListeningLearnerService(
         attempt.LastActivityAt = now;
         attempt.RawScore = review.RawScore;
         attempt.ScaledScore = review.ScaledScore;
+        attempt.RowVersion++;
 
         var score = new ListeningScoreDto(
             review.RawScore,
@@ -930,7 +990,12 @@ public sealed class ListeningLearnerService(
         var evaluation = CreateEvaluation(attempt.Id, score, review);
         db.Evaluations.Add(evaluation);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, userId, ct);
-        await db.SaveChangesAsync(ct);
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw ApiException.Conflict("listening_attempt_concurrent_update",
+                "This attempt was modified by another process. Please retry.");
+        }
         return BuildReview(attempt, source, answers, evaluation);
     }
 
@@ -1077,6 +1142,21 @@ public sealed class ListeningLearnerService(
                 "listening_attempt_locked",
                 "This Listening attempt is already submitted or expired and can no longer be changed.");
         }
+    }
+
+    /// <summary>Deserialise FSM navigation state for B5/H10 gating.
+    /// Returns null if the JSON is missing, empty, or malformed.</summary>
+    private static NavigationState? ParseNavigation(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            var state = JsonSerializer.Deserialize<NavigationState>(json);
+            return state is null || string.IsNullOrWhiteSpace(state.State) || state.Locks is null
+                ? null
+                : state;
+        }
+        catch { return null; }
     }
 
     private static ListeningAttemptMode ToRelationalMode(string mode) => mode switch

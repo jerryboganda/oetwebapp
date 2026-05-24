@@ -97,6 +97,12 @@ public static class ListeningExpertEndpoints
             if (string.IsNullOrWhiteSpace(request.OverallFeedback))
                 return Results.BadRequest("overallFeedback is required.");
 
+            // H17: a raw-score override requires a non-empty reason. Reject at
+            // the edge so the audit story stays consistent with the service
+            // which also throws on this condition.
+            if (request.RawScoreOverride.HasValue && string.IsNullOrWhiteSpace(request.ScoreOverrideReason))
+                return Results.BadRequest("scoreOverrideReason is required when rawScoreOverride is set.");
+
             var expertId = http.ListeningExpertId();
             try
             {
@@ -106,6 +112,10 @@ public static class ListeningExpertEndpoints
             catch (KeyNotFoundException)
             {
                 return Results.NotFound();
+            }
+            catch (InvalidOperationException ex) when (ex.Message.StartsWith("listening_override_", System.StringComparison.Ordinal))
+            {
+                return Results.BadRequest(ex.Message);
             }
         })
         .RequireRateLimiting("PerUserWrite");

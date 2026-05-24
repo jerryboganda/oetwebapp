@@ -23,7 +23,7 @@ public class ListeningExtractionDraftServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
-        var authoring = new ListeningAuthoringService(db);
+        var authoring = new ListeningAuthoringService(db, new NoOpBackfillService());
         var extraction = new ListeningExtractionService(useStubAi ? new StubListeningExtractionAi() : new ValidListeningExtractionAi());
         var svc = new ListeningExtractionDraftService(db, extraction, authoring);
         return (db, svc, authoring);
@@ -148,7 +148,7 @@ public class ListeningExtractionDraftServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
-        var authoring = new ListeningAuthoringService(db);
+        var authoring = new ListeningAuthoringService(db, new NoOpBackfillService());
         var extraction = new ListeningExtractionService(new InvalidShapeListeningExtractionAi());
         var svc = new ListeningExtractionDraftService(db, extraction, authoring);
         var paper = await SeedListeningPaperAsync(db);
@@ -194,6 +194,15 @@ public class ListeningExtractionDraftServiceTests
         var audit = await db.AuditEvents
             .SingleAsync(a => a.Action == "listening.extraction.reject");
         Assert.Equal(draft.Id, audit.ResourceId);
+    }
+
+    private sealed class NoOpBackfillService : IListeningBackfillService
+    {
+        public Task<ListeningBackfillReport> BackfillPaperAsync(string paperId, string adminId, CancellationToken ct)
+            => Task.FromResult(new ListeningBackfillReport(paperId, true, 0, 0, 0, 0, null));
+
+        public Task<IReadOnlyList<ListeningBackfillReport>> BackfillAllAsync(string adminId, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<ListeningBackfillReport>>([]);
     }
 
     private sealed class ValidListeningExtractionAi : IListeningExtractionAi

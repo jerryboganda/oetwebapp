@@ -142,6 +142,11 @@ public class ContentPaper
 
     public DateTimeOffset? IntegrityAcknowledgedAt { get; set; }
 
+    /// <summary>Optimistic concurrency token. Prevents lost updates when
+    /// multiple admins edit questions/structure concurrently.</summary>
+    [ConcurrencyCheck]
+    public int RowVersion { get; set; }
+
     // Navigation
     public ICollection<ContentPaperAsset> Assets { get; set; } = new List<ContentPaperAsset>();
 }

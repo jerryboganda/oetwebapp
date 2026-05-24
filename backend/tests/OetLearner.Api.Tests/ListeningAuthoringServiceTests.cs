@@ -22,7 +22,7 @@ public class ListeningAuthoringServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
-        return (db, new ListeningAuthoringService(db));
+        return (db, new ListeningAuthoringService(db, new RecordingBackfillService()));
     }
 
     private static async Task<ContentPaper> SeedPaperAsync(LearnerDbContext db)

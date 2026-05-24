@@ -4,11 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, BookOpen, FileCheck2, ArrowRight, Trash2 } from 'lucide-react';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { DataTable, type Column } from '@/components/ui/data-table';
+import { DataTable as LegacyDataTable, type Column } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button as LegacyButton } from '@/components/ui/button';
+import { Button } from '@/components/admin/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -113,7 +114,7 @@ export default function AdminReadingPapersPage() {
       render: (row) => (
         <Link
           href={`/admin/content/reading/${row.id}`}
-          className="font-semibold text-navy hover:text-primary transition-colors line-clamp-1"
+          className="font-semibold text-admin-fg-strong hover:text-[var(--admin-primary)] transition-colors line-clamp-1"
         >
           {row.title}
         </Link>
@@ -123,7 +124,7 @@ export default function AdminReadingPapersPage() {
       key: 'profession',
       header: 'Profession',
       render: (row) => (
-        <span className="text-sm capitalize">{row.profession || 'All'}</span>
+        <span className="text-sm capitalize text-admin-fg-default">{row.profession || 'All'}</span>
       ),
       hideOnMobile: true,
     },
@@ -139,14 +140,14 @@ export default function AdminReadingPapersPage() {
     {
       key: 'author',
       header: 'Author',
-      render: (row) => <span className="text-sm text-muted-foreground">{row.author}</span>,
+      render: (row) => <span className="text-sm text-admin-fg-muted">{row.author}</span>,
       hideOnMobile: true,
     },
     {
       key: 'updatedAt',
       header: 'Updated',
       render: (row) => (
-        <span className="text-sm text-muted-foreground">{formatDate(row.updatedAt)}</span>
+        <span className="text-sm text-admin-fg-muted">{formatDate(row.updatedAt)}</span>
       ),
       hideOnMobile: true,
     },
@@ -156,18 +157,18 @@ export default function AdminReadingPapersPage() {
       render: (row) => (
         <div className="flex items-center justify-end gap-2">
           <Link href={`/admin/content/reading/${row.id}`} aria-label={`Edit ${row.title}`}>
-            <Button variant="ghost" size="sm">
+            <LegacyButton variant="ghost" size="sm">
               <ArrowRight className="h-4 w-4" />
-            </Button>
+            </LegacyButton>
           </Link>
-          <Button
+          <LegacyButton
             variant="ghost"
             size="sm"
             aria-label={`Archive ${row.title}`}
             onClick={() => setArchiveTarget(row)}
           >
-            <Trash2 className="h-4 w-4 text-danger" />
-          </Button>
+            <Trash2 className="h-4 w-4 text-[var(--admin-danger)]" />
+          </LegacyButton>
         </div>
       ),
     },
@@ -182,9 +183,9 @@ export default function AdminReadingPapersPage() {
       {/* Archive Confirm Dialog */}
       {archiveTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-surface rounded-lg p-6 shadow-xl max-w-sm w-full mx-4 border border-border">
-            <h3 className="text-base font-semibold text-foreground mb-2">Archive Paper?</h3>
-            <p className="text-sm text-muted-foreground mb-4">
+          <div className="bg-admin-bg-surface rounded-admin-lg p-6 shadow-admin-lg max-w-sm w-full mx-4 border border-admin-border">
+            <h3 className="text-base font-semibold text-admin-fg-strong mb-2">Archive Paper?</h3>
+            <p className="text-sm text-admin-fg-muted mb-4">
               &ldquo;{archiveTarget.title}&rdquo; will be archived. This can be undone by an admin later.
             </p>
             <div className="flex justify-end gap-2">
@@ -199,25 +200,24 @@ export default function AdminReadingPapersPage() {
         </div>
       )}
 
-      <AdminRouteWorkspace>
-        <AdminRouteSectionHeader
-          eyebrow="CMS"
-          title="Reading Papers"
-          description="Manage OET reading papers. Author, review, and publish Part A / B / C papers with exact-match grading."
-          icon={BookOpen}
-          actions={
-            <Button variant="primary" size="sm" asChild>
-              <Link href="/admin/content/reading/new">
-                <Plus className="mr-1.5 h-4 w-4" />New Paper
-              </Link>
-            </Button>
-          }
-        />
-
-        <AdminRoutePanel>
-          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+      <AdminTableLayout
+        title="Reading Papers"
+        description="Manage OET reading papers. Author, review, and publish Part A / B / C papers with exact-match grading."
+        eyebrow="CMS"
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Reading' },
+        ]}
+        actions={
+          <Button asChild size="sm" startIcon={<Plus className="h-4 w-4" />}>
+            <Link href="/admin/content/reading/new">New Paper</Link>
+          </Button>
+        }
+        banner={
+          <div className="grid gap-3 sm:grid-cols-3 rounded-admin-lg border border-admin-border bg-admin-bg-surface p-3 sm:p-4 shadow-admin-sm">
             <div className="relative sm:col-span-2">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted pointer-events-none" />
               <Input
                 placeholder="Search papers by title…"
                 value={search}
@@ -237,7 +237,9 @@ export default function AdminReadingPapersPage() {
               ]}
             />
           </div>
-
+        }
+      >
+        <div className="p-4 sm:p-5">
           <AsyncStateWrapper
             status={pageStatus}
             emptyContent={
@@ -249,7 +251,7 @@ export default function AdminReadingPapersPage() {
               />
             }
           >
-            <DataTable
+            <LegacyDataTable
               columns={columns}
               data={rows}
               keyExtractor={(r) => r.id}
@@ -265,8 +267,11 @@ export default function AdminReadingPapersPage() {
               itemLabelPlural="papers"
             />
           </AsyncStateWrapper>
-        </AdminRoutePanel>
-      </AdminRouteWorkspace>
+        </div>
+      </AdminTableLayout>
     </>
   );
 }
+
+// Silence unused-import lint after icon prop is now passed as element rather than ref.
+void BookOpen;

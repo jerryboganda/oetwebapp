@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
@@ -217,6 +218,19 @@ public static class ListeningV2Endpoints
                 UpdatedAt = now,
             };
             db.ListeningAttemptNotes.Add(note);
+
+            db.Set<AuditEvent>().Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = userId,
+                ActorName = userId,
+                Action = "listening.note.created",
+                ResourceType = "ListeningAttemptNote",
+                ResourceId = note.Id,
+                Details = JsonSerializer.Serialize(new { attemptId, extractId = req.ExtractId, transcriptMs = req.TranscriptMs, textLength = req.Text.Length }),
+            });
+
             await db.SaveChangesAsync(ct);
 
             var dto = new NoteDto(
@@ -258,6 +272,19 @@ public static class ListeningV2Endpoints
 
             note.Text = req.Text;
             note.UpdatedAt = DateTimeOffset.UtcNow;
+
+            db.Set<AuditEvent>().Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = note.UpdatedAt,
+                ActorId = userId,
+                ActorName = userId,
+                Action = "listening.note.updated",
+                ResourceType = "ListeningAttemptNote",
+                ResourceId = noteId,
+                Details = JsonSerializer.Serialize(new { attemptId, textLength = req.Text.Length }),
+            });
+
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new NoteDto(
@@ -293,6 +320,19 @@ public static class ListeningV2Endpoints
             if (note is null) return Results.NotFound();
 
             db.ListeningAttemptNotes.Remove(note);
+
+            db.Set<AuditEvent>().Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = userId,
+                ActorName = userId,
+                Action = "listening.note.deleted",
+                ResourceType = "ListeningAttemptNote",
+                ResourceId = noteId,
+                Details = JsonSerializer.Serialize(new { attemptId }),
+            });
+
             await db.SaveChangesAsync(ct);
 
             return Results.NoContent();

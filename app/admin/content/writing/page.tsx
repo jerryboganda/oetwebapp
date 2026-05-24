@@ -3,14 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Archive as ArchiveIcon, CheckCircle2, PenSquare, Plus, XCircle } from 'lucide-react';
-import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
@@ -182,7 +180,7 @@ export default function AdminWritingPapersPage() {
       key: 'title',
       header: 'Title',
       render: (paper) => canWriteContent ? (
-        <Link href={`/admin/content/papers/${paper.id}`} className="font-medium hover:text-primary">
+        <Link href={`/admin/content/papers/${paper.id}`} className="font-medium hover:text-[var(--admin-primary)]">
           {paper.title}
         </Link>
       ) : <span className="font-medium">{paper.title}</span>,
@@ -191,24 +189,24 @@ export default function AdminWritingPapersPage() {
       key: 'letterType',
       header: 'Letter type',
       render: (paper) => paper.letterType
-        ? <Badge variant="info">{letterTypeLabel(paper.letterType)}</Badge>
-        : <Badge variant="danger">Missing</Badge>,
+        ? <Badge variant="info" intensity="tinted">{letterTypeLabel(paper.letterType)}</Badge>
+        : <Badge variant="danger" intensity="tinted">Missing</Badge>,
     },
     {
       key: 'scope',
       header: 'Profession scope',
       render: (paper) => paper.appliesToAllProfessions
-        ? <Badge variant="muted">All professions</Badge>
-        : <Badge variant="info">{paper.professionId ?? '—'}</Badge>,
+        ? <Badge variant="default" intensity="tinted">All professions</Badge>
+        : <Badge variant="info" intensity="tinted">{paper.professionId ?? '—'}</Badge>,
     },
     {
       key: 'status',
       header: 'Status',
       render: (paper) => <Badge variant={
         paper.status === 'Published' ? 'success'
-          : paper.status === 'Archived' ? 'muted'
-          : paper.status === 'InReview' ? 'warning' : 'default'
-      }>{paper.status}</Badge>,
+          : paper.status === 'Archived' ? 'default'
+          : paper.status === 'InReview' ? 'warning' : 'secondary'
+      } intensity="tinted">{paper.status}</Badge>,
     },
     {
       key: 'assets',
@@ -223,7 +221,9 @@ export default function AdminWritingPapersPage() {
                 title={`${roleName}: ${ok ? 'present' : 'missing'}`}
                 className={
                   'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ' +
-                  (ok ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger')
+                  (ok
+                    ? 'bg-[var(--admin-success-tint)] text-[var(--admin-success)]'
+                    : 'bg-[var(--admin-danger-tint)] text-[var(--admin-danger)]')
                 }
               >
                 {ok ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
@@ -240,24 +240,18 @@ export default function AdminWritingPapersPage() {
       header: 'Actions',
       render: (paper) => canWriteContent ? (
         <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/admin/content/papers/${paper.id}`}
-            className="inline-flex min-h-9 items-center rounded px-3 py-2 text-sm font-semibold text-navy hover:bg-background-light"
-          >
-            Edit
-          </Link>
+          <Button asChild variant="ghost" size="sm">
+            <Link href={`/admin/content/papers/${paper.id}`}>Edit</Link>
+          </Button>
           {paper.status === 'Draft' && (
             <Button variant="ghost" size="sm" onClick={() => void submitForReview(paper.id)}>
               Submit for review
             </Button>
           )}
           {paper.status === 'InReview' && (
-            <Link
-              href={`/admin/writing/tasks/${paper.id}/review`}
-              className="inline-flex min-h-9 items-center rounded px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
-            >
-              Review
-            </Link>
+            <Button asChild variant="ghost" size="sm">
+              <Link href={`/admin/writing/tasks/${paper.id}/review`}>Review</Link>
+            </Button>
           )}
           {paper.status === 'InReview' && canPublishContent && (
             <>
@@ -275,89 +269,80 @@ export default function AdminWritingPapersPage() {
             </Button>
           )}
         </div>
-      ) : <span className="text-xs text-muted">Read only</span>,
+      ) : <span className="text-xs text-admin-fg-muted">Read only</span>,
     },
   ], [approvePublish, archive, canPublishContent, canWriteContent, reject, submitForReview]);
 
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <p className="text-sm text-muted">Admin access required.</p>
-      </AdminRouteWorkspace>
+      <AdminTableLayout
+        title="Writing Papers"
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Writing' },
+        ]}
+      >
+        <div className="p-6 text-sm text-admin-fg-muted">Admin access required.</div>
+      </AdminTableLayout>
     );
   }
 
-  return (
-    <AdminRouteWorkspace role="main" aria-label="Writing Papers">
-      <AdminRouteSectionHeader
-        icon={<PenSquare className="w-6 h-6" />}
-        title="Writing Papers"
-        description="Author and publish OET Writing tasks from real case-note and model-answer sources. Each published paper must have a letter type, source provenance, primary case notes, a primary model answer, and reviewed learner-facing authoring text."
-      />
+  const headerActions = canWriteContent ? (
+    <>
+      <Button asChild variant="primary" size="sm">
+        <Link href="/admin/writing/tasks/new">
+          <Plus className="w-4 h-4" /> Create Writing task
+        </Link>
+      </Button>
+      <Button asChild variant="secondary" size="sm">
+        <Link href="/admin/content/papers/import">Bulk ZIP import</Link>
+      </Button>
+    </>
+  ) : null;
 
-      <AdminRoutePanel title="Filters">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-          <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
-          <Select label="Letter type" value={filterLetterType} onChange={(e) => setFilterLetterType(e.target.value)} options={LETTER_TYPES} />
-          <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
-          {canWriteContent ? (
-            <div className="flex items-end gap-2 md:col-span-2">
-              <Link
-                href="/admin/writing/tasks/new"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600"
-              >
-                <Plus className="w-4 h-4 mr-1" /> Create Writing task
-              </Link>
-              <Link
-                href="/admin/content/papers/import"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy transition hover:bg-background-light"
-              >
-                Bulk ZIP import
-              </Link>
-            </div>
-          ) : null}
-        </div>
-      </AdminRoutePanel>
+  const banner = (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <KpiTile size="sm" label="Total" value={stats.total} />
+        <KpiTile size="sm" label="Published" value={stats.published} tone="success" />
+        <KpiTile size="sm" label="Drafts" value={stats.draft} />
+        <KpiTile size="sm" label="Missing assets" value={stats.missingAssets} tone="danger" />
+        <KpiTile size="sm" label="Missing type" value={stats.missingLetterType} tone="warning" />
+      </div>
 
-      <AdminRoutePanel title="Writing overview">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          <StatTile label="Total" value={stats.total} />
-          <StatTile label="Published" value={stats.published} tone="success" />
-          <StatTile label="Drafts" value={stats.draft} />
-          <StatTile label="Missing assets" value={stats.missingAssets} tone="danger" />
-          <StatTile label="Missing type" value={stats.missingLetterType} tone="warning" />
-        </div>
-      </AdminRoutePanel>
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
+            <Select label="Letter type" value={filterLetterType} onChange={(e) => setFilterLetterType(e.target.value)} options={LETTER_TYPES} />
+            <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 
-      <AsyncStateWrapper status={status}>
-        <AdminRoutePanel title={`Writing papers (${rows.length})`}>
-          <DataTable data={rows} columns={columns} keyExtractor={(paper) => paper.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-          <BulkActionBar
-            selectedCount={selectedKeys.size}
-            onClearSelection={() => setSelectedKeys(new Set())}
-            actions={[
-              { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
-              { key: 'publish', label: 'Publish selected', onClick: () => {} },
-            ]}
-          />
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
-
-      <AdminRoutePanel>
+  const footer = (
+    <Card>
+      <CardContent>
         <details className="group">
-          <summary className="cursor-pointer text-sm font-semibold text-admin-text">
+          <summary className="cursor-pointer text-sm font-semibold text-admin-fg-strong">
             Authoring quick-reference: canonical Writing paper layout
           </summary>
-          <div className="mt-3 space-y-3 text-sm text-admin-text-muted">
+          <div className="mt-3 space-y-3 text-sm text-admin-fg-muted">
             <div>
-              <strong className="text-admin-text">Required asset roles:</strong>
+              <strong className="text-admin-fg-strong">Required asset roles:</strong>
               <ul className="ml-5 mt-1 list-disc space-y-1">
                 <li><code>CaseNotes</code> — learner-facing stimulus PDF.</li>
                 <li><code>ModelAnswer</code> — hidden reference answer PDF, shown only after submission through study views.</li>
               </ul>
             </div>
             <div>
-              <strong className="text-admin-text">Required authoring fields:</strong>
+              <strong className="text-admin-fg-strong">Required authoring fields:</strong>
               <ul className="ml-5 mt-1 list-disc space-y-1">
                 <li>Canonical letter type, task prompt, case notes text, and model answer text.</li>
                 <li>Source provenance before publish.</li>
@@ -366,23 +351,54 @@ export default function AdminWritingPapersPage() {
             </div>
           </div>
         </details>
-      </AdminRoutePanel>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <>
+      <AdminTableLayout
+        title="Writing Papers"
+        description="Author and publish OET Writing tasks from real case-note and model-answer sources. Each published paper must have a letter type, source provenance, primary case notes, a primary model answer, and reviewed learner-facing authoring text."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Writing' },
+        ]}
+        eyebrow="Catalog"
+        actions={headerActions}
+        banner={banner}
+        footer={footer}
+      >
+        <AsyncStateWrapper status={status}>
+          <div className="p-4 sm:p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <PenSquare className="h-4 w-4 text-admin-fg-muted" aria-hidden="true" />
+              <p className="text-sm font-medium text-admin-fg-default">
+                Writing papers ({rows.length})
+              </p>
+            </div>
+            <DataTable
+              data={rows}
+              columns={columns}
+              keyExtractor={(paper) => paper.id}
+              selectable
+              selectedKeys={selectedKeys}
+              onSelectionChange={setSelectedKeys}
+            />
+            <BulkActionBar
+              selectedCount={selectedKeys.size}
+              onClearSelection={() => setSelectedKeys(new Set())}
+              actions={[
+                { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
+                { key: 'publish', label: 'Publish selected', onClick: () => {} },
+              ]}
+            />
+          </div>
+        </AsyncStateWrapper>
+      </AdminTableLayout>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
-  );
-}
-
-function StatTile({ label, value, tone }: { label: string; value: number; tone?: 'success' | 'warning' | 'danger' }) {
-  const toneClass =
-    tone === 'success' ? 'text-success'
-      : tone === 'warning' ? 'text-warning'
-      : tone === 'danger' ? 'text-danger'
-      : 'text-navy';
-  return (
-    <div className="rounded-2xl border border-border bg-background-light p-4">
-      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${toneClass}`}>{value}</div>
-    </div>
+    </>
   );
 }

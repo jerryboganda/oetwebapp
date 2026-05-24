@@ -101,10 +101,14 @@ services:
       # OET 2026 27-SKU catalog — seed on startup + on admin reseed button.
       Content__Oet2026Catalog__Enabled: 'true'
       Content__Oet2026Catalog__CreateContentPackages: 'true'
+      # --- Listening sample seeder (imports 3 real OET papers on startup) ---
+      Seed__ListeningSamples__Enabled: 'true'
+      Seed__ListeningSamples__SourceRoot: '/app/real-content/Listening ( IMPORTANT NOTE =  Same for All Professions )'
     ports:
       - '8080:8080'
     volumes:
       - oet_local_storage:/var/opt/oet-learner/storage
+      - ./Project Real Content:/app/real-content:ro
 
   web:
     build:

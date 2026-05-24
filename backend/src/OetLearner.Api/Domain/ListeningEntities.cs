@@ -401,6 +401,11 @@ public class ListeningAttempt
     public ListeningAttemptStatus Status { get; set; } = ListeningAttemptStatus.InProgress;
     public ListeningAttemptMode Mode { get; set; } = ListeningAttemptMode.Exam;
 
+    /// <summary>Optimistic concurrency token — incremented on every mutation.
+    /// Prevents lost updates when grader, expert, FSM, autosave, and expire-worker race.</summary>
+    [ConcurrencyCheck]
+    public int RowVersion { get; set; }
+
     public int? RawScore { get; set; }
     public int? ScaledScore { get; set; }
     public int MaxRawScore { get; set; }

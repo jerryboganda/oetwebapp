@@ -19,7 +19,16 @@ public class ListeningExtractMetadataTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
-        return (db, new ListeningAuthoringService(db));
+        return (db, new ListeningAuthoringService(db, new NoOpBackfillService()));
+    }
+
+    private sealed class NoOpBackfillService : IListeningBackfillService
+    {
+        public Task<ListeningBackfillReport> BackfillPaperAsync(string paperId, string adminId, CancellationToken ct)
+            => Task.FromResult(new ListeningBackfillReport(paperId, true, 0, 0, 0, 0, null));
+
+        public Task<IReadOnlyList<ListeningBackfillReport>> BackfillAllAsync(string adminId, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<ListeningBackfillReport>>([]);
     }
 
     private static async Task<string> AddPaperAsync(LearnerDbContext db, string? json = null)

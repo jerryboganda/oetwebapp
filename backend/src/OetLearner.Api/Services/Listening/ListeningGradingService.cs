@@ -205,6 +205,7 @@ public sealed class ListeningGradingService
             .ToDictionary(g => g.Key, g => g.First());
 
         var rawCorrect = 0;
+        var driftedQuestionIds = new List<string>();
         foreach (var q in questions.OrderBy(q => q.QuestionNumber).ThenBy(q => q.DisplayOrder))
         {
             if (!answerByQuestionId.TryGetValue(q.Id, out var ans))
@@ -250,11 +251,52 @@ public sealed class ListeningGradingService
             }
 
             if (ans.IsCorrect == true) rawCorrect += q.Points;
-            _ = drifted; // reserved for analytics enrichment in WS-F dashboards
+
+            // H9: Track drifted questions for audit rather than discarding.
+            // Currently we grade against the live row because the V2 schema
+            // only carries the version int, not historical payload. A future
+            // ListeningQuestionRevision table would allow re-grading against
+            // the exact version the candidate saw.
+            if (drifted) driftedQuestionIds.Add(q.Id);
+        }
+
+        // H9: Emit audit event when version drift is detected so the
+        // analytics pipeline and reviewers can identify potentially
+        // impacted grades.
+        if (driftedQuestionIds.Count > 0)
+        {
+            _db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = "system",
+                ActorName = "ListeningGradingService",
+                Action = "listening.grading.version_drift_detected",
+                ResourceType = "ListeningAttempt",
+                ResourceId = attempt.Id,
+                Details = JsonSerializer.Serialize(new
+                {
+                    message = "Question version drift detected during grading. The candidate may have seen a different version than the current authored state.",
+                    driftedQuestionIds,
+                    driftedCount = driftedQuestionIds.Count,
+                    totalQuestions = questions.Count,
+                    attemptVersionMap = attempt.LastQuestionVersionMapJson,
+                }),
+            });
         }
 
         attempt.RawScore = rawCorrect;
         attempt.MaxRawScore = questions.Sum(q => Math.Max(0, q.Points));
+
+        // H12: Defensive guard — a paper with zero gradable questions must
+        // not silently produce a 0/500 floor score. This can happen if the
+        // relational store has no questions (empty projection / backfill needed).
+        if (attempt.MaxRawScore <= 0)
+        {
+            throw ApiException.Conflict(
+                "listening_no_questions_to_grade",
+                "Cannot grade this attempt: the paper has no structured questions in the relational store. Run backfill first.");
+        }
 
         // ── MISSION-CRITICAL ── raw→scaled MUST go through OetScoring.
         // Inline math (* 350 / / 42 / * 500 / * 8.33) is forbidden and

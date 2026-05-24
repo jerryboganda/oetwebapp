@@ -332,9 +332,21 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
 
     // ── Submit / update feedback ──────────────────────────────────────────────
 
+    // Listening expert review currently uses an OPEN model — every expert can
+    // submit feedback on every submitted attempt; the (attemptId, expertId)
+    // upsert is the only key. There is no ExpertReviewAssignment row for
+    // Listening to gate on. To compensate, EVERY raw-score override emits an
+    // AuditEvent with before→after values so it is fully traceable.
     public async Task<ListeningExpertFeedbackDto> SubmitFeedbackAsync(
         string expertId, string attemptId, ListeningExpertFeedbackRequest req, CancellationToken ct)
     {
+        // H17: a raw score override must carry a non-empty audit reason.
+        if (req.RawScoreOverride.HasValue && string.IsNullOrWhiteSpace(req.ScoreOverrideReason))
+        {
+            throw new InvalidOperationException(
+                "listening_override_reason_required: a Listening raw-score override requires ScoreOverrideReason.");
+        }
+
         var attempt = await db.ListeningAttempts
             .FirstOrDefaultAsync(a => a.Id == attemptId, ct)
             ?? throw new KeyNotFoundException($"Listening attempt '{attemptId}' not found.");
@@ -380,11 +392,18 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
         // Apply raw score override to attempt if provided
         if (req.RawScoreOverride.HasValue)
         {
+            // B6: tag the JSON shape so the per-question grading-service ARRAY
+            // shape and this whole-attempt OBJECT shape cannot silently
+            // collide. Future readers MUST inspect `kind` first.
+            var priorRaw = attempt.RawScore;
+            var priorScaled = attempt.ScaledScore;
+            var reasonTrimmed = req.ScoreOverrideReason!.Trim();
             var overrideRecord = new
             {
+                kind = "expert_whole_attempt_override_v1",
                 overriddenBy = expertId,
                 rawScore = req.RawScoreOverride.Value,
-                reason = req.ScoreOverrideReason ?? string.Empty,
+                reason = reasonTrimmed,
                 at = now,
             };
             attempt.HumanScoreOverridesJson = JsonSerializer.Serialize(overrideRecord, JsonOpts);
@@ -393,12 +412,42 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
             attempt.RawScore = req.RawScoreOverride.Value;
             attempt.ScaledScore = OetScoring.OetRawToScaled(req.RawScoreOverride.Value);
 
+            // B1: emit an audit row for every override so the missing
+            // ExpertReviewAssignment model is compensated by traceability.
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = expertId,
+                ActorName = expertId,
+                Action = "listening.score.override",
+                ResourceType = "ListeningAttempt",
+                ResourceId = attempt.Id,
+                Details = JsonSerializer.Serialize(new
+                {
+                    attemptId = attempt.Id,
+                    learnerId = attempt.UserId,
+                    paperId = attempt.PaperId,
+                    overrideRawScore = req.RawScoreOverride.Value,
+                    overrideScaledScore = attempt.ScaledScore,
+                    priorRawScore = priorRaw,
+                    priorScaledScore = priorScaled,
+                    reason = reasonTrimmed,
+                }, JsonOpts),
+            });
+
             logger.LogInformation(
-                "Expert {ExpertId} applied raw score override {Score} (scaled {Scaled}) to listening attempt {AttemptId}",
-                expertId, req.RawScoreOverride.Value, attempt.ScaledScore, attemptId);
+                "Expert {ExpertId} applied raw score override {Score} (scaled {Scaled}) to listening attempt {AttemptId}; prior raw={PriorRaw}, scaled={PriorScaled}",
+                expertId, req.RawScoreOverride.Value, attempt.ScaledScore, attemptId, priorRaw, priorScaled);
         }
 
-        await db.SaveChangesAsync(ct);
+        attempt.RowVersion++;
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw ApiException.Conflict("listening_attempt_concurrent_update",
+                "This attempt was modified by another process. Please retry.");
+        }
         return MapFeedback(existing);
     }
 
@@ -407,9 +456,11 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
     public async Task<ListeningExpertFeedbackDto?> GetFeedbackAsync(
         string expertId, string attemptId, CancellationToken ct)
     {
+        // H16: Filter by expertId — this endpoint is under /expert/ so the
+        // calling expert should only retrieve their own feedback row.
         var feedback = await db.ListeningExpertFeedbacks
             .AsNoTracking()
-            .Where(f => f.AttemptId == attemptId)
+            .Where(f => f.AttemptId == attemptId && f.ExpertId == expertId)
             .OrderByDescending(f => f.SubmittedAt)
             .FirstOrDefaultAsync(ct);
 

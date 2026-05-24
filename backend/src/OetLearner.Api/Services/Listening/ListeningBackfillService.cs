@@ -31,6 +31,12 @@ public interface IListeningBackfillService
 {
     Task<ListeningBackfillReport> BackfillPaperAsync(string paperId, string adminId, CancellationToken ct);
 
+    /// <summary>
+    /// Overload that allows a system_admin caller to bypass the attempts guard.
+    /// H3: the endpoint enforces system_admin before passing <c>true</c>.
+    /// </summary>
+    Task<ListeningBackfillReport> BackfillPaperAsync(string paperId, string adminId, bool bypassAttemptsGuard, CancellationToken ct);
+
     Task<IReadOnlyList<ListeningBackfillReport>> BackfillAllAsync(string adminId, CancellationToken ct);
 }
 
@@ -68,6 +74,9 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
     }
 
     public async Task<ListeningBackfillReport> BackfillPaperAsync(string paperId, string adminId, CancellationToken ct)
+        => await BackfillPaperAsync(paperId, adminId, bypassAttemptsGuard: false, ct);
+
+    public async Task<ListeningBackfillReport> BackfillPaperAsync(string paperId, string adminId, bool bypassAttemptsGuard, CancellationToken ct)
     {
         var paper = await db.ContentPapers.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == paperId, ct)
@@ -87,16 +96,29 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
 
         var hasLearnerAttempts = await db.ListeningAttempts.AsNoTracking()
             .AnyAsync(a => a.PaperId == paperId, ct);
-        if (hasLearnerAttempts)
+        if (hasLearnerAttempts && !bypassAttemptsGuard)
         {
-            return new ListeningBackfillReport(paperId, false, 0, 0, 0, 0,
-                "This paper already has relational learner attempts. Backfill is blocked to preserve submitted answers; create a new paper revision before re-projecting authoring rows.");
+            // Selective blocking: only refuse if the answer key would change.
+            // Cosmetic edits (stem text, explanations, transcript evidence,
+            // extract metadata, distractor wording) are safe to apply.
+            var existingQuestionsForCheck = await db.ListeningQuestions
+                .AsNoTracking()
+                .Where(q => q.PaperId == paperId)
+                .Include(q => q.Options)
+                .ToListAsync(ct);
+
+            if (DetectAnswerKeyChanges(existingQuestionsForCheck, questions))
+            {
+                return new ListeningBackfillReport(paperId, false, 0, 0, 0, 0,
+                    "Cannot modify answer keys while in-flight attempts exist. " +
+                    "Create a new paper revision or wait for all attempts to complete.");
+            }
         }
 
         // Idempotent rebuild: wipe existing relational rows for this paper
-        // before re-inserting. Once learner attempts exist, the guard above
-        // blocks this destructive rewrite because answer rows point at stable
-        // question ids.
+        // before re-inserting. The guard above blocks answer-key changes when
+        // learner attempts exist; non-destructive (cosmetic) changes proceed
+        // through the same wipe-and-rebuild path safely.
         var now = DateTimeOffset.UtcNow;
 
         await using var tx = db.Database.IsRelational() && db.Database.CurrentTransaction is null
@@ -294,6 +316,24 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 options = optionsCreated,
             }),
         });
+
+        if (hasLearnerAttempts)
+        {
+            var attemptCount = await db.ListeningAttempts.AsNoTracking()
+                .CountAsync(a => a.PaperId == paperId, ct);
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = $"audit_{Guid.NewGuid():N}",
+                OccurredAt = now,
+                ActorId = adminId,
+                ActorAuthAccountId = adminId,
+                ActorName = "ListeningBackfillService",
+                Action = "listening.backfill.non_destructive_update",
+                ResourceType = "ContentPaper",
+                ResourceId = paperId,
+                Details = $"Non-destructive update applied with {attemptCount} existing attempts",
+            });
+        }
 
         await db.SaveChangesAsync(ct);
         if (tx is not null)
@@ -521,6 +561,77 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         if (list is null || index >= list.Count) return null;
         var raw = list[index];
         return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+    }
+
+    // ── Answer-key change detection ─────────────────────────────────────
+    //
+    // Compares existing relational questions against the incoming authored
+    // JSON. Returns true if any answer-key-affecting change is detected:
+    //   • CorrectAnswer changed (Part A short-answer)
+    //   • Which options are marked correct changed (Part B/C MCQ)
+    //   • A question that had attempts was deleted
+    //   • Question numbering was reordered (would mis-grade existing answers)
+    //
+    // Cosmetic fields (stem text, explanation, distractor wording, transcript
+    // evidence, extract metadata) are intentionally NOT checked here — those
+    // may change freely without affecting grades.
+
+    private static bool DetectAnswerKeyChanges(
+        List<ListeningQuestion> existing,
+        List<AuthoredQuestion> incoming)
+    {
+        // Match by QuestionNumber — that's the stable authored identity.
+        var existingByNumber = existing.ToDictionary(q => q.QuestionNumber);
+
+        foreach (var incomingQ in incoming)
+        {
+            if (!existingByNumber.TryGetValue(incomingQ.Number, out var existingQ))
+                continue; // New question being added — safe, doesn't affect existing grades.
+
+            // Part A (short_answer): compare canonical correct answer.
+            var incomingAnswerJson = JsonSerializer.Serialize(incomingQ.CorrectAnswer ?? string.Empty);
+            if (!string.Equals(existingQ.CorrectAnswerJson, incomingAnswerJson, StringComparison.Ordinal))
+                return true;
+
+            // Part B/C (MCQ): compare which option keys are marked correct.
+            if (existingQ.Options is { Count: > 0 })
+            {
+                var existingCorrectKeys = existingQ.Options
+                    .Where(o => o.IsCorrect)
+                    .Select(o => o.OptionKey)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                // Recompute what isCorrect would be for incoming options
+                // using the same logic as the main projection loop.
+                var incomingCorrectKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (incomingQ.Type == "multiple_choice_3" && incomingQ.Options is { Count: > 0 })
+                {
+                    var optionLabels = new[] { "A", "B", "C" };
+                    for (var i = 0; i < incomingQ.Options.Count && i < 3; i++)
+                    {
+                        var optionKey = optionLabels[i];
+                        var optionText = incomingQ.Options[i] ?? string.Empty;
+                        var isCorrect = string.Equals(
+                            incomingQ.CorrectAnswer?.Trim(),
+                            optionText.Trim(),
+                            StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(incomingQ.CorrectAnswer?.Trim(), optionKey, StringComparison.OrdinalIgnoreCase);
+                        if (isCorrect)
+                            incomingCorrectKeys.Add(optionKey);
+                    }
+                }
+
+                if (!existingCorrectKeys.SetEquals(incomingCorrectKeys))
+                    return true;
+            }
+        }
+
+        // Check for deleted questions: existing question numbers missing from incoming set.
+        var incomingNumbers = incoming.Select(q => q.Number).ToHashSet();
+        if (existing.Any(q => !incomingNumbers.Contains(q.QuestionNumber)))
+            return true; // Deletion affects scoring.
+
+        return false;
     }
 
     // ── Internal projection records ─────────────────────────────────────

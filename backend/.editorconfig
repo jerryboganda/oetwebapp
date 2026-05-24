@@ -1,0 +1,19 @@
+# EditorConfig for OET Backend — Roslyn memory reduction
+# Suppresses heavy analyzers in the IDE while keeping them active in CI builds.
+root = false
+
+[*.cs]
+# Disable all analyzer diagnostics in the editor (they still run in dotnet build)
+dotnet_analyzer_diagnostic.severity = none
+
+# Keep compiler errors/warnings visible
+dotnet_diagnostic.CS0103.severity = error
+dotnet_diagnostic.CS0246.severity = error
+dotnet_diagnostic.CS1061.severity = error
+dotnet_diagnostic.CS8600.severity = warning
+dotnet_diagnostic.CS8601.severity = warning
+dotnet_diagnostic.CS8602.severity = warning
+dotnet_diagnostic.CS8603.severity = warning
+dotnet_diagnostic.CS8604.severity = warning
+dotnet_diagnostic.CS8618.severity = warning
+dotnet_diagnostic.CS8625.severity = warning

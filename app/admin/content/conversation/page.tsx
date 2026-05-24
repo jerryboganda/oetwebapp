@@ -4,17 +4,14 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MessageSquare, Plus, Archive, CheckCircle } from 'lucide-react';
-import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/form-controls';
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Input } from '@/components/admin/ui/input';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { Card, CardContent } from '@/components/admin/ui/card';
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/ui/empty-error';
 import { Pagination } from '@/components/ui/pagination';
 import {
   fetchAdminConversationTemplates,
@@ -91,117 +88,133 @@ export default function AdminConversationTemplatesPage() {
     }
   }
 
+  const filters = (
+    <div className="flex flex-wrap items-end gap-3">
+      <Input
+        label="Search"
+        value={search}
+        onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+        placeholder="Title or scenario body…"
+        wrapperClassName="min-w-[200px]"
+      />
+      <Input
+        label="Profession"
+        value={profession}
+        onChange={(e) => { setProfession(e.target.value); setPage(1); }}
+        placeholder="medicine, nursing, pharmacy…"
+        wrapperClassName="min-w-[180px]"
+      />
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-medium text-[var(--admin-fg-strong)]">Status</label>
+        <select
+          value={status}
+          onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+          className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
+        >
+          <option value="">All</option>
+          <option value="draft">Draft</option>
+          <option value="published">Published</option>
+          <option value="archived">Archived</option>
+        </select>
+      </div>
+    </div>
+  );
 
   return (
     <>
-      <AdminRouteWorkspace>
-        <AdminRoutePanel>
-          <AdminRouteSectionHeader
-            eyebrow="Content"
-            title="AI Conversation Scenarios"
-            description="Manage role-play and handover scenarios used by the learner AI Conversation module."
-            icon={MessageSquare}
-            actions={
-              <div className="flex items-center gap-2">
-                <Button variant="secondary" onClick={() => router.push('/admin/content/conversation/settings')}>
-                  Settings
-                </Button>
-                <Button variant="secondary" onClick={() => router.push('/admin/content/conversation/sessions')}>
-                  Sessions
-                </Button>
-                <Button variant="primary" onClick={() => router.push('/admin/content/conversation/new')}>
-                  <Plus className="mr-1 h-4 w-4" /> New Scenario
-                </Button>
-              </div>
-            }
-          />
-
-          <div className="mb-4 flex flex-wrap items-end gap-3">
-            <Input label="Search" value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Title or scenario body…" className="min-w-[200px]" />
-            <Input label="Profession" value={profession}
-              onChange={(e) => { setProfession(e.target.value); setPage(1); }}
-              placeholder="medicine, nursing, pharmacy…" className="min-w-[180px]" />
-            <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-muted">Status</label>
-              <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-                className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
-                <option value="">All</option>
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (<Skeleton key={i} className="h-16 rounded-2xl" />))}
-            </div>
-          ) : rows.length === 0 ? (
-            <EmptyState
-              icon={<MessageSquare className="h-6 w-6" />}
-              title="No conversation scenarios yet"
-              description="Create your first scenario to make it available to learners."
-              action={{
-                label: 'New Scenario',
-                onClick: () => router.push('/admin/content/conversation/new'),
-              }}
+      <AdminCatalogLayout
+        eyebrow="Content"
+        title="AI Conversation Scenarios"
+        description="Manage role-play and handover scenarios used by the learner AI Conversation module."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Conversation' },
+        ]}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => router.push('/admin/content/conversation/settings')}>
+              Settings
+            </Button>
+            <Button variant="secondary" onClick={() => router.push('/admin/content/conversation/sessions')}>
+              Sessions
+            </Button>
+            <Button variant="primary" onClick={() => router.push('/admin/content/conversation/new')} startIcon={<Plus className="h-4 w-4" />}>
+              New Scenario
+            </Button>
+          </>
+        }
+        filters={filters}
+        hideViewModeToggle
+        pagination={
+          !loading ? (
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="template"
+              itemLabelPlural="templates"
             />
-          ) : (
-            <div className="space-y-2">
-              {rows.map((row) => (
-                <div key={row.id} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link href={`/admin/content/conversation/${row.id}`}
-                        className="truncate text-sm font-semibold text-navy hover:text-primary">
-                        {row.title}
-                      </Link>
-                      <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'muted' : 'info'} size="sm">
-                        {row.status}
-                      </Badge>
-                      <Badge variant="default" size="sm">{row.taskTypeCode}</Badge>
-                      {row.professionId && (<Badge variant="default" size="sm">{row.professionId}</Badge>)}
-                      <Badge variant="default" size="sm">{row.difficulty}</Badge>
-                    </div>
-                    <div className="mt-1 text-xs text-muted">
-                      {Math.round(row.estimatedDurationSeconds / 60)} min · updated {new Date(row.updatedAt).toLocaleDateString()}
-                    </div>
+          ) : null
+        }
+        itemsClassName="flex flex-col gap-2"
+      >
+        {loading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (<Skeleton key={i} className="h-16 rounded-[var(--admin-radius-lg)]" />))}
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState
+            illustration={<MessageSquare />}
+            title="No conversation scenarios yet"
+            description="Create your first scenario to make it available to learners."
+            primaryAction={{
+              label: 'New Scenario',
+              onClick: () => router.push('/admin/content/conversation/new'),
+            }}
+          />
+        ) : (
+          rows.map((row) => (
+            <Card key={row.id}>
+              <CardContent className="flex items-center justify-between gap-3 p-4 pt-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/admin/content/conversation/${row.id}`}
+                      className="truncate text-sm font-semibold text-[var(--admin-fg-strong)] hover:text-[var(--admin-primary)]"
+                    >
+                      {row.title}
+                    </Link>
+                    <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'secondary' : 'info'} size="sm">
+                      {row.status}
+                    </Badge>
+                    <Badge variant="default" size="sm">{row.taskTypeCode}</Badge>
+                    {row.professionId && (<Badge variant="default" size="sm">{row.professionId}</Badge>)}
+                    <Badge variant="default" size="sm">{row.difficulty}</Badge>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {row.status === 'draft' && (
-                      <Button variant="primary" onClick={() => handlePublish(row.id)}>
-                        <CheckCircle className="mr-1 h-4 w-4" /> Publish
-                      </Button>
-                    )}
-                    {row.status !== 'archived' && (
-                      <Button variant="secondary" onClick={() => handleArchive(row.id)}>
-                        <Archive className="mr-1 h-4 w-4" /> Archive
-                      </Button>
-                    )}
+                  <div className="mt-1 text-xs text-[var(--admin-fg-muted)]">
+                    {Math.round(row.estimatedDurationSeconds / 60)} min · updated {new Date(row.updatedAt).toLocaleDateString()}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {!loading && (
-            <div className="mt-4">
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-                itemLabel="template"
-                itemLabelPlural="templates"
-              />
-            </div>
-          )}
-        </AdminRoutePanel>
-      </AdminRouteWorkspace>
+                <div className="flex items-center gap-2">
+                  {row.status === 'draft' && (
+                    <Button variant="primary" size="sm" onClick={() => handlePublish(row.id)} startIcon={<CheckCircle className="h-4 w-4" />}>
+                      Publish
+                    </Button>
+                  )}
+                  {row.status !== 'archived' && (
+                    <Button variant="secondary" size="sm" onClick={() => handleArchive(row.id)} startIcon={<Archive className="h-4 w-4" />}>
+                      Archive
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </AdminCatalogLayout>
 
       {toast && (<Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />)}
     </>

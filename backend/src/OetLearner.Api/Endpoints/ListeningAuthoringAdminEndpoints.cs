@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Listening;
 
@@ -33,6 +34,45 @@ public static class ListeningAuthoringAdminEndpoints
     public sealed record ReplaceExtractsBody(IReadOnlyList<ListeningAuthoredExtract> Extracts);
     public sealed record ApproveDraftBody(string? Reason);
     public sealed record RejectDraftBody(string? Reason);
+    public sealed record BackfillRequestBody(string? ConfirmationToken);
+    public sealed record TranscriptSegmentDto(int StartMs, int EndMs, string SpeakerId, string Text);
+    public sealed record ReplaceTranscriptBody(IReadOnlyList<TranscriptSegmentDto> Segments);
+
+    /// <summary>
+    /// Validates the If-Match header against the paper's RowVersion.
+    /// Returns a 412 Precondition Failed result if they don't match, or null to proceed.
+    /// </summary>
+    private static IResult? CheckIfMatch(HttpContext http, ContentPaper paper)
+    {
+        var ifMatch = http.Request.Headers.IfMatch.FirstOrDefault();
+        if (string.IsNullOrEmpty(ifMatch)) return null;
+        if (!int.TryParse(ifMatch.Trim('"'), out var clientVersion)
+            || clientVersion != paper.RowVersion)
+        {
+            return Results.StatusCode(StatusCodes.Status412PreconditionFailed);
+        }
+        return null;
+    }
+
+    /// <summary>Sets the ETag response header to the paper's current RowVersion.</summary>
+    private static void SetETag(HttpContext http, ContentPaper paper)
+    {
+        http.Response.Headers.ETag = $"\"{paper.RowVersion}\"";
+    }
+
+    /// <summary>
+    /// H2: Published papers require AdminContentPublish (or system_admin) for any mutation.
+    /// Returns a Forbid result when the paper is Published and the caller lacks permission.
+    /// Returns null when the caller is allowed to proceed.
+    /// </summary>
+    private static IResult? EnforcePublishGate(ContentPaper paper, HttpContext http)
+    {
+        if (paper.Status != ContentStatus.Published) return null;
+        var perms = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
+        if (AdminPermissionEvaluator.HasAny(perms, AdminPermissions.ContentPublish, AdminPermissions.SystemAdmin))
+            return null;
+        return Results.Forbid();
+    }
 
     public static IEndpointRouteBuilder MapListeningAuthoringAdminEndpoints(this IEndpointRouteBuilder app)
     {
@@ -52,8 +92,13 @@ public static class ListeningAuthoringAdminEndpoints
         group.MapGet("/structure", async (
             string paperId,
             IListeningAuthoringService svc,
+            LearnerDbContext db,
+            HttpContext http,
             CancellationToken ct) =>
         {
+            var paper = await db.ContentPapers.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is not null) SetETag(http, paper);
             var doc = await svc.GetStructureAsync(paperId, ct);
             return Results.Ok(doc);
         });
@@ -62,11 +107,21 @@ public static class ListeningAuthoringAdminEndpoints
             string paperId,
             ReplaceStructureBody body,
             IListeningAuthoringService svc,
+            LearnerDbContext db,
             HttpContext http,
             CancellationToken ct) =>
         {
+            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+            var conflict = CheckIfMatch(http, paper);
+            if (conflict is not null) return conflict;
+
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var doc = await svc.ReplaceStructureAsync(paperId, body.Questions ?? [], adminId, ct);
+            await db.Entry(paper).ReloadAsync(ct);
+            SetETag(http, paper);
             return Results.Ok(doc);
         });
 
@@ -78,11 +133,21 @@ public static class ListeningAuthoringAdminEndpoints
             string questionId,
             ListeningQuestionPatch body,
             IListeningAuthoringService svc,
+            LearnerDbContext db,
             HttpContext http,
             CancellationToken ct) =>
         {
+            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+            var conflict = CheckIfMatch(http, paper);
+            if (conflict is not null) return conflict;
+
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var doc = await svc.PatchQuestionAsync(paperId, questionId, body ?? new(), adminId, ct);
+            await db.Entry(paper).ReloadAsync(ct);
+            SetETag(http, paper);
             return Results.Ok(doc);
         });
 
@@ -93,9 +158,15 @@ public static class ListeningAuthoringAdminEndpoints
         group.MapPost("/extract", async (
             string paperId,
             IListeningExtractionDraftService drafts,
+            LearnerDbContext db,
             HttpContext http,
             CancellationToken ct) =>
         {
+            var paper = await db.ContentPapers.AsNoTracking().FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var draft = await drafts.ProposeAsync(paperId, adminId, ct);
             var questions = System.Text.Json.JsonSerializer
@@ -123,8 +194,13 @@ public static class ListeningAuthoringAdminEndpoints
         group.MapGet("/extracts", async (
             string paperId,
             IListeningAuthoringService svc,
+            LearnerDbContext db,
+            HttpContext http,
             CancellationToken ct) =>
         {
+            var paper = await db.ContentPapers.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is not null) SetETag(http, paper);
             var doc = await svc.GetExtractsAsync(paperId, ct);
             return Results.Ok(new { extracts = doc });
         });
@@ -133,11 +209,20 @@ public static class ListeningAuthoringAdminEndpoints
             string paperId,
             ReplaceExtractsBody body,
             IListeningAuthoringService svc,
+            LearnerDbContext db,
             HttpContext http,
             CancellationToken ct) =>
         {
+            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+            var conflict = CheckIfMatch(http, paper);
+            if (conflict is not null) return conflict;
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var doc = await svc.ReplaceExtractsAsync(paperId, body.Extracts ?? [], adminId, ct);
+            await db.Entry(paper).ReloadAsync(ct);
+            SetETag(http, paper);
             return Results.Ok(new { extracts = doc });
         });
 
@@ -149,11 +234,20 @@ public static class ListeningAuthoringAdminEndpoints
             string extractCode,
             ListeningExtractPatch body,
             IListeningAuthoringService svc,
+            LearnerDbContext db,
             HttpContext http,
             CancellationToken ct) =>
         {
+            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+            var conflict = CheckIfMatch(http, paper);
+            if (conflict is not null) return conflict;
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var doc = await svc.PatchExtractAsync(paperId, extractCode, body ?? new(), adminId, ct);
+            await db.Entry(paper).ReloadAsync(ct);
+            SetETag(http, paper);
             return Results.Ok(new { extracts = doc });
         });
 
@@ -195,11 +289,17 @@ public static class ListeningAuthoringAdminEndpoints
             string draftId,
             ApproveDraftBody? body,
             IListeningExtractionDraftService svc,
+            LearnerDbContext db,
             HttpContext http,
             CancellationToken ct) =>
         {
             var existing = await svc.GetAsync(draftId, ct);
             if (existing is null || existing.PaperId != paperId) return Results.NotFound();
+            var paper = await db.ContentPapers.AsNoTracking().FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var draft = await svc.ApproveAsync(draftId, adminId, body?.Reason, ct);
             return Results.Ok(draft);
@@ -210,11 +310,17 @@ public static class ListeningAuthoringAdminEndpoints
             string draftId,
             RejectDraftBody body,
             IListeningExtractionDraftService svc,
+            LearnerDbContext db,
             HttpContext http,
             CancellationToken ct) =>
         {
             var existing = await svc.GetAsync(draftId, ct);
             if (existing is null || existing.PaperId != paperId) return Results.NotFound();
+            var paper = await db.ContentPapers.AsNoTracking().FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var draft = await svc.RejectAsync(draftId, adminId, body?.Reason ?? string.Empty, ct);
             return Results.Ok(draft);
@@ -225,16 +331,198 @@ public static class ListeningAuthoringAdminEndpoints
         // Idempotent — wipes existing relational rows for the paper before
         // re-inserting. Authored learner attempts read those relational rows
         // when present, with JSON fallback for not-yet-backfilled content.
+        //
+        // H3: Backfill is destructive — requires explicit confirmation token.
+        // If paper has existing attempts, only system_admin may proceed.
         group.MapPost("/backfill", async (
             string paperId,
+            BackfillRequestBody? body,
             IListeningBackfillService svc,
+            LearnerDbContext db,
             HttpContext http,
             CancellationToken ct) =>
         {
+            // H3: Require confirmation token to prevent accidental invocation
+            var confirmToken = body?.ConfirmationToken;
+            if (string.IsNullOrWhiteSpace(confirmToken) || confirmToken != "CONFIRM_BACKFILL")
+            {
+                return Results.BadRequest(new
+                {
+                    errorCode = "listening_backfill_requires_confirmation",
+                    message = "Backfill overwrites hand-edited relational data. Pass confirmationToken='CONFIRM_BACKFILL' to proceed.",
+                });
+            }
+
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            var report = await svc.BackfillPaperAsync(paperId, adminId, ct);
+
+            // H2: Published papers require AdminContentPublish
+            var paper = await db.ContentPapers.AsNoTracking().FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+
+            // H3: If paper has existing attempts, require system_admin
+            var hasAttempts = await db.ListeningAttempts.AsNoTracking()
+                .AnyAsync(a => a.PaperId == paperId, ct);
+            if (hasAttempts)
+            {
+                var perms = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
+                if (!AdminPermissionEvaluator.HasAny(perms, AdminPermissions.SystemAdmin))
+                {
+                    return Results.Json(new
+                    {
+                        errorCode = "listening_backfill_requires_system_admin",
+                        message = "Only system_admin can backfill papers that learners have already attempted.",
+                    }, statusCode: 403);
+                }
+            }
+
+            // H3: Audit event for every backfill invocation
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = adminId,
+                ActorName = adminId,
+                Action = "listening.backfill.executed",
+                ResourceType = "ContentPaper",
+                ResourceId = paperId,
+                Details = $"hasExistingAttempts={hasAttempts}; destructive=true",
+            });
+            await db.SaveChangesAsync(ct);
+
+            var report = await svc.BackfillPaperAsync(paperId, adminId, hasAttempts, ct);
             return Results.Ok(report);
         });
+
+        // ─── Transcript Segment CRUD ───────────────────────────────────────
+
+        group.MapGet("/extracts/{extractId}/transcript", async (
+            string paperId,
+            string extractId,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var extract = await db.ListeningExtracts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(e => e.Id == extractId, ct);
+            if (extract is null)
+                return Results.NotFound(new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} not found." });
+
+            // Validate extract belongs to this paper via part → paper linkage.
+            var part = await db.ListeningParts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == extract.ListeningPartId, ct);
+            if (part is null || part.PaperId != paperId)
+                return Results.NotFound(new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} does not belong to paper {paperId}." });
+
+            var segments = System.Text.Json.JsonSerializer
+                .Deserialize<List<TranscriptSegmentDto>>(
+                    extract.TranscriptSegmentsJson,
+                    new System.Text.Json.JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                    }) ?? [];
+
+            return Results.Ok(new { extractId, segments });
+        })
+        .WithName("GetListeningExtractTranscript")
+        .WithSummary("Return deserialized transcript segments for a listening extract.");
+
+        group.MapPut("/extracts/{extractId}/transcript", async (
+            string paperId,
+            string extractId,
+            ReplaceTranscriptBody body,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            // Validate paper exists and enforce publish gate (tracked for RowVersion).
+            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+
+            // Concurrency check via If-Match header.
+            var conflict = CheckIfMatch(http, paper);
+            if (conflict is not null) return conflict;
+
+            var extract = await db.ListeningExtracts
+                .FirstOrDefaultAsync(e => e.Id == extractId, ct);
+            if (extract is null)
+                return Results.NotFound(new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} not found." });
+
+            // Validate extract belongs to this paper via part → paper linkage.
+            var part = await db.ListeningParts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == extract.ListeningPartId, ct);
+            if (part is null || part.PaperId != paperId)
+                return Results.NotFound(new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} does not belong to paper {paperId}." });
+
+            // Validate each segment.
+            if (body.Segments is null || body.Segments.Count == 0)
+                return Results.BadRequest(new { errorCode = "invalid_segments", message = "Segments array must contain at least one entry." });
+
+            for (var i = 0; i < body.Segments.Count; i++)
+            {
+                var seg = body.Segments[i];
+                if (seg.StartMs < 0)
+                    return Results.BadRequest(new { errorCode = "invalid_segment", message = $"Segment[{i}]: startMs must be >= 0." });
+                if (seg.StartMs >= seg.EndMs)
+                    return Results.BadRequest(new { errorCode = "invalid_segment", message = $"Segment[{i}]: startMs must be less than endMs." });
+                if (string.IsNullOrWhiteSpace(seg.Text))
+                    return Results.BadRequest(new { errorCode = "invalid_segment", message = $"Segment[{i}]: text must not be empty." });
+                if (string.IsNullOrWhiteSpace(seg.SpeakerId))
+                    return Results.BadRequest(new { errorCode = "invalid_segment", message = $"Segment[{i}]: speakerId must not be empty." });
+            }
+
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+
+            extract.TranscriptSegmentsJson = System.Text.Json.JsonSerializer.Serialize(
+                body.Segments,
+                new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                });
+
+            paper.RowVersion++;
+
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = adminId,
+                ActorName = adminId,
+                Action = "listening.transcript.updated",
+                ResourceType = "ListeningExtract",
+                ResourceId = extractId,
+                Details = $"segmentCount={body.Segments.Count}",
+            });
+
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Results.Conflict(new { errorCode = "listening_paper_concurrent_update", message = "Another user modified this paper. Reload and retry." });
+            }
+
+            await db.Entry(paper).ReloadAsync(ct);
+            SetETag(http, paper);
+
+            var saved = System.Text.Json.JsonSerializer
+                .Deserialize<List<TranscriptSegmentDto>>(
+                    extract.TranscriptSegmentsJson,
+                    new System.Text.Json.JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                    }) ?? [];
+
+            return Results.Ok(new { extractId, segments = saved });
+        })
+        .WithName("ReplaceListeningExtractTranscript")
+        .WithSummary("Replace transcript segments for a listening extract.");
 
         // TTS synthesis. Enqueues a ListeningTtsJob so the background worker
         // (ListeningTtsJobWorker) reads the extract's transcript segments and
@@ -249,15 +537,26 @@ public static class ListeningAuthoringAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
         {
+            // H2: Published papers require AdminContentPublish for mutations
+            var paper = await db.ContentPapers.AsNoTracking().FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
 
-            // Validate extract belongs to this paper.
+            // Validate extract belongs to this paper via part → paper linkage.
             var extract = await db.ListeningExtracts
                 .FirstOrDefaultAsync(e => e.Id == extractId, ct);
             if (extract is null)
                 return Results.Json(
                     new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} not found." },
                     statusCode: 404);
+
+            var ttsPart = await db.ListeningParts.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == extract.ListeningPartId, ct);
+            if (ttsPart is null || ttsPart.PaperId != paperId)
+                return Results.NotFound(new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} does not belong to paper {paperId}." });
 
             var job = new ListeningTtsJob
             {
@@ -302,6 +601,63 @@ public static class ListeningAuthoringAdminEndpoints
         .WithName("GetListeningTtsJobStatus")
         .WithSummary("Poll TTS synthesis job status.");
 
+        // ─── Bulk validate (not scoped to a single paperId) ───────────────
+        app.MapPost("/v1/admin/papers/listening/bulk-validate", async (
+            BulkValidateRequest body,
+            IListeningStructureService svc,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            if (body.PaperIds is null || body.PaperIds.Count == 0)
+                return Results.BadRequest(new { errorCode = "empty_paper_ids", message = "At least one paperId is required." });
+            if (body.PaperIds.Count > 50)
+                return Results.BadRequest(new { errorCode = "too_many_paper_ids", message = "Maximum 50 paper IDs per request." });
+
+            var papers = await db.ContentPapers.AsNoTracking()
+                .Where(p => body.PaperIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, ct);
+
+            var results = new List<BulkValidateResult>(body.PaperIds.Count);
+            foreach (var paperId in body.PaperIds)
+            {
+                if (!papers.TryGetValue(paperId, out var paper))
+                {
+                    results.Add(new BulkValidateResult(paperId, null, "Unknown", false, ["Paper not found"]));
+                    continue;
+                }
+
+                try
+                {
+                    var report = await svc.ValidatePaperAsync(paperId, ct);
+                    results.Add(new BulkValidateResult(
+                        paperId,
+                        paper.Title,
+                        paper.Status.ToString(),
+                        report.IsPublishReady,
+                        report.Issues.Select(i => i.Message).ToList()));
+                }
+                catch
+                {
+                    results.Add(new BulkValidateResult(paperId, paper.Title, paper.Status.ToString(), false, ["Validation failed unexpectedly"]));
+                }
+            }
+
+            var ready = results.Count(r => r.IsPublishReady);
+            var response = new BulkValidateResponse(
+                results,
+                new BulkValidateSummary(results.Count, ready, results.Count - ready));
+            return Results.Ok(response);
+        })
+        .RequireAuthorization("AdminContentRead")
+        .WithName("BulkValidateListeningPapers")
+        .WithSummary("Validate multiple papers for publish readiness.");
+
         return app;
     }
+
+    // ─── Bulk validate DTOs ──────────────────────────────────────────────────
+    public sealed record BulkValidateRequest(IReadOnlyList<string> PaperIds);
+    public sealed record BulkValidateResult(string PaperId, string? Title, string Status, bool IsPublishReady, IReadOnlyList<string> Issues);
+    public sealed record BulkValidateSummary(int Total, int Ready, int NotReady);
+    public sealed record BulkValidateResponse(IReadOnlyList<BulkValidateResult> Results, BulkValidateSummary Summary);
 }

@@ -103,8 +103,18 @@ public sealed class ListeningExtractionDraftService(
                 "Listening AI extraction is currently disabled by policy.");
         }
         var quota = policy?.AiExtractionMaxRetriesPerPaper ?? 5;
+
+        // H5: Atomic rate guard — insert a Pending placeholder row BEFORE
+        // the AI call to claim a slot. Two parallel requests both increment
+        // the count, but only one can satisfy the count < quota check under
+        // a serializable snapshot because we commit the placeholder first.
+        // On concurrent races the second caller will see the count already
+        // at (or above) the quota and fail with 409.
+        var draftId = $"led_{Guid.NewGuid():N}";
         if (quota > 0)
         {
+            // Count existing drafts (including any Pending placeholders from
+            // concurrent requests that already committed).
             var existing = await db.Set<DraftEntity>()
                 .CountAsync(d => d.PaperId == paperId, ct);
             if (existing >= quota)
@@ -113,37 +123,97 @@ public sealed class ListeningExtractionDraftService(
                     "ai_extraction_quota_reached",
                     $"Maximum {quota} AI extraction drafts per paper have already been recorded.");
             }
+
+            // Insert a Pending placeholder to atomically claim the slot.
+            var placeholder = new DraftEntity
+            {
+                Id = draftId,
+                PaperId = paperId,
+                Status = DraftStatus.Pending,
+                ProposedAt = DateTimeOffset.UtcNow,
+                ProposedByUserId = adminId,
+                IsStub = true,
+                StubReason = "AI extraction in progress",
+                Summary = "Placeholder — awaiting AI response",
+                ProposedQuestionsJson = "[]",
+            };
+            db.Set<DraftEntity>().Add(placeholder);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException ex) when (
+                ex.InnerException?.Message.Contains("unique", StringComparison.OrdinalIgnoreCase) == true
+                || ex.InnerException?.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                throw ApiException.Conflict(
+                    "listening_extraction_already_pending",
+                    "An AI extraction is already in progress for this paper.");
+            }
         }
 
         // ProposeStructureAsync funnels through IListeningExtractionAi which
         // (in production) is GroundedListeningExtractionAi → grounded gateway.
         // The AI call itself, prompt grounding, and refusal-on-ungrounded
         // policy all live there — this service is purely persistence.
-        var aiDraft = await extraction.ProposeStructureAsync(paperId, ct);
+        ListeningExtractionDraft aiDraft;
+        try
+        {
+            aiDraft = await extraction.ProposeStructureAsync(paperId, ct);
+        }
+        catch
+        {
+            // H5: On AI failure, remove the placeholder so the slot is freed.
+            if (quota > 0)
+            {
+                var stale = await db.Set<DraftEntity>()
+                    .FirstOrDefaultAsync(d => d.Id == draftId, ct);
+                if (stale is not null)
+                {
+                    db.Set<DraftEntity>().Remove(stale);
+                    await db.SaveChangesAsync(ct);
+                }
+            }
+            throw;
+        }
+
         if (aiDraft.Status != ListeningExtractionStatus.Ready || aiDraft.Questions.Count == 0)
         {
+            // H5: Remove placeholder on extraction failure.
+            if (quota > 0)
+            {
+                var stale = await db.Set<DraftEntity>()
+                    .FirstOrDefaultAsync(d => d.Id == draftId, ct);
+                if (stale is not null)
+                {
+                    db.Set<DraftEntity>().Remove(stale);
+                    await db.SaveChangesAsync(ct);
+                }
+            }
             throw ApiException.Validation(
                 "listening_extraction_failed",
                 $"Listening AI extraction did not produce an approvable structure: {aiDraft.Message}");
         }
 
         var now = DateTimeOffset.UtcNow;
-        var draft = new DraftEntity
-        {
-            Id = $"led_{Guid.NewGuid():N}",
-            PaperId = paperId,
-            Status = DraftStatus.Pending,
-            ProposedAt = now,
-            ProposedByUserId = adminId,
-            IsStub = aiDraft.IsStub,
-            StubReason = aiDraft.IsStub ? Truncate(aiDraft.Message, 512) : null,
-            Summary = Truncate(aiDraft.Message, 2048),
-            ProposedQuestionsJson = JsonSerializer.Serialize(aiDraft.Questions, CamelJson),
-            RawAiResponseJson = string.IsNullOrEmpty(aiDraft.RawResponseJson)
-                ? null
-                : Truncate(aiDraft.RawResponseJson, 65536),
-        };
-        db.ListeningExtractionDrafts.Add(draft);
+
+        // H5: Update the placeholder row with real AI results.
+        var existingPlaceholder = await db.Set<DraftEntity>()
+            .FirstOrDefaultAsync(d => d.Id == draftId, ct);
+        var draft = existingPlaceholder ?? new DraftEntity { Id = draftId };
+        draft.PaperId = paperId;
+        draft.Status = DraftStatus.Pending;
+        draft.ProposedAt = now;
+        draft.ProposedByUserId = adminId;
+        draft.IsStub = aiDraft.IsStub;
+        draft.StubReason = aiDraft.IsStub ? Truncate(aiDraft.Message, 512) : null;
+        draft.Summary = Truncate(aiDraft.Message, 2048);
+        draft.ProposedQuestionsJson = JsonSerializer.Serialize(aiDraft.Questions, CamelJson);
+        draft.RawAiResponseJson = string.IsNullOrEmpty(aiDraft.RawResponseJson)
+            ? null
+            : Truncate(aiDraft.RawResponseJson, 65536);
+        if (existingPlaceholder is null)
+            db.ListeningExtractionDrafts.Add(draft);
 
         db.AuditEvents.Add(new AuditEvent
         {

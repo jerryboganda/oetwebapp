@@ -98,7 +98,19 @@ public sealed class ListeningSessionService
         // Free-nav modes (Paper / Learning / Diagnostic): direct apply, no token.
         if (!mode.OneWayLocks)
         {
+            var previousState = nav.State;
             nav = nav with { State = cmd.ToState };
+            _db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = userId,
+                ActorName = userId,
+                Action = "listening.session.advance",
+                ResourceType = "ListeningAttempt",
+                ResourceId = attemptId,
+                Details = JsonSerializer.Serialize(new { fromState = previousState, toState = cmd.ToState, mode = attempt.Mode, freeNav = true }),
+            });
             await PersistNavigationAsync(attempt, nav, policy, mode, now, ct);
             return AdvanceResultDto.Applied(ToDto(attempt, nav, policy, mode));
         }
@@ -124,13 +136,43 @@ public sealed class ListeningSessionService
             var v = _tokens.Validate(cmd.ConfirmToken!, attempt.Id, nav.State, cmd.ToState, now);
             if (!v.IsValid)
                 return AdvanceResultDto.Rejected("confirm-token-invalid", v.Reason ?? "invalid token");
+
+            // H18: Consume the confirm token by immediately persisting a state
+            // mutation (RowVersion bump). A concurrent replay that passes HMAC
+            // validation will hit DbUpdateConcurrencyException on SaveChangesAsync
+            // because the RowVersion will have already been incremented by the
+            // first consumer.
+            attempt.RowVersion++;
         }
 
         // Lock the from-state so we can never go back (R06.1).
         var newLocks = nav.Locks.Concat(new[] { nav.State }).Distinct().ToArray();
+        var fromState = nav.State;
         nav = nav with { State = cmd.ToState, Locks = newLocks };
 
-        await PersistNavigationAsync(attempt, nav, policy, mode, now, ct);
+        _db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = now,
+            ActorId = userId,
+            ActorName = userId,
+            Action = "listening.session.advance",
+            ResourceType = "ListeningAttempt",
+            ResourceId = attemptId,
+            Details = JsonSerializer.Serialize(new { fromState, toState = cmd.ToState, mode = attempt.Mode, freeNav = false }),
+        });
+
+        try
+        {
+            await PersistNavigationAsync(attempt, nav, policy, mode, now, ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // H18: A concurrent request already consumed this token and advanced
+            // the state. Reject the replay attempt cleanly instead of a 500.
+            return AdvanceResultDto.Rejected("confirm-token-consumed",
+                "This confirm token has already been used. Refresh session state.");
+        }
         return AdvanceResultDto.Applied(ToDto(attempt, nav, policy, mode));
     }
 
@@ -157,6 +199,19 @@ public sealed class ListeningSessionService
 
         attempt.TechReadinessJson = JsonSerializer.Serialize(snapshot, JsonOptions);
         attempt.LastActivityAt = now;
+
+        _db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = now,
+            ActorId = userId,
+            ActorName = userId,
+            Action = "listening.session.tech_readiness_recorded",
+            ResourceType = "ListeningAttempt",
+            ResourceId = attemptId,
+            Details = JsonSerializer.Serialize(new { audioOk = cmd.AudioOk, durationMs = cmd.DurationMs }),
+        });
+
         await _db.SaveChangesAsync(ct);
 
         return new TechReadinessDto(
@@ -408,6 +463,19 @@ public sealed class ListeningSessionService
 
         attempt.AnnotationsJson = normalized;
         attempt.LastActivityAt = _clock.GetUtcNow();
+
+        _db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = _clock.GetUtcNow(),
+            ActorId = userId,
+            ActorName = userId,
+            Action = "listening.session.annotations_saved",
+            ResourceType = "ListeningAttempt",
+            ResourceId = attemptId,
+            Details = JsonSerializer.Serialize(new { bytesStored = normalized is not null ? System.Text.Encoding.UTF8.GetByteCount(normalized) : 0 }),
+        });
+
         await _db.SaveChangesAsync(ct);
     }
 

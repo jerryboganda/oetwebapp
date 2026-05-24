@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 /**
  * OET Speaking - Phase 11 P11.5 - admin drill bank list page.
@@ -9,12 +9,16 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Sparkles } from 'lucide-react';
+
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Input, Select } from '@/components/ui/form-controls';
 import {
   archiveAdminDrill,
@@ -28,12 +32,19 @@ import {
   type SpeakingDrillKind,
 } from '@/lib/api/speaking-drills';
 
-const STATUS_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'muted' | 'info'> = {
-  draft: 'muted',
+const STATUS_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'info'> = {
+  draft: 'default',
   inreview: 'warning',
   published: 'success',
   archived: 'default',
 };
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Speaking', href: '/admin/content/speaking' },
+  { label: 'Drill bank' },
+];
 
 export default function AdminSpeakingDrillsPage() {
   const [drills, setDrills] = useState<AdminDrillSummary[]>([]);
@@ -136,52 +147,62 @@ export default function AdminSpeakingDrillsPage() {
     }
   }
 
+  const filtersNode = (
+    <div className="flex flex-wrap items-end gap-2">
+      <div className="w-40">
+        <Select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          options={[
+            { value: '', label: 'All statuses' },
+            { value: 'draft', label: 'Draft' },
+            { value: 'inreview', label: 'In review' },
+            { value: 'published', label: 'Published' },
+            { value: 'archived', label: 'Archived' },
+          ]}
+        />
+      </div>
+      <div className="w-40">
+        <Select
+          value={kindFilter}
+          onChange={(e) => setKindFilter(e.target.value)}
+          options={[
+            { value: '', label: 'All kinds' },
+            ...SPEAKING_DRILL_KINDS.map((k) => ({ value: k, label: k })),
+          ]}
+        />
+      </div>
+      <Button variant="outline" size="sm" onClick={reload} disabled={loading}>
+        Refresh
+      </Button>
+    </div>
+  );
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Speaking drills">
-      <div className="space-y-6">
-        <header className="flex flex-wrap items-end justify-between gap-3">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold text-foreground">Speaking - drill bank</h1>
-            <p className="text-muted-foreground">
-              Curate the post-session remediation drills that the speaking analytics console
-              recommends to learners after low-scoring criteria.
-            </p>
-          </div>
-          <Button asChild variant="outline"><Link href="/admin/content/speaking/drills/ai-draft">AI-assisted draft...</Link></Button>
-        </header>
+    <AdminCatalogLayout
+      title="Speaking drill bank"
+      description="Curate the post-session remediation drills that the speaking analytics console recommends to learners after low-scoring criteria."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Content"
+      hideViewModeToggle
+      filters={filtersNode}
+      actions={
+        <Button asChild variant="outline">
+          <Link href="/admin/content/speaking/drills/ai-draft">AI-assisted draft</Link>
+        </Button>
+      }
+    >
+      {error && (
+        <div className="col-span-full">
+          <InlineAlert variant="error">{error}</InlineAlert>
+        </div>
+      )}
 
-        <Card className="space-y-4 p-4">
-          <h2 className="font-semibold text-foreground">Filters</h2>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              options={[
-                { value: '', label: 'All statuses' },
-                { value: 'draft', label: 'Draft' },
-                { value: 'inreview', label: 'In review' },
-                { value: 'published', label: 'Published' },
-                { value: 'archived', label: 'Archived' },
-              ]}
-            />
-            <Select
-              value={kindFilter}
-              onChange={(e) => setKindFilter(e.target.value)}
-              options={[
-                { value: '', label: 'All kinds' },
-                ...SPEAKING_DRILL_KINDS.map((k) => ({ value: k, label: k })),
-              ]}
-            />
-            <Button variant="outline" onClick={reload} disabled={loading}>
-              Refresh
-            </Button>
-          </div>
-        </Card>
-
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-
-        <Card className="space-y-3 p-4">
-          <h2 className="font-semibold text-foreground">Create drill (manual)</h2>
+      <Card className="col-span-full">
+        <CardHeader>
+          <CardTitle>Create drill (manual)</CardTitle>
+        </CardHeader>
+        <CardContent>
           <form className="grid gap-3 sm:grid-cols-2" onSubmit={submitDraft}>
             <Input
               placeholder="Title"
@@ -214,7 +235,7 @@ export default function AdminSpeakingDrillsPage() {
               }
             />
             <textarea
-              className="rounded border border-border p-2 text-sm sm:col-span-2"
+              className="rounded-admin border border-admin-border bg-admin-bg-surface p-2 text-sm sm:col-span-2"
               rows={3}
               placeholder="Instruction text shown to the learner"
               value={draft.instructionText}
@@ -227,73 +248,80 @@ export default function AdminSpeakingDrillsPage() {
               </Button>
             </div>
           </form>
-        </Card>
+        </CardContent>
+      </Card>
 
-        {loading ? (
+      {loading ? (
+        <div className="col-span-full">
           <Skeleton className="h-48 w-full" />
-        ) : visible.length === 0 ? (
-          <Card className="p-8 text-center text-muted-foreground">No drills match the current filters.</Card>
-        ) : (
-          <Card>
-            <ul className="divide-y divide-slate-100">
-              {visible.map((d) => {
-                const variant = STATUS_VARIANT[d.status] ?? 'default';
-                return (
-                  <li key={d.drillId} className="flex flex-wrap items-center gap-3 p-4">
-                    <div className="flex-1 min-w-[16rem]">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link
-                          href={`/admin/content/speaking/drills/${encodeURIComponent(d.drillId)}`}
-                          className="font-medium text-foreground hover:underline"
-                        >
-                          {d.title}
-                        </Link>
-                        <Badge variant={variant}>{d.status}</Badge>
-                        <Badge variant="outline">{String(d.drillKind)}</Badge>
-                        {d.professionId && <Badge variant="muted">{d.professionId}</Badge>}
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                        {d.instructionText}
-                      </p>
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="col-span-full">
+          <EmptyState
+            illustration={<Sparkles />}
+            title="No drills match the current filters"
+            description="Adjust filters or create a new drill above."
+          />
+        </div>
+      ) : (
+        <Card className="col-span-full">
+          <ul className="divide-y divide-admin-border">
+            {visible.map((d) => {
+              const variant = STATUS_VARIANT[d.status] ?? 'default';
+              return (
+                <li key={d.drillId} className="flex flex-wrap items-center gap-3 p-4">
+                  <div className="flex-1 min-w-[16rem]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/admin/content/speaking/drills/${encodeURIComponent(d.drillId)}`}
+                        className="font-medium text-admin-fg-strong hover:underline"
+                      >
+                        {d.title}
+                      </Link>
+                      <Badge variant={variant as any} intensity="tinted">{d.status}</Badge>
+                      <Badge variant="default" intensity="tinted">{String(d.drillKind)}</Badge>
+                      {d.professionId && <Badge variant="default" intensity="tinted">{d.professionId}</Badge>}
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {d.status !== 'published' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => publish(d.drillId)}
-                          disabled={busyId === d.drillId}
-                        >
-                          Publish
-                        </Button>
-                      )}
-                      {d.status !== 'archived' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => archive(d.drillId)}
-                          disabled={busyId === d.drillId}
-                        >
-                          Archive
-                        </Button>
-                      )}
+                    <p className="mt-1 text-sm text-admin-fg-muted line-clamp-2">
+                      {d.instructionText}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {d.status !== 'published' && (
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => destroy(d.drillId)}
+                        onClick={() => publish(d.drillId)}
                         disabled={busyId === d.drillId}
                       >
-                        Delete
+                        Publish
                       </Button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
-        )}
-      </div>
-    </AdminRouteWorkspace>
+                    )}
+                    {d.status !== 'archived' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => archive(d.drillId)}
+                        disabled={busyId === d.drillId}
+                      >
+                        Archive
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => destroy(d.drillId)}
+                      disabled={busyId === d.drillId}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+    </AdminCatalogLayout>
   );
 }
-

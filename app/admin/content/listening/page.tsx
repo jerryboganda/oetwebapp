@@ -3,11 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Headphones, Plus, Archive as ArchiveIcon, CheckCircle2, XCircle, Settings } from 'lucide-react';
-import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -176,7 +174,7 @@ export default function AdminListeningPapersPage() {
       key: 'title',
       header: 'Title',
       render: (p) => canWriteContent ? (
-        <Link href={`/admin/content/papers/${p.id}`} className="font-medium hover:text-primary">
+        <Link href={`/admin/content/papers/${p.id}`} className="font-medium hover:text-[var(--admin-primary)]">
           {p.title}
         </Link>
       ) : <span className="font-medium">{p.title}</span>,
@@ -207,7 +205,7 @@ export default function AdminListeningPapersPage() {
                 title={`${r}: ${ok ? 'present' : 'missing'}`}
                 className={
                   'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ' +
-                  (ok ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger')
+                  (ok ? 'bg-[var(--admin-success-tint)] text-[var(--admin-success)]' : 'bg-[var(--admin-danger-tint)] text-[var(--admin-danger)]')
                 }
               >
                 {ok ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
@@ -226,13 +224,13 @@ export default function AdminListeningPapersPage() {
         <div className="flex gap-2">
           <Link
             href={`/admin/content/papers/${p.id}`}
-            className="inline-flex min-h-9 items-center rounded px-3 py-2 text-sm font-semibold text-navy hover:bg-background-light"
+            className="inline-flex min-h-9 items-center rounded-admin px-3 py-2 text-sm font-semibold text-admin-fg-strong hover:bg-admin-bg-subtle"
           >
             Edit
           </Link>
           <Link
             href={`/admin/content/listening/${p.id}/structure`}
-            className="inline-flex min-h-9 items-center rounded px-3 py-2 text-sm font-semibold text-navy hover:bg-background-light"
+            className="inline-flex min-h-9 items-center rounded-admin px-3 py-2 text-sm font-semibold text-admin-fg-strong hover:bg-admin-bg-subtle"
           >
             Questions
           </Link>
@@ -242,68 +240,124 @@ export default function AdminListeningPapersPage() {
             </Button>
           )}
         </div>
-      ) : <span className="text-xs text-muted">Read only</span>,
+      ) : <span className="text-xs text-admin-fg-muted">Read only</span>,
     },
   ], [archive, canWriteContent]);
 
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <p className="text-sm text-muted">Admin access required.</p>
-      </AdminRouteWorkspace>
+      <AdminTableLayout
+        title="Listening Papers"
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Listening' },
+        ]}
+      >
+        <div className="p-6">
+          <p className="text-sm text-admin-fg-muted">Admin access required.</p>
+        </div>
+      </AdminTableLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Listening Papers">
-      <AdminRouteSectionHeader
-        icon={<Headphones className="w-6 h-6" />}
-        title="Listening Papers"
-        description="Author and publish OET Listening papers (Part A consultations 24 items, Part B workplace extracts 6 items, Part C presentations 12 items — total 42 items per paper). Upload audio + question paper + audio script + answer key. AI extraction proposes the question map; you review and approve."
-      />
-
-      <AdminRoutePanel title="Filters">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
-          <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
-          {canWriteContent ? (
-            <div className="flex items-end gap-2 md:col-span-2">
-              <Link
-                href="/admin/content/papers?subtest=listening"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600"
-              >
-                <Plus className="w-4 h-4 mr-1" /> Create Listening paper
-              </Link>
-              <Link
-                href="/admin/content/papers/import"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy transition hover:bg-background-light"
-              >
-                Bulk ZIP import
-              </Link>
-              <Link
-                href="/admin/content/listening/policy"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy transition hover:bg-background-light"
-              >
-                <Settings className="w-4 h-4 mr-1" /> Policy Settings
-              </Link>
-            </div>
-          ) : null}
+    <AdminTableLayout
+      eyebrow="CMS"
+      title="Listening Papers"
+      description="Author and publish OET Listening papers (Part A 24 items, Part B 6 items, Part C 12 items — total 42 items per paper). Upload audio + question paper + audio script + answer key. AI extraction proposes the question map; you review and approve."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Listening' },
+      ]}
+      actions={canWriteContent ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="primary" size="sm" asChild>
+            <Link href="/admin/content/papers?subtest=listening">
+              <Plus className="mr-1.5 h-4 w-4" />
+              New Listening Paper
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/content/papers/import">
+              Bulk ZIP import
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/content/listening/policy">
+              <Settings className="mr-1.5 h-4 w-4" />
+              Policy
+            </Link>
+          </Button>
         </div>
-      </AdminRoutePanel>
+      ) : undefined}
+      banner={
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <KpiTile label="Total" value={stats.total} tone="default" icon={<Headphones className="h-4 w-4" />} />
+            <KpiTile label="Published" value={stats.published} tone="success" />
+            <KpiTile label="Drafts" value={stats.draft} tone="default" />
+            <KpiTile label="In review" value={stats.review} tone="warning" />
+            <KpiTile label="Missing assets" value={stats.missing} tone="danger" />
+          </div>
 
-      <AdminRoutePanel title="Listening overview">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <StatTile label="Total" value={stats.total} />
-          <StatTile label="Published" value={stats.published} tone="success" />
-          <StatTile label="Drafts" value={stats.draft} />
-          <StatTile label="In review" value={stats.review} tone="warning" />
-          <StatTile label="Missing assets" value={stats.missing} tone="danger" />
+          <Card>
+            <CardHeader>
+              <CardTitle>Filters</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
+                <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </AdminRoutePanel>
-
+      }
+      footer={
+        <Card>
+          <CardContent className="p-5">
+            <details className="group">
+              <summary className="cursor-pointer text-sm font-semibold text-admin-fg-strong">
+                Authoring quick-reference: canonical Listening paper layout
+              </summary>
+              <div className="mt-3 space-y-3 text-sm text-admin-fg-muted">
+                <div>
+                  <strong className="text-admin-fg-strong">Canonical structure (42 items total):</strong>
+                  <ul className="ml-5 mt-1 list-disc space-y-1">
+                    <li><strong>Part A</strong> — 2 patient consultations × 12 short-answer items = <strong>24 items</strong></li>
+                    <li><strong>Part B</strong> — 6 short workplace extracts × 1 multiple-choice (3-option) item = <strong>6 items</strong></li>
+                    <li><strong>Part C</strong> — 2 longer presentations × 6 multiple-choice (3-option) items = <strong>12 items</strong></li>
+                  </ul>
+                </div>
+                <div>
+                  <strong className="text-admin-fg-strong">Required asset roles (4):</strong>
+                  <ul className="ml-5 mt-1 list-disc space-y-1">
+                    <li><code>Audio</code> — single combined MP3/WAV for the full paper</li>
+                    <li><code>QuestionPaper</code> — learner-facing PDF</li>
+                    <li><code>AudioScript</code> — full transcript PDF (admin/marker reference)</li>
+                    <li><code>AnswerKey</code> — official key PDF</li>
+                  </ul>
+                </div>
+                <div>
+                  <strong className="text-admin-fg-strong">Publish gate checks:</strong>
+                  <ul className="ml-5 mt-1 list-disc space-y-1">
+                    <li>All 4 required asset roles attached as primary</li>
+                    <li>Non-empty <code>SourceProvenance</code></li>
+                    <li>Authored structure validates to 24+6+12=42 items with no validation errors</li>
+                    <li>Every item has a non-empty correct answer; MCQ items have exactly 3 options</li>
+                  </ul>
+                </div>
+              </div>
+            </details>
+          </CardContent>
+        </Card>
+      }
+    >
       <AsyncStateWrapper status={status}>
-        <AdminRoutePanel title={`Listening papers (${rows.length})`}>
-          <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+        <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+        <div className="p-4">
           <BulkActionBar
             selectedCount={selectedKeys.size}
             onClearSelection={() => setSelectedKeys(new Set())}
@@ -312,60 +366,10 @@ export default function AdminListeningPapersPage() {
               { key: 'publish', label: bulkBusy ? 'Publishing…' : 'Publish selected', onClick: bulkPublish },
             ]}
           />
-        </AdminRoutePanel>
+        </div>
       </AsyncStateWrapper>
 
-      <AdminRoutePanel>
-        <details className="group">
-          <summary className="cursor-pointer text-sm font-semibold text-admin-text">
-            Authoring quick-reference: canonical Listening paper layout
-          </summary>
-          <div className="mt-3 space-y-3 text-sm text-admin-text-muted">
-            <div>
-              <strong className="text-admin-text">Canonical structure (42 items total):</strong>
-              <ul className="ml-5 mt-1 list-disc space-y-1">
-                <li><strong>Part A</strong> — 2 patient consultations × 12 short-answer items = <strong>24 items</strong></li>
-                <li><strong>Part B</strong> — 6 short workplace extracts × 1 multiple-choice (3-option) item = <strong>6 items</strong></li>
-                <li><strong>Part C</strong> — 2 longer presentations × 6 multiple-choice (3-option) items = <strong>12 items</strong></li>
-              </ul>
-            </div>
-            <div>
-              <strong className="text-admin-text">Required asset roles (4):</strong>
-              <ul className="ml-5 mt-1 list-disc space-y-1">
-                <li><code>Audio</code> — single combined MP3/WAV for the full paper</li>
-                <li><code>QuestionPaper</code> — learner-facing PDF</li>
-                <li><code>AudioScript</code> — full transcript PDF (admin/marker reference)</li>
-                <li><code>AnswerKey</code> — official key PDF</li>
-              </ul>
-            </div>
-            <div>
-              <strong className="text-admin-text">Publish gate checks:</strong>
-              <ul className="ml-5 mt-1 list-disc space-y-1">
-                <li>All 4 required asset roles attached as primary</li>
-                <li>Non-empty <code>SourceProvenance</code></li>
-                <li>Authored structure validates to 24+6+12=42 items with no validation errors</li>
-                <li>Every item has a non-empty correct answer; MCQ items have exactly 3 options</li>
-              </ul>
-            </div>
-          </div>
-        </details>
-      </AdminRoutePanel>
-
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
-  );
-}
-
-function StatTile({ label, value, tone }: { label: string; value: number; tone?: 'success' | 'warning' | 'danger' }) {
-  const toneClass =
-    tone === 'success' ? 'text-success'
-      : tone === 'warning' ? 'text-warning'
-      : tone === 'danger' ? 'text-danger'
-      : 'text-navy';
-  return (
-    <div className="rounded-2xl border border-border bg-background-light p-4">
-      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${toneClass}`}>{value}</div>
-    </div>
+    </AdminTableLayout>
   );
 }
