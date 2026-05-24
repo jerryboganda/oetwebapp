@@ -53,7 +53,7 @@ function summarise(payload: Json, fallback = 'No data.'): string {
 function RowsTable({ payload, emptyLabel }: { payload: Json; emptyLabel: string }) {
   const rows = toRows(payload);
   if (rows.length === 0) {
-    return <div className="p-4 text-sm text-slate-500">{emptyLabel}</div>;
+    return <div className="p-4 text-sm text-muted-foreground">{emptyLabel}</div>;
   }
   const columns = Array.from(
     rows.reduce<Set<string>>((acc, row) => {
@@ -64,7 +64,7 @@ function RowsTable({ payload, emptyLabel }: { payload: Json; emptyLabel: string 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+        <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
             {columns.map((c) => (
               <th key={c} className="p-2">
@@ -85,7 +85,7 @@ function RowsTable({ payload, emptyLabel }: { payload: Json; emptyLabel: string 
                   display = Number.isInteger(v) ? String(v) : v.toFixed(2);
                 else display = String(v);
                 return (
-                  <td key={c} className="p-2 align-top text-slate-700">
+                  <td key={c} className="p-2 align-top text-foreground">
                     {display}
                   </td>
                 );
@@ -137,8 +137,8 @@ export default function AdminSpeakingAnalyticsPage() {
     <AdminRouteWorkspace role="main" aria-label="Speaking analytics">
       <div className="space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold text-slate-900">Speaking · analytics console</h1>
-          <p className="text-slate-600">
+          <h1 className="text-2xl font-semibold text-foreground">Speaking · analytics console</h1>
+          <p className="text-muted-foreground">
             Aggregated cohort, tutor-consistency, and content-difficulty metrics. All data is
             sourced from server-authoritative endpoints; no client-side scoring is performed.
           </p>
@@ -173,8 +173,8 @@ export default function AdminSpeakingAnalyticsPage() {
 
         <Card>
           <header className="flex items-center justify-between border-b border-slate-100 p-4">
-            <h2 className="font-semibold text-slate-900">Cohort performance</h2>
-            <span className="text-xs text-slate-500">{summarise(classData)}</span>
+            <h2 className="font-semibold text-foreground">Cohort performance</h2>
+            <span className="text-xs text-muted-foreground">{summarise(classData)}</span>
           </header>
           {loading && !classData ? (
             <Skeleton className="m-4 h-32 w-[calc(100%-2rem)]" />
@@ -185,8 +185,8 @@ export default function AdminSpeakingAnalyticsPage() {
 
         <Card>
           <header className="flex items-center justify-between border-b border-slate-100 p-4">
-            <h2 className="font-semibold text-slate-900">Tutor consistency</h2>
-            <span className="text-xs text-slate-500">{summarise(tutorData)}</span>
+            <h2 className="font-semibold text-foreground">Tutor consistency</h2>
+            <span className="text-xs text-muted-foreground">{summarise(tutorData)}</span>
           </header>
           {loading && !tutorData ? (
             <Skeleton className="m-4 h-32 w-[calc(100%-2rem)]" />
@@ -197,8 +197,8 @@ export default function AdminSpeakingAnalyticsPage() {
 
         <Card>
           <header className="flex items-center justify-between border-b border-slate-100 p-4">
-            <h2 className="font-semibold text-slate-900">Content difficulty</h2>
-            <span className="text-xs text-slate-500">{summarise(contentData)}</span>
+            <h2 className="font-semibold text-foreground">Content difficulty</h2>
+            <span className="text-xs text-muted-foreground">{summarise(contentData)}</span>
           </header>
           {loading && !contentData ? (
             <Skeleton className="m-4 h-32 w-[calc(100%-2rem)]" />

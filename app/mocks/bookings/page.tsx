@@ -130,7 +130,7 @@ export default function MockBookingsPage() {
           <Skeleton className="h-32 w-full" />
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 p-12 text-center text-slate-500">
+        <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted-foreground">
           You have no upcoming bookings. Use the &quot;Book a mock&quot; button to schedule a Speaking or final-readiness mock.
         </div>
       ) : (
@@ -140,13 +140,13 @@ export default function MockBookingsPage() {
             const draft = rescheduleDraft[b.id] ?? '';
             const isTerminal = b.status === 'completed' || b.status === 'cancelled' || b.status === 'tutor_no_show' || b.status === 'learner_no_show';
             return (
-              <li key={b.id} className="rounded-2xl border border-slate-200 bg-white p-5">
+              <li key={b.id} className="rounded-2xl border border-border bg-surface p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-slate-900">
+                    <div className="text-sm font-semibold text-foreground">
                       {formatScheduled(b.scheduledStartAt, b.timezoneIana)}
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                    <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                       <MapPin className="h-3 w-3" /> {b.timezoneIana}
                       <span>·</span>
                       <span>{b.deliveryMode}</span>
@@ -160,12 +160,12 @@ export default function MockBookingsPage() {
                 {!isTerminal ? (
                   <div className="mt-4 flex flex-wrap items-end gap-2">
                     <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">
                         Reschedule to
                       </label>
                       <input
                         type="datetime-local"
-                        className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                        className="rounded-md border border-border px-3 py-2 text-sm"
                         value={draft}
                         onChange={(e) => setRescheduleDraft((prev) => ({ ...prev, [b.id]: e.target.value }))}
                       />
@@ -189,7 +189,7 @@ export default function MockBookingsPage() {
                         href={b.zoomJoinUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        className="inline-flex items-center rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
                       >
                         Join room
                       </a>

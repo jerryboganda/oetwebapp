@@ -364,7 +364,7 @@ export default function ListeningReviewPage() {
                 </div>
 
                 {/* Overall feedback — rendered as pre-wrap to preserve markdown line breaks */}
-                <div className="rounded-2xl border border-primary/10 bg-white p-5 text-sm leading-relaxed text-navy whitespace-pre-wrap">
+                <div className="rounded-2xl border border-primary/10 bg-surface p-5 text-sm leading-relaxed text-navy whitespace-pre-wrap">
                   {tutorFeedback.overallFeedbackMarkdown}
                 </div>
 
@@ -386,7 +386,7 @@ export default function ListeningReviewPage() {
                         {perQ.map(({ questionNumber, comment }) => (
                           <div
                             key={questionNumber}
-                            className="flex gap-3 rounded-xl border border-primary/10 bg-white p-3 text-sm"
+                            className="flex gap-3 rounded-xl border border-primary/10 bg-surface p-3 text-sm"
                           >
                             <span className="shrink-0 font-bold text-primary">
                               Q{questionNumber}

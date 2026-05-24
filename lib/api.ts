@@ -5157,6 +5157,8 @@ export interface AdminBillingPlanOet2026Fields {
   isDraft?: boolean;
   extensionAllowed?: boolean;
   recallUpdatesEnabled?: boolean;
+  // "What's included" bullet list — persisted on the linked ContentPackage.
+  comparisonFeaturesJson?: string;
 }
 
 export async function createAdminBillingPlan(payload: {
@@ -5210,6 +5212,7 @@ export async function createAdminBillingPlan(payload: {
       isDraft: payload.isDraft ?? null,
       extensionAllowed: payload.extensionAllowed ?? null,
       recallUpdatesEnabled: payload.recallUpdatesEnabled ?? null,
+      comparisonFeaturesJson: payload.comparisonFeaturesJson ?? null,
     }),
   });
 }
@@ -5265,6 +5268,7 @@ export async function updateAdminBillingPlan(planId: string, payload: {
       isDraft: payload.isDraft ?? null,
       extensionAllowed: payload.extensionAllowed ?? null,
       recallUpdatesEnabled: payload.recallUpdatesEnabled ?? null,
+      comparisonFeaturesJson: payload.comparisonFeaturesJson ?? null,
     }),
   });
 }
@@ -5383,6 +5387,18 @@ export async function updateAdminBillingAddOn(addOnId: string, payload: {
       sessionsGranted: payload.sessionsGranted ?? null,
     }),
   });
+}
+
+// ── Hard-delete (404 + 409 handled by caller). Server returns 409 when
+// the plan/add-on still has historical references — caller should fall
+// back to archive (PUT status=archived) in that case.
+
+export async function deleteAdminBillingPlan(planId: string): Promise<{ id: string; code: string; deleted: boolean }> {
+  return apiRequest(`/v1/admin/billing/plans/${encodeURIComponent(planId)}`, { method: 'DELETE' });
+}
+
+export async function deleteAdminBillingAddOn(addOnId: string): Promise<{ id: string; code: string; deleted: boolean }> {
+  return apiRequest(`/v1/admin/billing/add-ons/${encodeURIComponent(addOnId)}`, { method: 'DELETE' });
 }
 
 // ── OET 2026 catalog API ─────────────────────────────────────────────────

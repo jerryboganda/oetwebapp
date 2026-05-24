@@ -189,7 +189,7 @@ export default function AdminWritingAiDraftPage() {
                     className={`flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2 text-sm shadow-sm transition-colors ${
                       checked
                         ? 'border-primary bg-primary/10 text-primary font-semibold'
-                        : 'border-gray-200 bg-background-light text-navy hover:border-gray-300'
+                        : 'border-border bg-background-light text-navy hover:border-border-hover'
                     }`}
                   >
                     <input
@@ -272,7 +272,7 @@ export default function AdminWritingAiDraftPage() {
             </MotionItem>
 
             <MotionItem>
-              <dl className="grid gap-4 border-t border-gray-100 pt-4 sm:grid-cols-3">
+              <dl className="grid gap-4 border-t border-border pt-4 sm:grid-cols-3">
                 <div>
                   <dt className="text-xs uppercase tracking-wide text-muted">Case notes</dt>
                   <dd className="mt-1 text-xl font-bold text-navy">{result.caseNoteCount}</dd>
@@ -290,7 +290,7 @@ export default function AdminWritingAiDraftPage() {
 
             {result.appliedRuleIds.length > 0 && (
               <MotionItem>
-                <div className="mt-5 border-t border-gray-100 pt-4">
+                <div className="mt-5 border-t border-border pt-4">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                     Applied rules
                   </p>

@@ -108,7 +108,7 @@ export default function ExpertSpeakingLiveRoomPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <span className="inline-flex items-center gap-2 text-sm text-slate-500">
+        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Preparing the tutor room…
         </span>
       </div>
@@ -138,11 +138,11 @@ export default function ExpertSpeakingLiveRoomPage() {
     <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Expert · Live tutor room
           </p>
-          <h1 className="text-2xl font-bold text-slate-900">{card.scenarioTitle}</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle}</h1>
+          <p className="text-sm text-muted-foreground">
             {card.setting} · Candidate: {card.candidateRole}
           </p>
         </div>
@@ -177,19 +177,19 @@ export default function ExpertSpeakingLiveRoomPage() {
         />
       </LiveTutorRoomShell>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="mb-2 flex items-center gap-2">
-          <NotebookPen className="h-4 w-4 text-slate-500" aria-hidden />
-          <h2 className="text-sm font-semibold text-slate-700">Private notes (tutor only)</h2>
+          <NotebookPen className="h-4 w-4 text-muted-foreground" aria-hidden />
+          <h2 className="text-sm font-semibold text-foreground">Private notes (tutor only)</h2>
         </div>
         <textarea
           value={privateNotes}
           onChange={(e) => setPrivateNotes(e.target.value)}
           placeholder="Observations, coaching points, follow-up cues — kept on your device only."
-          className="h-32 w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="h-32 w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
           aria-label="Tutor private notes"
         />
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           Notes are local to this device. Use the review screen after the session for
           formal feedback that the learner will see.
         </p>

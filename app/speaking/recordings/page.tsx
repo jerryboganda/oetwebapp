@@ -73,8 +73,8 @@ export default function SpeakingRecordingsPage() {
     <LearnerDashboardShell>
       <div className="mx-auto max-w-5xl space-y-6 py-8">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold text-slate-900">My speaking recordings</h1>
-          <p className="text-slate-600">
+          <h1 className="text-2xl font-semibold text-foreground">My speaking recordings</h1>
+          <p className="text-muted-foreground">
             Manage the audio captured during your role-plays. You can delete a recording at any
             time. Recordings are also automatically removed after the retention window expires.
           </p>
@@ -85,7 +85,7 @@ export default function SpeakingRecordingsPage() {
         {!rows ? (
           <Skeleton className="h-48 w-full rounded-xl" />
         ) : rows.length === 0 ? (
-          <Card className="p-8 text-center text-slate-600">
+          <Card className="p-8 text-center text-muted-foreground">
             You don&apos;t have any saved recordings yet.
           </Card>
         ) : (
@@ -95,12 +95,12 @@ export default function SpeakingRecordingsPage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-slate-900">{r.scenarioTitle}</span>
+                      <span className="font-medium text-foreground">{r.scenarioTitle}</span>
                       <Badge variant="default">{r.mode}</Badge>
                       <Badge variant="default">{r.professionId}</Badge>
                       {r.isArchived && <Badge variant="warning">archived</Badge>}
                     </div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-muted-foreground">
                       Captured {formatDate(r.createdAt)} · Duration {formatDuration(r.durationSeconds)}
                       {r.retentionExpiresAt
                         ? ` · Auto-deletes ${formatDate(r.retentionExpiresAt)}`

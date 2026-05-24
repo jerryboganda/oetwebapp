@@ -1,15 +1,16 @@
-# Local Docker Desktop deployment — mirrors production with simplified networking.
+# Dev mode: postgres + API only. Run Next.js locally with `npm run dev` for hot-reload.
 # Usage:
-#   cp .env.docker-local.example .env.docker-local   # then edit secrets
-#   docker compose -f docker-compose.local.yml --env-file .env.docker-local up --build -d
+#   docker compose -f docker-compose.dev.yml --env-file .env.docker-local up -d
+#   npm run dev
 #
-# Alternatively, if your shell already exports the vars:
-#   docker compose -f docker-compose.local.yml up --build -d
+# Frontend at http://localhost:3000 (hot-reload, instant code changes)
+# API at http://localhost:8080 (from Docker)
+# Postgres at localhost:5432 (from Docker)
 
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: oet-local-postgres
+    container_name: oet-dev-postgres
     restart: always
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -29,7 +30,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: oet-local-api
+    container_name: oet-dev-api
     restart: always
     depends_on:
       postgres:
@@ -102,23 +103,12 @@ services:
       - '8080:8080'
     volumes:
       - oet_local_storage:/var/opt/oet-learner/storage
-
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: oet-local-web
-    restart: always
-    depends_on:
-      learner-api:
-        condition: service_healthy
-    environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
-      API_PROXY_TARGET_URL: http://learner-api:8080
-      APP_URL: http://localhost:3000
-      NODE_ENV: production
-    ports:
-      - '3000:3000'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:8080/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   oet_local_pgdata:

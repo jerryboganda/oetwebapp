@@ -249,7 +249,7 @@ export function PartLaunchpadCard(props: PartLaunchpadCardProps) {
           <Icon className="h-3.5 w-3.5" aria-hidden />
           Part {partCode}
         </span>
-        <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-foreground">
           <Clock className="h-3 w-3" aria-hidden />
           {timerLabel}
         </span>

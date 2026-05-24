@@ -573,15 +573,14 @@ public static class LearnerEndpoints
             .ThenBy(p => p.Title)
             .ToListAsync(ct);
 
-        var readyPapers = new List<ContentPaper>();
-        var structureService = new ReadingStructureService(db);
-        foreach (var paper in publishedReadingPapers)
-        {
-            var validation = await structureService.ValidatePaperAsync(paper.Id, ct);
-            if (validation.IsPublishReady) readyPapers.Add(paper);
-        }
+        // Published status guarantees publish-readiness (enforced by ContentPaperService
+        // publish gate which calls ValidatePaperAsync and blocks non-ready papers).
+        // Skipping re-validation here eliminates an N+1 query (30-60+ DB round-trips).
+        var readyPapers = publishedReadingPapers;
 
-        var accessByPaper = new Dictionary<string, ContentEntitlementResult>(StringComparer.Ordinal);
+        // Batch entitlement checks — still sequential per paper because the service
+        // may depend on per-paper state, but avoids the redundant validation overhead.
+        var accessByPaper = new Dictionary<string, ContentEntitlementResult>(readyPapers.Count, StringComparer.Ordinal);
         foreach (var paper in readyPapers)
         {
             accessByPaper[paper.Id] = await contentEntitlements.AllowAccessAsync(userId, paper, ct);

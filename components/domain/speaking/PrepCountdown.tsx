@@ -119,7 +119,7 @@ export function PrepCountdown({
       cn(
         'tabular-nums font-bold tracking-tight transition-colors duration-300',
         size === 'lg' ? 'text-6xl md:text-7xl' : 'text-4xl md:text-5xl',
-        isWarning ? 'text-rose-600' : 'text-slate-900',
+        isWarning ? 'text-rose-600' : 'text-foreground',
       ),
     [isWarning, size],
   );
@@ -134,12 +134,12 @@ export function PrepCountdown({
   return (
     <div
       className={cn(
-        'flex flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm',
+        'flex flex-col items-center gap-4 rounded-2xl border border-border bg-surface p-6 shadow-sm',
         className,
       )}
       data-testid="prep-countdown"
     >
-      <p id={labelId} className="text-sm font-medium uppercase tracking-wider text-slate-500">
+      <p id={labelId} className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
         Preparation time
       </p>
 
@@ -203,7 +203,7 @@ export function PrepCountdown({
           >
             {formatTime(remaining)}
           </span>
-          <span className="mt-1 text-xs uppercase tracking-wide text-slate-400">
+          <span className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
             {isWarning ? 'Wrap up' : 'minutes:seconds'}
           </span>
         </motion.div>
@@ -215,7 +215,7 @@ export function PrepCountdown({
           variant="ghost"
           size="sm"
           onClick={onCancel}
-          className="text-slate-500 hover:text-slate-700"
+          className="text-muted-foreground hover:text-foreground"
         >
           Skip prep
         </Button>

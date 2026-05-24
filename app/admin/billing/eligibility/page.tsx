@@ -193,7 +193,7 @@ export default function AdminEligibilityMatrixPage() {
                         <div className="text-xs text-slate-500 dark:text-slate-400">
                           <code>{row.code}</code>
                           {row.isDraft && <Badge variant="outline" className="ml-2 text-amber-600 border-amber-400">draft</Badge>}
-                          {!row.isVisible && <Badge variant="outline" className="ml-2 text-slate-500">hidden</Badge>}
+                          {!row.isVisible && <Badge variant="outline" className="ml-2 text-muted-foreground">hidden</Badge>}
                         </div>
                       </td>
                       <td className="px-4 py-3 capitalize text-slate-700 dark:text-slate-300">{row.profession}</td>

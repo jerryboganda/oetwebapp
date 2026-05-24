@@ -53,7 +53,7 @@ export function WritingCaseNotesPanel({
             className={cn(
               'flex-1 py-2 text-xs font-bold capitalize transition-all duration-300 rounded-lg relative',
               activeTab === tab 
-                ? 'text-primary bg-white shadow-sm ring-1 ring-black/5' 
+                ? 'text-primary bg-surface shadow-sm ring-1 ring-black/5 dark:ring-white/10' 
                 : 'text-navy/60 hover:text-navy hover:bg-white/50',
             )}
           >

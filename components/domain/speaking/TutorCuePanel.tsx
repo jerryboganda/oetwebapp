@@ -232,21 +232,21 @@ export function TutorCuePanel({
   return (
     <div
       className={cn(
-        'flex h-full flex-col gap-4 text-sm text-slate-800',
+        'flex h-full flex-col gap-4 text-sm text-foreground',
         className,
       )}
       data-testid="tutor-cue-panel"
     >
       {/* Timer header */}
-      <header className="flex items-center justify-between border-b border-slate-200 pb-3">
+      <header className="flex items-center justify-between border-b border-border pb-3">
         <div className="flex items-center gap-2">
-          <Clock className={cn('h-4 w-4', isTimerWarning ? 'text-rose-600' : 'text-slate-500')} aria-hidden />
-          <span className="font-medium text-slate-700">Role-play time</span>
+          <Clock className={cn('h-4 w-4', isTimerWarning ? 'text-rose-600' : 'text-muted-foreground')} aria-hidden />
+          <span className="font-medium text-foreground">Role-play time</span>
         </div>
         <span
           className={cn(
             'rounded-md px-2 py-0.5 font-mono text-base tabular-nums',
-            isTimerWarning ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-800',
+            isTimerWarning ? 'bg-rose-50 text-rose-700' : 'bg-muted text-foreground',
           )}
           aria-live="polite"
         >
@@ -255,7 +255,7 @@ export function TutorCuePanel({
       </header>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-slate-500">
+        <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading interlocutor script...
         </div>
       ) : forbidden ? (
@@ -282,10 +282,10 @@ export function TutorCuePanel({
           <ResistancePill resistance={resistance} />
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Opening response
             </h4>
-            <p className="mt-1 whitespace-pre-wrap rounded-md bg-slate-50 p-3 leading-relaxed text-slate-900">
+            <p className="mt-1 whitespace-pre-wrap rounded-md bg-muted p-3 leading-relaxed text-foreground">
               {script.openingResponse}
             </p>
             <Button
@@ -293,7 +293,7 @@ export function TutorCuePanel({
               variant="ghost"
               size="sm"
               onClick={() => setReading((v) => !v)}
-              className="mt-2 text-slate-600"
+              className="mt-2 text-muted-foreground"
               aria-pressed={reading}
             >
               {reading ? (
@@ -309,15 +309,15 @@ export function TutorCuePanel({
           </section>
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Cue prompts
             </h4>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Tap a prompt to deliver it. Delivered cues are highlighted; click again to re-broadcast.
             </p>
             <ul className="mt-2 space-y-2">
               {cues.length === 0 ? (
-                <li className="text-xs italic text-slate-500">No cue prompts recorded for this card.</li>
+                <li className="text-xs italic text-muted-foreground">No cue prompts recorded for this card.</li>
               ) : null}
               {cues.map((cue) => {
                 const delivered = deliveredCues.has(cue.index);
@@ -330,14 +330,14 @@ export function TutorCuePanel({
                         'group flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors',
                         delivered
                           ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
-                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
+                          : 'border-border bg-surface hover:border-border-hover hover:bg-muted',
                       )}
                       data-testid={`tutor-cue-${cue.index}`}
                     >
                       <MessageSquareQuote
                         className={cn(
                           'mt-0.5 h-4 w-4 shrink-0',
-                          delivered ? 'text-emerald-600' : 'text-slate-400',
+                          delivered ? 'text-emerald-600' : 'text-muted-foreground',
                         )}
                         aria-hidden
                       />
@@ -354,10 +354,10 @@ export function TutorCuePanel({
               type="button"
               onClick={() => setHiddenOpen((v) => !v)}
               aria-expanded={hiddenOpen}
-              className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
+              className="flex w-full items-center justify-between rounded-md border border-border bg-muted px-3 py-2 text-left text-sm font-medium text-foreground hover:bg-muted/80"
             >
               <span className="inline-flex items-center gap-2">
-                <EyeOff className="h-4 w-4 text-slate-500" aria-hidden />
+                <EyeOff className="h-4 w-4 text-muted-foreground" aria-hidden />
                 Hidden information (reveal only when probed)
               </span>
               <ChevronDown
@@ -366,35 +366,35 @@ export function TutorCuePanel({
               />
             </button>
             {hiddenOpen ? (
-              <p className="mt-2 whitespace-pre-wrap rounded-md border border-slate-200 bg-white p-3 leading-relaxed text-slate-800">
+              <p className="mt-2 whitespace-pre-wrap rounded-md border border-border bg-surface p-3 leading-relaxed text-foreground">
                 {script.hiddenInformation || (
-                  <span className="italic text-slate-500">No hidden information for this card.</span>
+                  <span className="italic text-muted-foreground">No hidden information for this card.</span>
                 )}
               </p>
             ) : null}
           </section>
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Closing cue
             </h4>
-            <p className="mt-1 whitespace-pre-wrap rounded-md bg-slate-50 p-3 leading-relaxed text-slate-900">
+            <p className="mt-1 whitespace-pre-wrap rounded-md bg-muted p-3 leading-relaxed text-foreground">
               {script.closingCue || (
-                <span className="italic text-slate-500">No closing cue recorded.</span>
+                <span className="italic text-muted-foreground">No closing cue recorded.</span>
               )}
             </p>
           </section>
 
           {script.layLanguageTriggers && script.layLanguageTriggers.length > 0 ? (
             <section>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Lay-language triggers
               </h4>
               <ul className="mt-1 flex flex-wrap gap-1.5">
                 {script.layLanguageTriggers.map((t) => (
                   <li
                     key={t}
-                    className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600"
+                    className="rounded-full border border-border bg-surface px-2 py-0.5 text-xs text-muted-foreground"
                   >
                     {t}
                   </li>
@@ -404,7 +404,7 @@ export function TutorCuePanel({
           ) : null}
         </>
       ) : (
-        <p className="text-xs italic text-slate-500">
+        <p className="text-xs italic text-muted-foreground">
           No interlocutor script published for this card yet.
         </p>
       )}

@@ -724,7 +724,7 @@ export default function AdminNotificationsPage() {
                   {GLOBAL_CHANNELS.map((channel) => {
                     const enabled = globalChannelEnabledByAudience[audienceRole][channel.key];
                     return (
-                      <div key={channel.key} className="rounded-lg border border-border bg-white px-3 py-2">
+                      <div key={channel.key} className="rounded-lg border border-border bg-surface px-3 py-2">
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-semibold text-navy">{channel.label}</p>

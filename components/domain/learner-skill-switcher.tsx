@@ -52,7 +52,7 @@ export function LearnerSkillSwitcher({
                 'pressable group flex min-h-11 items-center gap-2 rounded-2xl border px-3 py-2 text-left transition-[background-color,border-color,box-shadow,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
                 active
                   ? 'border-primary/30 bg-primary/10 text-primary-dark shadow-sm'
-                  : 'border-border/70 bg-background-light text-navy hover:border-border-hover hover:bg-white',
+                  : 'border-border/70 bg-background-light text-navy hover:border-border-hover hover:bg-muted',
               )}
             >
               <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-xl', active ? 'bg-primary text-white' : 'bg-white text-muted ring-1 ring-border/70')}>

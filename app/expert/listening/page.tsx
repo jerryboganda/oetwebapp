@@ -87,7 +87,7 @@ export default function ExpertListeningAttemptsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by learner name..."
-            className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-navy placeholder:text-muted focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm text-navy placeholder:text-muted focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
       </div>
@@ -95,10 +95,10 @@ export default function ExpertListeningAttemptsPage() {
       {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-xs font-semibold uppercase tracking-wide text-muted">
+            <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
               <th className="px-4 py-3">Learner</th>
               <th className="px-4 py-3">Paper</th>
               <th className="px-4 py-3">Submitted</th>

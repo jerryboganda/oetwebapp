@@ -12,14 +12,7 @@ import { OtpCodeInput } from '@/components/auth/otp-code-input';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { useAuth } from '@/contexts/auth-context';
 import { AUTH_ROUTES } from '@/lib/auth/routes';
-
-function readErrorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-
-  return 'Unable to verify the OTP code.';
-}
+import { readErrorMessage } from '@/lib/read-error-message';
 
 export default function VerifyEmailPage() {
   return (
@@ -71,7 +64,7 @@ function VerifyEmailContent() {
         }
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(readErrorMessage(error));
+          setErrorMessage(readErrorMessage(error, 'Unable to verify the OTP code.'));
         }
       }
     };
@@ -93,7 +86,7 @@ function VerifyEmailContent() {
         `Enter the 6 digit verification code sent to ${challenge.destinationHint || email}.`
       );
     } catch (error) {
-      setErrorMessage(readErrorMessage(error));
+      setErrorMessage(readErrorMessage(error, 'Unable to verify the OTP code.'));
     }
   };
 
@@ -124,7 +117,7 @@ function VerifyEmailContent() {
 
       router.replace(`${AUTH_ROUTES.signIn}?${params.toString()}`);
     } catch (error) {
-      setErrorMessage(readErrorMessage(error));
+      setErrorMessage(readErrorMessage(error, 'Unable to verify the OTP code.'));
     } finally {
       setIsSubmitting(false);
     }

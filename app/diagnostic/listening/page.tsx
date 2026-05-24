@@ -222,7 +222,7 @@ export default function DiagnosticListeningPage() {
                               ? 'bg-primary text-white shadow-primary/20 ring-2 ring-primary ring-offset-2' 
                               : answers[q.id]?.trim() 
                                 ? 'bg-success/10 text-success hover:bg-success/20 ring-1 ring-success/20' 
-                                : 'bg-white text-navy/60 hover:bg-gray-50 ring-1 ring-black/5',
+                                : 'bg-surface text-navy/60 hover:bg-muted ring-1 ring-black/5 dark:ring-white/10',
                           )}
                         >
                           {q.number}
@@ -254,7 +254,7 @@ export default function DiagnosticListeningPage() {
                                   'flex items-center gap-4 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all duration-200 group relative overflow-hidden',
                                   answers[question.id] === opt
                                     ? 'bg-primary/[0.03] ring-2 ring-primary shadow-sm shadow-primary/5'
-                                    : 'bg-white hover:bg-gray-50/80 ring-1 ring-black/5 hover:ring-black/10 hover:shadow-md',
+                                    : 'bg-surface hover:bg-muted ring-1 ring-black/5 dark:ring-white/10 hover:ring-black/10 hover:shadow-md',
                                 )}
                               >
                                 <div className="relative flex items-center justify-center shrink-0">

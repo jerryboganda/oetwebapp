@@ -113,10 +113,10 @@ export default function SpeakingWarmupPage() {
           <p className="text-sm font-medium uppercase tracking-wide text-blue-600">
             Step 1 of 4 · Warm-up
           </p>
-          <h1 className="text-2xl font-semibold text-slate-900">
+          <h1 className="text-2xl font-semibold text-foreground">
             Quick warm-up before your role-play
           </h1>
-          <p className="text-slate-600">
+          <p className="text-muted-foreground">
             We&apos;ll have a relaxed 90-second chat to settle your voice and microphone.
             Nothing here is scored.
           </p>
@@ -129,14 +129,14 @@ export default function SpeakingWarmupPage() {
         ) : (
           <Card className="space-y-6 p-6">
             <div className="flex items-center justify-between">
-              <div className="text-sm text-slate-500">Time remaining</div>
-              <div className="text-3xl font-mono font-semibold tabular-nums text-slate-900">
+              <div className="text-sm text-muted-foreground">Time remaining</div>
+              <div className="text-3xl font-mono font-semibold tabular-nums text-foreground">
                 {String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:
                 {String(secondsLeft % 60).padStart(2, '0')}
               </div>
             </div>
 
-            <ul className="space-y-2 text-sm text-slate-700">
+            <ul className="space-y-2 text-sm text-foreground">
               <li>• Tell me how your day has been so far.</li>
               <li>• What made you choose your healthcare profession?</li>
               <li>• How are you feeling about today&apos;s practice?</li>

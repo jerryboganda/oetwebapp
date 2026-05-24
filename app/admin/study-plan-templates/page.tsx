@@ -78,7 +78,7 @@ export default function StudyPlanTemplatesAdminPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Study Plan Templates</h1>
-          <p className="text-sm text-gray-600 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Admin-authored skeletons the planner picks from for each learner. Tier-gated and
             profession-aware.
           </p>
@@ -166,10 +166,10 @@ export default function StudyPlanTemplatesAdminPage() {
       )}
 
       {loading ? (
-        <div className="p-6 text-center text-gray-500">Loading...</div>
+        <div className="p-6 text-center text-muted-foreground">Loading...</div>
       ) : rows.length === 0 ? (
-        <div className="p-12 text-center bg-gray-50 border rounded">
-          <p className="text-gray-700">No templates match these filters.</p>
+        <div className="p-12 text-center bg-muted border rounded">
+          <p className="text-foreground">No templates match these filters.</p>
           <Link
             href="/admin/study-plan-templates/new"
             className="inline-block mt-3 px-4 py-2 bg-blue-600 text-white rounded"
@@ -180,7 +180,7 @@ export default function StudyPlanTemplatesAdminPage() {
       ) : (
         <div className="border rounded overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 text-left">
+            <thead className="bg-muted text-left">
               <tr>
                 <th className="p-3 w-10">
                   <input
@@ -202,7 +202,7 @@ export default function StudyPlanTemplatesAdminPage() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t hover:bg-gray-50">
+                <tr key={r.id} className="border-t hover:bg-muted">
                   <td className="p-3">
                     <input
                       type="checkbox"
@@ -218,7 +218,7 @@ export default function StudyPlanTemplatesAdminPage() {
                       {r.name}
                     </button>
                     {r.description && (
-                      <div className="text-xs text-gray-500 mt-1">{r.description}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{r.description}</div>
                     )}
                   </td>
                   <td className="p-3 text-sm font-mono">{r.slug}</td>
@@ -227,28 +227,28 @@ export default function StudyPlanTemplatesAdminPage() {
                   </td>
                   <td className="p-3 text-sm">
                     {r.tierCodes.length === 0 ? (
-                      <span className="text-gray-400">none</span>
+                      <span className="text-muted-foreground">none</span>
                     ) : (
                       r.tierCodes.map((t) => (
                         <span
                           key={t}
-                          className="inline-block px-2 py-0.5 bg-gray-100 rounded text-xs mr-1"
+                          className="inline-block px-2 py-0.5 bg-muted rounded text-xs mr-1"
                         >
                           {t}
                         </span>
                       ))
                     )}
                   </td>
-                  <td className="p-3 text-sm">{r.professionId ?? <span className="text-gray-400">any</span>}</td>
-                  <td className="p-3 text-sm">{r.targetBand ?? <span className="text-gray-400">any</span>}</td>
+                  <td className="p-3 text-sm">{r.professionId ?? <span className="text-muted-foreground">any</span>}</td>
+                  <td className="p-3 text-sm">{r.targetBand ?? <span className="text-muted-foreground">any</span>}</td>
                   <td className="p-3">
                     {r.isActive ? (
                       <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">Active</span>
                     ) : (
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">Inactive</span>
+                      <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">Inactive</span>
                     )}
                   </td>
-                  <td className="p-3 text-sm text-gray-500">{r.version}</td>
+                  <td className="p-3 text-sm text-muted-foreground">{r.version}</td>
                   <td className="p-3">
                     <Link
                       href={`/admin/study-plan-templates/${r.id}`}

@@ -120,16 +120,8 @@ export default function DiagnosticIntroPage() {
   return (
     <LearnerDashboardShell pageTitle="Diagnostic Assessment">
       <div className="space-y-8">
-        <InlineAlert variant="info" className="border-primary/20 bg-primary/5">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-navy text-sm">Training Estimate Only</p>
-              <p className="text-xs text-muted mt-1">
-                {diagnosticDisclaimer} Use it as a guide to identify strengths and areas for improvement.
-              </p>
-            </div>
-          </div>
+        <InlineAlert variant="info" title="Training Estimate Only">
+          {diagnosticDisclaimer} Use it as a guide to identify strengths and areas for improvement.
         </InlineAlert>
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}

@@ -266,7 +266,7 @@ export function TopNav({
                           <Link
                             href="/settings"
                             onClick={handleMobileItemClick}
-                            className="pressable flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-white"
+                            className="pressable flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-muted"
                           >
                             <Settings className="h-4 w-4" aria-hidden="true" />
                             Settings
@@ -274,7 +274,7 @@ export function TopNav({
                           <a
                             href={buildSupportMailto(userSummary?.email ?? undefined)}
                             onClick={handleMobileItemClick}
-                            className="pressable flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-white"
+                            className="pressable flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-muted"
                           >
                             <HelpCircle className="h-4 w-4" aria-hidden="true" />
                             Help & Support
@@ -320,7 +320,7 @@ export function TopNav({
                         onClick={() => {
                           void handleSignOut();
                         }}
-                        className="pressable flex w-full items-center justify-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-white"
+                        className="pressable flex w-full items-center justify-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-muted"
                       >
                         <LogOut className="h-4 w-4" aria-hidden="true" />
                         Sign out

@@ -214,7 +214,7 @@ export default function ProgressDashboard() {
                       onClick={() => setCriterionFilter(f)}
                       aria-pressed={criterionFilter === f}
                       aria-label={`Show ${f} criterion trend`}
-                      className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${criterionFilter === f ? 'bg-white text-navy shadow-sm' : 'text-muted hover:text-navy'}`}
+                      className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${criterionFilter === f ? 'bg-surface text-navy shadow-sm' : 'text-muted hover:text-navy'}`}
                     >
                       {f}
                     </button>

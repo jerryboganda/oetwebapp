@@ -63,7 +63,7 @@ export function LiveTutorRoomShell({
   }, []);
 
   const sidebar = (
-    <aside className="flex h-full min-h-[480px] w-full flex-col gap-3 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 lg:max-w-md">
+    <aside className="flex h-full min-h-[480px] w-full flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-surface p-4 lg:max-w-md">
       {children}
     </aside>
   );
@@ -85,8 +85,8 @@ export function LiveTutorRoomShell({
   if (!livekit) {
     return (
       <div className={cn('grid gap-4 lg:grid-cols-[1fr_minmax(280px,420px)]', className)}>
-        <div className="flex h-full min-h-[480px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
-          <span className="inline-flex items-center gap-2 text-sm text-slate-500">
+        <div className="flex h-full min-h-[480px] items-center justify-center rounded-2xl border border-border bg-muted">
+          <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Connecting tutor room…
           </span>
         </div>

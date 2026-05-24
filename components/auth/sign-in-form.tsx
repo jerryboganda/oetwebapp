@@ -10,6 +10,7 @@ import {
   IconBrandGoogle,
   IconBrandLinkedin,
 } from '@tabler/icons-react';
+import { readErrorMessage } from '@/lib/read-error-message';
 import AuthModeSwitch from '@/components/auth/auth-mode-switch';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import { PasswordField } from '@/components/auth/password-field';
@@ -34,17 +35,6 @@ function readErrorCode(error: unknown): string | null {
   return String(error.code);
 }
 
-function readErrorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'userMessage' in error && typeof error.userMessage === 'string') {
-    return error.userMessage;
-  }
-
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-
-  return 'Unable to complete the authentication request.';
-}
 
 function resolveExternalErrorMessage(errorCode?: string | null): string | null {
   switch (errorCode) {
@@ -151,7 +141,7 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
         return;
       }
 
-      let nextError = readErrorMessage(authError);
+      let nextError = readErrorMessage(authError, 'Unable to complete the authentication request.');
       if (
         readErrorCode(authError) === 'invalid_credentials'
         && desktopRuntimeInfo?.isPackaged

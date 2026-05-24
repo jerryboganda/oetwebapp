@@ -216,7 +216,7 @@ export function WizardShell({ bundle: initialBundle, children }: WizardShellProp
                         ? 'bg-primary text-white'
                         : isComplete
                           ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                          : 'bg-background-light text-navy hover:bg-gray-100')
+                          : 'bg-background-light text-navy hover:bg-muted')
                     }
                   >
                     <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/30 text-[11px]">

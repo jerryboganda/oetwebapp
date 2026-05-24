@@ -179,7 +179,7 @@ export default function WritingRulePage() {
             </div>
             <ul className="mt-4 space-y-2 text-sm text-warning">
               {rule.forbiddenPatterns.map((pattern) => (
-                <li key={pattern} className="rounded-xl border border-warning/30 bg-white/70 px-3 py-2 font-mono text-xs">{pattern}</li>
+                <li key={pattern} className="rounded-xl border border-warning/30 bg-surface/70 px-3 py-2 font-mono text-xs">{pattern}</li>
               ))}
             </ul>
           </Card>

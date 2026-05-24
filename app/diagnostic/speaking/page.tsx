@@ -369,7 +369,7 @@ export default function DiagnosticSpeakingPage() {
                 </Card>
               </div>
 
-              <Card className="bg-white border-border/60 shadow-lg shadow-black/[0.02] rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+              <Card className="bg-surface border-border/60 shadow-lg shadow-black/[0.02] rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-primary/20 transition-all">
                 <div className="bg-background-light px-5 py-3 border-b border-border/60 flex items-center gap-2">
                   <Edit3 className="w-4 h-4 text-muted" />
                   <h4 className="text-xs font-black text-muted uppercase tracking-widest">Your Notes</h4>

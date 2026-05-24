@@ -85,11 +85,11 @@ export function LearnerLiveRoomShell({
     return (
       <div
         className={cn(
-          'flex h-full min-h-[420px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50',
+          'flex h-full min-h-[420px] items-center justify-center rounded-2xl border border-border bg-muted',
           className,
         )}
       >
-        <span className="inline-flex items-center gap-2 text-sm text-slate-500">
+        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Connecting to live room…
         </span>
       </div>

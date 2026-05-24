@@ -63,7 +63,7 @@ export default function NewStudyPlanTemplatePage() {
           ← Back to templates
         </Link>
         <h1 className="text-2xl font-bold mt-2">New Study Plan Template</h1>
-        <p className="text-sm text-gray-600 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Create a skeleton plan. After this step you can edit week structure, day slots, and
           checkpoints in the full editor.
         </p>
@@ -191,7 +191,7 @@ export default function NewStudyPlanTemplatePage() {
           </button>
           <Link
             href="/admin/study-plan-templates"
-            className="px-6 py-2 border rounded hover:bg-gray-50"
+            className="px-6 py-2 border rounded hover:bg-muted"
           >
             Cancel
           </Link>

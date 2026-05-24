@@ -10,19 +10,12 @@ import { PasswordField } from '@/components/auth/password-field';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
+import { readErrorMessage } from '@/lib/read-error-message';
 
 const errorCopy: Record<string, string> = {
   'password-mismatch': 'Your passwords must match before you continue.',
   'password-too-short': 'Your new password must be at least 10 characters long.',
 };
-
-function readErrorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-
-  return 'Unable to reset your password right now.';
-}
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -68,7 +61,7 @@ export default function ResetPasswordPage() {
 
       router.push(`${AUTH_ROUTES.passwordResetSuccess}?${params.toString()}`);
     } catch (submitError) {
-      setError(readErrorMessage(submitError));
+      setError(readErrorMessage(submitError, 'Unable to reset your password right now.'));
     } finally {
       setIsSubmitting(false);
     }

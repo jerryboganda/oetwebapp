@@ -32,6 +32,7 @@ import {
 import { fetchMockReports } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
 import { isListeningReadingPassByScaled } from '@/lib/scoring';
+import { readErrorMessage } from '@/lib/read-error-message';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { PartLaunchpadCard, type PartCode } from '@/components/domain/part-launchpad-card';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
@@ -494,10 +495,6 @@ function ReadingHomeSkeleton() {
   return <LearnerSkeleton variant="dashboard" />;
 }
 
-function readErrorMessage(err: unknown, fallback: string): string {
-  const detail = (err as { detail?: { message?: string; error?: string } })?.detail;
-  return detail?.message ?? detail?.error ?? (err instanceof Error ? err.message : fallback);
-}
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));

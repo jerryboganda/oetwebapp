@@ -86,7 +86,7 @@ export default function ExpertReviewRedirectPage() {
 
   return (
     <div className="mx-auto flex min-h-[50vh] max-w-xl items-center justify-center px-6">
-      <div className="w-full space-y-4 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="w-full space-y-4 rounded-3xl border border-border bg-surface p-6 shadow-sm">
         <InlineAlert variant="error">{visibleError}</InlineAlert>
         <div className="flex justify-end">
           <Button type="button" onClick={() => router.push('/expert/queue')}>

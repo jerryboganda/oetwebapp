@@ -265,12 +265,12 @@ export default function StudyPlanTemplateEditorPage() {
             ← Back
           </Link>
           <h1 className="text-2xl font-bold mt-2">{name || template.slug}</h1>
-          <div className="text-sm text-gray-600 mt-1">
+          <div className="text-sm text-muted-foreground mt-1">
             <span className="font-mono">{template.slug}</span> · v{template.version} ·{' '}
             {isActive ? (
               <span className="text-green-700">Active</span>
             ) : (
-              <span className="text-gray-500">Inactive</span>
+              <span className="text-muted-foreground">Inactive</span>
             )}
           </div>
         </div>
@@ -311,7 +311,7 @@ export default function StudyPlanTemplateEditorPage() {
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm capitalize border-b-2 ${
-              tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-600'
+              tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-muted-foreground'
             }`}
           >
             {t}
@@ -413,7 +413,7 @@ export default function StudyPlanTemplateEditorPage() {
       {/* Tiers tab */}
       {tab === 'tiers' && (
         <div className="max-w-md">
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="text-sm text-muted-foreground mb-4">
             A learner can be matched to this template only if their subscription tier is checked
             below. Free is always available so the planner never returns empty.
           </p>
@@ -434,7 +434,7 @@ export default function StudyPlanTemplateEditorPage() {
       {tab === 'weeks' && (
         <div>
           <div className="flex justify-between mb-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               {body.weeks.length} week(s). Each week has days, each day has slots.
             </p>
             <button onClick={addWeek} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
@@ -469,7 +469,7 @@ export default function StudyPlanTemplateEditorPage() {
 
                 <div className="space-y-2 ml-4">
                   {week.days.map((day, dayIdx) => (
-                    <div key={dayIdx} className="border-l-2 border-gray-200 pl-3">
+                    <div key={dayIdx} className="border-l-2 border-border pl-3">
                       <div className="flex items-center gap-2 mb-2">
                         <select
                           value={day.dayOfWeek}
@@ -500,7 +500,7 @@ export default function StudyPlanTemplateEditorPage() {
                         {day.slots.map((slot, slotIdx) => (
                           <div
                             key={slotIdx}
-                            className="flex items-center gap-2 bg-gray-50 p-2 rounded text-sm"
+                            className="flex items-center gap-2 bg-muted p-2 rounded text-sm"
                           >
                             <select
                               value={slot.subtest}
@@ -594,7 +594,7 @@ export default function StudyPlanTemplateEditorPage() {
       {tab === 'checkpoints' && (
         <div>
           <div className="flex justify-between mb-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Checkpoints inject mocks or expert-review prompts after specific weeks.
             </p>
             <button
@@ -686,7 +686,7 @@ export default function StudyPlanTemplateEditorPage() {
       {tab === 'validation' && (
         <div>
           {validation === null ? (
-            <p className="text-gray-600">Click &quot;Validate&quot; above to check the template structure.</p>
+            <p className="text-muted-foreground">Click &quot;Validate&quot; above to check the template structure.</p>
           ) : validation.isValid ? (
             <div className="bg-green-50 border border-green-200 text-green-800 rounded p-4">
               ✓ Template structure is valid.
@@ -710,7 +710,7 @@ export default function StudyPlanTemplateEditorPage() {
       {tab === 'preview' && (
         <div>
           {preview === null ? (
-            <p className="text-gray-600">Click &quot;Preview&quot; above to dry-run the generator on this template.</p>
+            <p className="text-muted-foreground">Click &quot;Preview&quot; above to dry-run the generator on this template.</p>
           ) : (
             <div className="space-y-2">
               {preview.days.map((d, idx) => (
@@ -721,11 +721,11 @@ export default function StudyPlanTemplateEditorPage() {
                   <div className="space-y-1">
                     {d.slots.map((s, si) => (
                       <div key={si} className="text-sm flex gap-3">
-                        <span className="font-mono text-xs px-2 py-0.5 bg-gray-100 rounded">
+                        <span className="font-mono text-xs px-2 py-0.5 bg-muted rounded">
                           {s.subtest}
                         </span>
-                        <span className="text-gray-500">{s.kind}</span>
-                        <span className="text-gray-500">{s.minutes}m</span>
+                        <span className="text-muted-foreground">{s.kind}</span>
+                        <span className="text-muted-foreground">{s.minutes}m</span>
                         <span className="flex-1">{s.title}</span>
                         <a href={s.route} className="text-blue-600 hover:underline text-xs">
                           {s.route}

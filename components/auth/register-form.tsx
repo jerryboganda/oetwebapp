@@ -29,14 +29,7 @@ import { RegisterStepProgress } from '@/components/auth/register/register-step-p
 import { countryOptions } from '@/components/auth/country-code-select';
 import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
 import { TARGET_COUNTRY_OPTIONS } from '@/components/auth/register/target-countries';
-
-function readErrorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-
-  return 'Unable to create your account right now.';
-}
+import { readErrorMessage } from '@/lib/read-error-message';
 
 export function RegisterForm() {
   const router = useRouter();
@@ -219,7 +212,7 @@ export function RegisterForm() {
 
       router.push(`${AUTH_ROUTES.signUpSuccess}?${params.toString()}`);
     } catch (error) {
-      setErrorMessage(readErrorMessage(error));
+      setErrorMessage(readErrorMessage(error, 'Unable to create your account right now.'));
     } finally {
       setIsSubmitting(false);
     }

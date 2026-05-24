@@ -9,14 +9,7 @@ import { requestPasswordReset } from '@/lib/auth-client';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
-
-function readErrorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-
-  return 'Unable to send the reset OTP right now.';
-}
+import { readErrorMessage } from '@/lib/read-error-message';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -36,7 +29,7 @@ export default function ForgotPasswordPage() {
       await requestPasswordReset(normalizedEmail);
       router.push(`${AUTH_ROUTES.passwordResetOtp}?email=${encodeURIComponent(normalizedEmail)}`);
     } catch (error) {
-      setErrorMessage(readErrorMessage(error));
+      setErrorMessage(readErrorMessage(error, 'Unable to send the reset OTP right now.'));
     } finally {
       setIsSubmitting(false);
     }

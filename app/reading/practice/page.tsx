@@ -66,10 +66,6 @@ function isPaperAccessible(paper: ReadingHomePaperDto): boolean {
 }
 
 // TODO: wire up when API returns attempt count + cooldown fields on ReadingHomePaperDto
-function getAttemptInfo(_paper: any): { label: string } | null {
-  return null;
-}
-
 function papersWithAccess(papers: ReadingHomePaperDto[]): ReadingHomePaperDto[] {
   return papers.filter(isPaperAccessible);
 }
@@ -430,7 +426,6 @@ export default function ReadingPracticePage() {
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               {papers.map((paper, idx) => {
                 const locked = !isPaperAccessible(paper);
-                const attemptInfo = getAttemptInfo(paper);
                 return (
                   <MotionItem key={paper.id} delayIndex={idx}>
                     <LearnerSurfaceCard
@@ -450,7 +445,6 @@ export default function ReadingPracticePage() {
                         ],
                       }}
                     >
-                      {attemptInfo && <Badge variant="outline" className="text-xs">{attemptInfo.label}</Badge>}
                       <div className="mt-4 flex items-center justify-between gap-3">
                         <Badge variant={locked ? 'warning' : 'info'}>{locked ? 'Locked' : 'Learning Mode'}</Badge>
                         {locked ? (

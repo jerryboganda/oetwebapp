@@ -76,11 +76,11 @@ export default function AdminSpeakingDrillAiDraftPage() {
     <AdminRouteWorkspace role="main" aria-label="AI-assisted speaking drill draft">
       <div className="space-y-6">
         <header>
-          <Link href="/admin/content/speaking/drills" className="text-sm text-slate-500 hover:underline">
+          <Link href="/admin/content/speaking/drills" className="text-sm text-muted-foreground hover:underline">
             ← Back to drill bank
           </Link>
-          <h1 className="text-2xl font-semibold text-slate-900">Speaking · AI-assisted drill draft</h1>
-          <p className="text-slate-600">
+          <h1 className="text-2xl font-semibold text-foreground">Speaking · AI-assisted drill draft</h1>
+          <p className="text-muted-foreground">
             Generate a Draft drill from a profession + weak-criterion seed. The backend builds a
             grounded prompt against the canonical rulebook + scoring and persists the draft
             automatically. Review and publish from the drill bank list — the admin remains
@@ -89,7 +89,7 @@ export default function AdminSpeakingDrillAiDraftPage() {
         </header>
 
         <Card className="space-y-3 p-4">
-          <h2 className="font-semibold text-slate-900">Seed</h2>
+          <h2 className="font-semibold text-foreground">Seed</h2>
           <div className="grid gap-3 sm:grid-cols-3">
             <Select
               value={seed.drillKind}
@@ -119,30 +119,30 @@ export default function AdminSpeakingDrillAiDraftPage() {
 
         {result && (
           <Card className="space-y-3 p-4">
-            <h2 className="font-semibold text-slate-900">Draft saved</h2>
-            <p className="text-sm text-slate-600">
+            <h2 className="font-semibold text-foreground">Draft saved</h2>
+            <p className="text-sm text-muted-foreground">
               Drill <code>{result.drillId}</code> persisted as <code>{result.status}</code>.
             </p>
             <dl className="grid gap-2 text-sm sm:grid-cols-2">
               <div>
-                <dt className="font-medium text-slate-700">Title</dt>
-                <dd className="text-slate-900">{result.title}</dd>
+                <dt className="font-medium text-muted-foreground">Title</dt>
+                <dd className="text-foreground">{result.title}</dd>
               </div>
               <div>
-                <dt className="font-medium text-slate-700">Drill kind</dt>
-                <dd className="text-slate-900">{result.drillKind}</dd>
+                <dt className="font-medium text-muted-foreground">Drill kind</dt>
+                <dd className="text-foreground">{result.drillKind}</dd>
               </div>
               <div>
-                <dt className="font-medium text-slate-700">Profession</dt>
-                <dd className="text-slate-900">{result.professionId ?? '—'}</dd>
+                <dt className="font-medium text-muted-foreground">Profession</dt>
+                <dd className="text-foreground">{result.professionId ?? '—'}</dd>
               </div>
               <div>
-                <dt className="font-medium text-slate-700">Target criteria</dt>
-                <dd className="text-slate-900">{result.targetCriteria.join(', ') || '—'}</dd>
+                <dt className="font-medium text-muted-foreground">Target criteria</dt>
+                <dd className="text-foreground">{result.targetCriteria.join(', ') || '—'}</dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="font-medium text-slate-700">Instruction</dt>
-                <dd className="whitespace-pre-wrap text-slate-900">{result.instructionText}</dd>
+                <dt className="font-medium text-muted-foreground">Instruction</dt>
+                <dd className="whitespace-pre-wrap text-foreground">{result.instructionText}</dd>
               </div>
             </dl>
             <div className="flex justify-end gap-2">

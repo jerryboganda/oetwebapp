@@ -59,9 +59,9 @@ export function TechReadinessCheck({ audioProbeUrl, onReady, onSkip }: TechReadi
   };
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
-      <h2 className="mb-1 text-lg font-semibold text-neutral-900">Audio readiness check</h2>
-      <p className="mb-4 text-sm text-neutral-600">
+    <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+      <h2 className="mb-1 text-lg font-semibold text-foreground">Audio readiness check</h2>
+      <p className="mb-4 text-sm text-muted-foreground">
         Before the test begins, we&apos;ll play a short audio clip to confirm your speakers or
         headphones are working. You will not be able to replay the test audio later.
       </p>
@@ -72,7 +72,7 @@ export function TechReadinessCheck({ audioProbeUrl, onReady, onSkip }: TechReadi
           </Button>
         )}
         {status === 'running' && (
-          <span role="status" className="inline-flex items-center gap-2 text-sm text-neutral-700">
+          <span role="status" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> Playing probe…
           </span>
         )}

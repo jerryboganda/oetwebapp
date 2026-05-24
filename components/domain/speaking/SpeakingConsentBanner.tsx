@@ -132,22 +132,22 @@ export function SpeakingConsentBanner({
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
       data-testid="speaking-consent-banner"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-2xl">
         <div className="mb-4 flex items-start gap-3">
           <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-emerald-600" aria-hidden />
           <div>
-            <h2 id={titleId} className="text-lg font-semibold text-slate-900">
+            <h2 id={titleId} className="text-lg font-semibold text-foreground">
               {sessionMode === 'live_tutor'
                 ? 'Consent to record live tutor session'
                 : 'Consent to record this practice session'}
             </h2>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-muted-foreground">
               We need a one-time confirmation before recording starts.
             </p>
           </div>
         </div>
 
-        <div id={descId} className="space-y-3 text-sm leading-relaxed text-slate-700">
+        <div id={descId} className="space-y-3 text-sm leading-relaxed text-foreground">
           <p>{bodyCopy}</p>
           <div className="flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-amber-900">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />

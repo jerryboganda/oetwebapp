@@ -1,10 +1,92 @@
-﻿{
+{
   "files.associations": {
     "*.swift": "plaintext"
   },
   "swift.sourcekit-lsp.disable": true,
   "chat.promptFiles": true,
   "chat.promptFilesRecommendations": true,
+
+  // ═══════════════ PERFORMANCE OPTIMIZATIONS ═══════════════
+
+  // Exclude heavy dirs from file watcher (biggest perf win)
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/.next/**": true,
+    "**/android/**": true,
+    "**/ios/**": true,
+    "**/output/**": true,
+    "**/backend/src/OetLearner.Api/bin/**": true,
+    "**/backend/src/OetLearner.Api/obj/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/playwright-report/**": true,
+    "**/playwright-report-prod/**": true,
+    "**/copilot-worktrees/**": true,
+    "**/$sdkRoot/**": true,
+    "**/capacitor-web/**": true,
+    "**/desktop-backend-runtime/**": true,
+    "**/_extracted/**": true,
+    "**/repomix-output.xml": true
+  },
+
+  // Exclude from search results
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/android": true,
+    "**/ios": true,
+    "**/output": true,
+    "**/backend/src/OetLearner.Api/bin": true,
+    "**/backend/src/OetLearner.Api/obj": true,
+    "**/playwright-report": true,
+    "**/playwright-report-prod": true,
+    "**/copilot-worktrees": true,
+    "**/$sdkRoot": true,
+    "**/capacitor-web": true,
+    "**/desktop-backend-runtime": true,
+    "**/_extracted": true,
+    "**/repomix-output.xml": true,
+    "**/*.min.js": true,
+    "**/*.min.css": true
+  },
+
+  // Hide clutter from explorer
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "$sdkRoot": true,
+    "output": true,
+    "copilot-worktrees": true,
+    "desktop-backend-runtime": true
+  },
+
+  // Reduce TypeScript memory usage
+  "typescript.tsserver.maxTsServerMemory": 2048,
+  "typescript.tsserver.experimental.enableProjectDiagnostics": false,
+
+  // Reduce editor overhead
+  "editor.bracketPairColorization.independentColorPoolPerBracketType": false,
+  "editor.guides.bracketPairs": false,
+  "editor.occurrencesHighlight": "off",
+  "editor.renderWhitespace": "none",
+  "editor.minimap.enabled": false,
+  "editor.smoothScrolling": false,
+  "editor.cursorBlinking": "solid",
+  "editor.cursorSmoothCaretAnimation": "off",
+
+  // Reduce terminal resource usage
+  "terminal.integrated.gpuAcceleration": "off",
+  "terminal.integrated.persistentSessionReviveProcess": "never",
+
+  // Reduce Git overhead on large repo
+  "git.autorefresh": false,
+  "git.decorations.enabled": false,
+
+  // Disable heavy C# background analysis for non-backend work
+  "dotnet.backgroundAnalysis.analyzerDiagnosticsScope": "openFiles",
+  "dotnet.backgroundAnalysis.compilerDiagnosticsScope": "openFiles",
+  "omnisharp.enableRoslynAnalyzers": false,
   "github.copilot.chat.codeGeneration.useInstructionFiles": true,
   "github.copilot.chat.codeGeneration.instructions": [
     { "file": "AGENTS.md" },

@@ -557,13 +557,13 @@ function ScheduleStep({
           {DAY_ORDER.map((day) => {
             const d = schedule.days[day] ?? { active: false, start: '09:00', end: '17:00' };
             return (
-              <div key={day} className="flex items-center gap-3 rounded-xl border border-gray-200 bg-background-light p-3">
+              <div key={day} className="flex items-center gap-3 rounded-xl border border-border bg-background-light p-3">
                 <label className="flex items-center gap-2 min-w-[120px]">
                   <input
                     type="checkbox"
                     checked={d.active}
                     onChange={(e) => onDayUpdate(day, { active: e.target.checked })}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                    className="rounded border-border text-primary focus:ring-primary"
                   />
                   <span className="text-sm font-medium text-navy capitalize">{day}</span>
                 </label>
@@ -572,7 +572,7 @@ function ScheduleStep({
                     <select
                       value={d.start}
                       onChange={(e) => onDayUpdate(day, { start: e.target.value })}
-                      className="rounded-lg border border-gray-200 bg-surface px-2 py-1 text-sm"
+                      className="rounded-lg border border-border bg-surface px-2 py-1 text-sm"
                     >
                       {TIME_OPTIONS.map((t) => (
                         <option key={t.value} value={t.value}>{t.label}</option>
@@ -582,7 +582,7 @@ function ScheduleStep({
                     <select
                       value={d.end}
                       onChange={(e) => onDayUpdate(day, { end: e.target.value })}
-                      className="rounded-lg border border-gray-200 bg-surface px-2 py-1 text-sm"
+                      className="rounded-lg border border-border bg-surface px-2 py-1 text-sm"
                     >
                       {TIME_OPTIONS.map((t) => (
                         <option key={t.value} value={t.value}>{t.label}</option>
@@ -696,7 +696,7 @@ function ReviewStep({
 
 function SummarySection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-background-light p-4">
+    <div className="rounded-xl border border-border bg-background-light p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted mb-2">{title}</p>
       <div className="space-y-1">{children}</div>
     </div>

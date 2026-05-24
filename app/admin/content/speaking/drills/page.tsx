@@ -141,8 +141,8 @@ export default function AdminSpeakingDrillsPage() {
       <div className="space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold text-slate-900">Speaking - drill bank</h1>
-            <p className="text-slate-600">
+            <h1 className="text-2xl font-semibold text-foreground">Speaking - drill bank</h1>
+            <p className="text-muted-foreground">
               Curate the post-session remediation drills that the speaking analytics console
               recommends to learners after low-scoring criteria.
             </p>
@@ -151,7 +151,7 @@ export default function AdminSpeakingDrillsPage() {
         </header>
 
         <Card className="space-y-4 p-4">
-          <h2 className="font-semibold text-slate-900">Filters</h2>
+          <h2 className="font-semibold text-foreground">Filters</h2>
           <div className="grid gap-3 sm:grid-cols-3">
             <Select
               value={statusFilter}
@@ -181,7 +181,7 @@ export default function AdminSpeakingDrillsPage() {
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
         <Card className="space-y-3 p-4">
-          <h2 className="font-semibold text-slate-900">Create drill (manual)</h2>
+          <h2 className="font-semibold text-foreground">Create drill (manual)</h2>
           <form className="grid gap-3 sm:grid-cols-2" onSubmit={submitDraft}>
             <Input
               placeholder="Title"
@@ -214,7 +214,7 @@ export default function AdminSpeakingDrillsPage() {
               }
             />
             <textarea
-              className="rounded border border-slate-300 p-2 text-sm sm:col-span-2"
+              className="rounded border border-border p-2 text-sm sm:col-span-2"
               rows={3}
               placeholder="Instruction text shown to the learner"
               value={draft.instructionText}
@@ -232,7 +232,7 @@ export default function AdminSpeakingDrillsPage() {
         {loading ? (
           <Skeleton className="h-48 w-full" />
         ) : visible.length === 0 ? (
-          <Card className="p-8 text-center text-slate-500">No drills match the current filters.</Card>
+          <Card className="p-8 text-center text-muted-foreground">No drills match the current filters.</Card>
         ) : (
           <Card>
             <ul className="divide-y divide-slate-100">
@@ -244,7 +244,7 @@ export default function AdminSpeakingDrillsPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Link
                           href={`/admin/content/speaking/drills/${encodeURIComponent(d.drillId)}`}
-                          className="font-medium text-slate-900 hover:underline"
+                          className="font-medium text-foreground hover:underline"
                         >
                           {d.title}
                         </Link>
@@ -252,7 +252,7 @@ export default function AdminSpeakingDrillsPage() {
                         <Badge variant="outline">{String(d.drillKind)}</Badge>
                         {d.professionId && <Badge variant="muted">{d.professionId}</Badge>}
                       </div>
-                      <p className="mt-1 text-sm text-slate-500 line-clamp-2">
+                      <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
                         {d.instructionText}
                       </p>
                     </div>

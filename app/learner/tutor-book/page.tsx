@@ -137,7 +137,7 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
 function ReaderTab({ buyerEmail, buyerName, telegramUrl }: { buyerEmail: string; buyerName: string; telegramUrl: string | null }) {
   return (
     <div className="space-y-6">
-      <div className="relative rounded-2xl border border-border bg-white shadow-sm">
+      <div className="relative rounded-2xl border border-border bg-surface shadow-sm">
         {/* Server-side PDF served watermarked with buyer name + email + HMAC signature */}
         <iframe
           src={tutorBookDownloadUrl()}

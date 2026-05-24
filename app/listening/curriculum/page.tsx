@@ -129,14 +129,14 @@ function StageCard({ stage }: { stage: CurriculumStage }) {
   const body = (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 h-full flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Stage {stage.order} · {stage.partHint}
         </span>
         {stateBadge}
       </div>
       <h3 className="font-semibold text-slate-900 dark:text-slate-100">{stage.title}</h3>
       <p className="text-sm text-slate-600 dark:text-slate-300">{stage.focus}</p>
-      <span className="mt-auto text-xs text-slate-500">≈ {stage.estimatedMinutes} min</span>
+      <span className="mt-auto text-xs text-muted-foreground">≈ {stage.estimatedMinutes} min</span>
       {!stage.locked && !stage.completed && stage.nextActionLabel && (
         <span className="text-xs font-medium text-indigo-600 dark:text-indigo-300">
           {stage.nextActionLabel} →

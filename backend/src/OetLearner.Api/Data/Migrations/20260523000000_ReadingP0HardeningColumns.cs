@@ -1,10 +1,14 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations
 {
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260523000000_ReadingP0HardeningColumns")]
     /// <summary>
     /// P0 hardening - 2026-05-23. Adds the columns and column-size limits
     /// the entity model already declares but the prior ReadingP0Hardening

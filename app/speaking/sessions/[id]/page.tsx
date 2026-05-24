@@ -306,7 +306,7 @@ export default function SpeakingSessionRecordingPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <span className="inline-flex items-center gap-2 text-sm text-slate-500">
+        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Preparing your role-play…
         </span>
       </div>
@@ -334,7 +334,7 @@ export default function SpeakingSessionRecordingPage() {
     // Redirect is in flight — render a tiny placeholder so the page
     // never flashes the AI UI.
     return (
-      <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-500">
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> Switching to live tutor room…
       </div>
     );
@@ -355,11 +355,11 @@ export default function SpeakingSessionRecordingPage() {
 
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Speaking · Role-play
           </p>
-          <h1 className="text-2xl font-bold text-slate-900">{card.scenarioTitle}</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle}</h1>
+          <p className="text-sm text-muted-foreground">
             {card.setting} · {card.candidateRole}
           </p>
         </div>
@@ -388,15 +388,15 @@ export default function SpeakingSessionRecordingPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_minmax(280px,360px)]">
         {/* Card recap */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+        <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Candidate card
           </h2>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
             {card.background}
           </p>
           {card.tasks.length > 0 ? (
-            <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-slate-800">
+            <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-foreground">
               {card.tasks.map((task, idx) => (
                 <li key={idx}>{task}</li>
               ))}
@@ -406,12 +406,12 @@ export default function SpeakingSessionRecordingPage() {
 
         {/* Live HUD */}
         <aside className="flex flex-col gap-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Mic className="h-4 w-4 text-slate-500" aria-hidden /> Microphone
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Mic className="h-4 w-4 text-muted-foreground" aria-hidden /> Microphone
             </div>
             <MicLevelMeter level={micLevel} />
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-muted-foreground">
               {hubReady ? 'AI partner connected.' : 'Connecting AI partner…'}
             </p>
             {hubError ? (
@@ -424,12 +424,12 @@ export default function SpeakingSessionRecordingPage() {
             ) : null}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Activity className="h-4 w-4 text-slate-500" aria-hidden /> Live captions
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Activity className="h-4 w-4 text-muted-foreground" aria-hidden /> Live captions
             </div>
             <div
-              className="h-40 overflow-y-auto rounded-md bg-slate-50 p-2 text-sm text-slate-800"
+              className="h-40 overflow-y-auto rounded-md bg-muted p-2 text-sm text-foreground"
               aria-live="polite"
             >
               {captions.length === 0 ? (
@@ -477,7 +477,7 @@ function Timer({ secondsLeft, isWarning }: { secondsLeft: number; isWarning: boo
       aria-live="polite"
       className={cn(
         'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-base font-mono tabular-nums',
-        isWarning ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-800',
+        isWarning ? 'bg-rose-50 text-rose-700' : 'bg-muted text-foreground',
       )}
     >
       <Activity className="h-4 w-4" aria-hidden />

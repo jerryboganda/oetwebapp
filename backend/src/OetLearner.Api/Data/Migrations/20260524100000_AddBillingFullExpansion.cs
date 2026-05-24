@@ -1,5 +1,7 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
@@ -16,6 +18,8 @@ namespace OetLearner.Api.Data.Migrations
     /// the pattern used by <c>20260522100000_AddSpeakingDriftColumns</c> and
     /// <c>20260523200000_AddBillingRegionFoundation</c>.
     /// </summary>
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260524100000_AddBillingFullExpansion")]
     public partial class AddBillingFullExpansion : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

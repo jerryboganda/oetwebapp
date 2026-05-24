@@ -1,14 +1,3 @@
 {
-  "servers": {
-    "playwright": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["--no-install", "playwright-mcp", "--extension"]
-    },
-    "sequential-thinking": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["--no-install", "mcp-server-sequential-thinking"]
-    }
-  }
+  "servers": {}
 }

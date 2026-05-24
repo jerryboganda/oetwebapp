@@ -62,7 +62,7 @@ const CATEGORIES: DrillCategory[] = [
     title: 'Abbreviations',
     description: 'Decide when to expand and when to keep abbreviations.',
     Icon: Hash,
-    accent: 'bg-slate-100 text-slate-700',
+    accent: 'bg-muted text-foreground',
   },
 ];
 

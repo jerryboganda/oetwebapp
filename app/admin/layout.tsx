@@ -435,7 +435,7 @@ function filterGroupsByPermissions(
 function AdminPermissionDenied({ required }: { required: string[] }) {
   return (
     <section className="mx-auto flex min-h-[50vh] w-full max-w-2xl items-center justify-center px-4 py-12">
-      <div className="rounded-[2rem] border border-red-100 bg-white p-8 text-center shadow-sm">
+      <div className="rounded-[2rem] border border-danger/20 bg-surface p-8 text-center shadow-sm">
         <ShieldCheck className="mx-auto h-10 w-10 text-red-500" aria-hidden="true" />
         <h1 className="mt-4 text-xl font-semibold text-navy">Admin permission required</h1>
         <p className="mt-2 text-sm text-muted">
@@ -454,7 +454,7 @@ function AdminPermissionDenied({ required }: { required: string[] }) {
 function AdminPermissionChecking() {
   return (
     <section className="mx-auto flex min-h-[50vh] w-full max-w-sm items-center justify-center px-4 py-12">
-      <div className="rounded-[2rem] border border-slate-100 bg-white p-8 text-center shadow-sm">
+      <div className="rounded-[2rem] border border-border bg-surface p-8 text-center shadow-sm">
         <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-hidden="true" />
         <p className="mt-4 text-sm font-semibold text-navy">Checking admin permissions</p>
       </div>

@@ -63,12 +63,12 @@ export default function AdminSpeakingRecordingsAuditPage() {
     <AdminRouteWorkspace role="main" aria-label="Speaking recording access audit">
       <div className="space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold text-slate-900">
+          <h1 className="text-2xl font-semibold text-foreground">
             Speaking recordings · access audit
           </h1>
-          <p className="text-slate-600">
+          <p className="text-muted-foreground">
             Every read of a learner&apos;s speaking recording is logged here. Each row maps to one
-            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-xs">AuditEvent</code> row.
+            <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">AuditEvent</code> row.
           </p>
         </header>
 
@@ -123,11 +123,11 @@ export default function AdminSpeakingRecordingsAuditPage() {
         {!rows ? (
           <Skeleton className="h-64 w-full rounded-xl" />
         ) : rows.length === 0 ? (
-          <Card className="p-8 text-center text-slate-600">No audit entries match the filter.</Card>
+          <Card className="p-8 text-center text-muted-foreground">No audit entries match the filter.</Card>
         ) : (
           <Card className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="p-3">When</th>
                   <th className="p-3">Action</th>
@@ -140,7 +140,7 @@ export default function AdminSpeakingRecordingsAuditPage() {
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.auditEventId} className="border-t border-slate-100 align-top">
-                    <td className="p-3 text-xs font-mono text-slate-600">
+                    <td className="p-3 text-xs font-mono text-muted-foreground">
                       {formatDate(row.occurredAt)}
                     </td>
                     <td className="p-3">
@@ -156,12 +156,12 @@ export default function AdminSpeakingRecordingsAuditPage() {
                     </td>
                     <td className="p-3 text-xs font-mono">{row.learnerUserId ?? '—'}</td>
                     <td className="p-3">
-                      <div className="text-sm text-slate-900">{row.actorName}</div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-sm text-foreground">{row.actorName}</div>
+                      <div className="text-[10px] text-muted-foreground">
                         {row.actorRole ?? 'unknown role'}
                       </div>
                     </td>
-                    <td className="p-3 text-xs text-slate-700">
+                    <td className="p-3 text-xs text-muted-foreground">
                       {row.purpose || row.reason || '—'}
                     </td>
                   </tr>

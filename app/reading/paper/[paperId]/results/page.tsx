@@ -14,6 +14,7 @@ import { SafeRichText } from '@/components/domain/grammar/grammar-content-render
 import { getReadingAttemptReview, type ReadingAttemptReviewDto } from '@/lib/reading-authoring-api';
 import { completeMockSection } from '@/lib/api';
 import { isListeningReadingPassByScaled } from '@/lib/scoring';
+import { readErrorMessage } from '@/lib/read-error-message';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
 interface PendingMockCompletion {
@@ -410,7 +411,3 @@ function formatReviewValue(value: unknown): string {
   return String(value);
 }
 
-function readErrorMessage(err: unknown, fallback: string): string {
-  const detail = (err as { detail?: { message?: string; error?: string } })?.detail;
-  return detail?.message ?? detail?.error ?? (err instanceof Error ? err.message : fallback);
-}

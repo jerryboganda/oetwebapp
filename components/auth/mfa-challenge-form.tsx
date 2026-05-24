@@ -9,17 +9,10 @@ import { resolvePostAuthDestination } from '@/lib/auth-routes';
 import { AuthScreenShell } from './auth-screen-shell';
 import { OtpCodeInput } from './otp-code-input';
 import styles from './auth-screen-shell.module.scss';
+import { readErrorMessage } from '@/lib/read-error-message';
 
 interface MfaChallengeFormProps {
   nextHref?: string | null;
-}
-
-function readErrorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-
-  return 'Unable to verify the MFA challenge.';
 }
 
 export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
@@ -47,7 +40,7 @@ export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
       const session = await completeMfaChallenge(normalizedCode);
       router.replace(resolvePostAuthDestination(session.currentUser, nextHref));
     } catch (submitError) {
-      setError(readErrorMessage(submitError));
+      setError(readErrorMessage(submitError, 'Unable to verify the MFA challenge.'));
     } finally {
       setIsSubmittingCode(false);
     }
@@ -62,7 +55,7 @@ export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
       const session = await completeRecoveryChallenge(recoveryCode.trim());
       router.replace(resolvePostAuthDestination(session.currentUser, nextHref));
     } catch (submitError) {
-      setError(readErrorMessage(submitError));
+      setError(readErrorMessage(submitError, 'Unable to verify the MFA challenge.'));
     } finally {
       setIsSubmittingRecovery(false);
     }

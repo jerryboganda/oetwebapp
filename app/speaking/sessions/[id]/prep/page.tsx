@@ -131,7 +131,7 @@ export default function SpeakingSessionPrepPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <span className="inline-flex items-center gap-2 text-sm text-slate-500">
+        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading session…
         </span>
       </div>
@@ -161,11 +161,11 @@ export default function SpeakingSessionPrepPage() {
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Speaking · Prep
           </p>
-          <h1 className="text-2xl font-bold text-slate-900">{card.scenarioTitle}</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle}</h1>
+          <p className="text-sm text-muted-foreground">
             {card.setting} · {card.candidateRole}
           </p>
         </div>
@@ -184,18 +184,18 @@ export default function SpeakingSessionPrepPage() {
         {/* Candidate card */}
         <section
           aria-labelledby="candidate-card-heading"
-          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+          className="rounded-2xl border border-border bg-surface p-6 shadow-sm"
         >
           <div className="flex items-center gap-2">
-            <BookOpen className="h-4 w-4 text-slate-500" aria-hidden />
+            <BookOpen className="h-4 w-4 text-muted-foreground" aria-hidden />
             <h2
               id="candidate-card-heading"
-              className="text-sm font-semibold uppercase tracking-wide text-slate-600"
+              className="text-sm font-semibold uppercase tracking-wide text-muted-foreground"
             >
               Candidate card
             </h2>
           </div>
-          <dl className="mt-4 space-y-3 text-sm text-slate-800">
+          <dl className="mt-4 space-y-3 text-sm text-foreground">
             <Row label="Setting">{card.setting}</Row>
             <Row label="Your role">{card.candidateRole}</Row>
             <Row label="You are speaking with">{card.interlocutorRole}</Row>
@@ -231,15 +231,15 @@ export default function SpeakingSessionPrepPage() {
             onComplete={() => void beginRolePlay()}
           />
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
             <div className="mb-2 flex items-center gap-2">
-              <NotebookPen className="h-4 w-4 text-slate-500" aria-hidden />
-              <h2 className="text-sm font-semibold text-slate-700">
+              <NotebookPen className="h-4 w-4 text-muted-foreground" aria-hidden />
+              <h2 className="text-sm font-semibold text-foreground">
                 {card.allowedNotes ? 'Your notes' : 'Mental prep'}
               </h2>
             </div>
             {!card.allowedNotes ? (
-              <p className="mb-2 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600">
+              <p className="mb-2 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
                 This card simulates exam conditions — notes will not be visible during the role-play.
               </p>
             ) : null}
@@ -249,7 +249,7 @@ export default function SpeakingSessionPrepPage() {
                   key={p.label}
                   type="button"
                   onClick={() => insertSnippet(p.insert)}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-100"
+                  className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-foreground transition-colors hover:border-border-hover hover:bg-muted/80"
                   data-testid={`prep-quick-pick-${p.label.toLowerCase().replace(/\s+/g, '-')}`}
                 >
                   + {p.label}
@@ -260,10 +260,10 @@ export default function SpeakingSessionPrepPage() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Jot any quick reminders for yourself…"
-              className="mt-3 h-32 w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="mt-3 h-32 w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               aria-label="Prep notes"
             />
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Notes are local to this device and never sent to the server.
             </p>
           </div>
@@ -286,7 +286,7 @@ export default function SpeakingSessionPrepPage() {
         title="Skip preparation time?"
         size="sm"
       >
-        <p className="text-sm text-slate-700">
+        <p className="text-sm text-foreground">
           You&apos;ll move straight to the role-play with no further chance to plan. Some
           candidates find this useful for exam practice — but a quick pause is usually
           worth it.
@@ -324,10 +324,10 @@ export default function SpeakingSessionPrepPage() {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
-      <dt className="w-40 shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <dt className="w-40 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </dt>
-      <dd className="flex-1 text-sm text-slate-900">{children}</dd>
+      <dd className="flex-1 text-sm text-foreground">{children}</dd>
     </div>
   );
 }

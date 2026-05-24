@@ -295,7 +295,7 @@ export default function ReviewQueuePage() {
       key: 'status',
       header: 'Status',
       render: (row) => {
-        const variant = row.status === 'overdue' ? 'bg-red-50 text-red-700' : row.status === 'assigned' ? 'bg-blue-50 text-blue-700' : row.status === 'in_progress' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700';
+        const variant = row.status === 'overdue' ? 'bg-red-50 text-red-700' : row.status === 'assigned' ? 'bg-blue-50 text-blue-700' : row.status === 'in_progress' ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-foreground';
         return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${variant}`}>{row.status.replace('_', ' ')}</span>;
       },
     },

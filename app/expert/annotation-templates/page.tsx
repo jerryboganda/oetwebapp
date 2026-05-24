@@ -219,7 +219,7 @@ export default function AnnotationTemplatesPage() {
                 type="checkbox"
                 checked={form.isShared}
                 onChange={(e) => setForm({ ...form, isShared: e.target.checked })}
-                className="rounded border-gray-300"
+                className="rounded border-border"
               />
               Share with other experts
             </label>

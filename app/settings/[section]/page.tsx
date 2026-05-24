@@ -169,10 +169,10 @@ const accentStyles: Record<LearnerSurfaceAccent, {
     toggleOn: 'bg-emerald-600',
   },
   slate: {
-    icon: 'bg-slate-100 text-slate-700',
-    badge: 'border-slate-200 bg-slate-100 text-slate-700',
-    softBadge: 'border-slate-200 bg-slate-100 text-slate-700',
-    helperSurface: 'border-slate-200 bg-surface',
+    icon: 'bg-muted text-foreground',
+    badge: 'border-border bg-muted text-foreground',
+    softBadge: 'border-border bg-muted text-foreground',
+    helperSurface: 'border-border bg-surface',
     helperGlow: 'from-slate-100 via-white to-white',
     inputFocus: 'focus:border-slate-400 focus:ring-2 focus:ring-slate-100',
     toggleOn: 'bg-slate-700',
@@ -670,7 +670,7 @@ function fieldStatus(field: FieldConfig, value: string | boolean): { label: stri
 
 function inputClasses(accent: LearnerSurfaceAccent) {
   return cn(
-    'w-full rounded-2xl border border-black/5 bg-white/60 backdrop-blur-xl px-5 py-4 text-base font-bold text-navy outline-none transition-all shadow-inner focus:bg-white focus:shadow-[0_4px_20px_rgb(0,0,0,0.08)] focus:border-primary focus:ring-4 focus:ring-primary/20',
+    'w-full rounded-2xl border border-black/5 bg-surface/60 backdrop-blur-xl px-5 py-4 text-base font-bold text-navy outline-none transition-all shadow-inner focus:bg-surface focus:shadow-[0_4px_20px_rgb(0,0,0,0.08)] focus:border-primary focus:ring-4 focus:ring-primary/20',
     accentStyles[accent].inputFocus,
   );
 }
@@ -812,7 +812,7 @@ function SettingsSectionForm({
         const isStorageOrAudio = field.primaryTag === 'Storage' || field.secondaryTag === 'Audio evidence';
 
         return (
-          <div key={field.key} className={cn('rounded-[2rem] border/50 bg-white/70 backdrop-blur-2xl p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-black/5 transition-all duration-500 hover:shadow-[0_8px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1 group relative', status.label === 'Not set' ? 'border-dashed border-gray-300 ring-transparent' : 'border-black/5', data.section === 'privacy' && 'backdrop-blur-xl bg-white/60')}>
+          <div key={field.key} className={cn('rounded-[2rem] border/50 bg-white/70 backdrop-blur-2xl p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-black/5 transition-all duration-500 hover:shadow-[0_8px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1 group relative', status.label === 'Not set' ? 'border-dashed border-border ring-transparent' : 'border-black/5', data.section === 'privacy' && 'backdrop-blur-xl bg-white/60')}>
             <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none rounded-[2rem]" />
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between relative z-10">
               <div className="flex min-w-0 flex-1 items-start gap-5">
@@ -1172,7 +1172,7 @@ export default function LearnerSettingsSectionPage() {
                       <Badge className={cn('rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] shadow-sm', accentStyles[config.accent].badge)}>
                         {configuredFieldCount}/{config.fields.length} configured
                       </Badge>
-                      <Badge variant={successMessage ? 'success' : 'muted'} className="rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] bg-white shadow-sm ring-1 ring-black/5">
+                      <Badge variant={successMessage ? 'success' : 'muted'} className="rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] bg-surface shadow-sm ring-1 ring-black/5">
                         {saving ? 'Saving...' : successMessage ? 'Saved' : 'Ready to save'}
                       </Badge>
                     </div>

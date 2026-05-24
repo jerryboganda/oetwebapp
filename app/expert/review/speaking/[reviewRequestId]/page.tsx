@@ -667,9 +667,9 @@ export default function SpeakingReviewWorkspace() {
 
   const renderCriteriaGroup = (title: string, criteria: { key: SpeakingCriterionKey; label: string }[], bandOptions = LINGUISTIC_BAND_OPTIONS) => (
     <>
-      <h3 className="font-bold text-navy border-b border-gray-200 pb-2">{title}</h3>
+      <h3 className="font-bold text-navy border-b border-border pb-2">{title}</h3>
       {criteria.map(({ key, label }) => (
-        <div key={key} className={`p-3 bg-white border rounded-md ${validationErrors.has(key) ? 'border-red-400 ring-1 ring-red-200' : 'border-gray-200'}`}>
+        <div key={key} className={`p-3 bg-surface border rounded-md ${validationErrors.has(key) ? 'border-danger ring-1 ring-danger/20' : 'border-border'}`}>
           <Select
             label={label}
             value={scores[key] ?? ''}
@@ -716,17 +716,17 @@ export default function SpeakingReviewWorkspace() {
         errorMessage={errorMsg ?? undefined}
         partialMessage={partialMessage}
       >
-        <div className="flex-1 min-w-0 flex flex-col border-b border-gray-200 overflow-hidden lg:border-b-0 lg:border-r lg:w-1/2">
-          <div className="p-4 bg-surface border-b border-gray-200 shrink-0">
+        <div className="flex-1 min-w-0 flex flex-col border-b border-border overflow-hidden lg:border-b-0 lg:border-r lg:w-1/2">
+          <div className="p-4 bg-surface border-b border-border shrink-0">
             <h3 className="text-sm font-semibold text-navy mb-2">Candidate Audio Submission</h3>
             {reviewDetail && <AudioPlayerWaveform audioUrl={reviewDetail.audioUrl} onTimeUpdate={setCurrentTime} seekToTime={seekTo} />}
             {reviewDetail?.artifactStatus && (
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                 {Object.entries(reviewDetail.artifactStatus).map(([artifact, artifactState]) => (
-                  <div key={artifact} className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600">
-                    <p className="font-semibold text-slate-900">{artifact}</p>
+                  <div key={artifact} className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                    <p className="font-semibold text-foreground">{artifact}</p>
                     <p>{artifactState.state}{artifactState.isStale ? ' • stale' : ''}</p>
-                    {artifactState.message ? <p className="mt-1 text-slate-500">{artifactState.message}</p> : null}
+                    {artifactState.message ? <p className="mt-1 text-muted-foreground">{artifactState.message}</p> : null}
                   </div>
                 ))}
               </div>
@@ -735,7 +735,7 @@ export default function SpeakingReviewWorkspace() {
 
           <Tabs tabs={tabOptions} activeTab={activeTab} onChange={setActiveTab} className="bg-surface shrink-0" />
 
-          <div className="flex-1 overflow-y-auto p-4 bg-white" role="region" aria-label="Review content">
+          <div className="flex-1 overflow-y-auto p-4 bg-surface" role="region" aria-label="Review content">
             <TabPanel id="transcript" activeTab={activeTab} className="h-full space-y-2">
               {!reviewDetail?.transcriptLines.length && (
                 <InlineAlert variant="warning">Transcript is still being processed. You can continue reviewing with the audio and save a draft.</InlineAlert>
@@ -748,7 +748,7 @@ export default function SpeakingReviewWorkspace() {
                   <div key={line.id} id={`transcript-line-${line.id}`}>
                     <button
                       type="button"
-                      className={`w-full text-left p-3 rounded-lg border transition-colors ${isActive ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:border-gray-200'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
+                      className={`w-full text-left p-3 rounded-lg border transition-colors ${isActive ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-surface border-transparent hover:border-border'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
                       onClick={() => handleTranscriptClick(line.startTime)}
                       aria-label={`Seek to ${line.startTime.toFixed(1)} seconds for ${line.speaker}`}
                     >
@@ -778,7 +778,7 @@ export default function SpeakingReviewWorkspace() {
                           <input
                             type="text"
                             placeholder="Your comment..."
-                            className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            className="flex-1 text-sm border border-border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/30"
                             autoFocus
                             onKeyDown={(event) => {
                               if (event.key === 'Enter') {
@@ -900,7 +900,7 @@ export default function SpeakingReviewWorkspace() {
         </div>
 
         <div className="w-full lg:w-[520px] flex flex-col bg-surface">
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-white shrink-0" role="banner">
+          <div className="p-4 border-b border-border flex justify-between items-center bg-surface shrink-0" role="banner">
             <div>
               <h2 className="font-semibold text-navy">Review Rubric</h2>
               <p className="text-xs text-muted">ID: {reviewRequestId}</p>
@@ -915,7 +915,7 @@ export default function SpeakingReviewWorkspace() {
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {learnerContext && (
-              <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <div className="rounded-xl border border-border bg-surface p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-navy">{learnerContext.name}</p>
@@ -936,7 +936,7 @@ export default function SpeakingReviewWorkspace() {
                 <p className="mt-1 text-xs text-blue-700">These scores are advisory AI guidance and are visually separated from your final rubric judgment.</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {ALL_CRITERIA.map(({ key, label }) => (
-                    <div key={`ai-${key}`} className="rounded-lg bg-white px-3 py-2 text-sm text-navy">
+                    <div key={`ai-${key}`} className="rounded-lg bg-surface px-3 py-2 text-sm text-navy">
                       <span className="font-medium">{label}</span>
                       <span className="ml-2 text-blue-700">{reviewDetail.aiSuggestedScores?.[key] ?? '-'}</span>
                     </div>
@@ -946,15 +946,15 @@ export default function SpeakingReviewWorkspace() {
             )}
 
             {reviewHistory && (
-              <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <div className="rounded-xl border border-border bg-surface p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-navy">Review History</p>
                   <span className="text-xs text-muted">{reviewHistory.draftVersionCount} draft version(s)</span>
                 </div>
                 <div className="mt-3 space-y-2">
                   {reviewHistory.entries.slice(-4).reverse().map((entry) => (
-                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                      <p className="font-medium text-slate-900">{entry.action.replace(/_/g, ' ')}</p>
+                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                      <p className="font-medium text-foreground">{entry.action.replace(/_/g, ' ')}</p>
                       <p>{entry.actorName ?? 'System'} • {new Date(entry.timestamp).toLocaleString()}</p>
                       {entry.details ? <p className="mt-1">{entry.details}</p> : null}
                     </div>
@@ -966,7 +966,7 @@ export default function SpeakingReviewWorkspace() {
             {renderCriteriaGroup('Linguistic Criteria', LINGUISTIC_CRITERIA)}
             <div className="mt-2">{renderCriteriaGroup('Clinical Communication', CLINICAL_CRITERIA, CLINICAL_BAND_OPTIONS)}</div>
 
-            <div className="p-3 bg-white border border-gray-200 rounded-md">
+            <div className="p-3 bg-surface border border-border rounded-md">
               <Textarea
                 label="Final Overall Comment"
                 placeholder="Provide a summary of the learner's performance..."
@@ -979,7 +979,7 @@ export default function SpeakingReviewWorkspace() {
               <p className="text-xs text-muted mt-1 text-right">{finalComment.length} characters</p>
             </div>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-3" role="region" aria-label="Voice-note feedback">
+            <div className="rounded-xl border border-border bg-surface p-3" role="region" aria-label="Voice-note feedback">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-sm font-semibold text-navy">
@@ -1027,12 +1027,12 @@ export default function SpeakingReviewWorkspace() {
                 {voiceNotesLoading ? (
                   <p className="text-xs text-muted">Loading voice notes...</p>
                 ) : voiceNotes.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-gray-200 bg-slate-50 p-3 text-xs text-muted">
+                  <p className="rounded-lg border border-dashed border-border bg-muted p-3 text-xs text-muted">
                     No voice notes yet. Record one above to attach spoken feedback.
                   </p>
                 ) : (
                   voiceNotes.map((note) => (
-                    <div key={note.id} className="rounded-lg border border-gray-200 bg-slate-50 p-3" role="listitem">
+                    <div key={note.id} className="rounded-lg border border-border bg-muted p-3" role="listitem">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate text-xs font-semibold text-navy">{note.fileName}</p>
@@ -1047,7 +1047,7 @@ export default function SpeakingReviewWorkspace() {
                               type="button"
                               onClick={() => void handleDeleteVoiceNote(note.id)}
                               disabled={deletingVoiceNoteId === note.id}
-                              className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-red-600 hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-semibold text-danger hover:border-danger hover:bg-danger/5 disabled:opacity-50"
                               aria-label={`Delete voice note ${note.fileName}`}
                             >
                               <Trash2 className="h-3 w-3" /> {deletingVoiceNoteId === note.id ? 'Deleting...' : 'Delete'}
@@ -1071,7 +1071,7 @@ export default function SpeakingReviewWorkspace() {
             <p className="text-xs text-muted">Keyboard: Ctrl+S save draft · Ctrl+Enter submit</p>
           </div>
 
-          <div className="p-4 border-t border-gray-200 bg-white flex justify-between items-center gap-3 shrink-0" role="toolbar" aria-label="Review actions">
+          <div className="p-4 border-t border-border bg-surface flex justify-between items-center gap-3 shrink-0" role="toolbar" aria-label="Review actions">
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={() => void handleSaveDraft()} disabled={isSaving || !workspaceMeta?.canSaveDraft} className="flex items-center gap-2" aria-label="Save draft">
                 <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : 'Save Draft'}
@@ -1089,7 +1089,7 @@ export default function SpeakingReviewWorkspace() {
             <div className="px-4 pb-4 bg-amber-50 border-t border-amber-200">
               <p className="text-sm font-semibold text-amber-800 my-2">Request Rework</p>
               <textarea
-                className="w-full text-sm border border-amber-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 bg-white"
+                className="w-full text-sm border border-amber-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 bg-surface"
                 rows={2}
                 placeholder="Reason for rework..."
                 value={reworkReason}

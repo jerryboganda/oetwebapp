@@ -311,6 +311,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.UpdateBillingPlanAsync(http.AdminId(), http.AdminName(), planId, request, ct)))
             .WithAdminWrite("AdminBillingCatalogWrite");
 
+        admin.MapDelete("/billing/plans/{planId}", async (string planId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.DeleteBillingPlanAsync(http.AdminId(), http.AdminName(), planId, ct)))
+            .WithAdminWrite("AdminBillingCatalogWrite");
+
         admin.MapGet("/billing/plans/{planId}/versions", async (string planId, AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetBillingPlanVersionsAsync(planId, ct)))
             .WithAdminRead("AdminBillingRead");
@@ -385,6 +389,10 @@ public static class AdminEndpoints
 
         admin.MapPut("/billing/add-ons/{addOnId}", async (string addOnId, HttpContext http, AdminBillingAddOnUpdateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.UpdateBillingAddOnAsync(http.AdminId(), http.AdminName(), addOnId, request, ct)))
+            .WithAdminWrite("AdminBillingCatalogWrite");
+
+        admin.MapDelete("/billing/add-ons/{addOnId}", async (string addOnId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.DeleteBillingAddOnAsync(http.AdminId(), http.AdminName(), addOnId, ct)))
             .WithAdminWrite("AdminBillingCatalogWrite");
 
         admin.MapGet("/billing/add-ons/{addOnId}/versions", async (string addOnId, AdminService service, CancellationToken ct)

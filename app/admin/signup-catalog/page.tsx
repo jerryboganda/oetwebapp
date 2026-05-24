@@ -257,7 +257,7 @@ export default function AdminSignupCatalogPage() {
 
 function CheckboxGroup({ label, values, options, onChange }: { label: string; values: string[]; options: { value: string; label: string }[]; onChange: (values: string[]) => void }) {
   return (
-    <fieldset className="space-y-2 rounded-2xl border border-gray-200 bg-background-light p-4">
+    <fieldset className="space-y-2 rounded-2xl border border-border bg-background-light p-4">
       <legend className="px-1 text-sm font-semibold text-navy">{label}</legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {options.map((option) => {

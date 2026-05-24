@@ -10,17 +10,10 @@ import { resolvePostAuthDestination } from '@/lib/auth-routes';
 import { AuthScreenShell } from './auth-screen-shell';
 import { OtpCodeInput } from './otp-code-input';
 import styles from './auth-screen-shell.module.scss';
+import { readErrorMessage } from '@/lib/read-error-message';
 
 interface MfaSetupCardProps {
   nextHref?: string | null;
-}
-
-function readErrorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-
-  return 'Unable to complete MFA setup.';
 }
 
 export function MfaSetupCard({ nextHref }: MfaSetupCardProps) {
@@ -45,7 +38,7 @@ export function MfaSetupCard({ nextHref }: MfaSetupCardProps) {
         setSetup(response);
       } catch (setupError) {
         if (!cancelled) {
-          setError(readErrorMessage(setupError));
+          setError(readErrorMessage(setupError, 'Unable to complete MFA setup.'));
         }
       } finally {
         if (!cancelled) {
@@ -76,7 +69,7 @@ export function MfaSetupCard({ nextHref }: MfaSetupCardProps) {
       const currentUser = await confirmAuthenticatorSetup(normalizedCode);
       router.replace(resolvePostAuthDestination(currentUser, nextHref));
     } catch (confirmError) {
-      setError(readErrorMessage(confirmError));
+      setError(readErrorMessage(confirmError, 'Unable to complete MFA setup.'));
     } finally {
       setIsConfirming(false);
     }

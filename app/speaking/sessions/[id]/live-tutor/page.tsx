@@ -105,7 +105,7 @@ export default function SpeakingSessionLiveTutorPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <span className="inline-flex items-center gap-2 text-sm text-slate-500">
+        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Connecting to the tutor room...
         </span>
       </div>
@@ -143,16 +143,16 @@ export default function SpeakingSessionLiveTutorPage() {
 
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Speaking - Live tutor
           </p>
-          <h1 className="text-2xl font-bold text-slate-900">{card.scenarioTitle}</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle}</h1>
+          <p className="text-sm text-muted-foreground">
             {card.setting} - {card.candidateRole}
           </p>
         </div>
         {ending ? (
-          <span className="inline-flex items-center gap-2 text-sm text-slate-500">
+          <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Wrapping up...
           </span>
         ) : null}
@@ -168,8 +168,8 @@ export default function SpeakingSessionLiveTutorPage() {
               onEnd={() => void handleEnd()}
             />
           ) : (
-            <div className="flex h-full min-h-[480px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
-              <span className="inline-flex items-center gap-2 text-sm text-slate-500">
+            <div className="flex h-full min-h-[480px] items-center justify-center rounded-2xl border border-border bg-muted">
+              <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                 {consentAccepted ? 'Setting up the room...' : 'Waiting for consent...'}
               </span>
@@ -178,11 +178,11 @@ export default function SpeakingSessionLiveTutorPage() {
         </div>
 
         {/* Candidate card recap */}
-        <aside className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-800 shadow-sm">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <aside className="rounded-2xl border border-border bg-surface p-5 text-sm text-foreground shadow-sm">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Candidate card
           </h2>
-          <p className="mt-2 whitespace-pre-wrap leading-relaxed text-slate-800">
+          <p className="mt-2 whitespace-pre-wrap leading-relaxed text-foreground">
             {card.background}
           </p>
           {card.tasks.length > 0 ? (
@@ -192,8 +192,8 @@ export default function SpeakingSessionLiveTutorPage() {
               ))}
             </ol>
           ) : null}
-          <p className="mt-3 text-xs text-slate-500">
-            Goal: <span className="text-slate-800">{card.communicationGoal}</span>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Goal: <span className="text-foreground">{card.communicationGoal}</span>
           </p>
         </aside>
       </div>

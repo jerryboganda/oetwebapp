@@ -54,10 +54,10 @@ export default function SpeakingPathwayPage() {
     <LearnerDashboardShell>
       <div className="mx-auto max-w-4xl space-y-6 py-8">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold text-slate-900">
+          <h1 className="text-2xl font-semibold text-foreground">
             {data?.title ?? 'Your Speaking pathway'}
           </h1>
-          <p className="text-slate-600">
+          <p className="text-muted-foreground">
             A guided sequence of warm-ups, drills, and full role-plays. Complete each stage to
             unlock the next.
           </p>
@@ -72,8 +72,8 @@ export default function SpeakingPathwayPage() {
             <Card className="p-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div className="text-sm text-slate-500">Progress</div>
-                  <div className="text-lg font-semibold text-slate-900">
+                  <div className="text-sm text-muted-foreground">Progress</div>
+                  <div className="text-lg font-semibold text-foreground">
                     {data.completedStageCount} / {data.totalStages} stages
                   </div>
                 </div>
@@ -96,14 +96,14 @@ export default function SpeakingPathwayPage() {
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-mono text-slate-500">
+                          <span className="text-xs font-mono text-muted-foreground">
                             {String(idx + 1).padStart(2, '0')}
                           </span>
-                          <span className="font-medium text-slate-900">{stage.title}</span>
+                          <span className="font-medium text-foreground">{stage.title}</span>
                           {stateBadge(stage.state)}
                           <Badge variant="outline">{stage.activityKind}</Badge>
                         </div>
-                        <p className="text-sm text-slate-600">{stage.description}</p>
+                        <p className="text-sm text-muted-foreground">{stage.description}</p>
                       </div>
                     </div>
                   </Card>

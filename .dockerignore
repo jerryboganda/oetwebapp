@@ -6,6 +6,9 @@
 .vscode
 .next
 node_modules
+.venv
+__pycache__
+*.pyc
 dist
 output
 android
@@ -66,6 +69,7 @@ speaking markdown (2).md
 *.png
 *.dump
 Listening*
+Reading*
 01-*.png
 02-*.png
 03-*.png

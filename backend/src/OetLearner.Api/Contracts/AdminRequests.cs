@@ -278,7 +278,9 @@ public record AdminBillingPlanCreateRequest(
     bool? BundledBasicEnglish = null,
     bool? IsDraft = null,
     bool? ExtensionAllowed = null,
-    bool? RecallUpdatesEnabled = null);
+    bool? RecallUpdatesEnabled = null,
+    // "What's included" bullet list — persisted on the linked ContentPackage.
+    string? ComparisonFeaturesJson = null);
 
 public record AdminBillingPlanUpdateRequest(
     string Code,
@@ -312,7 +314,8 @@ public record AdminBillingPlanUpdateRequest(
     bool? BundledBasicEnglish = null,
     bool? IsDraft = null,
     bool? ExtensionAllowed = null,
-    bool? RecallUpdatesEnabled = null);
+    bool? RecallUpdatesEnabled = null,
+    string? ComparisonFeaturesJson = null);
 
 public record AdminBillingAddOnCreateRequest(
     string Code,

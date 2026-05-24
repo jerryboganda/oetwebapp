@@ -392,7 +392,7 @@ function SecretField({ label, hint, serverValue, draftValue, onChange }: SecretF
             onChange={(event) => onChange(event.target.value)}
             autoComplete="off"
             spellCheck={false}
-            className="w-full rounded-2xl border border-gray-200 bg-background-light px-4 py-3 pr-12 text-sm text-navy shadow-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
+            className="w-full rounded-2xl border border-border bg-background-light px-4 py-3 pr-12 text-sm text-navy shadow-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
           />
           <button
             type="button"
@@ -442,7 +442,7 @@ function PlainField({ label, hint, type = 'text', value, onChange }: PlainFieldP
             type="checkbox"
             checked={Boolean(value)}
             onChange={(event) => onChange(event.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
           />
           {label}
         </label>
@@ -462,7 +462,7 @@ function PlainField({ label, hint, type = 'text', value, onChange }: PlainFieldP
         value={value === null || value === undefined ? '' : String(value)}
         onChange={(event) => onChange(event.target.value)}
         spellCheck={false}
-        className="w-full rounded-2xl border border-gray-200 bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
+        className="w-full rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
       />
       {hint ? <p className="text-xs leading-5 text-muted">{hint}</p> : null}
     </div>
@@ -571,7 +571,7 @@ function LoadingState() {
 function LockedState() {
   return (
     <section className="mx-auto flex min-h-[40vh] w-full max-w-2xl items-center justify-center px-4 py-12">
-      <div className="rounded-[2rem] border border-amber-100 bg-white p-8 text-center shadow-sm">
+      <div className="rounded-[2rem] border border-amber-100 bg-surface p-8 text-center shadow-sm">
         <Lock className="mx-auto h-10 w-10 text-amber-500" aria-hidden="true" />
         <h2 className="mt-4 text-xl font-semibold text-navy">System administrator access required</h2>
         <p className="mt-2 text-sm text-muted">

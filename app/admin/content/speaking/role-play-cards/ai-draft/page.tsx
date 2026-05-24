@@ -96,11 +96,11 @@ export default function AdminSpeakingRolePlayAiDraftPage() {
     <AdminRouteWorkspace role="main" aria-label="AI-assisted role-play card draft">
       <div className="space-y-6">
         <header>
-          <Link href="/admin/content/speaking/role-play-cards" className="text-sm text-slate-500 hover:underline">
+          <Link href="/admin/content/speaking/role-play-cards" className="text-sm text-muted-foreground hover:underline">
             ← Back to role-play cards
           </Link>
-          <h1 className="text-2xl font-semibold text-slate-900">Speaking · AI-assisted role-play card draft</h1>
-          <p className="text-slate-600">
+          <h1 className="text-2xl font-semibold text-foreground">Speaking · AI-assisted role-play card draft</h1>
+          <p className="text-muted-foreground">
             Generate a Draft scenario from a profession + topic + patient-emotion seed. The backend
             builds a grounded prompt against the canonical rulebook + scoring, persists the card
             and its hidden interlocutor script, and returns the saved draft for review. The admin
@@ -110,7 +110,7 @@ export default function AdminSpeakingRolePlayAiDraftPage() {
         </header>
 
         <Card className="space-y-3 p-4">
-          <h2 className="font-semibold text-slate-900">Seed</h2>
+          <h2 className="font-semibold text-foreground">Seed</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Select
               value={seed.professionId}
@@ -174,30 +174,30 @@ export default function AdminSpeakingRolePlayAiDraftPage() {
 
         {result && (
           <Card className="space-y-3 p-4">
-            <h2 className="font-semibold text-slate-900">Draft saved</h2>
-            <p className="text-sm text-slate-600">
+            <h2 className="font-semibold text-foreground">Draft saved</h2>
+            <p className="text-sm text-muted-foreground">
               Card <code>{result.cardId}</code> persisted as <code>{result.card.status}</code>.
             </p>
             <dl className="grid gap-2 text-sm sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <dt className="font-medium text-slate-700">Scenario title</dt>
-                <dd className="text-slate-900">{result.card.scenarioTitle}</dd>
+                <dt className="font-medium text-muted-foreground">Scenario title</dt>
+                <dd className="text-foreground">{result.card.scenarioTitle}</dd>
               </div>
               <div>
-                <dt className="font-medium text-slate-700">Profession</dt>
-                <dd className="text-slate-900">{result.card.professionId}</dd>
+                <dt className="font-medium text-muted-foreground">Profession</dt>
+                <dd className="text-foreground">{result.card.professionId}</dd>
               </div>
               <div>
-                <dt className="font-medium text-slate-700">Difficulty</dt>
-                <dd className="text-slate-900">{result.card.difficulty}</dd>
+                <dt className="font-medium text-muted-foreground">Difficulty</dt>
+                <dd className="text-foreground">{result.card.difficulty}</dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="font-medium text-slate-700">Setting</dt>
-                <dd className="text-slate-900">{result.card.setting}</dd>
+                <dt className="font-medium text-muted-foreground">Setting</dt>
+                <dd className="text-foreground">{result.card.setting}</dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="font-medium text-slate-700">Background</dt>
-                <dd className="whitespace-pre-wrap text-slate-900">{result.card.background}</dd>
+                <dt className="font-medium text-muted-foreground">Background</dt>
+                <dd className="whitespace-pre-wrap text-foreground">{result.card.background}</dd>
               </div>
             </dl>
             <div className="flex justify-end gap-2">

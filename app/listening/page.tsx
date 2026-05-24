@@ -227,13 +227,13 @@ export default function ListeningHome() {
                       title={m.target != null && m.progress != null ? `${m.label} (${m.progress}/${m.target})` : m.label}
                       className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
                         m.achieved
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                          : 'border-slate-200 bg-white text-slate-700'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                          : 'border-border bg-surface text-foreground'
                       }`}
                     >
                       <span
                         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                          m.achieved ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 ring-1 ring-slate-200'
+                          m.achieved ? 'bg-emerald-600 text-white' : 'bg-muted text-muted-foreground ring-1 ring-border'
                         }`}
                       >
                         {m.achieved ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> : milestoneIndex + 1}

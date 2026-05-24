@@ -27,6 +27,7 @@ import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } f
 import { ReadingPaperSimulation } from '@/components/domain/reading-paper-simulation';
 import { completeMockSection } from '@/lib/api';
 import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
+import { readErrorMessage } from '@/lib/read-error-message';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -1624,7 +1625,4 @@ function minutesBetween(start: string, end: string): number {
   return Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
 }
 
-function readErrorMessage(err: unknown, fallback: string): string {
-  const detail = (err as { detail?: { message?: string; error?: string } })?.detail;
-  return detail?.message ?? detail?.error ?? (err instanceof Error ? err.message : fallback);
-}
+

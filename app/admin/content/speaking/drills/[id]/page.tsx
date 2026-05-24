@@ -130,10 +130,10 @@ export default function AdminSpeakingDrillEditPage() {
       <div className="space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
-            <Link href="/admin/content/speaking/drills" className="text-sm text-slate-500 hover:underline">
+            <Link href="/admin/content/speaking/drills" className="text-sm text-muted-foreground hover:underline">
               ← Back to drill bank
             </Link>
-            <h1 className="text-2xl font-semibold text-slate-900">
+            <h1 className="text-2xl font-semibold text-foreground">
               {detail?.title ?? 'Drill detail'}
             </h1>
             {detail && (
@@ -198,7 +198,7 @@ export default function AdminSpeakingDrillEditPage() {
                 }
               />
               <textarea
-                className="rounded border border-slate-300 p-2 text-sm sm:col-span-2"
+                className="rounded border border-border p-2 text-sm sm:col-span-2"
                 rows={5}
                 placeholder="Instruction text"
                 value={edit.instructionText ?? ''}

@@ -215,7 +215,7 @@ export default function AiSettingsPage() {
                     label="Preferred credential source"
                     value={prefs.mode}
                     onChange={(e) => void savePrefs({ ...prefs, mode: e.target.value as AiCredentialMode })}
-                    className="w-full rounded-2xl border border-black/5 bg-white/80 backdrop-blur-xl px-5 py-4 text-base font-bold text-navy outline-none transition-all shadow-inner focus:bg-white focus:shadow-[0_4px_20px_rgb(0,0,0,0.08)] focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 appearance-none cursor-pointer h-14 bg-no-repeat bg-[right_1rem_center] bg-[length:1.2em]"
+                    className="w-full rounded-2xl border border-black/5 bg-surface/80 backdrop-blur-xl px-5 py-4 text-base font-bold text-navy outline-none transition-all shadow-inner focus:bg-surface focus:shadow-[0_4px_20px_rgb(0,0,0,0.08)] focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 appearance-none cursor-pointer h-14 bg-no-repeat bg-[right_1rem_center] bg-[length:1.2em]"
                     options={[
                       { value: 'Auto', label: 'Auto — use my key when available, platform otherwise' },
                       { value: 'ByokOnly', label: 'My key only — refuse calls if my key is unavailable' },
@@ -286,7 +286,7 @@ export default function AiSettingsPage() {
                             </span>
                           </div>
                         </div>
-                        <Button variant="ghost" size="sm" onClick={() => void handleRevoke(c.id)} className="text-danger hover:bg-danger/10 hover:text-danger rounded-xl font-bold bg-white shadow-sm ring-1 ring-black/5">
+                        <Button variant="ghost" size="sm" onClick={() => void handleRevoke(c.id)} className="text-danger hover:bg-danger/10 hover:text-danger rounded-xl font-bold bg-surface shadow-sm ring-1 ring-black/5">
                           <Trash2 className="w-4 h-4 mr-2" /> Revoke
                         </Button>
                       </li>

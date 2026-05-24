@@ -42,7 +42,7 @@ export function InlineAlert({ variant = 'info', title, children, dismissible, cl
           {...motionProps}
           className={cn('flex items-start gap-3 rounded-2xl border px-4 py-4 shadow-sm', config.bgClass, config.borderClass, className)}
         >
-          <div className={cn('mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/70', config.textClass)}>
+          <div className={cn('mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/70 dark:bg-white/10', config.textClass)}>
             <Icon className="h-5 w-5" aria-hidden="true" />
           </div>
           <div className="flex-1 min-w-0">
@@ -57,7 +57,7 @@ export function InlineAlert({ variant = 'info', title, children, dismissible, cl
                 void triggerImpactHaptic('LIGHT');
                 setVisible(false);
               }}
-              className={cn('rounded-xl p-2.5 -m-1', config.textClass, 'hover:bg-white/70')}
+              className={cn('rounded-xl p-2.5 -m-1', config.textClass, 'hover:bg-white/70 dark:hover:bg-white/10')}
               aria-label="Dismiss"
             >
               <X className="w-4 h-4" />

@@ -348,7 +348,7 @@ function DrillWaveform({ stream }: { stream: MediaStream | null }) {
       ref={canvasRef}
       width={120}
       height={32}
-      className="rounded bg-slate-50"
+      className="rounded bg-muted"
       data-testid="drill-player-waveform"
     />
   );

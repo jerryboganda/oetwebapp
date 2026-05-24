@@ -49,7 +49,7 @@ function PreferenceToggle({
         'flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-colors',
         checked
           ? 'border-primary/25 bg-primary/5 text-navy'
-          : 'border-border bg-white text-navy hover:border-border',
+          : 'border-border bg-surface text-navy hover:border-border',
       )}
     >
       <div className="space-y-1">
@@ -206,7 +206,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
         />
       </div>
 
-      <div className="rounded-2xl border border-border bg-white p-4">
+      <div className="rounded-2xl border border-border bg-surface p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -258,7 +258,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
 
         <div className={cn('space-y-3 rounded-2xl border border-border bg-background-light/60 p-3', compact && 'max-h-80 overflow-y-auto')}>
           {visibleEventEntries.map(([eventKey, eventPreference]) => (
-            <div key={eventKey} className="rounded-2xl border border-border bg-white p-3">
+            <div key={eventKey} className="rounded-2xl border border-border bg-surface p-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-2">
                   <p className="text-sm font-semibold text-navy">{formatEventLabel(eventKey)}</p>

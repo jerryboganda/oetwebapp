@@ -146,7 +146,7 @@ export default function DiagnosticInsightsPage() {
                     <p className="text-sm text-muted mb-3">{sa.recommendation}</p>
                     {sa.weakCriteria.length > 0 ? (
                       <div>
-                        <p className="text-xs font-medium text-gray-500 mb-1">Weak criteria:</p>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Weak criteria:</p>
                         <div className="flex flex-wrap gap-1">
                           {sa.weakCriteria.map((wc) => (
                             <Badge key={wc.code} variant="danger" className="text-xs">{wc.code}: {wc.score}</Badge>

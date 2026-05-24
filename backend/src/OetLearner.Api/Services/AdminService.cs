@@ -287,11 +287,12 @@ public partial class AdminService(
         bool? BundledBasicEnglish,
         bool? IsDraft,
         bool? ExtensionAllowed,
-        bool? RecallUpdatesEnabled)
+        bool? RecallUpdatesEnabled,
+        string? ComparisonFeaturesJson)
     {
         public static Oet2026PlanFields Empty { get; } = new(
             null, null, null, null, null, null, null, null,
-            null, null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null, null);
     }
 
     /// <summary>OET 2026 catalog optional fields for add-ons.</summary>
@@ -334,6 +335,30 @@ public partial class AdminService(
         if (!string.IsNullOrWhiteSpace(fields.EligibilityFlag)) addOn.EligibilityFlag = fields.EligibilityFlag.Trim().ToLowerInvariant();
         if (fields.LettersGranted.HasValue) addOn.LettersGranted = Math.Max(0, fields.LettersGranted.Value);
         if (fields.SessionsGranted.HasValue) addOn.SessionsGranted = Math.Max(0, fields.SessionsGranted.Value);
+    }
+
+    /// <summary>
+    /// Syncs the linked <see cref="ContentPackage"/>'s ComparisonFeaturesJson
+    /// ("What's included" bullet list) for a plan when the admin edits the
+    /// catalog. No-op when no payload was supplied or the linked package
+    /// doesn't yet exist (will be created by the Oet2026CatalogSeeder).
+    /// </summary>
+    private async Task SyncContentPackageComparisonFeaturesAsync(
+        string planCode,
+        string? comparisonFeaturesJson,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        if (comparisonFeaturesJson is null) return;
+        if (string.IsNullOrWhiteSpace(planCode)) return;
+
+        var pkg = await db.ContentPackages.FirstOrDefaultAsync(p => p.Code == planCode, ct);
+        if (pkg is null) return;
+
+        var trimmed = comparisonFeaturesJson.Trim();
+        if (string.IsNullOrEmpty(trimmed)) trimmed = "[]";
+        pkg.ComparisonFeaturesJson = trimmed;
+        pkg.UpdatedAt = now;
     }
 
     private sealed record BillingCouponCatalogInput(
@@ -448,7 +473,8 @@ public partial class AdminService(
             request.BundledBasicEnglish,
             request.IsDraft,
             request.ExtensionAllowed,
-            request.RecallUpdatesEnabled));
+            request.RecallUpdatesEnabled,
+            request.ComparisonFeaturesJson));
 
     private static BillingPlanCatalogInput ToBillingPlanCatalogInput(AdminBillingPlanUpdateRequest request) => new(
         request.Code,
@@ -483,7 +509,8 @@ public partial class AdminService(
             request.BundledBasicEnglish,
             request.IsDraft,
             request.ExtensionAllowed,
-            request.RecallUpdatesEnabled));
+            request.RecallUpdatesEnabled,
+            request.ComparisonFeaturesJson));
 
     private static BillingAddOnCatalogInput ToBillingAddOnCatalogInput(AdminBillingAddOnCreateRequest request) => new(
         request.Code,
@@ -3783,6 +3810,9 @@ public partial class AdminService(
         db.BillingPlanVersions.Add(version);
         await db.SaveChangesAsync(ct);
 
+        await SyncContentPackageComparisonFeaturesAsync(plan.Code, validated.Oet2026.ComparisonFeaturesJson, now, ct);
+        if (db.ChangeTracker.HasChanges()) await db.SaveChangesAsync(ct);
+
         await LogAuditAsync(adminId, adminName, "Created", "BillingPlan", id, $"Created plan: {validated.Name}", ct);
         return MapBillingPlan(plan);
     }
@@ -3822,6 +3852,10 @@ public partial class AdminService(
         db.BillingPlanVersions.Add(version);
 
         await db.SaveChangesAsync(ct);
+
+        await SyncContentPackageComparisonFeaturesAsync(plan.Code, validated.Oet2026.ComparisonFeaturesJson, now, ct);
+        if (db.ChangeTracker.HasChanges()) await db.SaveChangesAsync(ct);
+
         await LogAuditAsync(adminId, adminName, "Updated", "BillingPlan", plan.Id, $"Updated plan: {validated.Name}", ct);
         return MapBillingPlan(plan);
     }
@@ -3938,6 +3972,102 @@ public partial class AdminService(
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Updated", "BillingAddOn", addOn.Id, $"Updated add-on: {validated.Name}", ct);
         return MapBillingAddOn(addOn);
+    }
+
+    /// <summary>
+    /// Hard-deletes a billing plan after verifying no live references exist
+    /// (active subscribers, historical subscriptions, billing quotes).
+    /// Returns 409 (ApiException with status conflict) if references exist —
+    /// callers are expected to archive instead.
+    /// Also deletes the plan's BillingPlanVersion rows and the matching
+    /// ContentPackage marketing row (so the row can be safely reseeded).
+    /// </summary>
+    public async Task<object> DeleteBillingPlanAsync(string adminId, string adminName, string planId, CancellationToken ct)
+    {
+        var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Id == planId || p.Code == planId, ct)
+            ?? throw ApiException.NotFound("billing_plan_not_found", "Billing plan not found.");
+
+        if (plan.ActiveSubscribers > 0)
+        {
+            throw ApiException.Conflict(
+                "billing_plan_in_use",
+                $"Plan has {plan.ActiveSubscribers} active subscriber(s). Archive the plan instead of deleting it.");
+        }
+
+        var subscriptionExists = await db.Subscriptions.AsNoTracking()
+            .AnyAsync(s => s.PlanId == plan.Id, ct);
+        if (subscriptionExists)
+        {
+            throw ApiException.Conflict(
+                "billing_plan_in_use",
+                "Plan has historical subscription rows. Archive the plan instead of deleting it.");
+        }
+
+        var quoteExists = await db.BillingQuotes.AsNoTracking()
+            .AnyAsync(q => q.PlanCode == plan.Code, ct);
+        if (quoteExists)
+        {
+            throw ApiException.Conflict(
+                "billing_plan_in_use",
+                "Plan has historical billing quotes. Archive the plan instead of deleting it.");
+        }
+
+        var versions = await db.BillingPlanVersions.Where(v => v.PlanId == plan.Id).ToListAsync(ct);
+        if (versions.Count > 0) db.BillingPlanVersions.RemoveRange(versions);
+
+        var pkg = await db.ContentPackages.FirstOrDefaultAsync(p => p.Code == plan.Code, ct);
+        if (pkg is not null) db.ContentPackages.Remove(pkg);
+
+        var planName = plan.Name;
+        var planCode = plan.Code;
+        db.BillingPlans.Remove(plan);
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(adminId, adminName, "Deleted", "BillingPlan", plan.Id, $"Hard-deleted plan {planCode}: {planName}", ct);
+        return new { id = plan.Id, code = planCode, deleted = true };
+    }
+
+    /// <summary>
+    /// Hard-deletes a billing add-on after verifying no live references exist
+    /// (subscription items, billing quotes). Returns 409 when references
+    /// exist — callers should archive instead.
+    /// </summary>
+    public async Task<object> DeleteBillingAddOnAsync(string adminId, string adminName, string addOnId, CancellationToken ct)
+    {
+        var addOn = await db.BillingAddOns.FirstOrDefaultAsync(a => a.Id == addOnId || a.Code == addOnId, ct)
+            ?? throw ApiException.NotFound("billing_addon_not_found", "Billing add-on not found.");
+
+        var itemExists = await db.SubscriptionItems.AsNoTracking()
+            .AnyAsync(i => i.ItemCode == addOn.Code && i.ItemType == "addon", ct);
+        if (itemExists)
+        {
+            throw ApiException.Conflict(
+                "billing_addon_in_use",
+                "Add-on has historical subscription items. Archive the add-on instead of deleting it.");
+        }
+
+        var quoteExists = await db.BillingQuotes.AsNoTracking()
+            .AnyAsync(q => q.AddOnCodesJson.Contains(addOn.Code), ct);
+        if (quoteExists)
+        {
+            throw ApiException.Conflict(
+                "billing_addon_in_use",
+                "Add-on has historical billing quotes. Archive the add-on instead of deleting it.");
+        }
+
+        var versions = await db.BillingAddOnVersions.Where(v => v.AddOnId == addOn.Id).ToListAsync(ct);
+        if (versions.Count > 0) db.BillingAddOnVersions.RemoveRange(versions);
+
+        var pkg = await db.ContentPackages.FirstOrDefaultAsync(p => p.Code == addOn.Code, ct);
+        if (pkg is not null) db.ContentPackages.Remove(pkg);
+
+        var addOnName = addOn.Name;
+        var addOnCode = addOn.Code;
+        db.BillingAddOns.Remove(addOn);
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(adminId, adminName, "Deleted", "BillingAddOn", addOn.Id, $"Hard-deleted add-on {addOnCode}: {addOnName}", ct);
+        return new { id = addOn.Id, code = addOnCode, deleted = true };
     }
 
     public async Task<object> GetBillingCouponsAsync(string? status, CancellationToken ct)

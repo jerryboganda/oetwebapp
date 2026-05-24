@@ -505,7 +505,7 @@ const DIFF_TONE: Record<ReturnType<typeof diffKindForRow>, string> = {
   changed: 'bg-emerald-50',
   added: 'bg-blue-50',
   removed: 'bg-red-50',
-  empty: 'bg-gray-50',
+  empty: 'bg-muted',
 };
 
 const DIFF_LABEL: Record<ReturnType<typeof diffKindForRow>, string> = {

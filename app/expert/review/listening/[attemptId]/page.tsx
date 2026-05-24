@@ -98,7 +98,7 @@ function ScoreOverrideSection({
               max={maxRaw}
               value={override}
               onChange={(e) => onOverrideChange(e.target.value)}
-              className="w-32 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+              className="w-32 rounded-lg border border-warning bg-surface px-3 py-1.5 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-warning/40"
             />
           </div>
           <Textarea
@@ -151,7 +151,7 @@ function RecommendedAreasInput({
   return (
     <div>
       <p className="mb-1 text-xs font-medium text-navy">Recommended Practice Areas</p>
-      <div className="flex flex-wrap gap-1.5 rounded-xl border border-gray-200 bg-white p-2">
+      <div className="flex flex-wrap gap-1.5 rounded-xl border border-border bg-surface p-2">
         {areas.map((tag) => (
           <span
             key={tag}
@@ -189,7 +189,7 @@ function RecommendedAreasInput({
             key={a}
             type="button"
             onClick={() => add(a)}
-            className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-muted hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+            className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
           >
             + {a.replace(/_/g, ' ')}
           </button>
@@ -215,7 +215,7 @@ function MetadataCard({
   onReasonChange: (v: string) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
         Attempt
       </h2>
@@ -233,7 +233,7 @@ function MetadataCard({
         })}
       </p>
 
-      <div className="mt-4 grid grid-cols-3 gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 text-center text-sm">
+      <div className="mt-4 grid grid-cols-3 gap-3 rounded-xl border border-border bg-muted p-3 text-center text-sm">
         <div>
           <p className="text-xs text-muted">Raw</p>
           <p className="font-bold text-navy">
@@ -289,7 +289,7 @@ function QuestionCard({
       className={`w-full rounded-xl border p-4 text-left transition-all ${
         selected
           ? 'border-primary/40 bg-primary/5 shadow-sm'
-          : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+          : 'border-border bg-surface hover:border-border-hover hover:bg-muted'
       }`}
       aria-pressed={selected}
     >
@@ -558,7 +558,7 @@ export default function ListeningReviewWorkspacePage() {
       )}
 
       {/* Header */}
-      <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-6 py-3">
+      <div className="sticky top-0 z-10 border-b border-border bg-surface px-6 py-3">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <div>
             <h1 className="text-base font-semibold text-navy">
@@ -636,7 +636,7 @@ export default function ListeningReviewWorkspacePage() {
 
         {/* Right — feedback panel */}
         <aside className="space-y-4">
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <h2 className="mb-4 text-sm font-semibold text-navy">
               Feedback Panel
             </h2>
@@ -652,7 +652,7 @@ export default function ListeningReviewWorkspacePage() {
                   </span>
                 </p>
                 <textarea
-                  className="w-full rounded-lg border border-primary/20 bg-white px-3 py-2 text-sm text-navy placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full rounded-lg border border-primary/20 bg-surface px-3 py-2 text-sm text-navy placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30"
                   rows={3}
                   placeholder="Add a comment for this question..."
                   value={
@@ -675,7 +675,7 @@ export default function ListeningReviewWorkspacePage() {
             )}
 
             {!selectedQuestion && (
-              <p className="mb-4 rounded-xl border border-dashed border-gray-200 p-3 text-xs text-muted">
+              <p className="mb-4 rounded-xl border border-dashed border-border p-3 text-xs text-muted">
                 Click a question in the centre panel to add a per-question
                 comment here.
               </p>

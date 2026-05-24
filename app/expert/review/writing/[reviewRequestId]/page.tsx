@@ -672,10 +672,10 @@ export default function WritingReviewWorkspace() {
         errorMessage={errorMsg ?? undefined}
         partialMessage={partialMessage}
       >
-        <div className="flex-1 min-w-0 flex flex-col border-b border-gray-200 overflow-hidden lg:border-b-0 lg:border-r lg:w-1/2">
+        <div className="flex-1 min-w-0 flex flex-col border-b border-border overflow-hidden lg:border-b-0 lg:border-r lg:w-1/2">
           <Tabs tabs={tabOptions} activeTab={activeTab} onChange={setActiveTab} className="bg-surface" />
 
-          <div className="flex-1 overflow-y-auto p-4 bg-white">
+          <div className="flex-1 overflow-y-auto p-4 bg-surface">
             <TabPanel id="response" activeTab={activeTab} className="h-full">
               <div id="learner-response-content" className="whitespace-pre-wrap font-serif text-[15px] leading-relaxed text-navy" onMouseUp={handleTextSelection} role="article" aria-label="Learner response text">
                 {reviewDetail?.learnerResponse}
@@ -707,7 +707,7 @@ export default function WritingReviewWorkspace() {
                     <input
                       type="text"
                       placeholder="Your comment..."
-                      className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      className="flex-1 text-sm border border-border rounded px-2 py-1 bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') {
                           addAnchoredComment((event.target as HTMLInputElement).value, pendingCriterion);
@@ -756,11 +756,11 @@ export default function WritingReviewWorkspace() {
                   Uploaded pages and extracted text are evidence for paper-mode Writing reviews. Open the source file when handwriting legibility affects scoring.
                 </InlineAlert>
                 {(reviewDetail?.paperAssets ?? []).length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-gray-200 bg-slate-50 p-6 text-sm text-muted">No paper assets are attached to this review.</div>
+                  <div className="rounded-xl border border-dashed border-border bg-muted p-6 text-sm text-muted-foreground">No paper assets are attached to this review.</div>
                 ) : (
                   <div className="grid gap-3">
                     {(reviewDetail?.paperAssets ?? []).map((asset) => (
-                      <div key={asset.id} className="rounded-xl border border-gray-200 bg-white p-4">
+                      <div key={asset.id} className="rounded-xl border border-border bg-surface p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 text-sm font-semibold text-navy">
@@ -774,7 +774,7 @@ export default function WritingReviewWorkspace() {
                             <Button size="sm" variant="outline" onClick={() => paperAssetUrls[asset.id] && window.open(paperAssetUrls[asset.id], '_blank', 'noopener,noreferrer')} disabled={!paperAssetUrls[asset.id]}>Open</Button>
                           </div>
                         </div>
-                        {asset.extractionMessage ? <p className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-muted">{asset.extractionMessage}</p> : null}
+                        {asset.extractionMessage ? <p className="mt-3 rounded-lg bg-muted p-3 text-xs text-muted-foreground">{asset.extractionMessage}</p> : null}
                       </div>
                     ))}
                   </div>
@@ -788,14 +788,14 @@ export default function WritingReviewWorkspace() {
                   Save at least one audio note before submitting so the learner receives Dr. Ahmed&apos;s spoken feedback alongside the rubric.
                 </InlineAlert>
 
-                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <div className="rounded-xl border border-border bg-surface p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-semibold text-navy">Record or upload audio</p>
                       <p className="text-xs text-muted">MP3, M4A, WAV, OGG, or WebM audio is accepted.</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-navy hover:border-primary/40">
+                      <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-navy hover:border-primary/40">
                         <UploadCloud className="h-4 w-4" /> Upload
                         <input
                           type="file"
@@ -847,11 +847,11 @@ export default function WritingReviewWorkspace() {
                 </div>
 
                 {(reviewDetail?.voiceNotes ?? []).length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-gray-200 bg-slate-50 p-6 text-sm text-muted">No voice notes have been saved yet.</div>
+                  <div className="rounded-xl border border-dashed border-border bg-muted p-6 text-sm text-muted-foreground">No voice notes have been saved yet.</div>
                 ) : (
                   <div className="space-y-3">
                     {(reviewDetail?.voiceNotes ?? []).map((note) => (
-                      <div key={note.id} className="rounded-xl border border-gray-200 bg-white p-4">
+                      <div key={note.id} className="rounded-xl border border-border bg-surface p-4">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                           <div>
                             <p className="text-sm font-semibold text-navy">{note.fileName}</p>
@@ -861,7 +861,7 @@ export default function WritingReviewWorkspace() {
                         </div>
                         <audio controls src={voiceNoteUrls[note.id]} className="mt-3 w-full" preload="metadata" />
                         {note.writtenNotes ? <p className="mt-3 text-sm text-navy">{note.writtenNotes}</p> : null}
-                        {note.transcriptText ? <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-muted">{note.transcriptText}</p> : null}
+                        {note.transcriptText ? <p className="mt-3 whitespace-pre-wrap rounded-lg bg-muted p-3 text-xs text-muted-foreground">{note.transcriptText}</p> : null}
                       </div>
                     ))}
                   </div>
@@ -896,7 +896,7 @@ export default function WritingReviewWorkspace() {
         </div>
 
         <div className="w-full lg:w-[520px] flex flex-col bg-surface">
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-white" role="banner">
+          <div className="p-4 border-b border-border flex justify-between items-center bg-surface" role="banner">
             <div>
               <h2 className="font-semibold text-navy">Review Rubric</h2>
               <p className="text-xs text-muted">ID: {reviewRequestId}</p>
@@ -911,7 +911,7 @@ export default function WritingReviewWorkspace() {
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {learnerContext && (
-              <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <div className="rounded-xl border border-border bg-surface p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-navy">{learnerContext.name}</p>
@@ -924,8 +924,8 @@ export default function WritingReviewWorkspace() {
                   {learnerContext.subTestScores.length > 0 ? <span>{learnerContext.subTestScores.map((item) => `${item.subTest}:${item.latestScore ?? '-'}`).join(' • ')}</span> : null}
                 </div>
                 {learnerContext.priorReviews[0] ? (
-                  <div className="mt-3 rounded-lg bg-slate-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest prior tutor feedback</p>
+                  <div className="mt-3 rounded-lg bg-muted p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest prior tutor feedback</p>
                     <p className="mt-1 text-sm text-navy">{learnerContext.priorReviews[0].overallComment}</p>
                   </div>
                 ) : null}
@@ -938,7 +938,7 @@ export default function WritingReviewWorkspace() {
                 <p className="mt-1 text-xs text-blue-700">Visible by default as advisory guidance only. These are not the final tutor scores.</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {CRITERIA.map(({ key, label }) => (
-                    <div key={`ai-${key}`} className="rounded-lg bg-white px-3 py-2 text-sm text-navy">
+                    <div key={`ai-${key}`} className="rounded-lg bg-surface px-3 py-2 text-sm text-navy">
                       <span className="font-medium">{label}</span>
                       <span className="ml-2 text-blue-700">{reviewDetail.aiSuggestedScores?.[key] ?? '-'}</span>
                     </div>
@@ -948,15 +948,15 @@ export default function WritingReviewWorkspace() {
             )}
 
             {reviewHistory && (
-              <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <div className="rounded-xl border border-border bg-surface p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-navy">Review History</p>
                   <span className="text-xs text-muted">{reviewHistory.draftVersionCount} draft version(s)</span>
                 </div>
                 <div className="mt-3 space-y-2">
                   {reviewHistory.entries.slice(-4).reverse().map((entry) => (
-                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                      <p className="font-medium text-slate-900">{entry.action.replace(/_/g, ' ')}</p>
+                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                      <p className="font-medium text-foreground">{entry.action.replace(/_/g, ' ')}</p>
                       <p>{entry.actorName ?? 'System'} • {new Date(entry.timestamp).toLocaleString()}</p>
                       {entry.details ? <p className="mt-1">{entry.details}</p> : null}
                     </div>
@@ -998,7 +998,7 @@ export default function WritingReviewWorkspace() {
             </div>
 
             {CRITERIA.map(({ key, label }) => (
-              <div key={key} className={`p-3 bg-white border rounded-md ${validationErrors.has(key) ? 'border-red-400 ring-1 ring-red-200' : 'border-gray-200'}`}>
+              <div key={key} className={`p-3 bg-surface border rounded-md ${validationErrors.has(key) ? 'border-danger ring-1 ring-danger/20' : 'border-border'}`}>
                 <Select
                   label={label}
                   value={scores[key] ?? ''}
@@ -1032,7 +1032,7 @@ export default function WritingReviewWorkspace() {
               </div>
             ))}
 
-            <div className="p-3 bg-white border border-gray-200 rounded-md">
+            <div className="p-3 bg-surface border border-border rounded-md">
               <Textarea
                 label="Final Overall Comment"
                 placeholder="Provide a summary of the learner's performance..."
@@ -1048,7 +1048,7 @@ export default function WritingReviewWorkspace() {
             <p className="text-xs text-muted">Keyboard: Ctrl+S save draft · Ctrl+Enter submit</p>
           </div>
 
-          <div className="p-4 border-t border-gray-200 bg-white flex justify-between items-center gap-3 shrink-0" role="toolbar" aria-label="Review actions">
+          <div className="p-4 border-t border-border bg-surface flex justify-between items-center gap-3 shrink-0" role="toolbar" aria-label="Review actions">
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={() => void handleSaveDraft()} disabled={isSaving || !workspaceMeta?.canSaveDraft} className="flex items-center gap-2" aria-label="Save draft">
                 <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : 'Save Draft'}
@@ -1066,7 +1066,7 @@ export default function WritingReviewWorkspace() {
             <div className="px-4 pb-4 bg-amber-50 border-t border-amber-200">
               <p className="text-sm font-semibold text-amber-800 my-2">Request Rework</p>
               <textarea
-                className="w-full text-sm border border-amber-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 bg-white"
+                className="w-full text-sm border border-warning/50 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-warning/30 bg-surface text-foreground"
                 rows={2}
                 placeholder="Reason for rework..."
                 value={reworkReason}
