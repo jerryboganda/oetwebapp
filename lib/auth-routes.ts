@@ -17,6 +17,18 @@ export function defaultRouteForRole(role: UserRole): string {
   }
 }
 
+/**
+ * Whether a role satisfies a required-role guard. Admin is a superset of
+ * learner — admins can preview learner content without switching sessions.
+ */
+export function roleSatisfiesRequired(userRole: UserRole | null, requiredRole: UserRole): boolean {
+  if (!userRole) return false;
+  if (userRole === requiredRole) return true;
+  // Admin can also access learner pages (preview / dual-role support)
+  if (userRole === 'admin' && requiredRole === 'learner') return true;
+  return false;
+}
+
 export function roleCanAccessPath(role: UserRole, path: string): boolean {
   if (!isSafeRelativePath(path)) {
     return false;
@@ -34,7 +46,8 @@ export function roleCanAccessPath(role: UserRole, path: string): boolean {
     return role === 'sponsor' && isSponsorPortalEnabled();
   }
 
-  return role === 'learner';
+  // Learner paths: accessible by learner AND admin (preview/dual-role)
+  return role === 'learner' || role === 'admin';
 }
 
 function isSafeRelativePath(path: string): boolean {

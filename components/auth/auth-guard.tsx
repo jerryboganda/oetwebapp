@@ -6,7 +6,7 @@ import { Lock } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UserRole } from '@/lib/types/auth';
 import { useAuth } from '@/contexts/auth-context';
-import { defaultRouteForRole } from '@/lib/auth-routes';
+import { defaultRouteForRole, roleSatisfiesRequired } from '@/lib/auth-routes';
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -53,7 +53,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
       return;
     }
 
-    if (requiredRole && role !== requiredRole) {
+    if (requiredRole && !roleSatisfiesRequired(role, requiredRole)) {
       router.replace(role ? defaultRouteForRole(role) : '/');
     }
   }, [isAuthenticated, isAuthRoute, loading, nextPath, pendingMfaChallenge, requiredRole, role, router]);
@@ -62,7 +62,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     return <>{children}</>;
   }
 
-  if (loading || pendingMfaChallenge || !isAuthenticated || (requiredRole && role !== requiredRole)) {
+  if (loading || pendingMfaChallenge || !isAuthenticated || (requiredRole && !roleSatisfiesRequired(role, requiredRole))) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background-light px-6">
         <div className="flex flex-col items-center gap-4 text-center text-muted">

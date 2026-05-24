@@ -306,9 +306,13 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
             };
             attempt.HumanScoreOverridesJson = JsonSerializer.Serialize(overrideRecord, JsonOpts);
 
+            // Recalculate attempt scores from override (MISSION CRITICAL: always via OetScoring)
+            attempt.RawScore = req.RawScoreOverride.Value;
+            attempt.ScaledScore = OetScoring.OetRawToScaled(req.RawScoreOverride.Value);
+
             logger.LogInformation(
-                "Expert {ExpertId} applied raw score override {Score} to listening attempt {AttemptId}",
-                expertId, req.RawScoreOverride.Value, attemptId);
+                "Expert {ExpertId} applied raw score override {Score} (scaled {Scaled}) to listening attempt {AttemptId}",
+                expertId, req.RawScoreOverride.Value, attempt.ScaledScore, attemptId);
         }
 
         await db.SaveChangesAsync(ct);
