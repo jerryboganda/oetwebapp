@@ -1,18 +1,28 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Shield, ToggleLeft, ToggleRight, Search, AlertTriangle, CheckCircle2, Percent, Tag, Layers } from 'lucide-react';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteSummaryCard,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+  AlertTriangle,
+  CheckCircle2,
+  Layers,
+  Percent,
+  Search,
+  Shield,
+  Tag,
+  ToggleLeft,
+  ToggleRight,
+} from 'lucide-react';
+
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { Input } from '@/components/admin/ui/input';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { cn } from '@/lib/utils';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -121,132 +131,238 @@ export default function FreeTierStrategyPage() {
   const enabledCount = flags.filter(f => f.enabled).length;
   const freeTierBlockedCount = Object.values(tierLimits).filter(t => t.freeLimit === 0).length;
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Free Tier Strategy' },
+  ];
+
   /* ── render ────────────────────────────────── */
   if (loading) {
     return (
-      <AdminRouteWorkspace role="main" aria-label="Free Tier Strategy">
-        <Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-96" />
-        <div className="grid sm:grid-cols-3 gap-4">{[1,2,3].map(i => <Skeleton key={i} className="h-20" />)}</div>
-        {[1,2,3,4].map(i => <Skeleton key={i} className="h-24" />)}
-      </AdminRouteWorkspace>
+      <AdminTableLayout
+        title="Free Tier Strategy"
+        description="Configure feature access limits for free-tier learners vs premium subscribers."
+        breadcrumbs={breadcrumbs}
+        banner={
+          <KpiStrip>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-24" variant="bare" />
+            ))}
+          </KpiStrip>
+        }
+      >
+        <div className="space-y-3 p-4">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-28" variant="bare" />
+          ))}
+        </div>
+      </AdminTableLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Free Tier Strategy">
-      <AdminRouteHero
-        eyebrow="Admin Workspace"
-        icon={Shield}
-        accent="navy"
-        title="Free Tier Strategy"
-        description="Configure feature access limits for free-tier learners vs premium subscribers."
-      />
+    <AdminTableLayout
+      title="Free Tier Strategy"
+      description="Configure feature access limits for free-tier learners vs premium subscribers."
+      eyebrow="Admin Workspace"
+      breadcrumbs={breadcrumbs}
+      banner={
+        <div className="space-y-4">
+          <KpiStrip>
+            <KpiTile
+              label="Total Flags"
+              value={flags.length}
+              icon={<Layers className="h-4 w-4" />}
+              tone="primary"
+            />
+            <KpiTile
+              label="Active"
+              value={enabledCount}
+              icon={<CheckCircle2 className="h-4 w-4" />}
+              tone="success"
+            />
+            <KpiTile
+              label="Blocked for Free Tier"
+              value={freeTierBlockedCount}
+              icon={<AlertTriangle className="h-4 w-4" />}
+              tone="warning"
+            />
+          </KpiStrip>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <AdminRouteSummaryCard label="Total Flags" value={flags.length} icon={<Layers className="h-5 w-5" />} />
-        <AdminRouteSummaryCard label="Active" value={enabledCount} icon={<CheckCircle2 className="h-5 w-5" />} tone="success" />
-        <AdminRouteSummaryCard label="Blocked for Free Tier" value={freeTierBlockedCount} icon={<AlertTriangle className="h-5 w-5" />} tone="warning" />
-      </div>
+          <Card surface="tinted-warning">
+            <CardContent className="p-4 pt-4 text-sm text-admin-fg-default">
+              Tier-limit editing is read-only until a backend persistence endpoint
+              is available. Feature flag toggles and rollout percentages still
+              save through the existing admin flag API.
+            </CardContent>
+          </Card>
 
-      <Card className="border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        Tier-limit editing is read-only until a backend persistence endpoint is available. Feature flag toggles and rollout percentages still save through the existing admin flag API.
-      </Card>
-
-      {/* search + filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search flags…"
-            className="w-full pl-9 pr-3 py-2 border rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
+          {/* search + filters */}
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted"
+                aria-hidden="true"
+              />
+              <Input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search flags…"
+                aria-label="Search flags"
+                className="pl-9"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={!filterType ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => setFilterType(null)}
+              >
+                All
+              </Button>
+              {flagTypes.map((t) => (
+                <Button
+                  key={t}
+                  variant={filterType === t.toLowerCase() ? 'primary' : 'secondary'}
+                  size="sm"
+                  onClick={() =>
+                    setFilterType(filterType === t.toLowerCase() ? null : t.toLowerCase())
+                  }
+                  className="capitalize"
+                >
+                  {t}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => setFilterType(null)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
-              ${!filterType ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/30 border-border'}`}
-          >
-            All
-          </button>
-          {flagTypes.map(t => (
-            <button
-              key={t}
-              onClick={() => setFilterType(filterType === t.toLowerCase() ? null : t.toLowerCase())}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors capitalize
-                ${filterType === t.toLowerCase() ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/30 border-border'}`}
-            >
-              {t}
-            </button>
-          ))}
+      }
+      footer={
+        <div className="sticky bottom-0 -mx-4 border-t border-admin-border bg-admin-bg-surface/95 px-4 py-4 backdrop-blur">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+            <p className="text-xs text-admin-fg-muted">
+              Changes are applied in real-time for toggles and rollout. Tier
+              limits are read-only until backend support ships.
+            </p>
+            <Button variant="primary" disabled>
+              Backend endpoint required
+            </Button>
+          </div>
         </div>
-      </div>
-
+      }
+    >
       {/* flags list */}
-      <MotionSection className="space-y-3">
-        {filtered.map(flag => {
-          const limits = tierLimits[flag.id] || { freeLimit: -1, premiumLimit: -1 };
-          const preset = FREE_TIER_DEFAULTS[flag.key];
-          const flagType = normalizeFlagType(flag.flagType);
-          return (
-            <MotionItem key={flag.id}>
-              <Card className="p-4">
-                  <div className="flex items-start justify-between gap-4 mb-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-sm">{flag.name}</span>
-                        <Badge variant="outline" className="text-[10px] capitalize">{flagType}</Badge>
-                        {preset && <Badge variant="muted" className="text-[10px]">Tier-configured</Badge>}
+      {filtered.length === 0 ? (
+        <EmptyState
+          illustration={<Tag />}
+          title="No flags match your search"
+          description="Try a different search term or clear the type filter to see more results."
+          size="sm"
+        />
+      ) : (
+        <div className="space-y-3 p-4">
+          {filtered.map((flag) => {
+            const limits = tierLimits[flag.id] || { freeLimit: -1, premiumLimit: -1 };
+            const preset = FREE_TIER_DEFAULTS[flag.key];
+            const flagType = normalizeFlagType(flag.flagType);
+            return (
+              <Card key={flag.id}>
+                <CardContent className="p-4 pt-4">
+                  <div className="mb-3 flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="text-sm font-medium text-admin-fg-strong">
+                          {flag.name}
+                        </span>
+                        <Badge
+                          variant="default"
+                          intensity="tinted"
+                          size="sm"
+                          className="capitalize"
+                        >
+                          {flagType}
+                        </Badge>
+                        {preset && (
+                          <Badge variant="info" intensity="tinted" size="sm">
+                            Tier-configured
+                          </Badge>
+                        )}
                       </div>
-                      <p className="text-xs text-muted truncate">{flag.description || flag.key}</p>
+                      <p className="truncate text-xs text-admin-fg-muted">
+                        {flag.description || flag.key}
+                      </p>
                     </div>
                     <button
+                      type="button"
                       onClick={() => toggleFlag(flag)}
                       disabled={toggling === flag.id}
-                      className="shrink-0"
+                      className={cn(
+                        'shrink-0 rounded-admin-sm focus-visible:outline-none focus-visible:ring-2',
+                        'focus-visible:ring-[var(--admin-primary)] focus-visible:ring-offset-2',
+                        'focus-visible:ring-offset-[var(--admin-bg-surface)]',
+                      )}
                       aria-label={flag.enabled ? 'Disable flag' : 'Enable flag'}
                     >
-                      {flag.enabled
-                        ? <ToggleRight className="h-7 w-7 text-success" />
-                        : <ToggleLeft className="h-7 w-7 text-muted" />
-                      }
+                      {flag.enabled ? (
+                        <ToggleRight className="h-7 w-7 text-[var(--admin-success)]" />
+                      ) : (
+                        <ToggleLeft className="h-7 w-7 text-admin-fg-muted" />
+                      )}
                     </button>
                   </div>
 
                   {/* tier config row */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t">
+                  <div className="grid grid-cols-1 gap-3 border-t border-admin-border pt-3 sm:grid-cols-3">
                     {/* rollout */}
                     <div className="flex items-center gap-2">
-                      <Percent className="h-3.5 w-3.5 text-muted shrink-0" />
+                      <Percent
+                        className="h-3.5 w-3.5 shrink-0 text-admin-fg-muted"
+                        aria-hidden="true"
+                      />
                       <div className="flex-1">
-                        <p className="text-[10px] text-muted mb-1">Rollout %</p>
+                        <p className="mb-1 text-[10px] uppercase tracking-wider text-admin-fg-muted">
+                          Rollout %
+                        </p>
                         <input
                           type="range"
-                          min={0} max={100}
+                          min={0}
+                          max={100}
                           value={flag.rolloutPercentage}
-                          onChange={e => {
+                          onChange={(e) => {
                             const v = Number(e.target.value);
-                            setFlags(prev => prev.map(f => f.id === flag.id ? { ...f, rolloutPercentage: v } : f));
+                            setFlags((prev) =>
+                              prev.map((f) =>
+                                f.id === flag.id ? { ...f, rolloutPercentage: v } : f,
+                              ),
+                            );
                           }}
                           onMouseUp={() => updateRollout(flag.id, flag.rolloutPercentage)}
                           onTouchEnd={() => updateRollout(flag.id, flag.rolloutPercentage)}
-                          className="w-full h-1.5 accent-primary"
+                          className="h-1.5 w-full accent-[var(--admin-primary)]"
+                          aria-label={`Rollout percentage for ${flag.name}`}
                         />
-                        <span className="text-[10px] text-muted">{flag.rolloutPercentage}%</span>
+                        <span className="text-[10px] text-admin-fg-muted">
+                          {flag.rolloutPercentage}%
+                        </span>
                       </div>
                     </div>
 
                     {/* free tier limit */}
                     <div>
-                      <p className="text-[10px] text-muted mb-1">Free Tier Limit</p>
+                      <p className="mb-1 text-[10px] uppercase tracking-wider text-admin-fg-muted">
+                        Free Tier Limit
+                      </p>
                       <select
                         value={limits.freeLimit}
                         disabled
                         onChange={() => undefined}
-                        className="w-full text-xs border rounded px-2 py-1.5 bg-muted/30 disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label={`Free tier limit for ${flag.name}`}
+                        className={cn(
+                          'w-full rounded-admin-sm border border-admin-border bg-admin-bg-subtle',
+                          'px-2 py-1.5 text-xs text-admin-fg-default',
+                          'disabled:cursor-not-allowed disabled:opacity-60',
+                        )}
                       >
                         <option value={-1}>Unlimited</option>
                         <option value={0}>Blocked</option>
@@ -261,12 +377,19 @@ export default function FreeTierStrategyPage() {
 
                     {/* premium tier limit */}
                     <div>
-                      <p className="text-[10px] text-muted mb-1">Premium Limit</p>
+                      <p className="mb-1 text-[10px] uppercase tracking-wider text-admin-fg-muted">
+                        Premium Limit
+                      </p>
                       <select
                         value={limits.premiumLimit}
                         disabled
                         onChange={() => undefined}
-                        className="w-full text-xs border rounded px-2 py-1.5 bg-muted/30 disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label={`Premium limit for ${flag.name}`}
+                        className={cn(
+                          'w-full rounded-admin-sm border border-admin-border bg-admin-bg-subtle',
+                          'px-2 py-1.5 text-xs text-admin-fg-default',
+                          'disabled:cursor-not-allowed disabled:opacity-60',
+                        )}
                       >
                         <option value={-1}>Unlimited</option>
                         <option value={10}>10/month</option>
@@ -277,28 +400,12 @@ export default function FreeTierStrategyPage() {
                       </select>
                     </div>
                   </div>
+                </CardContent>
               </Card>
-            </MotionItem>
-          );
-        })}
-      </MotionSection>
-
-      {filtered.length === 0 && (
-        <div className="text-center py-12 text-muted">
-          <Tag className="h-10 w-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No flags match your search</p>
+            );
+          })}
         </div>
       )}
-
-      {/* save bar */}
-      <div className="sticky bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-0 bg-background/95 backdrop-blur border-t py-4 -mx-4 px-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <p className="text-xs text-muted">Changes are applied in real-time for toggles and rollout. Tier limits are read-only until backend support ships.</p>
-          <Button disabled>
-            Backend endpoint required
-          </Button>
-        </div>
-      </div>
-    </AdminRouteWorkspace>
+    </AdminTableLayout>
   );
 }

@@ -3,14 +3,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Download, FileText, Search } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/form-controls';
+import { Input } from '@/components/ui/form-controls';
 import { Drawer } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
 import { exportAdminAuditLogs } from '@/lib/api';
@@ -141,34 +142,32 @@ export default function AuditLogsPage() {
     },
   ], [actionOptions, actorOptions]);
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-
   const columns: Column<AdminAuditLogRow>[] = useMemo(
     () => [
       {
         key: 'timestamp',
         header: 'Timestamp',
-        render: (log) => <span className="text-sm text-muted">{new Date(log.timestamp).toLocaleString()}</span>,
+        render: (log) => <span className="text-sm text-admin-fg-muted">{new Date(log.timestamp).toLocaleString()}</span>,
       },
       {
         key: 'actor',
         header: 'Actor',
-        render: (log) => <span className="font-medium text-navy">{log.actor}</span>,
+        render: (log) => <span className="font-medium text-admin-fg-strong">{log.actor}</span>,
       },
       {
         key: 'action',
         header: 'Action',
-        render: (log) => <span className="text-navy">{log.action}</span>,
+        render: (log) => <span className="text-admin-fg-strong">{log.action}</span>,
       },
       {
         key: 'resource',
         header: 'Resource',
-        render: (log) => <span className="font-mono text-xs text-muted">{log.resource}</span>,
+        render: (log) => <span className="font-mono text-xs text-admin-fg-muted">{log.resource}</span>,
       },
       {
         key: 'details',
         header: 'Details',
-        render: (log) => <span className="text-sm text-muted">{log.details}</span>,
+        render: (log) => <span className="text-sm text-admin-fg-muted">{log.details}</span>,
       },
     ],
     [],
@@ -178,25 +177,25 @@ export default function AuditLogsPage() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-navy">{log.actor}</p>
-          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{log.resource}</p>
+          <p className="truncate font-semibold text-admin-fg-strong">{log.actor}</p>
+          <p className="truncate text-xs uppercase tracking-[0.12em] text-admin-fg-muted">{log.resource}</p>
         </div>
-        <span className="rounded-full bg-background-light px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+        <span className="rounded-full bg-admin-bg-subtle px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">
           {new Date(log.timestamp).toLocaleDateString()}
         </span>
       </div>
 
-      <div className="rounded-2xl bg-background-light px-3 py-2 text-sm">
-        <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Action</p>
-        <p className="mt-1 font-medium text-navy">{log.action}</p>
+      <div className="rounded-admin bg-admin-bg-subtle px-3 py-2 text-sm">
+        <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Action</p>
+        <p className="mt-1 font-medium text-admin-fg-strong">{log.action}</p>
       </div>
 
-      <div className="rounded-2xl bg-background-light px-3 py-2 text-sm">
-        <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Details</p>
-        <p className="mt-1 line-clamp-3 text-muted">{log.details}</p>
+      <div className="rounded-admin bg-admin-bg-subtle px-3 py-2 text-sm">
+        <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Details</p>
+        <p className="mt-1 line-clamp-3 text-admin-fg-muted">{log.details}</p>
       </div>
 
-      <p className="text-xs font-medium text-primary">Tap to inspect the full event.</p>
+      <p className="text-xs font-medium text-[var(--admin-primary)]">Tap to inspect the full event.</p>
     </div>
   );
 
@@ -244,35 +243,62 @@ export default function AuditLogsPage() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Audit Logs' },
+  ];
+
+  const headerActions = (
+    <Button
+      variant="outline"
+      onClick={handleExport}
+      loading={isExporting}
+      startIcon={<Download className="h-4 w-4" />}
+    >
+      Export CSV
+    </Button>
+  );
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Audit logs">
+    <AdminTableLayout
+      title="Audit Logs"
+      description="Operational and security events are loaded from the live audit stream, with export and drill-in detail backed by real endpoints."
+      breadcrumbs={breadcrumbs}
+      actions={headerActions}
+    >
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
-        title="Audit Logs"
-        description="Operational and security events are loaded from the live audit stream, with export and drill-in detail backed by real endpoints."
-        actions={
-          <Button variant="outline" onClick={handleExport} loading={isExporting} className="gap-2">
-            <Download className="h-4 w-4" />
-            Export CSV
-          </Button>
-        }
-      />
+      <CardHeader className="flex-col items-start gap-1">
+        <CardTitle>Audit Stream</CardTitle>
+        <CardDescription>Search, filter, and inspect individual events without leaving the admin console.</CardDescription>
+      </CardHeader>
 
-      <AdminRoutePanel title="Audit Stream" description="Search, filter, and inspect individual events without leaving the admin console.">
+      <CardContent className="space-y-4 pt-0">
         <div className="max-w-md">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
-            <Input placeholder="Search actions, actors, resources, or details" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
+            <Input
+              placeholder="Search actions, actors, resources, or details"
+              value={searchQuery}
+              onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }}
+              className="pl-9"
+            />
           </div>
         </div>
-        <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => { setPage(1); handleFilterChange(groupId, optionId); }} onClear={() => { setPage(1); setFilters({ action: [], actor: [] }); setSearchQuery(''); }} />
+
+        <FilterBar
+          groups={filterGroups}
+          selected={filters}
+          onChange={(groupId, optionId) => { setPage(1); handleFilterChange(groupId, optionId); }}
+          onClear={() => { setPage(1); setFilters({ action: [], actor: [] }); setSearchQuery(''); }}
+        />
+
         <AsyncStateWrapper
           status={pageStatus}
           onRetry={() => window.location.reload()}
           emptyContent={
             <EmptyState
-              icon={<FileText className="h-10 w-10 text-admin-text-muted" />}
+              illustration={<FileText />}
               title="No audit events found"
               description="Adjust the search or filters, or wait for more operational activity to be recorded."
             />
@@ -297,44 +323,44 @@ export default function AuditLogsPage() {
             mobileCardRender={mobileCardRender}
           />
         </AsyncStateWrapper>
-      </AdminRoutePanel>
+      </CardContent>
 
       <Drawer open={Boolean(selectedLogId)} onClose={handleDrawerClose} title="Audit Event Detail">
         {isDetailLoading || !selectedLogDetail ? (
-          <p className="text-sm text-muted">Loading event detail...</p>
+          <p className="text-sm text-admin-fg-muted">Loading event detail...</p>
         ) : (
           <div className="space-y-4 text-sm">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Event ID</p>
-              <p className="font-mono text-navy">{selectedLogDetail.id}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Event ID</p>
+              <p className="font-mono text-admin-fg-strong">{selectedLogDetail.id}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Timestamp</p>
-              <p className="text-navy">{new Date(selectedLogDetail.timestamp).toLocaleString()}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Timestamp</p>
+              <p className="text-admin-fg-strong">{new Date(selectedLogDetail.timestamp).toLocaleString()}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Actor</p>
-              <p className="text-navy">{selectedLogDetail.actorName}</p>
-              <p className="font-mono text-xs text-muted">{selectedLogDetail.actorId}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Actor</p>
+              <p className="text-admin-fg-strong">{selectedLogDetail.actorName}</p>
+              <p className="font-mono text-xs text-admin-fg-muted">{selectedLogDetail.actorId}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Action</p>
-              <p className="text-navy">{selectedLogDetail.action}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Action</p>
+              <p className="text-admin-fg-strong">{selectedLogDetail.action}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Resource</p>
-              <p className="text-navy">{selectedLogDetail.resourceType}</p>
-              <p className="font-mono text-xs text-muted">{selectedLogDetail.resourceId || 'No resource ID'}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Resource</p>
+              <p className="text-admin-fg-strong">{selectedLogDetail.resourceType}</p>
+              <p className="font-mono text-xs text-admin-fg-muted">{selectedLogDetail.resourceId || 'No resource ID'}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Details</p>
-              <p className="whitespace-pre-wrap rounded-xl border border-border bg-background-light p-4 text-navy">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Details</p>
+              <p className="whitespace-pre-wrap rounded-admin border border-admin-border bg-admin-bg-subtle p-4 text-admin-fg-strong">
                 {selectedLogDetail.details || 'No additional details recorded.'}
               </p>
             </div>
           </div>
         )}
       </Drawer>
-    </AdminRouteWorkspace>
+    </AdminTableLayout>
   );
 }

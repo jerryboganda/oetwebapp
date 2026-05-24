@@ -3,9 +3,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { TrendingUp, RefreshCcw, AlertTriangle, ChevronRight } from 'lucide-react';
-import { fetchAdminReadinessLearners, recomputeAdminReadiness, type AdminReadinessLearnerRow, type AdminReadinessLearnerList } from '@/lib/api';
-import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import type { ColumnDef } from '@tanstack/react-table';
+
+import {
+  fetchAdminReadinessLearners,
+  recomputeAdminReadiness,
+  type AdminReadinessLearnerRow,
+  type AdminReadinessLearnerList,
+} from '@/lib/api';
+import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { DataTable } from '@/components/admin/ui/data-table';
+import { TableSkeleton } from '@/components/admin/ui/skeleton';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 
 const RISK_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All' },
@@ -15,12 +27,12 @@ const RISK_OPTIONS: { value: string; label: string }[] = [
   { value: 'Unknown', label: 'Unknown' },
 ];
 
-const RISK_BADGE: Record<string, string> = {
-  High: 'bg-danger/10 text-danger border-danger/20',
-  Moderate: 'bg-warning/10 text-warning border-warning/20',
-  Low: 'bg-success/10 text-success border-success/20',
-  Unknown: 'bg-muted/10 text-muted border-border',
-};
+function riskToVariant(risk: string): 'danger' | 'warning' | 'success' | 'default' {
+  if (risk === 'High') return 'danger';
+  if (risk === 'Moderate') return 'warning';
+  if (risk === 'Low') return 'success';
+  return 'default';
+}
 
 export default function AdminReadinessLearnersPage() {
   const [data, setData] = useState<AdminReadinessLearnerList | null>(null);
@@ -32,14 +44,20 @@ export default function AdminReadinessLearnersPage() {
   const load = useCallback(async () => {
     setError('');
     try {
-      const result = await fetchAdminReadinessLearners({ risk: risk || undefined, page, pageSize: 25 });
+      const result = await fetchAdminReadinessLearners({
+        risk: risk || undefined,
+        page,
+        pageSize: 25,
+      });
       setData(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load learner readiness list.');
     }
   }, [risk, page]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   async function handleRecompute(userId: string) {
     setRecomputing(userId);
@@ -53,114 +71,208 @@ export default function AdminReadinessLearnersPage() {
     }
   }
 
+  const columns: ColumnDef<AdminReadinessLearnerRow>[] = [
+    {
+      accessorKey: 'displayName',
+      header: 'Learner',
+      cell: ({ row }) => (
+        <span className="font-semibold text-admin-fg-strong">{row.original.displayName}</span>
+      ),
+    },
+    {
+      accessorKey: 'targetExamDate',
+      header: 'Target date',
+      cell: ({ row }) => (
+        <span className="text-admin-fg-muted">{row.original.targetExamDate ?? '—'}</span>
+      ),
+    },
+    {
+      accessorKey: 'overallReadiness',
+      header: 'Overall',
+      cell: ({ row }) => (
+        <span className="font-semibold tabular-nums text-admin-fg-strong">
+          {Math.round(row.original.overallReadiness)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'overallRisk',
+      header: 'Risk',
+      cell: ({ row }) => (
+        <Badge variant={riskToVariant(row.original.overallRisk)} size="sm">
+          {row.original.overallRisk}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: 'weakestSubtest',
+      header: 'Weakest',
+      cell: ({ row }) => (
+        <span className="text-admin-fg-muted">{row.original.weakestSubtest ?? '—'}</span>
+      ),
+    },
+    {
+      accessorKey: 'targetDateProbability',
+      header: 'Probability',
+      cell: ({ row }) => (
+        <span className="text-admin-fg-muted tabular-nums">
+          {row.original.targetDateProbability != null
+            ? `${Math.round(row.original.targetDateProbability)}%`
+            : '—'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'computedAt',
+      header: 'Updated',
+      cell: ({ row }) => (
+        <span className="text-xs text-admin-fg-muted">
+          {new Date(row.original.computedAt).toLocaleDateString()}
+        </span>
+      ),
+    },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => {
+        const r = row.original;
+        const isRecomputing = recomputing === r.userId;
+        return (
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleRecompute(r.userId)}
+              disabled={isRecomputing}
+              startIcon={
+                <RefreshCcw className={`h-3.5 w-3.5 ${isRecomputing ? 'animate-spin' : ''}`} />
+              }
+            >
+              {isRecomputing ? 'Recomputing' : 'Recompute'}
+            </Button>
+            <Button asChild variant="ghost" size="sm" endIcon={<ChevronRight className="h-3.5 w-3.5" />}>
+              <Link href={`/admin/readiness/${encodeURIComponent(r.userId)}`}>Open</Link>
+            </Button>
+          </div>
+        );
+      },
+    },
+  ];
+
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
-            <TrendingUp className="w-6 h-6 text-primary" />
-            Learner readiness oversight
-          </h1>
-          <p className="text-sm text-muted">Identify learners at risk of missing target dates and trigger intervention.</p>
-        </div>
-        <Link href="/admin/readiness/metrics" className="text-sm font-bold text-primary hover:underline">
-          View platform metrics →
-        </Link>
-      </header>
+    <AdminOperationsLayout
+      title="Learner readiness oversight"
+      description="Identify learners at risk of missing target dates and trigger intervention."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Learner readiness' },
+      ]}
+      actions={
+        <Button asChild variant="outline" size="sm" startIcon={<TrendingUp className="h-4 w-4" />}>
+          <Link href="/admin/readiness/metrics">View platform metrics</Link>
+        </Button>
+      }
+    >
+      {error && (
+        <Card surface="tinted-danger">
+          <CardContent>
+            <p className="text-sm font-medium text-[var(--admin-danger)]">{error}</p>
+          </CardContent>
+        </Card>
+      )}
 
-      {error && <InlineAlert variant="error">{error}</InlineAlert>}
-
-      <div className="flex items-center gap-3 flex-wrap">
-        <label className="text-xs font-bold uppercase tracking-widest text-muted">Filter by risk</label>
-        {RISK_OPTIONS.map(opt => (
-          <button
-            key={opt.value}
-            onClick={() => { setRisk(opt.value); setPage(1); }}
-            className={`text-xs font-bold px-3 py-1.5 rounded-full border ${risk === opt.value ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface text-navy border-border hover:bg-background-light'}`}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Filter by risk</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-2">
+            {RISK_OPTIONS.map((opt) => (
+              <Button
+                key={opt.value}
+                variant={risk === opt.value ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setRisk(opt.value);
+                  setPage(1);
+                }}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {!data ? (
-        <div className="space-y-3">
-          {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)}
-        </div>
+        <TableSkeleton rows={6} columns={8} />
+      ) : data.items.length === 0 ? (
+        <Card>
+          <CardContent>
+            <EmptyState
+              size="md"
+              title="No learners matched"
+              description="No learners matched the current risk filter. Try a different filter."
+            />
+          </CardContent>
+        </Card>
       ) : (
-        <div className="rounded-2xl border border-border bg-surface overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-background-light text-[11px] font-bold uppercase tracking-widest text-muted">
-              <tr>
-                <th className="text-left px-4 py-3">Learner</th>
-                <th className="text-left px-4 py-3">Target date</th>
-                <th className="text-left px-4 py-3">Overall</th>
-                <th className="text-left px-4 py-3">Risk</th>
-                <th className="text-left px-4 py-3">Weakest</th>
-                <th className="text-left px-4 py-3">Probability</th>
-                <th className="text-left px-4 py-3">Updated</th>
-                <th className="text-right px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.length === 0 ? (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-muted">No learners matched the filter.</td></tr>
-              ) : data.items.map((row: AdminReadinessLearnerRow) => (
-                <tr key={row.userId} className="border-t border-border hover:bg-background-light/50">
-                  <td className="px-4 py-3 font-semibold text-navy">{row.displayName}</td>
-                  <td className="px-4 py-3 text-muted">{row.targetExamDate ?? '—'}</td>
-                  <td className="px-4 py-3 font-bold">{Math.round(row.overallReadiness)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border ${RISK_BADGE[row.overallRisk] ?? RISK_BADGE.Unknown}`}>
-                      {row.overallRisk}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-muted">{row.weakestSubtest ?? '—'}</td>
-                  <td className="px-4 py-3 text-muted">{row.targetDateProbability != null ? `${Math.round(row.targetDateProbability)}%` : '—'}</td>
-                  <td className="px-4 py-3 text-muted text-xs">{new Date(row.computedAt).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleRecompute(row.userId)}
-                        disabled={recomputing === row.userId}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-muted hover:text-primary disabled:opacity-50"
-                      >
-                        <RefreshCcw className={`w-3.5 h-3.5 ${recomputing === row.userId ? 'animate-spin' : ''}`} />
-                        {recomputing === row.userId ? 'Recomputing' : 'Recompute'}
-                      </button>
-                      <Link
-                        href={`/admin/readiness/${encodeURIComponent(row.userId)}`}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
-                      >
-                        Open <ChevronRight className="w-3.5 h-3.5" />
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {data.total > data.pageSize && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border text-xs text-muted">
-              <span>Page {data.page} · {data.total} learners</span>
-              <div className="flex gap-2">
-                <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1} className="font-bold text-primary disabled:opacity-50">Prev</button>
-                <button onClick={() => setPage(page + 1)} disabled={data.items.length < data.pageSize} className="font-bold text-primary disabled:opacity-50">Next</button>
+        <Card>
+          <CardContent className="p-0 pt-0">
+            <DataTable
+              columns={columns as ColumnDef<AdminReadinessLearnerRow, unknown>[]}
+              data={data.items}
+              enableSorting={false}
+              enableFiltering={false}
+              enableColumnVisibility={false}
+              enablePagination={false}
+            />
+            {data.total > data.pageSize && (
+              <div className="flex items-center justify-between border-t border-admin-border-default px-4 py-3 text-xs text-admin-fg-muted">
+                <span>
+                  Page {data.page} · {data.total} learners
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPage(Math.max(1, page - 1))}
+                    disabled={page <= 1}
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPage(page + 1)}
+                    disabled={data.items.length < data.pageSize}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      {data && data.items.some(r => r.overallRisk === 'High') && (
-        <div className="rounded-2xl border border-danger/20 bg-danger/5 p-4 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-bold text-navy">Intervention candidates detected</p>
-            <p className="text-xs text-muted">High-risk learners benefit from outreach — consider a tutor check-in or revised study plan.</p>
-          </div>
-        </div>
+      {data && data.items.some((r) => r.overallRisk === 'High') && (
+        <Card surface="tinted-danger">
+          <CardContent>
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[var(--admin-danger)]" />
+              <div>
+                <p className="text-sm font-semibold text-admin-fg-strong">
+                  Intervention candidates detected
+                </p>
+                <p className="text-xs text-admin-fg-muted">
+                  High-risk learners benefit from outreach — consider a tutor check-in or revised study plan.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
-    </div>
+    </AdminOperationsLayout>
   );
 }

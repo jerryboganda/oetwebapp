@@ -2,14 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { Scale, UserRoundCheck, CheckCircle2 } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { assignEscalationReviewer, resolveEscalation } from '@/lib/api';
@@ -17,6 +14,13 @@ import { getAdminEscalationsData, getAdminUsersPageData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminReviewEscalation, AdminUserRow } from '@/lib/types/admin';
 import { BulkActionBar } from '@/components/ui/bulk-action-bar';
+
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -123,14 +127,14 @@ export default function EscalationsPage() {
   ];
 
   const columns: Column<AdminReviewEscalation>[] = [
-    { key: 'subtestCode', header: 'Subtest', render: (e) => <Badge variant="muted">{e.subtestCode}</Badge> },
-    { key: 'aiScore', header: 'AI Score', render: (e) => <span className="font-mono">{e.aiScore}</span> },
-    { key: 'humanScore', header: 'Human Score', render: (e) => <span className="font-mono">{e.humanScore}</span> },
+    { key: 'subtestCode', header: 'Subtest', render: (e) => <Badge variant="default">{e.subtestCode}</Badge> },
+    { key: 'aiScore', header: 'AI Score', render: (e) => <span className="font-mono text-admin-fg-default">{e.aiScore}</span> },
+    { key: 'humanScore', header: 'Human Score', render: (e) => <span className="font-mono text-admin-fg-default">{e.humanScore}</span> },
     {
       key: 'divergence',
       header: 'Divergence',
       render: (e) => (
-        <span className={`font-mono font-semibold ${e.divergence >= 50 ? 'text-danger' : 'text-warning'}`}>
+        <span className={`font-mono font-semibold ${e.divergence >= 50 ? 'text-[var(--admin-danger)]' : 'text-[var(--admin-warning)]'}`}>
           {e.divergence}
         </span>
       ),
@@ -143,21 +147,19 @@ export default function EscalationsPage() {
         return <Badge variant={badge.variant}>{badge.label}</Badge>;
       },
     },
-    { key: 'finalScore', header: 'Final', render: (e) => e.finalScore != null ? <span className="font-mono font-semibold">{e.finalScore}</span> : <span className="text-muted">—</span> },
+    { key: 'finalScore', header: 'Final', render: (e) => e.finalScore != null ? <span className="font-mono font-semibold text-admin-fg-strong">{e.finalScore}</span> : <span className="text-admin-fg-muted">—</span> },
     {
       key: 'actions',
       header: '',
       render: (e) => (
         <div className="flex gap-1">
           {e.status === 'pending' && (
-            <Button size="sm" variant="outline" onClick={() => { setAssignTarget(e); setSelectedExpertId(''); }}>
-              <UserRoundCheck className="w-3.5 h-3.5 mr-1" />
+            <Button size="sm" variant="outline" onClick={() => { setAssignTarget(e); setSelectedExpertId(''); }} startIcon={<UserRoundCheck className="w-3.5 h-3.5" />}>
               Assign
             </Button>
           )}
           {(e.status === 'pending' || e.status === 'assigned') && (
-            <Button size="sm" variant="outline" onClick={() => { setResolveTarget(e); setFinalScore(''); setResolutionNote(''); }}>
-              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+            <Button size="sm" variant="outline" onClick={() => { setResolveTarget(e); setFinalScore(''); setResolutionNote(''); }} startIcon={<CheckCircle2 className="w-3.5 h-3.5" />}>
               Resolve
             </Button>
           )}
@@ -167,29 +169,36 @@ export default function EscalationsPage() {
   ];
 
   const pendingCount = escalations.filter((e) => e.status === 'pending').length;
+  const resolvedCount = escalations.filter((e) => e.status === 'resolved').length;
 
   return (
     <AdminRouteWorkspace>
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-      <AdminRouteSectionHeader
+
+      <AdminTableLayout
         title="Review Escalations"
         description="Manage cases where AI and human review scores significantly diverge."
-      />
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <AdminRouteSummaryCard label="Total Escalations" value={total} />
-        <AdminRouteSummaryCard label="Pending" value={pendingCount} tone={pendingCount > 0 ? 'warning' : 'default'} />
-        <AdminRouteSummaryCard label="Resolved" value={escalations.filter((e) => e.status === 'resolved').length} tone="success" />
-      </div>
-
-      <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => setFilters(prev => { const arr = [...(prev[groupId] || [])]; const i = arr.indexOf(optionId); if (i >= 0) arr.splice(i, 1); else arr.push(optionId); return { ...prev, [groupId]: arr }; })} />
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        emptyContent={<EmptyState icon={<Scale className="w-12 h-12" />} title="No escalations" description="No review escalations found." />}
-        errorMessage="Unable to load escalations."
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Review Escalations' }]}
+        banner={
+          <div className="space-y-6">
+            <KpiStrip className="sm:grid-cols-3 lg:grid-cols-3">
+              <KpiTile label="Total Escalations" value={total} icon={<Scale className="h-4 w-4" />} tone="info" />
+              <KpiTile label="Pending" value={pendingCount} icon={<UserRoundCheck className="h-4 w-4" />} tone={pendingCount > 0 ? 'warning' : 'default'} />
+              <KpiTile label="Resolved" value={resolvedCount} icon={<CheckCircle2 className="h-4 w-4" />} tone="success" />
+            </KpiStrip>
+            <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => setFilters(prev => { const arr = [...(prev[groupId] || [])]; const i = arr.indexOf(optionId); if (i >= 0) arr.splice(i, 1); else arr.push(optionId); return { ...prev, [groupId]: arr }; })} />
+          </div>
+        }
       >
-        <AdminRoutePanel>
+        <AsyncStateWrapper
+          status={pageStatus}
+          emptyContent={
+            <div className="p-6">
+              <EmptyState illustration={<Scale />} title="No escalations" description="No review escalations found." />
+            </div>
+          }
+          errorMessage="Unable to load escalations."
+        >
           <DataTable
             columns={columns}
             data={escalations}
@@ -197,11 +206,11 @@ export default function EscalationsPage() {
             mobileCardRender={(e) => (
               <div className="space-y-1">
                 <div className="flex gap-2">
-                  <Badge variant="muted">{e.subtestCode}</Badge>
+                  <Badge variant="default">{e.subtestCode}</Badge>
                   <Badge variant={statusBadge[e.status]?.variant ?? 'default'}>{statusBadge[e.status]?.label ?? e.status}</Badge>
                 </div>
-                <p className="text-xs">AI: {e.aiScore} | Human: {e.humanScore} | Div: {e.divergence}</p>
-                {e.finalScore != null && <p className="text-xs font-semibold">Final: {e.finalScore}</p>}
+                <p className="text-xs text-admin-fg-muted">AI: {e.aiScore} | Human: {e.humanScore} | Div: {e.divergence}</p>
+                {e.finalScore != null && <p className="text-xs font-semibold text-admin-fg-strong">Final: {e.finalScore}</p>}
               </div>
             )}
             selectable
@@ -215,8 +224,8 @@ export default function EscalationsPage() {
               { key: 'resolve', label: 'Resolve selected', onClick: () => setToast({ variant: 'error', message: 'Bulk resolve coming soon.' }) },
             ]}
           />
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
+        </AsyncStateWrapper>
+      </AdminTableLayout>
 
       {assignTarget && (
         <Modal
@@ -225,8 +234,8 @@ export default function EscalationsPage() {
           title="Assign Second Reviewer"
         >
           <div className="space-y-4 p-4">
-            <p className="text-sm text-muted">
-              Subtest: <Badge variant="muted">{assignTarget.subtestCode}</Badge>
+            <p className="text-sm text-admin-fg-muted">
+              Subtest: <Badge variant="default">{assignTarget.subtestCode}</Badge>
               {' '}AI: {assignTarget.aiScore} | Human: {assignTarget.humanScore} (Divergence: {assignTarget.divergence})
             </p>
             <Select
@@ -236,10 +245,10 @@ export default function EscalationsPage() {
               options={[{ value: '', label: 'Choose a tutor...' }, ...experts.filter((ex) => ex.id !== assignTarget.originalReviewerId).map((ex) => ({ value: ex.id, label: `${ex.name} (${ex.email})` }))]}
             />
           </div>
-          <div className="flex justify-end gap-2 pt-4 border-t border-border dark:border-border px-4 pb-4">
+          <div className="flex justify-end gap-2 pt-4 border-t border-admin-border px-4 pb-4">
             <Button variant="ghost" onClick={() => setAssignTarget(null)}>Cancel</Button>
-            <Button onClick={handleAssign} disabled={isMutating || !selectedExpertId}>
-              {isMutating ? 'Assigning...' : 'Assign'}
+            <Button onClick={handleAssign} disabled={isMutating || !selectedExpertId} loading={isMutating}>
+              Assign
             </Button>
           </div>
         </Modal>
@@ -252,11 +261,11 @@ export default function EscalationsPage() {
           title="Resolve Escalation"
         >
           <div className="space-y-4 p-4">
-            <p className="text-sm text-muted">
+            <p className="text-sm text-admin-fg-muted">
               AI: {resolveTarget.aiScore} | Human: {resolveTarget.humanScore} (Divergence: {resolveTarget.divergence})
             </p>
             <Input
-              label="Final Score (0–500)"
+              label="Final Score (0-500)"
               type="number"
               min={0}
               max={500}
@@ -271,10 +280,10 @@ export default function EscalationsPage() {
               placeholder="Explain the resolution..."
             />
           </div>
-          <div className="flex justify-end gap-2 pt-4 border-t border-border dark:border-border px-4 pb-4">
+          <div className="flex justify-end gap-2 pt-4 border-t border-admin-border px-4 pb-4">
             <Button variant="ghost" onClick={() => setResolveTarget(null)}>Cancel</Button>
-            <Button onClick={handleResolve} disabled={isMutating || !finalScore}>
-              {isMutating ? 'Resolving...' : 'Resolve'}
+            <Button onClick={handleResolve} disabled={isMutating || !finalScore} loading={isMutating}>
+              Resolve
             </Button>
           </div>
         </Modal>

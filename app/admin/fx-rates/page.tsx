@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/form-controls';
-import { InlineAlert, Toast } from '@/components/ui/alert';
+import type { ColumnDef } from '@tanstack/react-table';
+
 import { fetchFxRates, refreshFxRates, type ExchangeRateDto } from '@/lib/api';
+
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { DataTable } from '@/components/admin/ui/data-table';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { Card, CardContent } from '@/components/admin/ui/card';
 
 export default function AdminFxRatesPage() {
   const [rows, setRows] = useState<ExchangeRateDto[]>([]);
@@ -28,7 +31,9 @@ export default function AdminFxRatesPage() {
     }
   }, [from, to]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   async function handleRefresh() {
     try {
@@ -40,39 +45,115 @@ export default function AdminFxRatesPage() {
     }
   }
 
-  const columns: Column<ExchangeRateDto>[] = [
-    { key: 'from', header: 'From', render: (r) => r.fromCurrency },
-    { key: 'to', header: 'To', render: (r) => r.toCurrency },
-    { key: 'rate', header: 'Rate', render: (r) => r.rate.toFixed(6) },
-    { key: 'effective', header: 'Effective from', render: (r) => new Date(r.effectiveFrom).toLocaleString() },
-    { key: 'source', header: 'Source', render: (r) => r.source },
+  const columns: ColumnDef<ExchangeRateDto>[] = [
+    {
+      accessorKey: 'fromCurrency',
+      header: 'From',
+      cell: ({ row }) => (
+        <span className="font-medium text-admin-fg-strong">{row.original.fromCurrency}</span>
+      ),
+    },
+    {
+      accessorKey: 'toCurrency',
+      header: 'To',
+      cell: ({ row }) => (
+        <span className="font-medium text-admin-fg-strong">{row.original.toCurrency}</span>
+      ),
+    },
+    {
+      accessorKey: 'rate',
+      header: 'Rate',
+      cell: ({ row }) => (
+        <span className="font-mono tabular-nums text-admin-fg-default">
+          {row.original.rate.toFixed(6)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'effectiveFrom',
+      header: 'Effective from',
+      cell: ({ row }) => (
+        <span className="text-sm text-admin-fg-muted">
+          {new Date(row.original.effectiveFrom).toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'source',
+      header: 'Source',
+      cell: ({ row }) => (
+        <span className="text-sm text-admin-fg-muted">{row.original.source}</span>
+      ),
+    },
   ];
 
-  return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader title="FX rates" description="Live foreign-exchange rates used by dynamic-pricing experiments and multi-currency invoicing." />
-
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
-      <AdminRoutePanel>
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-        <div className="flex items-end gap-3">
-          <Input label="From currency" value={from} onChange={(e) => setFrom(e.target.value.toUpperCase())} maxLength={3} />
-          <Input label="To currency" value={to} onChange={(e) => setTo(e.target.value.toUpperCase())} maxLength={3} />
-          <Button variant="ghost" onClick={() => void load()}>
-            <RefreshCw className="h-4 w-4" />
+  const banner = (
+    <Card>
+      <CardContent>
+        {error && (
+          <div className="mb-3 rounded-admin border border-[var(--admin-danger-tint-strong)] bg-[var(--admin-danger-tint)] px-3 py-2 text-sm text-[var(--admin-danger)]">
+            {error}
+          </div>
+        )}
+        {toast && (
+          <div
+            className={`mb-3 rounded-admin border px-3 py-2 text-sm ${
+              toast.variant === 'success'
+                ? 'border-[var(--admin-success-tint-strong)] bg-[var(--admin-success-tint)] text-[var(--admin-success)]'
+                : 'border-[var(--admin-danger-tint-strong)] bg-[var(--admin-danger-tint)] text-[var(--admin-danger)]'
+            }`}
+          >
+            {toast.message}
+          </div>
+        )}
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-40">
+            <Input
+              label="From currency"
+              value={from}
+              onChange={(e) => setFrom(e.target.value.toUpperCase())}
+              maxLength={3}
+            />
+          </div>
+          <div className="w-40">
+            <Input
+              label="To currency"
+              value={to}
+              onChange={(e) => setTo(e.target.value.toUpperCase())}
+              maxLength={3}
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="md"
+            onClick={() => void load()}
+            startIcon={<RefreshCw className="h-4 w-4" />}
+          >
+            Reload
           </Button>
           <Button onClick={handleRefresh}>Refresh from provider</Button>
         </div>
-      </AdminRoutePanel>
+      </CardContent>
+    </Card>
+  );
 
-      <AdminRoutePanel>
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} emptyMessage="No FX rate rows. Click ‘Refresh from provider’." />
-        )}
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
+  return (
+    <AdminTableLayout
+      title="FX rates"
+      description="Live foreign-exchange rates used by dynamic-pricing experiments and multi-currency invoicing."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'FX rates' },
+      ]}
+      banner={banner}
+    >
+      <DataTable
+        columns={columns as ColumnDef<ExchangeRateDto, unknown>[]}
+        data={rows}
+        loading={loading}
+        emptyMessage="No FX rate rows. Click ‘Refresh from provider’."
+        searchPlaceholder="Search currencies…"
+      />
+    </AdminTableLayout>
   );
 }

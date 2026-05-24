@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { Webhook, RefreshCw, AlertTriangle } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -112,7 +115,7 @@ export default function WebhooksPage() {
     {
       key: 'normalizedStatus',
       header: 'Payment',
-      render: (e) => e.normalizedStatus ? <Badge variant="muted">{e.normalizedStatus}</Badge> : <span className="text-xs text-admin-text-muted">-</span>,
+      render: (e) => e.normalizedStatus ? <Badge variant="muted">{e.normalizedStatus}</Badge> : <span className="text-xs text-admin-fg-muted">-</span>,
     },
     {
       key: 'processingStatus',
@@ -122,7 +125,7 @@ export default function WebhooksPage() {
     {
       key: 'attemptCount',
       header: 'Attempts',
-      render: (e) => <span className="text-xs text-admin-text-muted">{e.attemptCount} / {e.retryCount}</span>,
+      render: (e) => <span className="text-xs text-admin-fg-muted">{e.attemptCount} / {e.retryCount}</span>,
     },
     {
       key: 'receivedAt',
@@ -151,47 +154,90 @@ export default function WebhooksPage() {
   ];
 
   return (
-    <AdminRouteWorkspace>
+    <>
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-      <AdminRouteSectionHeader
+      <AdminTableLayout
         title="Webhook Monitoring"
         description="Monitor payment webhook processing and retry verified failed processing attempts."
-      />
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Webhooks' },
+        ]}
+        banner={
+          <div className="space-y-4">
+            {summary && (
+              <KpiStrip>
+                <KpiTile label="Total Events" value={summary.total} />
+                <KpiTile label="Last 24h" value={summary.recent24h} />
+                <KpiTile
+                  label="Failed"
+                  value={summary.failed}
+                  tone={summary.failed > 0 ? 'danger' : 'default'}
+                />
+                <KpiTile
+                  label="Failed (24h)"
+                  value={summary.failed24h}
+                  tone={summary.failed24h > 0 ? 'warning' : 'default'}
+                />
+              </KpiStrip>
+            )}
 
-      {summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-          <AdminRouteSummaryCard label="Total Events" value={summary.total} />
-          <AdminRouteSummaryCard label="Last 24h" value={summary.recent24h} />
-          <AdminRouteSummaryCard label="Failed" value={summary.failed} tone={summary.failed > 0 ? 'danger' : 'default'} />
-          <AdminRouteSummaryCard label="Failed (24h)" value={summary.failed24h} tone={summary.failed24h > 0 ? 'warning' : 'default'} />
-        </div>
-      )}
+            {summary && summary.recentFailures.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-1.5 text-sm">
+                    <AlertTriangle className="w-4 h-4 text-[var(--admin-danger)]" aria-hidden="true" />
+                    Recent Failures
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-2">
+                    {summary.recentFailures.map((f) => (
+                      <div
+                        key={f.id}
+                        className="text-xs text-admin-fg-muted border-l-2 border-[var(--admin-danger)]/40 pl-3"
+                      >
+                        <span className="font-mono">{f.eventType}</span>
+                        {f.errorMessage && (
+                          <span className="ml-2 text-[var(--admin-danger)]">{f.errorMessage}</span>
+                        )}
+                        {!f.retryable && f.retryBlockedReason && (
+                          <span className="ml-2 text-admin-fg-muted">{f.retryBlockedReason}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-      {summary && summary.recentFailures.length > 0 && (
-        <AdminRoutePanel className="mb-6">
-          <h3 className="text-sm font-semibold text-admin-text mb-2 flex items-center gap-1.5">
-            <AlertTriangle className="w-4 h-4 text-danger" /> Recent Failures
-          </h3>
-          <div className="space-y-2">
-            {summary.recentFailures.map((f) => (
-              <div key={f.id} className="text-xs text-admin-text-muted border-l-2 border-danger/40 pl-3">
-                <span className="font-mono">{f.eventType}</span>
-                {f.errorMessage && <span className="ml-2 text-danger">{f.errorMessage}</span>}
-                {!f.retryable && f.retryBlockedReason && <span className="ml-2 text-admin-text-muted">{f.retryBlockedReason}</span>}
-              </div>
-            ))}
+            <FilterBar
+              groups={filterGroups}
+              selected={filters}
+              onChange={(groupId, optionId) =>
+                setFilters((prev) => {
+                  const arr = [...(prev[groupId] || [])];
+                  const i = arr.indexOf(optionId);
+                  if (i >= 0) arr.splice(i, 1);
+                  else arr.push(optionId);
+                  return { ...prev, [groupId]: arr };
+                })
+              }
+            />
           </div>
-        </AdminRoutePanel>
-      )}
-
-      <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => setFilters(prev => { const arr = [...(prev[groupId] || [])]; const i = arr.indexOf(optionId); if (i >= 0) arr.splice(i, 1); else arr.push(optionId); return { ...prev, [groupId]: arr }; })} />
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        emptyContent={<EmptyState icon={<Webhook className="w-12 h-12" />} title="No webhook events" description="No webhook events found with current filters." />}
-        errorMessage="Unable to load webhook events."
+        }
       >
-        <AdminRoutePanel>
+        <AsyncStateWrapper
+          status={pageStatus}
+          emptyContent={
+            <EmptyState
+              illustration={<Webhook className="w-12 h-12" />}
+              title="No webhook events"
+              description="No webhook events found with current filters."
+            />
+          }
+          errorMessage="Unable to load webhook events."
+        >
           <DataTable
             columns={columns}
             data={events}
@@ -204,9 +250,9 @@ export default function WebhooksPage() {
                   <Badge variant={statusColors[e.processingStatus] ?? 'default'}>{e.processingStatus}</Badge>
                   {e.normalizedStatus && <Badge variant="muted">{e.normalizedStatus}</Badge>}
                 </div>
-                <p className="text-xs text-admin-text-muted">Attempts {e.attemptCount} / retries {e.retryCount}</p>
-                {e.errorMessage && <p className="text-xs text-danger">{e.errorMessage}</p>}
-                {!e.retryable && e.retryBlockedReason && <p className="text-xs text-admin-text-muted">{e.retryBlockedReason}</p>}
+                <p className="text-xs text-admin-fg-muted">Attempts {e.attemptCount} / retries {e.retryCount}</p>
+                {e.errorMessage && <p className="text-xs text-[var(--admin-danger)]">{e.errorMessage}</p>}
+                {!e.retryable && e.retryBlockedReason && <p className="text-xs text-admin-fg-muted">{e.retryBlockedReason}</p>}
               </div>
             )}
             selectable
@@ -217,12 +263,16 @@ export default function WebhooksPage() {
             selectedCount={selectedKeys.size}
             onClearSelection={() => setSelectedKeys(new Set())}
             actions={[
-              { key: 'retry', label: 'Retry selected', onClick: () => setToast({ variant: 'error', message: 'Bulk retry coming soon.' }) },
+              {
+                key: 'retry',
+                label: 'Retry selected',
+                onClick: () => setToast({ variant: 'error', message: 'Bulk retry coming soon.' }),
+              },
             ]}
           />
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
-    </AdminRouteWorkspace>
+        </AsyncStateWrapper>
+      </AdminTableLayout>
+    </>
   );
 }
 

@@ -3,14 +3,27 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { MessageSquareText, Pin, Lock, Trash2, Eye, MessageCircle, Clock } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { TableSkeleton } from '@/components/admin/ui/skeleton';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/admin/ui/alert-dialog';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Modal } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
 import { fetchAdminCommunityThreads, pinCommunityThread, lockCommunityThread, adminDeleteCommunityThread } from '@/lib/api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -137,13 +150,13 @@ export default function AdminCommunityPage() {
               </Badge>
             )}
             {row.isLocked && (
-              <Badge variant="muted" className="text-[10px] px-1.5 py-0">
+              <Badge variant="default" className="text-[10px] px-1.5 py-0">
                 <Lock className="mr-0.5 h-2.5 w-2.5" /> Locked
               </Badge>
             )}
           </div>
-          <span className="font-medium text-navy truncate block">{row.title}</span>
-          <span className="text-xs text-muted">by {row.authorDisplayName}</span>
+          <span className="font-medium text-admin-fg-strong truncate block">{row.title}</span>
+          <span className="text-xs text-admin-fg-muted">by {row.authorDisplayName}</span>
         </div>
       ),
     },
@@ -152,7 +165,7 @@ export default function AdminCommunityPage() {
       header: 'Stats',
       hideOnMobile: true,
       render: (row) => (
-        <div className="flex items-center gap-3 text-xs text-muted">
+        <div className="flex items-center gap-3 text-xs text-admin-fg-muted">
           <span className="flex items-center gap-1"><MessageCircle className="h-3 w-3" /> {row.replyCount}</span>
           <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {row.viewCount}</span>
         </div>
@@ -163,7 +176,7 @@ export default function AdminCommunityPage() {
       header: 'Created',
       hideOnMobile: true,
       render: (row) => (
-        <span className="flex items-center gap-1 text-xs text-muted">
+        <span className="flex items-center gap-1 text-xs text-admin-fg-muted">
           <Clock className="h-3 w-3" /> {formatDate(row.createdAt)}
         </span>
       ),
@@ -180,7 +193,7 @@ export default function AdminCommunityPage() {
             disabled={isMutating}
             title={row.isPinned ? 'Unpin thread' : 'Pin thread'}
           >
-            <Pin className={`h-3.5 w-3.5 ${row.isPinned ? 'text-warning' : ''}`} />
+            <Pin className={`h-3.5 w-3.5 ${row.isPinned ? 'text-[var(--admin-warning)]' : ''}`} />
           </Button>
           <Button
             variant="outline"
@@ -189,14 +202,14 @@ export default function AdminCommunityPage() {
             disabled={isMutating}
             title={row.isLocked ? 'Unlock thread' : 'Lock thread'}
           >
-            <Lock className={`h-3.5 w-3.5 ${row.isLocked ? 'text-danger' : ''}`} />
+            <Lock className={`h-3.5 w-3.5 ${row.isLocked ? 'text-[var(--admin-danger)]' : ''}`} />
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setDeleteTarget(row)}
             disabled={isMutating}
-            className="text-danger"
+            className="text-[var(--admin-danger)]"
             title="Delete thread"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -210,108 +223,111 @@ export default function AdminCommunityPage() {
 
   return (
     <AdminRouteWorkspace role="main" aria-label="Community moderation">
-      <AsyncStateWrapper status={pageStatus} onRetry={() => loadThreads(page, pageSize)}>
-        <div className="space-y-6">
-          <AdminRouteSectionHeader
-            icon={MessageSquareText}
-            title="Community moderation"
-            description="Pin, lock, or delete forum threads to keep discussions on-topic."
-          />
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <AdminRouteSummaryCard label="Total Threads" value={String(total)} />
-            <AdminRouteSummaryCard label="Pinned" value={String(threads.filter((t) => t.isPinned).length)} />
-            <AdminRouteSummaryCard label="Locked" value={String(threads.filter((t) => t.isLocked).length)} />
-          </div>
-
-          <AdminRoutePanel>
-            {threads.length === 0 ? (
-              <EmptyState
-                icon={<MessageSquareText className="h-8 w-8" />}
-                title={total === 0 ? 'No threads' : 'No threads on this page'}
-                description={total === 0 ? 'No community threads have been created yet.' : 'Move to another page to continue moderation.'}
-              />
-            ) : (
-              <DataTable<ForumThreadSummary>
-                columns={columns}
-                data={threads}
-                keyExtractor={(row) => row.id}
-                onRowClick={(row) => router.push(`/community/threads/${row.id}`)}
-                mobileCardRender={(row, _index) => (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {row.isPinned && (
-                        <Badge variant="warning" className="text-xs">
-                          <Pin className="mr-0.5 h-3 w-3" /> Pinned
-                        </Badge>
-                      )}
-                      {row.isLocked && (
-                        <Badge variant="muted" className="text-xs">
-                          <Lock className="mr-0.5 h-3 w-3" /> Locked
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="font-medium text-admin-text">{row.title}</p>
-                    <p className="text-xs text-admin-text-muted">by {row.authorDisplayName} · {formatDate(row.createdAt)}</p>
-                    <div className="flex items-center gap-3 text-xs text-admin-text-muted">
-                      <span className="flex items-center gap-1"><MessageCircle className="h-3 w-3" /> {row.replyCount}</span>
-                      <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {row.viewCount}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 pt-1">
-                      <Button variant="outline" size="sm" onClick={() => handlePin(row)} disabled={isMutating}>
-                        <Pin className={`h-3.5 w-3.5 mr-1 ${row.isPinned ? 'text-warning' : ''}`} />
-                        {row.isPinned ? 'Unpin' : 'Pin'}
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleLock(row)} disabled={isMutating}>
-                        <Lock className={`h-3.5 w-3.5 mr-1 ${row.isLocked ? 'text-danger' : ''}`} />
-                        {row.isLocked ? 'Unlock' : 'Lock'}
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => setDeleteTarget(row)} disabled={isMutating} className="text-danger">
-                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
-                      </Button>
-                    </div>
+      <AdminTableLayout
+        title="Community moderation"
+        description="Pin, lock, or delete forum threads to keep discussions on-topic."
+        eyebrow="Moderation"
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Community' },
+        ]}
+        banner={
+          <KpiStrip>
+            <KpiTile label="Total threads" value={total} />
+            <KpiTile label="Pinned" value={threads.filter((t) => t.isPinned).length} tone="warning" />
+            <KpiTile label="Locked" value={threads.filter((t) => t.isLocked).length} tone="danger" />
+          </KpiStrip>
+        }
+        footer={
+          total > 0 ? (
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="thread"
+              itemLabelPlural="threads"
+            />
+          ) : null
+        }
+      >
+        <AsyncStateWrapper
+          status={pageStatus}
+          onRetry={() => loadThreads(page, pageSize)}
+          loadingContent={<TableSkeleton rows={6} columns={4} />}
+        >
+          {threads.length === 0 ? (
+            <EmptyState
+              illustration={<MessageSquareText className="h-10 w-10" />}
+              title={total === 0 ? 'No threads' : 'No threads on this page'}
+              description={total === 0 ? 'No community threads have been created yet.' : 'Move to another page to continue moderation.'}
+            />
+          ) : (
+            <DataTable<ForumThreadSummary>
+              columns={columns}
+              data={threads}
+              keyExtractor={(row) => row.id}
+              onRowClick={(row) => router.push(`/community/threads/${row.id}`)}
+              mobileCardRender={(row, _index) => (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {row.isPinned && (
+                      <Badge variant="warning" className="text-xs">
+                        <Pin className="mr-0.5 h-3 w-3" /> Pinned
+                      </Badge>
+                    )}
+                    {row.isLocked && (
+                      <Badge variant="default" className="text-xs">
+                        <Lock className="mr-0.5 h-3 w-3" /> Locked
+                      </Badge>
+                    )}
                   </div>
-                )}
-                aria-label="Community threads"
-              />
-            )}
-            {total > 0 && (
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-                itemLabel="thread"
-                itemLabelPlural="threads"
-              />
-            )}
-          </AdminRoutePanel>
-        </div>
-      </AsyncStateWrapper>
+                  <p className="font-medium text-admin-fg-strong">{row.title}</p>
+                  <p className="text-xs text-admin-fg-muted">by {row.authorDisplayName} · {formatDate(row.createdAt)}</p>
+                  <div className="flex items-center gap-3 text-xs text-admin-fg-muted">
+                    <span className="flex items-center gap-1"><MessageCircle className="h-3 w-3" /> {row.replyCount}</span>
+                    <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {row.viewCount}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <Button variant="outline" size="sm" onClick={() => handlePin(row)} disabled={isMutating}>
+                      <Pin className={`h-3.5 w-3.5 mr-1 ${row.isPinned ? 'text-[var(--admin-warning)]' : ''}`} />
+                      {row.isPinned ? 'Unpin' : 'Pin'}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleLock(row)} disabled={isMutating}>
+                      <Lock className={`h-3.5 w-3.5 mr-1 ${row.isLocked ? 'text-[var(--admin-danger)]' : ''}`} />
+                      {row.isLocked ? 'Unlock' : 'Lock'}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setDeleteTarget(row)} disabled={isMutating} className="text-[var(--admin-danger)]">
+                      <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                    </Button>
+                  </div>
+                </div>
+              )}
+              aria-label="Community threads"
+            />
+          )}
+        </AsyncStateWrapper>
+      </AdminTableLayout>
 
-      {/* Delete confirmation modal */}
-      <Modal open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} title="Delete Thread" size="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-muted">
-            Are you sure you want to delete <span className="font-semibold text-navy">&ldquo;{deleteTarget?.title}&rdquo;</span>?
-            This action cannot be undone.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)} disabled={isMutating}>
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={handleDeleteConfirm}
-              disabled={isMutating}
-            >
-              {isMutating ? 'Deleting…' : 'Delete Thread'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {/* Delete confirmation */}
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete thread</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <span className="font-semibold text-admin-fg-strong">&ldquo;{deleteTarget?.title}&rdquo;</span>?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isMutating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} disabled={isMutating}>
+              {isMutating ? 'Deleting…' : 'Delete thread'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
     </AdminRouteWorkspace>

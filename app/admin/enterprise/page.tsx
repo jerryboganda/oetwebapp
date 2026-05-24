@@ -1,15 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Building2, Plus, GraduationCap } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { Building2, GraduationCap, Plus } from 'lucide-react';
+
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { KpiStrip } from '@/components/admin/layout/admin-operations-layout';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
@@ -47,10 +52,13 @@ function adminRequest<T = unknown>(path: string, init?: RequestInit): Promise<T>
   return apiClient.request<T>(path, init);
 }
 
-const STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'outline' }> = {
+const STATUS_BADGE: Record<
+  string,
+  { label: string; variant: 'default' | 'success' | 'danger' | 'info' | 'warning' }
+> = {
   active: { label: 'Active', variant: 'success' },
-  draft: { label: 'Draft', variant: 'outline' },
-  completed: { label: 'Completed', variant: 'default' },
+  draft: { label: 'Draft', variant: 'warning' },
+  completed: { label: 'Completed', variant: 'info' },
   archived: { label: 'Archived', variant: 'danger' },
 };
 
@@ -139,74 +147,120 @@ export default function EnterprisePage() {
   }
 
   const sponsorColumns: Column<Sponsor>[] = [
-    { key: 'name', header: 'Name', render: (r) => <span className="font-medium">{r.name}</span> },
-    { key: 'type', header: 'Type', render: (r) => <Badge variant="outline" className="capitalize">{r.type}</Badge> },
-    { key: 'contactEmail', header: 'Email', render: (r) => <span className="text-sm">{r.contactEmail}</span> },
-    { key: 'organizationName', header: 'Organization', render: (r) => <span className="text-sm">{r.organizationName || '—'}</span> },
-    { key: 'status', header: 'Status', render: (r) => { const b = STATUS_BADGE[r.status] ?? { label: r.status, variant: 'outline' as const }; return <Badge variant={b.variant}>{b.label}</Badge>; } },
-    { key: 'createdAt', header: 'Created', render: (r) => <span className="text-xs text-muted">{new Date(r.createdAt).toLocaleDateString()}</span> },
+    { key: 'name', header: 'Name', render: (r) => <span className="font-medium text-admin-fg-strong">{r.name}</span> },
+    { key: 'type', header: 'Type', render: (r) => <Badge variant="default" intensity="tinted" className="capitalize">{r.type}</Badge> },
+    { key: 'contactEmail', header: 'Email', render: (r) => <span className="text-sm text-admin-fg-default">{r.contactEmail}</span> },
+    { key: 'organizationName', header: 'Organization', render: (r) => <span className="text-sm text-admin-fg-default">{r.organizationName || '—'}</span> },
+    { key: 'status', header: 'Status', render: (r) => { const b = STATUS_BADGE[r.status] ?? { label: r.status, variant: 'default' as const }; return <Badge variant={b.variant} intensity="tinted">{b.label}</Badge>; } },
+    { key: 'createdAt', header: 'Created', render: (r) => <span className="text-xs text-admin-fg-muted">{new Date(r.createdAt).toLocaleDateString()}</span> },
   ];
 
   const cohortColumns: Column<Cohort>[] = [
-    { key: 'name', header: 'Cohort', render: (r) => <span className="font-medium">{r.name}</span> },
-    { key: 'examTypeCode', header: 'Exam', render: (r) => <span className="uppercase text-sm">{r.examTypeCode}</span> },
-    { key: 'seats', header: 'Seats', render: (r) => <span className="text-sm">{r.enrolledCount}/{r.maxSeats}</span> },
-    { key: 'status', header: 'Status', render: (r) => { const b = STATUS_BADGE[r.status] ?? { label: r.status, variant: 'outline' as const }; return <Badge variant={b.variant}>{b.label}</Badge>; } },
-    { key: 'dates', header: 'Period', render: (r) => <span className="text-xs text-muted">{r.startDate || '—'} → {r.endDate || '—'}</span> },
+    { key: 'name', header: 'Cohort', render: (r) => <span className="font-medium text-admin-fg-strong">{r.name}</span> },
+    { key: 'examTypeCode', header: 'Exam', render: (r) => <span className="text-sm uppercase text-admin-fg-default">{r.examTypeCode}</span> },
+    { key: 'seats', header: 'Seats', render: (r) => <span className="text-sm tabular-nums text-admin-fg-default">{r.enrolledCount}/{r.maxSeats}</span> },
+    { key: 'status', header: 'Status', render: (r) => { const b = STATUS_BADGE[r.status] ?? { label: r.status, variant: 'default' as const }; return <Badge variant={b.variant} intensity="tinted">{b.label}</Badge>; } },
+    { key: 'dates', header: 'Period', render: (r) => <span className="text-xs text-admin-fg-muted">{r.startDate || '—'} → {r.endDate || '—'}</span> },
+  ];
+
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Enterprise' },
   ];
 
   if (!SPONSOR_PORTAL_ENABLED) {
     return (
-      <AdminRouteWorkspace>
-        <AdminRouteSectionHeader
-          title="Enterprise Channel"
-          description="Sponsor and cohort management is held until the sponsor launch gate is explicitly opened."
-          icon={<Building2 className="w-5 h-5" />}
-        />
-        <AdminRoutePanel>
-          <p className="text-sm leading-6 text-admin-text-muted">
-            Sponsor finance, learner attribution, reporting, contracts, and privacy evidence are not launch-ready. Backend sponsor and enterprise endpoints are disabled by default with the same feature gate.
-          </p>
-        </AdminRoutePanel>
-      </AdminRouteWorkspace>
+      <AdminTableLayout
+        title="Enterprise Channel"
+        description="Sponsor and cohort management is held until the sponsor launch gate is explicitly opened."
+        breadcrumbs={breadcrumbs}
+      >
+        <div className="p-6">
+          <EmptyState
+            illustration={<Building2 />}
+            title="Sponsor portal not yet launched"
+            description="Sponsor finance, learner attribution, reporting, contracts, and privacy evidence are not launch-ready. Backend sponsor and enterprise endpoints are disabled by default with the same feature gate."
+          />
+        </div>
+      </AdminTableLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace>
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
-      <AdminRouteSectionHeader title="Enterprise Channel" icon={<Building2 className="w-5 h-5" />} />
-
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <AdminRouteSummaryCard label="Sponsors" value={sponsors.length} />
-        <AdminRouteSummaryCard label="Active Cohorts" value={cohorts.filter((c) => c.status === 'active').length} />
-        <AdminRouteSummaryCard label="Total Seats" value={cohorts.reduce((s, c) => s + c.maxSeats, 0)} />
-      </div>
-
-      <div className="flex gap-2 mb-4">
-        <Button variant={tab === 'sponsors' ? 'secondary' : 'outline'} size="sm" onClick={() => setTab('sponsors')}>
-          <Building2 className="w-4 h-4 mr-1" /> Sponsors
-        </Button>
-        <Button variant={tab === 'cohorts' ? 'secondary' : 'outline'} size="sm" onClick={() => setTab('cohorts')}>
-          <GraduationCap className="w-4 h-4 mr-1" /> Cohorts
-        </Button>
-        <div className="flex-1" />
-        {tab === 'sponsors' && (
-          <Button size="sm" onClick={() => setShowCreate(true)}>
-            <Plus className="w-4 h-4 mr-1" /> New Sponsor
+    <AdminTableLayout
+      title="Enterprise Channel"
+      description="Manage sponsors, cohorts, and seat allocation across enterprise customers."
+      eyebrow="Operations"
+      breadcrumbs={breadcrumbs}
+      actions={
+        tab === 'sponsors' ? (
+          <Button size="md" onClick={() => setShowCreate(true)}>
+            <Plus className="mr-1 h-4 w-4" /> New Sponsor
           </Button>
-        )}
-        {tab === 'cohorts' && (
-          <Button size="sm" onClick={() => setShowCohortCreate(true)}>
-            <Plus className="w-4 h-4 mr-1" /> New Cohort
+        ) : (
+          <Button size="md" onClick={() => setShowCohortCreate(true)}>
+            <Plus className="mr-1 h-4 w-4" /> New Cohort
           </Button>
-        )}
-      </div>
+        )
+      }
+      banner={
+        <div className="space-y-4">
+          {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
+          <KpiStrip>
+            <KpiTile label="Sponsors" value={sponsors.length} icon={<Building2 className="h-4 w-4" />} tone="primary" />
+            <KpiTile
+              label="Active Cohorts"
+              value={cohorts.filter((c) => c.status === 'active').length}
+              icon={<GraduationCap className="h-4 w-4" />}
+              tone="success"
+            />
+            <KpiTile
+              label="Total Seats"
+              value={cohorts.reduce((s, c) => s + c.maxSeats, 0)}
+              tone="info"
+            />
+          </KpiStrip>
+
+          <div
+            role="tablist"
+            aria-label="Enterprise sections"
+            className="flex gap-2"
+          >
+            <Button
+              role="tab"
+              aria-selected={tab === 'sponsors'}
+              variant={tab === 'sponsors' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setTab('sponsors')}
+            >
+              <Building2 className="mr-1 h-4 w-4" /> Sponsors
+            </Button>
+            <Button
+              role="tab"
+              aria-selected={tab === 'cohorts'}
+              variant={tab === 'cohorts' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setTab('cohorts')}
+            >
+              <GraduationCap className="mr-1 h-4 w-4" /> Cohorts
+            </Button>
+          </div>
+        </div>
+      }
+    >
       <AsyncStateWrapper status={status} errorMessage="Failed to load enterprise data." onRetry={loadData}>
-        <AdminRoutePanel>
-          {tab === 'sponsors' && <DataTable columns={sponsorColumns} data={sponsors} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />}
+        <div className="p-4">
+          {tab === 'sponsors' && (
+            <DataTable
+              columns={sponsorColumns}
+              data={sponsors}
+              keyExtractor={(row) => row.id}
+              selectable
+              selectedKeys={selectedKeys}
+              onSelectionChange={setSelectedKeys}
+            />
+          )}
           {tab === 'sponsors' && selectedKeys.size > 0 && (
             <BulkActionBar
               selectedCount={selectedKeys.size}
@@ -217,7 +271,7 @@ export default function EnterprisePage() {
             />
           )}
           {tab === 'cohorts' && <DataTable columns={cohortColumns} data={cohorts} keyExtractor={(row) => row.id} />}
-        </AdminRoutePanel>
+        </div>
       </AsyncStateWrapper>
 
       {/* Create Sponsor Modal */}
@@ -225,23 +279,23 @@ export default function EnterprisePage() {
         <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Sponsor">
           <div className="space-y-4 p-4">
             <div>
-              <label className="text-sm font-medium">Name</label>
+              <label className="text-sm font-medium text-admin-fg-strong">Name</label>
               <Input value={newSponsorName} onChange={(e) => setNewSponsorName(e.target.value)} placeholder="Sponsor name" />
             </div>
             <div>
-              <label className="text-sm font-medium">Type</label>
+              <label className="text-sm font-medium text-admin-fg-strong">Type</label>
               <Select value={newSponsorType} onChange={(e) => setNewSponsorType(e.target.value)} options={[{ value: 'employer', label: 'Employer' }, { value: 'institution', label: 'Institution' }, { value: 'parent', label: 'Parent' }]} />
             </div>
             <div>
-              <label className="text-sm font-medium">Contact Email</label>
+              <label className="text-sm font-medium text-admin-fg-strong">Contact Email</label>
               <Input type="email" value={newSponsorEmail} onChange={(e) => setNewSponsorEmail(e.target.value)} placeholder="contact@example.com" />
             </div>
             <div>
-              <label className="text-sm font-medium">Organization (optional)</label>
+              <label className="text-sm font-medium text-admin-fg-strong">Organization (optional)</label>
               <Input value={newSponsorOrg} onChange={(e) => setNewSponsorOrg(e.target.value)} placeholder="Organization name" />
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
               <Button onClick={handleCreateSponsor} disabled={submitting}>{submitting ? 'Creating…' : 'Create'}</Button>
             </div>
           </div>
@@ -253,30 +307,30 @@ export default function EnterprisePage() {
         <Modal open={showCohortCreate} onClose={() => setShowCohortCreate(false)} title="Create Cohort">
           <div className="space-y-4 p-4">
             <div>
-              <label className="text-sm font-medium">Sponsor</label>
+              <label className="text-sm font-medium text-admin-fg-strong">Sponsor</label>
               <Select value={cohortSponsorId} onChange={(e) => setCohortSponsorId(e.target.value)} options={[{ value: '', label: 'Select sponsor…' }, ...sponsors.map((s) => ({ value: s.id, label: s.name }))]} />
             </div>
             <div>
-              <label className="text-sm font-medium">Cohort Name</label>
+              <label className="text-sm font-medium text-admin-fg-strong">Cohort Name</label>
               <Input value={cohortName} onChange={(e) => setCohortName(e.target.value)} placeholder="2026 Q2 Nursing Batch" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Exam Type</label>
+                <label className="text-sm font-medium text-admin-fg-strong">Exam Type</label>
                 <Select value={cohortExamType} onChange={(e) => setCohortExamType(e.target.value)} options={[{ value: 'oet', label: 'OET' }]} />
               </div>
               <div>
-                <label className="text-sm font-medium">Max Seats</label>
+                <label className="text-sm font-medium text-admin-fg-strong">Max Seats</label>
                 <Input type="number" value={cohortMaxSeats} onChange={(e) => setCohortMaxSeats(e.target.value)} />
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowCohortCreate(false)}>Cancel</Button>
+              <Button variant="secondary" onClick={() => setShowCohortCreate(false)}>Cancel</Button>
               <Button onClick={handleCreateCohort} disabled={submitting}>{submitting ? 'Creating…' : 'Create'}</Button>
             </div>
           </div>
         </Modal>
       )}
-    </AdminRouteWorkspace>
+    </AdminTableLayout>
   );
 }

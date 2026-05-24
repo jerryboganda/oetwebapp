@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
-import { Fraunces, Manrope } from 'next/font/google';
+import { Fraunces, Manrope, Montserrat } from 'next/font/google';
 import { getRuntimeBootstrapScript } from '@/lib/runtime-signals';
 import { AppProviders } from './providers';
 import './globals.css';
@@ -23,6 +23,15 @@ const bodyFont = Manrope({
 const displayFont = Fraunces({
   subsets: ['latin'],
   variable: '--font-display',
+  display: 'swap',
+});
+
+// Admin UI typography (consumed by `app/admin/_design/admin-tokens.css`
+// via the `--font-montserrat` CSS variable on <html>).
+const adminFont = Montserrat({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-montserrat',
   display: 'swap',
 });
 
@@ -105,7 +114,7 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
-    <html lang="en" className={`${bodyFont.variable} ${displayFont.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${bodyFont.variable} ${displayFont.variable} ${adminFont.variable}`} suppressHydrationWarning>
       <head>
         {/*
           CSP for Capacitor WebView and web — restrict script/style/connect sources.

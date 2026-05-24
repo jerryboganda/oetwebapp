@@ -1,25 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
 import {
   Building2,
   Mail,
   Plus,
   Search,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Input } from '@/components/admin/ui/input';
+import { TableSkeleton } from '@/components/admin/ui/skeleton';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Input } from '@/components/ui/form-controls';
-import { Skeleton } from '@/components/ui/skeleton';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { fetchAdminSponsors, type AdminSponsorDto } from '@/lib/api';
 import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type Sponsor = AdminSponsorDto;
 
 export default function AdminInstitutionsPage() {
-  const reducedMotion = useReducedMotion();
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,12 +47,12 @@ export default function AdminInstitutionsPage() {
       header: 'Institution',
       render: (sponsor) => (
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-500">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-admin bg-[var(--admin-primary-tint)] text-[var(--admin-primary)]">
             <Building2 className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <p className="truncate font-semibold text-zinc-900 dark:text-zinc-100">{sponsor.name}</p>
-            <p className="mt-1 flex items-center gap-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="truncate font-semibold text-admin-fg-strong">{sponsor.name}</p>
+            <p className="mt-1 flex items-center gap-1 truncate text-xs text-admin-fg-muted">
               <Mail className="h-3 w-3 shrink-0" />
               {sponsor.contactEmail}
             </p>
@@ -63,93 +64,77 @@ export default function AdminInstitutionsPage() {
       key: 'organization',
       header: 'Organization',
       render: (sponsor) => sponsor.organizationName ?? 'Unassigned',
-      className: 'text-zinc-600 dark:text-zinc-300',
+      className: 'text-admin-fg-default',
     },
     {
       key: 'type',
       header: 'Type',
       render: (sponsor) => <span className="capitalize">{sponsor.type}</span>,
-      className: 'text-zinc-600 dark:text-zinc-300',
+      className: 'text-admin-fg-default',
       hideOnMobile: true,
     },
     {
       key: 'learners',
       header: 'Learners',
       render: (sponsor) => sponsor.learnerCount ?? 0,
-      className: 'text-right font-semibold tabular-nums text-zinc-900 dark:text-zinc-100',
+      className: 'text-right font-semibold tabular-nums text-admin-fg-strong',
       hideOnMobile: true,
     },
     {
       key: 'status',
       header: 'Status',
       render: (sponsor) => (
-        <span
-          className={`inline-flex rounded px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
-            sponsor.status === 'active'
-              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-              : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
-          }`}
-        >
+        <Badge variant={(sponsor.status === 'active' ? 'success' : 'warning') as any}>
           {sponsor.status}
-        </span>
+        </Badge>
       ),
     },
   ];
 
   return (
-    <AdminRouteWorkspace className="p-6">
-      <motion.div
-        initial={reducedMotion ? false : { opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="space-y-4"
-      >
-        <AdminRouteSectionHeader
-          title="Institutions"
-          description="Manage sponsor accounts, employers, and institutional partners."
-          icon={Building2}
-          meta={`${filtered.length} visible`}
-          actions={(
+    <AdminRouteWorkspace>
+      <AdminTableLayout
+        title="Institutions"
+        description="Manage sponsor accounts, employers, and institutional partners."
+        eyebrow="Directory"
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Institutions' },
+        ]}
+        actions={
           <Button variant="primary">
-            <Plus className="mr-1.5 h-4 w-4" />
+            <Plus className="h-4 w-4" />
             Add institution
           </Button>
-          )}
-        />
-
-        <AdminRoutePanel
-          title="Institution Registry"
-          description="Search sponsor accounts by legal name, organization, or contact email."
-          actions={(
-            <div className="relative w-full min-w-[240px] sm:w-80">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
-            <Input
-              placeholder="Search by name, email, or organization..."
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          )}
-          contentClassName="p-0"
-        >
-          {loading ? (
-            <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="flex items-center gap-4 p-4">
-                  <Skeleton className="h-10 w-10 rounded-lg" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-1/3" />
-                    <Skeleton className="h-3 w-1/4" />
-                  </div>
-                  <Skeleton className="h-8 w-20" />
-                </div>
-              ))}
+        }
+        banner={
+          <div className="flex flex-col gap-3 rounded-admin-lg border border-admin-border bg-admin-bg-surface p-3 shadow-admin-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-admin-fg-muted">
+              {filtered.length} visible {filtered.length === 1 ? 'institution' : 'institutions'}
             </div>
-          ) : error ? (
-            <div className="p-8 text-center text-admin-text-muted">{error}</div>
-          ) : (
-            <>
+            <div className="relative w-full min-w-[240px] sm:w-80">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
+              <Input
+                placeholder="Search by name, email, or organization…"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+          </div>
+        }
+      >
+        {loading ? (
+          <TableSkeleton rows={6} columns={5} />
+        ) : error ? (
+          <EmptyState
+            variant="error"
+            illustration={<Building2 className="h-10 w-10" />}
+            title="Could not load institutions"
+            description={error}
+          />
+        ) : (
+          <>
             <DataTable
               columns={columns}
               data={filtered}
@@ -167,10 +152,9 @@ export default function AdminInstitutionsPage() {
                 { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
               ]}
             />
-            </>
-          )}
-        </AdminRoutePanel>
-      </motion.div>
+          </>
+        )}
+      </AdminTableLayout>
     </AdminRouteWorkspace>
   );
 }

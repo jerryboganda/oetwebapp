@@ -1,0 +1,342 @@
+/* ============================================================================
+ * OET Admin — Design Tokens (Foundation)
+ *
+ * Source of truth: docs/admin-redesign/axelit-study/06-DESIGN_TOKENS.md
+ *                  docs/admin-redesign/axelit-study/13-DARK-MODE-COMPLETE.md
+ *
+ * Conventions
+ *   - All tokens are prefixed `--admin-*` to avoid leakage into learner UI
+ *     and to prevent collisions with the legacy `--bs-*` Bootstrap layer.
+ *   - Light mode is the default; both `[data-theme="light"]` and
+ *     `:root:not(.dark)` resolve to the same block so consumers may toggle
+ *     either via the next-themes `attribute="class"` strategy (`html.dark`)
+ *     OR via an explicit `data-theme` attribute.
+ *   - Dark-mode brand colors are desaturated ~25% (per file 13 §4.3) to
+ *     avoid visual vibration on dark surfaces.
+ *   - Elevation in dark mode is encoded via LIGHTNESS, not shadow
+ *     (per file 13 §4.1 — the four-layer surface system).
+ * ========================================================================== */
+
+/* --------------------------------------------------------------------------
+ * LIGHT MODE
+ * Default for :root:not(.dark) and explicit [data-theme="light"].
+ * -------------------------------------------------------------------------- */
+:root,
+:root:not(.dark),
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* ---------- Brand role colors -------------------------------------- */
+  --admin-primary:              #2563eb;            /* Clinical blue */
+  --admin-primary-hover:        #1d4ed8;
+  --admin-primary-active:       #1e40af;
+  --admin-primary-fg:           #ffffff;
+  --admin-primary-tint:         rgba(37, 99, 235, 0.12);
+  --admin-primary-tint-strong:  rgba(37, 99, 235, 0.24);
+  --admin-primary-rgb:          37, 99, 235;
+
+  --admin-secondary:            #64748b;            /* Slate */
+  --admin-secondary-hover:      #475569;
+  --admin-secondary-active:     #334155;
+  --admin-secondary-fg:         #ffffff;
+  --admin-secondary-tint:       rgba(100, 116, 139, 0.12);
+  --admin-secondary-tint-strong: rgba(100, 116, 139, 0.24);
+  --admin-secondary-rgb:        100, 116, 139;
+
+  --admin-success:              #10b981;
+  --admin-success-hover:        #059669;
+  --admin-success-active:       #047857;
+  --admin-success-fg:           #ffffff;
+  --admin-success-tint:         rgba(16, 185, 129, 0.12);
+  --admin-success-tint-strong:  rgba(16, 185, 129, 0.24);
+  --admin-success-rgb:          16, 185, 129;
+
+  --admin-warning:              #f59e0b;
+  --admin-warning-hover:        #d97706;
+  --admin-warning-active:       #b45309;
+  --admin-warning-fg:           #1f2937;            /* dark text on amber */
+  --admin-warning-tint:         rgba(245, 158, 11, 0.12);
+  --admin-warning-tint-strong:  rgba(245, 158, 11, 0.24);
+  --admin-warning-rgb:          245, 158, 11;
+
+  --admin-danger:               #ef4444;
+  --admin-danger-hover:         #dc2626;
+  --admin-danger-active:        #b91c1c;
+  --admin-danger-fg:            #ffffff;
+  --admin-danger-tint:          rgba(239, 68, 68, 0.12);
+  --admin-danger-tint-strong:   rgba(239, 68, 68, 0.24);
+  --admin-danger-rgb:           239, 68, 68;
+
+  --admin-info:                 #06b6d4;
+  --admin-info-hover:           #0891b2;
+  --admin-info-active:          #0e7490;
+  --admin-info-fg:              #ffffff;
+  --admin-info-tint:            rgba(6, 182, 212, 0.12);
+  --admin-info-tint-strong:     rgba(6, 182, 212, 0.24);
+  --admin-info-rgb:             6, 182, 212;
+
+  /* ---------- Surfaces ----------------------------------------------- */
+  --admin-bg-page:              #f8fafc;            /* App background  */
+  --admin-bg-surface:           #ffffff;            /* Cards/panels    */
+  --admin-bg-elevated:          #ffffff;            /* Modals/popovers (paired with shadow-lg) */
+  --admin-bg-subtle:            #f1f5f9;            /* Table header strip, inset wells */
+  --admin-bg-inverse:           #0f172a;            /* Dark surface on light UI (e.g. tooltips) */
+
+  /* ---------- Text --------------------------------------------------- */
+  --admin-fg-strong:            #0f172a;            /* H1, KPI numbers */
+  --admin-fg-default:           #334155;            /* Body */
+  --admin-fg-muted:             #64748b;            /* Helper, captions */
+  --admin-fg-disabled:          #94a3b8;
+  --admin-fg-inverse:           #ffffff;            /* Text on dark surfaces */
+
+  /* ---------- Borders ----------------------------------------------- */
+  --admin-border-default:       #e2e8f0;
+  --admin-border-strong:        #cbd5e1;
+  --admin-border-focus:         var(--admin-primary);
+
+  /* ---------- State overlays (universal — same idea for both modes) -- */
+  --admin-state-hover:          rgba(15, 23, 42, 0.05);
+  --admin-state-active:         rgba(15, 23, 42, 0.10);
+  --admin-state-selected:       var(--admin-primary-tint);
+  --admin-state-disabled-opacity: 0.45;
+
+  /* ---------- Shadows (ambient halo — Axelit / Aria-Labs style) ------- */
+  --admin-shadow-sm:            0 1px 2px rgba(15, 23, 42, 0.04);
+  --admin-shadow-md:            0 0 21px 3px rgba(15, 23, 42, 0.05);
+  --admin-shadow-lg:            0 12px 24px rgba(15, 23, 42, 0.08);
+  --admin-shadow-focus-ring:    0 0 0 3px rgba(37, 99, 235, 0.30);
+}
+
+/* --------------------------------------------------------------------------
+ * DARK MODE
+ * Activated by `html.dark` (next-themes `attribute="class"`) and by the
+ * explicit `[data-theme="dark"]` attribute. We intentionally support BOTH
+ * selectors so any consumer (next-themes, Storybook, manual override) works.
+ * -------------------------------------------------------------------------- */
+.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* ---------- Brand role colors (desaturated 25% per file 13 §4.3) ---- */
+  /* Original light-mode HSL values:                                       */
+  /*   primary  hsl(217 91% 56%)  → dark hsl(217 66% 60%)                  */
+  /*   success  hsl(160 84% 39%)  → dark hsl(160 59% 50%)                  */
+  /*   warning  hsl(38 92% 50%)   → dark hsl(38 67% 56%)                   */
+  /*   danger   hsl(0 84% 60%)    → dark hsl(0 59% 64%)                    */
+  /*   info     hsl(189 94% 43%)  → dark hsl(189 69% 52%)                  */
+  --admin-primary:              hsl(217 66% 60%);
+  --admin-primary-hover:        hsl(217 66% 66%);
+  --admin-primary-active:       hsl(217 66% 72%);
+  --admin-primary-fg:           hsl(217 30% 12%);
+  --admin-primary-tint:         hsla(217, 66%, 60%, 0.18);
+  --admin-primary-tint-strong:  hsla(217, 66%, 60%, 0.32);
+  --admin-primary-rgb:          90, 142, 224;       /* hsl(217 66% 60%) ≈ rgb(90,142,224) */
+
+  --admin-secondary:            hsl(215 14% 65%);
+  --admin-secondary-hover:      hsl(215 14% 72%);
+  --admin-secondary-active:     hsl(215 14% 78%);
+  --admin-secondary-fg:         hsl(215 25% 12%);
+  --admin-secondary-tint:       hsla(215, 14%, 65%, 0.16);
+  --admin-secondary-tint-strong: hsla(215, 14%, 65%, 0.28);
+  --admin-secondary-rgb:        160, 169, 181;
+
+  --admin-success:              hsl(160 59% 50%);
+  --admin-success-hover:        hsl(160 59% 56%);
+  --admin-success-active:       hsl(160 59% 62%);
+  --admin-success-fg:           hsl(160 30% 10%);
+  --admin-success-tint:         hsla(160, 59%, 50%, 0.18);
+  --admin-success-tint-strong:  hsla(160, 59%, 50%, 0.32);
+  --admin-success-rgb:          52, 191, 142;
+
+  --admin-warning:              hsl(38 67% 56%);
+  --admin-warning-hover:        hsl(38 67% 62%);
+  --admin-warning-active:       hsl(38 67% 68%);
+  --admin-warning-fg:           hsl(38 30% 10%);
+  --admin-warning-tint:         hsla(38, 67%, 56%, 0.18);
+  --admin-warning-tint-strong:  hsla(38, 67%, 56%, 0.32);
+  --admin-warning-rgb:          221, 167, 75;
+
+  --admin-danger:               hsl(0 59% 64%);
+  --admin-danger-hover:         hsl(0 59% 70%);
+  --admin-danger-active:        hsl(0 59% 76%);
+  --admin-danger-fg:            hsl(0 30% 10%);
+  --admin-danger-tint:          hsla(0, 59%, 64%, 0.18);
+  --admin-danger-tint-strong:   hsla(0, 59%, 64%, 0.32);
+  --admin-danger-rgb:           220, 117, 117;
+
+  --admin-info:                 hsl(189 69% 52%);
+  --admin-info-hover:           hsl(189 69% 58%);
+  --admin-info-active:          hsl(189 69% 64%);
+  --admin-info-fg:              hsl(189 30% 10%);
+  --admin-info-tint:            hsla(189, 69%, 52%, 0.18);
+  --admin-info-tint-strong:     hsla(189, 69%, 52%, 0.32);
+  --admin-info-rgb:             49, 178, 213;
+
+  /* ---------- Surfaces (4-layer elevation — file 13 §4.1) ----------- */
+  --admin-bg-page:              hsl(220 15% 8%);    /* Layer 0 — deepest */
+  --admin-bg-surface:           hsl(220 14% 12%);   /* Layer 1 — cards   */
+  --admin-bg-elevated:          hsl(220 13% 16%);   /* Layer 2 — modals  */
+  --admin-bg-subtle:            hsl(220 12% 20%);   /* Layer 3 — header strips */
+  --admin-bg-inverse:           #f8fafc;            /* Light surface on dark UI */
+
+  /* ---------- Text (opacity-tinted white — file 13 §4.5) ------------ */
+  --admin-fg-strong:            rgba(255, 255, 255, 0.95);
+  --admin-fg-default:           rgba(255, 255, 255, 0.87);
+  --admin-fg-muted:             rgba(255, 255, 255, 0.60);
+  --admin-fg-disabled:          rgba(255, 255, 255, 0.38);
+  --admin-fg-inverse:           #0f172a;
+
+  /* ---------- Borders (lighter than surface — file 13 §4.6) --------- */
+  --admin-border-default:       rgba(255, 255, 255, 0.12);
+  --admin-border-strong:        rgba(255, 255, 255, 0.20);
+  --admin-border-focus:         var(--admin-primary);
+
+  /* ---------- State overlays (6/14% white per file 13 §4.4) --------- */
+  --admin-state-hover:          rgba(255, 255, 255, 0.06);
+  --admin-state-active:         rgba(255, 255, 255, 0.14);
+  --admin-state-selected:       rgba(90, 142, 224, 0.18);
+  --admin-state-disabled-opacity: 0.40;
+
+  /* ---------- Shadows (TRUE dark — file 13 §4.7) -------------------- */
+  --admin-shadow-sm:            0 1px 2px rgba(0, 0, 0, 0.5);
+  --admin-shadow-md:            0 4px 12px rgba(0, 0, 0, 0.55);
+  --admin-shadow-lg:            0 12px 32px rgba(0, 0, 0, 0.6);
+  --admin-shadow-focus-ring:    0 0 0 3px hsla(217, 66%, 60%, 0.45);
+
+  /* Native scrollbar coloring */
+  scrollbar-color: rgba(255, 255, 255, 0.20) transparent;
+}
+
+/* --------------------------------------------------------------------------
+ * MODE-INDEPENDENT TOKENS (radii, type scale, spacing, motion, layout)
+ * Defined once on :root — never overridden by mode.
+ * -------------------------------------------------------------------------- */
+:root {
+  /* ---------- Radii -------------------------------------------------- */
+  --admin-radius-sm:            4px;
+  --admin-radius-md:            8px;
+  --admin-radius-lg:            12px;   /* Default for cards */
+  --admin-radius-xl:            16px;
+  --admin-radius-2xl:           20px;
+  --admin-radius-pill:          9999px;
+
+  /* ---------- Spacing (4px grid) ----------------------------------- */
+  --admin-space-1:              4px;
+  --admin-space-2:              8px;
+  --admin-space-3:              12px;
+  --admin-space-4:              16px;
+  --admin-space-5:              20px;
+  --admin-space-6:              24px;
+  --admin-space-8:              32px;
+  --admin-space-10:             40px;
+  --admin-space-12:             48px;
+
+  /* ---------- Type scale (14px base · 1.25× modular) --------------- */
+  --admin-font-size-xs:         11px;     /* 14 / 1.25 / 1.02 */
+  --admin-font-size-sm:         12.5px;   /* 14 / 1.12 */
+  --admin-font-size-base:       14px;
+  --admin-font-size-lg:         17.5px;
+  --admin-font-size-xl:         21.9px;
+  --admin-font-size-2xl:        27.3px;
+  --admin-font-size-3xl:        34.2px;
+  --admin-font-size-4xl:        42.7px;
+
+  /* Line heights (paired with the scale above) */
+  --admin-line-height-tight:    1.2;
+  --admin-line-height-snug:     1.4;
+  --admin-line-height-base:     1.5;
+  --admin-line-height-relaxed:  1.65;
+
+  /* Font weights */
+  --admin-font-weight-normal:   400;
+  --admin-font-weight-medium:   500;
+  --admin-font-weight-semibold: 600;
+  --admin-font-weight-bold:     700;
+
+  /* Font families — Montserrat loaded in app/layout.tsx via next/font */
+  --admin-font-display:         var(--font-montserrat), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --admin-font-body:            var(--font-montserrat), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --admin-font-mono:            ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* ---------- Motion ----------------------------------------------- */
+  --admin-dur-fast:             100ms;
+  --admin-dur-base:             200ms;
+  --admin-dur-slow:             300ms;
+
+  --admin-ease-out:             cubic-bezier(0.16, 1, 0.3, 1);
+  --admin-ease-in:              cubic-bezier(0.7, 0, 0.84, 0);
+  --admin-ease-in-out:          cubic-bezier(0.87, 0, 0.13, 1);
+
+  /* ---------- Layout ------------------------------------------------ */
+  --admin-sidebar-width:           272px;
+  --admin-sidebar-collapsed-width: 72px;
+  --admin-header-height:           64px;
+  --admin-content-max-width:       1440px;
+
+  /* ---------- Z-index scale ---------------------------------------- */
+  --admin-z-dropdown:           1000;
+  --admin-z-sticky:             1020;
+  --admin-z-fixed:              1030;
+  --admin-z-overlay:            1040;
+  --admin-z-modal:              1050;
+  --admin-z-popover:            1060;
+  --admin-z-tooltip:            1070;
+  --admin-z-toast:              1080;
+}
+
+/* --------------------------------------------------------------------------
+ * COMPONENT-LEVEL DARK-MODE FIXES (file 13 §5.2)
+ * Autofill, scrollbar, native form controls.
+ * -------------------------------------------------------------------------- */
+
+/* Autofill — Chrome/Edge override the user's bg with a yellow/white box.
+   This forces the admin surface color inside the autofilled input.        */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark input:-webkit-autofill:active,
+[data-theme="dark"] input:-webkit-autofill,
+[data-theme="dark"] input:-webkit-autofill:hover,
+[data-theme="dark"] input:-webkit-autofill:focus,
+[data-theme="dark"] input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--admin-fg-default);
+  -webkit-box-shadow: 0 0 0 1000px var(--admin-bg-surface) inset;
+  caret-color: var(--admin-fg-default);
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* WebKit scrollbar (Chrome / Edge / Safari)                                */
+.dark ::-webkit-scrollbar,
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track,
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark ::-webkit-scrollbar-thumb,
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.20);
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.30);
+}
+
+/* --------------------------------------------------------------------------
+ * REDUCED MOTION
+ * Zero out all admin duration tokens when the user has requested it.
+ * Components that read --admin-dur-* will pick this up automatically.
+ * -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --admin-dur-fast: 0ms;
+    --admin-dur-base: 0ms;
+    --admin-dur-slow: 0ms;
+  }
+}

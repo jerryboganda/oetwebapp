@@ -23,9 +23,11 @@ import {
   Upload,
   Users,
 } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { hasPermission, sidebarPermissionMap } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
@@ -285,68 +287,80 @@ export default function AdminContentHubPage() {
   const canOpenLibrary = canAccessHubHref('/admin/content/library', userPermissions);
   const canCreateContent = canAccessHubHref('/admin/content/new', userPermissions);
   const headerActions = canOpenLibrary || canCreateContent ? (
-    <div className="flex flex-wrap gap-2">
+    <>
       {canOpenLibrary ? (
-        <Button onClick={() => router.push('/admin/content/library')} variant="outline" className="gap-2">
-          <Library className="h-4 w-4" /> Open Library
+        <Button variant="outline" onClick={() => router.push('/admin/content/library')} startIcon={<Library className="h-4 w-4" />}>
+          Open Library
         </Button>
       ) : null}
       {canCreateContent ? (
-        <Button onClick={() => router.push('/admin/content/new')} className="gap-2">
-          <PenSquare className="h-4 w-4" /> New Content
+        <Button onClick={() => router.push('/admin/content/new')} startIcon={<PenSquare className="h-4 w-4" />}>
+          New Content
         </Button>
       ) : null}
-    </div>
+    </>
   ) : undefined;
 
   if (!isAuthenticated || role !== 'admin') return null;
 
-  return (
-    <AdminRouteWorkspace role="main" aria-label="Content Hub">
-      <AdminRouteSectionHeader
-        title="Content Hub"
-        description="Single front-door for every content workflow: papers, lessons, mocks, imports, AI drafts, hierarchy, media, and governance."
-        actions={headerActions}
-      />
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Content' },
+  ];
 
-      {visibleHubSections.length > 0 ? visibleHubSections.map((section) => (
-        <AdminRoutePanel key={section.id} title={section.title} description={section.description}>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {section.links.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="group flex h-full flex-col justify-between gap-3 rounded-2xl border border-border bg-background-light p-4 transition hover:-translate-y-0.5 hover:border-primary hover:shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      {link.icon}
-                    </span>
-                    <div>
-                      <p className="font-semibold text-navy">{link.label}</p>
-                      {link.badge ? (
-                        <Badge variant="success" className="mt-1 text-[10px] uppercase tracking-wide">
-                          {link.badge}
-                        </Badge>
-                      ) : null}
+  return (
+    <AdminCatalogLayout
+      title="Content Hub"
+      description="Single front-door for every content workflow: papers, lessons, mocks, imports, AI drafts, hierarchy, media, and governance."
+      breadcrumbs={breadcrumbs}
+      actions={headerActions}
+      hideViewModeToggle
+      itemsClassName="flex flex-col gap-6"
+    >
+      {visibleHubSections.length > 0 ? (
+        visibleHubSections.map((section) => (
+          <Card key={section.id}>
+            <CardHeader className="flex-col items-start gap-1">
+              <CardTitle>{section.title}</CardTitle>
+              <CardDescription>{section.description}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {section.links.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="group flex h-full flex-col justify-between gap-3 rounded-admin border border-admin-border bg-admin-bg-subtle p-4 transition hover:-translate-y-0.5 hover:border-[var(--admin-primary)] hover:shadow-admin-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--admin-bg-page)]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-admin bg-[var(--admin-primary-tint)] text-[var(--admin-primary)]">
+                          {link.icon}
+                        </span>
+                        <div>
+                          <p className="font-semibold text-admin-fg-strong">{link.label}</p>
+                          {link.badge ? (
+                            <Badge variant="success" size="sm" className="mt-1 uppercase tracking-wide">
+                              {link.badge}
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-admin-fg-muted transition group-hover:text-[var(--admin-primary)]" />
                     </div>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-muted transition group-hover:text-primary" />
-                </div>
-                <p className="text-sm text-muted">{link.description}</p>
-              </Link>
-            ))}
-          </div>
-        </AdminRoutePanel>
-      )) : (
-        <AdminRoutePanel
+                    <p className="text-sm text-admin-fg-muted">{link.description}</p>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ))
+      ) : (
+        <EmptyState
           title="No available content workflows"
           description="Your admin account does not currently have permission to open any content workflows."
-        >
-          <div />
-        </AdminRoutePanel>
+        />
       )}
-    </AdminRouteWorkspace>
+    </AdminCatalogLayout>
   );
 }

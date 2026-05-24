@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Cpu, Gauge, Power, RefreshCw, ShieldCheck } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminOperationsLayout, KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { Tabs } from '@/components/ui/tabs';
@@ -35,6 +37,21 @@ import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
+// Local Panel helper — replaces legacy AdminRoutePanel using admin DS Card.
+function Panel({ title, description, children }: { title?: React.ReactNode; description?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <Card className="mt-4">
+      {(title || description) && (
+        <CardHeader>
+          {title && <CardTitle>{title}</CardTitle>}
+          {description && <p className="text-sm text-admin-fg-muted">{description}</p>}
+        </CardHeader>
+      )}
+      <CardContent className="pt-0">{children}</CardContent>
+    </Card>
+  );
+}
+
 const TABS = [
   { id: 'usage', label: 'Usage', icon: <Gauge className="w-4 h-4" /> },
   { id: 'budget', label: 'Budget & Kill-switch', icon: <Power className="w-4 h-4" /> },
@@ -56,31 +73,35 @@ export default function AiUsagePage() {
 
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <EmptyState icon={<ShieldCheck className="w-8 h-8" />} title="Admin access required" description="Sign in with an admin account to view this page." />
-      </AdminRouteWorkspace>
+      <div className="mx-auto max-w-3xl py-12">
+        <EmptyState illustration={<ShieldCheck className="w-8 h-8" />} title="Admin access required" description="Sign in with an admin account to view this page." />
+      </div>
     );
   }
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader
-        icon={<Cpu className="w-6 h-6" />}
-        title="AI Usage & Budget"
-        description="Platform-wide control over AI spend, quota plans, providers, and per-user credentials. See docs/AI-USAGE-POLICY.md."
-      />
-
-      <Tabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
-
-      {activeTab === 'usage' && <UsagePanel onToast={setToast} />}
-      {activeTab === 'budget' && <BudgetPanel onToast={setToast} />}
-      {activeTab === 'plans' && <PlansPanel onToast={setToast} />}
-      {activeTab === 'anomalies' && <AnomaliesPanel onToast={setToast} />}
-
+    <>
       {toast && (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       )}
-    </AdminRouteWorkspace>
+      <AdminOperationsLayout
+        title="AI Usage & Budget"
+        description="Platform-wide control over AI spend, quota plans, providers, and per-user credentials. See docs/AI-USAGE-POLICY.md."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'AI Usage & Budget' },
+        ]}
+        primaryGrid={
+          <>
+            <Tabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
+            {activeTab === 'usage' && <UsagePanel onToast={setToast} />}
+            {activeTab === 'budget' && <BudgetPanel onToast={setToast} />}
+            {activeTab === 'plans' && <PlansPanel onToast={setToast} />}
+            {activeTab === 'anomalies' && <AnomaliesPanel onToast={setToast} />}
+          </>
+        }
+      />
+    </>
   );
 }
 
@@ -151,7 +172,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
         <span className="font-mono text-xs">
           {r.accountId ? r.accountId.slice(0, 8) : '—'}
           {r.failoverTrace && (
-            <span className="ml-1 text-[10px] text-admin-text-muted">⤳</span>
+            <span className="ml-1 text-[10px] text-admin-fg-muted">⤳</span>
           )}
         </span>
       ),
@@ -164,7 +185,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
       key: 'tr',
       header: 'Trace',
       render: (r) => (
-        <span className="text-xs text-admin-text-muted truncate max-w-xs block" title={[r.policyTrace, r.failoverTrace].filter(Boolean).join(' | ')}>
+        <span className="text-xs text-admin-fg-muted truncate max-w-xs block" title={[r.policyTrace, r.failoverTrace].filter(Boolean).join(' | ')}>
           {r.failoverTrace ?? r.policyTrace ?? ''}
         </span>
       ),
@@ -183,7 +204,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
         (r.failovers ?? 0) > 0 ? (
           <Badge variant="warning">{r.failovers}</Badge>
         ) : (
-          <span className="text-admin-text-muted">0</span>
+          <span className="text-admin-fg-muted">0</span>
         ),
     },
     {
@@ -199,30 +220,30 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
 
   return (
     <AsyncStateWrapper status={status}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-        <AdminRouteSummaryCard label="Total calls this month" value={fmt(totals.calls)} icon={<Gauge className="w-5 h-5" />} />
-        <AdminRouteSummaryCard label="Total tokens this month" value={fmt(totals.tokens)} icon={<Cpu className="w-5 h-5" />} />
-        <AdminRouteSummaryCard label="Trend days" value={fmt(trend.length)} icon={<RefreshCw className="w-5 h-5" />} />
-      </div>
-      <AdminRoutePanel title="By feature">
+      <KpiStrip className="mt-4">
+        <KpiTile label="Total calls this month" value={fmt(totals.calls)} icon={<Gauge className="w-4 h-4" />} />
+        <KpiTile label="Total tokens this month" value={fmt(totals.tokens)} icon={<Cpu className="w-4 h-4" />} />
+        <KpiTile label="Trend days" value={fmt(trend.length)} icon={<RefreshCw className="w-4 h-4" />} />
+      </KpiStrip>
+      <Panel title="By feature">
         <DataTable data={summary} columns={summaryColumns} keyExtractor={(r) => r.key} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-          <BulkActionBar
-            selectedCount={selectedKeys.size}
-            onClearSelection={() => setSelectedKeys(new Set())}
-            actions={[
-              { key: 'export', label: 'Export selected', onClick: () => onToast({ variant: 'error', message: 'Bulk export coming soon.' }) },
-            ]}
-          />
-      </AdminRoutePanel>
-      <AdminRoutePanel title="By account (multi-account providers)">
+        <BulkActionBar
+          selectedCount={selectedKeys.size}
+          onClearSelection={() => setSelectedKeys(new Set())}
+          actions={[
+            { key: 'export', label: 'Export selected', onClick: () => onToast({ variant: 'error', message: 'Bulk export coming soon.' }) },
+          ]}
+        />
+      </Panel>
+      <Panel title="By account (multi-account providers)">
         {accountSummary.length === 0 ? (
           <EmptyState title="No multi-account usage yet" description="Records appear once a multi-account provider (e.g. Copilot) serves a request." />
         ) : (
           <DataTable data={accountSummary} columns={accountColumns} keyExtractor={(r) => `${r.providerId ?? ''}/${r.key}`} />
         )}
-      </AdminRoutePanel>
+      </Panel>
       {log && (
-        <AdminRoutePanel title={`Recent calls (${log.total} total)`}>
+        <Panel title={`Recent calls (${log.total} total)`}>
           <div className="flex items-end gap-2 mb-3">
             <Input
               label="Filter by account ID"
@@ -237,7 +258,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
             )}
           </div>
           <DataTable data={log.rows} columns={logColumns} keyExtractor={(r) => r.id} />
-        </AdminRoutePanel>
+        </Panel>
       )}
     </AsyncStateWrapper>
   );
@@ -279,7 +300,7 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
     <AsyncStateWrapper status={status}>
       {policy && (
         <div className="space-y-6 mt-4">
-          <AdminRoutePanel title="Kill-switch">
+          <Panel title="Kill-switch">
             <div className="flex flex-wrap items-end gap-4">
               <Badge variant={policy.killSwitchEnabled ? 'danger' : 'success'}>
                 {policy.killSwitchEnabled ? 'ENGAGED' : 'Off'}
@@ -302,9 +323,9 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
                 {policy.killSwitchEnabled ? 'Disengage' : 'Engage'} kill-switch
               </Button>
             </div>
-          </AdminRoutePanel>
+          </Panel>
 
-          <AdminRoutePanel title="Monthly budget">
+          <Panel title="Monthly budget">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Input type="number" step="0.01" label="Monthly budget (USD)" value={policy.monthlyBudgetUsd}
                 onChange={(e) => setPolicy({ ...policy, monthlyBudgetUsd: Number(e.target.value) })} />
@@ -313,15 +334,15 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
               <Input type="number" label="Hard-kill at %" value={policy.hardKillPct}
                 onChange={(e) => setPolicy({ ...policy, hardKillPct: Number(e.target.value) })} />
             </div>
-            <p className="text-sm text-admin-text-muted mt-2">
+            <p className="text-sm text-admin-fg-muted mt-2">
               Current platform spend: {fmtUsd(policy.currentSpendUsd)} ({policy.monthlyBudgetUsd > 0
                 ? Math.round((policy.currentSpendUsd / policy.monthlyBudgetUsd) * 100)
                 : 0}%).
             </p>
-          </AdminRoutePanel>
+          </Panel>
 
-          <AdminRoutePanel title="Per-feature kill list">
-            <p className="text-sm text-admin-text-muted mb-2">
+          <Panel title="Per-feature kill list">
+            <p className="text-sm text-admin-fg-muted mb-2">
               Comma-separated list of AI feature codes to disable without flipping the global kill-switch.
               Calls to a disabled feature are refused with <code className="font-mono">feature_disabled</code> before any quota / BYOK check.
               Example: <code className="font-mono">conversation.evaluation,speaking.grade</code>.
@@ -332,9 +353,9 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
               onChange={(e) => setPolicy({ ...policy, disabledFeaturesCsv: e.target.value })}
               placeholder="e.g. conversation.evaluation,speaking.grade"
             />
-          </AdminRoutePanel>
+          </Panel>
 
-          <AdminRoutePanel title="BYOK policy">
+          <Panel title="BYOK policy">
             <div className="space-y-2">
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={policy.allowByokOnScoringFeatures}
@@ -362,14 +383,14 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
                   onChange={(e) => setPolicy({ ...policy, byokTransientRetryCount: Number(e.target.value) })}
                 />
               </div>
-              <p className="text-xs text-admin-text-muted">
+              <p className="text-xs text-admin-fg-muted">
                 After {policy.byokErrorCooldownHours || 0}h of auth errors on a user&apos;s BYOK key, the gateway falls back to the platform key.
                 Transient (5xx / timeout) failures retry up to {policy.byokTransientRetryCount || 0}× before giving up.
               </p>
             </div>
-          </AdminRoutePanel>
+          </Panel>
 
-          <AdminRoutePanel title="Anomaly detection">
+          <Panel title="Anomaly detection">
             <div className="flex flex-wrap gap-4 items-end">
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={policy.anomalyDetectionEnabled}
@@ -379,7 +400,7 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
               <Input type="number" step="0.5" label="Flag users at N× median" value={policy.anomalyMultiplierX}
                 onChange={(e) => setPolicy({ ...policy, anomalyMultiplierX: Number(e.target.value) })} />
             </div>
-          </AdminRoutePanel>
+          </Panel>
 
           <div className="flex gap-3">
             <Button variant="primary" onClick={save} loading={saving}>Save changes</Button>
@@ -452,9 +473,9 @@ function PlansPanel({ onToast }: { onToast: (t: ToastState) => void }) {
           });
         }}>+ New plan</Button>
       </div>
-      <AdminRoutePanel title="Quota plans">
+      <Panel title="Quota plans">
         <DataTable data={plans} columns={columns} keyExtractor={(p) => p.id || p.code} />
-      </AdminRoutePanel>
+      </Panel>
       {editing && (
         <Modal open={true} onClose={() => { setEditing(null); setCreating(false); }} title={creating ? 'New plan' : `Edit ${editing.code}`}>
           <PlanEditor value={editing} onChange={setEditing} />
@@ -524,12 +545,12 @@ function AnomaliesPanel({ onToast }: { onToast: (t: ToastState) => void }) {
   return (
     <AsyncStateWrapper status={status}>
       {data && !data.enabled && (
-        <EmptyState icon={<AlertCircle className="w-8 h-8" />} title="Anomaly detection is disabled" description="Enable it on the Budget tab." />
+        <EmptyState illustration={<AlertCircle className="w-8 h-8" />} title="Anomaly detection is disabled" description="Enable it on the Budget tab." />
       )}
       {data && data.enabled && (
-        <AdminRoutePanel title={`Flagged users (≥ ${data.multiplier}× trailing 7-day median)`}>
+        <Panel title={`Flagged users (≥ ${data.multiplier}× trailing 7-day median)`}>
           {data.rows.length === 0
-            ? <EmptyState icon={<ShieldCheck className="w-6 h-6" />} title="No anomalies detected" description="Nothing in the last 24h crossed the threshold." />
+            ? <EmptyState illustration={<ShieldCheck className="w-6 h-6" />} title="No anomalies detected" description="Nothing in the last 24h crossed the threshold." />
             : (
               <DataTable
                 data={data.rows}
@@ -541,7 +562,7 @@ function AnomaliesPanel({ onToast }: { onToast: (t: ToastState) => void }) {
                 ]}
               />
             )}
-        </AdminRoutePanel>
+        </Panel>
       )}
     </AsyncStateWrapper>
   );

@@ -2,22 +2,24 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Edit3, Plus, Target } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
-import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input, Select, Textarea } from '@/components/ui/form-controls';
-import { Modal } from '@/components/ui/modal';
 import { Tabs } from '@/components/ui/tabs';
+import { Modal } from '@/components/ui/modal';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
+import { Toast } from '@/components/ui/alert';
 import { createAdminCriterion, updateAdminCriterion } from '@/lib/api';
 import { getAdminCriteriaData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminCriterion } from '@/lib/types/admin';
 import { BulkActionBar } from '@/components/ui/bulk-action-bar';
+// New admin DS imports
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -109,22 +111,24 @@ export default function CriteriaPage() {
         header: 'Criterion',
         render: (criterion) => (
           <div className="space-y-1">
-            <p className="font-medium text-navy">{criterion.name}</p>
-            <p className="max-w-2xl text-sm text-muted">{criterion.description || 'No editorial description yet.'}</p>
+            <p className="font-medium text-admin-fg-strong">{criterion.name}</p>
+            <p className="max-w-2xl text-sm text-admin-fg-muted">
+              {criterion.description || 'No editorial description yet.'}
+            </p>
           </div>
         ),
       },
       {
         key: 'weight',
         header: 'Weight',
-        render: (criterion) => <span className="font-mono text-sm text-muted">{criterion.weight}</span>,
+        render: (criterion) => <span className="font-mono text-sm text-admin-fg-muted">{criterion.weight}</span>,
         className: 'w-24',
       },
       {
         key: 'status',
         header: 'Status',
         render: (criterion) => (
-          <Badge variant={criterion.status === 'active' ? 'success' : 'muted'}>
+          <Badge variant={criterion.status === 'active' ? 'success' : 'secondary'}>
             {criterion.status}
           </Badge>
         ),
@@ -136,8 +140,7 @@ export default function CriteriaPage() {
         className: 'w-28',
         render: (criterion) => (
           <div className="flex justify-end">
-            <Button variant="outline" size="sm" onClick={() => openEditModal(criterion)}>
-              <Edit3 className="h-3.5 w-3.5" />
+            <Button variant="outline" size="sm" onClick={() => openEditModal(criterion)} startIcon={<Edit3 className="h-3.5 w-3.5" />}>
               Edit
             </Button>
           </div>
@@ -226,46 +229,80 @@ export default function CriteriaPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Rubrics and criteria">
+    <>
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
+      <AdminCatalogLayout
         title="Rubrics & Criteria"
         description="Manage live scoring criteria for each OET subtest with real weight, status, and editorial descriptions."
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Rubrics & Criteria' }]}
         actions={
-          <Button onClick={openCreateModal} className="gap-2">
-            <Plus className="h-4 w-4" />
+          <Button onClick={openCreateModal} startIcon={<Plus className="h-4 w-4" />}>
             Add Criterion
           </Button>
         }
-      />
-
-      <Tabs tabs={subtestTabs} activeTab={activeTab} onChange={setActiveTab} />
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        onRetry={() => window.location.reload()}
-        emptyContent={
-          <EmptyState
-            icon={<Target className="h-10 w-10 text-muted" />}
-            title={`No ${activeTab} criteria yet`}
-            description="Create the first scoring criterion for this subtest so editors and evaluators share the same rubric language."
-            action={{ label: 'Add Criterion', onClick: openCreateModal }}
-          />
-        }
+        viewMode="list"
+        hideViewModeToggle
+        itemsClassName="flex flex-col gap-4"
       >
-        <AdminRoutePanel title="Criteria Library" description="Every row below is backed by the live admin criteria endpoint and persists status changes.">
-          <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [] })} />
-          <DataTable columns={columns} data={criteria} keyExtractor={(criterion) => criterion.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-          <BulkActionBar
-            selectedCount={selectedKeys.size}
-            onClearSelection={() => setSelectedKeys(new Set())}
-            actions={[
-              { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
-            ]}
-          />
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
+        <Tabs tabs={subtestTabs} activeTab={activeTab} onChange={setActiveTab} />
+
+        <AsyncStateWrapper
+          status={pageStatus}
+          onRetry={() => window.location.reload()}
+          emptyContent={
+            <Card>
+              <CardContent className="p-8">
+                <EmptyState
+                  illustration={<Target aria-hidden="true" />}
+                  title={`No ${activeTab} criteria yet`}
+                  description="Create the first scoring criterion for this subtest so editors and evaluators share the same rubric language."
+                  primaryAction={{ label: 'Add Criterion', onClick: openCreateModal }}
+                />
+              </CardContent>
+            </Card>
+          }
+        >
+          <Card>
+            <CardHeader>
+              <div className="min-w-0">
+                <CardTitle>Criteria Library</CardTitle>
+                <CardDescription>
+                  Every row below is backed by the live admin criteria endpoint and persists status changes.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <FilterBar
+                groups={filterGroups}
+                selected={filters}
+                onChange={handleFilterChange}
+                onClear={() => setFilters({ status: [] })}
+              />
+              <DataTable
+                columns={columns}
+                data={criteria}
+                keyExtractor={(criterion) => criterion.id}
+                selectable
+                selectedKeys={selectedKeys}
+                onSelectionChange={setSelectedKeys}
+              />
+              <BulkActionBar
+                selectedCount={selectedKeys.size}
+                onClearSelection={() => setSelectedKeys(new Set())}
+                actions={[
+                  {
+                    key: 'delete',
+                    label: 'Delete selected',
+                    variant: 'danger',
+                    onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }),
+                  },
+                ]}
+              />
+            </CardContent>
+          </Card>
+        </AsyncStateWrapper>
+      </AdminCatalogLayout>
 
       <Modal
         open={isModalOpen}
@@ -305,7 +342,7 @@ export default function CriteriaPage() {
             ]}
           />
 
-          <div className="flex justify-end gap-3 border-t border-border pt-4">
+          <div className="flex justify-end gap-3 border-t border-admin-border pt-4">
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
@@ -315,6 +352,6 @@ export default function CriteriaPage() {
           </div>
         </div>
       </Modal>
-    </AdminRouteWorkspace>
+    </>
   );
 }

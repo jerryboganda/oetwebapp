@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Server } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { Toast } from '@/components/ui/alert';
@@ -369,7 +370,7 @@ export default function AiProvidersPage() {
     { key: 'name', header: 'Name', render: (p) => p.name },
     { key: 'd', header: 'Dialect', render: (p) => p.dialect },
     { key: 'cat', header: 'Category', render: (p) => <Badge variant={p.category === 'TextChat' ? 'info' : 'success'}>{p.category}</Badge> },
-    { key: 'u', header: 'Base URL', render: (p) => <span className="text-xs text-muted">{p.baseUrl}</span> },
+    { key: 'u', header: 'Base URL', render: (p) => <span className="text-xs text-admin-fg-muted">{p.baseUrl}</span> },
     { key: 'k', header: 'Key', render: (p) => <span className="font-mono text-xs">{p.apiKeyHint}</span> },
     { key: 'pr', header: 'Price 1k in/out', render: (p) => `${fmtUsd(p.pricePer1kPromptTokens)}/${fmtUsd(p.pricePer1kCompletionTokens)}` },
     { key: 'pri', header: 'Priority', render: (p) => p.failoverPriority },
@@ -379,10 +380,10 @@ export default function AiProvidersPage() {
         ? (
           <div className="flex flex-col gap-1">
             <Badge variant={testStatusVariant(p.lastTestStatus)}>{p.lastTestStatus}</Badge>
-            {p.lastTestedAt && <span className="text-[10px] text-muted">{new Date(p.lastTestedAt).toLocaleString()}</span>}
+            {p.lastTestedAt && <span className="text-[10px] text-admin-fg-muted">{new Date(p.lastTestedAt).toLocaleString()}</span>}
           </div>
         )
-        : <span className="text-xs text-muted">—</span>,
+        : <span className="text-xs text-admin-fg-muted">—</span>,
     },
     {
       key: 'acts', header: 'Actions', render: (p) => (
@@ -400,42 +401,43 @@ export default function AiProvidersPage() {
 
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <EmptyState icon={<Server className="w-8 h-8" />} title="Admin access required" description="Sign in with an admin account to view this page." />
-      </AdminRouteWorkspace>
+      <div className="mx-auto max-w-3xl py-12">
+        <EmptyState illustration={<Server className="w-8 h-8" />} title="Admin access required" description="Sign in with an admin account to view this page." />
+      </div>
     );
   }
 
+  const registerButton = (
+    <Button variant="primary" onClick={() => {
+      setCreating(true);
+      setEditing({
+        id: '', code: '', name: '', dialect: 'OpenAiCompatible', category: 'TextChat',
+        baseUrl: '', apiKeyHint: '', defaultModel: '', allowedModelsCsv: '',
+        pricePer1kPromptTokens: 0, pricePer1kCompletionTokens: 0,
+        retryCount: 2, circuitBreakerThreshold: 5, circuitBreakerWindowSeconds: 30,
+        failoverPriority: 100, isActive: true,
+        lastTestedAt: null, lastTestStatus: null, lastTestError: null,
+        createdAt: '', updatedAt: '', apiKey: '',
+      });
+    }}>
+      + Register provider
+    </Button>
+  );
+
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader
-        icon={<Server className="w-6 h-6" />}
+    <>
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
+      <AdminTableLayout
         title="AI Providers"
         description="Register, rotate, and manage platform AI provider credentials. OpenAI-compatible endpoints (NVIDIA NIM, Groq, DeepSeek, Together, OpenRouter, Azure, …) are supported via the same dialect."
-      />
-
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
-      <AsyncStateWrapper status={status}>
-        <div className="flex justify-end mt-4">
-          <Button variant="primary" onClick={() => {
-            setCreating(true);
-            setEditing({
-              id: '', code: '', name: '', dialect: 'OpenAiCompatible', category: 'TextChat',
-              baseUrl: '', apiKeyHint: '', defaultModel: '', allowedModelsCsv: '',
-              pricePer1kPromptTokens: 0, pricePer1kCompletionTokens: 0,
-              retryCount: 2, circuitBreakerThreshold: 5, circuitBreakerWindowSeconds: 30,
-              failoverPriority: 100, isActive: true,
-              lastTestedAt: null, lastTestStatus: null, lastTestError: null,
-              createdAt: '', updatedAt: '', apiKey: '',
-            });
-          }}>
-            + Register provider
-          </Button>
-        </div>
-        <AdminRoutePanel title="Registered providers">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-admin-text-muted">Filter by category:</span>
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'AI Providers' },
+        ]}
+        actions={registerButton}
+        banner={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-admin-fg-muted">Filter by category:</span>
             {(['All', 'TextChat', 'Tts', 'Asr', 'Phoneme', 'Ocr', 'PdfExtraction'] as const).map((cat) => (
               <Button
                 key={cat}
@@ -447,38 +449,46 @@ export default function AiProvidersPage() {
               </Button>
             ))}
           </div>
-          <DataTable
-            data={categoryFilter === 'All' ? rows : rows.filter((r) => r.category === categoryFilter)}
-            columns={columns}
-            keyExtractor={(p) => p.id || p.code}
-            selectable
-            selectedKeys={selectedKeys}
-            onSelectionChange={setSelectedKeys}
-          />
-          <BulkActionBar
-            selectedCount={selectedKeys.size}
-            onClearSelection={() => setSelectedKeys(new Set())}
-            actions={[
-              { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
-            ]}
-          />
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
-
-      <div className="mt-6">
-        <AiFeatureRoutesPanel />
-      </div>
-
-      <div className="mt-6">
-        <AiFeatureToolGrantsPanel />
-      </div>
+        }
+        footer={
+          <div className="space-y-6">
+            <AiFeatureRoutesPanel />
+            <AiFeatureToolGrantsPanel />
+          </div>
+        }
+      >
+        <AsyncStateWrapper status={status}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Registered providers</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <DataTable
+                data={categoryFilter === 'All' ? rows : rows.filter((r) => r.category === categoryFilter)}
+                columns={columns}
+                keyExtractor={(p) => p.id || p.code}
+                selectable
+                selectedKeys={selectedKeys}
+                onSelectionChange={setSelectedKeys}
+              />
+              <BulkActionBar
+                selectedCount={selectedKeys.size}
+                onClearSelection={() => setSelectedKeys(new Set())}
+                actions={[
+                  { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
+                ]}
+              />
+            </CardContent>
+          </Card>
+        </AsyncStateWrapper>
+      </AdminTableLayout>
 
       {editing && (
         <Modal open={true} onClose={() => { setEditing(null); setCreating(false); }} title={creating ? 'Register provider' : `Edit ${editing.code}`}>
           <div className="space-y-4">
             {creating && (
               <div className="flex flex-wrap gap-2">
-                <span className="text-sm text-muted mr-1">Quick preset:</span>
+                <span className="text-sm text-admin-fg-muted mr-1">Quick preset:</span>
                 {Object.entries(PRESETS).map(([key, preset]) => (
                   <Button key={key} variant="outline" size="sm" onClick={() => applyPreset(key)} title={preset.name}>
                     {preset.name}
@@ -536,10 +546,10 @@ export default function AiProvidersPage() {
                     {discoveringModels ? 'Discovering…' : 'Discover models'}
                   </Button>
                   {creating && (
-                    <span className="text-xs text-muted-foreground">Save the provider first to enable discovery.</span>
+                    <span className="text-xs text-admin-fg-muted">Save the provider first to enable discovery.</span>
                   )}
                   {discoveredModels && discoveredModels.length === 0 && !discoveringModels && (
-                    <span className="text-xs text-muted-foreground">No models returned by provider.</span>
+                    <span className="text-xs text-admin-fg-muted">No models returned by provider.</span>
                   )}
                 </div>
               </div>
@@ -576,6 +586,6 @@ export default function AiProvidersPage() {
           onClose={() => setAccountsFor(null)}
         />
       )}
-    </AdminRouteWorkspace>
+    </>
   );
 }

@@ -2,13 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Play, Square, Plus, Trash2, Beaker } from 'lucide-react';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { Button } from '@/components/ui/button';
-import { Input, Select, Textarea } from '@/components/ui/form-controls';
-import { Badge } from '@/components/ui/badge';
-import { InlineAlert, Toast } from '@/components/ui/alert';
-import { Modal } from '@/components/ui/modal';
+import type { ColumnDef } from '@tanstack/react-table';
+
 import {
   listPricingExperiments,
   upsertPricingExperiment,
@@ -23,12 +18,35 @@ import {
   type ZTestResultDto,
 } from '@/lib/api';
 
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { DataTable } from '@/components/admin/ui/data-table';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { Textarea } from '@/components/admin/ui/textarea';
+import { Badge } from '@/components/admin/ui/badge';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/admin/ui/select';
+import { Label } from '@/components/admin/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/admin/ui/dialog';
+
 const STATUS_OPTIONS = [
-  { value: '', label: 'all' },
-  { value: 'draft', label: 'draft' },
-  { value: 'running', label: 'running' },
-  { value: 'paused', label: 'paused' },
-  { value: 'completed', label: 'completed' },
+  { value: '__all__', label: 'All' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'running', label: 'Running' },
+  { value: 'paused', label: 'Paused' },
+  { value: 'completed', label: 'Completed' },
 ];
 
 const TARGET_TYPES = [
@@ -46,30 +64,36 @@ const EMPTY: PricingExperimentUpsertRequest = {
   targetId: '',
   region: '*',
   rolloutPercent: 50,
-  variantsJson: '[\n  {"code":"control","weight":50,"priceMultiplier":1.0},\n  {"code":"discount_10","weight":50,"priceMultiplier":0.9}\n]',
+  variantsJson:
+    '[\n  {"code":"control","weight":50,"priceMultiplier":1.0},\n  {"code":"discount_10","weight":50,"priceMultiplier":0.9}\n]',
 };
 
-function statusVariant(status: string) {
-  if (status === 'running') return 'success' as const;
-  if (status === 'paused') return 'warning' as const;
-  if (status === 'completed') return 'muted' as const;
-  return 'default' as const;
+function statusVariant(status: string): 'success' | 'warning' | 'default' | 'secondary' {
+  if (status === 'running') return 'success';
+  if (status === 'paused') return 'warning';
+  if (status === 'completed') return 'secondary';
+  return 'default';
 }
 
 export default function AdminPricingExperimentsPage() {
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('__all__');
   const [rows, setRows] = useState<PricingExperimentDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
   const [editing, setEditing] = useState<PricingExperimentUpsertRequest | null>(null);
-  const [resultsFor, setResultsFor] = useState<{ id: string; rows: VariantResultsDto[]; significance: ZTestResultDto[] } | null>(null);
+  const [resultsFor, setResultsFor] = useState<{
+    id: string;
+    rows: VariantResultsDto[];
+    significance: ZTestResultDto[];
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRows(await listPricingExperiments(statusFilter || undefined));
+      const filter = statusFilter === '__all__' ? undefined : statusFilter;
+      setRows(await listPricingExperiments(filter));
     } catch (err: any) {
       setError(err?.userMessage ?? err?.message ?? 'Failed to load.');
     } finally {
@@ -77,7 +101,9 @@ export default function AdminPricingExperimentsPage() {
     }
   }, [statusFilter]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   async function handleSave() {
     if (!editing) return;
@@ -93,17 +119,29 @@ export default function AdminPricingExperimentsPage() {
   }
 
   async function handleStart(id: string) {
-    try { await startPricingExperiment(id); await load(); }
-    catch (err: any) { setToast({ variant: 'error', message: err?.message ?? 'Start failed.' }); }
+    try {
+      await startPricingExperiment(id);
+      await load();
+    } catch (err: any) {
+      setToast({ variant: 'error', message: err?.message ?? 'Start failed.' });
+    }
   }
   async function handleStop(id: string) {
-    try { await stopPricingExperiment(id); await load(); }
-    catch (err: any) { setToast({ variant: 'error', message: err?.message ?? 'Stop failed.' }); }
+    try {
+      await stopPricingExperiment(id);
+      await load();
+    } catch (err: any) {
+      setToast({ variant: 'error', message: err?.message ?? 'Stop failed.' });
+    }
   }
   async function handleDelete(id: string) {
     if (!confirm('Delete this experiment?')) return;
-    try { await deletePricingExperiment(id); await load(); }
-    catch (err: any) { setToast({ variant: 'error', message: err?.message ?? 'Delete failed.' }); }
+    try {
+      await deletePricingExperiment(id);
+      await load();
+    } catch (err: any) {
+      setToast({ variant: 'error', message: err?.message ?? 'Delete failed.' });
+    }
   }
   async function viewResults(id: string) {
     try {
@@ -112,183 +150,427 @@ export default function AdminPricingExperimentsPage() {
         fetchExperimentSignificance(id),
       ]);
       setResultsFor({ id, rows: r.variants, significance: sig });
+    } catch (err: any) {
+      setToast({ variant: 'error', message: err?.message ?? 'Failed.' });
     }
-    catch (err: any) { setToast({ variant: 'error', message: err?.message ?? 'Failed.' }); }
   }
 
-  const columns: Column<PricingExperimentDto>[] = [
-    { key: 'code', header: 'Code', render: (r) => r.code },
-    { key: 'name', header: 'Name', render: (r) => r.name },
-    { key: 'target', header: 'Target', render: (r) => `${r.targetType}:${r.targetId}` },
-    { key: 'region', header: 'Region', render: (r) => r.region },
-    { key: 'rollout', header: 'Rollout', render: (r) => `${r.rolloutPercent}%` },
-    { key: 'status', header: 'Status', render: (r) => <Badge variant={statusVariant(r.status)}>{r.status}</Badge> },
+  const columns: ColumnDef<PricingExperimentDto>[] = [
     {
-      key: 'actions',
-      header: '',
-      render: (r) => (
-        <div className="flex gap-1">
-          {r.status === 'draft' || r.status === 'paused' ? (
-            <Button variant="ghost" size="sm" onClick={() => handleStart(r.id)} aria-label="Start">
-              <Play className="h-4 w-4 text-emerald-600" />
-            </Button>
-          ) : null}
-          {r.status === 'running' ? (
-            <Button variant="ghost" size="sm" onClick={() => handleStop(r.id)} aria-label="Stop">
-              <Square className="h-4 w-4 text-rose-600" />
-            </Button>
-          ) : null}
-          <Button variant="ghost" size="sm" onClick={() => viewResults(r.id)} aria-label="Results">
-            <Beaker className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setEditing({
-            code: r.code,
-            name: r.name,
-            targetType: r.targetType,
-            targetId: r.targetId,
-            region: r.region,
-            rolloutPercent: r.rolloutPercent,
-            variantsJson: r.variantsJson,
-          })}>Edit</Button>
-          <Button variant="ghost" size="sm" onClick={() => handleDelete(r.id)} aria-label="Delete">
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
+      accessorKey: 'code',
+      header: 'Code',
+      cell: ({ row }) => <span className="font-mono text-sm">{row.original.code}</span>,
+    },
+    {
+      accessorKey: 'name',
+      header: 'Name',
+      cell: ({ row }) => (
+        <span className="font-medium text-admin-fg-strong">{row.original.name}</span>
       ),
+    },
+    {
+      id: 'target',
+      header: 'Target',
+      cell: ({ row }) => (
+        <span className="text-sm text-admin-fg-muted">
+          {row.original.targetType}:{row.original.targetId}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'region',
+      header: 'Region',
+      cell: ({ row }) => <span className="text-sm">{row.original.region}</span>,
+    },
+    {
+      accessorKey: 'rolloutPercent',
+      header: 'Rollout',
+      cell: ({ row }) => (
+        <span className="tabular-nums">{row.original.rolloutPercent}%</span>
+      ),
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      cell: ({ row }) => (
+        <Badge variant={statusVariant(row.original.status)} size="sm">
+          {row.original.status}
+        </Badge>
+      ),
+    },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <div className="flex items-center justify-end gap-1">
+            {r.status === 'draft' || r.status === 'paused' ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleStart(r.id)}
+                aria-label="Start"
+                startIcon={<Play className="h-4 w-4 text-[var(--admin-success)]" />}
+              >
+                Start
+              </Button>
+            ) : null}
+            {r.status === 'running' ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleStop(r.id)}
+                aria-label="Stop"
+                startIcon={<Square className="h-4 w-4 text-[var(--admin-danger)]" />}
+              >
+                Stop
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => viewResults(r.id)}
+              aria-label="Results"
+              startIcon={<Beaker className="h-4 w-4" />}
+            >
+              Results
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                setEditing({
+                  code: r.code,
+                  name: r.name,
+                  targetType: r.targetType,
+                  targetId: r.targetId,
+                  region: r.region,
+                  rolloutPercent: r.rolloutPercent,
+                  variantsJson: r.variantsJson,
+                })
+              }
+            >
+              Edit
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleDelete(r.id)}
+              aria-label="Delete"
+              startIcon={<Trash2 className="h-4 w-4 text-[var(--admin-danger)]" />}
+            >
+              Delete
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 
-  function update<K extends keyof PricingExperimentUpsertRequest>(k: K, v: PricingExperimentUpsertRequest[K]) {
+  function update<K extends keyof PricingExperimentUpsertRequest>(
+    k: K,
+    v: PricingExperimentUpsertRequest[K],
+  ) {
     if (!editing) return;
     setEditing({ ...editing, [k]: v });
   }
 
-  return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader title="Pricing experiments" description="A/B price tests with FX-aware variants. Deterministic per-user assignment by SHA-256 hash." />
-
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
-      <AdminRoutePanel>
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-        <div className="mb-4 flex items-end gap-3">
-          <Select label="Status" value={statusFilter} options={STATUS_OPTIONS} onChange={(e) => setStatusFilter(e.target.value)} />
-          <Button onClick={() => setEditing({ ...EMPTY })}>
-            <Plus className="mr-2 h-4 w-4" />
+  const banner = (
+    <Card>
+      <CardContent>
+        {error && (
+          <div className="mb-3 rounded-admin border border-[var(--admin-danger-tint-strong)] bg-[var(--admin-danger-tint)] px-3 py-2 text-sm text-[var(--admin-danger)]">
+            {error}
+          </div>
+        )}
+        {toast && (
+          <div
+            className={`mb-3 rounded-admin border px-3 py-2 text-sm ${
+              toast.variant === 'success'
+                ? 'border-[var(--admin-success-tint-strong)] bg-[var(--admin-success-tint)] text-[var(--admin-success)]'
+                : 'border-[var(--admin-danger-tint-strong)] bg-[var(--admin-danger-tint)] text-[var(--admin-danger)]'
+            }`}
+          >
+            {toast.message}
+          </div>
+        )}
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-48">
+            <Label htmlFor="status-filter">Status</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger id="status-filter" className="mt-1.5">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            onClick={() => setEditing({ ...EMPTY })}
+            startIcon={<Plus className="h-4 w-4" />}
+          >
             New experiment
           </Button>
         </div>
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} emptyMessage="No experiments." />
-        )}
-      </AdminRoutePanel>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <AdminTableLayout
+      title="Pricing experiments"
+      description="A/B price tests with FX-aware variants. Deterministic per-user assignment by SHA-256 hash."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Pricing experiments' },
+      ]}
+      banner={banner}
+    >
+      <DataTable
+        columns={columns as ColumnDef<PricingExperimentDto, unknown>[]}
+        data={rows}
+        loading={loading}
+        emptyMessage="No experiments."
+        searchPlaceholder="Search experiments…"
+      />
 
       {editing && (
-        <Modal open onClose={() => setEditing(null)} title="Pricing experiment" size="lg">
-          <div className="space-y-3 p-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Input label="Code" value={editing.code} onChange={(e) => update('code', e.target.value)} placeholder="premium_uk_summer25" />
-              <Input label="Name" value={editing.name} onChange={(e) => update('name', e.target.value)} placeholder="UK summer pricing test" />
-              <Select label="Target type" value={editing.targetType} options={TARGET_TYPES} onChange={(e) => update('targetType', e.target.value)} />
-              <Input label="Target id" value={editing.targetId} onChange={(e) => update('targetId', e.target.value)} placeholder="premium" />
-              <Select label="Region" value={editing.region ?? '*'} options={REGIONS} onChange={(e) => update('region', e.target.value)} />
-              <Input label="Rollout %" type="number" min={0} max={100} value={editing.rolloutPercent} onChange={(e) => update('rolloutPercent', Number(e.target.value))} />
+        <Dialog open onOpenChange={(o) => !o && setEditing(null)}>
+          <DialogContent size="lg">
+            <DialogHeader>
+              <DialogTitle>Pricing experiment</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Input
+                  label="Code"
+                  value={editing.code}
+                  onChange={(e) => update('code', e.target.value)}
+                  placeholder="premium_uk_summer25"
+                />
+                <Input
+                  label="Name"
+                  value={editing.name}
+                  onChange={(e) => update('name', e.target.value)}
+                  placeholder="UK summer pricing test"
+                />
+                <div>
+                  <Label htmlFor="target-type">Target type</Label>
+                  <Select
+                    value={editing.targetType}
+                    onValueChange={(v) => update('targetType', v)}
+                  >
+                    <SelectTrigger id="target-type" className="mt-1.5">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TARGET_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Input
+                  label="Target id"
+                  value={editing.targetId}
+                  onChange={(e) => update('targetId', e.target.value)}
+                  placeholder="premium"
+                />
+                <div>
+                  <Label htmlFor="region">Region</Label>
+                  <Select
+                    value={editing.region ?? '*'}
+                    onValueChange={(v) => update('region', v)}
+                  >
+                    <SelectTrigger id="region" className="mt-1.5">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REGIONS.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Input
+                  label="Rollout %"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={editing.rolloutPercent}
+                  onChange={(e) => update('rolloutPercent', Number(e.target.value))}
+                />
+              </div>
+              <Textarea
+                label="Variants JSON"
+                value={editing.variantsJson ?? ''}
+                onChange={(e) => update('variantsJson', e.target.value)}
+                rows={6}
+                placeholder='[{"code":"control","weight":50,"priceMultiplier":1.0}]'
+              />
+              <p className="text-xs text-admin-fg-muted">
+                Each variant: <code className="font-mono">{`{ code, weight, priceMultiplier, currency? }`}</code>. Weight determines split; priceMultiplier scales base price; optional currency triggers FX conversion.
+              </p>
             </div>
-            <Textarea
-              value={editing.variantsJson ?? ''}
-              onChange={(e) => update('variantsJson', e.target.value)}
-              placeholder='[{"code":"control","weight":50,"priceMultiplier":1.0}]'
-            />
-            <p className="text-xs text-muted-foreground">
-              Each variant: <code>{`{ code, weight, priceMultiplier, currency? }`}</code>. Weight determines split; priceMultiplier scales base price; optional currency triggers FX conversion.
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
               <Button onClick={handleSave}>Save</Button>
-            </div>
-          </div>
-        </Modal>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {resultsFor && (
-        <Modal open onClose={() => setResultsFor(null)} title="Experiment results" size="lg">
-          <div className="space-y-4 p-4">
-            {resultsFor.rows.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No assignments yet.</p>
-            ) : (
-              <>
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Variant</th>
-                      <th className="px-3 py-2 text-right">Assignments</th>
-                      <th className="px-3 py-2 text-right">Conversions</th>
-                      <th className="px-3 py-2 text-right">Conv. rate</th>
-                      <th className="px-3 py-2 text-right">Revenue</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {resultsFor.rows.map((v) => {
-                      const rate = v.assignments > 0 ? (v.conversions / v.assignments) * 100 : 0;
-                      return (
-                        <tr key={v.variantCode} className="border-t border-border">
-                          <td className="px-3 py-2 font-mono">{v.variantCode}</td>
-                          <td className="px-3 py-2 text-right">{v.assignments}</td>
-                          <td className="px-3 py-2 text-right">{v.conversions}</td>
-                          <td className="px-3 py-2 text-right">{rate.toFixed(1)}%</td>
-                          <td className="px-3 py-2 text-right">${v.conversionRevenue.toFixed(2)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                {resultsFor.significance.length > 0 && (
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Statistical significance (vs control)</p>
+        <Dialog open onOpenChange={(o) => !o && setResultsFor(null)}>
+          <DialogContent size="lg">
+            <DialogHeader>
+              <DialogTitle>Experiment results</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {resultsFor.rows.length === 0 ? (
+                <p className="text-sm text-admin-fg-muted">No assignments yet.</p>
+              ) : (
+                <>
+                  <div className="overflow-hidden rounded-admin border border-admin-border">
                     <table className="w-full text-sm">
-                      <thead className="bg-muted/50">
+                      <thead className="bg-admin-bg-subtle">
                         <tr>
-                          <th className="px-3 py-2 text-left">Variant</th>
-                          <th className="px-3 py-2 text-right">Δ rate</th>
-                          <th className="px-3 py-2 text-right">95% CI</th>
-                          <th className="px-3 py-2 text-right">z</th>
-                          <th className="px-3 py-2 text-right">p-value</th>
-                          <th className="px-3 py-2 text-center">Sig.</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                            Variant
+                          </th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                            Assignments
+                          </th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                            Conversions
+                          </th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                            Conv. rate
+                          </th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                            Revenue
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
-                        {resultsFor.significance.map((s) => (
-                          <tr key={s.variantCode} className="border-t border-border">
-                            <td className="px-3 py-2 font-mono">{s.variantCode}</td>
-                            <td className="px-3 py-2 text-right">
-                              <span className={s.difference > 0 ? 'text-emerald-600' : s.difference < 0 ? 'text-rose-600' : ''}>
-                                {s.difference >= 0 ? '+' : ''}{(s.difference * 100).toFixed(2)}pp
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-right text-muted-foreground">
-                              [{(s.ciLower95 * 100).toFixed(2)}, {(s.ciUpper95 * 100).toFixed(2)}]
-                            </td>
-                            <td className="px-3 py-2 text-right">{s.z.toFixed(3)}</td>
-                            <td className="px-3 py-2 text-right">{s.pValueTwoTailed.toFixed(4)}</td>
-                            <td className="px-3 py-2 text-center">
-                              {s.significantAt95
-                                ? <Badge variant="success">p&lt;0.05</Badge>
-                                : <Badge variant="muted">n.s.</Badge>}
-                            </td>
-                          </tr>
-                        ))}
+                        {resultsFor.rows.map((v) => {
+                          const rate =
+                            v.assignments > 0 ? (v.conversions / v.assignments) * 100 : 0;
+                          return (
+                            <tr key={v.variantCode} className="border-t border-admin-border">
+                              <td className="px-3 py-2 font-mono">{v.variantCode}</td>
+                              <td className="px-3 py-2 text-right tabular-nums">
+                                {v.assignments}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums">
+                                {v.conversions}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums">
+                                {rate.toFixed(1)}%
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums">
+                                ${v.conversionRevenue.toFixed(2)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
-                )}
-              </>
-            )}
-          </div>
-        </Modal>
+
+                  {resultsFor.significance.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                        Statistical significance (vs control)
+                      </p>
+                      <div className="overflow-hidden rounded-admin border border-admin-border">
+                        <table className="w-full text-sm">
+                          <thead className="bg-admin-bg-subtle">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                                Variant
+                              </th>
+                              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                                Δ rate
+                              </th>
+                              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                                95% CI
+                              </th>
+                              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                                z
+                              </th>
+                              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                                p-value
+                              </th>
+                              <th className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                                Sig.
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {resultsFor.significance.map((s) => (
+                              <tr key={s.variantCode} className="border-t border-admin-border">
+                                <td className="px-3 py-2 font-mono">{s.variantCode}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">
+                                  <span
+                                    className={
+                                      s.difference > 0
+                                        ? 'text-[var(--admin-success)]'
+                                        : s.difference < 0
+                                          ? 'text-[var(--admin-danger)]'
+                                          : ''
+                                    }
+                                  >
+                                    {s.difference >= 0 ? '+' : ''}
+                                    {(s.difference * 100).toFixed(2)}pp
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-right text-admin-fg-muted tabular-nums">
+                                  [{(s.ciLower95 * 100).toFixed(2)},{' '}
+                                  {(s.ciUpper95 * 100).toFixed(2)}]
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums">
+                                  {s.z.toFixed(3)}
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums">
+                                  {s.pValueTwoTailed.toFixed(4)}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  {s.significantAt95 ? (
+                                    <Badge variant="success" size="sm">
+                                      p&lt;0.05
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="default" size="sm">
+                                      n.s.
+                                    </Badge>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
-    </AdminRouteWorkspace>
+    </AdminTableLayout>
   );
 }

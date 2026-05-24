@@ -1,14 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Cog, Eye, EyeOff, Loader2, Lock, Save } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, Save } from 'lucide-react';
 import { Toast } from '@/components/ui/alert';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
+// New admin DS imports
+import { AdminSettingsLayout, SettingsNav } from '@/components/admin/layout/admin-settings-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/admin/ui/card';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 
 /* ───────────────────────── Types ───────────────────────── */
 
@@ -373,13 +377,13 @@ function SecretField({ label, hint, serverValue, draftValue, onChange }: SecretF
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
-        <label htmlFor={inputId} className="text-sm font-semibold tracking-tight text-navy">
+        <label htmlFor={inputId} className="text-sm font-semibold tracking-tight text-admin-fg-strong">
           {label}
         </label>
         {isSetOnServer ? (
           <Badge variant="success">Set</Badge>
         ) : (
-          <Badge variant="muted">Not set</Badge>
+          <Badge variant="default">Not set</Badge>
         )}
       </div>
       <div className="flex items-stretch gap-2">
@@ -392,12 +396,12 @@ function SecretField({ label, hint, serverValue, draftValue, onChange }: SecretF
             onChange={(event) => onChange(event.target.value)}
             autoComplete="off"
             spellCheck={false}
-            className="w-full rounded-2xl border border-border bg-background-light px-4 py-3 pr-12 text-sm text-navy shadow-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
+            className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-3 pr-12 text-sm text-admin-fg-default shadow-sm transition-[border-color,box-shadow] focus:border-[var(--admin-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
           />
           <button
             type="button"
             onClick={() => setReveal((v) => !v)}
-            className="absolute inset-y-0 right-2 my-auto flex h-9 w-9 items-center justify-center rounded-xl text-muted hover:bg-lavender/40"
+            className="absolute inset-y-0 right-2 my-auto flex h-9 w-9 items-center justify-center rounded-admin text-admin-fg-muted hover:bg-[var(--admin-state-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-primary)]"
             aria-label={reveal ? `Hide ${label}` : `Show ${label}`}
           >
             {reveal ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
@@ -415,7 +419,7 @@ function SecretField({ label, hint, serverValue, draftValue, onChange }: SecretF
           </Button>
         )}
       </div>
-      {hint ? <p className="text-xs leading-5 text-muted">{hint}</p> : null}
+      {hint ? <p className="text-xs leading-5 text-admin-fg-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -436,24 +440,24 @@ function PlainField({ label, hint, type = 'text', value, onChange }: PlainFieldP
   if (type === 'checkbox') {
     return (
       <div className="flex flex-col gap-1.5">
-        <label htmlFor={inputId} className="flex items-center gap-3 text-sm font-semibold tracking-tight text-navy">
+        <label htmlFor={inputId} className="flex items-center gap-3 text-sm font-semibold tracking-tight text-admin-fg-strong">
           <input
             id={inputId}
             type="checkbox"
             checked={Boolean(value)}
             onChange={(event) => onChange(event.target.checked)}
-            className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+            className="h-4 w-4 rounded border-admin-border text-[var(--admin-primary)] focus:ring-[var(--admin-primary)]"
           />
           {label}
         </label>
-        {hint ? <p className="text-xs leading-5 text-muted">{hint}</p> : null}
+        {hint ? <p className="text-xs leading-5 text-admin-fg-muted">{hint}</p> : null}
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={inputId} className="text-sm font-semibold tracking-tight text-navy">
+      <label htmlFor={inputId} className="text-sm font-semibold tracking-tight text-admin-fg-strong">
         {label}
       </label>
       <input
@@ -462,9 +466,9 @@ function PlainField({ label, hint, type = 'text', value, onChange }: PlainFieldP
         value={value === null || value === undefined ? '' : String(value)}
         onChange={(event) => onChange(event.target.value)}
         spellCheck={false}
-        className="w-full rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
+        className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-3 text-sm text-admin-fg-default shadow-sm transition-[border-color,box-shadow] focus:border-[var(--admin-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
       />
-      {hint ? <p className="text-xs leading-5 text-muted">{hint}</p> : null}
+      {hint ? <p className="text-xs leading-5 text-admin-fg-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -486,45 +490,46 @@ interface SectionProps {
 function Section({ id, title, description, open, onToggle, testing, testStatus, onTest, children }: SectionProps) {
   const headingId = `runtime-settings-${id}-heading`;
   return (
-    <section
+    <Card
       role="region"
       aria-labelledby={headingId}
-      className="rounded-2xl border border-border bg-surface shadow-sm"
+      id={`runtime-settings-${id}`}
+      className="scroll-mt-24"
     >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
         aria-controls={`runtime-settings-${id}-body`}
-        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left rounded-admin-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-primary)]"
       >
         <span>
-          <span id={headingId} className="block text-base font-semibold text-navy">
+          <span id={headingId} className="block text-base font-semibold text-admin-fg-strong">
             {title}
           </span>
-          <span className="mt-0.5 block text-xs text-muted">{description}</span>
+          <span className="mt-0.5 block text-xs text-admin-fg-muted">{description}</span>
         </span>
         {open ? (
-          <ChevronDown className="h-5 w-5 text-muted" aria-hidden="true" />
+          <ChevronDown className="h-5 w-5 text-admin-fg-muted" aria-hidden="true" />
         ) : (
-          <ChevronRight className="h-5 w-5 text-muted" aria-hidden="true" />
+          <ChevronRight className="h-5 w-5 text-admin-fg-muted" aria-hidden="true" />
         )}
       </button>
       {open && (
-        <div id={`runtime-settings-${id}-body`} className="border-t border-border px-5 py-5">
-          <div className="mb-5 flex flex-col gap-3 rounded-2xl bg-background-light p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div id={`runtime-settings-${id}-body`} className="border-t border-admin-border px-5 py-5">
+          <div className="mb-5 flex flex-col gap-3 rounded-admin border border-admin-border bg-admin-bg-subtle p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-navy">Connection check</span>
+                <span className="text-sm font-semibold text-admin-fg-strong">Connection check</span>
                 {testStatus ? (
                   <Badge variant={testStatus.status === 'ok' ? 'success' : 'danger'}>
                     {testStatus.status === 'ok' ? 'Green' : 'Failed'}
                   </Badge>
                 ) : (
-                  <Badge variant="muted">Not tested</Badge>
+                  <Badge variant="default">Not tested</Badge>
                 )}
               </div>
-              <p className="mt-1 text-xs leading-5 text-muted">
+              <p className="mt-1 text-xs leading-5 text-admin-fg-muted">
                 {testStatus?.message ?? 'Runs a non-mutating sandbox/format check; no live learner data is sent.'}
               </p>
             </div>
@@ -534,16 +539,17 @@ function Section({ id, title, description, open, onToggle, testing, testStatus, 
               size="sm"
               onClick={onTest}
               disabled={testing}
+              loading={testing}
+              loadingText="Testing..."
               aria-label={`Test ${title}`}
             >
-              {testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-              {testing ? 'Testing...' : 'Test'}
+              Test
             </Button>
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">{children}</div>
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -553,14 +559,16 @@ function LoadingState() {
   return (
     <div className="space-y-4" aria-busy="true" aria-live="polite">
       {SECTION_META.map((s) => (
-        <div key={s.id} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <Skeleton className="h-5 w-1/3" />
-          <Skeleton className="mt-3 h-4 w-2/3" />
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-          </div>
-        </div>
+        <Card key={s.id}>
+          <CardContent className="p-5 pt-5">
+            <Skeleton className="h-5 w-1/3" />
+            <Skeleton className="mt-3 h-4 w-2/3" />
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          </CardContent>
+        </Card>
       ))}
     </div>
   );
@@ -570,18 +578,17 @@ function LoadingState() {
 
 function LockedState() {
   return (
-    <section className="mx-auto flex min-h-[40vh] w-full max-w-2xl items-center justify-center px-4 py-12">
-      <div className="rounded-[2rem] border border-amber-100 bg-surface p-8 text-center shadow-sm">
-        <Lock className="mx-auto h-10 w-10 text-amber-500" aria-hidden="true" />
-        <h2 className="mt-4 text-xl font-semibold text-navy">System administrator access required</h2>
-        <p className="mt-2 text-sm text-muted">
-          Runtime Settings exposes production secrets and is gated behind the{' '}
-          <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">system_admin</code> permission.
-          Ask a super-admin to grant access if you need to change Brevo, Stripe, Sentry, OAuth, push, or backup
-          credentials from this UI.
-        </p>
-      </div>
-    </section>
+    <Card surface="tinted-warning">
+      <CardContent className="p-8 pt-8">
+        <EmptyState
+          variant="error"
+          size="md"
+          illustration={<Lock aria-hidden="true" />}
+          title="System administrator access required"
+          description="Runtime Settings exposes production secrets and is gated behind the system_admin permission. Ask a super-admin to grant access if you need to change Brevo, Stripe, Sentry, OAuth, push, or backup credentials from this UI."
+        />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -702,37 +709,54 @@ export function RuntimeSettingsClient() {
 
   if (authLoading) {
     return (
-      <main className="mx-auto w-full max-w-4xl px-4 py-8">
+      <AdminSettingsLayout
+        title="Runtime Settings"
+        description="Configure production secrets without editing the server's .env file. Changes apply within ~30 seconds."
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Runtime Settings' }]}
+      >
         <LoadingState />
-      </main>
+      </AdminSettingsLayout>
     );
   }
 
   if (!isSystemAdmin) {
     return (
-      <main className="mx-auto w-full max-w-4xl px-4 py-8">
+      <AdminSettingsLayout
+        title="Runtime Settings"
+        description="Configure production secrets without editing the server's .env file. Changes apply within ~30 seconds."
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Runtime Settings' }]}
+      >
         <LockedState />
-      </main>
+      </AdminSettingsLayout>
     );
   }
 
-  return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-8">
-      <header className="mb-6">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <Cog className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <div>
-            <h1 className="text-xl font-semibold text-navy sm:text-2xl">Runtime Settings</h1>
-            <p className="mt-1 text-sm text-muted">
-              Configure production secrets without editing the server&apos;s .env file. Changes apply within ~30
-              seconds.
-            </p>
-          </div>
-        </div>
-      </header>
+  const navItems = SECTION_META.map((s) => ({
+    label: s.title,
+    href: `#runtime-settings-${s.id}`,
+  }));
 
+  return (
+    <AdminSettingsLayout
+      title="Runtime Settings"
+      description="Configure production secrets without editing the server's .env file. Changes apply within ~30 seconds."
+      breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Runtime Settings' }]}
+      sidebar={<SettingsNav items={navItems} title="Sections" />}
+      mobileNavLabel="Sections"
+      actions={
+        <Button
+          variant="primary"
+          onClick={handleSave}
+          disabled={saving || !draft}
+          loading={saving}
+          loadingText="Saving…"
+          startIcon={<Save className="h-4 w-4" aria-hidden="true" />}
+          aria-label="Save all runtime settings"
+        >
+          Save All
+        </Button>
+      }
+    >
       {loading || !draft || !server ? (
         <LoadingState />
       ) : (
@@ -924,18 +948,21 @@ export function RuntimeSettingsClient() {
           ))}
 
           <div className="flex flex-col items-stretch gap-3 pt-2 sm:flex-row sm:items-center sm:justify-end">
-            <Button variant="primary" onClick={handleSave} disabled={saving} aria-label="Save all runtime settings">
-              {saving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Save className="mr-2 h-4 w-4" aria-hidden="true" />
-              )}
-              {saving ? 'Saving…' : 'Save All'}
+            <Button
+              variant="primary"
+              onClick={handleSave}
+              disabled={saving}
+              loading={saving}
+              loadingText="Saving…"
+              startIcon={<Save className="h-4 w-4" aria-hidden="true" />}
+              aria-label="Save all runtime settings"
+            >
+              Save All
             </Button>
           </div>
 
           {updatedLine && (
-            <p className="text-right text-xs text-muted" data-testid="runtime-settings-updated-line">
+            <p className="text-right text-xs text-admin-fg-muted" data-testid="runtime-settings-updated-line">
               {updatedLine}
             </p>
           )}
@@ -943,7 +970,7 @@ export function RuntimeSettingsClient() {
       )}
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </main>
+    </AdminSettingsLayout>
   );
 }
 

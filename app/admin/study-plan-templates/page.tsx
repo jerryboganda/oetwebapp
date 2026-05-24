@@ -3,11 +3,28 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { FileText, Plus, RefreshCcw, Trash2 } from 'lucide-react';
 import {
   listStudyPlanTemplates,
   bulkStudyPlanTemplateAction,
   type StudyPlanTemplateListItem,
 } from '@/lib/study-plan-admin-api';
+// New admin DS imports
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Checkbox } from '@/components/admin/ui/checkbox';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/admin/ui/select';
+import { Label } from '@/components/admin/ui/label';
+import { Toaster, toast as adminToast } from '@/components/admin/ui/toaster';
 
 type Filter = { tier: string; active: 'all' | 'active' | 'inactive' };
 
@@ -18,7 +35,6 @@ export default function StudyPlanTemplatesAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>({ tier: '', active: 'all' });
-  const [toast, setToast] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -65,204 +81,183 @@ export default function StudyPlanTemplatesAdminPage() {
     if (action === 'soft-delete' && !confirm(`Soft-delete ${selected.size} template(s)?`)) return;
     try {
       const result = await bulkStudyPlanTemplateAction(action, Array.from(selected));
-      setToast(`${action}: ${result.processed} template(s) processed.`);
+      adminToast.success(`${action}: ${result.processed} template(s) processed.`);
       setSelected(new Set());
       await reload();
     } catch (e: any) {
-      setError(e?.userMessage ?? e?.message ?? 'Bulk action failed.');
+      const message = e?.userMessage ?? e?.message ?? 'Bulk action failed.';
+      setError(message);
+      adminToast.error(message);
     }
   };
 
-  return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Study Plan Templates</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Admin-authored skeletons the planner picks from for each learner. Tier-gated and
-            profession-aware.
-          </p>
+  const banner = (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-admin-lg border border-admin-border bg-admin-bg-surface p-4 shadow-admin-sm">
+        <div className="flex flex-col gap-1.5 min-w-[160px]">
+          <Label htmlFor="filter-tier">Tier</Label>
+          <Select value={filter.tier || '__all__'} onValueChange={(v) => setFilter((f) => ({ ...f, tier: v === '__all__' ? '' : v }))}>
+            <SelectTrigger id="filter-tier">
+              <SelectValue placeholder="All tiers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All tiers</SelectItem>
+              <SelectItem value="free">Free</SelectItem>
+              <SelectItem value="premium">Premium</SelectItem>
+              <SelectItem value="elite">Elite</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Link
-          href="/admin/study-plan-templates/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          + New Template
-        </Link>
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-3 mb-4 items-center">
-        <select
-          value={filter.tier}
-          onChange={(e) => setFilter((f) => ({ ...f, tier: e.target.value }))}
-          className="border rounded px-3 py-2"
-        >
-          <option value="">All tiers</option>
-          <option value="free">Free</option>
-          <option value="premium">Premium</option>
-          <option value="elite">Elite</option>
-        </select>
-        <select
-          value={filter.active}
-          onChange={(e) => setFilter((f) => ({ ...f, active: e.target.value as Filter['active'] }))}
-          className="border rounded px-3 py-2"
-        >
-          <option value="all">All statuses</option>
-          <option value="active">Active only</option>
-          <option value="inactive">Inactive only</option>
-        </select>
-        <button onClick={() => void reload()} className="px-3 py-2 border rounded">
+        <div className="flex flex-col gap-1.5 min-w-[160px]">
+          <Label htmlFor="filter-status">Status</Label>
+          <Select value={filter.active} onValueChange={(v) => setFilter((f) => ({ ...f, active: v as Filter['active'] }))}>
+            <SelectTrigger id="filter-status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="active">Active only</SelectItem>
+              <SelectItem value="inactive">Inactive only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="outline" onClick={() => void reload()} startIcon={<RefreshCcw className="h-4 w-4" />}>
           Refresh
-        </button>
+        </Button>
       </div>
 
-      {/* Bulk toolbar */}
       {selected.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-4 flex items-center gap-3">
-          <span className="text-sm">{selected.size} selected</span>
-          <button
-            onClick={() => runBulk('activate')}
-            className="px-3 py-1 bg-green-600 text-white rounded text-sm"
-          >
-            Activate
-          </button>
-          <button
-            onClick={() => runBulk('deactivate')}
-            className="px-3 py-1 bg-yellow-600 text-white rounded text-sm"
-          >
-            Deactivate
-          </button>
-          <button
-            onClick={() => runBulk('duplicate')}
-            className="px-3 py-1 bg-gray-600 text-white rounded text-sm"
-          >
-            Duplicate
-          </button>
-          <button
-            onClick={() => runBulk('soft-delete')}
-            className="px-3 py-1 bg-red-600 text-white rounded text-sm"
-          >
+        <div className="flex flex-wrap items-center gap-2 rounded-admin-lg border border-[var(--admin-primary)] bg-[var(--admin-primary-tint)] px-4 py-3">
+          <span className="text-sm font-medium text-admin-fg-strong">{selected.size} selected</span>
+          <span className="text-admin-fg-muted" aria-hidden="true">·</span>
+          <Button size="sm" onClick={() => runBulk('activate')}>Activate</Button>
+          <Button size="sm" variant="outline" onClick={() => runBulk('deactivate')}>Deactivate</Button>
+          <Button size="sm" variant="secondary" onClick={() => runBulk('duplicate')}>Duplicate</Button>
+          <Button size="sm" variant="destructive" onClick={() => runBulk('soft-delete')} startIcon={<Trash2 className="h-3.5 w-3.5" />}>
             Soft-delete
-          </button>
-          <button
-            onClick={() => setSelected(new Set())}
-            className="px-3 py-1 text-sm underline"
-          >
+          </Button>
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setSelected(new Set())}>
             Clear
-          </button>
+          </Button>
         </div>
       )}
 
-      {toast && (
-        <div className="bg-green-50 border border-green-200 text-green-800 rounded p-3 mb-4">
-          {toast}
-        </div>
-      )}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-800 rounded p-3 mb-4">
+        <div role="alert" className="rounded-admin-lg border border-[var(--admin-danger)] bg-[var(--admin-danger-tint)] px-4 py-3 text-sm text-[var(--admin-danger)]">
           {error}
         </div>
       )}
-
-      {loading ? (
-        <div className="p-6 text-center text-muted-foreground">Loading...</div>
-      ) : rows.length === 0 ? (
-        <div className="p-12 text-center bg-muted border rounded">
-          <p className="text-foreground">No templates match these filters.</p>
-          <Link
-            href="/admin/study-plan-templates/new"
-            className="inline-block mt-3 px-4 py-2 bg-blue-600 text-white rounded"
-          >
-            Create your first template
-          </Link>
-        </div>
-      ) : (
-        <div className="border rounded overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-muted text-left">
-              <tr>
-                <th className="p-3 w-10">
-                  <input
-                    type="checkbox"
-                    checked={selected.size === rows.length}
-                    onChange={selectAll}
-                  />
-                </th>
-                <th className="p-3">Name</th>
-                <th className="p-3">Slug</th>
-                <th className="p-3">Weeks</th>
-                <th className="p-3">Tiers</th>
-                <th className="p-3">Profession</th>
-                <th className="p-3">Band</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">v</th>
-                <th className="p-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t hover:bg-muted">
-                  <td className="p-3">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(r.id)}
-                      onChange={() => toggleSelect(r.id)}
-                    />
-                  </td>
-                  <td className="p-3">
-                    <button
-                      onClick={() => router.push(`/admin/study-plan-templates/${r.id}`)}
-                      className="text-blue-600 hover:underline text-left"
-                    >
-                      {r.name}
-                    </button>
-                    {r.description && (
-                      <div className="text-xs text-muted-foreground mt-1">{r.description}</div>
-                    )}
-                  </td>
-                  <td className="p-3 text-sm font-mono">{r.slug}</td>
-                  <td className="p-3 text-sm">
-                    {r.minWeeks}–{r.maxWeeks}
-                  </td>
-                  <td className="p-3 text-sm">
-                    {r.tierCodes.length === 0 ? (
-                      <span className="text-muted-foreground">none</span>
-                    ) : (
-                      r.tierCodes.map((t) => (
-                        <span
-                          key={t}
-                          className="inline-block px-2 py-0.5 bg-muted rounded text-xs mr-1"
-                        >
-                          {t}
-                        </span>
-                      ))
-                    )}
-                  </td>
-                  <td className="p-3 text-sm">{r.professionId ?? <span className="text-muted-foreground">any</span>}</td>
-                  <td className="p-3 text-sm">{r.targetBand ?? <span className="text-muted-foreground">any</span>}</td>
-                  <td className="p-3">
-                    {r.isActive ? (
-                      <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">Active</span>
-                    ) : (
-                      <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">Inactive</span>
-                    )}
-                  </td>
-                  <td className="p-3 text-sm text-muted-foreground">{r.version}</td>
-                  <td className="p-3">
-                    <Link
-                      href={`/admin/study-plan-templates/${r.id}`}
-                      className="text-sm text-blue-600 hover:underline"
-                    >
-                      Edit
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
+  );
+
+  return (
+    <>
+      <AdminTableLayout
+        title="Study Plan Templates"
+        description="Admin-authored skeletons the planner picks from for each learner. Tier-gated and profession-aware."
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Study Plan Templates' }]}
+        actions={
+          <Button asChild startIcon={<Plus className="h-4 w-4" />}>
+            <Link href="/admin/study-plan-templates/new">New Template</Link>
+          </Button>
+        }
+        banner={banner}
+      >
+        {loading ? (
+          <div className="p-6 space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 rounded-admin" />
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="p-8">
+            <EmptyState
+              illustration={<FileText aria-hidden="true" />}
+              title="No templates match these filters"
+              description="Adjust the filters above or create your first template to get started."
+              primaryAction={{ label: 'Create your first template', href: '/admin/study-plan-templates/new' }}
+            />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-admin-bg-subtle">
+                <tr>
+                  <th scope="col" className="w-10 px-3 py-2.5 text-left">
+                    <Checkbox
+                      checked={selected.size === rows.length && rows.length > 0}
+                      onCheckedChange={selectAll}
+                      aria-label="Select all templates"
+                    />
+                  </th>
+                  <th scope="col" className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">Name</th>
+                  <th scope="col" className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">Slug</th>
+                  <th scope="col" className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">Weeks</th>
+                  <th scope="col" className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">Tiers</th>
+                  <th scope="col" className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">Profession</th>
+                  <th scope="col" className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">Band</th>
+                  <th scope="col" className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">Status</th>
+                  <th scope="col" className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">v</th>
+                  <th scope="col" className="px-3 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-t border-admin-border transition-colors hover:bg-[var(--admin-state-hover)]">
+                    <td className="px-3 py-3 align-middle">
+                      <Checkbox
+                        checked={selected.has(r.id)}
+                        onCheckedChange={() => toggleSelect(r.id)}
+                        aria-label={`Select ${r.name}`}
+                      />
+                    </td>
+                    <td className="px-3 py-3 align-middle">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/admin/study-plan-templates/${r.id}`)}
+                        className="text-left text-admin-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-primary)] rounded-admin-sm"
+                      >
+                        {r.name}
+                      </button>
+                      {r.description && (
+                        <div className="text-xs text-admin-fg-muted mt-1">{r.description}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 align-middle font-mono text-xs text-admin-fg-muted">{r.slug}</td>
+                    <td className="px-3 py-3 align-middle">{r.minWeeks}–{r.maxWeeks}</td>
+                    <td className="px-3 py-3 align-middle">
+                      {r.tierCodes.length === 0 ? (
+                        <span className="text-admin-fg-muted">none</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {r.tierCodes.map((t) => (
+                            <Badge key={t} variant="default" size="sm">{t}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 align-middle">{r.professionId ?? <span className="text-admin-fg-muted">any</span>}</td>
+                    <td className="px-3 py-3 align-middle">{r.targetBand ?? <span className="text-admin-fg-muted">any</span>}</td>
+                    <td className="px-3 py-3 align-middle">
+                      <Badge variant={r.isActive ? 'success' : 'secondary'}>
+                        {r.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-3 align-middle text-admin-fg-muted">{r.version}</td>
+                    <td className="px-3 py-3 align-middle">
+                      <Button variant="link" size="sm" asChild>
+                        <Link href={`/admin/study-plan-templates/${r.id}`}>Edit</Link>
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </AdminTableLayout>
+
+      <Toaster />
+    </>
   );
 }

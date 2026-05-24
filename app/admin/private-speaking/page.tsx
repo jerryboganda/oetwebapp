@@ -2,10 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { Users, Calendar, BarChart3, Settings, Plus, Trash2, RefreshCw, X, CheckCircle2, CreditCard, ListChecks, Video } from 'lucide-react';
-import { AdminRouteHero, AdminRoutePanel, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Skeleton } from '@/components/ui/skeleton';
+import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
+import { PageHeader } from '@/components/admin/ui/page-header';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
 import {
   fetchAdminPrivateSpeakingConfig,
   updateAdminPrivateSpeakingConfig,
@@ -187,27 +194,35 @@ export default function AdminPrivateSpeakingPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4"><Skeleton className="h-20 rounded-xl" /><Skeleton className="h-48 rounded-xl" /></div>
+      <AdminPageShell>
+        <div className="space-y-4">
+          <Skeleton className="h-20 rounded-admin-lg" />
+          <Skeleton className="h-48 rounded-admin-lg" />
+        </div>
+      </AdminPageShell>
     );
   }
 
   return (
     <AdminRouteWorkspace role="main" aria-label="Private speaking">
-      <AdminRouteHero
-        eyebrow="Operations"
-        icon={Calendar}
-        accent="navy"
-        title="Private speaking sessions"
-        description="Manage tutors, availability, bookings, and session configuration."
-      />
+      <AdminPageShell>
+        <PageHeader
+          title="Private speaking sessions"
+          description="Manage tutors, availability, bookings, and session configuration."
+          breadcrumbs={[
+            { label: 'Admin', href: '/admin' },
+            { label: 'Private Speaking' },
+          ]}
+          icon={<Calendar className="h-5 w-5" aria-hidden="true" />}
+        />
 
       {error && <InlineAlert variant="warning">{error}<button onClick={() => setError(null)} className="ml-2"><X className="w-4 h-4 inline" /></button></InlineAlert>}
 
       {/* Tab navigation */}
-      <div className="flex gap-1 border-b border-border dark:border-border">
+      <div className="flex gap-1 border-b border-admin-border">
         {(['overview', 'config', 'tutors', 'bookings', 'audit'] as AdminTab[]).map(t => (          <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${
-              tab === t ? 'border-primary text-primary dark:text-primary' : 'border-transparent text-muted hover:text-navy'
+              tab === t ? 'border-[var(--admin-primary)] text-[var(--admin-primary)]' : 'border-transparent text-admin-fg-muted hover:text-admin-fg-strong'
             }`}>
             {t}
           </button>
@@ -218,161 +233,163 @@ export default function AdminPrivateSpeakingPage() {
       {tab === 'overview' && stats && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-            <AdminRouteSummaryCard label="Active Tutors" value={String(stats.activeTutors)} icon={Users} />
-            <AdminRouteSummaryCard label="Upcoming" value={String(stats.upcomingSessions)} icon={Calendar} />
-            <AdminRouteSummaryCard label="Completed" value={String(stats.completedBookings)} icon={BarChart3} />
-            <AdminRouteSummaryCard label="Cancelled" value={String(stats.cancelledBookings)} tone={stats.cancelledBookings > 0 ? 'danger' : 'default'} />
-            <AdminRouteSummaryCard label="Revenue (30d)" value={formatPrice(stats.revenueMinorUnitsLast30Days, config?.currency)} />
+            <KpiTile label="Active Tutors" value={String(stats.activeTutors)} icon={<Users className="h-4 w-4" />} size="sm" />
+            <KpiTile label="Upcoming" value={String(stats.upcomingSessions)} icon={<Calendar className="h-4 w-4" />} size="sm" />
+            <KpiTile label="Completed" value={String(stats.completedBookings)} icon={<BarChart3 className="h-4 w-4" />} size="sm" />
+            <KpiTile label="Cancelled" value={String(stats.cancelledBookings)} tone={stats.cancelledBookings > 0 ? 'danger' : 'default'} size="sm" />
+            <KpiTile label="Revenue (30d)" value={formatPrice(stats.revenueMinorUnitsLast30Days, config?.currency)} size="sm" />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <AdminRouteSummaryCard label="Total Bookings" value={String(stats.totalBookings)} icon={ListChecks} />
-            <AdminRouteSummaryCard label="Confirmed" value={String(stats.confirmedBookings)} icon={CheckCircle2} />
-            <AdminRouteSummaryCard label="Payment Failures" value={String(stats.failedPayments)} icon={CreditCard} tone={stats.failedPayments > 0 ? 'warning' : 'default'} />
-            <AdminRouteSummaryCard label="Zoom Failures" value={String(stats.zoomFailures)} icon={Video} tone={stats.zoomFailures > 0 ? 'warning' : 'default'} />
+            <KpiTile label="Total Bookings" value={String(stats.totalBookings)} icon={<ListChecks className="h-4 w-4" />} size="sm" />
+            <KpiTile label="Confirmed" value={String(stats.confirmedBookings)} icon={<CheckCircle2 className="h-4 w-4" />} size="sm" />
+            <KpiTile label="Payment Failures" value={String(stats.failedPayments)} icon={<CreditCard className="h-4 w-4" />} tone={stats.failedPayments > 0 ? 'warning' : 'default'} size="sm" />
+            <KpiTile label="Zoom Failures" value={String(stats.zoomFailures)} icon={<Video className="h-4 w-4" />} tone={stats.zoomFailures > 0 ? 'warning' : 'default'} size="sm" />
           </div>
         </>
       )}
 
       {/* ── Config Tab ──────────────────────────────── */}
       {tab === 'config' && config && (
-          <AdminRoutePanel title="Module Configuration">
+          <Card>
+            <CardHeader><CardTitle>Module Configuration</CardTitle></CardHeader>
+            <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="flex items-center gap-3">
                 <input type="checkbox" checked={config.isEnabled} onChange={e => setConfig(c => c ? { ...c, isEnabled: e.target.checked } : c)}
                   className="w-4 h-4 rounded text-primary" />
-                <span className="text-sm text-admin-text">Module Enabled</span>
+                <span className="text-sm text-admin-fg-strong">Module Enabled</span>
               </label>
               <div>
-                <label className="text-xs text-admin-text-muted mb-1 block">Default Price (minor units)</label>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Default Price (minor units)</label>
                 <input type="number" value={config.defaultPriceMinorUnits}
                   onChange={e => setConfig(c => c ? { ...c, defaultPriceMinorUnits: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-text-muted mb-1 block">Currency</label>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Currency</label>
                 <input type="text" value={config.currency}
                   onChange={e => setConfig(c => c ? { ...c, currency: e.target.value } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-text-muted mb-1 block">Slot Duration (minutes)</label>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Slot Duration (minutes)</label>
                 <input type="number" value={config.defaultSlotDurationMinutes}
                   onChange={e => setConfig(c => c ? { ...c, defaultSlotDurationMinutes: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-text-muted mb-1 block">Buffer Between Slots (minutes)</label>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Buffer Between Slots (minutes)</label>
                 <input type="number" value={config.bufferMinutesBetweenSlots}
                   onChange={e => setConfig(c => c ? { ...c, bufferMinutesBetweenSlots: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-text-muted mb-1 block">Min Lead Time (hours)</label>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Min Lead Time (hours)</label>
                 <input type="number" value={config.minBookingLeadTimeHours}
                   onChange={e => setConfig(c => c ? { ...c, minBookingLeadTimeHours: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-text-muted mb-1 block">Max Advance Days</label>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Max Advance Days</label>
                 <input type="number" value={config.maxBookingAdvanceDays}
                   onChange={e => setConfig(c => c ? { ...c, maxBookingAdvanceDays: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-text-muted mb-1 block">Cancellation Window (hours)</label>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Cancellation Window (hours)</label>
                 <input type="number" value={config.cancellationWindowHours}
                   onChange={e => setConfig(c => c ? { ...c, cancellationWindowHours: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-text-muted mb-1 block">Reservation Timeout (minutes)</label>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Reservation Timeout (minutes)</label>
                 <input type="number" value={config.reservationTimeoutMinutes}
                   onChange={e => setConfig(c => c ? { ...c, reservationTimeoutMinutes: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
             </div>
-            <button onClick={handleSaveConfig} disabled={saving}
-              className="mt-4 px-5 py-2 bg-primary hover:bg-primary-dark text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded-lg text-sm font-medium disabled:opacity-50">
+            <Button variant="primary" onClick={handleSaveConfig} loading={saving} className="mt-4">
               {saving ? 'Saving...' : 'Save Configuration'}
-            </button>
-          </AdminRoutePanel>
+            </Button>
+            </CardContent>
+          </Card>
       )}
 
       {/* ── Tutors Tab ───────────────────────────── */}
       {tab === 'tutors' && (
         <>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-navy dark:text-navy">Tutor Profiles</h3>
-            <button onClick={() => setShowCreateTutor(true)} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded-lg text-sm font-medium">
+            <h3 className="text-lg font-semibold text-admin-fg-strong">Tutor Profiles</h3>
+            <Button variant="primary" onClick={() => setShowCreateTutor(true)}>
               <Plus className="w-4 h-4" /> Add Tutor
-            </button>
+            </Button>
           </div>
 
           {showCreateTutor && (
-            <AdminRoutePanel title="Create Tutor Profile" className="mb-4">
+            <Card className="mb-4">
+              <CardHeader><CardTitle>Create Tutor Profile</CardTitle></CardHeader>
+              <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input type="text" placeholder="Expert User ID" value={newTutor.expertUserId}
                   onChange={e => setNewTutor(p => ({ ...p, expertUserId: e.target.value }))}
-                  className="px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
                 <input type="text" placeholder="Display Name" value={newTutor.displayName}
                   onChange={e => setNewTutor(p => ({ ...p, displayName: e.target.value }))}
-                  className="px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
                 <input type="text" placeholder="Timezone (e.g. Australia/Sydney)" value={newTutor.timezone}
                   onChange={e => setNewTutor(p => ({ ...p, timezone: e.target.value }))}
-                  className="px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
                 <input type="text" placeholder="Bio (optional)" value={newTutor.bio}
                   onChange={e => setNewTutor(p => ({ ...p, bio: e.target.value }))}
-                  className="px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
+                  className="px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div className="flex gap-2 mt-3">
-                <button onClick={handleCreateTutor} disabled={saving || !newTutor.expertUserId || !newTutor.displayName}
-                  className="px-4 py-2 bg-primary hover:bg-primary-dark text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded-lg text-sm font-medium disabled:opacity-50">
+                <Button variant="primary" onClick={handleCreateTutor} loading={saving} disabled={!newTutor.expertUserId || !newTutor.displayName}>
                   {saving ? 'Creating...' : 'Create'}
-                </button>
-                <button onClick={() => setShowCreateTutor(false)} className="px-4 py-2 border border-border dark:border-border rounded-lg text-sm text-muted dark:text-muted">Cancel</button>
+                </Button>
+                <Button variant="ghost" onClick={() => setShowCreateTutor(false)}>Cancel</Button>
               </div>
-            </AdminRoutePanel>
+              </CardContent>
+            </Card>
           )}
 
           <div className="space-y-3">
             {tutors.map(tutor => (
-              <AdminRoutePanel key={tutor.id} title="" className="!p-4">
+              <Card key={tutor.id}><CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-admin-text">{tutor.displayName}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${tutor.isActive ? 'bg-success/10 text-success' : 'bg-admin-surface-raised text-admin-text-muted'}`}>
+                      <span className="font-medium text-admin-fg-strong">{tutor.displayName}</span>
+                      <Badge variant={tutor.isActive ? 'success' : 'default'} intensity="tinted" size="sm">
                         {tutor.isActive ? 'Active' : 'Inactive'}
-                      </span>
+                      </Badge>
                     </div>
-                    <div className="text-xs text-admin-text-muted mt-0.5">
+                    <div className="text-xs text-admin-fg-muted mt-0.5">
                       {tutor.timezone} · {tutor.totalSessions} sessions · Rating: {tutor.averageRating.toFixed(1)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => handleToggleTutor(tutor.id, tutor.isActive)}
-                      className={`text-xs px-3 py-2 rounded-lg ${tutor.isActive ? 'bg-danger/10 text-danger hover:bg-danger/15' : 'bg-success/10 text-success hover:bg-success/10'}`}>
+                    <Button size="sm" variant={tutor.isActive ? 'destructive' : 'primary'} onClick={() => handleToggleTutor(tutor.id, tutor.isActive)}>
                       {tutor.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button onClick={() => handleLoadAvailability(tutor.id)}
-                      className="text-xs px-3 py-2 bg-lavender/30 dark:bg-surface rounded-lg text-muted dark:text-navy hover:bg-lavender/60">
-                      <Settings className="w-3.5 h-3.5 inline mr-1" /> Availability
-                    </button>
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => handleLoadAvailability(tutor.id)}>
+                      <Settings className="w-3.5 h-3.5 mr-1" /> Availability
+                    </Button>
                   </div>
                 </div>
 
                 {/* Availability panel */}
                 {selectedTutorId === tutor.id && (
                   <div className="mt-4 pt-4 border-t border-admin-border">
-                    <h4 className="text-sm font-medium text-admin-text mb-3">Weekly Availability Rules</h4>
-                    {availability.length === 0 && <p className="text-xs text-admin-text-muted mb-3">No availability rules yet.</p>}
+                    <h4 className="text-sm font-medium text-admin-fg-strong mb-3">Weekly Availability Rules</h4>
+                    {availability.length === 0 && <p className="text-xs text-admin-fg-muted mb-3">No availability rules yet.</p>}
                     <div className="space-y-2 mb-3">
                       {availability.map(rule => (
-                        <div key={rule.id} className="flex items-center justify-between bg-background-light dark:bg-surface rounded-lg px-3 py-2">
-                          <span className="text-sm text-navy dark:text-navy">
+                        <div key={rule.id} className="flex items-center justify-between bg-admin-bg-subtle rounded-admin-md px-3 py-2">
+                          <span className="text-sm text-admin-fg-strong">
                             {DAY_NAMES[rule.dayOfWeek]} {rule.startTime} – {rule.endTime}
                           </span>
-                          <button onClick={() => handleDeleteRule(rule.id)} className="text-danger hover:text-danger">
+                          <button onClick={() => handleDeleteRule(rule.id)} className="text-[var(--admin-danger)] hover:opacity-80">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -380,21 +397,21 @@ export default function AdminPrivateSpeakingPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <select value={newRule.dayOfWeek} onChange={e => setNewRule(r => ({ ...r, dayOfWeek: Number(e.target.value) }))}
-                        className="px-2 py-1.5 border border-border dark:border-border rounded text-xs bg-surface dark:bg-surface">
+                        className="px-2 py-1.5 border border-admin-border rounded text-xs bg-admin-bg-surface text-admin-fg-strong">
                         {DAY_NAMES.map((name, i) => <option key={i} value={i}>{name}</option>)}
                       </select>
                       <input type="time" value={newRule.startTime} onChange={e => setNewRule(r => ({ ...r, startTime: e.target.value }))}
-                        className="px-2 py-1.5 border border-border dark:border-border rounded text-xs bg-surface dark:bg-surface" />
-                      <span className="text-xs text-admin-text-muted">to</span>
+                        className="px-2 py-1.5 border border-admin-border rounded text-xs bg-admin-bg-surface text-admin-fg-strong" />
+                      <span className="text-xs text-admin-fg-muted">to</span>
                       <input type="time" value={newRule.endTime} onChange={e => setNewRule(r => ({ ...r, endTime: e.target.value }))}
-                        className="px-2 py-1.5 border border-border dark:border-border rounded text-xs bg-surface dark:bg-surface" />
-                      <button onClick={handleAddRule} className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded text-xs">
-                        <Plus className="w-3.5 h-3.5 inline" /> Add
-                      </button>
+                        className="px-2 py-1.5 border border-admin-border rounded text-xs bg-admin-bg-surface text-admin-fg-strong" />
+                      <Button size="sm" variant="primary" onClick={handleAddRule}>
+                        <Plus className="w-3.5 h-3.5" /> Add
+                      </Button>
                     </div>
                   </div>
                 )}
-              </AdminRoutePanel>
+              </CardContent></Card>
             ))}
           </div>
         </>
@@ -402,14 +419,16 @@ export default function AdminPrivateSpeakingPage() {
 
       {/* ── Bookings Tab ─────────────────────────── */}
       {tab === 'bookings' && (
-        <AdminRoutePanel title="All bookings">
+        <Card>
+          <CardHeader><CardTitle>All bookings</CardTitle></CardHeader>
+          <CardContent>
           {bookings.length === 0 ? (
-            <p className="text-sm text-admin-text-muted text-center py-8">No bookings found.</p>
+            <p className="text-sm text-admin-fg-muted text-center py-8">No bookings found.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-admin-border text-left text-xs text-admin-text-muted uppercase">
+                  <tr className="border-b border-admin-border text-left text-xs text-admin-fg-muted uppercase">
                     <th className="pb-2 pr-3">Booking</th>
                     <th className="pb-2 pr-3">Tutor</th>
                     <th className="pb-2 pr-3">Session</th>
@@ -421,27 +440,24 @@ export default function AdminPrivateSpeakingPage() {
                 </thead>
                 <tbody>
                   {bookings.map(b => (
-                    <tr key={b.id} className="border-b border-border dark:border-border">
+                    <tr key={b.id} className="border-b border-admin-border">
                       <td className="py-2 pr-3 font-mono text-xs">{b.id.slice(0, 12)}…</td>
                       <td className="py-2 pr-3">{b.tutorName ?? '—'}</td>
                       <td className="py-2 pr-3">{new Date(b.sessionStartUtc).toLocaleString('en-AU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                      <td className="py-2 pr-3"><span className="text-xs px-2 py-0.5 rounded-full bg-lavender/30 dark:bg-surface">{b.status}</span></td>
+                      <td className="py-2 pr-3"><Badge variant="default" intensity="tinted" size="sm">{b.status}</Badge></td>
                       <td className="py-2 pr-3 text-xs">{b.paymentStatus}</td>
                       <td className="py-2 pr-3 text-xs">{b.zoomStatus ?? '—'}</td>
                       <td className="py-2 flex items-center gap-1.5">
                         {(b.status === 'Confirmed' || b.status === 'ZoomCreated') && (
                           <>
-                            <button onClick={async () => { await completeAdminPrivateSpeakingBooking(b.id); loadBookings(); }}
-                              className="text-xs px-2 py-2 bg-success/10 text-success rounded hover:bg-success/10">Complete</button>
-                            <button onClick={async () => { await cancelAdminPrivateSpeakingBooking(b.id, 'Admin cancelled'); loadBookings(); }}
-                              className="text-xs px-2 py-2 bg-danger/10 text-danger rounded hover:bg-danger/15">Cancel</button>
+                            <Button size="sm" variant="outline" onClick={async () => { await completeAdminPrivateSpeakingBooking(b.id); loadBookings(); }}>Complete</Button>
+                            <Button size="sm" variant="destructive" onClick={async () => { await cancelAdminPrivateSpeakingBooking(b.id, 'Admin cancelled'); loadBookings(); }}>Cancel</Button>
                           </>
                         )}
                         {b.zoomStatus === 'Failed' && (
-                          <button onClick={async () => { await retryAdminPrivateSpeakingZoom(b.id); loadBookings(); }}
-                            className="text-xs px-2 py-2 bg-lavender text-primary rounded hover:bg-lavender/60 flex items-center gap-1">
+                          <Button size="sm" variant="ghost" onClick={async () => { await retryAdminPrivateSpeakingZoom(b.id); loadBookings(); }}>
                             <RefreshCw className="w-3 h-3" /> Retry Zoom
-                          </button>
+                          </Button>
                         )}
                       </td>
                     </tr>
@@ -450,33 +466,38 @@ export default function AdminPrivateSpeakingPage() {
               </table>
             </div>
           )}
-        </AdminRoutePanel>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Audit Logs Tab ──────────────────────── */}
       {tab === 'audit' && (
-        <AdminRoutePanel title="Audit logs">
+        <Card>
+          <CardHeader><CardTitle>Audit logs</CardTitle></CardHeader>
+          <CardContent>
           {auditLogs.length === 0 ? (
-            <p className="text-sm text-admin-text-muted text-center py-8">No audit logs found.</p>
+            <p className="text-sm text-admin-fg-muted text-center py-8">No audit logs found.</p>
           ) : (
             <div className="space-y-2">
               {auditLogs.map(log => (
-                <div key={log.id} className="bg-background-light dark:bg-surface rounded-lg px-4 py-2 text-sm">
-                  <div className="flex items-center gap-2 text-xs text-muted">
+                <div key={log.id} className="bg-admin-bg-subtle rounded-admin-md px-4 py-2 text-sm">
+                  <div className="flex items-center gap-2 text-xs text-admin-fg-muted">
                     <span>{new Date(log.createdAt).toLocaleString('en-AU')}</span>
                     <span className="font-mono">{log.actorRole}/{log.actorId.slice(0, 10)}</span>
                   </div>
-                  <div className="text-navy dark:text-navy mt-0.5">
+                  <div className="text-admin-fg-strong mt-0.5">
                     <span className="font-medium">{log.action}</span>
-                    {log.bookingId && <span className="text-xs ml-2 text-muted">Booking: {log.bookingId.slice(0, 12)}</span>}
+                    {log.bookingId && <span className="text-xs ml-2 text-admin-fg-muted">Booking: {log.bookingId.slice(0, 12)}</span>}
                   </div>
-                  {log.details && <p className="text-xs text-muted mt-0.5">{log.details}</p>}
+                  {log.details && <p className="text-xs text-admin-fg-muted mt-0.5">{log.details}</p>}
                 </div>
               ))}
             </div>
           )}
-        </AdminRoutePanel>
+          </CardContent>
+        </Card>
       )}
+      </AdminPageShell>
     </AdminRouteWorkspace>
   );
 }

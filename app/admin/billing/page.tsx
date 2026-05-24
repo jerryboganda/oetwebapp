@@ -3,17 +3,19 @@
 import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Activity, AlertTriangle, CreditCard, DollarSign, FileSearch, FileText, History as HistoryIcon, Package, Receipt, Search, Ticket, Trash2, Users } from 'lucide-react';
-import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Pagination } from '@/components/ui/pagination';
 import { InlineAlert, Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Drawer, Modal } from '@/components/ui/modal';
+import { AdminOperationsLayout, KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { KpiTile, type KpiTone } from '@/components/admin/ui/kpi-tile';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { ContentScopePanel } from '@/components/domain/ContentScopePanel';
 import { BillingConfirmDialog } from '@/components/admin/billing/confirm-dialog';
 import { BillingConflictBanner, isConflictError } from '@/components/admin/billing/conflict-banner';
@@ -347,12 +349,12 @@ function evidenceGapLabel(value: string): string {
   return labels[value] ?? labelSummaryKey(value);
 }
 
-function paymentStatusVariant(status: string): 'success' | 'danger' | 'warning' | 'muted' | 'info' {
+function paymentStatusVariant(status: string): 'success' | 'danger' | 'warning' | 'default' | 'info' {
   if (status === 'completed') return 'success';
   if (status === 'failed' || status === 'disputed') return 'danger';
   if (status === 'pending') return 'warning';
   if (status === 'refunded') return 'info';
-  return 'muted';
+  return 'default';
 }
 
 function paymentTypeLabel(value: string): string {
@@ -370,34 +372,34 @@ function paymentProductLabel(payment: AdminBillingPaymentTransaction): string {
   return payment.productId ? `${productType}: ${payment.productId}` : productType;
 }
 
-function providerSignalStatusVariant(status: string): 'success' | 'danger' | 'warning' | 'muted' | 'info' {
+function providerSignalStatusVariant(status: string): 'success' | 'danger' | 'warning' | 'default' | 'info' {
   if (status === 'completed') return 'success';
   if (status === 'failed') return 'danger';
   if (status === 'processing' || status === 'received') return 'warning';
-  if (status === 'ignored') return 'muted';
+  if (status === 'ignored') return 'default';
   return 'info';
 }
 
-function providerSignalVerificationVariant(status: string): 'success' | 'danger' | 'warning' | 'muted' | 'info' {
+function providerSignalVerificationVariant(status: string): 'success' | 'danger' | 'warning' | 'default' | 'info' {
   if (status === 'verified') return 'success';
   if (status === 'failed') return 'danger';
   if (status === 'legacy') return 'warning';
-  return 'muted';
+  return 'default';
 }
 
-function providerSignalCorrelationVariant(status: string): 'success' | 'danger' | 'warning' | 'muted' | 'info' {
+function providerSignalCorrelationVariant(status: string): 'success' | 'danger' | 'warning' | 'default' | 'info' {
   if (status === 'linked') return 'success';
   if (status === 'ambiguous') return 'danger';
   if (status === 'unmatched') return 'warning';
-  return 'muted';
+  return 'default';
 }
 
-function providerSignalCategoryVariant(category: string): 'success' | 'danger' | 'warning' | 'muted' | 'info' | 'outline' {
+function providerSignalCategoryVariant(category: string): 'success' | 'danger' | 'warning' | 'default' | 'info' {
   if (category === 'refund' || category === 'dispute') return 'danger';
   if (category === 'cancellation') return 'warning';
-  if (category === 'unknown') return 'muted';
+  if (category === 'unknown') return 'default';
   if (category === 'invoice') return 'info';
-  return 'outline';
+  return 'default';
 }
 
 function renderLinkedLocalIds(signal: AdminBillingProviderLifecycleSignal) {
@@ -1446,7 +1448,7 @@ export default function BillingPage() {
       header: 'Gateway',
       render: (payment) => (
         <div className="max-w-[220px] space-y-1">
-          <Badge variant="outline">{payment.gateway || 'unknown'}</Badge>
+          <Badge variant="default">{payment.gateway || 'unknown'}</Badge>
           <p className="truncate font-mono text-xs text-muted" title={payment.gatewayTransactionId}>{payment.gatewayTransactionId}</p>
         </div>
       ),
@@ -1507,7 +1509,7 @@ export default function BillingPage() {
       header: 'Provider IDs',
       render: (signal) => (
         <div className="max-w-[220px] space-y-1">
-          <Badge variant="outline">{signal.gateway || 'unknown'}</Badge>
+          <Badge variant="default">{signal.gateway || 'unknown'}</Badge>
           <p className="truncate font-mono text-xs text-muted" title={signal.maskedProviderEventId}>{signal.maskedProviderEventId}</p>
           <p className="truncate font-mono text-xs text-muted" title={signal.maskedProviderTransactionId ?? undefined}>{signal.maskedProviderTransactionId ?? 'No transaction id'}</p>
         </div>
@@ -1533,7 +1535,7 @@ export default function BillingPage() {
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant={providerSignalCorrelationVariant(signal.correlationStatus)}>{labelSummaryKey(signal.correlationStatus)}</Badge>
-            <Badge variant="outline">{labelSummaryKey(signal.confidence)} confidence</Badge>
+            <Badge variant="default">{labelSummaryKey(signal.confidence)} confidence</Badge>
           </div>
           {renderLinkedLocalIds(signal)}
         </div>
@@ -1865,7 +1867,7 @@ export default function BillingPage() {
       <div className="space-y-2 text-xs text-muted">
         <div className="flex flex-wrap gap-1.5">
           <Badge variant={providerSignalVerificationVariant(signal.verificationStatus)}>{signal.verificationStatus}</Badge>
-          <Badge variant="outline">{labelSummaryKey(signal.confidence)} confidence</Badge>
+          <Badge variant="default">{labelSummaryKey(signal.confidence)} confidence</Badge>
         </div>
         {renderLinkedLocalIds(signal)}
         {signal.integrityFlags.length > 0 ? <p className="break-words">Flags: {signal.integrityFlags.map(labelSummaryKey).join(', ')}</p> : null}
@@ -2406,68 +2408,63 @@ export default function BillingPage() {
     <AdminRouteWorkspace role="main" aria-label="Billing operations">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
+      <AdminOperationsLayout
         title="Billing Operations"
         description="Manage subscription plans, add-ons, coupons, subscriptions, and invoices with live backend data."
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Billing Operations' }]}
         actions={
           <>
-            <Button onClick={() => openPlanEditor()} className="gap-2" disabled={!canWriteCatalog}>
-              <CreditCard className="h-4 w-4" />
+            <Button onClick={() => openPlanEditor()} startIcon={<CreditCard className="h-4 w-4" />} disabled={!canWriteCatalog}>
               Create Plan
             </Button>
-            <Button variant="outline" onClick={() => openAddOnEditor()} className="gap-2" disabled={!canWriteCatalog}>
-              <Package className="h-4 w-4" />
+            <Button variant="outline" onClick={() => openAddOnEditor()} startIcon={<Package className="h-4 w-4" />} disabled={!canWriteCatalog}>
               Create Add-on
             </Button>
-            <Button variant="outline" onClick={() => openCouponEditor()} className="gap-2" disabled={!canWriteCatalog}>
-              <Ticket className="h-4 w-4" />
+            <Button variant="outline" onClick={() => openCouponEditor()} startIcon={<Ticket className="h-4 w-4" />} disabled={!canWriteCatalog}>
               Create Coupon
             </Button>
-            <Link
-              href="/admin/audit-logs?search=billing"
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium text-navy hover:bg-background-light"
-              data-testid="billing-audit-log-link"
-            >
-              <FileText className="h-4 w-4" />
-              Audit log
-            </Link>
+            <Button variant="outline" asChild startIcon={<FileText className="h-4 w-4" />}>
+              <Link href="/admin/audit-logs?search=billing" data-testid="billing-audit-log-link">Audit log</Link>
+            </Button>
           </>
         }
-      />
-
-      {conflict ? (
-        <BillingConflictBanner
-          entityLabel={conflict.entity}
-          detail={conflict.detail}
-          onReload={() => {
-            setConflict(null);
-            void reloadBilling();
-          }}
-          onDismiss={() => setConflict(null)}
-        />
-      ) : null}
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        onRetry={() => window.location.reload()}
-        emptyContent={
-          <EmptyState
-            icon={<Receipt className="h-10 w-10 text-muted" />}
-            title="No billing records found"
-            description="Create a plan or wait for invoices to populate the admin billing workspace."
-            action={{ label: 'Create Plan', onClick: () => setIsPlanModalOpen(true) }}
-          />
+        kpis={
+          <KpiStrip className="lg:grid-cols-4 xl:grid-cols-7">
+            <KpiTile label="Monthly Revenue" value={formatCurrency(metrics.totalMRR)} icon={<DollarSign className="h-4 w-4" />} tone="success" />
+            <KpiTile label="Subscribers" value={metrics.totalSubscribers} icon={<Users className="h-4 w-4" />} tone="primary" />
+            <KpiTile label="Active Subscriptions" value={metrics.activeSubscriptions} icon={<Users className="h-4 w-4" />} tone="info" />
+            <KpiTile label="Active Plans" value={metrics.activePlans} icon={<CreditCard className="h-4 w-4" />} tone="default" />
+            <KpiTile label="Active Add-ons" value={metrics.activeAddOns} icon={<Package className="h-4 w-4" />} tone="default" />
+            <KpiTile label="Active Coupons" value={metrics.activeCoupons} icon={<Ticket className="h-4 w-4" />} tone="default" />
+            <KpiTile label="Failed Invoices" value={metrics.failedInvoices} icon={<Receipt className="h-4 w-4" />} tone={(metrics.failedInvoices > 0 ? 'danger' : 'default') as KpiTone} />
+          </KpiStrip>
         }
-      >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <AdminRouteSummaryCard label="Monthly Revenue" value={formatCurrency(metrics.totalMRR)} icon={<DollarSign className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="Subscribers" value={metrics.totalSubscribers} icon={<Users className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="Active Subscriptions" value={metrics.activeSubscriptions} icon={<Users className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="Active Plans" value={metrics.activePlans} icon={<CreditCard className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="Active Add-ons" value={metrics.activeAddOns} icon={<Package className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="Active Coupons" value={metrics.activeCoupons} icon={<Ticket className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="Failed Invoices" value={metrics.failedInvoices} icon={<Receipt className="h-5 w-5" />} tone={metrics.failedInvoices > 0 ? 'danger' : 'default'} />
-        </div>
+        primaryGrid={
+          <div className="space-y-6">
+            {conflict ? (
+              <BillingConflictBanner
+                entityLabel={conflict.entity}
+                detail={conflict.detail}
+                onReload={() => {
+                  setConflict(null);
+                  void reloadBilling();
+                }}
+                onDismiss={() => setConflict(null)}
+              />
+            ) : null}
+
+            <AsyncStateWrapper
+              status={pageStatus}
+              onRetry={() => window.location.reload()}
+              emptyContent={
+                <EmptyState
+                  illustration={<Receipt />}
+                  title="No billing records found"
+                  description="Create a plan or wait for invoices to populate the admin billing workspace."
+                  primaryAction={{ label: 'Create Plan', onClick: () => setIsPlanModalOpen(true) }}
+                />
+              }
+            >
 
         <AdminRoutePanel
           title="Entitlement diagnostics"
@@ -2533,7 +2530,7 @@ export default function BillingPage() {
                             {check.examples.map((example) => (
                               <div key={`${check.key}-${example.subjectType}-${example.subjectId}`} className="rounded-md bg-background-light px-3 py-2">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="outline">{example.subjectType}</Badge>
+                                  <Badge variant="default">{example.subjectType}</Badge>
                                   <span className="text-sm font-semibold text-foreground">{example.subjectName || example.subjectCode}</span>
                                   <span className="text-xs text-muted">{example.subjectCode}</span>
                                 </div>
@@ -2744,7 +2741,10 @@ export default function BillingPage() {
             </>
           ) : null}
         </AdminRoutePanel>
-      </AsyncStateWrapper>
+            </AsyncStateWrapper>
+          </div>
+        }
+      />
 
       <Drawer
         open={catalogHistoryTarget !== null}
@@ -2756,9 +2756,9 @@ export default function BillingPage() {
           <div className="space-y-5">
             <div className="border-b border-border pb-4">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{catalogHistory?.subject.kind.replace('_', ' ') ?? catalogHistoryTarget.kind.replace('_', ' ')}</Badge>
+                <Badge variant="default">{catalogHistory?.subject.kind.replace('_', ' ') ?? catalogHistoryTarget.kind.replace('_', ' ')}</Badge>
                 {catalogHistory?.subject.activeVersionNumber ? <Badge variant="info">Active v{catalogHistory.subject.activeVersionNumber}</Badge> : null}
-                {catalogHistory?.subject.versionCount ? <Badge variant="muted">{catalogHistory.subject.versionCount} versions</Badge> : null}
+                {catalogHistory?.subject.versionCount ? <Badge variant="default">{catalogHistory.subject.versionCount} versions</Badge> : null}
               </div>
               <h2 className="mt-3 text-lg font-semibold text-navy">{catalogHistory?.subject.name ?? catalogHistoryTarget.name}</h2>
               <p className="mt-1 text-xs uppercase tracking-[0.12em] text-muted">{catalogHistory?.subject.code ?? catalogHistoryTarget.code}</p>
@@ -2848,10 +2848,10 @@ export default function BillingPage() {
           <div className="space-y-5">
             <div className="border-b border-border pb-4">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">read only</Badge>
+                <Badge variant="default">read only</Badge>
                 {invoiceEvidence ? <Badge variant={invoiceEvidence.invoice.status === 'paid' ? 'success' : invoiceEvidence.invoice.status === 'failed' ? 'danger' : 'warning'}>{invoiceEvidence.invoice.status}</Badge> : null}
                 {invoiceEvidence?.payments.length ? <Badge variant="info">{invoiceEvidence.payments.length} payment {invoiceEvidence.payments.length === 1 ? 'record' : 'records'}</Badge> : null}
-                {invoiceEvidence?.notRecorded.length ? <Badge variant="muted">partial local evidence</Badge> : null}
+                {invoiceEvidence?.notRecorded.length ? <Badge variant="default">partial local evidence</Badge> : null}
               </div>
               <h2 className="mt-3 text-lg font-semibold text-navy">{invoiceEvidence?.invoice.userName ?? invoiceEvidenceTarget.userName}</h2>
               <p className="mt-1 break-words font-mono text-xs text-muted">{invoiceEvidenceTarget.id}</p>

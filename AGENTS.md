@@ -362,13 +362,25 @@ Use the installed project skills based on the area being changed:
 
 | Area | Skills to Use |
 | ------ | --------------- |
-| `app/`, `components/`, `contexts/`, `hooks/`, `lib/` | `next-best-practices`, `vercel-react-best-practices`, `vercel-composition-patterns`, `tailwind-css-patterns`, `typescript-advanced-types` |
-| UI polish, accessibility, SEO | `frontend-design`, `accessibility`, `seo` |
+| **`app/admin/**`, `components/domain/admin/**` (admin panel UI/UX)** | **`hallmark` — MANDATORY, AUTO-TRIGGER. Anti-AI-slop design system. Invoke `hallmark` BEFORE any edit/build/redesign/audit of the admin panel. The admin panel is being completely rebuilt under hallmark's design discipline (22 macrostructures, 65 slop-test gates, locked tokens, light + dark parity). Do NOT touch admin UI without invoking hallmark first.** |
+| `app/`, `components/`, `contexts/`, `hooks/`, `lib/` (non-admin) | `next-best-practices`, `vercel-react-best-practices`, `vercel-composition-patterns`, `tailwind-css-patterns`, `typescript-advanced-types` |
+| UI polish, accessibility, SEO (non-admin) | `frontend-design`, `accessibility`, `seo` |
 | `tests/e2e/`, Playwright configs | `playwright-best-practices` |
 | Unit tests | `vitest` |
 | Node tooling, route handlers | `nodejs-backend-patterns`, `nodejs-best-practices` |
 | `electron/`, desktop packaging | `electron-pro` |
 | `backend/` | `dotnet-best-practices`, `aspnet-minimal-api-openapi`, `dotnet-design-pattern-review` |
+
+### Hallmark — Admin Panel Discipline (MISSION CRITICAL)
+
+The `hallmark` skill is installed at `.claude/skills/hallmark/` (cloned from [nutlope/hallmark](https://github.com/nutlope/hallmark), MIT-licensed). It is **scoped exclusively to the admin panel** — never invoke it for learner/expert/sponsor portals, marketing pages, or backend code.
+
+**Trigger contract for every agent (binding):**
+
+1. **Before** touching any file under `app/admin/**` or `components/domain/admin/**`, invoke `Skill(skill: "hallmark")` to load its full body (SKILL.md + relevant references).
+2. Apply hallmark's four verbs as appropriate: default (build), `hallmark audit <target>`, `hallmark redesign <target>`, `hallmark study <screenshot|url>`.
+3. Honour hallmark's anti-slop gates: locked design tokens, structural variety across pages (no copy-pasted hero → 3-feature → CTA rhythm), light/dark parity verified per change, honest copy (no AI-fluff microcopy), pre-emit critique pass.
+4. The admin panel is undergoing a from-scratch rebuild under this discipline. Existing admin pages may contain pre-hallmark patterns — treat them as legacy and bring them into compliance whenever touched.
 
 ---
 

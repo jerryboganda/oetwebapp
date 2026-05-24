@@ -1,0 +1,258 @@
+{
+  "url": "https://axelit-next.vercel.app/dashboard/project",
+  "pageTitle": "Project Dashboard - Axelit | Axelit",
+  "viewport": { "width": 1920, "height": 893 },
+  "documentHeight": 1221,
+
+  "stack": {
+    "framework": "Next.js (paths like /_next/static/...)",
+    "css": "Bootstrap 5 (all --bs-* variables present)",
+    "iconLibraries": [
+      "Tabler Icons (cdn.jsdelivr.net/npm/@tabler/icons-webfont)",
+      "Phosphor Icons web @2.0.3 (regular, thin, light, bold, fill, duotone all loaded)"
+    ],
+    "uiWidgets": ["FilePond (file uploader)", "DataTables (--dt-* tokens)", "Tawk.to chat widget", "EmojiOne"]
+  },
+
+  "fonts": {
+    "primary": "Montserrat (declared via --font-Montserrat: \"Montserrat\",system-ui)",
+    "preloaded": "_next/static/media/904be59b21bd51cb-s.p.woff2 (likely Montserrat .woff2)",
+    "secondary": "Outfit (appears in fontFamilies — likely used in landing or specific blocks)",
+    "monospace": "SFMono-Regular,Menlo,Monaco,Consolas (system fallback)",
+    "bsFontFamily": "system-ui,-apple-system,\"Segoe UI\",Roboto fallback (Bootstrap default)"
+  },
+
+  "exactPalette": {
+    "brand": {
+      "primary": { "rgb": "140,118,240", "name": "violet/lavender — the headline brand color" },
+      "secondary": { "rgb": "100,100,100", "name": "neutral grey" },
+      "success": { "rgb": "20,120,52", "name": "deep green" },
+      "danger": { "rgb": "240,10,200", "name": "magenta/hot pink — unusual choice" },
+      "warning": { "rgb": "215,220,65", "name": "chartreuse / yellow-green" },
+      "info": { "rgb": "46,94,231", "name": "royal blue" },
+      "light": { "rgb": "215,208,200", "name": "warm beige" },
+      "dark": { "rgb": "40,38,50", "name": "near-black with purple tint" }
+    },
+    "darkenedVariants": {
+      "primary-dark": "36,17,135",
+      "secondary-dark": "106,90,100",
+      "success-dark": "52,50,46",
+      "danger-dark": "102,15,106",
+      "warning-dark": "99,89,29",
+      "info-dark": "8,60,128",
+      "dark-dark": "30,29,35"
+    },
+    "surfaces": {
+      "bodybg": "#f6f6f6 (--bodybg-color)",
+      "body-secondary": "#f9f9f9 (--body-color)",
+      "card-bg": "#ffffff (most common bg, 59 instances)",
+      "light-gray": "#f4f7f8 (--light-gray)",
+      "light-gray-bg": "#f8f8f8"
+    },
+    "text": {
+      "font-color": "#15264b (navy)",
+      "font-title-color": "#1c3264 (navy)",
+      "font-secondary-color": "#22242c (near-black)",
+      "font-light-color": "#a0a0b0 (muted grey)",
+      "theme-body-font-color": "#2b2b2b"
+    },
+    "borders": {
+      "border_color": "#e0dfd6 (warm beige)",
+      "grid_color": "rgba(144,164,246,0.21) (cool blue-violet at low opacity)"
+    }
+  },
+
+  "gradients": {
+    "primary-gradient": "linear-gradient(50deg, rgba(140,118,240,1) 10%, rgba(240,10,200,1) 50%, rgba(215,220,65,1) 100%) [violet → magenta → chartreuse — the SIGNATURE brand gradient]",
+    "secondary-gradient": "linear-gradient(50deg, violet 30%, green 50%, violet 100%)",
+    "dark-gradient": "linear-gradient(50deg, violet 30%, dark 50%, violet 100%)",
+    "body-bg-gradient": "linear-gradient(50deg, violet@9% 10%, white 50%, violet@9% 100%)",
+    "app-gradient": "linear-gradient(50deg, violet 20%, green 30%, violet 50%, chartreuse 100%)"
+  },
+
+  "borderRadius": {
+    "app-border-radius": "1.8rem (28.8px) — DOMINANT, used 87 times on this page",
+    "bs-border-radius-pill": "50rem (800px effective — fully rounded)",
+    "bs-border-radius-xl": "1rem (16px)",
+    "bs-border-radius-lg": "0.5rem (8px)",
+    "bs-border-radius-sm": "0.25rem (4px)",
+    "frequencyDistribution": {
+      "28.8px": 87,
+      "50px (pill)": 50,
+      "16px": 21,
+      "5px": 13,
+      "10px": 9,
+      "8px": 7,
+      "50% (circles)": 6
+    }
+  },
+
+  "shadows": {
+    "box-shadow": "0px 0px 21px 3px rgba(100,100,100,0.05) — extremely subtle, ambient",
+    "hover-shadow": "0 0.5rem 2rem #f4f7f8 — soft lift on hover",
+    "bottom-shadow": "0 8px 6px -5px #f4f7f8",
+    "bs-box-shadow": "0 0.5rem 1rem rgba(0,0,0,0.15)",
+    "bs-box-shadow-sm": "0 0.125rem 0.25rem rgba(0,0,0,0.075)",
+    "bs-box-shadow-lg": "0 1rem 3rem rgba(0,0,0,0.175)"
+  },
+
+  "spacing": {
+    "sidebar-width": "17rem (272px)",
+    "semi-nav-width": "4.5rem (72px collapsed)",
+    "header-height": "80px",
+    "main-padding-top": "32px",
+    "header-padding-left": "292px (sidebar+20)",
+    "app-transition": "all 0.3s ease"
+  },
+
+  "typography": {
+    "scale-tokens": {
+      "h1-font-size": "2.5rem (40px)",
+      "h2-font-size": "2rem (32px)",
+      "h3-font-size": "1.75rem (28px)",
+      "h4-font-size": "1.25rem (20px)",
+      "h5-font-size": "1.125rem (18px)",
+      "h6-font-size": "1rem (16px)",
+      "body-font-size": "14px",
+      "p-font-size": "14px",
+      "p-line-height": "1.6",
+      "btn-font-size": "15px"
+    },
+    "rendered": {
+      "h1": "44.96px / 62.944px line-height / 600 weight / Montserrat (page overrides scale)",
+      "h2": "45px / 63px / 700 / Montserrat",
+      "body": "14px / 21px / 400 / Montserrat",
+      "p": "13px / 20.8px / 500 / Montserrat"
+    }
+  },
+
+  "layout": {
+    "sidebar": {
+      "tag": "nav",
+      "class": "vertical-sidebar",
+      "width": "272px",
+      "height": "893px (full viewport)",
+      "bg": "rgb(255, 255, 255) — white",
+      "padding": "0px (item padding is internal)"
+    },
+    "header": {
+      "tag": "header",
+      "class": "header-main",
+      "width": "1905px",
+      "height": "80px",
+      "bg": "rgb(246, 246, 246) — same as body, transparent feel",
+      "padding": "0px 0px 0px 292px"
+    },
+    "main": {
+      "width": "1613px (1920 - 272 sidebar - some padding)",
+      "height": "1129px (content area)",
+      "bg": "transparent",
+      "padding": "32px 0px 0px"
+    }
+  },
+
+  "navStructure": {
+    "totalLinks": "~80 visible, ~300+ implied across sub-groups",
+    "groups": [
+      { "label": "Dashboard (badge: 4)", "children": ["Project", "Ecommerce"] },
+      { "label": "Apps", "children": ["Calendar", "Profile", "Setting", "Projects + Details", "To-Do", "Team", "API", "Ticket + Details", "Email + Read", "E-shop (Cart/Product/AddProduct/Details/List/Orders + 3 variants/Checkout/Wishlist)", "Invoice", "Chat", "File Manager", "Bookmark", "kanban board", "Timeline", "FAQ", "Pricing", "Gallery", "Blog + Details + Add"] },
+      { "label": "Widgets", "children": [] },
+      { "label": "Ui Kits", "children": ["Alert", "Badges", "Buttons", "Cards", "Dropdown", "Grid", "Avatar", "Tabs", "Accordions", "Progress", "Notifications", "Lists", "Helper Classes", "Background", "Divider", "Ribbons", "Editor", "Collapse", "Shadow", "Wrapper", "Bullet", "Placeholder", "Alignment Things"] },
+      { "label": "Advanced UI (badge: 12+)", "children": ["Modals", "OffCanvas Toggle", "Sweet Alert", "Scrollbar", "Spinners", "Animation", "Video Embed", "Tour", "Slider"] },
+      { "label": "Icons", "children": "implied" },
+      { "label": "Misc", "children": [] },
+      { "label": "Map & Charts", "children": "(separator section)" },
+      { "label": "Chart", "children": "implied" },
+      { "label": "Table & forms", "children": "(separator)" },
+      { "label": "Table", "children": "implied" },
+      { "label": "Forms elements", "children": "implied" },
+      { "label": "Ready to use (badge: new)", "children": "implied" },
+      { "label": "Pages", "children": "(separator)" },
+      { "label": "Auth Pages / Error pages / Other pages", "children": "implied" },
+      { "label": "Others", "children": "(separator)" },
+      { "label": "2 level (nested)", "children": "demo of multi-level nesting" }
+    ],
+    "navItemPattern": "icon (img/svg) + text label + optional badge (number or text like 'new', '12+')",
+    "groupSeparatorPattern": "uppercase plain text label as <li>"
+  },
+
+  "buttonsObserved": {
+    "iconButtonPrimary": {
+      "bg": "rgb(100, 100, 100)",
+      "color": "white",
+      "border": "1px solid rgb(100, 100, 100)",
+      "borderRadius": "18px",
+      "fontSize": "15px",
+      "fontWeight": "600",
+      "class": "btn btn-light-primary icon-btn b-r-18"
+    },
+    "iconButtonDanger": {
+      "bg": "rgb(240, 10, 200) — magenta",
+      "color": "white",
+      "borderRadius": "18px",
+      "fontWeight": "600",
+      "state": "disabled"
+    },
+    "iconButtonLightInfo": {
+      "bg": "rgba(46, 94, 231, 0.3) — translucent blue",
+      "color": "rgb(8, 60, 128) — info-dark",
+      "borderRadius": "18px",
+      "pattern": "light variant — bg at 30% opacity, text at dark variant of same hue"
+    },
+    "floatingCustomizerBtn": {
+      "bg": "rgb(140, 118, 240) — primary violet",
+      "color": "white",
+      "borderRadius": "28.8px",
+      "padding": "0px 10px",
+      "fontSize": "28px",
+      "position": "fixed bottom-right"
+    }
+  },
+
+  "pageSectionsInDomOrder": [
+    "Welcome modal/dialog (active on first load — 'Welcome! Get Started' onboarding overlay)",
+    "Top header: logo / weather widget (26°C) / language picker (EN flag) / search? / fullscreen toggle / notification bell (5 badge) / dark-mode toggle / avatar",
+    "Hero strip: 4 KPI/info tiles in a row [Total Hours | Project Alpha card | Project Beta card | 💼 Core Teams]",
+    "Total Hours tile: h5 label 'Total Hours' + h2 '0H' + 3-segment status (Productive/Middle/Idle)",
+    "Project Alpha card: tag chips '📱 Mobile app' 'Marketing' + h5 'Project Alpha' + paragraph + avatar stack (3) + countdown badge '🔥 1H left'",
+    "Project Beta card: same archetype with different content '⚡ API' 'Web Development', '✨ 2D left'",
+    "Core Teams tile: emoji + h5 + h2 '1k Team Members' + avatar stack (3 + '10+' overflow)",
+    "Mid-section row: FilePond file uploader + Chart area (visible 'Loading FilePond...' and 'Loading Chart...' placeholders — these load client-side)",
+    "Promo card 'Get started Effortlessly.': h5 + paragraph + logo + image",
+    "Tracker card: h5 'Tracker' + play/pause/stop buttons + h1 '00:00:00' timer + scrollable session list (5 sessions with mm:ss)",
+    "Project Status TABLE: h5 + 5-column table [Project | Status | TeamLead | Priority | Remarks] + 8 rows + pagination 'Showing 7 to 20 of 20 entries' + page nums 1/2/3",
+    "Status badge tones: In Progress (chip), Completed (chip), Not Started (chip), Scheduled (chip)",
+    "Priority text: 'High', 'Medium', 'Low' (plain text, no chip)",
+    "Today Tasks card: h5 + scrolling list of task cards (some 'Meeting' header tiles with avatars; some with progress bars '+60%', '+80%', '+68%', '+35%')",
+    "Footer: 'Copyright © 2025 axelit. All rights reserved 💖' + V1.0.0 link + 'Need Help' link",
+    "Floating customizer button bottom-right (violet square with gear icon)"
+  ],
+
+  "tableArchitecture": {
+    "structure": "thead → tbody, no rowspan/colspan, no expandable rows visible",
+    "columns": ["Project (with H6 heading style)", "Status (chip)", "TeamLead (avatar link)", "Priority (plain text)", "Remarks (icon + text)"],
+    "rowHeight": "comfortable (not dense)",
+    "pagination": "Previous / 1 / 2 / 3 / Next + 'Showing X to Y of Z entries' caption",
+    "library": "Likely datatables.net (DT custom properties present)"
+  },
+
+  "iconographyEvidence": [
+    "Tabler Icons loaded as webfont",
+    "Phosphor Icons (all 6 weight variants: regular, thin, light, bold, fill, duotone)",
+    "Emoji used inline as content (📱, ⚡, 💼, 🔥, ✨, 💖)",
+    "Avatars are <img> tags, circular"
+  ],
+
+  "interactionsObserved": {
+    "modal": "Welcome modal active on page load — id welcomeModal pattern",
+    "tracker": "play / pause / stop buttons with disabled state",
+    "progressBars": "with overlapping +N% badge — progress + label combo"
+  },
+
+  "darkModeIndicators": "data-bs-theme=\"light\" hardcoded on :root — Bootstrap dark mode CSS variables likely present in stylesheet for [data-bs-theme=\"dark\"]. Toggle exists in header.",
+
+  "motion": {
+    "library": "animate.css present (--animate-duration, --animate-delay, --animate-repeat tokens)",
+    "transition": "--app-transition: all 0.3s ease (sweeping default, anti-pattern flag candidate)"
+  }
+}

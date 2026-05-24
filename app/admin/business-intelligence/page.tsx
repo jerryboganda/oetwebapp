@@ -2,15 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { Activity, DollarSign, Layers3, Target, TrendingDown, Users } from 'lucide-react';
-import { AdminRouteFreshnessBadge, AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteFreshnessBadge, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AdminQuickAction } from '@/components/domain/admin-quick-action';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { getAdminBusinessIntelligenceData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminBusinessIntelligenceData } from '@/lib/types/admin';
+
+import { AdminOperationsLayout, KpiStrip, BentoGrid, BentoCell } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 
 type PageStatus = 'loading' | 'success' | 'error';
 
@@ -22,11 +26,11 @@ const decimalFormatter = new Intl.NumberFormat('en-AU', {
   maximumFractionDigits: 1,
 });
 
-const efficiencyBadgeClasses: Record<string, string> = {
-  high: 'bg-success/10 text-success',
-  medium: 'bg-warning/10 text-warning',
-  low: 'bg-danger/10 text-danger',
-  'no-data': 'bg-muted text-muted-foreground',
+const efficiencyBadgeVariant: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
+  high: 'success',
+  medium: 'warning',
+  low: 'danger',
+  'no-data': 'default',
 };
 
 function formatCurrency(value: number, maximumFractionDigits = 0) {
@@ -85,21 +89,21 @@ function buildLoadingContent() {
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, index) => (
-          <Skeleton key={`bi-kpi-${index}`} className="h-32 rounded-2xl" />
+          <Skeleton key={`bi-kpi-${index}`} className="h-32 rounded-admin-lg" />
         ))}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Skeleton className="h-[30rem] rounded-2xl" />
-        <Skeleton className="h-[30rem] rounded-2xl" />
+        <Skeleton className="h-[30rem] rounded-admin-lg" />
+        <Skeleton className="h-[30rem] rounded-admin-lg" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Skeleton className="h-[34rem] rounded-2xl" />
-        <Skeleton className="h-[34rem] rounded-2xl" />
+        <Skeleton className="h-[34rem] rounded-admin-lg" />
+        <Skeleton className="h-[34rem] rounded-admin-lg" />
       </div>
 
-      <Skeleton className="h-28 rounded-2xl" />
+      <Skeleton className="h-28 rounded-admin-lg" />
     </div>
   );
 }
@@ -167,13 +171,15 @@ export default function BusinessIntelligencePage() {
 
   return (
     <AdminRouteWorkspace role="main" aria-label="Business intelligence">
-      <AdminRouteSectionHeader
+      <AdminOperationsLayout
         title="Business Intelligence"
         description="Live backend aggregates for subscription health, learner cohorts, content effectiveness, and tutor throughput."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Business Intelligence' },
+        ]}
         actions={<AdminRouteFreshnessBadge value={data?.generatedAt} />}
-        meta="Live backend aggregates"
-      />
-
+      >
       <AsyncStateWrapper
         status={pageStatus}
         onRetry={() => window.location.reload()}
@@ -183,105 +189,102 @@ export default function BusinessIntelligencePage() {
         {data ? (
           <>
             {unavailableSections.length > 0 ? (
-              <div
-                role="status"
-                aria-live="polite"
-                className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-foreground"
-              >
-                <p className="font-semibold text-warning">Some panels are temporarily unavailable</p>
-                <p className="mt-1 text-foreground/80">
-                  {unavailableSections.join(', ')} {unavailableSections.length === 1 ? 'is' : 'are'} offline. The
-                  remaining sections are still live and the page will recover automatically once the backend
-                  responds.
-                </p>
-              </div>
+              <Card surface="tinted-warning" role="status" aria-live="polite">
+                <CardContent className="px-4 py-3 text-sm pt-3">
+                  <p className="font-semibold text-[var(--admin-warning)]">Some panels are temporarily unavailable</p>
+                  <p className="mt-1 text-admin-fg-default">
+                    {unavailableSections.join(', ')} {unavailableSections.length === 1 ? 'is' : 'are'} offline. The
+                    remaining sections are still live and the page will recover automatically once the backend
+                    responds.
+                  </p>
+                </CardContent>
+              </Card>
             ) : null}
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <AdminRouteSummaryCard
+            <KpiStrip className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <KpiTile
                 label="Monthly recurring revenue"
                 value={formatCurrency(subscription?.mrr ?? 0)}
-                hint={`${formatNumber(subscription?.activeSubscriptions ?? 0)} active subscriptions`}
-                icon={<DollarSign className="h-5 w-5" />}
+                icon={<DollarSign className="h-4 w-4" />}
                 tone="success"
               />
-              <AdminRouteSummaryCard
+              <KpiTile
                 label="Active subscriptions"
                 value={formatNumber(subscription?.activeSubscriptions ?? 0)}
-                hint={`ARPU ${formatCurrency(subscription?.arpu ?? 0, 2)}`}
-                icon={<Users className="h-5 w-5" />}
+                icon={<Users className="h-4 w-4" />}
               />
-              <AdminRouteSummaryCard
+              <KpiTile
                 label="Churn rate"
                 value={formatPercent(subscription?.churnRate ?? 0)}
-                hint={`${formatNumber(subscription?.newSubscriptionsThisMonth ?? 0)} new this month`}
-                icon={<TrendingDown className="h-5 w-5" />}
+                icon={<TrendingDown className="h-4 w-4" />}
                 tone={(subscription?.churnRate ?? 0) > 5 ? 'warning' : 'success'}
               />
-              <AdminRouteSummaryCard
+              <KpiTile
                 label="Total learners"
                 value={formatNumber(cohortData?.totalLearners ?? 0)}
-                hint={`Grouped by ${cohortData?.groupBy ?? 'profession'}`}
-                icon={<Layers3 className="h-5 w-5" />}
+                icon={<Layers3 className="h-4 w-4" />}
               />
-              <AdminRouteSummaryCard
+              <KpiTile
                 label="Content effectiveness"
                 value={formatDecimal(topContent?.effectivenessScore ?? null)}
-                hint={topContent ? truncate(topContent.title) : 'No published content yet'}
-                icon={<Target className="h-5 w-5" />}
+                icon={<Target className="h-4 w-4" />}
                 tone={topContent ? 'success' : 'default'}
               />
-              <AdminRouteSummaryCard
+              <KpiTile
                 label="Tutor throughput"
                 value={formatDecimal(expertData?.summary.averageReviewsPerExpertPerDay ?? null)}
-                hint={`${formatNumber(expertData?.summary.activeExperts ?? 0)} active of ${formatNumber(expertData?.summary.totalExperts ?? 0)} tutors`}
-                icon={<Activity className="h-5 w-5" />}
+                icon={<Activity className="h-4 w-4" />}
               />
-            </div>
+            </KpiStrip>
 
-            <div className="grid gap-6 xl:grid-cols-2">
-              <AdminRoutePanel
-                title="Subscription Health"
-                description={`ARPU ${formatCurrency(subscription?.arpu ?? 0, 2)}, trial conversion ${formatPercent(subscription?.trialConversionRate ?? 0)}, and six-month movement.`}
-              >
+            <BentoGrid>
+              <BentoCell span={{ default: 12, xl: 6 }}>
+                <Card>
+                  <CardHeader>
+                    <div>
+                      <CardTitle>Subscription Health</CardTitle>
+                      <p className="text-sm text-admin-fg-muted mt-1">{`ARPU ${formatCurrency(subscription?.arpu ?? 0, 2)}, trial conversion ${formatPercent(subscription?.trialConversionRate ?? 0)}, and six-month movement.`}</p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
                 <div className="grid gap-4 md:grid-cols-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">ARPU</p>
-                    <p className="text-xl font-semibold text-admin-text">{formatCurrency(subscription?.arpu ?? 0, 2)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">ARPU</p>
+                    <p className="text-xl font-semibold text-admin-fg-strong">{formatCurrency(subscription?.arpu ?? 0, 2)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Trial conversion</p>
-                    <p className="text-xl font-semibold text-admin-text">{formatPercent(subscription?.trialConversionRate ?? 0)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Trial conversion</p>
+                    <p className="text-xl font-semibold text-admin-fg-strong">{formatPercent(subscription?.trialConversionRate ?? 0)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">New this month</p>
-                    <p className="text-xl font-semibold text-admin-text">{formatNumber(subscription?.newSubscriptionsThisMonth ?? 0)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">New this month</p>
+                    <p className="text-xl font-semibold text-admin-fg-strong">{formatNumber(subscription?.newSubscriptionsThisMonth ?? 0)}</p>
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   {subscription?.revenueByPlan.length ? subscription.revenueByPlan.map((plan) => (
-                    <div key={plan.planId} className="space-y-2 rounded-2xl border border-border bg-background-light p-4">
+                    <div key={plan.planId} className="space-y-2 rounded-admin-lg border border-admin-border bg-admin-bg-subtle p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-navy">{plan.planName}</p>
-                          <p className="text-xs text-muted">{formatNumber(plan.subscribers)} subscribers</p>
+                          <p className="truncate text-sm font-semibold text-admin-fg-strong">{plan.planName}</p>
+                          <p className="text-xs text-admin-fg-muted">{formatNumber(plan.subscribers)} subscribers</p>
                         </div>
-                        <p className="text-sm font-semibold text-navy">{formatCurrency(plan.monthlyRevenue)}</p>
+                        <p className="text-sm font-semibold text-admin-fg-strong">{formatCurrency(plan.monthlyRevenue)}</p>
                       </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-surface">
-                        <div className="h-full rounded-full bg-primary" style={{ width: barWidth(plan.monthlyRevenue, topPlanRevenue) }} />
+                      <div className="h-2 overflow-hidden rounded-full bg-admin-bg-surface">
+                        <div className="h-full rounded-full bg-[var(--admin-primary)]" style={{ width: barWidth(plan.monthlyRevenue, topPlanRevenue) }} />
                       </div>
                     </div>
                   )) : (
-                    <p className="text-sm text-muted">No subscription plan revenue is available yet.</p>
+                    <p className="text-sm text-admin-fg-muted">No subscription plan revenue is available yet.</p>
                   )}
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-navy">Monthly trend</h3>
-                    <p className="text-xs text-muted">New subscriptions and cancellations</p>
+                    <h3 className="text-sm font-semibold text-admin-fg-strong">Monthly trend</h3>
+                    <p className="text-xs text-admin-fg-muted">New subscriptions and cancellations</p>
                   </div>
 
                   <div className="space-y-3">
@@ -290,227 +293,254 @@ export default function BusinessIntelligencePage() {
 
                       return (
                         <div key={point.month} className="flex items-center gap-3">
-                          <span className="w-16 text-xs font-medium text-muted">{point.month}</span>
-                          <div className="flex h-6 flex-1 overflow-hidden rounded-full bg-surface">
+                          <span className="w-16 text-xs font-medium text-admin-fg-muted">{point.month}</span>
+                          <div className="flex h-6 flex-1 overflow-hidden rounded-full bg-admin-bg-subtle">
                             <div className="flex h-full" style={{ width: barWidth(total, maxTrendVolume) }}>
-                              <div className="h-full bg-success/100" style={{ width: total > 0 ? `${(point.newSubscriptions / total) * 100}%` : '0%' }} />
-                              <div className="h-full bg-danger" style={{ width: total > 0 ? `${(point.cancellations / total) * 100}%` : '0%' }} />
+                              <div className="h-full bg-[var(--admin-success)]" style={{ width: total > 0 ? `${(point.newSubscriptions / total) * 100}%` : '0%' }} />
+                              <div className="h-full bg-[var(--admin-danger)]" style={{ width: total > 0 ? `${(point.cancellations / total) * 100}%` : '0%' }} />
                             </div>
                           </div>
-                          <span className="w-24 text-right text-xs text-muted">+{point.newSubscriptions} / -{point.cancellations}</span>
+                          <span className="w-24 text-right text-xs text-admin-fg-muted">+{point.newSubscriptions} / -{point.cancellations}</span>
                         </div>
                       );
                     }) : (
-                      <p className="text-sm text-muted">No monthly trend data is available yet.</p>
+                      <p className="text-sm text-admin-fg-muted">No monthly trend data is available yet.</p>
                     )}
                   </div>
                 </div>
-              </AdminRoutePanel>
+                </CardContent>
+              </Card>
+              </BentoCell>
 
-              <AdminRoutePanel
-                title="Learner Cohorts"
-                description={`Grouped by ${cohortData?.groupBy ?? 'profession'}. ${formatNumber(cohortData?.totalLearners ?? 0)} learners are in view.`}
-              >
+              <BentoCell span={{ default: 12, xl: 6 }}>
+                <Card>
+                  <CardHeader>
+                    <div>
+                      <CardTitle>Learner Cohorts</CardTitle>
+                      <p className="text-sm text-admin-fg-muted mt-1">{`Grouped by ${cohortData?.groupBy ?? 'profession'}. ${formatNumber(cohortData?.totalLearners ?? 0)} learners are in view.`}</p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
                 <div className="grid gap-3 md:grid-cols-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Top cohort</p>
-                    <p className="text-lg font-semibold text-admin-text">{topCohort ? topCohort.cohortName : 'No data'}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Top cohort</p>
+                    <p className="text-lg font-semibold text-admin-fg-strong">{topCohort ? topCohort.cohortName : 'No data'}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Learners</p>
-                    <p className="text-lg font-semibold text-admin-text">{topCohort ? formatNumber(topCohort.learnerCount) : '--'}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Learners</p>
+                    <p className="text-lg font-semibold text-admin-fg-strong">{topCohort ? formatNumber(topCohort.learnerCount) : '--'}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Avg score</p>
-                    <p className="text-lg font-semibold text-admin-text">{formatDecimal(topCohort?.averageScore ?? null)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Avg score</p>
+                    <p className="text-lg font-semibold text-admin-fg-strong">{formatDecimal(topCohort?.averageScore ?? null)}</p>
                   </div>
                 </div>
 
                 <div className="space-y-3">
                   {cohorts.length ? cohorts.map((cohort) => (
-                    <div key={cohort.cohortKey} className="rounded-2xl border border-border bg-background-light p-4">
+                    <div key={cohort.cohortKey} className="rounded-admin-lg border border-admin-border bg-admin-bg-subtle p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-navy">{cohort.cohortName}</p>
-                          <p className="text-xs text-muted">{formatNumber(cohort.evaluationCount)} evaluations, {formatNumber(cohort.activeLastMonth)} active in the last 30 days</p>
+                          <p className="truncate text-sm font-semibold text-admin-fg-strong">{cohort.cohortName}</p>
+                          <p className="text-xs text-admin-fg-muted">{formatNumber(cohort.evaluationCount)} evaluations, {formatNumber(cohort.activeLastMonth)} active in the last 30 days</p>
                         </div>
-                        <Badge variant="outline" className="text-[10px] uppercase tracking-[0.12em]">
+                        <Badge variant="default" intensity="tinted" size="sm">
                           {formatNumber(cohort.learnerCount)} learners
                         </Badge>
                       </div>
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-3">
                         <div>
-                          <p className="text-xs uppercase tracking-[0.12em] text-muted">Avg score</p>
-                          <p className="text-sm font-semibold text-navy">{formatDecimal(cohort.averageScore)}</p>
+                          <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">Avg score</p>
+                          <p className="text-sm font-semibold text-admin-fg-strong">{formatDecimal(cohort.averageScore)}</p>
                         </div>
                         <div>
-                          <p className="text-xs uppercase tracking-[0.12em] text-muted">Evaluations</p>
-                          <p className="text-sm font-semibold text-navy">{formatNumber(cohort.evaluationCount)}</p>
+                          <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">Evaluations</p>
+                          <p className="text-sm font-semibold text-admin-fg-strong">{formatNumber(cohort.evaluationCount)}</p>
                         </div>
                         <div>
-                          <p className="text-xs uppercase tracking-[0.12em] text-muted">Active 30d</p>
-                          <p className="text-sm font-semibold text-navy">{formatNumber(cohort.activeLastMonth)}</p>
+                          <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">Active 30d</p>
+                          <p className="text-sm font-semibold text-admin-fg-strong">{formatNumber(cohort.activeLastMonth)}</p>
                         </div>
                       </div>
                     </div>
                   )) : (
-                    <p className="text-sm text-admin-text-muted">No cohort data is available yet.</p>
+                    <p className="text-sm text-admin-fg-muted">No cohort data is available yet.</p>
                   )}
                 </div>
-              </AdminRoutePanel>
-            </div>
+                </CardContent>
+              </Card>
+              </BentoCell>
 
-            <div className="grid gap-6 xl:grid-cols-2">
-              <AdminRoutePanel
-                title="Content Effectiveness"
-                description={`Top ${contentItems.length || 0} published items ranked by effectiveness.`}
-              >
+              <BentoCell span={{ default: 12, xl: 6 }}>
+                <Card>
+                  <CardHeader>
+                    <div>
+                      <CardTitle>Content Effectiveness</CardTitle>
+                      <p className="text-sm text-admin-fg-muted mt-1">{`Top ${contentItems.length || 0} published items ranked by effectiveness.`}</p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
                 <div className="grid gap-3 md:grid-cols-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Top item</p>
-                    <p className="text-lg font-semibold text-admin-text">{topContent ? truncate(topContent.title) : 'No data'}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Top item</p>
+                    <p className="text-lg font-semibold text-admin-fg-strong">{topContent ? truncate(topContent.title) : 'No data'}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Top score</p>
-                    <p className="text-lg font-semibold text-admin-text">{formatDecimal(topContent?.effectivenessScore ?? null)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Top score</p>
+                    <p className="text-lg font-semibold text-admin-fg-strong">{formatDecimal(topContent?.effectivenessScore ?? null)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Completion</p>
-                    <p className="text-lg font-semibold text-admin-text">{topContent ? formatPercent(topContent.completionRate) : '--'}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Completion</p>
+                    <p className="text-lg font-semibold text-admin-fg-strong">{topContent ? formatPercent(topContent.completionRate) : '--'}</p>
                   </div>
                 </div>
 
                 <div className="space-y-3">
                   {contentItems.length ? contentItems.map((item) => (
-                    <div key={item.contentId} className="rounded-2xl border border-border bg-background-light p-4">
+                    <div key={item.contentId} className="rounded-admin-lg border border-admin-border bg-admin-bg-subtle p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-navy">{item.title}</p>
+                          <p className="truncate text-sm font-semibold text-admin-fg-strong">{item.title}</p>
                           <div className="mt-2 flex flex-wrap gap-2">
-                            <Badge variant="outline" className="text-[10px] uppercase tracking-[0.12em]">{item.subtestCode}</Badge>
-                            <Badge variant="outline" className="text-[10px] capitalize">{item.difficulty}</Badge>
+                            <Badge variant="default" intensity="tinted" size="sm">{item.subtestCode}</Badge>
+                            <Badge variant="default" intensity="tinted" size="sm" className="capitalize">{item.difficulty}</Badge>
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-semibold text-navy">{formatDecimal(item.effectivenessScore)}</p>
-                          <p className="text-xs text-muted">Effectiveness</p>
+                          <p className="text-lg font-semibold text-admin-fg-strong">{formatDecimal(item.effectivenessScore)}</p>
+                          <p className="text-xs text-admin-fg-muted">Effectiveness</p>
                         </div>
                       </div>
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-4">
                         <div>
-                          <p className="text-xs uppercase tracking-[0.12em] text-muted">Attempts</p>
-                          <p className="text-sm font-semibold text-navy">{formatNumber(item.totalAttempts)}</p>
+                          <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">Attempts</p>
+                          <p className="text-sm font-semibold text-admin-fg-strong">{formatNumber(item.totalAttempts)}</p>
                         </div>
                         <div>
-                          <p className="text-xs uppercase tracking-[0.12em] text-muted">Complete</p>
-                          <p className="text-sm font-semibold text-navy">{formatPercent(item.completionRate)}</p>
+                          <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">Complete</p>
+                          <p className="text-sm font-semibold text-admin-fg-strong">{formatPercent(item.completionRate)}</p>
                         </div>
                         <div>
-                          <p className="text-xs uppercase tracking-[0.12em] text-admin-text-muted">Avg score</p>
-                          <p className="text-sm font-semibold text-admin-text">{formatDecimal(item.averageScore)}</p>
+                          <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">Avg score</p>
+                          <p className="text-sm font-semibold text-admin-fg-strong">{formatDecimal(item.averageScore)}</p>
                         </div>
                         <div>
-                          <p className="text-xs uppercase tracking-[0.12em] text-admin-text-muted">Avg time</p>
-                          <p className="text-sm font-semibold text-admin-text">{formatDurationSeconds(item.avgTimeSeconds)}</p>
+                          <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">Avg time</p>
+                          <p className="text-sm font-semibold text-admin-fg-strong">{formatDurationSeconds(item.avgTimeSeconds)}</p>
                         </div>
                       </div>
                     </div>
                   )) : (
-                    <p className="text-sm text-admin-text-muted">No content effectiveness data is available yet.</p>
+                    <p className="text-sm text-admin-fg-muted">No content effectiveness data is available yet.</p>
                   )}
                 </div>
-              </AdminRoutePanel>
+                </CardContent>
+              </Card>
+              </BentoCell>
 
-              <AdminRoutePanel
-                title="Tutor Efficiency"
-                description={`${formatNumber(expertData?.summary.activeExperts ?? 0)} active of ${formatNumber(expertData?.summary.totalExperts ?? 0)} tutors over the last ${expertData?.period ?? 30} days.`}
-              >
+              <BentoCell span={{ default: 12, xl: 6 }}>
+                <Card>
+                  <CardHeader>
+                    <div>
+                      <CardTitle>Tutor Efficiency</CardTitle>
+                      <p className="text-sm text-admin-fg-muted mt-1">{`${formatNumber(expertData?.summary.activeExperts ?? 0)} active of ${formatNumber(expertData?.summary.totalExperts ?? 0)} tutors over the last ${expertData?.period ?? 30} days.`}</p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
                 <div className="grid gap-3 md:grid-cols-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Reviews completed</p>
-                    <p className="text-lg font-semibold text-admin-text">{formatNumber(expertData?.summary.totalReviewsCompleted ?? 0)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Reviews completed</p>
+                    <p className="text-lg font-semibold text-admin-fg-strong">{formatNumber(expertData?.summary.totalReviewsCompleted ?? 0)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Reviews per tutor</p>
-                    <p className="text-lg font-semibold text-admin-text">{formatDecimal(expertData?.summary.averageReviewsPerExpertPerDay ?? null)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Reviews per tutor</p>
+                    <p className="text-lg font-semibold text-admin-fg-strong">{formatDecimal(expertData?.summary.averageReviewsPerExpertPerDay ?? null)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Top tutor</p>
-                    <p className="text-lg font-semibold text-admin-text">{topExpert ? truncate(topExpert.expertName) : 'No data'}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Top tutor</p>
+                    <p className="text-lg font-semibold text-admin-fg-strong">{topExpert ? truncate(topExpert.expertName) : 'No data'}</p>
                   </div>
                 </div>
 
                 <div className="space-y-3">
                   {experts.length ? experts.map((expert) => {
-                    const badgeClassName = efficiencyBadgeClasses[expert.efficiency] ?? efficiencyBadgeClasses['no-data'];
+                    const badgeVariant = efficiencyBadgeVariant[expert.efficiency] ?? efficiencyBadgeVariant['no-data'];
 
                     return (
-                      <div key={expert.expertId} className="rounded-2xl border border-border bg-background-light p-4">
+                      <div key={expert.expertId} className="rounded-admin-lg border border-admin-border bg-admin-bg-subtle p-4">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface text-sm font-semibold text-navy">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-admin-bg-surface text-sm font-semibold text-admin-fg-strong">
                               {expert.expertName.slice(0, 1).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-navy">{expert.expertName}</p>
-                              <p className="text-xs text-muted">{formatNumber(expert.assignmentsReceived)} assignments received</p>
+                              <p className="truncate text-sm font-semibold text-admin-fg-strong">{expert.expertName}</p>
+                              <p className="text-xs text-admin-fg-muted">{formatNumber(expert.assignmentsReceived)} assignments received</p>
                             </div>
                           </div>
-                          <Badge className={badgeClassName}>{expert.efficiency}</Badge>
+                          <Badge variant={badgeVariant} intensity="tinted">{expert.efficiency}</Badge>
                         </div>
 
                         <div className="mt-4 grid gap-3 sm:grid-cols-5">
                           <div>
-                            <p className="text-xs uppercase tracking-[0.12em] text-muted">Done</p>
-                            <p className="text-sm font-semibold text-navy">{formatNumber(expert.reviewsCompleted)}</p>
+                            <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">Done</p>
+                            <p className="text-sm font-semibold text-admin-fg-strong">{formatNumber(expert.reviewsCompleted)}</p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-[0.12em] text-muted">Avg time</p>
-                            <p className="text-sm font-semibold text-navy">{formatMinutes(expert.averageReviewTimeMinutes)}</p>
+                            <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">Avg time</p>
+                            <p className="text-sm font-semibold text-admin-fg-strong">{formatMinutes(expert.averageReviewTimeMinutes)}</p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-[0.12em] text-muted">Per day</p>
-                            <p className="text-sm font-semibold text-navy">{decimalFormatter.format(expert.reviewsPerDay)}</p>
+                            <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">Per day</p>
+                            <p className="text-sm font-semibold text-admin-fg-strong">{decimalFormatter.format(expert.reviewsPerDay)}</p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-[0.12em] text-admin-text-muted">AI align</p>
-                            <p className="text-sm font-semibold text-admin-text">{formatDecimal(expert.aiAlignmentScore)}</p>
+                            <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">AI align</p>
+                            <p className="text-sm font-semibold text-admin-fg-strong">{formatDecimal(expert.aiAlignmentScore)}</p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-[0.12em] text-admin-text-muted">Period</p>
-                            <p className="text-sm font-semibold text-admin-text">{expert.period} days</p>
+                            <p className="text-xs uppercase tracking-[0.12em] text-admin-fg-muted">Period</p>
+                            <p className="text-sm font-semibold text-admin-fg-strong">{expert.period} days</p>
                           </div>
                         </div>
                       </div>
                     );
                   }) : (
-                    <p className="text-sm text-admin-text-muted">No tutor efficiency data is available yet.</p>
+                    <p className="text-sm text-admin-fg-muted">No tutor efficiency data is available yet.</p>
                   )}
                 </div>
-              </AdminRoutePanel>
-            </div>
+                </CardContent>
+              </Card>
+              </BentoCell>
+            </BentoGrid>
 
-            <AdminRoutePanel
-              title="Analytics Routes"
-              description="Open the dedicated slices when you need to drill beyond the summary view."
-            >
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {[
-                  { href: '/admin/analytics/subscription-health', label: 'Subscription health' },
-                  { href: '/admin/analytics/cohort', label: 'Learner cohorts' },
-                  { href: '/admin/analytics/content-effectiveness', label: 'Content effectiveness' },
-                  { href: '/admin/analytics/expert-efficiency', label: 'Tutor efficiency' },
-                  { href: '/admin/analytics/reading', label: 'Reading analytics' },
-                ].map((link) => (
-                  <AdminQuickAction key={link.href} href={link.href} label={link.label} />
-                ))}
-              </div>
-            </AdminRoutePanel>
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Analytics Routes</CardTitle>
+                  <p className="text-sm text-admin-fg-muted mt-1">Open the dedicated slices when you need to drill beyond the summary view.</p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    { href: '/admin/analytics/subscription-health', label: 'Subscription health' },
+                    { href: '/admin/analytics/cohort', label: 'Learner cohorts' },
+                    { href: '/admin/analytics/content-effectiveness', label: 'Content effectiveness' },
+                    { href: '/admin/analytics/expert-efficiency', label: 'Tutor efficiency' },
+                    { href: '/admin/analytics/reading', label: 'Reading analytics' },
+                  ].map((link) => (
+                    <AdminQuickAction key={link.href} href={link.href} label={link.label} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </>
         ) : null}
       </AsyncStateWrapper>
+      </AdminOperationsLayout>
     </AdminRouteWorkspace>
   );
 }

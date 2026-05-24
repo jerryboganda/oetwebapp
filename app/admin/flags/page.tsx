@@ -2,14 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Edit3, Flag, Plus, Power } from 'lucide-react';
-import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { activateAdminFlag, createAdminFlag, deactivateAdminFlag, updateAdminFlag } from '@/lib/api';
@@ -17,6 +14,13 @@ import { getAdminFlagData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminFlag } from '@/lib/types/admin';
 import { BulkActionBar } from '@/components/ui/bulk-action-bar';
+
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -109,20 +113,20 @@ export default function FlagsPage() {
       header: 'Flag',
       render: (flag) => (
         <div className="space-y-1">
-          <p className="font-medium text-navy">{flag.name}</p>
-          <p className="font-mono text-xs text-muted">{flag.key}</p>
+          <p className="font-medium text-admin-fg-strong">{flag.name}</p>
+          <p className="font-mono text-xs text-admin-fg-muted">{flag.key}</p>
         </div>
       ),
     },
     {
       key: 'description',
       header: 'Description',
-      render: (flag) => <span className="text-sm text-muted">{flag.description || 'No rollout description yet.'}</span>,
+      render: (flag) => <span className="text-sm text-admin-fg-muted">{flag.description || 'No rollout description yet.'}</span>,
     },
     {
       key: 'owner',
       header: 'Owner',
-      render: (flag) => <span className="text-sm text-muted">{flag.owner || 'Unassigned'}</span>,
+      render: (flag) => <span className="text-sm text-admin-fg-muted">{flag.owner || 'Unassigned'}</span>,
     },
     {
       key: 'type',
@@ -138,10 +142,10 @@ export default function FlagsPage() {
       header: 'Rollout',
       render: (flag) => (
         <div className="min-w-[140px] space-y-2">
-          <div className="h-2 rounded-full bg-background-light">
-            <div className="h-2 rounded-full bg-primary" style={{ width: `${flag.rolloutPercentage}%` }} />
+          <div className="h-2 rounded-full bg-admin-bg-subtle">
+            <div className="h-2 rounded-full bg-[var(--admin-primary)]" style={{ width: `${flag.rolloutPercentage}%` }} />
           </div>
-          <p className="font-mono text-xs text-muted">{flag.rolloutPercentage}%</p>
+          <p className="font-mono text-xs text-admin-fg-muted">{flag.rolloutPercentage}%</p>
         </div>
       ),
     },
@@ -149,7 +153,7 @@ export default function FlagsPage() {
       key: 'status',
       header: 'Status',
       render: (flag) => (
-        <Badge variant={flag.enabled ? 'success' : 'muted'}>
+        <Badge variant={flag.enabled ? 'success' : 'default'}>
           {flag.enabled ? 'enabled' : 'disabled'}
         </Badge>
       ),
@@ -160,8 +164,7 @@ export default function FlagsPage() {
       className: 'w-56',
       render: (flag) => (
         <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={() => openEditModal(flag)}>
-            <Edit3 className="h-3.5 w-3.5" />
+          <Button variant="outline" size="sm" onClick={() => openEditModal(flag)} startIcon={<Edit3 className="h-3.5 w-3.5" />}>
             Edit
           </Button>
           <Button
@@ -169,8 +172,8 @@ export default function FlagsPage() {
             variant={flag.enabled ? 'destructive' : 'primary'}
             onClick={() => handleToggleFlag(flag)}
             loading={togglingId === flag.id}
+            startIcon={<Power className="h-3.5 w-3.5" />}
           >
-            <Power className="h-3.5 w-3.5" />
             {flag.enabled ? 'Disable' : 'Enable'}
           </Button>
         </div>
@@ -182,35 +185,34 @@ export default function FlagsPage() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-navy">{flag.name}</p>
-          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{flag.key}</p>
+          <p className="truncate font-semibold text-admin-fg-strong">{flag.name}</p>
+          <p className="truncate text-xs uppercase tracking-[0.12em] text-admin-fg-muted">{flag.key}</p>
         </div>
         <div className="flex flex-col items-end gap-1">
           <Badge variant={flag.type === 'experiment' ? 'warning' : flag.type === 'operational' ? 'info' : 'default'}>
             {flag.type}
           </Badge>
-          <Badge variant={flag.enabled ? 'success' : 'muted'}>
+          <Badge variant={flag.enabled ? 'success' : 'default'}>
             {flag.enabled ? 'enabled' : 'disabled'}
           </Badge>
         </div>
       </div>
 
-      <p className="text-sm text-muted">{flag.description || 'No rollout description yet.'}</p>
+      <p className="text-sm text-admin-fg-muted">{flag.description || 'No rollout description yet.'}</p>
 
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Owner</p>
-          <p className="mt-1 font-medium text-navy">{flag.owner || 'Unassigned'}</p>
+        <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Owner</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{flag.owner || 'Unassigned'}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Rollout</p>
-          <p className="mt-1 font-medium text-navy">{flag.rolloutPercentage}%</p>
+        <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Rollout</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{flag.rolloutPercentage}%</p>
         </div>
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row">
-        <Button variant="outline" size="sm" className="w-full sm:flex-1" onClick={() => openEditModal(flag)}>
-          <Edit3 className="h-3.5 w-3.5" />
+        <Button variant="outline" size="sm" className="w-full sm:flex-1" onClick={() => openEditModal(flag)} startIcon={<Edit3 className="h-3.5 w-3.5" />}>
           Edit
         </Button>
         <Button
@@ -219,8 +221,8 @@ export default function FlagsPage() {
           variant={flag.enabled ? 'destructive' : 'primary'}
           onClick={() => handleToggleFlag(flag)}
           loading={togglingId === flag.id}
+          startIcon={<Power className="h-3.5 w-3.5" />}
         >
-          <Power className="h-3.5 w-3.5" />
           {flag.enabled ? 'Disable' : 'Enable'}
         </Button>
       </div>
@@ -320,38 +322,41 @@ export default function FlagsPage() {
     <AdminRouteWorkspace role="main" aria-label="Feature flags">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
+      <AdminTableLayout
         title="Feature Flags"
         description="Manage production rollouts, experiments, and operational controls with real activate and deactivate actions."
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Feature Flags' }]}
         actions={
-          <Button onClick={openCreateModal} className="gap-2">
-            <Plus className="h-4 w-4" />
+          <Button onClick={openCreateModal} startIcon={<Plus className="h-4 w-4" />}>
             Create Flag
           </Button>
         }
-      />
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        onRetry={() => window.location.reload()}
-        emptyContent={
-          <EmptyState
-            icon={<Flag className="h-10 w-10 text-muted" />}
-            title="No feature flags yet"
-            description="Create the first rollout control so experiments and launches are traceable from admin."
-            action={{ label: 'Create Flag', onClick: openCreateModal }}
-          />
+        banner={
+          <div className="space-y-6">
+            <KpiStrip>
+              <KpiTile label="Enabled Flags" value={metrics.enabled} icon={<Power className="h-4 w-4" />} tone="primary" />
+              <KpiTile label="Experiments" value={metrics.experiments} icon={<Flag className="h-4 w-4" />} tone={metrics.experiments > 0 ? 'warning' : 'default'} />
+              <KpiTile label="Operational Controls" value={metrics.operational} icon={<Flag className="h-4 w-4" />} tone="info" />
+              <KpiTile label="100% Rollout" value={metrics.fullRollout} icon={<Flag className="h-4 w-4" />} tone="success" />
+            </KpiStrip>
+            <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ type: [] })} />
+          </div>
         }
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <AdminRouteSummaryCard label="Enabled Flags" value={metrics.enabled} icon={<Power className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="Experiments" value={metrics.experiments} icon={<Flag className="h-5 w-5" />} tone={metrics.experiments > 0 ? 'warning' : 'default'} />
-          <AdminRouteSummaryCard label="Operational Controls" value={metrics.operational} icon={<Flag className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="100% Rollout" value={metrics.fullRollout} icon={<Flag className="h-5 w-5" />} />
-        </div>
-
-        <AdminRoutePanel title="Rollout Registry" description="All visible enable, disable, and edit controls are backed by the admin feature flag endpoints and audit events.">
-          <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ type: [] })} />
+        <AsyncStateWrapper
+          status={pageStatus}
+          onRetry={() => window.location.reload()}
+          emptyContent={
+            <div className="p-6">
+              <EmptyState
+                illustration={<Flag />}
+                title="No feature flags yet"
+                description="Create the first rollout control so experiments and launches are traceable from admin."
+                primaryAction={{ label: 'Create Flag', onClick: openCreateModal }}
+              />
+            </div>
+          }
+        >
           <DataTable columns={columns} data={flags} keyExtractor={(flag) => flag.id} mobileCardRender={mobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
           <BulkActionBar
             selectedCount={selectedKeys.size}
@@ -361,8 +366,8 @@ export default function FlagsPage() {
               { key: 'disable', label: 'Disable selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk disable coming soon.' }) },
             ]}
           />
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
+        </AsyncStateWrapper>
+      </AdminTableLayout>
 
       <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? 'Edit Feature Flag' : 'Create Feature Flag'}>
         <div className="space-y-4 py-2">
@@ -398,7 +403,7 @@ export default function FlagsPage() {
             ]}
           />
 
-          <div className="flex justify-end gap-3 border-t border-border pt-4">
+          <div className="flex justify-end gap-3 border-t border-admin-border pt-4">
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>

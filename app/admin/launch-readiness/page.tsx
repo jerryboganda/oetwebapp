@@ -2,11 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Rocket, Save, ShieldAlert, type LucideIcon } from 'lucide-react';
-import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminOperationsLayout, KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { Button } from '@/components/ui/button';
 import { Toast } from '@/components/ui/alert';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
@@ -159,57 +157,86 @@ export default function AdminLaunchReadinessPage() {
 
   return (
     <>
-      <AdminRouteWorkspace>
-        <AdminRoutePanel>
-          <AdminRouteSectionHeader
-            eyebrow="System admin"
-            title="Launch Readiness"
-            description="Typed, admin-editable release gates for mobile, desktop, and realtime STT. This page never stores signing keys, certificates, provider secrets, or private app-store credentials."
-            icon={Rocket}
-            actions={
-              <Button variant="primary" onClick={save} disabled={saving || loading || Object.keys(draft).length === 0}>
-                <Save className="mr-1 h-4 w-4" />
-                {saving ? 'Saving...' : 'Save changes'}
-              </Button>
-            }
-          />
-
-          {loading || !settings ? (
-            <p className="text-sm text-admin-text-muted">Loading launch readiness settings...</p>
+      <AdminOperationsLayout
+        eyebrow="System admin"
+        title="Launch Readiness"
+        description="Typed, admin-editable release gates for mobile, desktop, and realtime STT. This page never stores signing keys, certificates, provider secrets, or private app-store credentials."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Launch Readiness' },
+        ]}
+        actions={
+          <Button variant="primary" onClick={save} disabled={saving || loading || Object.keys(draft).length === 0}>
+            <Save className="mr-1 h-4 w-4" />
+            {saving ? 'Saving...' : 'Save changes'}
+          </Button>
+        }
+        kpis={
+          settings ? (
+            <KpiStrip>
+              <KpiTile
+                label="Evidence gates approved"
+                value={`${completedCount}/7`}
+                tone={completedCount === 7 ? 'success' : completedCount > 0 ? 'warning' : 'default'}
+                icon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+              />
+              <KpiTile
+                label="Mobile force update"
+                value={value('mobileForceUpdate') ? 'Enabled' : 'Disabled'}
+                tone={value('mobileForceUpdate') ? 'warning' : 'default'}
+                icon={<ShieldAlert className="h-4 w-4" aria-hidden="true" />}
+              />
+              <KpiTile
+                label="Desktop force update"
+                value={value('desktopForceUpdate') ? 'Enabled' : 'Disabled'}
+                tone={value('desktopForceUpdate') ? 'warning' : 'default'}
+                icon={<ShieldAlert className="h-4 w-4" aria-hidden="true" />}
+              />
+              <KpiTile
+                label="Release status"
+                value={settings.releaseOwnerApprovalStatus === 'approved' ? 'Approved' : 'Pending'}
+                tone={settings.releaseOwnerApprovalStatus === 'approved' ? 'success' : 'default'}
+                icon={<Rocket className="h-4 w-4" aria-hidden="true" />}
+              />
+            </KpiStrip>
+          ) : undefined
+        }
+        primaryGrid={
+          loading || !settings ? (
+            <Card>
+              <CardContent>
+                <p className="text-sm text-admin-fg-muted">Loading launch readiness settings...</p>
+              </CardContent>
+            </Card>
           ) : (
-            <div className="space-y-8">
-              <div className="grid gap-3 md:grid-cols-3">
-                <SummaryCard label="Evidence gates approved/complete" value={`${completedCount}/7`} icon={CheckCircle2} />
-                <SummaryCard label="Mobile force update" value={value('mobileForceUpdate') ? 'Enabled' : 'Disabled'} icon={ShieldAlert} />
-                <SummaryCard label="Desktop force update" value={value('desktopForceUpdate') ? 'Enabled' : 'Disabled'} icon={ShieldAlert} />
-              </div>
-
+            <div className="space-y-6">
               {sections.map((section) => (
-                <section key={section.title} className="rounded-3xl border border-border bg-surface/70 p-5 shadow-sm">
-                  <div className="mb-4">
-                    <h2 className="text-lg font-semibold text-navy">{section.title}</h2>
-                    <p className="mt-1 text-sm text-muted">{section.description}</p>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {section.fields.map((field) => (
-                      <LaunchInput
-                        key={field.key}
-                        field={field}
-                        value={value(field.key)}
-                        onChange={(next) => setDraftField(field.key, next)}
-                      />
-                    ))}
-                  </div>
-                </section>
+                <Card key={section.title}>
+                  <CardHeader>
+                    <CardTitle>{section.title}</CardTitle>
+                    <CardDescription>{section.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {section.fields.map((field) => (
+                        <LaunchInput
+                          key={field.key}
+                          field={field}
+                          value={value(field.key)}
+                          onChange={(next) => setDraftField(field.key, next)}
+                        />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
-
-              <p className="text-xs text-muted">
+              <p className="text-xs text-admin-fg-muted">
                 Last updated {new Date(settings.updatedAt).toLocaleString()} by {settings.updatedByAdminName || settings.updatedByAdminId || 'system'}.
               </p>
             </div>
-          )}
-        </AdminRoutePanel>
-      </AdminRouteWorkspace>
+          )
+        }
+      />
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
     </>
@@ -266,21 +293,5 @@ function LaunchInput({
       placeholder={field.kind === 'version' ? '1.0.0' : undefined}
       onChange={(event) => onChange(event.target.value || null)}
     />
-  );
-}
-
-function SummaryCard({ label, value, icon: Icon }: { label: string; value: string; icon: LucideIcon }) {
-  return (
-    <div className="rounded-3xl border border-border bg-background-light p-4 shadow-sm">
-      <div className="flex items-center gap-3">
-        <span className="rounded-2xl bg-primary/10 p-2 text-primary">
-          <Icon className="h-5 w-5" />
-        </span>
-        <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-muted">{label}</p>
-          <p className="mt-1 text-lg font-semibold text-navy">{value}</p>
-        </div>
-      </div>
-    </div>
   );
 }

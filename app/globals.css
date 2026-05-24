@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./admin/_design/admin-tokens.css";
 
 @theme {
   --color-primary: #7c3aed;
@@ -28,6 +29,73 @@
   --shadow-clinical: 0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+/* ----------------------------------------------------------------------
+ * Admin design-system mapping for Tailwind v4 utility generation.
+ *
+ * `@theme inline` preserves the `var(--admin-*)` reference at *runtime*
+ * so that light/dark mode swaps via [data-theme] / .dark continue to
+ * re-evaluate. Without `inline`, Tailwind would freeze the value at
+ * compile time and dark mode would not flip.
+ *
+ * Enables utilities like:  bg-admin-surface  text-admin-fg-default
+ *                          rounded-admin     shadow-admin
+ *                          border-admin      text-admin-primary
+ * ---------------------------------------------------------------------- */
+@theme inline {
+  /* Brand role colors */
+  --color-admin-primary:           var(--admin-primary);
+  --color-admin-primary-hover:     var(--admin-primary-hover);
+  --color-admin-primary-fg:        var(--admin-primary-fg);
+  --color-admin-secondary:         var(--admin-secondary);
+  --color-admin-secondary-fg:      var(--admin-secondary-fg);
+  --color-admin-success:           var(--admin-success);
+  --color-admin-success-fg:        var(--admin-success-fg);
+  --color-admin-warning:           var(--admin-warning);
+  --color-admin-warning-fg:        var(--admin-warning-fg);
+  --color-admin-danger:            var(--admin-danger);
+  --color-admin-danger-fg:         var(--admin-danger-fg);
+  --color-admin-info:              var(--admin-info);
+  --color-admin-info-fg:           var(--admin-info-fg);
+
+  /* Surfaces */
+  --color-admin-bg-page:           var(--admin-bg-page);
+  --color-admin-bg-surface:        var(--admin-bg-surface);
+  --color-admin-bg-elevated:       var(--admin-bg-elevated);
+  --color-admin-bg-subtle:         var(--admin-bg-subtle);
+  --color-admin-bg-inverse:        var(--admin-bg-inverse);
+
+  /* Text */
+  --color-admin-fg-strong:         var(--admin-fg-strong);
+  --color-admin-fg-default:        var(--admin-fg-default);
+  --color-admin-fg-muted:          var(--admin-fg-muted);
+  --color-admin-fg-disabled:       var(--admin-fg-disabled);
+  --color-admin-fg-inverse:        var(--admin-fg-inverse);
+
+  /* Borders */
+  --color-admin-border:            var(--admin-border-default);
+  --color-admin-border-strong:     var(--admin-border-strong);
+  --color-admin-border-focus:      var(--admin-border-focus);
+
+  /* Radii & shadows shortcuts */
+  --radius-admin-sm:               var(--admin-radius-sm);
+  --radius-admin:                  var(--admin-radius-lg);
+  --radius-admin-md:               var(--admin-radius-md);
+  --radius-admin-lg:               var(--admin-radius-lg);
+  --radius-admin-xl:               var(--admin-radius-xl);
+  --radius-admin-2xl:              var(--admin-radius-2xl);
+  --radius-admin-pill:             var(--admin-radius-pill);
+
+  --shadow-admin-sm:               var(--admin-shadow-sm);
+  --shadow-admin:                  var(--admin-shadow-md);
+  --shadow-admin-md:               var(--admin-shadow-md);
+  --shadow-admin-lg:               var(--admin-shadow-lg);
+
+  /* Font family utilities */
+  --font-admin-display:            var(--admin-font-display);
+  --font-admin-body:               var(--admin-font-body);
+  --font-admin-mono:               var(--admin-font-mono);
 }
 
 @layer utilities {

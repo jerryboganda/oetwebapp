@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AlertCircle, AlertTriangle, Bell, ChevronRight, Info, RefreshCw } from 'lucide-react';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import { AdminRouteWorkspace, AdminRouteHero } from '@/components/domain/admin-route-surface';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ErrorState } from '@/components/ui/empty-error';
-import { Badge } from '@/components/ui/badge';
-import { Bell, AlertTriangle, Info, AlertCircle, ChevronRight } from 'lucide-react';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { fetchAdminAlerts } from '@/lib/api';
 
 interface AdminAlert {
@@ -25,6 +28,18 @@ interface AlertSummary {
   warningCount: number;
   infoCount: number;
   generatedAt: string;
+}
+
+const SEVERITY_BADGE: Record<AdminAlert['severity'], { variant: 'danger' | 'warning' | 'info'; label: string }> = {
+  critical: { variant: 'danger', label: 'Critical' },
+  warning: { variant: 'warning', label: 'Warning' },
+  info: { variant: 'info', label: 'Info' },
+};
+
+function severityIcon(s: AdminAlert['severity']) {
+  if (s === 'critical') return <AlertCircle className="h-5 w-5 text-[var(--admin-danger)]" />;
+  if (s === 'warning') return <AlertTriangle className="h-5 w-5 text-[var(--admin-warning)]" />;
+  return <Info className="h-5 w-5 text-[var(--admin-info)]" />;
 }
 
 export default function AdminAlertsPage() {
@@ -49,87 +64,114 @@ export default function AdminAlertsPage() {
 
   useEffect(() => { load(); }, []);
 
-  const severityIcon = (s: string) => {
-    if (s === 'critical') return <AlertCircle className="w-5 h-5 text-red-500" />;
-    if (s === 'warning') return <AlertTriangle className="w-5 h-5 text-amber-500" />;
-    return <Info className="w-5 h-5 text-blue-500" />;
-  };
+  const headerActions = (
+    <Button variant="outline" onClick={load} loading={loading} startIcon={<RefreshCw className="h-4 w-4" />}>
+      Refresh
+    </Button>
+  );
 
-  const severityBadge = (s: string) => {
-    if (s === 'critical') return <Badge variant="danger">Critical</Badge>;
-    if (s === 'warning') return <Badge variant="warning">Warning</Badge>;
-    return <Badge variant="info">Info</Badge>;
-  };
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Alerts' },
+  ];
 
   if (loading) {
     return (
-      <AdminRouteWorkspace>
-        <AdminRouteHero title="Alerts" description="Platform monitoring and notifications." />
-        <div className="space-y-3">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
-      </AdminRouteWorkspace>
+      <AdminTableLayout
+        title="Alerts"
+        description="Platform monitoring and notifications."
+        breadcrumbs={breadcrumbs}
+        actions={headerActions}
+      >
+        <CardContent className="space-y-3 p-4 sm:p-5">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-admin" />)}
+        </CardContent>
+      </AdminTableLayout>
     );
   }
 
   if (error) {
     return (
-      <AdminRouteWorkspace>
-        <AdminRouteHero title="Alerts" description="Platform monitoring and notifications." />
-        <ErrorState message={error} onRetry={load} />
-      </AdminRouteWorkspace>
+      <AdminTableLayout
+        title="Alerts"
+        description="Platform monitoring and notifications."
+        breadcrumbs={breadcrumbs}
+        actions={headerActions}
+      >
+        <CardContent className="p-4 sm:p-5">
+          <EmptyState
+            variant="error"
+            title="Unable to load alerts"
+            description={error}
+            primaryAction={{ label: 'Retry', onClick: load }}
+          />
+        </CardContent>
+      </AdminTableLayout>
     );
   }
 
+  const hasAlerts = (data?.alerts.length ?? 0) > 0;
+
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteHero title="Alerts" description="Platform monitoring and notifications." />
-
-      {data && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-              <p className="text-2xl font-bold text-red-700">{data.criticalCount}</p>
-              <p className="text-sm text-red-600">Critical</p>
-            </div>
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <p className="text-2xl font-bold text-amber-700">{data.warningCount}</p>
-              <p className="text-sm text-amber-600">Warnings</p>
-            </div>
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-              <p className="text-2xl font-bold text-blue-700">{data.infoCount}</p>
-              <p className="text-sm text-blue-600">Info</p>
-            </div>
+    <AdminTableLayout
+      title="Alerts"
+      description="Platform monitoring and notifications."
+      breadcrumbs={breadcrumbs}
+      actions={headerActions}
+      banner={
+        data ? (
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
+            <KpiTile label="Critical" value={data.criticalCount} tone="danger" icon={<AlertCircle className="h-5 w-5" />} />
+            <KpiTile label="Warnings" value={data.warningCount} tone="warning" icon={<AlertTriangle className="h-5 w-5" />} />
+            <KpiTile label="Info" value={data.infoCount} tone="info" icon={<Info className="h-5 w-5" />} />
           </div>
-
-          {data.alerts.length === 0 ? (
-            <div className="text-center py-12 rounded-lg border border-dashed">
-              <Bell className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-muted-foreground">No alerts at this time.</p>
-              <p className="text-xs text-muted-foreground mt-1">All systems operational.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {data.alerts.map((alert, i) => (
-                <button
+        ) : null
+      }
+    >
+      {data ? (
+        hasAlerts ? (
+          <CardContent className="space-y-2 p-4 sm:p-5">
+            {data.alerts.map((alert, i) => {
+              const sev = SEVERITY_BADGE[alert.severity];
+              return (
+                <Card
                   key={`${alert.alertType}-${i}`}
-                  onClick={() => router.push(alert.actionRoute)}
-                  className="w-full text-left rounded-lg border p-4 hover:bg-accent transition-colors flex items-start gap-3"
+                  interactive
+                  asChild
+                  className="border-admin-border"
                 >
-                  <div className="mt-0.5">{severityIcon(alert.severity)}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-medium text-sm">{alert.title}</p>
-                      {severityBadge(alert.severity)}
+                  <button
+                    type="button"
+                    onClick={() => router.push(alert.actionRoute)}
+                    className="flex w-full items-start gap-3 p-4 text-left"
+                  >
+                    <div className="mt-0.5 shrink-0">{severityIcon(alert.severity)}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium text-admin-fg-strong">{alert.title}</p>
+                        <Badge variant={sev.variant}>{sev.label}</Badge>
+                      </div>
+                      <p className="text-xs text-admin-fg-muted">{alert.description}</p>
+                      <p className="mt-1 text-xs text-admin-fg-muted">
+                        {new Date(alert.detectedAt).toLocaleString()}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">{alert.description}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{new Date(alert.detectedAt).toLocaleString()}</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground mt-1 flex-shrink-0" />
-                </button>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </AdminRouteWorkspace>
+                    <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-admin-fg-muted" />
+                  </button>
+                </Card>
+              );
+            })}
+          </CardContent>
+        ) : (
+          <CardContent className="p-4 sm:p-5">
+            <EmptyState
+              illustration={<Bell />}
+              title="No alerts at this time"
+              description="All systems operational."
+            />
+          </CardContent>
+        )
+      ) : null}
+    </AdminTableLayout>
   );
 }

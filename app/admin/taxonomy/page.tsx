@@ -2,14 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { Edit2, ListTree, Plus } from 'lucide-react';
-import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { TableSkeleton } from '@/components/admin/ui/skeleton';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -72,24 +75,26 @@ export default function AdminTaxonomyPage() {
   ];
 
   const columns: Column<AdminTaxonomyNode>[] = [
-    { key: 'label', header: 'Label', render: (row) => <span className="font-medium text-navy">{row.label}</span> },
-    { key: 'slug', header: 'Code', render: (row) => <span className="font-mono text-xs text-muted">{row.slug}</span> },
+    { key: 'label', header: 'Label', render: (row) => <span className="font-medium text-admin-fg-strong">{row.label}</span> },
+    { key: 'slug', header: 'Code', render: (row) => <span className="font-mono text-xs text-admin-fg-muted">{row.slug}</span> },
     { key: 'contentCount', header: 'Linked Content', render: (row) => <span>{row.contentCount}</span> },
     {
       key: 'status',
       header: 'Status',
-      render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'muted'}>{row.status}</Badge>,
+      render: (row) => (
+        <Badge variant={(row.status === 'active' ? 'success' : 'default') as any}>{row.status}</Badge>
+      ),
     },
     {
       key: 'actions',
       header: '',
       render: (row) => (
         <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={() => void openEditor(row)} className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => void openEditor(row)}>
             <Edit2 className="h-4 w-4" /> Edit
           </Button>
           {row.status === 'active' ? (
-            <Button variant="outline" size="sm" onClick={() => void archiveNode(row)} className="text-danger">
+            <Button variant="outline" size="sm" onClick={() => void archiveNode(row)} className="text-[var(--admin-danger)]">
               Archive
             </Button>
           ) : null}
@@ -161,36 +166,76 @@ export default function AdminTaxonomyPage() {
     <AdminRouteWorkspace role="main" aria-label="Professions">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
+      <AdminCatalogLayout
         title="Professions"
         description="Manage the professions that drive OET content targeting, learner goals, and downstream analytics."
+        eyebrow="Taxonomy"
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Professions' },
+        ]}
         actions={
-          <Button onClick={() => void openEditor()} className="gap-2">
+          <Button onClick={() => void openEditor()}>
             <Plus className="h-4 w-4" /> Add Profession
           </Button>
         }
-      />
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        onRetry={() => setReloadNonce((current) => current + 1)}
-        emptyContent={<EmptyState icon={<ListTree className="h-10 w-10 text-muted" />} title="No taxonomy entries" description="Add your first profession to start structuring content." />}
-      >
-        <AdminRoutePanel title="Filters" description="Review active vs archived taxonomy nodes.">
-          <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({})} />
-        </AdminRoutePanel>
-
-        <AdminRoutePanel title="Professions" description="Create, update, and archive professions with live impact checks before change.">
-          <DataTable columns={columns} data={nodes} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-          <BulkActionBar
-            selectedCount={selectedKeys.size}
-            onClearSelection={() => setSelectedKeys(new Set())}
-            actions={[
-              { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
-            ]}
+        filters={
+          <FilterBar
+            groups={filterGroups}
+            selected={filters}
+            onChange={handleFilterChange}
+            onClear={() => setFilters({})}
           />
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
+        }
+        hideViewModeToggle
+        itemsClassName="flex flex-col gap-4"
+      >
+        <AsyncStateWrapper
+          status={pageStatus}
+          onRetry={() => setReloadNonce((current) => current + 1)}
+          loadingContent={<TableSkeleton rows={6} columns={5} />}
+          emptyContent={
+            <EmptyState
+              illustration={<ListTree className="h-10 w-10 text-admin-fg-muted" />}
+              title="No taxonomy entries"
+              description="Add your first profession to start structuring content."
+            />
+          }
+        >
+          <Card>
+            <CardHeader>
+              <div className="min-w-0">
+                <CardTitle>Professions</CardTitle>
+                <CardDescription>
+                  Create, update, and archive professions with live impact checks before change.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                columns={columns}
+                data={nodes}
+                keyExtractor={(row) => row.id}
+                selectable
+                selectedKeys={selectedKeys}
+                onSelectionChange={setSelectedKeys}
+              />
+              <BulkActionBar
+                selectedCount={selectedKeys.size}
+                onClearSelection={() => setSelectedKeys(new Set())}
+                actions={[
+                  {
+                    key: 'delete',
+                    label: 'Delete selected',
+                    variant: 'danger',
+                    onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }),
+                  },
+                ]}
+              />
+            </CardContent>
+          </Card>
+        </AsyncStateWrapper>
+      </AdminCatalogLayout>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingNode ? `Edit ${editingNode.label}` : 'Add Profession'}>
         <div className="space-y-4">
@@ -214,15 +259,15 @@ export default function AdminTaxonomyPage() {
             hint="Reserved for taxonomy governance notes."
           />
           {impact ? (
-            <div className="rounded-xl bg-background-light p-4 text-sm text-muted">
-              <p className="font-medium text-navy">Impact preview</p>
+            <div className="rounded-admin bg-admin-bg-subtle p-4 text-sm text-admin-fg-muted">
+              <p className="font-medium text-admin-fg-strong">Impact preview</p>
               <p>Linked content: {impact.usage.contentCount}</p>
               <p>Linked learners: {impact.usage.learnerCount}</p>
               <p>Goal references: {impact.usage.goalCount}</p>
               <p>{impact.safeToArchive ? 'Safe to archive when needed.' : 'Not safe to archive yet.'}</p>
             </div>
           ) : null}
-          <div className="flex justify-end gap-3 border-t border-border pt-4">
+          <div className="flex justify-end gap-3 border-t border-admin-border pt-4">
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button onClick={() => void submitNode()}>{editingNode ? 'Save Changes' : 'Create Profession'}</Button>
           </div>

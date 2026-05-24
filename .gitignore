@@ -136,3 +136,10 @@ _audit/
 !.qa-artifacts/scripts/
 !.qa-artifacts/scripts/**
 .qa/
+.qa-audit/
+
+# Root-level transient Playwright screenshots (committed copies live under docs/)
+/verify-*.jpeg
+/verify-*.png
+/axelit-*.png
+/axelit-*.jpeg

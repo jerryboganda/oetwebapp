@@ -2,18 +2,23 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, CheckCircle2, Clock, Download, FileText, Users } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { AdminRouteFreshnessBadge, AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteFreshnessBadge, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { EmptyState } from '@/components/ui/empty-error';
+import { EmptyState as LegacyEmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Select } from '@/components/ui/form-controls';
 import { getAdminQualityAnalyticsData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminQualityAnalytics } from '@/lib/types/admin';
+
+import { AdminOperationsLayout, KpiStrip, BentoGrid, BentoCell } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { ChartCard } from '@/components/admin/ui/chart-card';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 
@@ -119,141 +124,193 @@ export default function QualityAnalyticsPage() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
+  const headerActions = (
+    <div className="flex items-center gap-3">
+      {analytics && (
+        <Button variant="outline" size="sm" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+          const rows: Record<string, unknown>[] = [
+            { metric: 'AI-Human Agreement (%)', value: analytics.aiHumanAgreement.value, trend: analytics.aiHumanAgreement.trend },
+            { metric: 'Appeals Rate (%)', value: analytics.appealsRate.value, trend: analytics.appealsRate.trend },
+            { metric: 'Avg Review Time', value: `${analytics.avgReviewTime.value} ${analytics.avgReviewTime.unit}` },
+            { metric: 'SLA Met (%)', value: analytics.reviewSLA.metPercent },
+            { metric: 'Risk Cases', value: analytics.riskCases.count, severity: analytics.riskCases.severity },
+            { metric: 'Published Content', value: analytics.contentPerformance.publishedCount },
+            { metric: 'Active Content', value: analytics.contentPerformance.activeContent },
+            { metric: 'Feature Adoption (%)', value: analytics.featureAdoption.adoptionRate, activeUsers: analytics.featureAdoption.activeUsers },
+          ];
+          exportToCsv(rows, `quality-analytics-${timeRange}-${formatDateForExport(new Date())}.csv`);
+        }}>
+          Export CSV
+        </Button>
+      )}
+      <AdminRouteFreshnessBadge value={analytics?.freshness.generatedAt} />
+      <div className="w-44">
+        <Select
+          label=""
+          value={timeRange}
+          onChange={(event) => setTimeRange(event.target.value)}
+          options={[
+            { value: '7d', label: 'Last 7 Days' },
+            { value: '30d', label: 'Last 30 Days' },
+            { value: 'ytd', label: 'Year to Date' },
+          ]}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <AdminRouteWorkspace role="main" aria-label="Quality analytics">
-      <AdminRouteSectionHeader
+      <AdminOperationsLayout
         title="Quality Analytics"
         description="Track grading agreement, appeals, turnaround, and risk signals from the live quality analytics service."
-        meta={analytics ? `Window ${analytics.freshness.windowDays} days` : undefined}
-        actions={
-          <div className="flex items-center gap-3">
-            {analytics && (
-              <Button variant="outline" size="sm" className="gap-2" onClick={() => {
-                const rows: Record<string, unknown>[] = [
-                  { metric: 'AI-Human Agreement (%)', value: analytics.aiHumanAgreement.value, trend: analytics.aiHumanAgreement.trend },
-                  { metric: 'Appeals Rate (%)', value: analytics.appealsRate.value, trend: analytics.appealsRate.trend },
-                  { metric: 'Avg Review Time', value: `${analytics.avgReviewTime.value} ${analytics.avgReviewTime.unit}` },
-                  { metric: 'SLA Met (%)', value: analytics.reviewSLA.metPercent },
-                  { metric: 'Risk Cases', value: analytics.riskCases.count, severity: analytics.riskCases.severity },
-                  { metric: 'Published Content', value: analytics.contentPerformance.publishedCount },
-                  { metric: 'Active Content', value: analytics.contentPerformance.activeContent },
-                  { metric: 'Feature Adoption (%)', value: analytics.featureAdoption.adoptionRate, activeUsers: analytics.featureAdoption.activeUsers },
-                ];
-                exportToCsv(rows, `quality-analytics-${timeRange}-${formatDateForExport(new Date())}.csv`);
-              }}>
-                <Download className="w-4 h-4" />
-                Export CSV
-              </Button>
-            )}
-            <AdminRouteFreshnessBadge value={analytics?.freshness.generatedAt} />
-            <div className="w-44">
-              <Select
-                label=""
-                value={timeRange}
-                onChange={(event) => setTimeRange(event.target.value)}
-                options={[
-                  { value: '7d', label: 'Last 7 Days' },
-                  { value: '30d', label: 'Last 30 Days' },
-                  { value: 'ytd', label: 'Year to Date' },
-                ]}
-              />
-            </div>
-          </div>
-        }
-      />
-
-      <div className="rounded-xl border border-border bg-surface p-4">
-        <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ subtest: [], profession: [] })} />
-      </div>
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        onRetry={() => window.location.reload()}
-        emptyContent={
-          <EmptyState
-            icon={<BarChart3 className="h-10 w-10 text-muted" />}
-            title="No quality analytics are available for this filter set"
-            description="Try a broader time range or clear the current subtest and profession filters."
-          />
-        }
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Analytics', href: '/admin/analytics' },
+          { label: 'Quality' },
+        ]}
+        actions={headerActions}
       >
-        {analytics ? (
-          <div className="space-y-8">
-            <MotionSection delayIndex={0}>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <AdminRouteSummaryCard label="AI-Human Agreement" value={`${analytics.aiHumanAgreement.value}%`} hint={`${analytics.aiHumanAgreement.trend >= 0 ? '+' : ''}${analytics.aiHumanAgreement.trend}% vs prior window`} icon={<CheckCircle2 className="h-5 w-5" />} tone={analytics.aiHumanAgreement.trend >= 0 ? 'success' : 'warning'} />
-                <AdminRouteSummaryCard label="Appeals Rate" value={`${analytics.appealsRate.value}%`} hint={`${analytics.appealsRate.trend >= 0 ? '+' : ''}${analytics.appealsRate.trend}% vs prior window`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.appealsRate.trend <= 0 ? 'success' : 'warning'} />
-                <AdminRouteSummaryCard label="Avg Review Time" value={`${analytics.avgReviewTime.value} ${analytics.avgReviewTime.unit}`} hint={`SLA met ${analytics.reviewSLA.metPercent}%`} icon={<Clock className="h-5 w-5" />} />
-                <AdminRouteSummaryCard label="Risk Cases" value={analytics.riskCases.count} hint={`Severity ${analytics.riskCases.severity}`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.riskCases.count > 0 ? 'warning' : 'default'} />
-              </div>
-            </MotionSection>
+        <Card>
+          <CardContent className="p-4 sm:p-5 pt-4 sm:pt-5">
+            <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ subtest: [], profession: [] })} />
+          </CardContent>
+        </Card>
 
-            <MotionSection delayIndex={1}>
-              <div className="grid gap-4 md:grid-cols-3">
-                <AdminRouteSummaryCard label="Published Content" value={analytics.contentPerformance.publishedCount} icon={<FileText className="h-5 w-5" />} />
-                <AdminRouteSummaryCard label="Active Content" value={analytics.contentPerformance.activeContent} icon={<FileText className="h-5 w-5" />} />
-                <AdminRouteSummaryCard label="Feature Adoption" value={`${analytics.featureAdoption.adoptionRate}%`} hint={`${analytics.featureAdoption.activeUsers} active users`} icon={<Users className="h-5 w-5" />} />
-              </div>
-            </MotionSection>
+        <AsyncStateWrapper
+          status={pageStatus}
+          onRetry={() => window.location.reload()}
+          emptyContent={
+            <LegacyEmptyState
+              icon={<BarChart3 className="h-10 w-10 text-admin-fg-muted" />}
+              title="No quality analytics are available for this filter set"
+              description="Try a broader time range or clear the current subtest and profession filters."
+            />
+          }
+        >
+          {analytics ? (
+            <div className="space-y-8">
+              <MotionSection delayIndex={0}>
+                <KpiStrip>
+                  <KpiTile
+                    label="AI-Human Agreement"
+                    value={`${analytics.aiHumanAgreement.value}%`}
+                    icon={<CheckCircle2 className="h-4 w-4" />}
+                    tone={analytics.aiHumanAgreement.trend >= 0 ? 'success' : 'warning'}
+                    trend={{
+                      value: `${analytics.aiHumanAgreement.trend >= 0 ? '+' : ''}${analytics.aiHumanAgreement.trend}%`,
+                      direction: analytics.aiHumanAgreement.trend > 0 ? 'up' : analytics.aiHumanAgreement.trend < 0 ? 'down' : 'flat',
+                      positive: analytics.aiHumanAgreement.trend >= 0,
+                    }}
+                  />
+                  <KpiTile
+                    label="Appeals Rate"
+                    value={`${analytics.appealsRate.value}%`}
+                    icon={<AlertTriangle className="h-4 w-4" />}
+                    tone={analytics.appealsRate.trend <= 0 ? 'success' : 'warning'}
+                    trend={{
+                      value: `${analytics.appealsRate.trend >= 0 ? '+' : ''}${analytics.appealsRate.trend}%`,
+                      direction: analytics.appealsRate.trend > 0 ? 'up' : analytics.appealsRate.trend < 0 ? 'down' : 'flat',
+                      positive: analytics.appealsRate.trend <= 0,
+                    }}
+                  />
+                  <KpiTile
+                    label="Avg Review Time"
+                    value={`${analytics.avgReviewTime.value} ${analytics.avgReviewTime.unit}`}
+                    icon={<Clock className="h-4 w-4" />}
+                  />
+                  <KpiTile
+                    label="Risk Cases"
+                    value={analytics.riskCases.count}
+                    icon={<AlertTriangle className="h-4 w-4" />}
+                    tone={analytics.riskCases.count > 0 ? 'warning' : 'default'}
+                  />
+                </KpiStrip>
+              </MotionSection>
 
-            <MotionSection delayIndex={2}>
-              <div className="grid gap-6 xl:grid-cols-2">
-                <AdminRoutePanel title="Quality Rates Trend" description="Agreement and appeals trends from the current analytics window.">
-                  <div className="h-[240px] w-full sm:h-[280px] lg:h-[320px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={rateChartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
-                        <YAxis stroke="#64748b" fontSize={12} />
-                        <Tooltip />
-                        <Legend />
-                        <Line type="monotone" dataKey="agreement" name="Agreement" stroke="#2563eb" strokeWidth={2} dot={false} />
-                        <Line type="monotone" dataKey="appeals" name="Appeals" stroke="#dc2626" strokeWidth={2} dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </AdminRoutePanel>
-
-                <AdminRoutePanel title="Operations Trend" description="Review time and risk case trend lines from the live analytics response.">
-                  <div className="h-[240px] w-full sm:h-[280px] lg:h-[320px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={operationsChartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
-                        <YAxis stroke="#64748b" fontSize={12} />
-                        <Tooltip />
-                        <Legend />
-                        <Line type="monotone" dataKey="reviewTime" name="Review Time" stroke="#f59e0b" strokeWidth={2} dot={false} />
-                        <Line type="monotone" dataKey="riskCases" name="Risk Cases" stroke="#7c3aed" strokeWidth={2} dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </AdminRoutePanel>
-              </div>
-            </MotionSection>
-
-            <MotionSection delayIndex={3}>
-              <AdminRoutePanel title="Sample Coverage" description="Quality analytics are only as trustworthy as the evidence window behind them.">
+              <MotionSection delayIndex={1}>
                 <div className="grid gap-4 md:grid-cols-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Evaluation Samples</p>
-                    <p className="text-xl font-semibold text-admin-text">{analytics.freshness.evaluationSampleCount}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Review Samples</p>
-                    <p className="text-xl font-semibold text-admin-text">{analytics.freshness.reviewSampleCount}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Applied Filters</p>
-                    <p className="text-sm text-admin-text-muted">Subtest: {analytics.filters.subtest}</p>
-                    <p className="text-sm text-admin-text-muted">Profession: {analytics.filters.profession}</p>
-                  </div>
+                  <KpiTile label="Published Content" value={analytics.contentPerformance.publishedCount} icon={<FileText className="h-4 w-4" />} size="sm" />
+                  <KpiTile label="Active Content" value={analytics.contentPerformance.activeContent} icon={<FileText className="h-4 w-4" />} size="sm" />
+                  <KpiTile label="Feature Adoption" value={`${analytics.featureAdoption.adoptionRate}%`} icon={<Users className="h-4 w-4" />} size="sm" />
                 </div>
-              </AdminRoutePanel>
-            </MotionSection>
-          </div>
-        ) : null}
-      </AsyncStateWrapper>
+              </MotionSection>
+
+              <MotionSection delayIndex={2}>
+                <BentoGrid>
+                  <BentoCell span={{ default: 12, xl: 6 }}>
+                    <ChartCard
+                      title="Quality Rates Trend"
+                      subtitle="Agreement and appeals trends from the current analytics window."
+                      height={320}
+                    >
+                      <ResponsiveContainer width="100%" height={320}>
+                        <LineChart data={rateChartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border)" />
+                          <XAxis dataKey="label" stroke="var(--admin-fg-muted)" fontSize={12} />
+                          <YAxis stroke="var(--admin-fg-muted)" fontSize={12} />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="agreement" name="Agreement" stroke="var(--admin-primary)" strokeWidth={2} dot={false} />
+                          <Line type="monotone" dataKey="appeals" name="Appeals" stroke="var(--admin-danger)" strokeWidth={2} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </ChartCard>
+                  </BentoCell>
+
+                  <BentoCell span={{ default: 12, xl: 6 }}>
+                    <ChartCard
+                      title="Operations Trend"
+                      subtitle="Review time and risk case trend lines from the live analytics response."
+                      height={320}
+                    >
+                      <ResponsiveContainer width="100%" height={320}>
+                        <LineChart data={operationsChartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border)" />
+                          <XAxis dataKey="label" stroke="var(--admin-fg-muted)" fontSize={12} />
+                          <YAxis stroke="var(--admin-fg-muted)" fontSize={12} />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="reviewTime" name="Review Time" stroke="var(--admin-warning)" strokeWidth={2} dot={false} />
+                          <Line type="monotone" dataKey="riskCases" name="Risk Cases" stroke="var(--admin-secondary)" strokeWidth={2} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </ChartCard>
+                  </BentoCell>
+                </BentoGrid>
+              </MotionSection>
+
+              <MotionSection delayIndex={3}>
+                <Card>
+                  <CardHeader>
+                    <div>
+                      <CardTitle>Sample Coverage</CardTitle>
+                      <p className="text-sm text-admin-fg-muted mt-1">Quality analytics are only as trustworthy as the evidence window behind them.</p>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Evaluation Samples</p>
+                        <p className="text-xl font-semibold text-admin-fg-strong">{analytics.freshness.evaluationSampleCount}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Review Samples</p>
+                        <p className="text-xl font-semibold text-admin-fg-strong">{analytics.freshness.reviewSampleCount}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Applied Filters</p>
+                        <p className="text-sm text-admin-fg-muted">Subtest: {analytics.filters.subtest}</p>
+                        <p className="text-sm text-admin-fg-muted">Profession: {analytics.filters.profession}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </MotionSection>
+            </div>
+          ) : null}
+        </AsyncStateWrapper>
+      </AdminOperationsLayout>
     </AdminRouteWorkspace>
   );
 }

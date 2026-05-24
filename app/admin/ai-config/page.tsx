@@ -2,10 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Bot, Cpu, Edit3, PlayCircle, Plus, ShieldAlert, Trash2 } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -153,31 +156,31 @@ export default function AIConfigPage() {
       header: 'Model',
       render: (config) => (
         <div className="space-y-1">
-          <p className="font-medium text-navy">{config.model}</p>
-          <p className="text-sm text-muted">{config.providerName ?? config.provider}</p>
+          <p className="font-medium text-admin-fg-strong">{config.model}</p>
+          <p className="text-sm text-admin-fg-muted">{config.providerName ?? config.provider}</p>
         </div>
       ),
     },
     {
       key: 'taskType',
       header: 'Task Type',
-      render: (config) => <span className="capitalize text-muted">{config.taskType}</span>,
+      render: (config) => <span className="capitalize text-admin-fg-muted">{config.taskType}</span>,
     },
     {
       key: 'promptLabel',
       header: 'Prompt Label',
-      render: (config) => <span className="font-mono text-xs text-muted">{config.promptLabel || 'Not labeled'}</span>,
+      render: (config) => <span className="font-mono text-xs text-admin-fg-muted">{config.promptLabel || 'Not labeled'}</span>,
     },
     {
       key: 'routingRule',
       header: 'Routing Rule',
-      render: (config) => <span className="text-sm text-muted">{config.routingRule || 'No routing override'}</span>,
+      render: (config) => <span className="text-sm text-admin-fg-muted">{config.routingRule || 'No routing override'}</span>,
     },
     {
       key: 'metrics',
       header: 'Confidence / Accuracy',
       render: (config) => (
-        <div className="space-y-1 text-sm text-muted">
+        <div className="space-y-1 text-sm text-admin-fg-muted">
           <p>{Math.round(config.confidenceThreshold * 100)}% threshold</p>
           <p>{Math.round(config.accuracy * 100)}% accuracy</p>
         </div>
@@ -189,7 +192,7 @@ export default function AIConfigPage() {
       render: (config) => {
         const stats = config.escalationStats;
         if (!stats) {
-          return <span className="text-xs text-muted">No data</span>;
+          return <span className="text-xs text-admin-fg-muted">No data</span>;
         }
         const rate = stats.escalationRatePercent;
         return (
@@ -197,7 +200,7 @@ export default function AIConfigPage() {
             <Badge variant={rate < 5 ? 'success' : rate < 15 ? 'warning' : 'danger'} size="sm">
               {rate.toFixed(1)}%
             </Badge>
-            <p className="text-xs text-muted">{stats.escalationsTriggered} / {stats.totalEvaluations} evals</p>
+            <p className="text-xs text-admin-fg-muted">{stats.escalationsTriggered} / {stats.totalEvaluations} evals</p>
           </div>
         );
       },
@@ -228,7 +231,7 @@ export default function AIConfigPage() {
             </Button>
           ) : null}
           {config.status === 'deprecated' ? (
-            <Button variant="ghost" size="sm" className="text-danger" onClick={() => handleDelete(config.id)}>
+            <Button variant="ghost" size="sm" className="text-[var(--admin-danger)]" onClick={() => handleDelete(config.id)}>
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           ) : null}
@@ -352,57 +355,69 @@ export default function AIConfigPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="AI evaluation config">
+    <>
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-
-      <AdminRouteSectionHeader
+      <AdminTableLayout
         title="AI Evaluation Config"
         description="Control live grading models, routing thresholds, and experiment linkages with real activation rules."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'AI Evaluation Config' },
+        ]}
         actions={
           <Button onClick={openCreateModal} className="gap-2">
             <Plus className="h-4 w-4" />
             New Configuration
           </Button>
         }
-      />
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        onRetry={() => window.location.reload()}
-        emptyContent={
-          <EmptyState
-            icon={<Cpu className="h-10 w-10 text-muted" />}
-            title="No AI configurations yet"
-            description="Create the first evaluation configuration so routing, experimentation, and activation are controlled from admin."
-            action={{ label: 'New Configuration', onClick: openCreateModal }}
-          />
+        banner={
+          <div className="space-y-4">
+            <KpiStrip>
+              <KpiTile label="Active Configs" value={metrics.active} icon={<PlayCircle className="h-4 w-4" />} tone="success" />
+              <KpiTile label="Testing Configs" value={metrics.testing} icon={<Bot className="h-4 w-4" />} tone={metrics.testing > 0 ? 'warning' : 'default'} />
+              <KpiTile label="Deprecated" value={metrics.deprecated} icon={<Cpu className="h-4 w-4" />} />
+              <KpiTile label="Average Accuracy" value={`${metrics.averageAccuracy}%`} icon={<Cpu className="h-4 w-4" />} />
+              <KpiTile
+                label="Escalation Rate"
+                value={metrics.totalEvaluations > 0 ? `${metrics.overallEscalationRate.toFixed(1)}%` : 'N/A'}
+                icon={<ShieldAlert className="h-4 w-4" />}
+                tone={metrics.overallEscalationRate > 15 ? 'danger' : metrics.overallEscalationRate > 5 ? 'warning' : 'default'}
+              />
+            </KpiStrip>
+            <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [] })} />
+          </div>
         }
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <AdminRouteSummaryCard label="Active Configs" value={metrics.active} icon={<PlayCircle className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="Testing Configs" value={metrics.testing} icon={<Bot className="h-5 w-5" />} tone={metrics.testing > 0 ? 'warning' : 'default'} />
-          <AdminRouteSummaryCard label="Deprecated" value={metrics.deprecated} icon={<Cpu className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="Average Accuracy" value={`${metrics.averageAccuracy}%`} icon={<Cpu className="h-5 w-5" />} />
-          <AdminRouteSummaryCard
-            label="Escalation Rate"
-            value={metrics.totalEvaluations > 0 ? `${metrics.overallEscalationRate.toFixed(1)}%` : 'N/A'}
-            icon={<ShieldAlert className="h-5 w-5" />}
-            tone={metrics.overallEscalationRate > 15 ? 'danger' : metrics.overallEscalationRate > 5 ? 'warning' : 'default'}
-          />
-        </div>
-
-        <AdminRoutePanel title="Configuration Registry" description="Live model metadata, thresholds, routing rules, and activation controls all come from the admin AI config endpoints.">
-          <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [] })} />
-          <DataTable columns={columns} data={configs} keyExtractor={(config) => config.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-          <BulkActionBar
-            selectedCount={selectedKeys.size}
-            onClearSelection={() => setSelectedKeys(new Set())}
-            actions={[
-              { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
-            ]}
-          />
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
+        <AsyncStateWrapper
+          status={pageStatus}
+          onRetry={() => window.location.reload()}
+          emptyContent={
+            <EmptyState
+              illustration={<Cpu className="h-10 w-10" />}
+              title="No AI configurations yet"
+              description="Create the first evaluation configuration so routing, experimentation, and activation are controlled from admin."
+              primaryAction={{ label: 'New Configuration', onClick: openCreateModal }}
+            />
+          }
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Configuration Registry</CardTitle>
+              <CardDescription>Live model metadata, thresholds, routing rules, and activation controls all come from the admin AI config endpoints.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <DataTable columns={columns} data={configs} keyExtractor={(config) => config.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+              <BulkActionBar
+                selectedCount={selectedKeys.size}
+                onClearSelection={() => setSelectedKeys(new Set())}
+                actions={[
+                  { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
+                ]}
+              />
+            </CardContent>
+          </Card>
+        </AsyncStateWrapper>
+      </AdminTableLayout>
 
       <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? 'Edit AI Configuration' : 'New AI Configuration'}>
         <div className="space-y-4 py-2">
@@ -466,8 +481,8 @@ export default function AIConfigPage() {
             ]}
           />
 
-          <div className="border-t border-border pt-4">
-            <h4 className="text-sm font-bold text-navy mb-3">Confidence Policy</h4>
+          <div className="border-t border-admin-border pt-4">
+            <h4 className="text-sm font-bold text-admin-fg-strong mb-3">Confidence Policy</h4>
             <div className="grid gap-4 md:grid-cols-2">
               <Select
                 label="Band"
@@ -486,9 +501,9 @@ export default function AIConfigPage() {
                   type="checkbox"
                   checked={form.confidencePolicyHumanReview}
                   onChange={(e) => setForm((current) => ({ ...current, confidencePolicyHumanReview: e.target.checked }))}
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-admin-border text-[var(--admin-primary)] focus:ring-[var(--admin-primary)]"
                 />
-                <label htmlFor="humanReview" className="text-sm text-navy cursor-pointer">
+                <label htmlFor="humanReview" className="text-sm text-admin-fg-default cursor-pointer">
                   Recommend human review in this band
                 </label>
               </div>
@@ -529,7 +544,7 @@ export default function AIConfigPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-3 border-t border-border pt-4">
+          <div className="flex justify-end gap-3 border-t border-admin-border pt-4">
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
@@ -539,6 +554,6 @@ export default function AIConfigPage() {
           </div>
         </div>
       </Modal>
-    </AdminRouteWorkspace>
+    </>
   );
 }

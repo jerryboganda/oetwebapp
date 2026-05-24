@@ -1,31 +1,33 @@
+// Re-skinned 2026-05-24 for admin redesign — uses --admin-* token system
 import { cn } from '@/lib/utils';
 import type { MetricTone } from './types';
 
+/**
+ * MetricGrid2x2 — four metric pairs in a 2×2 grid.
+ *
+ * Public API preserved: `items` array with `label`, `value`, optional
+ * `tone` (default tone) and optional `sub` (helper line).
+ */
 export function MetricGrid2x2({
   items,
 }: { items: { label: string; value: string | number; tone?: MetricTone; sub?: string }[] }) {
+  // Tone → text color for the metric value (tabular numeric display)
   const valColor: Record<MetricTone, string> = {
-    default: 'text-admin-text',
-    success: 'text-emerald-400',
-    warning: 'text-amber-400',
-    danger:  'text-rose-400',
-    info:    'text-blue-400',
-    purple:  'text-violet-400',
+    default: 'text-admin-fg-strong',
+    success: 'text-admin-success',
+    warning: 'text-admin-warning',
+    danger:  'text-admin-danger',
+    info:    'text-admin-info',
+    purple:  'text-admin-primary',
   };
+
   return (
-    <div className="grid grid-cols-2">
+    <div className="grid grid-cols-2 gap-2">
       {items.map(({ label, value, tone = 'default', sub }, i) => (
-        <div
-          key={i}
-          className={cn(
-            'px-4 py-3.5',
-            i % 2 === 0 ? 'border-r border-admin-border/60' : '',
-            i < 2 ? 'border-b border-admin-border/60' : '',
-          )}
-        >
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-admin-text-muted leading-none mb-1.5">{label}</p>
-          <p className={cn('text-2xl font-bold tabular-nums leading-none', valColor[tone])}>{value}</p>
-          {sub && <p className="text-xs text-admin-text-muted mt-1.5 leading-none">{sub}</p>}
+        <div key={i} className="rounded-admin-md bg-admin-bg-subtle p-3">
+          <p className="mb-1.5 text-xs leading-none text-admin-fg-muted">{label}</p>
+          <p className={cn('text-lg font-semibold leading-none tabular-nums', valColor[tone])}>{value}</p>
+          {sub && <p className="mt-1.5 text-xs leading-none text-admin-fg-muted">{sub}</p>}
         </div>
       ))}
     </div>

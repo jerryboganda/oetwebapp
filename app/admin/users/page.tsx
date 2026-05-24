@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   CheckCircle2,
   FileKey,
@@ -18,17 +18,21 @@ import {
   Users,
   UserX,
 } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { KpiTile, type KpiTone } from '@/components/admin/ui/kpi-tile';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import {
   applyPermissionTemplate,
   createPermissionTemplate,
@@ -238,7 +242,7 @@ export default function UsersPage() {
         header: 'Status',
         render: (user) => (
           <div className="flex flex-wrap gap-1">
-            <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'muted'}>
+            <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'default'}>
               {user.status}
             </Badge>
             {user.lockedOut ? <Badge variant="danger">Locked</Badge> : null}
@@ -282,7 +286,7 @@ export default function UsersPage() {
         </Badge>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'muted'}>
+        <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'default'}>
           {user.status}
         </Badge>
         {user.lockedOut ? <Badge variant="danger">Locked</Badge> : null}
@@ -374,12 +378,12 @@ export default function UsersPage() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
-  const summaryCards = [
-    { label: 'Active', value: summary?.active ?? users.filter((u) => u.status === 'active').length, icon: CheckCircle2, tone: 'text-emerald-600' },
-    { label: 'Suspended', value: summary?.suspended ?? users.filter((u) => u.status === 'suspended').length, icon: UserMinus, tone: 'text-amber-600' },
-    { label: 'Deleted', value: summary?.deleted ?? users.filter((u) => u.status === 'deleted').length, icon: UserX, tone: 'text-rose-600' },
-    { label: 'MFA enabled', value: summary?.mfaEnabled ?? users.filter((u) => u.mfaEnabled).length, icon: ShieldCheck, tone: 'text-emerald-600' },
-    { label: 'Locked out', value: summary?.lockedOut ?? users.filter((u) => u.lockedOut).length, icon: ShieldAlert, tone: 'text-rose-600' },
+  const summaryCards: Array<{ label: string; value: number; icon: ReactNode; tone: KpiTone }> = [
+    { label: 'Active', value: summary?.active ?? users.filter((u) => u.status === 'active').length, icon: <CheckCircle2 className="h-4 w-4" />, tone: 'success' },
+    { label: 'Suspended', value: summary?.suspended ?? users.filter((u) => u.status === 'suspended').length, icon: <UserMinus className="h-4 w-4" />, tone: 'warning' },
+    { label: 'Deleted', value: summary?.deleted ?? users.filter((u) => u.status === 'deleted').length, icon: <UserX className="h-4 w-4" />, tone: 'danger' },
+    { label: 'MFA enabled', value: summary?.mfaEnabled ?? users.filter((u) => u.mfaEnabled).length, icon: <ShieldCheck className="h-4 w-4" />, tone: 'success' },
+    { label: 'Locked out', value: summary?.lockedOut ?? users.filter((u) => u.lockedOut).length, icon: <ShieldAlert className="h-4 w-4" />, tone: 'danger' },
   ];
 
   const tabs: { id: HubTab; label: string; icon: typeof Users }[] = [
@@ -393,103 +397,107 @@ export default function UsersPage() {
     <AdminRouteWorkspace role="main" aria-label="User management">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <header className="flex flex-col gap-4 border-b border-border/60 pb-4 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Admin workspace</p>
-          <h1 className="text-2xl font-semibold text-navy">User Management</h1>
-          <p className="max-w-2xl text-sm text-muted">
-            One hub for every account on the platform — learners, tutors, and admins. Invite, suspend, restore,
-            audit, recover access, and manage admin permissions, all backed by the live admin API.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" className="gap-2" asChild>
-<Link href="/admin/users/import">
-              <Upload className="h-4 w-4" />
-              Bulk Import
-            </Link>
-</Button>
-          <Button onClick={() => { setInviteForm({ ...defaultInviteForm, role: tab === 'tutors' ? 'tutor' : tab === 'admins' ? 'admin' : 'learner' }); setIsInviteOpen(true); }} className="gap-2">
-            <MailPlus className="h-4 w-4" />
-            Invite User
-          </Button>
-        </div>
-      </header>
-
-      <div className="flex flex-wrap gap-1 border-b border-border" role="tablist" aria-label="User type">
-        {tabs.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === id ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-foreground'}`}
+      <AdminTableLayout
+        title="User Management"
+        description="One hub for every account on the platform — learners, tutors, and admins. Invite, suspend, restore, audit, recover access, and manage admin permissions, all backed by the live admin API."
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'User Management' }]}
+        actions={
+          <>
+            <Button variant="outline" asChild startIcon={<Upload className="h-4 w-4" />}>
+              <Link href="/admin/users/import">Bulk Import</Link>
+            </Button>
+            <Button
+              onClick={() => { setInviteForm({ ...defaultInviteForm, role: tab === 'tutors' ? 'tutor' : tab === 'admins' ? 'admin' : 'learner' }); setIsInviteOpen(true); }}
+              startIcon={<MailPlus className="h-4 w-4" />}
+            >
+              Invite User
+            </Button>
+          </>
+        }
+        banner={
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-1 border-b border-admin-border" role="tablist" aria-label="User type">
+              {tabs.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === id}
+                  onClick={() => setTab(id)}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === id ? 'border-[var(--admin-primary)] text-[var(--admin-primary)]' : 'border-transparent text-admin-fg-muted hover:text-admin-fg-strong'}`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
+            {tab !== 'admins' ? (
+              <KpiStrip className="lg:grid-cols-5">
+                {summaryCards.map(({ label, value, icon, tone }) => (
+                  <KpiTile key={label} label={label} value={value ?? 0} icon={icon} tone={tone} />
+                ))}
+              </KpiStrip>
+            ) : null}
+          </div>
+        }
+      >
+        {tab === 'admins' ? (
+          <div className="p-4 sm:p-5">
+            <AdminsAndPermissionsTab onToast={setToast} />
+          </div>
+        ) : (
+          <AsyncStateWrapper
+            status={pageStatus}
+            onRetry={() => window.location.reload()}
+            emptyContent={
+              <div className="p-6">
+                <EmptyState
+                  illustration={<Users />}
+                  title={tab === 'all' ? 'No users found' : `No ${tab} found`}
+                  description="Invite the first account to start operating the platform."
+                  primaryAction={{ label: 'Invite User', onClick: () => setIsInviteOpen(true) }}
+                />
+              </div>
+            }
           >
-            <Icon className="h-4 w-4" />
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'admins' ? (
-        <AdminsAndPermissionsTab onToast={setToast} />
-      ) : (
-        <AsyncStateWrapper
-          status={pageStatus}
-          onRetry={() => window.location.reload()}
-          emptyContent={
-            <EmptyState
-              icon={<Users className="h-10 w-10 text-muted" />}
-              title={tab === 'all' ? 'No users found' : `No ${tab} found`}
-              description="Invite the first account to start operating the platform."
-              action={{ label: 'Invite User', onClick: () => setIsInviteOpen(true) }}
-            />
-          }
-        >
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {summaryCards.map(({ label, value, icon: Icon, tone }) => (
-              <div key={label} className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</p>
-                    <p className="mt-1 text-2xl font-semibold text-navy">{value ?? 0}</p>
+            <div className="space-y-4 p-4 sm:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-base font-semibold text-admin-fg-strong">Directory</p>
+                  <p className="text-sm text-admin-fg-muted">
+                    Showing {users.length} of {total.toLocaleString()} accounts (page {page} of {totalPages}).
+                  </p>
+                </div>
+                <div className="w-full max-w-sm">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
+                    <Input placeholder="Search by name, email, or ID" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
                   </div>
-                  <Icon className={`h-5 w-5 ${tone}`} aria-hidden="true" />
                 </div>
               </div>
-            ))}
-          </div>
-
-          <AdminRoutePanel title="Directory" description={`Showing ${users.length} of ${total.toLocaleString()} accounts (page ${page} of ${totalPages}). Filter by status, or free-text search across name, email, and ID.`}>
-            <div className="max-w-sm">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
-                <Input placeholder="Search by name, email, or ID" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
-              </div>
+              <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => { setPage(1); setFilters({ status: [] }); setSearchQuery(''); }} />
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="user"
+                itemLabelPlural="users"
+              />
+              <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} mobileCardRender={mobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+              <BulkActionBar
+                selectedCount={selectedKeys.size}
+                onClearSelection={() => setSelectedKeys(new Set())}
+                actions={[
+                  { key: 'suspend', label: 'Suspend selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk suspend coming soon.' }) },
+                  { key: 'export', label: 'Export selected', onClick: () => setToast({ variant: 'error', message: 'Bulk export coming soon.' }) },
+                ]}
+              />
             </div>
-            <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => { setPage(1); setFilters({ status: [] }); setSearchQuery(''); }} />
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              itemLabel="user"
-              itemLabelPlural="users"
-            />
-            <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} mobileCardRender={mobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-            <BulkActionBar
-              selectedCount={selectedKeys.size}
-              onClearSelection={() => setSelectedKeys(new Set())}
-              actions={[
-                { key: 'suspend', label: 'Suspend selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk suspend coming soon.' }) },
-                { key: 'export', label: 'Export selected', onClick: () => setToast({ variant: 'error', message: 'Bulk export coming soon.' }) },
-              ]}
-            />
-          </AdminRoutePanel>
-        </AsyncStateWrapper>
-      )}
+          </AsyncStateWrapper>
+        )}
+      </AdminTableLayout>
 
       <Modal open={isInviteOpen} onClose={() => setIsInviteOpen(false)} title="Invite User">
         <div className="space-y-4 py-2">
@@ -687,22 +695,27 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
     <AsyncStateWrapper
       status={status}
       onRetry={reloadAll}
-      emptyContent={<EmptyState icon={<KeyRound className="h-10 w-10 text-muted" />} title="No admins" description="Invite an admin from the Invite User button to manage permissions." />}
+      emptyContent={<EmptyState illustration={<KeyRound />} title="No admins" description="Invite an admin from the Invite User button to manage permissions." />}
       errorMessage="Unable to load admins or permissions."
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <Input placeholder="Search admins by name or email" value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" />
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="relative max-w-sm flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
+            <Input placeholder="Search admins by name or email" value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" />
+          </div>
+          <Button variant="outline" size="sm" startIcon={<FileKey className="h-4 w-4" />} onClick={() => setShowTemplates(true)}>
+            Permission Templates ({templates.length})
+          </Button>
         </div>
-        <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowTemplates(true)}>
-          <FileKey className="h-4 w-4" />
-          Permission Templates ({templates.length})
-        </Button>
-      </div>
 
-      <AdminRoutePanel title="Admins" description="Click any admin to grant or revoke individual permissions and apply templates.">
-        <div className="divide-y divide-border">
+        <Card>
+          <CardHeader className="flex-col items-start gap-1">
+            <CardTitle>Admins</CardTitle>
+            <CardDescription>Click any admin to grant or revoke individual permissions and apply templates.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y divide-admin-border">
           {filtered.map((admin) => (
             <div key={admin.id} className="flex items-center justify-between py-3">
               <div className="min-w-0 flex-1">
@@ -717,11 +730,13 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
               </Button>
             </div>
           ))}
-          {filtered.length === 0 ? (
-            <p className="py-6 text-center text-sm text-admin-text-muted">No admins match your search.</p>
-          ) : null}
-        </div>
-      </AdminRoutePanel>
+              {filtered.length === 0 ? (
+                <p className="py-6 text-center text-sm text-admin-fg-muted">No admins match your search.</p>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Per-admin permission editor */}
       {selectedAdmin ? (
@@ -779,7 +794,7 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
                   {tpl.description ? <p className="text-xs text-muted">{tpl.description}</p> : null}
                   <div className="mt-1 flex flex-wrap gap-1">
                     {tpl.permissions.map((p) => (
-                      <Badge key={p} variant="muted" className="text-[10px]">{permLabel(p)}</Badge>
+                      <Badge key={p} variant="default" className="text-[10px]">{permLabel(p)}</Badge>
                     ))}
                   </div>
                 </div>
@@ -811,7 +826,7 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
                     {tpl.description ? <p className="text-xs text-muted">{tpl.description}</p> : null}
                     <div className="mt-1 flex flex-wrap gap-1">
                       {tpl.permissions.map((p) => (
-                        <Badge key={p} variant="muted" className="text-[10px]">{permLabel(p)}</Badge>
+                        <Badge key={p} variant="default" className="text-[10px]">{permLabel(p)}</Badge>
                       ))}
                     </div>
                   </div>

@@ -1,235 +1,543 @@
 'use client';
 
+/**
+ * Admin Operations dashboard — the canonical demonstration of the new admin
+ * design system. This page proves the new primitives end-to-end:
+ *
+ *   • AdminOperationsLayout / KpiStrip / BentoGrid (layout chrome)
+ *   • KpiTile (metrics)
+ *   • Card + DataTable (review-ops + billing tables)
+ *   • Badge + statusToTone (status semantics)
+ *   • EmptyState (error fallback inside the layout)
+ *   • TableSkeleton (loading fallback inside the layout)
+ *
+ * Data + auth wiring is preserved verbatim from the legacy implementation:
+ * `useAdminAuth`, `getAdminDashboardData`, `PrivilegedMfaBanner`. Only the
+ * visual layer changed.
+ */
+
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import {
-  Activity,
   AlertTriangle,
-  BarChart3,
-  Clock4,
-  CreditCard,
-  FileText,
+  ArrowRight,
   Flag,
   Inbox,
+  RefreshCw,
   Shield,
-  Sparkles,
   TrendingUp,
   Users,
-  Zap,
 } from 'lucide-react';
-import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
+
+// ── Data + auth wiring (preserved) ────────────────────────────────────
+import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminDashboardData } from '@/lib/admin';
 import type { AdminDashboardData } from '@/lib/types/admin';
-import { cn } from '@/lib/utils';
-import { DenseTable } from '@/components/admin/ui/dense-table';
-import { MetricGrid2x2 } from '@/components/admin/ui/metric-grid-2x2';
-import { Panel } from '@/components/admin/ui/panel';
-import { PulseTile } from '@/components/admin/ui/pulse-tile';
-import { StatusBadge } from '@/components/admin/ui/status-badge';
 
-/* ── Main page ────────────────────────────────────────────────────────── */
+// ── New admin design system primitives ────────────────────────────────
+import {
+  AdminOperationsLayout,
+  KpiStrip,
+  BentoGrid,
+  BentoCell,
+} from '@/components/admin/layout/admin-operations-layout';
+import { Button } from '@/components/admin/ui/button';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardAction,
+  CardContent,
+} from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Badge } from '@/components/admin/ui/badge';
+import { DataTable, type ColumnDef } from '@/components/admin/ui/data-table';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { TableSkeleton } from '@/components/admin/ui/skeleton';
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Row types for the dashboard tables. We model these in-page rather than
+ * leak local shapes into the global types module — the DataTable just
+ * needs an inline ColumnDef array.
+ * ───────────────────────────────────────────────────────────────────── */
+
+type ReviewOpsRow = {
+  id: string;
+  workstream: string;
+  badge: { tone: 'default' | 'warning' | 'danger' | 'success' | 'info'; label: string };
+  count: number;
+  emphasize: boolean;
+};
+
+type BillingRow = {
+  id: string;
+  category: string;
+  badge: { tone: 'default' | 'warning' | 'danger' | 'success' | 'info'; label: string };
+  count: string;
+};
+
+type QualityRow = {
+  label: string;
+  value: string;
+  tone: 'default' | 'success' | 'warning' | 'danger' | 'info';
+};
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Pure projections from AdminDashboardData → table rows. Kept outside
+ * the component so they can be unit-tested without rendering.
+ * ───────────────────────────────────────────────────────────────────── */
+
+function reviewOpsRows(d: AdminDashboardData): ReviewOpsRow[] {
+  return [
+    {
+      id: 'backlog',
+      workstream: 'Backlog',
+      badge: d.reviewOps.backlog > 0
+        ? { tone: 'warning', label: 'Action required' }
+        : { tone: 'default', label: 'Normal' },
+      count: d.reviewOps.backlog,
+      emphasize: d.reviewOps.backlog > 0,
+    },
+    {
+      id: 'overdue',
+      workstream: 'Overdue',
+      badge: d.reviewOps.overdue > 0
+        ? { tone: 'danger', label: 'Critical' }
+        : { tone: 'success', label: 'Clear' },
+      count: d.reviewOps.overdue,
+      emphasize: d.reviewOps.overdue > 0,
+    },
+    {
+      id: 'inProgress',
+      workstream: 'In progress',
+      badge: { tone: 'info', label: 'Active' },
+      count: d.reviewOps.inProgress,
+      emphasize: false,
+    },
+    {
+      id: 'failedReviews',
+      workstream: 'Failed reviews',
+      badge: d.reviewOps.failedReviews > 0
+        ? { tone: 'danger', label: 'Failing' }
+        : { tone: 'success', label: 'Clear' },
+      count: d.reviewOps.failedReviews,
+      emphasize: d.reviewOps.failedReviews > 0,
+    },
+    {
+      id: 'failedJobs',
+      workstream: 'Failed jobs',
+      badge: d.reviewOps.failedJobs > 0
+        ? { tone: 'danger', label: 'Failing' }
+        : { tone: 'success', label: 'Healthy' },
+      count: d.reviewOps.failedJobs,
+      emphasize: d.reviewOps.failedJobs > 0,
+    },
+  ];
+}
+
+function billingRows(d: AdminDashboardData): BillingRow[] {
+  return [
+    {
+      id: 'activeSubscribers',
+      category: 'Active subscribers',
+      badge: { tone: 'success', label: 'Stable' },
+      count: d.billingRisk.activeSubscribers.toLocaleString(),
+    },
+    {
+      id: 'pendingInvoices',
+      category: 'Pending invoices',
+      badge: d.billingRisk.pendingInvoices > 0
+        ? { tone: 'warning', label: 'Pending' }
+        : { tone: 'success', label: 'Clear' },
+      count: d.billingRisk.pendingInvoices.toLocaleString(),
+    },
+    {
+      id: 'failedInvoices',
+      category: 'Failed invoices',
+      badge: d.billingRisk.failedInvoices > 0
+        ? { tone: 'danger', label: 'At risk' }
+        : { tone: 'success', label: 'Clear' },
+      count: d.billingRisk.failedInvoices.toLocaleString(),
+    },
+    {
+      id: 'legacyPlans',
+      category: 'Legacy plans',
+      badge: { tone: 'warning', label: 'Deprecating' },
+      count: d.billingRisk.legacyPlans.toLocaleString(),
+    },
+  ];
+}
+
+function qualityRows(d: AdminDashboardData): QualityRow[] {
+  const agreementTone: QualityRow['tone'] =
+    d.quality.agreementRate >= 80 ? 'success' : d.quality.agreementRate >= 65 ? 'warning' : 'danger';
+  return [
+    { label: 'AI/human agreement', value: `${d.quality.agreementRate}%`, tone: agreementTone },
+    { label: 'Evaluations', value: d.quality.evaluationCount.toLocaleString(), tone: 'info' },
+    { label: 'Avg review time', value: `${d.quality.avgReviewHours}h`, tone: 'default' },
+    {
+      label: 'Risk cases',
+      value: d.quality.riskCases.toLocaleString(),
+      tone: d.quality.riskCases > 0 ? 'danger' : 'success',
+    },
+  ];
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Column definitions for the new DataTable. Inline because the rows
+ * never leave this page.
+ * ───────────────────────────────────────────────────────────────────── */
+
+const reviewOpsColumns: ColumnDef<ReviewOpsRow>[] = [
+  {
+    key: 'workstream',
+    header: 'Workstream',
+    cell: (row) => <span className="font-medium text-admin-fg-strong">{row.workstream}</span>,
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    cell: (row) => (
+      <Badge variant={row.badge.tone} intensity="tinted" size="sm">
+        {row.badge.label}
+      </Badge>
+    ),
+  },
+  {
+    key: 'count',
+    header: 'Count',
+    align: 'right',
+    cell: (row) => (
+      <span
+        className={
+          row.emphasize
+            ? 'font-mono font-semibold tabular-nums text-admin-fg-strong'
+            : 'font-mono tabular-nums text-admin-fg-muted'
+        }
+      >
+        {row.count.toLocaleString()}
+      </span>
+    ),
+  },
+];
+
+const billingColumns: ColumnDef<BillingRow>[] = [
+  {
+    key: 'category',
+    header: 'Category',
+    cell: (row) => <span className="font-medium text-admin-fg-strong">{row.category}</span>,
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    cell: (row) => (
+      <Badge variant={row.badge.tone} intensity="tinted" size="sm">
+        {row.badge.label}
+      </Badge>
+    ),
+  },
+  {
+    key: 'count',
+    header: 'Count',
+    align: 'right',
+    cell: (row) => (
+      <span className="font-mono tabular-nums text-admin-fg-default">{row.count}</span>
+    ),
+  },
+];
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Page
+ * ───────────────────────────────────────────────────────────────────── */
+
+type FetchStatus = 'loading' | 'success' | 'error';
+
 export default function AdminDashboardPage() {
   const { isAuthenticated, role } = useAdminAuth();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [d, setD] = useState<AdminDashboardData | null>(null);
+  const [status, setStatus] = useState<FetchStatus>('loading');
+  const [data, setData] = useState<AdminDashboardData | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setStatus('loading');
+    setError(null);
     getAdminDashboardData()
-      .then((data) => { if (!cancelled) { setD(data); setStatus('success'); } })
-      .catch(() => { if (!cancelled) setStatus('error'); });
-    return () => { cancelled = true; };
+      .then((d) => {
+        if (cancelled) return;
+        setData(d);
+        setStatus('success');
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err : new Error('Failed to load dashboard'));
+        setStatus('error');
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  // Auth gate — matches legacy behaviour. Server-side enforcement lives upstream;
+  // this prevents an authenticated-but-wrong-role flash.
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Admin operations">
-      <h1 className="sr-only">Admin Dashboard</h1>
-      <AsyncStateWrapper status={status} onRetry={() => window.location.reload()}>
-        {d ? (
-          <div className="flex flex-col gap-3">
+    <>
+      <PrivilegedMfaBanner key="privileged-mfa-banner" />
+      <h1 className="sr-only">Admin Operations Dashboard</h1>
 
-            {/* ── Command strip ─────────────────────────────────────── */}
-            <div className="flex flex-col justify-between gap-3 rounded-2xl border border-admin-border bg-admin-surface px-5 py-3.5 shadow-sm sm:flex-row sm:items-center">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="rounded-lg bg-violet-500/20 p-2 shrink-0">
-                  <Sparkles className="h-4 w-4 text-violet-400" />
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-violet-400 leading-none">Operations Center</h2>
-                  <p className="text-xs text-admin-text-muted leading-none mt-1 truncate">Platform health · review risk · rollout signals</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold uppercase tracking-widest sm:justify-end">
-                <span className="text-admin-text-muted">Q·{d.freshness.qualityWindow}</span>
-                <span className="text-admin-text-muted/60">|</span>
-                <span className="text-admin-text-muted">{new Date(d.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                <span className="text-admin-text-muted/60">|</span>
-                <span className="flex items-center gap-1.5 text-emerald-400">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
-                  Live
-                </span>
-              </div>
-            </div>
+      <AdminOperationsLayout
+        title="Operations"
+        description="Platform health · review risk · rollout signals · daily ops view"
+        actions={
+          <Button
+            size="sm"
+            variant="outline"
+            startIcon={<RefreshCw className="h-4 w-4" />}
+            onClick={() => window.location.reload()}
+            aria-label="Refresh dashboard data"
+          >
+            Refresh
+          </Button>
+        }
+      >
+        {status === 'error' ? (
+          <EmptyState
+            variant="error"
+            size="lg"
+            illustration={<AlertTriangle aria-hidden="true" />}
+            title="Couldn't load dashboard"
+            description={
+              error?.message ??
+              'The dashboard data service did not respond. Reload to try again, or check your network.'
+            }
+            primaryAction={{
+              label: 'Retry',
+              onClick: () => window.location.reload(),
+            }}
+          />
+        ) : status === 'loading' || !data ? (
+          <DashboardSkeleton />
+        ) : (
+          <DashboardContent data={data} />
+        )}
+      </AdminOperationsLayout>
+    </>
+  );
+}
 
-            {/* ── KPI pulse bar ─────────────────────────────────────── */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <PulseTile label="Backlog"     value={d.reviewOps.backlog}                            tone={d.reviewOps.backlog > 0 ? 'warning' : 'default'} icon={Inbox} />
-              <PulseTile label="Overdue"     value={d.reviewOps.overdue}                            tone={d.reviewOps.overdue > 0 ? 'danger' : 'success'} icon={AlertTriangle} />
-              <PulseTile label="Active Subs" value={d.billingRisk.activeSubscribers.toLocaleString()} tone="info"    icon={Users} />
-              <PulseTile label="Agreement"  value={`${d.quality.agreementRate}%`}                  tone={d.quality.agreementRate >= 80 ? 'success' : d.quality.agreementRate >= 65 ? 'warning' : 'danger'} icon={Shield} />
-              <PulseTile label="Risk Cases"  value={d.quality.riskCases}                            tone={d.quality.riskCases > 0 ? 'danger' : 'success'} icon={TrendingUp} />
-              <PulseTile label="Live Flags"  value={d.flags.liveExperiments}                        tone={d.flags.liveExperiments > 0 ? 'purple' : 'default'} icon={Flag} />
-            </div>
+/* ─────────────────────────────────────────────────────────────────────
+ * Loading & success subtrees split out so they don't fight over the
+ * Suspense boundary inside AdminOperationsLayout (when present).
+ * ───────────────────────────────────────────────────────────────────── */
 
-            {/* ── Main grid: left (tables) + right rail ─────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3">
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true" aria-label="Loading dashboard">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <KpiTile key={i} label="" value="" loading />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="lg:col-span-8">
+          <TableSkeleton rows={5} columns={3} />
+        </div>
+        <div className="space-y-4 lg:col-span-4">
+          <TableSkeleton rows={4} columns={3} />
+          <TableSkeleton rows={4} columns={2} showHeader={false} />
+          <TableSkeleton rows={4} columns={2} showHeader={false} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
-              {/* Left — two dense tables stacked */}
-              <div className="flex flex-col gap-3">
+function DashboardContent({ data: d }: { data: AdminDashboardData }) {
+  const agreementTone =
+    d.quality.agreementRate >= 80 ? 'success' : d.quality.agreementRate >= 65 ? 'warning' : 'danger';
 
-                {/* Review Operations */}
-                <Panel title="Review Operations" icon={Inbox} href="/admin/review-ops">
-                  <DenseTable
-                    cols={['Workstream', 'Status', 'Vol']}
-                    rows={[
-                      [
-                        <span key="bl" className="font-semibold text-admin-text">Backlog</span>,
-                        <StatusBadge key="bls" tone={d.reviewOps.backlog > 0 ? 'warning' : 'default'} label={d.reviewOps.backlog > 0 ? 'Action Req' : 'Normal'} />,
-                        <span key="blv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.backlog > 0 ? 'text-amber-400' : 'text-admin-text-muted')}>{d.reviewOps.backlog}</span>,
-                      ],
-                      [
-                        <span key="ov" className="font-semibold text-admin-text">Overdue</span>,
-                        <StatusBadge key="ovs" tone={d.reviewOps.overdue > 0 ? 'danger' : 'success'} label={d.reviewOps.overdue > 0 ? 'Critical' : 'Clear'} />,
-                        <span key="ovv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.overdue > 0 ? 'text-rose-400' : 'text-emerald-400')}>{d.reviewOps.overdue}</span>,
-                      ],
-                      [
-                        <span key="ip" className="font-semibold text-admin-text">In Progress</span>,
-                        <StatusBadge key="ips" tone="info" label="Active" />,
-                        <span key="ipv" className="font-mono text-admin-text-muted tabular-nums">{d.reviewOps.inProgress}</span>,
-                      ],
-                      [
-                        <span key="fr" className="font-semibold text-admin-text">Failed Reviews</span>,
-                        <StatusBadge key="frs" tone={d.reviewOps.failedReviews > 0 ? 'danger' : 'success'} label={d.reviewOps.failedReviews > 0 ? 'Failing' : 'Clear'} />,
-                        <span key="frv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.failedReviews > 0 ? 'text-rose-400' : 'text-emerald-400')}>{d.reviewOps.failedReviews}</span>,
-                      ],
-                      [
-                        <span key="fj" className="font-semibold text-admin-text">Failed Jobs</span>,
-                        <StatusBadge key="fjs" tone={d.reviewOps.failedJobs > 0 ? 'danger' : 'success'} label={d.reviewOps.failedJobs > 0 ? 'Failing' : 'Healthy'} />,
-                        <span key="fjv" className={cn('font-mono font-bold tabular-nums', d.reviewOps.failedJobs > 0 ? 'text-rose-400' : 'text-emerald-400')}>{d.reviewOps.failedJobs}</span>,
-                      ],
-                    ]}
-                  />
-                </Panel>
+  return (
+    <>
+      {/* KPI strip — six pulse-style tiles. */}
+      <KpiStrip aria-label="Operations key metrics">
+        <KpiTile
+          label="Backlog"
+          value={d.reviewOps.backlog.toLocaleString()}
+          tone={d.reviewOps.backlog > 0 ? 'warning' : 'default'}
+          icon={<Inbox className="h-4 w-4" />}
+        />
+        <KpiTile
+          label="Overdue"
+          value={d.reviewOps.overdue.toLocaleString()}
+          tone={d.reviewOps.overdue > 0 ? 'danger' : 'success'}
+          icon={<AlertTriangle className="h-4 w-4" />}
+        />
+        <KpiTile
+          label="Active Subscribers"
+          value={d.billingRisk.activeSubscribers.toLocaleString()}
+          tone="info"
+          icon={<Users className="h-4 w-4" />}
+        />
+        <KpiTile
+          label="Agreement Rate"
+          value={`${d.quality.agreementRate}%`}
+          tone={agreementTone}
+          icon={<Shield className="h-4 w-4" />}
+        />
+        <KpiTile
+          label="Risk Cases"
+          value={d.quality.riskCases.toLocaleString()}
+          tone={d.quality.riskCases > 0 ? 'danger' : 'success'}
+          icon={<TrendingUp className="h-4 w-4" />}
+        />
+        <KpiTile
+          label="Live Flags"
+          value={d.flags.liveExperiments.toLocaleString()}
+          tone={d.flags.liveExperiments > 0 ? 'primary' : 'default'}
+          icon={<Flag className="h-4 w-4" />}
+        />
+      </KpiStrip>
 
-                {/* Billing Risk & Subscriptions */}
-                <Panel title="Billing Risk & Subscriptions" icon={CreditCard} href="/admin/billing">
-                  <DenseTable
-                    cols={['Category', 'Status', 'Count']}
-                    rows={[
-                      [
-                        <span key="as" className="font-semibold text-admin-text">Active Subscribers</span>,
-                        <StatusBadge key="ass" tone="success" label="Stable" />,
-                        <span key="asv" className="font-mono font-bold text-emerald-400 tabular-nums">{d.billingRisk.activeSubscribers.toLocaleString()}</span>,
-                      ],
-                      [
-                        <span key="pi" className="font-semibold text-admin-text">Pending Invoices</span>,
-                        <StatusBadge key="pis" tone={d.billingRisk.pendingInvoices > 0 ? 'warning' : 'success'} label={d.billingRisk.pendingInvoices > 0 ? 'Pending' : 'Clear'} />,
-                        <span key="piv" className={cn('font-mono font-bold tabular-nums', d.billingRisk.pendingInvoices > 0 ? 'text-amber-400' : 'text-emerald-400')}>{d.billingRisk.pendingInvoices}</span>,
-                      ],
-                      [
-                        <span key="fi" className="font-semibold text-admin-text">Failed Invoices</span>,
-                        <StatusBadge key="fis" tone={d.billingRisk.failedInvoices > 0 ? 'danger' : 'success'} label={d.billingRisk.failedInvoices > 0 ? 'At Risk' : 'Clear'} />,
-                        <span key="fiv" className={cn('font-mono font-bold tabular-nums', d.billingRisk.failedInvoices > 0 ? 'text-rose-400' : 'text-emerald-400')}>{d.billingRisk.failedInvoices}</span>,
-                      ],
-                      [
-                        <span key="lp" className="font-semibold text-admin-text">Legacy Plans</span>,
-                        <StatusBadge key="lps" tone="warning" label="Deprecating" />,
-                        <span key="lpv" className="font-mono text-amber-400 tabular-nums">{d.billingRisk.legacyPlans}</span>,
-                      ],
-                    ]}
-                  />
-                </Panel>
+      {/* Main bento — large left (review ops) + right rail (3 cards). */}
+      <BentoGrid>
+        <BentoCell span={{ base: 12, lg: 8 }}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Review Operations</CardTitle>
+              <CardAction>
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  endIcon={<ArrowRight className="h-3.5 w-3.5" />}
+                  aria-label="View all review operations"
+                >
+                  <a href="/admin/review-ops">View all</a>
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                aria-label="Review operations workstreams"
+                columns={reviewOpsColumns}
+                data={reviewOpsRows(d)}
+                keyExtractor={(row) => row.id}
+              />
+            </CardContent>
+          </Card>
+        </BentoCell>
 
-              </div>
+        <BentoCell span={{ base: 12, lg: 4 }}>
+          <div className="flex flex-col gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Billing & Subscriptions</CardTitle>
+                <CardAction>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    endIcon={<ArrowRight className="h-3.5 w-3.5" />}
+                    aria-label="Open billing operations"
+                  >
+                    <a href="/admin/billing">Open</a>
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  aria-label="Billing risk and subscriptions"
+                  columns={billingColumns}
+                  data={billingRows(d)}
+                  keyExtractor={(row) => row.id}
+                />
+              </CardContent>
+            </Card>
 
-              {/* Right rail — four compact panels */}
-              <div className="flex flex-col gap-3">
-
-                {/* Content Health + Quality side by side */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Content Health</CardTitle>
+                <CardAction>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    endIcon={<ArrowRight className="h-3.5 w-3.5" />}
+                    aria-label="Open content hub"
+                  >
+                    <a href="/admin/content">Open</a>
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent>
                 <div className="grid grid-cols-2 gap-3">
-                  <Panel title="Content" icon={FileText} href="/admin/content">
-                    <MetricGrid2x2
-                      items={[
-                        { label: 'Published',    value: d.contentHealth.published,    tone: 'success' },
-                        { label: 'Drafts',       value: d.contentHealth.drafts,       tone: d.contentHealth.drafts > 0 ? 'info' : 'default' },
-                        { label: 'Archived',     value: d.contentHealth.archived,     tone: 'default' },
-                        { label: 'Stale Drafts', value: d.contentHealth.staleDrafts,  tone: d.contentHealth.staleDrafts > 0 ? 'warning' : 'default' },
-                      ]}
-                    />
-                  </Panel>
-
-                  <Panel title="Quality" icon={Shield} href="/admin/analytics/quality">
-                    <MetricGrid2x2
-                      items={[
-                        { label: 'Agreement',  value: `${d.quality.agreementRate}%`,  tone: d.quality.agreementRate >= 80 ? 'success' : d.quality.agreementRate >= 65 ? 'warning' : 'danger' },
-                        { label: 'Evals',      value: d.quality.evaluationCount,      tone: 'info' },
-                        { label: 'Avg Review', value: `${d.quality.avgReviewHours}h`, tone: 'default' },
-                        { label: 'Risk Cases', value: d.quality.riskCases,            tone: d.quality.riskCases > 0 ? 'danger' : 'success' },
-                      ]}
-                    />
-                  </Panel>
-                </div>
-
-                {/* Feature Flags */}
-                <Panel title="Feature Flags" icon={Flag} href="/admin/flags">
-                  <MetricGrid2x2
-                    items={[
-                      { label: 'Total',       value: d.flags.total,            tone: 'default' },
-                      { label: 'Enabled',     value: d.flags.enabled,          tone: 'success' },
-                      { label: 'Live Exps',   value: d.flags.liveExperiments,  tone: d.flags.liveExperiments > 0 ? 'purple' : 'default' },
-                      { label: 'Changes 24h', value: d.flags.recentChanges,    tone: d.flags.recentChanges > 0 ? 'warning' : 'default' },
-                    ]}
+                  <KpiTile
+                    label="Published"
+                    value={d.contentHealth.published.toLocaleString()}
+                    tone="success"
+                    size="sm"
                   />
-                </Panel>
+                  <KpiTile
+                    label="Drafts"
+                    value={d.contentHealth.drafts.toLocaleString()}
+                    tone={d.contentHealth.drafts > 0 ? 'info' : 'default'}
+                    size="sm"
+                  />
+                  <KpiTile
+                    label="Archived"
+                    value={d.contentHealth.archived.toLocaleString()}
+                    tone="default"
+                    size="sm"
+                  />
+                  <KpiTile
+                    label="Stale Drafts"
+                    value={d.contentHealth.staleDrafts.toLocaleString()}
+                    tone={d.contentHealth.staleDrafts > 0 ? 'warning' : 'default'}
+                    size="sm"
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-                {/* Quick Actions */}
-                <Panel title="Quick Actions" icon={Zap}>
-                  <div className="grid grid-cols-3">
-                    {([
-                      { href: '/admin/content',               label: 'Content Hub', icon: FileText,  color: 'text-blue-500',   bg: 'hover:bg-blue-500/10' },
-                      { href: '/admin/review-ops',            label: 'Review Ops',  icon: Inbox,     color: 'text-violet-500', bg: 'hover:bg-violet-500/10' },
-                      { href: '/admin/freeze',                label: 'Freezes',     icon: Clock4,    color: 'text-cyan-500',   bg: 'hover:bg-cyan-500/10' },
-                      { href: '/admin/billing',               label: 'Billing',     icon: CreditCard, color: 'text-emerald-500', bg: 'hover:bg-emerald-500/10' },
-                      { href: '/admin/business-intelligence', label: 'BI',          icon: BarChart3, color: 'text-amber-500',  bg: 'hover:bg-amber-500/10' },
-                      { href: '/admin/analytics/quality',     label: 'Quality',     icon: Shield,    color: 'text-rose-500',   bg: 'hover:bg-rose-500/10' },
-                    ] as const).map((a, i) => (
-                      <Link
-                        key={a.href}
-                        href={a.href}
-                        className={cn(
-                          'flex flex-col items-center justify-center gap-2 py-4 transition-colors group',
-                          i % 3 !== 2 && 'border-r border-admin-border/60',
-                          i < 3 && 'border-b border-admin-border/60',
-                          a.bg,
-                        )}
-                      >
-                        <a.icon className={cn('h-5 w-5 transition-transform group-hover:scale-110', a.color)} />
-                        <span className="text-xs font-bold uppercase tracking-[0.15em] text-admin-text-muted group-hover:text-admin-text transition-colors leading-none">{a.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </Panel>
-
-              </div>
-            </div>
-
+            <Card>
+              <CardHeader>
+                <CardTitle>Quality</CardTitle>
+                <CardAction>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    endIcon={<ArrowRight className="h-3.5 w-3.5" />}
+                    aria-label="Open quality analytics"
+                  >
+                    <a href="/admin/analytics/quality">Open</a>
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent>
+                <ul
+                  className="divide-y divide-admin-border"
+                  aria-label="Quality metrics"
+                >
+                  {qualityRows(d).map((row) => (
+                    <li
+                      key={row.label}
+                      className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0"
+                    >
+                      <span className="text-sm text-admin-fg-default">{row.label}</span>
+                      <Badge variant={row.tone} intensity="tinted" size="sm">
+                        {row.value}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
           </div>
-        ) : null}
-      </AsyncStateWrapper>
-    </AdminRouteWorkspace>
+        </BentoCell>
+      </BentoGrid>
+    </>
   );
 }

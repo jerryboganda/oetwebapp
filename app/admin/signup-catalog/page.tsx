@@ -2,13 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, Edit2, Plus } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { Input, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -26,16 +22,41 @@ import {
   type AdminSignupProfessionPayload,
 } from '@/lib/api';
 import { TARGET_COUNTRY_OPTIONS } from '@/lib/auth/target-countries';
-import type { AdminSignupCatalogResponse, AdminSignupExamTypeCatalogItem, AdminSignupProfessionCatalogItem } from '@/lib/types/admin';
+import type {
+  AdminSignupCatalogResponse,
+  AdminSignupExamTypeCatalogItem,
+  AdminSignupProfessionCatalogItem,
+} from '@/lib/types/admin';
 import { BulkActionBar } from '@/components/ui/bulk-action-bar';
+// New admin DS imports
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type CatalogTab = 'exam-types' | 'professions';
 
 const targetCountryOptions = [...TARGET_COUNTRY_OPTIONS];
 
-const blankExamForm: AdminSignupExamTypePayload = { id: '', code: '', label: '', description: '', sortOrder: 0, isActive: true };
-const blankProfessionForm: AdminSignupProfessionPayload = { id: '', label: '', description: '', examTypeIds: [], countryTargets: targetCountryOptions, sortOrder: 0, isActive: true };
+const blankExamForm: AdminSignupExamTypePayload = {
+  id: '',
+  code: '',
+  label: '',
+  description: '',
+  sortOrder: 0,
+  isActive: true,
+};
+const blankProfessionForm: AdminSignupProfessionPayload = {
+  id: '',
+  label: '',
+  description: '',
+  examTypeIds: [],
+  countryTargets: targetCountryOptions,
+  sortOrder: 0,
+  isActive: true,
+};
 
 export default function AdminSignupCatalogPage() {
   const { isAuthenticated, role } = useAdminAuth();
@@ -82,35 +103,80 @@ export default function AdminSignupCatalogPage() {
   );
 
   const examColumns: Column<AdminSignupExamTypeCatalogItem>[] = [
-    { key: 'label', header: 'Exam Type', render: (row) => <span className="font-medium text-navy">{row.label}</span> },
-    { key: 'code', header: 'Code', render: (row) => <span className="font-mono text-xs text-muted">{row.code}</span> },
+    {
+      key: 'label',
+      header: 'Exam Type',
+      render: (row) => <span className="font-medium text-admin-fg-strong">{row.label}</span>,
+    },
+    {
+      key: 'code',
+      header: 'Code',
+      render: (row) => <span className="font-mono text-xs text-admin-fg-muted">{row.code}</span>,
+    },
     { key: 'sortOrder', header: 'Order', render: (row) => row.sortOrder },
-    { key: 'status', header: 'Status', render: (row) => <Badge variant={row.isActive ? 'success' : 'muted'}>{row.isActive ? 'active' : 'archived'}</Badge> },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => (
+        <Badge variant={row.isActive ? 'success' : 'secondary'}>{row.isActive ? 'active' : 'archived'}</Badge>
+      ),
+    },
     {
       key: 'actions',
       header: '',
       render: (row) => (
         <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={() => openExamEditor(row)} className="gap-2"><Edit2 className="h-4 w-4" /> Edit</Button>
-          <Button variant="outline" size="sm" onClick={() => void toggleExamType(row)}>{row.isActive ? 'Archive' : 'Activate'}</Button>
+          <Button variant="outline" size="sm" onClick={() => openExamEditor(row)} startIcon={<Edit2 className="h-3.5 w-3.5" />}>
+            Edit
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void toggleExamType(row)}>
+            {row.isActive ? 'Archive' : 'Activate'}
+          </Button>
         </div>
       ),
     },
   ];
 
   const professionColumns: Column<AdminSignupProfessionCatalogItem>[] = [
-    { key: 'label', header: 'Profession', render: (row) => <span className="font-medium text-navy">{row.label}</span> },
-    { key: 'id', header: 'ID', render: (row) => <span className="font-mono text-xs text-muted">{row.id}</span> },
-    { key: 'examTypes', header: 'Exam Types', render: (row) => row.examTypeIds.map((id) => examTypeLabelById.get(id) ?? id).join(', ') || 'None' },
-    { key: 'countries', header: 'Countries', render: (row) => row.countryTargets.length ? row.countryTargets.join(', ') : 'All' },
-    { key: 'status', header: 'Status', render: (row) => <Badge variant={row.isActive ? 'success' : 'muted'}>{row.isActive ? 'active' : 'archived'}</Badge> },
+    {
+      key: 'label',
+      header: 'Profession',
+      render: (row) => <span className="font-medium text-admin-fg-strong">{row.label}</span>,
+    },
+    {
+      key: 'id',
+      header: 'ID',
+      render: (row) => <span className="font-mono text-xs text-admin-fg-muted">{row.id}</span>,
+    },
+    {
+      key: 'examTypes',
+      header: 'Exam Types',
+      render: (row) =>
+        row.examTypeIds.map((id) => examTypeLabelById.get(id) ?? id).join(', ') || 'None',
+    },
+    {
+      key: 'countries',
+      header: 'Countries',
+      render: (row) => (row.countryTargets.length ? row.countryTargets.join(', ') : 'All'),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => (
+        <Badge variant={row.isActive ? 'success' : 'secondary'}>{row.isActive ? 'active' : 'archived'}</Badge>
+      ),
+    },
     {
       key: 'actions',
       header: '',
       render: (row) => (
         <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={() => openProfessionEditor(row)} className="gap-2"><Edit2 className="h-4 w-4" /> Edit</Button>
-          <Button variant="outline" size="sm" onClick={() => void toggleProfession(row)}>{row.isActive ? 'Archive' : 'Activate'}</Button>
+          <Button variant="outline" size="sm" onClick={() => openProfessionEditor(row)} startIcon={<Edit2 className="h-3.5 w-3.5" />}>
+            Edit
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void toggleProfession(row)}>
+            {row.isActive ? 'Archive' : 'Activate'}
+          </Button>
         </div>
       ),
     },
@@ -124,7 +190,17 @@ export default function AdminSignupCatalogPage() {
 
   function openProfessionEditor(row?: AdminSignupProfessionCatalogItem) {
     setEditingProfession(row ?? null);
-    setProfessionForm(row ? { ...row } : { ...blankProfessionForm, examTypeIds: catalog.examTypes.filter((item) => item.isActive).map((item) => item.id).slice(0, 1) });
+    setProfessionForm(
+      row
+        ? { ...row }
+        : {
+            ...blankProfessionForm,
+            examTypeIds: catalog.examTypes
+              .filter((item) => item.isActive)
+              .map((item) => item.id)
+              .slice(0, 1),
+          },
+    );
     setProfessionModalOpen(true);
   }
 
@@ -174,97 +250,266 @@ export default function AdminSignupCatalogPage() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
+  const tabSwitcher = (
+    <div className="inline-flex items-center gap-1 rounded-admin-lg border border-admin-border bg-admin-bg-surface p-1">
+      <Button
+        variant={activeTab === 'exam-types' ? 'primary' : 'ghost'}
+        size="sm"
+        onClick={() => setActiveTab('exam-types')}
+      >
+        Exam Types
+      </Button>
+      <Button
+        variant={activeTab === 'professions' ? 'primary' : 'ghost'}
+        size="sm"
+        onClick={() => setActiveTab('professions')}
+      >
+        Professions
+      </Button>
+    </div>
+  );
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Signup catalog">
+    <>
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-      <AdminRouteSectionHeader
+
+      <AdminCatalogLayout
         title="Signup Catalog"
         description="Manage the exam types and professions shown on learner registration. Changes are served from the backend catalog immediately."
-        icon={ClipboardList}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button variant={activeTab === 'exam-types' ? 'primary' : 'outline'} onClick={() => setActiveTab('exam-types')}>Exam Types</Button>
-            <Button variant={activeTab === 'professions' ? 'primary' : 'outline'} onClick={() => setActiveTab('professions')}>Professions</Button>
-          </div>
-        }
-      />
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        onRetry={() => setReloadNonce((current) => current + 1)}
-        emptyContent={<EmptyState icon={<ClipboardList className="h-10 w-10 text-muted" />} title="No signup catalog entries" description="Add exam types and professions to power registration." />}
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Signup Catalog' }]}
+        actions={tabSwitcher}
+        viewMode="list"
+        hideViewModeToggle
+        itemsClassName="flex flex-col gap-4"
       >
-        {activeTab === 'exam-types' ? (
-          <AdminRoutePanel
-            title="Exam Types"
-            description="These values populate the Exam Type field during account registration."
-            actions={<Button onClick={() => openExamEditor()} className="gap-2"><Plus className="h-4 w-4" /> Add Exam Type</Button>}
-          >
-            <DataTable columns={examColumns} data={catalog.examTypes} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-            <BulkActionBar
-              selectedCount={selectedKeys.size}
-              onClearSelection={() => setSelectedKeys(new Set())}
-              actions={[
-                { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
-              ]}
-            />
-          </AdminRoutePanel>
-        ) : (
-          <AdminRoutePanel
-            title="Professions"
-            description="These values populate the Current Profession field and can be limited by exam type and target country."
-            actions={<Button onClick={() => openProfessionEditor()} className="gap-2"><Plus className="h-4 w-4" /> Add Profession</Button>}
-          >
-            <DataTable columns={professionColumns} data={catalog.professions} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-            <BulkActionBar
-              selectedCount={selectedKeys.size}
-              onClearSelection={() => setSelectedKeys(new Set())}
-              actions={[
-                { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
-              ]}
-            />
-          </AdminRoutePanel>
-        )}
-      </AsyncStateWrapper>
+        <AsyncStateWrapper
+          status={pageStatus}
+          onRetry={() => setReloadNonce((current) => current + 1)}
+          emptyContent={
+            <Card>
+              <CardContent className="p-8">
+                <EmptyState
+                  illustration={<ClipboardList aria-hidden="true" />}
+                  title="No signup catalog entries"
+                  description="Add exam types and professions to power registration."
+                />
+              </CardContent>
+            </Card>
+          }
+        >
+          {activeTab === 'exam-types' ? (
+            <Card>
+              <CardHeader>
+                <div className="min-w-0">
+                  <CardTitle>Exam Types</CardTitle>
+                  <CardDescription>
+                    These values populate the Exam Type field during account registration.
+                  </CardDescription>
+                </div>
+                <Button onClick={() => openExamEditor()} startIcon={<Plus className="h-4 w-4" />}>
+                  Add Exam Type
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  columns={examColumns}
+                  data={catalog.examTypes}
+                  keyExtractor={(row) => row.id}
+                  selectable
+                  selectedKeys={selectedKeys}
+                  onSelectionChange={setSelectedKeys}
+                />
+                <BulkActionBar
+                  selectedCount={selectedKeys.size}
+                  onClearSelection={() => setSelectedKeys(new Set())}
+                  actions={[
+                    { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
+                  ]}
+                />
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <div className="min-w-0">
+                  <CardTitle>Professions</CardTitle>
+                  <CardDescription>
+                    These values populate the Current Profession field and can be limited by exam type and target country.
+                  </CardDescription>
+                </div>
+                <Button onClick={() => openProfessionEditor()} startIcon={<Plus className="h-4 w-4" />}>
+                  Add Profession
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  columns={professionColumns}
+                  data={catalog.professions}
+                  keyExtractor={(row) => row.id}
+                  selectable
+                  selectedKeys={selectedKeys}
+                  onSelectionChange={setSelectedKeys}
+                />
+                <BulkActionBar
+                  selectedCount={selectedKeys.size}
+                  onClearSelection={() => setSelectedKeys(new Set())}
+                  actions={[
+                    { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
+                  ]}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </AsyncStateWrapper>
+      </AdminCatalogLayout>
 
-      <Modal open={examModalOpen} onClose={() => setExamModalOpen(false)} title={editingExamType ? `Edit ${editingExamType.label}` : 'Add Exam Type'}>
+      <Modal
+        open={examModalOpen}
+        onClose={() => setExamModalOpen(false)}
+        title={editingExamType ? `Edit ${editingExamType.label}` : 'Add Exam Type'}
+      >
         <div className="space-y-4">
-          <Input label="ID" value={examForm.id} disabled={Boolean(editingExamType)} onChange={(event) => setExamForm((current) => ({ ...current, id: event.target.value }))} hint="Lowercase ID used by registration, for example oet." />
-          <Input label="Code" value={examForm.code} onChange={(event) => setExamForm((current) => ({ ...current, code: event.target.value }))} />
-          <Input label="Label" value={examForm.label} onChange={(event) => setExamForm((current) => ({ ...current, label: event.target.value }))} />
-          <Input label="Sort Order" type="number" value={examForm.sortOrder ?? 0} onChange={(event) => setExamForm((current) => ({ ...current, sortOrder: Number(event.target.value) }))} />
-          <Textarea label="Description" value={examForm.description ?? ''} onChange={(event) => setExamForm((current) => ({ ...current, description: event.target.value }))} />
-          <label className="flex items-center gap-2 text-sm font-semibold text-navy"><input type="checkbox" checked={examForm.isActive ?? true} onChange={(event) => setExamForm((current) => ({ ...current, isActive: event.target.checked }))} /> Active</label>
-          <ModalActions onCancel={() => setExamModalOpen(false)} onSave={() => void submitExamType()} saveLabel={editingExamType ? 'Save Changes' : 'Create Exam Type'} />
+          <Input
+            label="ID"
+            value={examForm.id}
+            disabled={Boolean(editingExamType)}
+            onChange={(event) => setExamForm((current) => ({ ...current, id: event.target.value }))}
+            hint="Lowercase ID used by registration, for example oet."
+          />
+          <Input
+            label="Code"
+            value={examForm.code}
+            onChange={(event) => setExamForm((current) => ({ ...current, code: event.target.value }))}
+          />
+          <Input
+            label="Label"
+            value={examForm.label}
+            onChange={(event) => setExamForm((current) => ({ ...current, label: event.target.value }))}
+          />
+          <Input
+            label="Sort Order"
+            type="number"
+            value={examForm.sortOrder ?? 0}
+            onChange={(event) => setExamForm((current) => ({ ...current, sortOrder: Number(event.target.value) }))}
+          />
+          <Textarea
+            label="Description"
+            value={examForm.description ?? ''}
+            onChange={(event) => setExamForm((current) => ({ ...current, description: event.target.value }))}
+          />
+          <label className="flex items-center gap-2 text-sm font-semibold text-admin-fg-strong">
+            <input
+              type="checkbox"
+              checked={examForm.isActive ?? true}
+              onChange={(event) => setExamForm((current) => ({ ...current, isActive: event.target.checked }))}
+            />
+            Active
+          </label>
+          <ModalActions
+            onCancel={() => setExamModalOpen(false)}
+            onSave={() => void submitExamType()}
+            saveLabel={editingExamType ? 'Save Changes' : 'Create Exam Type'}
+          />
         </div>
       </Modal>
 
-      <Modal open={professionModalOpen} onClose={() => setProfessionModalOpen(false)} title={editingProfession ? `Edit ${editingProfession.label}` : 'Add Profession'}>
+      <Modal
+        open={professionModalOpen}
+        onClose={() => setProfessionModalOpen(false)}
+        title={editingProfession ? `Edit ${editingProfession.label}` : 'Add Profession'}
+      >
         <div className="space-y-4">
-          <Input label="ID" value={professionForm.id} disabled={Boolean(editingProfession)} onChange={(event) => setProfessionForm((current) => ({ ...current, id: event.target.value }))} hint="Lowercase ID used by registration, for example nursing." />
-          <Input label="Label" value={professionForm.label} onChange={(event) => setProfessionForm((current) => ({ ...current, label: event.target.value }))} />
-          <Input label="Sort Order" type="number" value={professionForm.sortOrder ?? 0} onChange={(event) => setProfessionForm((current) => ({ ...current, sortOrder: Number(event.target.value) }))} />
-          <Textarea label="Description" value={professionForm.description ?? ''} onChange={(event) => setProfessionForm((current) => ({ ...current, description: event.target.value }))} />
-          <CheckboxGroup label="Available Exam Types" values={professionForm.examTypeIds ?? []} options={catalog.examTypes.map((item) => ({ value: item.id, label: item.label }))} onChange={(values) => setProfessionForm((current) => ({ ...current, examTypeIds: values }))} />
-          <CheckboxGroup label="Target Countries" values={professionForm.countryTargets ?? []} options={targetCountryOptions.map((item) => ({ value: item, label: item }))} onChange={(values) => setProfessionForm((current) => ({ ...current, countryTargets: values }))} />
-          <label className="flex items-center gap-2 text-sm font-semibold text-navy"><input type="checkbox" checked={professionForm.isActive ?? true} onChange={(event) => setProfessionForm((current) => ({ ...current, isActive: event.target.checked }))} /> Active</label>
-          <ModalActions onCancel={() => setProfessionModalOpen(false)} onSave={() => void submitProfession()} saveLabel={editingProfession ? 'Save Changes' : 'Create Profession'} />
+          <Input
+            label="ID"
+            value={professionForm.id}
+            disabled={Boolean(editingProfession)}
+            onChange={(event) => setProfessionForm((current) => ({ ...current, id: event.target.value }))}
+            hint="Lowercase ID used by registration, for example nursing."
+          />
+          <Input
+            label="Label"
+            value={professionForm.label}
+            onChange={(event) => setProfessionForm((current) => ({ ...current, label: event.target.value }))}
+          />
+          <Input
+            label="Sort Order"
+            type="number"
+            value={professionForm.sortOrder ?? 0}
+            onChange={(event) =>
+              setProfessionForm((current) => ({ ...current, sortOrder: Number(event.target.value) }))
+            }
+          />
+          <Textarea
+            label="Description"
+            value={professionForm.description ?? ''}
+            onChange={(event) => setProfessionForm((current) => ({ ...current, description: event.target.value }))}
+          />
+          <CheckboxGroup
+            label="Available Exam Types"
+            values={professionForm.examTypeIds ?? []}
+            options={catalog.examTypes.map((item) => ({ value: item.id, label: item.label }))}
+            onChange={(values) => setProfessionForm((current) => ({ ...current, examTypeIds: values }))}
+          />
+          <CheckboxGroup
+            label="Target Countries"
+            values={professionForm.countryTargets ?? []}
+            options={targetCountryOptions.map((item) => ({ value: item, label: item }))}
+            onChange={(values) => setProfessionForm((current) => ({ ...current, countryTargets: values }))}
+          />
+          <label className="flex items-center gap-2 text-sm font-semibold text-admin-fg-strong">
+            <input
+              type="checkbox"
+              checked={professionForm.isActive ?? true}
+              onChange={(event) =>
+                setProfessionForm((current) => ({ ...current, isActive: event.target.checked }))
+              }
+            />
+            Active
+          </label>
+          <ModalActions
+            onCancel={() => setProfessionModalOpen(false)}
+            onSave={() => void submitProfession()}
+            saveLabel={editingProfession ? 'Save Changes' : 'Create Profession'}
+          />
         </div>
       </Modal>
-    </AdminRouteWorkspace>
+    </>
   );
 }
 
-function CheckboxGroup({ label, values, options, onChange }: { label: string; values: string[]; options: { value: string; label: string }[]; onChange: (values: string[]) => void }) {
+function CheckboxGroup({
+  label,
+  values,
+  options,
+  onChange,
+}: {
+  label: string;
+  values: string[];
+  options: { value: string; label: string }[];
+  onChange: (values: string[]) => void;
+}) {
   return (
-    <fieldset className="space-y-2 rounded-2xl border border-border bg-background-light p-4">
-      <legend className="px-1 text-sm font-semibold text-navy">{label}</legend>
+    <fieldset className="space-y-2 rounded-admin-lg border border-admin-border bg-admin-bg-subtle p-4">
+      <legend className="px-1 text-sm font-semibold text-admin-fg-strong">{label}</legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {options.map((option) => {
           const checked = values.includes(option.value);
           return (
-            <label key={option.value} className="flex items-center gap-2 rounded-xl bg-surface px-3 py-2 text-sm text-navy">
-              <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked ? [...values, option.value] : values.filter((value) => value !== option.value))} />
+            <label
+              key={option.value}
+              className="flex items-center gap-2 rounded-admin bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(event) =>
+                  onChange(
+                    event.target.checked
+                      ? [...values, option.value]
+                      : values.filter((value) => value !== option.value),
+                  )
+                }
+              />
               {option.label}
             </label>
           );
@@ -274,17 +519,27 @@ function CheckboxGroup({ label, values, options, onChange }: { label: string; va
   );
 }
 
-function ModalActions({ onCancel, onSave, saveLabel }: { onCancel: () => void; onSave: () => void; saveLabel: string }) {
+function ModalActions({
+  onCancel,
+  onSave,
+  saveLabel,
+}: {
+  onCancel: () => void;
+  onSave: () => void;
+  saveLabel: string;
+}) {
   return (
-    <div className="flex justify-end gap-3 border-t border-border pt-4">
-      <Button variant="outline" onClick={onCancel}>Cancel</Button>
+    <div className="flex justify-end gap-3 border-t border-admin-border pt-4">
+      <Button variant="outline" onClick={onCancel}>
+        Cancel
+      </Button>
       <Button onClick={onSave}>{saveLabel}</Button>
     </div>
   );
 }
 
 function normalizeCatalog(value: unknown): AdminSignupCatalogResponse {
-  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const record = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   return {
     examTypes: Array.isArray(record.examTypes) ? record.examTypes.map(normalizeExamType) : [],
     professions: Array.isArray(record.professions) ? record.professions.map(normalizeProfession) : [],
@@ -292,7 +547,7 @@ function normalizeCatalog(value: unknown): AdminSignupCatalogResponse {
 }
 
 function normalizeExamType(value: unknown): AdminSignupExamTypeCatalogItem {
-  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const record = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   return {
     id: String(record.id ?? ''),
     code: String(record.code ?? ''),
@@ -304,7 +559,7 @@ function normalizeExamType(value: unknown): AdminSignupExamTypeCatalogItem {
 }
 
 function normalizeProfession(value: unknown): AdminSignupProfessionCatalogItem {
-  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const record = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   return {
     id: String(record.id ?? ''),
     label: String(record.label ?? ''),

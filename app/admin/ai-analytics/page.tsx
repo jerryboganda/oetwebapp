@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, AlertTriangle, RefreshCw, Users } from 'lucide-react';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
+
+import { AdminOperationsLayout, KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
-import { Badge } from '@/components/ui/badge';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import {
   fetchAdminAiUsage,
@@ -124,9 +127,17 @@ export default function AdminAiAnalyticsPage() {
     { key: 'date', header: 'Date', render: (r) => r.snapshotDate },
     { key: 'u', header: 'User', render: (r) => r.userId },
     { key: 'score', header: 'Score', render: (r) => `${(r.riskScore * 100).toFixed(0)}%` },
-    { key: 'band', header: 'Band', render: (r) => <Badge variant={bandVariant(r.riskBand)}>{r.riskBand}</Badge> },
+    {
+      key: 'band',
+      header: 'Band',
+      render: (r) => (
+        <Badge variant={bandVariant(r.riskBand)} intensity="tinted">
+          {r.riskBand}
+        </Badge>
+      ),
+    },
     { key: 'action', header: 'Action', render: (r) => r.recommendedAction ?? '—' },
-    { key: 'disp', header: 'Dispatched', render: (r) => r.actionDispatched ? 'Yes' : 'No' },
+    { key: 'disp', header: 'Dispatched', render: (r) => (r.actionDispatched ? 'Yes' : 'No') },
   ];
 
   const forecastColumns: Column<UsageForecastSnapshotDto>[] = [
@@ -135,90 +146,148 @@ export default function AdminAiAnalyticsPage() {
     { key: 'credits', header: 'Credits/30d', render: (r) => r.forecastCredits.toLocaleString() },
     { key: 'cost', header: 'Cost USD/30d', render: (r) => `$${r.forecastCostUsd.toFixed(2)}` },
     { key: 'ema', header: 'EMA daily calls', render: (r) => r.ema30DailyCalls.toFixed(2) },
-    { key: 'topup', header: 'Top-up suggested', render: (r) => r.suggestedTopUpCredits ? `${r.suggestedTopUpCredits} cr` : '—' },
+    { key: 'topup', header: 'Top-up suggested', render: (r) => (r.suggestedTopUpCredits ? `${r.suggestedTopUpCredits} cr` : '—') },
+  ];
+
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'AI Analytics' },
   ];
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader title="AI analytics" description="Usage, churn risk, and 30-day forecast across the learner base." />
-
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
-      <AdminRoutePanel>
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
-          <Input label="From" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <Input label="To" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          <Input label="Feature filter" value={featureFilter} onChange={(e) => setFeatureFilter(e.target.value)} placeholder="writing.grade" />
-          <Input label="Provider filter" value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)} placeholder="openai-platform" />
-          <Select label="Churn band" value={bandFilter} options={BAND_OPTIONS} onChange={(e) => setBandFilter(e.target.value)} />
-        </div>
-        <div className="mt-3 flex gap-2">
+    <AdminOperationsLayout
+      title="AI analytics"
+      description="Usage, churn risk, and 30-day forecast across the learner base."
+      eyebrow="AI"
+      breadcrumbs={breadcrumbs}
+      actions={
+        <>
           <Button variant="ghost" onClick={() => void load()}>
-            <RefreshCw className="mr-2 h-4 w-4" />Refresh
+            <RefreshCw className="mr-2 h-4 w-4" /> Refresh
           </Button>
-          <Button onClick={handleRecomputeChurn}>
-            <AlertTriangle className="mr-2 h-4 w-4" />Recompute churn
+          <Button variant="secondary" onClick={handleRecomputeChurn}>
+            <AlertTriangle className="mr-2 h-4 w-4" /> Recompute churn
           </Button>
           <Button onClick={handleRecomputeForecast}>
-            <Activity className="mr-2 h-4 w-4" />Recompute forecast
+            <Activity className="mr-2 h-4 w-4" /> Recompute forecast
           </Button>
+        </>
+      }
+      kpis={
+        summary ? (
+          <KpiStrip>
+            <KpiTile label="Total calls" value={summary.totalCalls.toLocaleString()} tone="primary" />
+            <KpiTile label="Tokens" value={summary.totalTokens.toLocaleString()} tone="info" />
+            <KpiTile label="Cost USD" value={`$${summary.totalCostUsd.toFixed(2)}`} tone="warning" />
+            <KpiTile label="Unique users" value={summary.uniqueUsers.toLocaleString()} tone="default" />
+            <KpiTile label="Success rate" value={`${summary.successRate}%`} tone="success" />
+          </KpiStrip>
+        ) : null
+      }
+      primaryGrid={
+        <div className="space-y-6">
+          {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Filters</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {error && <InlineAlert variant="error">{error}</InlineAlert>}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+                <Input label="From" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+                <Input label="To" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+                <Input label="Feature filter" value={featureFilter} onChange={(e) => setFeatureFilter(e.target.value)} placeholder="writing.grade" />
+                <Input label="Provider filter" value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)} placeholder="openai-platform" />
+                <Select label="Churn band" value={bandFilter} options={BAND_OPTIONS} onChange={(e) => setBandFilter(e.target.value)} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>By feature</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="text-sm text-admin-fg-muted">Loading…</p>
+              ) : (
+                <DataTable
+                  data={summary?.byFeature ?? []}
+                  columns={featureColumns}
+                  keyExtractor={(r) => r.featureCode}
+                  emptyMessage="No usage."
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>By provider</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                data={summary?.byProvider ?? []}
+                columns={providerColumns}
+                keyExtractor={(r) => r.provider}
+                emptyMessage="No usage."
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Top users by spend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                data={summary?.topUsers ?? []}
+                columns={topUserColumns}
+                keyExtractor={(r) => r.userId}
+                emptyMessage="No users."
+              />
+            </CardContent>
+          </Card>
         </div>
-      </AdminRoutePanel>
+      }
+      secondaryGrid={
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-[var(--admin-danger)]" aria-hidden="true" />
+                Churn risk — band: {bandFilter || 'all'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                data={churn}
+                columns={churnColumns}
+                keyExtractor={(r) => r.id}
+                emptyMessage="No risk snapshots."
+              />
+            </CardContent>
+          </Card>
 
-      {summary && (
-        <AdminRoutePanel>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
-            <Stat label="Total calls" value={summary.totalCalls.toLocaleString()} />
-            <Stat label="Tokens" value={summary.totalTokens.toLocaleString()} />
-            <Stat label="Cost USD" value={`$${summary.totalCostUsd.toFixed(2)}`} />
-            <Stat label="Unique users" value={summary.uniqueUsers.toLocaleString()} />
-            <Stat label="Success rate" value={`${summary.successRate}%`} />
-          </div>
-        </AdminRoutePanel>
-      )}
-
-      <AdminRoutePanel>
-        <h3 className="mb-3 text-base font-semibold">By feature</h3>
-        {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : (
-          <DataTable data={summary?.byFeature ?? []} columns={featureColumns} keyExtractor={(r) => r.featureCode} emptyMessage="No usage." />
-        )}
-      </AdminRoutePanel>
-
-      <AdminRoutePanel>
-        <h3 className="mb-3 text-base font-semibold">By provider</h3>
-        <DataTable data={summary?.byProvider ?? []} columns={providerColumns} keyExtractor={(r) => r.provider} emptyMessage="No usage." />
-      </AdminRoutePanel>
-
-      <AdminRoutePanel>
-        <h3 className="mb-3 text-base font-semibold">Top users by spend</h3>
-        <DataTable data={summary?.topUsers ?? []} columns={topUserColumns} keyExtractor={(r) => r.userId} emptyMessage="No users." />
-      </AdminRoutePanel>
-
-      <AdminRoutePanel>
-        <h3 className="mb-3 flex items-center gap-2 text-base font-semibold">
-          <AlertTriangle className="h-4 w-4" />
-          Churn risk — band: {bandFilter || 'all'}
-        </h3>
-        <DataTable data={churn} columns={churnColumns} keyExtractor={(r) => r.id} emptyMessage="No risk snapshots." />
-      </AdminRoutePanel>
-
-      <AdminRoutePanel>
-        <h3 className="mb-3 flex items-center gap-2 text-base font-semibold">
-          <Users className="h-4 w-4" />
-          Usage forecast — top 50 by predicted cost
-        </h3>
-        <DataTable data={forecast} columns={forecastColumns} keyExtractor={(r) => r.id} emptyMessage="No forecast snapshots." />
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-muted/40 p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-lg font-semibold">{value}</p>
-    </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-admin-fg-muted" aria-hidden="true" />
+                Usage forecast — top 50 by predicted cost
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                data={forecast}
+                columns={forecastColumns}
+                keyExtractor={(r) => r.id}
+                emptyMessage="No forecast snapshots."
+              />
+            </CardContent>
+          </Card>
+        </div>
+      }
+    />
   );
 }

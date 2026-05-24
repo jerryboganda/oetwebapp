@@ -18,11 +18,13 @@ import {
   Volume2,
   XCircle,
 } from 'lucide-react';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
+import { AdminRouteWorkspace, AdminRoutePanel } from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Toast } from '@/components/ui/alert';
+import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
+import { PageHeader } from '@/components/admin/ui/page-header';
 import {
   probeAdminQwen3Voices,
   previewAdminVoiceDesign,
@@ -464,16 +466,19 @@ export default function AdminVoiceDesignPage() {
 
   return (
     <AdminRouteWorkspace>
-      <AdminRouteSectionHeader
-        title="Voice Design Studio"
-        description="Configure TTS voice settings and manage bulk audio regeneration across the platform."
-        icon={AudioWaveform}
-        accent="purple"
-        eyebrow="Admin"
-      />
+      <AdminPageShell>
+        <PageHeader
+          title="Voice Design Studio"
+          description="Configure TTS voice settings and manage bulk audio regeneration across the platform."
+          breadcrumbs={[
+            { label: 'Admin', href: '/admin' },
+            { label: 'Voice Design' },
+          ]}
+          icon={<AudioWaveform className="h-5 w-5" aria-hidden="true" />}
+        />
 
       {/* Global Voice Lock Indicator */}
-      <div className="flex items-center gap-2 rounded-xl border border-admin-border bg-admin-surface px-4 py-2.5">
+      <div className="flex items-center gap-2 rounded-admin-lg border border-admin-border bg-admin-bg-surface px-4 py-2.5">
         <Lock className="h-4 w-4 text-violet-400" />
         <span className="text-xs font-bold text-admin-text-muted">Global Voice:</span>
         <Badge variant="violet" size="sm">{selectedVoice || 'Not configured'}</Badge>
@@ -1185,6 +1190,7 @@ export default function AdminVoiceDesignPage() {
           />
         )}
       </AnimatePresence>
+      </AdminPageShell>
     </AdminRouteWorkspace>
   );
 }

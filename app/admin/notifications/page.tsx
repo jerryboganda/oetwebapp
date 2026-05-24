@@ -1,14 +1,16 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Bell, Filter, Mail, RefreshCw, RotateCcw, Send, Siren, Smartphone } from 'lucide-react';
-import { AdminRouteSummaryCard, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { fetchAdminAuditLogs } from '@/lib/api';
 import {
@@ -74,7 +76,7 @@ function globalPolicyKey(audienceRole: NotificationAudienceRole, channelKey: Glo
   return `${audienceRole}:${GLOBAL_POLICY_EVENT_KEY}:${channelKey}`;
 }
 
-function deliveryStatusVariant(status: NotificationDeliveryAttemptItem['status']) {
+function deliveryStatusVariant(status: NotificationDeliveryAttemptItem['status']): 'success' | 'danger' | 'warning' | 'default' {
   switch (status) {
     case 'sent':
       return 'success';
@@ -84,7 +86,7 @@ function deliveryStatusVariant(status: NotificationDeliveryAttemptItem['status']
     case 'suppressed':
       return 'warning';
     default:
-      return 'muted';
+      return 'default';
   }
 }
 
@@ -282,7 +284,7 @@ export default function AdminNotificationsPage() {
     {
       key: 'category',
       header: 'Category',
-      render: (row) => <Badge variant="muted">{row.category}</Badge>,
+      render: (row) => <Badge variant="default">{row.category}</Badge>,
     },
     {
       key: 'inAppEnabled',
@@ -425,7 +427,7 @@ export default function AdminNotificationsPage() {
       key: 'state',
       header: 'State',
       render: (row) => (
-        <Badge variant={row.isOverride ? 'info' : 'muted'}>
+        <Badge variant={row.isOverride ? 'info' : 'default'}>
           {row.isOverride ? 'Override' : 'Default'}
         </Badge>
       ),
@@ -493,7 +495,7 @@ export default function AdminNotificationsPage() {
     {
       key: 'channel',
       header: 'Channel',
-      render: (row) => <Badge variant="muted">{row.channel}</Badge>,
+      render: (row) => <Badge variant="default">{row.channel}</Badge>,
     },
     {
       key: 'status',
@@ -526,7 +528,7 @@ export default function AdminNotificationsPage() {
     {
       key: 'channel',
       header: 'Channel',
-      render: (row) => <Badge variant="muted">{row.channel}</Badge>,
+      render: (row) => <Badge variant="default">{row.channel}</Badge>,
     },
     {
       key: 'status',
@@ -667,68 +669,82 @@ export default function AdminNotificationsPage() {
     return null;
   }
 
-  return (
-    <AdminRouteWorkspace role="main" aria-label="Notifications" className="space-y-5">
-      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Notifications' },
+  ];
 
-      <div className="rounded-lg border border-border bg-surface px-4 py-4 shadow-sm sm:px-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Admin Workspace</p>
-            <h1 className="text-xl font-semibold tracking-tight text-navy sm:text-2xl">Notifications</h1>
-            <p className="max-w-4xl text-sm leading-6 text-muted">
-              Govern learner, tutor, and admin delivery from one operational surface: role-wide switches, per-event policy, delivery health, test email, and audit visibility.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {health?.generatedAt ? <Badge variant="muted">Updated {new Date(health.generatedAt).toLocaleString()}</Badge> : null}
-          <Button type="button" variant="outline" onClick={() => void loadPageData(false, deliveryPage, deliveryFilters)} loading={reloading} className="gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
-          </div>
-        </div>
-      </div>
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        className="space-y-5"
-        onRetry={() => void loadPageData(true, deliveryPage, deliveryFilters)}
-        emptyContent={(
-          <EmptyState
-            icon={<Bell className="h-10 w-10 text-muted" />}
-            title="No notification governance data is available yet"
-            description="Reload after the first notification events and policy rows have been generated."
-          />
-        )}
+  const headerActions = (
+    <>
+      {health?.generatedAt ? (
+        <Badge variant="default">Updated {new Date(health.generatedAt).toLocaleString()}</Badge>
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => void loadPageData(false, deliveryPage, deliveryFilters)}
+        loading={reloading}
+        startIcon={<RefreshCw className="h-4 w-4" />}
       >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <AdminRouteSummaryCard label="Queued Events" value={health?.queuedEvents ?? 0} icon={<Bell className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="Failed Deliveries (24h)" value={health?.failedDeliveriesLast24Hours ?? 0} icon={<Siren className="h-5 w-5" />} tone={(health?.failedDeliveriesLast24Hours ?? 0) > 0 ? 'danger' : 'default'} />
-          <AdminRouteSummaryCard label="Unread Inbox Items" value={health?.unreadInboxItems ?? 0} icon={<Mail className="h-5 w-5" />} />
-          <AdminRouteSummaryCard label="Active Push Subscriptions" value={health?.activePushSubscriptions ?? 0} icon={<Smartphone className="h-5 w-5" />} tone={(health?.activePushSubscriptions ?? 0) > 0 ? 'success' : 'default'} />
-        </div>
+        Refresh
+      </Button>
+    </>
+  );
 
-        <AdminRoutePanel title="Role-wide Channel Governance" description="These switches apply before per-event policy and account preferences. Use them when an entire audience channel needs to be paused or restored.">
+  const kpiBanner = (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <KpiTile
+        label="Queued Events"
+        value={health?.queuedEvents ?? 0}
+        icon={<Bell className="h-5 w-5" />}
+      />
+      <KpiTile
+        label="Failed Deliveries (24h)"
+        value={health?.failedDeliveriesLast24Hours ?? 0}
+        icon={<Siren className="h-5 w-5" />}
+        tone={(health?.failedDeliveriesLast24Hours ?? 0) > 0 ? 'danger' : 'default'}
+      />
+      <KpiTile
+        label="Unread Inbox Items"
+        value={health?.unreadInboxItems ?? 0}
+        icon={<Mail className="h-5 w-5" />}
+      />
+      <KpiTile
+        label="Active Push Subscriptions"
+        value={health?.activePushSubscriptions ?? 0}
+        icon={<Smartphone className="h-5 w-5" />}
+        tone={(health?.activePushSubscriptions ?? 0) > 0 ? 'success' : 'default'}
+      />
+    </div>
+  );
+
+  const sections = (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex-col items-start gap-1">
+          <CardTitle>Role-wide Channel Governance</CardTitle>
+          <CardDescription>These switches apply before per-event policy and account preferences. Use them when an entire audience channel needs to be paused or restored.</CardDescription>
+        </CardHeader>
+        <CardContent>
           <div className="grid gap-3 md:grid-cols-3">
             {AUDIENCE_ROLES.map((audienceRole) => (
-              <div key={audienceRole} className="rounded-lg border border-border bg-background-light p-3 shadow-sm">
+              <div key={audienceRole} className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3 shadow-admin-sm">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold capitalize text-navy">{audienceRole}</p>
-                    <p className="text-xs text-muted">Role-wide delivery controls.</p>
+                    <p className="text-sm font-semibold capitalize text-admin-fg-strong">{audienceRole}</p>
+                    <p className="text-xs text-admin-fg-muted">Role-wide delivery controls.</p>
                   </div>
-                  <Badge variant="muted">{GLOBAL_CHANNELS.filter((channel) => globalChannelEnabledByAudience[audienceRole][channel.key]).length}/3 on</Badge>
+                  <Badge variant="default">{GLOBAL_CHANNELS.filter((channel) => globalChannelEnabledByAudience[audienceRole][channel.key]).length}/3 on</Badge>
                 </div>
                 <div className="space-y-2">
                   {GLOBAL_CHANNELS.map((channel) => {
                     const enabled = globalChannelEnabledByAudience[audienceRole][channel.key];
                     return (
-                      <div key={channel.key} className="rounded-lg border border-border bg-surface px-3 py-2">
+                      <div key={channel.key} className="rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2">
                         <div className="flex items-center justify-between gap-3">
                           <div>
-                            <p className="text-sm font-semibold text-navy">{channel.label}</p>
-                            <p className="text-xs text-muted">{channel.description}</p>
+                            <p className="text-sm font-semibold text-admin-fg-strong">{channel.label}</p>
+                            <p className="text-xs text-admin-fg-muted">{channel.description}</p>
                           </div>
                           <Badge variant={enabled ? 'success' : 'warning'}>{enabled ? 'Enabled' : 'Suppressed'}</Badge>
                         </div>
@@ -749,24 +765,32 @@ export default function AdminNotificationsPage() {
               </div>
             ))}
           </div>
-        </AdminRoutePanel>
+        </CardContent>
+      </Card>
 
-        {AUDIENCE_ROLES.map((audienceRole) => (
-          <AdminRoutePanel
-            key={audienceRole}
-            title={`${audienceRole.charAt(0).toUpperCase()}${audienceRole.slice(1)} Policy Matrix`}
-            description={`Per-event channel policy for ${audienceRole} notifications. Email modes are off, immediate, or daily digest.`}
-          >
+      {AUDIENCE_ROLES.map((audienceRole) => (
+        <Card key={audienceRole}>
+          <CardHeader className="flex-col items-start gap-1">
+            <CardTitle>{`${audienceRole.charAt(0).toUpperCase()}${audienceRole.slice(1)} Policy Matrix`}</CardTitle>
+            <CardDescription>{`Per-event channel policy for ${audienceRole} notifications. Email modes are off, immediate, or daily digest.`}</CardDescription>
+          </CardHeader>
+          <CardContent>
             <DataTable
               columns={policyColumns}
               data={policies.filter((row) => row.audienceRole === audienceRole)}
               keyExtractor={(row) => policyKey(row.audienceRole, row.eventKey)}
             />
-          </AdminRoutePanel>
-        ))}
+          </CardContent>
+        </Card>
+      ))}
 
-        <div className="grid gap-6 xl:grid-cols-2">
-          <AdminRoutePanel title="Email Preview & Test Send" description="Email rendering stays server-owned in this rollout. Use the catalog preview below and send a real test email without editing HTML.">
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader className="flex-col items-start gap-1">
+            <CardTitle>Email Preview &amp; Test Send</CardTitle>
+            <CardDescription>Email rendering stays server-owned in this rollout. Use the catalog preview below and send a real test email without editing HTML.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <Input
                 label="Recipient Email"
@@ -796,72 +820,94 @@ export default function AdminNotificationsPage() {
               }))}
             />
             {selectedTestCatalogEntry ? (
-              <div className="rounded-lg border border-border bg-background-light p-4 text-sm text-muted">
-                <p className="font-semibold text-navy">{selectedTestCatalogEntry.label}</p>
+              <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-4 text-sm text-admin-fg-muted">
+                <p className="font-semibold text-admin-fg-strong">{selectedTestCatalogEntry.label}</p>
                 <p className="mt-1">{selectedTestCatalogEntry.description}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge variant="info">Severity {selectedTestCatalogEntry.defaultSeverity}</Badge>
-                  <Badge variant="muted">Email mode {selectedTestCatalogEntry.defaultEmailMode}</Badge>
+                  <Badge variant="default">Email mode {selectedTestCatalogEntry.defaultEmailMode}</Badge>
                   {selectedTestCatalogEntry.isPolicyProtected ? <Badge variant="warning">Protected policy</Badge> : null}
                 </div>
               </div>
             ) : null}
             <div className="flex justify-end">
-              <Button type="button" onClick={() => void handleSendTestEmail()} loading={sendingTestEmail} className="gap-2">
-                <Send className="h-4 w-4" />
+              <Button
+                type="button"
+                onClick={() => void handleSendTestEmail()}
+                loading={sendingTestEmail}
+                startIcon={<Send className="h-4 w-4" />}
+              >
                 Send Test Email
               </Button>
             </div>
-          </AdminRoutePanel>
+          </CardContent>
+        </Card>
 
-          <AdminRoutePanel title="Delivery Health" description="Recent delivery attempts and failed queue entries stay visible here so admins can react before notifications silently degrade.">
+        <Card>
+          <CardHeader className="flex-col items-start gap-1">
+            <CardTitle>Delivery Health</CardTitle>
+            <CardDescription>Recent delivery attempts and failed queue entries stay visible here so admins can react before notifications silently degrade.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border border-border bg-background-light p-3 text-sm">
-                <p className="font-semibold text-navy">Failed Events</p>
-                <p className="mt-1 text-2xl font-bold text-navy">{health?.failedEvents ?? 0}</p>
+              <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3 text-sm">
+                <p className="font-semibold text-admin-fg-strong">Failed Events</p>
+                <p className="mt-1 text-2xl font-bold text-admin-fg-strong">{health?.failedEvents ?? 0}</p>
               </div>
-              <div className="rounded-lg border border-border bg-background-light p-3 text-sm">
-                <p className="font-semibold text-navy">Pending Digests</p>
-                <p className="mt-1 text-2xl font-bold text-navy">{health?.pendingDigestJobs ?? 0}</p>
+              <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3 text-sm">
+                <p className="font-semibold text-admin-fg-strong">Pending Digests</p>
+                <p className="mt-1 text-2xl font-bold text-admin-fg-strong">{health?.pendingDigestJobs ?? 0}</p>
               </div>
-              <div className="rounded-lg border border-border bg-background-light p-3 text-sm">
-                <p className="font-semibold text-navy">Expired Push Subscriptions</p>
-                <p className="mt-1 text-2xl font-bold text-navy">{health?.expiredPushSubscriptions ?? 0}</p>
+              <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3 text-sm">
+                <p className="font-semibold text-admin-fg-strong">Expired Push Subscriptions</p>
+                <p className="mt-1 text-2xl font-bold text-admin-fg-strong">{health?.expiredPushSubscriptions ?? 0}</p>
               </div>
-              <div className="rounded-lg border border-border bg-background-light p-3 text-sm">
-                <p className="font-semibold text-navy">Health Snapshot</p>
-                <p className="mt-2 text-muted">{health?.generatedAt ? new Date(health.generatedAt).toLocaleString() : 'Not generated yet'}</p>
+              <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3 text-sm">
+                <p className="font-semibold text-admin-fg-strong">Health Snapshot</p>
+                <p className="mt-2 text-admin-fg-muted">{health?.generatedAt ? new Date(health.generatedAt).toLocaleString() : 'Not generated yet'}</p>
               </div>
             </div>
             {health?.channels?.length ? (
               <div className="grid gap-3 sm:grid-cols-3">
                 {health.channels.map((channel) => (
-                  <div key={channel.channel} className="rounded-lg border border-border bg-background-light p-3 text-sm shadow-sm">
-                    <p className="font-semibold capitalize text-navy">{channel.channel}</p>
-                    <p className="mt-2 text-muted">Sent {channel.sentLast24Hours}</p>
-                    <p className="text-muted">Failed {channel.failedLast24Hours}</p>
-                    <p className="text-muted">Suppressed {channel.suppressedLast24Hours}</p>
+                  <div key={channel.channel} className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3 text-sm shadow-admin-sm">
+                    <p className="font-semibold capitalize text-admin-fg-strong">{channel.channel}</p>
+                    <p className="mt-2 text-admin-fg-muted">Sent {channel.sentLast24Hours}</p>
+                    <p className="text-admin-fg-muted">Failed {channel.failedLast24Hours}</p>
+                    <p className="text-admin-fg-muted">Suppressed {channel.suppressedLast24Hours}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted">No channel telemetry has been recorded yet.</p>
+              <p className="text-sm text-admin-fg-muted">No channel telemetry has been recorded yet.</p>
             )}
-          </AdminRoutePanel>
-        </div>
+          </CardContent>
+        </Card>
+      </div>
 
-        <div className="grid gap-6 xl:grid-cols-2">
-          <AdminRoutePanel title="Failure Queue" description="Manual visibility into delivery failures and threshold-triggered alert candidates.">
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader className="flex-col items-start gap-1">
+            <CardTitle>Failure Queue</CardTitle>
+            <CardDescription>Manual visibility into delivery failures and threshold-triggered alert candidates.</CardDescription>
+          </CardHeader>
+          <CardContent>
             {health?.failureQueue?.length ? (
               <DataTable columns={failureQueueColumns} data={health.failureQueue} keyExtractor={(row) => `${row.eventId}:${row.channel}:${row.attemptedAt}`} />
             ) : (
-              <p className="text-sm text-admin-text-muted">No failed or expired deliveries are currently queued for investigation.</p>
+              <p className="text-sm text-admin-fg-muted">No failed or expired deliveries are currently queued for investigation.</p>
             )}
-          </AdminRoutePanel>
+          </CardContent>
+        </Card>
 
-          <AdminRoutePanel title="Recent Deliveries" description="Latest delivery attempts across in-app, email, and push channels.">
-            <div className="rounded-lg border border-border bg-background-light p-3">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-navy">
+        <Card>
+          <CardHeader className="flex-col items-start gap-1">
+            <CardTitle>Recent Deliveries</CardTitle>
+            <CardDescription>Latest delivery attempts across in-app, email, and push channels.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-admin-fg-strong">
                 <Filter className="h-4 w-4" />
                 Delivery filters
               </div>
@@ -921,7 +967,7 @@ export default function AdminNotificationsPage() {
             {deliveries.length ? (
               <>
                 <DataTable columns={deliveryColumns} data={deliveries} keyExtractor={(row) => row.id} />
-                <div className="flex flex-col gap-3 border-t border-border pt-3 text-sm text-admin-text-muted sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 border-t border-admin-border pt-3 text-sm text-admin-fg-muted sm:flex-row sm:items-center sm:justify-between">
                   <span>Showing {deliveryStartIndex}-{deliveryEndIndex} of {deliveryTotalCount}</span>
                   <div className="flex items-center gap-2">
                     <Button
@@ -934,7 +980,7 @@ export default function AdminNotificationsPage() {
                     >
                       Previous
                     </Button>
-                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">Page {deliveryPage} / {deliveryTotalPages}</span>
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Page {deliveryPage} / {deliveryTotalPages}</span>
                     <Button
                       type="button"
                       size="sm"
@@ -949,44 +995,79 @@ export default function AdminNotificationsPage() {
                 </div>
               </>
             ) : (
-              <p className="text-sm text-admin-text-muted">No delivery attempts have been recorded yet.</p>
+              <p className="text-sm text-admin-fg-muted">No delivery attempts have been recorded yet.</p>
             )}
-          </AdminRoutePanel>
-        </div>
+          </CardContent>
+        </Card>
+      </div>
 
-        <AdminRoutePanel title="Policy Change Audit Trail" description="Every policy update is written into the existing admin audit stream. Manual test sends also land in audit logs for traceability.">
+      <Card>
+        <CardHeader className="flex-col items-start gap-1">
+          <CardTitle>Policy Change Audit Trail</CardTitle>
+          <CardDescription>Every policy update is written into the existing admin audit stream. Manual test sends also land in audit logs for traceability.</CardDescription>
+        </CardHeader>
+        <CardContent>
           {auditRows.length ? (
             <DataTable
               columns={[
                 {
                   key: 'timestamp',
                   header: 'Timestamp',
-                  render: (row) => <span className="text-sm text-admin-text-muted">{new Date(row.timestamp).toLocaleString()}</span>,
+                  render: (row) => <span className="text-sm text-admin-fg-muted">{new Date(row.timestamp).toLocaleString()}</span>,
                 },
                 {
                   key: 'actor',
                   header: 'Actor',
-                  render: (row) => <span className="font-medium text-admin-text">{row.actor}</span>,
+                  render: (row) => <span className="font-medium text-admin-fg-strong">{row.actor}</span>,
                 },
                 {
                   key: 'resource',
                   header: 'Resource',
-                  render: (row) => <span className="font-mono text-xs text-admin-text-muted">{row.resource}</span>,
+                  render: (row) => <span className="font-mono text-xs text-admin-fg-muted">{row.resource}</span>,
                 },
                 {
                   key: 'details',
                   header: 'Details',
-                  render: (row) => <span className="text-sm text-admin-text-muted">{row.details}</span>,
+                  render: (row) => <span className="text-sm text-admin-fg-muted">{row.details}</span>,
                 },
               ]}
               data={auditRows}
               keyExtractor={(row) => row.id}
             />
           ) : (
-            <p className="text-sm text-admin-text-muted">No notification policy audit rows have been recorded yet.</p>
+            <p className="text-sm text-admin-fg-muted">No notification policy audit rows have been recorded yet.</p>
           )}
-        </AdminRoutePanel>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  return (
+    <AdminTableLayout
+      title="Notifications"
+      description="Govern learner, tutor, and admin delivery from one operational surface: role-wide switches, per-event policy, delivery health, test email, and audit visibility."
+      breadcrumbs={breadcrumbs}
+      actions={headerActions}
+      banner={kpiBanner}
+      cardClassName="border-transparent bg-transparent shadow-none"
+      contentClassName="p-0"
+      footer={null}
+    >
+      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
+      <AsyncStateWrapper
+        status={pageStatus}
+        className="space-y-5"
+        onRetry={() => void loadPageData(true, deliveryPage, deliveryFilters)}
+        emptyContent={(
+          <EmptyState
+            illustration={<Bell />}
+            title="No notification governance data is available yet"
+            description="Reload after the first notification events and policy rows have been generated."
+          />
+        )}
+      >
+        {sections}
       </AsyncStateWrapper>
-    </AdminRouteWorkspace>
+    </AdminTableLayout>
   );
 }
