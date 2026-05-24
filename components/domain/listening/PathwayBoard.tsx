@@ -79,6 +79,10 @@ function PathwayTile({ stage, index }: { stage: PathwayStageView; index: number 
           <span className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-primary">
             {actionVerb} {meta.label} <ArrowRight className="h-4 w-4" aria-hidden />
           </span>
+        ) : unlocked && !stage.actionHref ? (
+          <span className="mt-4 text-xs text-muted">
+            Content coming soon — check back after your admin publishes a paper for this stage.
+          </span>
         ) : null}
       </div>
     </div>

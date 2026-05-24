@@ -569,12 +569,31 @@ export async function getAdminBillingPlanData(params?: Parameters<typeof fetchAd
     isRenewable: item.isRenewable !== false,
     trialDays: toNumberValue(item.trialDays),
     activeSubscribers: toNumberValue(item.activeSubscribers),
+    diagnosticMockEntitlement: toNullableString(item.diagnosticMockEntitlement) ?? undefined,
     status: toStringValue(item.status),
     includedSubtests: parseJsonArray(item.includedSubtests),
     entitlements: asRecord(item.entitlements),
     archivedAt: toNullableString(item.archivedAt),
     createdAt: toNullableString(item.createdAt) ?? undefined,
     updatedAt: toNullableString(item.updatedAt) ?? undefined,
+    // ── OET 2026 catalog fields ───────────────────────────
+    originalPriceGbp: item.originalPriceGbp == null ? null : toNumberValue(item.originalPriceGbp),
+    accessDurationDays: item.accessDurationDays == null ? undefined : toNumberValue(item.accessDurationDays),
+    writingAddonsEnabled: toBooleanValue(item.writingAddonsEnabled),
+    speakingAddonsEnabled: toBooleanValue(item.speakingAddonsEnabled),
+    tutorBookDiscountEnabled: toBooleanValue(item.tutorBookDiscountEnabled),
+    profession: toNullableString(item.profession) ?? undefined,
+    productCategory: toNullableString(item.productCategory) ?? undefined,
+    dashboardModules: parseJsonArray(item.dashboardModules),
+    bundledWritingAssessments: toNumberValue(item.bundledWritingAssessments),
+    bundledSpeakingSessions: toNumberValue(item.bundledSpeakingSessions),
+    bundledAiCredits: toNumberValue(item.bundledAiCredits),
+    bundledTutorBook: toBooleanValue(item.bundledTutorBook),
+    bundledBasicEnglish: toBooleanValue(item.bundledBasicEnglish),
+    isDraft: toBooleanValue(item.isDraft),
+    extensionAllowed: item.extensionAllowed === undefined ? undefined : toBooleanValue(item.extensionAllowed),
+    recallUpdatesEnabled: toBooleanValue(item.recallUpdatesEnabled),
+    comparisonFeatures: parseJsonArray(item.comparisonFeatures),
   }));
 }
 
@@ -606,6 +625,13 @@ export async function getAdminBillingAddOnData(params?: Parameters<typeof fetchA
     grantEntitlements: asRecord(item.grantEntitlements),
     createdAt: toStringValue(item.createdAt),
     updatedAt: toStringValue(item.updatedAt),
+    // ── OET 2026 catalog fields ───────────────────────────
+    originalPriceGbp: item.originalPriceGbp == null ? null : toNumberValue(item.originalPriceGbp),
+    addonKind: toNullableString(item.addonKind) ?? undefined,
+    requiresEligibleParent: toBooleanValue(item.requiresEligibleParent),
+    eligibilityFlag: toNullableString(item.eligibilityFlag) ?? undefined,
+    lettersGranted: toNumberValue(item.lettersGranted),
+    sessionsGranted: toNumberValue(item.sessionsGranted),
   }));
 }
 

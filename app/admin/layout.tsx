@@ -167,6 +167,7 @@ function isContentWorkspace(pathname: string | null) {
     'grammar',
     'pronunciation',
     'listening',
+    'reading',
     'writing',
     'strategies',
     'publish-requests',

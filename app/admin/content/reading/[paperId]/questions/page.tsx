@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Plus, Trash2, Save, Code, FormInput } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Plus, Trash2, Save, Code, FormInput, ArrowUp, ArrowDown } from 'lucide-react';
 
 import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import {
   getReadingStructureAdmin,
   upsertReadingQuestion,
   removeReadingQuestion,
+  reorderReadingQuestions,
   type ReadingPartCode,
   type ReadingQuestionType,
   type ReadingQuestionAdminDto,
@@ -259,6 +260,24 @@ export default function ReadingQuestionsEditorPage() {
 
   async function handleSaveForm() {
     if (!form) return;
+    // Client-side validation
+    if (!form.stem.trim()) {
+      setToast({ variant: 'error', message: 'Question stem is required.' });
+      return;
+    }
+    const isMulti = form.questionType === 'MultipleChoice3' || form.questionType === 'MultipleChoice4';
+    if (isMulti && form.options.some((o) => !o.trim())) {
+      setToast({ variant: 'error', message: 'All options must have text.' });
+      return;
+    }
+    if (isMulti && !form.correctAnswer) {
+      setToast({ variant: 'error', message: 'Select the correct answer.' });
+      return;
+    }
+    if (!isMulti && !form.correctAnswer.trim()) {
+      setToast({ variant: 'error', message: 'Correct answer is required.' });
+      return;
+    }
     setSaving(true);
     try {
       const payload = buildPayload(form);
@@ -315,6 +334,33 @@ export default function ReadingQuestionsEditorPage() {
     }
   }
 
+  async function handleQuestionMoveUp(index: number) {
+    if (!activePart || index <= 0) return;
+    const questions = [...activePart.questions];
+    [questions[index - 1], questions[index]] = [questions[index], questions[index - 1]];
+    const orderedIds = questions.map((q) => q.id);
+    try {
+      await reorderReadingQuestions(paperId, activePart.id, orderedIds);
+      await fetchData();
+    } catch (err: unknown) {
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Reorder failed' });
+    }
+  }
+
+  async function handleQuestionMoveDown(index: number) {
+    if (!activePart) return;
+    const questions = [...activePart.questions];
+    if (index >= questions.length - 1) return;
+    [questions[index], questions[index + 1]] = [questions[index + 1], questions[index]];
+    const orderedIds = questions.map((q) => q.id);
+    try {
+      await reorderReadingQuestions(paperId, activePart.id, orderedIds);
+      await fetchData();
+    } catch (err: unknown) {
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Reorder failed' });
+    }
+  }
+
   // ── Render Helpers ───────────────────────────────────────────────────
 
   function renderQuestionList() {
@@ -335,11 +381,31 @@ export default function ReadingQuestionsEditorPage() {
 
     return (
       <div className="space-y-2">
-        {questions.map((q) => (
+        {questions.map((q, idx) => (
           <div
             key={q.id}
             className="flex items-center gap-3 rounded-lg border border-admin-border bg-admin-surface-raised/30 px-3 py-2"
           >
+            <div className="flex flex-col items-center gap-0.5 text-admin-text-muted shrink-0">
+              <button
+                type="button"
+                onClick={() => handleQuestionMoveUp(idx)}
+                disabled={idx === 0}
+                className="p-0.5 hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Move up"
+              >
+                <ArrowUp className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuestionMoveDown(idx)}
+                disabled={idx === questions.length - 1}
+                className="p-0.5 hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Move down"
+              >
+                <ArrowDown className="h-3 w-3" />
+              </button>
+            </div>
             <span className="text-xs font-mono text-admin-text-muted w-6 text-center shrink-0">
               {q.displayOrder}
             </span>
@@ -459,7 +525,7 @@ export default function ReadingQuestionsEditorPage() {
               options={[
                 { value: '', label: '— Select correct answer —' },
                 ...form.options.map((opt, idx) => ({
-                  value: opt || optionLabels[idx],
+                  value: optionLabels[idx],
                   label: `${optionLabels[idx]}: ${opt || '(empty)'}`,
                 })),
               ]}
@@ -489,11 +555,17 @@ export default function ReadingQuestionsEditorPage() {
         {/* Matching Text Reference */}
         {isMatching && (
           <div>
-            <Input
-              label="Correct Answer (text reference letter/number)"
+            <Select
+              label="Correct Answer (matching text)"
               value={form.correctAnswer}
               onChange={(e) => setForm({ ...form, correctAnswer: e.target.value })}
-              placeholder="e.g. A, B, 1, 2..."
+              options={[
+                { value: '', label: '— Select matching text —' },
+                ...activePart.texts.map((txt: ReadingTextDto) => ({
+                  value: String(txt.displayOrder),
+                  label: `Text ${txt.displayOrder}: ${txt.title}`,
+                })),
+              ]}
             />
           </div>
         )}

@@ -20,8 +20,10 @@ import {
   type ReadingStructureAdminDto,
 } from '@/lib/reading-authoring-api';
 import { apiClient } from '@/lib/api';
+import { getContentPaper } from '@/lib/content-upload-api';
 
 type PublishState = 'idle' | 'confirming' | 'publishing' | 'published' | 'error';
+type UnpublishState = 'idle' | 'confirming' | 'unpublishing';
 
 export default function ReadingValidatePublishPage() {
   const params = useParams<{ paperId: string }>();
@@ -32,18 +34,25 @@ export default function ReadingValidatePublishPage() {
   const [loading, setLoading] = useState(true);
   const [validating, setValidating] = useState(false);
   const [publishState, setPublishState] = useState<PublishState>('idle');
+  const [unpublishState, setUnpublishState] = useState<UnpublishState>('idle');
+  const [paperStatus, setPaperStatus] = useState<string>('');
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
   const fetchData = async () => {
     if (!paperId) return;
     setLoading(true);
     try {
-      const [validationResult, structureResult] = await Promise.all([
+      const [validationResult, structureResult, paperResult] = await Promise.all([
         validateReadingPaper(paperId),
         getReadingStructureAdmin(paperId),
+        getContentPaper(paperId),
       ]);
       setReport(validationResult);
       setStructure(structureResult);
+      setPaperStatus(paperResult.status ?? '');
+      if (paperResult.status?.toLowerCase() === 'published') {
+        setPublishState('published');
+      }
     } catch {
       setToast({ message: 'Failed to load validation data.', variant: 'error' });
     } finally {
@@ -71,7 +80,7 @@ export default function ReadingValidatePublishPage() {
   };
 
   const handlePublishClick = async () => {
-    if (publishState === 'idle') {
+    if (publishState === 'idle' || publishState === 'error') {
       setPublishState('confirming');
       return;
     }
@@ -89,6 +98,26 @@ export default function ReadingValidatePublishPage() {
   };
 
   const cancelPublish = () => setPublishState('idle');
+
+  const handleUnpublish = async () => {
+    if (unpublishState === 'idle') {
+      setUnpublishState('confirming');
+      return;
+    }
+    if (unpublishState === 'confirming') {
+      setUnpublishState('unpublishing');
+      try {
+        await apiClient.put(`/v1/admin/papers/${encodeURIComponent(paperId)}/status`, { status: 'Draft' });
+        setPublishState('idle');
+        setUnpublishState('idle');
+        setPaperStatus('Draft');
+        setToast({ message: 'Paper reverted to draft.', variant: 'success' });
+      } catch {
+        setUnpublishState('idle');
+        setToast({ message: 'Unpublish failed.', variant: 'error' });
+      }
+    }
+  };
 
   // Derive counts from structure
   const partACounts = structure?.parts.find((p) => p.partCode === 'A')?.questions.length ?? 0;
@@ -234,10 +263,26 @@ export default function ReadingValidatePublishPage() {
               </Button>
 
               {publishState === 'published' ? (
-                <Badge variant="emerald" className="text-base px-4 py-2">
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Published!
-                </Badge>
+                <div className="flex items-center gap-3">
+                  <Badge variant="emerald" className="text-base px-4 py-2">
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Published!
+                  </Badge>
+                  {unpublishState === 'confirming' ? (
+                    <div className="flex items-center gap-2">
+                      <Button variant="destructive" size="sm" onClick={handleUnpublish}>
+                        Confirm Unpublish
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setUnpublishState('idle')}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={handleUnpublish} disabled={unpublishState === 'unpublishing'}>
+                      {unpublishState === 'unpublishing' ? 'Reverting…' : 'Unpublish'}
+                    </Button>
+                  )}
+                </div>
               ) : (
                 <div className="flex items-center gap-2">
                   <Button
@@ -253,12 +298,12 @@ export default function ReadingValidatePublishPage() {
                         : 'Publish Paper'}
                   </Button>
                   {publishState === 'confirming' && (
-                    <Button variant="primary" onClick={cancelPublish}>
+                    <Button variant="ghost" onClick={cancelPublish}>
                       Cancel
                     </Button>
                   )}
                   {publishState === 'error' && (
-                    <span className="text-sm text-red-400">Publish failed. Try again.</span>
+                    <span className="text-sm text-red-400">Publish failed — click Publish to retry.</span>
                   )}
                 </div>
               )}

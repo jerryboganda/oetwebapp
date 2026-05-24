@@ -36,7 +36,13 @@ public partial class AdminService(
         "month",
         "monthly",
         "year",
-        "yearly"
+        "yearly",
+        // OET 2026 27-SKU catalogue uses one-time purchases with fixed-duration
+        // access (e.g. 6 months). The Oet2026CatalogSeeder writes `Interval =
+        // "one_time"` to BillingPlan; admin edits must round-trip the same
+        // value back through the upsert validator without rejection.
+        "one_time",
+        "one-time"
     };
 
     private static readonly HashSet<string> AddOnIntervals = new(StringComparer.OrdinalIgnoreCase)

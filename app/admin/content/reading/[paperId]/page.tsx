@@ -3,15 +3,16 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, ArrowRight, BookOpen, FileText, HelpCircle, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, FileText, HelpCircle, ShieldCheck, Pencil } from 'lucide-react';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
   AdminRouteSectionHeader,
 } from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
+import { Input, Select } from '@/components/ui/form-controls';
 import { Badge } from '@/components/ui/badge';
-import { InlineAlert } from '@/components/ui/alert';
+import { InlineAlert, Toast } from '@/components/ui/alert';
 import { ReadingWizardSteps } from '@/components/domain/admin/reading/ReadingWizardSteps';
 import {
   getReadingStructureAdmin,
@@ -19,6 +20,11 @@ import {
   type ReadingStructureAdminDto,
   type ReadingValidationReport,
 } from '@/lib/reading-authoring-api';
+import {
+  updateContentPaper,
+  getContentPaper,
+  type ContentPaperDto,
+} from '@/lib/content-upload-api';
 
 export default function AdminReadingPaperOverviewPage() {
   const params = useParams<{ paperId: string }>();
@@ -28,6 +34,11 @@ export default function AdminReadingPaperOverviewPage() {
   const [validation, setValidation] = useState<ReadingValidationReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [paper, setPaper] = useState<ContentPaperDto | null>(null);
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [metaForm, setMetaForm] = useState({ title: '', difficulty: '', estimatedDurationMinutes: 60, sourceProvenance: '' });
+  const [savingMeta, setSavingMeta] = useState(false);
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     if (!paperId) return;
@@ -60,6 +71,38 @@ export default function AdminReadingPaperOverviewPage() {
     load();
     return () => { cancelled = true; };
   }, [paperId]);
+
+  useEffect(() => {
+    if (!paperId) return;
+    getContentPaper(paperId).then((p) => {
+      setPaper(p);
+      setMetaForm({
+        title: p.title ?? '',
+        difficulty: p.difficulty ?? '',
+        estimatedDurationMinutes: p.estimatedDurationMinutes ?? 60,
+        sourceProvenance: p.sourceProvenance ?? '',
+      });
+    }).catch(() => { /* paper may not exist yet */ });
+  }, [paperId]);
+
+  async function handleSaveMeta() {
+    setSavingMeta(true);
+    try {
+      const updated = await updateContentPaper(paperId, {
+        title: metaForm.title.trim() || undefined,
+        difficulty: metaForm.difficulty || null,
+        estimatedDurationMinutes: metaForm.estimatedDurationMinutes,
+        sourceProvenance: metaForm.sourceProvenance.trim() || null,
+      });
+      setPaper(updated);
+      setEditingMeta(false);
+      setToast({ message: 'Metadata saved', variant: 'success' });
+    } catch (err) {
+      setToast({ message: err instanceof Error ? err.message : 'Save failed', variant: 'error' });
+    } finally {
+      setSavingMeta(false);
+    }
+  }
 
   const partASummary = structure?.parts.find((p) => p.partCode === 'A');
   const partBSummary = structure?.parts.find((p) => p.partCode === 'B');
@@ -177,6 +220,69 @@ export default function AdminReadingPaperOverviewPage() {
               </div>
             )}
 
+            {/* Metadata Edit */}
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-foreground">Paper Metadata</h3>
+                {!editingMeta && (
+                  <Button variant="ghost" size="sm" onClick={() => setEditingMeta(true)}>
+                    <Pencil className="h-3.5 w-3.5 mr-1" />
+                    Edit
+                  </Button>
+                )}
+              </div>
+              {!editingMeta ? (
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-muted-foreground">Title:</span> {paper?.title ?? '—'}</div>
+                  <div><span className="text-muted-foreground">Difficulty:</span> {paper?.difficulty ?? '—'}</div>
+                  <div><span className="text-muted-foreground">Duration:</span> {paper?.estimatedDurationMinutes ?? 60} min</div>
+                  <div><span className="text-muted-foreground">Source:</span> {paper?.sourceProvenance ?? '—'}</div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Input
+                    label="Title"
+                    value={metaForm.title}
+                    onChange={(e) => setMetaForm({ ...metaForm, title: e.target.value })}
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Select
+                      label="Difficulty"
+                      value={metaForm.difficulty}
+                      onChange={(e) => setMetaForm({ ...metaForm, difficulty: e.target.value })}
+                      options={[
+                        { value: '', label: '— Select —' },
+                        { value: 'easy', label: 'Easy' },
+                        { value: 'medium', label: 'Medium' },
+                        { value: 'hard', label: 'Hard' },
+                      ]}
+                    />
+                    <Input
+                      label="Duration (minutes)"
+                      type="number"
+                      min={1}
+                      value={metaForm.estimatedDurationMinutes}
+                      onChange={(e) => setMetaForm({ ...metaForm, estimatedDurationMinutes: parseInt(e.target.value) || 60 })}
+                    />
+                  </div>
+                  <Input
+                    label="Source Provenance"
+                    value={metaForm.sourceProvenance}
+                    onChange={(e) => setMetaForm({ ...metaForm, sourceProvenance: e.target.value })}
+                    placeholder="e.g. Original OET material, BMJ 2024..."
+                  />
+                  <div className="flex gap-2 pt-1">
+                    <Button variant="primary" size="sm" onClick={handleSaveMeta} disabled={savingMeta}>
+                      {savingMeta ? 'Saving…' : 'Save Metadata'}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setEditingMeta(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3">
               <Button variant="primary" asChild>
@@ -201,6 +307,10 @@ export default function AdminReadingPaperOverviewPage() {
           </div>
         )}
       </AdminRoutePanel>
+
+      {toast && (
+        <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
+      )}
     </AdminRouteWorkspace>
   );
 }

@@ -205,6 +205,7 @@ function PlayerContent() {
   const [integrityWarning, setIntegrityWarning] = useState<string | null>(null);
   const [audioResumeWarning, setAudioResumeWarning] = useState<string | null>(null);
   const [audioState, setAudioState] = useState<'idle' | 'buffering' | 'ready' | 'error'>('idle');
+  const [audioRetryKey, setAudioRetryKey] = useState(0);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -1013,6 +1014,7 @@ function PlayerContent() {
     <AppShell pageTitle={session.paper.title} distractionFree>
       {shouldMountAudio ? (
         <audio
+          key={audioRetryKey}
           ref={audioRef}
           src={session.paper.audioUrl ?? undefined}
           controlsList="nodownload nofullscreen noremoteplayback"
@@ -1223,7 +1225,22 @@ function PlayerContent() {
                 You&rsquo;re taking this section as part of a mock. Submitting will mark this section complete and return you to the mock dashboard.
               </InlineAlert>
             ) : null}
-            {audioError ? <InlineAlert variant="error">{audioError}</InlineAlert> : null}
+            {audioError ? (
+              <InlineAlert variant="error">
+                {audioError}
+                <button
+                  type="button"
+                  className="ml-3 underline font-medium"
+                  onClick={() => {
+                    setAudioError(null);
+                    setAudioState('idle');
+                    setAudioRetryKey((k) => k + 1);
+                  }}
+                >
+                  Retry
+                </button>
+              </InlineAlert>
+            ) : null}
             {saveState === 'error' ? <InlineAlert variant="warning">One answer did not autosave. Keep working; submit will retry saving all answers.</InlineAlert> : null}
             {integrityWarning ? <InlineAlert variant="warning">{integrityWarning}</InlineAlert> : null}
             {audioResumeWarning ? <InlineAlert variant="warning">{audioResumeWarning}</InlineAlert> : null}

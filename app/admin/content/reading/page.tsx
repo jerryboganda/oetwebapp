@@ -3,17 +3,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, BookOpen, FileCheck2, ArrowRight } from 'lucide-react';
+import { Plus, Search, BookOpen, FileCheck2, ArrowRight, Trash2 } from 'lucide-react';
 import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/form-controls';
+import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-error';
 import { Pagination } from '@/components/ui/pagination';
 import { getAdminContentLibraryData } from '@/lib/admin';
+import { archiveContentPaper } from '@/lib/content-upload-api';
 import type { AdminContentRow } from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
@@ -60,6 +61,21 @@ export default function AdminReadingPapersPage() {
       return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     } catch {
       return iso;
+    }
+  }
+
+  const [archiveTarget, setArchiveTarget] = useState<AdminContentRow | null>(null);
+
+  async function handleArchive(row: AdminContentRow) {
+    try {
+      await archiveContentPaper(row.id);
+      setRows((prev) => prev.filter((r) => r.id !== row.id));
+      setTotal((prev) => prev - 1);
+      setToast({ variant: 'success', message: `"${row.title}" archived.` });
+    } catch {
+      setToast({ variant: 'error', message: 'Archive failed.' });
+    } finally {
+      setArchiveTarget(null);
     }
   }
 
@@ -117,6 +133,14 @@ export default function AdminReadingPapersPage() {
               <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Archive ${row.title}`}
+            onClick={() => setArchiveTarget(row)}
+          >
+            <Trash2 className="h-4 w-4 text-danger" />
+          </Button>
         </div>
       ),
     },
@@ -127,6 +151,27 @@ export default function AdminReadingPapersPage() {
       {toast && (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       )}
+
+      {/* Archive Confirm Dialog */}
+      {archiveTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-surface rounded-lg p-6 shadow-xl max-w-sm w-full mx-4 border border-border">
+            <h3 className="text-base font-semibold text-foreground mb-2">Archive Paper?</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              &ldquo;{archiveTarget.title}&rdquo; will be archived. This can be undone by an admin later.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setArchiveTarget(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => handleArchive(archiveTarget)}>
+                Archive
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <AdminRouteWorkspace>
         <AdminRouteSectionHeader
           eyebrow="CMS"
@@ -153,19 +198,30 @@ export default function AdminReadingPapersPage() {
                 className="pl-9"
               />
             </div>
-            <select
+            <Select
+              label="Status"
               value={status}
               onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm"
-            >
-              <option value="">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-              <option value="archived">Archived</option>
-            </select>
+              options={[
+                { value: '', label: 'All statuses' },
+                { value: 'draft', label: 'Draft' },
+                { value: 'published', label: 'Published' },
+                { value: 'archived', label: 'Archived' },
+              ]}
+            />
           </div>
 
-          <AsyncStateWrapper status={pageStatus}>
+          <AsyncStateWrapper
+            status={pageStatus}
+            emptyContent={
+              <EmptyState
+                icon={<FileCheck2 className="h-6 w-6" />}
+                title="No reading papers found"
+                description="Create your first reading paper to start building the content library."
+                action={{ label: 'Create Paper', onClick: () => router.push('/admin/content/reading/new') }}
+              />
+            }
+          >
             <DataTable
               columns={columns}
               data={rows}
@@ -182,15 +238,6 @@ export default function AdminReadingPapersPage() {
               itemLabelPlural="papers"
             />
           </AsyncStateWrapper>
-
-          {pageStatus === 'empty' && (
-            <EmptyState
-              icon={<FileCheck2 className="h-6 w-6" />}
-              title="No reading papers found"
-              description="Create your first reading paper to start building the content library."
-              action={{ label: 'Create Paper', onClick: () => router.push('/admin/content/reading/new') }}
-            />
-          )}
         </AdminRoutePanel>
       </AdminRouteWorkspace>
     </>

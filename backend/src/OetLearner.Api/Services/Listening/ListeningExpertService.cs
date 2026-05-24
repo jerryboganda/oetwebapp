@@ -79,10 +79,30 @@ public sealed record ListeningExpertFeedbackRequest(
 // Interface
 // ─────────────────────────────────────────────────────────────────────────────
 
+public sealed record ListeningExpertMyReviewsPagedResponse(
+    IReadOnlyList<ListeningExpertMyReviewSummary> Items,
+    int Total,
+    int Page,
+    int PageSize);
+
+public sealed record ListeningExpertMyReviewSummary(
+    string FeedbackId,
+    string AttemptId,
+    string PaperId,
+    string PaperTitle,
+    string LearnerId,
+    string LearnerDisplayName,
+    int? RawScoreOverride,
+    DateTimeOffset SubmittedAt,
+    DateTimeOffset? UpdatedAt);
+
 public interface IListeningExpertService
 {
     Task<ListeningExpertAttemptsPagedResponse> GetAttemptsPagedAsync(
         string expertId, int page, int pageSize, string? learnerId, string? paperId, CancellationToken ct);
+
+    Task<ListeningExpertMyReviewsPagedResponse> GetMyReviewsPagedAsync(
+        string expertId, int page, int pageSize, CancellationToken ct);
 
     Task<ListeningExpertReviewBundle> GetReviewBundleAsync(
         string expertId, string attemptId, CancellationToken ct);
@@ -173,6 +193,69 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
         )).ToList();
 
         return new ListeningExpertAttemptsPagedResponse(items, total, page, pageSize);
+    }
+
+    // ── My reviews (paginated) ────────────────────────────────────────────────
+
+    public async Task<ListeningExpertMyReviewsPagedResponse> GetMyReviewsPagedAsync(
+        string expertId, int page, int pageSize, CancellationToken ct)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+
+        var query = db.ListeningExpertFeedbacks
+            .AsNoTracking()
+            .Where(f => f.ExpertId == expertId);
+
+        var total = await query.CountAsync(ct);
+
+        var feedbacks = await query
+            .OrderByDescending(f => f.SubmittedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(f => new
+            {
+                f.Id,
+                f.AttemptId,
+                f.RawScoreOverride,
+                f.SubmittedAt,
+                f.UpdatedAt,
+                f.Attempt.PaperId,
+                f.Attempt.UserId,
+            })
+            .ToListAsync(ct);
+
+        if (feedbacks.Count == 0)
+            return new ListeningExpertMyReviewsPagedResponse([], total, page, pageSize);
+
+        // Load paper titles and learner names
+        var paperIds = feedbacks.Select(f => f.PaperId).Distinct().ToList();
+        var paperTitles = await db.Set<ContentPaper>()
+            .AsNoTracking()
+            .Where(p => paperIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Title })
+            .ToDictionaryAsync(p => p.Id, p => p.Title, ct);
+
+        var learnerIds = feedbacks.Select(f => f.UserId).Distinct().ToList();
+        var learnerNames = await db.Users
+            .AsNoTracking()
+            .Where(u => learnerIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.DisplayName })
+            .ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
+
+        var items = feedbacks.Select(f => new ListeningExpertMyReviewSummary(
+            FeedbackId: f.Id,
+            AttemptId: f.AttemptId,
+            PaperId: f.PaperId,
+            PaperTitle: paperTitles.GetValueOrDefault(f.PaperId, f.PaperId),
+            LearnerId: f.UserId,
+            LearnerDisplayName: learnerNames.GetValueOrDefault(f.UserId, f.UserId),
+            RawScoreOverride: f.RawScoreOverride,
+            SubmittedAt: f.SubmittedAt,
+            UpdatedAt: f.UpdatedAt
+        )).ToList();
+
+        return new ListeningExpertMyReviewsPagedResponse(items, total, page, pageSize);
     }
 
     // ── Full review bundle ────────────────────────────────────────────────────

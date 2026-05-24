@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Plus, Trash2, GripVertical, Save } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Plus, Trash2, ArrowUp, ArrowDown, Save } from 'lucide-react';
 
 import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
@@ -220,7 +220,7 @@ export default function ReadingTextsEditorPage() {
 
       <ReadingWizardSteps paperId={paperId} currentStep="texts" />
 
-      <ReadingPartTabs activeTab={activeTab} onTabChange={setActiveTab} counts={textCounts} />
+      <ReadingPartTabs activeTab={activeTab} onTabChange={setActiveTab} counts={textCounts} context="texts" />
 
       {loading ? (
         <AdminRoutePanel>
@@ -267,7 +267,16 @@ export default function ReadingTextsEditorPage() {
                       className="p-0.5 hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
                       aria-label="Move up"
                     >
-                      <GripVertical className="h-3.5 w-3.5" />
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveDown(idx)}
+                      disabled={idx === activeTexts.length - 1}
+                      className="p-0.5 hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+                      aria-label="Move down"
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
                     </button>
                   </div>
 

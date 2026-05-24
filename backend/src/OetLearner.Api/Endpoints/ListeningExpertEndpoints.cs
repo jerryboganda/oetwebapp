@@ -28,6 +28,20 @@ public static class ListeningExpertEndpoints
             return Results.Ok(result);
         });
 
+        // GET /v1/expert/listening/my-reviews
+        // Returns paginated list of reviews this expert has already submitted.
+        group.MapGet("/my-reviews", async (
+            HttpContext http,
+            IListeningExpertService service,
+            CancellationToken ct,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20) =>
+        {
+            var expertId = http.ListeningExpertId();
+            var result = await service.GetMyReviewsPagedAsync(expertId, page, pageSize, ct);
+            return Results.Ok(result);
+        });
+
         // GET /v1/expert/listening/attempts/{attemptId}/bundle
         // Returns full review bundle: attempt metadata + all answers + transcript evidence + existing feedback.
         group.MapGet("/attempts/{attemptId}/bundle", async (
