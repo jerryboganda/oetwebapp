@@ -61,6 +61,10 @@ export function resolvePostAuthDestination(user: CurrentUser, nextPath?: string 
     return defaultRouteForRole(user.role);
   }
 
+  if (normalizedNext === '/' && user.role !== 'learner') {
+    return defaultRouteForRole(user.role);
+  }
+
   return roleCanAccessPath(user.role, normalizedNext)
     ? normalizedNext
     : defaultRouteForRole(user.role);

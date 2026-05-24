@@ -19,6 +19,13 @@ describe('auth routes', () => {
     expect(defaultRouteForRole('sponsor')).toBe('/support');
   });
 
+  it('routes privileged users away from the learner root after sign-in', () => {
+    expect(resolvePostAuthDestination({ role: 'admin' } as never, '/')).toBe('/admin');
+    expect(resolvePostAuthDestination({ role: 'expert' } as never, '/')).toBe('/expert');
+    expect(resolvePostAuthDestination({ role: 'sponsor' } as never, '/')).toBe('/support');
+    expect(resolvePostAuthDestination({ role: 'learner' } as never, '/')).toBe('/');
+  });
+
   it('does not force privileged users into MFA setup when the authenticator is not enrolled yet', () => {
     expect(resolveAuthenticatedDestination({
       role: 'expert',
