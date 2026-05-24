@@ -4032,19 +4032,23 @@ public partial class AdminService(
                 "Plan has historical billing quotes. Archive the plan instead of deleting it.");
         }
 
-        var versions = await db.BillingPlanVersions.Where(v => v.PlanId == plan.Id).ToListAsync(ct);
-        if (versions.Count > 0) db.BillingPlanVersions.RemoveRange(versions);
-
-        var pkg = await db.ContentPackages.FirstOrDefaultAsync(p => p.Code == plan.Code, ct);
-        if (pkg is not null) db.ContentPackages.Remove(pkg);
-
+        // Detach the plan first so EF doesn't track-and-delete it twice when
+        // ExecuteDeleteAsync runs (which is a tracker-bypassing SQL DELETE).
         var planName = plan.Name;
         var planCode = plan.Code;
-        db.BillingPlans.Remove(plan);
-        await db.SaveChangesAsync(ct);
+        var resolvedPlanId = plan.Id;
+        db.Entry(plan).State = EntityState.Detached;
 
-        await LogAuditAsync(adminId, adminName, "Deleted", "BillingPlan", plan.Id, $"Hard-deleted plan {planCode}: {planName}", ct);
-        return new { id = plan.Id, code = planCode, deleted = true };
+        // BillingPlanVersion is guarded by an EF SaveChanges interceptor that
+        // forbids Modified/Deleted on snapshot rows. ExecuteDeleteAsync issues
+        // a single SQL DELETE without going through the ChangeTracker, so the
+        // interceptor never sees it — which is what we want for hard-delete.
+        await db.BillingPlanVersions.Where(v => v.PlanId == resolvedPlanId).ExecuteDeleteAsync(ct);
+        await db.ContentPackages.Where(p => p.Code == planCode).ExecuteDeleteAsync(ct);
+        await db.BillingPlans.Where(p => p.Id == resolvedPlanId).ExecuteDeleteAsync(ct);
+
+        await LogAuditAsync(adminId, adminName, "Deleted", "BillingPlan", resolvedPlanId, $"Hard-deleted plan {planCode}: {planName}", ct);
+        return new { id = resolvedPlanId, code = planCode, deleted = true };
     }
 
     /// <summary>
@@ -4075,19 +4079,19 @@ public partial class AdminService(
                 "Add-on has historical billing quotes. Archive the add-on instead of deleting it.");
         }
 
-        var versions = await db.BillingAddOnVersions.Where(v => v.AddOnId == addOn.Id).ToListAsync(ct);
-        if (versions.Count > 0) db.BillingAddOnVersions.RemoveRange(versions);
-
-        var pkg = await db.ContentPackages.FirstOrDefaultAsync(p => p.Code == addOn.Code, ct);
-        if (pkg is not null) db.ContentPackages.Remove(pkg);
-
         var addOnName = addOn.Name;
         var addOnCode = addOn.Code;
-        db.BillingAddOns.Remove(addOn);
-        await db.SaveChangesAsync(ct);
+        var resolvedAddOnId = addOn.Id;
+        db.Entry(addOn).State = EntityState.Detached;
 
-        await LogAuditAsync(adminId, adminName, "Deleted", "BillingAddOn", addOn.Id, $"Hard-deleted add-on {addOnCode}: {addOnName}", ct);
-        return new { id = addOn.Id, code = addOnCode, deleted = true };
+        // Same rationale as DeleteBillingPlanAsync — bypass the immutability
+        // interceptor by issuing SQL DELETEs that don't touch the ChangeTracker.
+        await db.BillingAddOnVersions.Where(v => v.AddOnId == resolvedAddOnId).ExecuteDeleteAsync(ct);
+        await db.ContentPackages.Where(p => p.Code == addOnCode).ExecuteDeleteAsync(ct);
+        await db.BillingAddOns.Where(a => a.Id == resolvedAddOnId).ExecuteDeleteAsync(ct);
+
+        await LogAuditAsync(adminId, adminName, "Deleted", "BillingAddOn", resolvedAddOnId, $"Hard-deleted add-on {addOnCode}: {addOnName}", ct);
+        return new { id = resolvedAddOnId, code = addOnCode, deleted = true };
     }
 
     public async Task<object> GetBillingCouponsAsync(string? status, CancellationToken ct)
