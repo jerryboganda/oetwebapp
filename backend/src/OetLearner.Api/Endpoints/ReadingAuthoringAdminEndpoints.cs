@@ -27,7 +27,7 @@ public static class ReadingAuthoringAdminEndpoints
             string paperId, IReadingStructureService svc, CancellationToken ct) =>
         {
             var structure = await svc.GetAdminStructureAsync(paperId, ct);
-            return Results.Ok(structure);
+            return Results.Ok(ProjectStructure(structure));
         });
 
         group.MapGet("/manifest", async (
@@ -48,7 +48,11 @@ public static class ReadingAuthoringAdminEndpoints
             try
             {
                 var result = await svc.ImportManifestAsync(paperId, dto.Manifest, dto.ReplaceExisting, adminId, ct);
-                return Results.Ok(result);
+                return Results.Ok(new
+                {
+                    structure = ProjectStructure(result.Structure),
+                    report = result.Report,
+                });
             }
             catch (InvalidOperationException ex)
             {
@@ -335,6 +339,49 @@ public static class ReadingAuthoringAdminEndpoints
 
         return app;
     }
+
+    private static object ProjectStructure(ReadingStructure structure) => new
+    {
+        structure.PaperId,
+        parts = structure.Parts.Select(part => new
+        {
+            part.Id,
+            part.PartCode,
+            part.TimeLimitMinutes,
+            part.MaxRawScore,
+            part.Instructions,
+            texts = part.Texts.Select(text => new
+            {
+                text.Id,
+                text.ReadingPartId,
+                text.DisplayOrder,
+                text.Title,
+                text.Source,
+                text.BodyHtml,
+                text.WordCount,
+                text.TopicTag,
+            }),
+            questions = part.Questions.Select(question => new
+            {
+                question.Id,
+                question.ReadingPartId,
+                question.ReadingTextId,
+                question.DisplayOrder,
+                question.Points,
+                question.QuestionType,
+                question.Stem,
+                question.OptionsJson,
+                question.CorrectAnswerJson,
+                question.AcceptedSynonymsJson,
+                question.CaseSensitive,
+                question.ExplanationMarkdown,
+                question.SkillTag,
+                question.OptionDistractorsJson,
+                question.ReviewState,
+                question.LatestReviewNote,
+            }),
+        }),
+    };
 }
 
 public sealed record ReadingExtractionRequestDto(string? MediaAssetId);

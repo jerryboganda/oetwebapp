@@ -13,11 +13,36 @@ import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-error';
 import { Pagination } from '@/components/ui/pagination';
-import { getAdminContentLibraryData } from '@/lib/admin';
-import { archiveContentPaper } from '@/lib/content-upload-api';
+import { archiveContentPaper, listContentPapers, type ContentPaperDto, type ContentStatus } from '@/lib/content-upload-api';
 import type { AdminContentRow } from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
+
+function toQueryStatus(value: string): ContentStatus | undefined {
+  if (value === 'draft') return 'Draft';
+  if (value === 'published') return 'Published';
+  if (value === 'archived') return 'Archived';
+  return undefined;
+}
+
+function toRowStatus(status: ContentStatus): AdminContentRow['status'] {
+  if (status === 'Published') return 'published';
+  if (status === 'Archived') return 'archived';
+  return 'draft';
+}
+
+function toContentRow(paper: ContentPaperDto): AdminContentRow {
+  return {
+    id: paper.id,
+    title: paper.title,
+    type: paper.subtestCode,
+    profession: paper.appliesToAllProfessions ? 'All' : paper.professionId ?? 'All',
+    status: toRowStatus(paper.status),
+    updatedAt: paper.updatedAt,
+    author: 'System',
+    revisionCount: paper.publishedRevisionId ? 1 : 0,
+  };
+}
 
 export default function AdminReadingPapersPage() {
   const router = useRouter();
@@ -35,17 +60,19 @@ export default function AdminReadingPapersPage() {
     const t = setTimeout(async () => {
       setPageStatus('loading');
       try {
-        const result = await getAdminContentLibraryData({
-          page,
-          pageSize,
+        const papers = await listContentPapers({
+          page: 1,
+          pageSize: 500,
+          subtest: 'reading',
           search: search.trim() || undefined,
-          type: 'reading_task',
-          status: status || undefined,
+          status: toQueryStatus(status),
         });
         if (cancelled) return;
-        setRows(result.items);
-        setTotal(result.total);
-        setPageStatus(result.items.length > 0 ? 'success' : 'empty');
+        const resultRows = papers.map(toContentRow);
+        const pageStart = (page - 1) * pageSize;
+        setRows(resultRows.slice(pageStart, pageStart + pageSize));
+        setTotal(resultRows.length);
+        setPageStatus(resultRows.length > 0 ? 'success' : 'empty');
       } catch {
         if (!cancelled) {
           setPageStatus('error');

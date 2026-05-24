@@ -331,7 +331,7 @@ public static class ContentPapersAdminEndpoints
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var asset = await svc.AttachAssetAsync(id, dto, adminId, ct);
-            return Results.Created($"/v1/admin/papers/{id}/assets/{asset.Id}", asset);
+            return Results.Created($"/v1/admin/papers/{id}/assets/{asset.Id}", ProjectAsset(asset));
         })
         .RequireAuthorization("AdminContentWrite")
         .RequireRateLimiting("PerUserWrite");
@@ -453,17 +453,31 @@ public static class ContentPapersAdminEndpoints
         p.PublishedRevisionId, p.CardType, p.LetterType, p.Priority, p.TagsCsv,
         p.SourceProvenance, p.CreatedAt, p.UpdatedAt, p.PublishedAt, p.ArchivedAt,
         p.IntegrityAcknowledgedByAdminId, p.IntegrityAcknowledgedAt,
-        assets = p.Assets.Select(a => new
+        assets = p.Assets.Select(ProjectAsset),
+    };
+
+    private static object ProjectAsset(ContentPaperAsset a) => new
+    {
+        a.Id,
+        role = a.Role.ToString(),
+        a.Part,
+        a.MediaAssetId,
+        a.Title,
+        a.DisplayOrder,
+        a.IsPrimary,
+        a.CreatedAt,
+        media = a.MediaAsset is null ? null : new
         {
-            a.Id, role = a.Role.ToString(), a.Part, a.MediaAssetId, a.Title,
-            a.DisplayOrder, a.IsPrimary, a.CreatedAt,
-            media = a.MediaAsset is null ? null : new
-            {
-                a.MediaAsset.Id, a.MediaAsset.OriginalFilename, a.MediaAsset.MimeType,
-                a.MediaAsset.Format, a.MediaAsset.SizeBytes, a.MediaAsset.DurationSeconds,
-                a.MediaAsset.Sha256, a.MediaAsset.MediaKind, a.MediaAsset.UploadedAt,
-            },
-        }),
+            a.MediaAsset.Id,
+            a.MediaAsset.OriginalFilename,
+            a.MediaAsset.MimeType,
+            a.MediaAsset.Format,
+            a.MediaAsset.SizeBytes,
+            a.MediaAsset.DurationSeconds,
+            a.MediaAsset.Sha256,
+            a.MediaAsset.MediaKind,
+            a.MediaAsset.UploadedAt,
+        },
     };
 }
 
