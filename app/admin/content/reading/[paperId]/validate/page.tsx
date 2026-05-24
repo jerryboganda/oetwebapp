@@ -19,8 +19,7 @@ import {
   type ReadingValidationReport,
   type ReadingStructureAdminDto,
 } from '@/lib/reading-authoring-api';
-import { apiClient } from '@/lib/api';
-import { getContentPaper } from '@/lib/content-upload-api';
+import { getContentPaper, publishContentPaper, unpublishContentPaper } from '@/lib/content-upload-api';
 
 type PublishState = 'idle' | 'confirming' | 'publishing' | 'published' | 'error';
 type UnpublishState = 'idle' | 'confirming' | 'unpublishing';
@@ -87,8 +86,9 @@ export default function ReadingValidatePublishPage() {
     if (publishState === 'confirming') {
       setPublishState('publishing');
       try {
-        await apiClient.put(`/v1/admin/papers/${encodeURIComponent(paperId)}/status`, { status: 'Published' });
+        await publishContentPaper(paperId);
         setPublishState('published');
+        setPaperStatus('Published');
         setToast({ message: 'Paper published successfully!', variant: 'success' });
       } catch {
         setPublishState('error');
@@ -107,7 +107,7 @@ export default function ReadingValidatePublishPage() {
     if (unpublishState === 'confirming') {
       setUnpublishState('unpublishing');
       try {
-        await apiClient.put(`/v1/admin/papers/${encodeURIComponent(paperId)}/status`, { status: 'Draft' });
+        await unpublishContentPaper(paperId);
         setPublishState('idle');
         setUnpublishState('idle');
         setPaperStatus('Draft');

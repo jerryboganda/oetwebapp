@@ -116,6 +116,21 @@ public static class ContentPapersAdminEndpoints
         .RequireAuthorization("AdminContentPublish")
         .RequireRateLimiting("PerUserWrite");
 
+        // ── Unpublish (revert to Draft) ───────────────────────────────────
+        group.MapPost("/{id}/unpublish", async (
+            string id, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try { await svc.UnpublishAsync(id, adminId, ct); }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            return Results.NoContent();
+        })
+        .RequireAuthorization("AdminContentPublish")
+        .RequireRateLimiting("PerUserWrite");
+
         // ── Draft → InReview → Published workflow (spec §1E) ──────────────
         group.MapPost("/{id}/submit-for-review", async (
             string id, IContentPaperService svc, HttpContext http, CancellationToken ct) =>

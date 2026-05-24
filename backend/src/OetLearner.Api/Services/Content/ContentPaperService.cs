@@ -32,6 +32,11 @@ public interface IContentPaperService
     Task ArchiveAsync(string paperId, string adminId, CancellationToken ct);
     Task PublishAsync(string paperId, string adminId, CancellationToken ct);
 
+    /// <summary>Transitions Published → Draft. Allows an admin to revert a
+    /// paper to draft state for further editing. Throws when the paper is
+    /// already Draft or Archived.</summary>
+    Task UnpublishAsync(string paperId, string adminId, CancellationToken ct);
+
     /// <summary>Transitions Draft → InReview. Used by the writing authoring
     /// workflow (spec §1E) so a second reviewer can approve a paper before it
     /// goes live. Throws when the paper is not Draft.</summary>
@@ -361,6 +366,30 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
             }
         }
         await WriteAuditAsync("ContentPaperArchived", paper.Id, paper.Title, adminId, ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UnpublishAsync(string paperId, string adminId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId, ct)
+            ?? throw new InvalidOperationException("Paper not found.");
+        if (paper.Status == ContentStatus.Draft)
+            throw new InvalidOperationException("Paper is already in Draft status.");
+        if (paper.Status == ContentStatus.Archived)
+            throw new InvalidOperationException("Cannot unpublish an archived paper. Restore it first.");
+        paper.Status = ContentStatus.Draft;
+        paper.UpdatedAt = DateTimeOffset.UtcNow;
+        if (string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == paper.Id, ct);
+            if (content is not null)
+            {
+                content.Status = ContentStatus.Draft;
+                content.UpdatedAt = paper.UpdatedAt;
+            }
+        }
+        await WriteAuditAsync("ContentPaperUnpublished", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
     }
 

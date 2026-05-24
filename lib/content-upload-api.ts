@@ -288,6 +288,8 @@ export const archiveContentPaper = (id: string) =>
   api<void>(`/v1/admin/papers/${id}`, { method: 'DELETE' });
 export const publishContentPaper = (id: string) =>
   api<void>(`/v1/admin/papers/${id}/publish`, { method: 'POST' });
+export const unpublishContentPaper = (id: string) =>
+  api<void>(`/v1/admin/papers/${id}/unpublish`, { method: 'POST' });
 
 // ── Writing-task authoring + lifecycle (spec §1C / §1E / §19) ───────────
 
