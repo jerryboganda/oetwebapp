@@ -1,5 +1,6 @@
 import { defineConfig } from "eslint/config";
 import next from "eslint-config-next";
+import reactHooks from "eslint-plugin-react-hooks";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,6 +24,9 @@ export default defineConfig([{
     // pre-existing patterns (always-fresh refs, Date.now() in render,
     // setState-in-effect with cancelled-guards) that are not safety-critical
     // bugs. Downgrade to warnings so lint stays green; tracked as tech debt.
+    plugins: {
+        "react-hooks": reactHooks,
+    },
     rules: {
         "react-hooks/set-state-in-effect": "warn",
         "react-hooks/refs": "warn",

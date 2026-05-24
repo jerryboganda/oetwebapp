@@ -238,7 +238,7 @@ export default function AdminTutorBookPage() {
           <h3 className="text-base font-bold">Audio scripts</h3>
         </header>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Per-chapter MP3 + optional transcript URLs. Surfaced inside the reader's Audio Scripts tab.
+          Per-chapter MP3 + optional transcript URLs. Surfaced inside the reader&apos;s Audio Scripts tab.
         </p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
