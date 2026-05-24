@@ -42,6 +42,7 @@ tsconfig.tsbuildinfo
 .env*
 !.env.example
 !.env.staging.example
+!.env.docker-local.example
 
 # Local/temp artifacts
 .local-deploy/
