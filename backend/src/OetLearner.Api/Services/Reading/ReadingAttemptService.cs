@@ -369,6 +369,7 @@ public sealed class ReadingAttemptService(
             // Auto-expire on next action — the grader handles idempotency.
             attempt.Status = ReadingAttemptStatus.Expired;
             attempt.LastActivityAt = now;
+            attempt.RowVersion++;
             await db.SaveChangesAsync(ct);
             throw new ReadingAttemptException("attempt_deadline_passed", "Attempt deadline has passed.");
         }
@@ -557,6 +558,7 @@ public sealed class ReadingAttemptService(
         // Update attempt.LastActivityAt + write audit log in a fresh save so
         // it does not get tangled with the answer write path above.
         attempt.LastActivityAt = now;
+        attempt.RowVersion++;
         var elapsedDetail = sanitisedElapsedMs is int dm ? $"; elapsedMs={dm}" : string.Empty;
         db.AuditEvents.Add(new AuditEvent
         {
@@ -631,6 +633,7 @@ public sealed class ReadingAttemptService(
         {
             attempt.Status = ReadingAttemptStatus.Abandoned;
             attempt.SubmittedAt = DateTimeOffset.UtcNow;
+            attempt.RowVersion++;
             await db.SaveChangesAsync(ct);
             throw new InvalidOperationException("Attempt expired and was marked abandoned by policy.");
         }
@@ -831,6 +834,7 @@ public sealed class ReadingAttemptService(
         {
             attempt.Status = ReadingAttemptStatus.Expired;
             attempt.LastActivityAt = now;
+            attempt.RowVersion++;
             await db.SaveChangesAsync(ct);
             throw new ReadingAttemptException(
                 "attempt_deadline_passed",
@@ -842,6 +846,7 @@ public sealed class ReadingAttemptService(
         attempt.PartBCTimerPausedAt = null;
         attempt.DeadlineAt = deadline;
         attempt.LastActivityAt = now;
+        attempt.RowVersion++;
 
         db.AuditEvents.Add(new AuditEvent
         {
@@ -884,19 +889,36 @@ public sealed class ReadingAttemptService(
             .ToList();
         if (stale.Count == 0) return 0;
 
+        var expiredCount = 0;
         foreach (var a in stale)
         {
             a.Status = policy.OnExpirySubmitPolicy == "auto_submit_graded"
                 ? ReadingAttemptStatus.Expired
                 : ReadingAttemptStatus.Abandoned;
             a.SubmittedAt = now;
+            a.RowVersion++;
+
+            try
+            {
+                await db.SaveChangesAsync(ct);
+                expiredCount++;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // A concurrent autosave modified this attempt since we read it.
+                // The learner is still active — skip and let the next sweep
+                // re-evaluate. Detach the stale entity so the context stays clean.
+                db.Entry(a).State = EntityState.Detached;
+                logger.LogInformation(
+                    "ReadingAttemptExpireWorker skipped attempt {AttemptId} due to concurrent modification.",
+                    a.Id);
+            }
         }
-        await db.SaveChangesAsync(ct);
 
         // If we chose auto_submit_graded, grade each expired attempt now.
         if (policy.OnExpirySubmitPolicy == "auto_submit_graded")
         {
-            foreach (var a in stale)
+            foreach (var a in stale.Where(a => a.Status == ReadingAttemptStatus.Expired))
             {
                 try { await grader.GradeAttemptAsync(a.Id, ct); }
                 catch (Exception ex)
@@ -905,7 +927,7 @@ public sealed class ReadingAttemptService(
                 }
             }
         }
-        return stale.Count;
+        return expiredCount;
     }
 
     private static ReadingResolvedPolicy ResolvePolicySnapshot(string json)
