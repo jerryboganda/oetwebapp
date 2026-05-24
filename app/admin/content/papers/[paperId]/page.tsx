@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CloudUpload, Loader2, Trash2 } from 'lucide-react';
+import { ArrowLeft, CloudUpload, Eye, Loader2, Trash2 } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
@@ -222,6 +222,15 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
               icon={<CloudUpload className="w-6 h-6" />}
               title={paper.title}
               description={`${paper.subtestCode.toUpperCase()} · ${paper.appliesToAllProfessions ? 'All professions' : (paper.professionId ?? '—')} · ${paper.status}`}
+              actions={paper.subtestCode === 'reading' ? (
+                <Link
+                  href={`/admin/content/papers/${paperId}/preview`}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-admin-border bg-admin-surface px-3 py-1.5 text-sm font-semibold text-admin-text hover:bg-admin-surface-raised transition-colors"
+                >
+                  <Eye className="w-4 h-4" />
+                  Preview
+                </Link>
+              ) : undefined}
             />
 
             {missingRoles.length > 0 && paper.status !== 'Published' && (

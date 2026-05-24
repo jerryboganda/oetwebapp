@@ -109,6 +109,8 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const autoSubmitTriggered = useRef(false);
+  const warnedMiniTest2min = useRef(false);
+  const warnedMiniTest1min = useRef(false);
   const dirtyQuestionIds = useRef<Set<string>>(new Set());
   const timingState = useRef({ partALocked: false, partBCWindowEnded: false, paperExpired: false, breakPending: false });
   /**
@@ -165,10 +167,10 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     const readWarnings = () => {
       if (typeof window === 'undefined') return;
       const next: string[] = [];
-      if (window.screen.width < 1920 || window.screen.height < 1080) {
-        next.push('Display below 1920 x 1080');
+      if (window.screen.width < 1024 || window.screen.height < 600) {
+        next.push('Display below 1024 x 600');
       }
-      if (Math.abs(window.devicePixelRatio - 1) > 0.01) {
+      if (window.devicePixelRatio > 3) {
         next.push(`Display scale or browser zoom ${Math.round(window.devicePixelRatio * 100)}%`);
       }
       setDisplayWarnings(next);
@@ -375,6 +377,19 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       : 'Part A is locked. Parts B and C are now active.');
   }, [activePart, attempt, breakPending, partALocked]);
 
+  // MiniTest time warnings at 2 min and 1 min remaining
+  useEffect(() => {
+    if (!attempt || attempt.mode !== 'MiniTest') return;
+    const remainingSec = Math.max(0, Math.floor((partBCDeadlineMs - nowMs) / 1000));
+    if (remainingSec <= 120 && remainingSec > 60 && !warnedMiniTest2min.current) {
+      warnedMiniTest2min.current = true;
+      setTimingNotice('2 minutes remaining in your mini-test.');
+    } else if (remainingSec <= 60 && remainingSec > 0 && !warnedMiniTest1min.current) {
+      warnedMiniTest1min.current = true;
+      setTimingNotice('1 minute remaining in your mini-test.');
+    }
+  }, [attempt, nowMs, partBCDeadlineMs]);
+
   const start = async () => {
     setStarting(true);
     setError(null);
@@ -391,6 +406,8 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       setFlagged(new Set());
       setEliminatedChoices(new Set());
       autoSubmitTriggered.current = false;
+      warnedMiniTest2min.current = false;
+      warnedMiniTest1min.current = false;
       dirtyQuestionIds.current.clear();
       setTimingNotice(null);
       setActivePart('A');
@@ -461,6 +478,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
   const submit = useCallback(async () => {
     if (!attempt) return;
+    if (submitting) return;
     if (breakPending) {
       setError('Resume the test before submitting the Reading attempt.');
       return;
@@ -550,7 +568,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     } finally {
       setSubmitting(false);
     }
-  }, [answers, attempt, breakPending, mockAttemptId, mockSectionId, paperId, paperExpired, partALocked, partBCWindowEnded, questionPartById, router]);
+  }, [answers, attempt, breakPending, mockAttemptId, mockSectionId, paperId, paperExpired, partALocked, partBCWindowEnded, questionPartById, router, submitting]);
 
   const resumeBreak = useCallback(async () => {
     if (!attempt) return;
@@ -571,7 +589,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       setActivePart('B');
       setTimingNotice('Break ended. Parts B and C are now active.');
     } catch (err) {
-      setError(readErrorMessage(err, 'Could not resume the Reading attempt.'));
+      setError(readErrorMessage(err, 'Failed to resume — please try again.'));
     }
   }, [attempt]);
 
@@ -994,7 +1012,7 @@ function ReadingA11ySettings({
         ) : null}
         <p className="text-[10px] text-muted">
           <Eye className="mr-1 inline h-3 w-3" aria-hidden />
-          Settings persist per paper in this browser.
+          Settings are saved per paper — changes here only affect this paper.
         </p>
       </div>
     </details>
@@ -1133,6 +1151,19 @@ function PartBody({
   onToggleEliminated: (questionId: string, optionValue: string) => void;
   onAnswerChange: (question: ReadingQuestionLearnerDto, value: unknown) => void;
 }) {
+  if (part.questions.length === 0) {
+    return (
+      <div
+        className="rounded-[20px] border border-border bg-surface p-8 text-center shadow-sm"
+        role="tabpanel"
+        id={`reading-part-panel-${part.partCode}`}
+        aria-labelledby={`reading-part-tab-${part.partCode}`}
+      >
+        <p className="text-sm text-muted">No questions available for this section in the selected drill.</p>
+      </div>
+    );
+  }
+
   const activeQuestion = part.questions.find((question) => question.id === activeQuestionId) ?? part.questions[0];
 
   return (

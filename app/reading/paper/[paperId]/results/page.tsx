@@ -3,13 +3,14 @@
 import { Suspense, use, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, CheckCircle2, FileText, RefreshCw, Target, XCircle } from 'lucide-react';
+import { BookOpen, CheckCircle2, FileText, RefreshCw, Target, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
+import { InlineAlert, Toast } from '@/components/ui/alert';
+import { SafeRichText } from '@/components/domain/grammar/grammar-content-renderer';
 import { getReadingAttemptReview, type ReadingAttemptReviewDto } from '@/lib/reading-authoring-api';
 import { completeMockSection } from '@/lib/api';
 import { isListeningReadingPassByScaled } from '@/lib/scoring';
@@ -39,6 +40,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
   const [review, setReview] = useState<ReadingAttemptReviewDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorBankToast, setErrorBankToast] = useState<string | null>(null);
 
   useEffect(() => {
     if (!attemptId) {
@@ -80,6 +82,13 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
     scrollToHash();
     window.addEventListener('hashchange', scrollToHash);
     return () => window.removeEventListener('hashchange', scrollToHash);
+  }, [review]);
+
+  useEffect(() => {
+    if (!review) return;
+    // TODO: wire up when API returns errorBankCleared count on review items
+    // const cleared = review.items.filter(i => i.errorBankCleared).length;
+    // if (cleared > 0) setErrorBankToast(`✓ ${cleared} error bank ${cleared === 1 ? 'entry' : 'entries'} resolved`);
   }, [review]);
 
   /**
@@ -135,10 +144,6 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
   return (
     <LearnerDashboardShell pageTitle="Reading Results" backHref="/reading">
       <main className="space-y-8">
-        <Link href={`/reading/paper/${paperId}`} className="inline-flex items-center gap-2 text-sm font-semibold text-muted hover:text-navy">
-          <ArrowLeft className="h-4 w-4" /> Back to paper
-        </Link>
-
         {loading ? <Skeleton className="h-96" /> : null}
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
@@ -178,6 +183,10 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
           <InlineAlert variant="success">
             Mock section marked complete. You can return to the mock dashboard.
           </InlineAlert>
+        ) : null}
+
+        {errorBankToast ? (
+          <Toast message={errorBankToast} variant="success" onClose={() => setErrorBankToast(null)} />
         ) : null}
 
         {review ? (
@@ -316,8 +325,8 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                       <ReviewValue label="Correct answer" value={item.correctAnswer ?? 'Hidden by review policy'} />
                     </div>
                     {item.explanationMarkdown ? (
-                      <div className="mt-4 rounded-xl bg-background-light p-3 text-sm leading-6 text-muted">
-                        {item.explanationMarkdown}
+                      <div className="mt-4 rounded-xl bg-background-light p-3">
+                        <SafeRichText markdown={item.explanationMarkdown} className="text-sm leading-6 text-muted" />
                       </div>
                     ) : null}
                   </details>

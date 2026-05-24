@@ -65,6 +65,11 @@ function isPaperAccessible(paper: ReadingHomePaperDto): boolean {
   return paper.entitlement?.allowed !== false;
 }
 
+// TODO: wire up when API returns attempt count + cooldown fields on ReadingHomePaperDto
+function getAttemptInfo(_paper: any): { label: string } | null {
+  return null;
+}
+
 function papersWithAccess(papers: ReadingHomePaperDto[]): ReadingHomePaperDto[] {
   return papers.filter(isPaperAccessible);
 }
@@ -84,6 +89,7 @@ export default function ReadingPracticePage() {
   // `${paperId}::${kind}` (or just `kind` for cross-paper retest).
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [drillPaperId, setDrillPaperId] = useState<string | null>(null);
+  const [drillSelectError, setDrillSelectError] = useState<string | null>(null);
   const accessiblePapers = useMemo(() => papersWithAccess(home?.papers ?? []), [home?.papers]);
 
   // ── Deep-link support: /reading/practice?focus=A|B|C&tab=errors ─────────
@@ -140,6 +146,7 @@ export default function ReadingPracticePage() {
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Could not start learning mode.';
         setErrorMsg(message);
+      } finally {
         setStartingPaperId(null);
       }
     },
@@ -148,6 +155,10 @@ export default function ReadingPracticePage() {
 
   const handleStartDrill = useCallback(
     async (paperId: string, drillCode: string) => {
+      if (!paperId) {
+        setDrillSelectError('Please select a paper first.');
+        return;
+      }
       const key = `${paperId}::drill::${drillCode}`;
       setBusyKey(key);
       setErrorMsg(null);
@@ -156,6 +167,7 @@ export default function ReadingPracticePage() {
         router.push(started.playerRoute);
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : 'Could not start drill.');
+      } finally {
         setBusyKey(null);
       }
     },
@@ -172,6 +184,7 @@ export default function ReadingPracticePage() {
         router.push(started.playerRoute);
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : 'Could not start mini-test.');
+      } finally {
         setBusyKey(null);
       }
     },
@@ -186,6 +199,7 @@ export default function ReadingPracticePage() {
       router.push(started.playerRoute);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Could not start retest.');
+    } finally {
       setBusyKey(null);
     }
   }, [focusPart, router]);
@@ -221,6 +235,7 @@ export default function ReadingPracticePage() {
             router.push('/billing');
             return;
           }
+          // TODO: use pathway-recommended duration when API exposes it (ReadingPathwayAction has no durationMinutes yet)
           const started = await startReadingMiniTest(paperId, 10);
           router.push(started.playerRoute);
           return;
@@ -415,6 +430,7 @@ export default function ReadingPracticePage() {
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               {papers.map((paper, idx) => {
                 const locked = !isPaperAccessible(paper);
+                const attemptInfo = getAttemptInfo(paper);
                 return (
                   <MotionItem key={paper.id} delayIndex={idx}>
                     <LearnerSurfaceCard
@@ -434,6 +450,7 @@ export default function ReadingPracticePage() {
                         ],
                       }}
                     >
+                      {attemptInfo && <Badge variant="outline" className="text-xs">{attemptInfo.label}</Badge>}
                       <div className="mt-4 flex items-center justify-between gap-3">
                         <Badge variant={locked ? 'warning' : 'info'}>{locked ? 'Locked' : 'Learning Mode'}</Badge>
                         {locked ? (
@@ -478,9 +495,9 @@ export default function ReadingPracticePage() {
                 : 'You have no open Error Bank entries. Submit a graded Reading attempt to start tracking missed questions.'}
             </InlineAlert>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3">Paper</th>
                     <th className="px-4 py-3">Part</th>
@@ -492,30 +509,30 @@ export default function ReadingPracticePage() {
                 </thead>
                 <tbody>
                   {filteredErrorEntries.map((entry) => (
-                    <tr key={entry.id} className="border-t border-slate-100">
+                    <tr key={entry.id} className="border-t border-border">
                       <td className="px-4 py-3">
                         {entry.paper ? (
                           <Link
-                            className="text-blue-700 hover:underline"
+                            className="text-primary hover:underline"
                             href={`/reading/paper/${entry.paper.id}/results?attemptId=${entry.lastWrongAttemptId}#item-review`}
                           >
                             {entry.paper.title}
                           </Link>
                         ) : (
-                          <span className="text-slate-500">—</span>
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant="info">Part {entry.partCode}</Badge>
                       </td>
                       <td className="px-4 py-3 max-w-md truncate" title={entry.questionStem ?? ''}>
-                        {entry.questionStem ?? <span className="text-slate-400">(stem unavailable)</span>}
+                        {entry.questionStem ?? <span className="text-muted-foreground">(stem unavailable)</span>}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
+                      <td className="px-4 py-3 text-muted-foreground">
                         {entry.skillTag ?? entry.questionType ?? '—'}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className="inline-flex items-center gap-1 text-amber-700">
+                        <span className="inline-flex items-center gap-1 text-warning">
                           <AlertTriangle className="h-4 w-4" aria-hidden /> {entry.timesWrong}
                         </span>
                       </td>
@@ -566,14 +583,14 @@ export default function ReadingPracticePage() {
           ) : (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-slate-700" htmlFor="drill-paper">
+                <label className="text-sm font-medium text-foreground" htmlFor="drill-paper">
                   Practice on paper
                 </label>
                 <select
                   id="drill-paper"
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   value={drillPaperId ?? ''}
-                  onChange={(e) => setDrillPaperId(e.target.value || null)}
+                  onChange={(e) => { setDrillPaperId(e.target.value || null); setDrillSelectError(null); }}
                 >
                   {accessiblePapers.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -582,6 +599,7 @@ export default function ReadingPracticePage() {
                   ))}
                 </select>
               </div>
+              {drillSelectError && <span className="text-sm text-danger">{drillSelectError}</span>}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {filteredDrills.map((d, idx) => {
                   const key = drillPaperId ? `${drillPaperId}::drill::${d.code}` : null;
@@ -704,7 +722,7 @@ export default function ReadingPracticePage() {
                 {busyKey === 'retest' ? 'Building retest…' : `Retest up to ${Math.min(10, visibleErrorCount)} ${focusPart ? `Part ${focusPart} ` : ''}open miss${Math.min(10, visibleErrorCount) === 1 ? '' : 'es'}`}
                 <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
               </Button>
-              <span className="text-sm text-slate-600">
+              <span className="text-sm text-muted-foreground">
                 Pulls from the {visibleErrorCount} visible open question
                 {visibleErrorCount === 1 ? '' : 's'} above.
               </span>

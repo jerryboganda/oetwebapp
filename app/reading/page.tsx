@@ -47,6 +47,8 @@ export default function ReadingHome() {
   const [partErrorCounts, setPartErrorCounts] = useState<Record<PartCode, number>>({ A: 0, B: 0, C: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [errorBankError, setErrorBankError] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -65,7 +67,7 @@ export default function ReadingHome() {
         const [readingHome, reports, errorBank] = await Promise.all([
           getReadingHome(),
           fetchMockReports().catch(() => [] as MockReport[]),
-          getReadingErrorBank({ limit: 200 }).catch(() => null),
+          getReadingErrorBank({ limit: 200 }).then((result) => { setErrorBankError(false); return result; }).catch(() => { setErrorBankError(true); return null; }),
         ]);
         if (cancelled) return;
         setHome(readingHome);
@@ -86,7 +88,7 @@ export default function ReadingHome() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, isAuthenticated]);
+  }, [authLoading, isAuthenticated, retryCount]);
 
   const activeAttempts = useMemo(() => home?.activeAttempts ?? [], [home]);
   const latestResult = home?.recentResults[0] ?? null;
@@ -140,7 +142,18 @@ export default function ReadingHome() {
 
         <LearnerSkillSwitcher compact />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+        {error ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <InlineAlert variant="error">{error}</InlineAlert>
+            <button
+              type="button"
+              onClick={() => setRetryCount((c) => c + 1)}
+              className="rounded-full border border-danger/30 bg-surface px-3 py-1 text-xs font-medium text-danger hover:bg-danger/5 dark:border-danger/40 dark:hover:bg-danger/10"
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
 
         <div className="flex justify-end">
           <Link
@@ -176,6 +189,19 @@ export default function ReadingHome() {
                           <span className="rounded-lg bg-background-light px-2 py-2">B {paper.partBCount}</span>
                           <span className="rounded-lg bg-background-light px-2 py-2">C {paper.partCCount}</span>
                         </div>
+                        {/* Attempt info — shows last attempt status + date when available */}
+                        {paper.lastAttempt ? (
+                          <p className="mt-2 text-xs text-muted">
+                            Last attempt:{' '}
+                            <span className="font-medium capitalize">
+                              {paper.lastAttempt.status.toLowerCase()}
+                            </span>
+                            {paper.lastAttempt.submittedAt ? ` · ${formatDate(paper.lastAttempt.submittedAt)}` : null}
+                          </p>
+                        ) : null}
+                        {/* TODO: show remaining attempts when API returns attemptCount + cooldownEndsAt */}
+                        {/* When cooldown data arrives, render "Available in X min" notice here
+                            and disable the primary action button for the duration of the cooldown. */}
                         {home?.policy.allowPaperReadingMode && !(paper.entitlement ? !paper.entitlement.allowed : false) ? (
                           <Link
                             href={`${paper.route}?presentation=paper`}
@@ -227,6 +253,11 @@ export default function ReadingHome() {
                 description={`Part A is ${home?.policy.partATimerMinutes ?? 15} minutes, followed by ${home?.policy.partBCTimerMinutes ?? 45} shared minutes for Parts B and C.`}
                 className="mb-5"
               />
+              {errorBankError ? (
+                <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+                  Could not load error bank data — counts may be inaccurate.
+                </p>
+              ) : null}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {home ? (['A', 'B', 'C'] as const).map((code, index) => (
                   <MotionItem key={code} delayIndex={index}>
