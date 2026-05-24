@@ -97,4 +97,16 @@
     </None>
   </ItemGroup>
 
+  <!--
+    OET 2026 27-SKU catalog manifest. Loaded by Oet2026CatalogSeeder at
+    boot (when Content:Oet2026Catalog:Enabled=true) and by the admin
+    "/admin/billing/catalog" reseed button. Idempotent — matched by Code.
+  -->
+  <ItemGroup>
+    <None Include="Data\Seeds\oet-2026-catalog.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

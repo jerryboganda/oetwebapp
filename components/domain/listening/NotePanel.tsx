@@ -159,7 +159,7 @@ export function NotePanel({
       <div
         role="dialog"
         aria-label="Attempt notes"
-        className="fixed right-0 top-0 z-50 flex h-full w-full max-w-sm flex-col bg-white shadow-xl sm:rounded-l-xl"
+        className="fixed right-0 top-0 z-50 flex h-full w-full max-w-sm flex-col bg-surface shadow-xl sm:rounded-l-xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">

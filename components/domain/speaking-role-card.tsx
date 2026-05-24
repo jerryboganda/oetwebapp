@@ -47,8 +47,8 @@ export function SpeakingRoleCard({
       <div className="space-y-6">
         {(prepLabel || roleplayLabel) && (
           <div className="flex flex-wrap gap-2 pb-2">
-            {prepLabel && <span className="rounded-full bg-white shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-bold tracking-wide text-primary">PREP: {prepLabel}</span>}
-            {roleplayLabel && <span className="rounded-full bg-white shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-bold tracking-wide text-primary">ROLE-PLAY: {roleplayLabel}</span>}
+            {prepLabel && <span className="rounded-full bg-surface shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-bold tracking-wide text-primary">PREP: {prepLabel}</span>}
+            {roleplayLabel && <span className="rounded-full bg-surface shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-bold tracking-wide text-primary">ROLE-PLAY: {roleplayLabel}</span>}
           </div>
         )}
         <div className="grid gap-6 md:grid-cols-2">

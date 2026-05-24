@@ -230,7 +230,7 @@ export default function AdminRulebooksListPage() {
                 <label className="text-sm font-semibold tracking-tight">Pick file</label>
                 <input ref={fileRef} type="file" accept="application/json,.json"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFilePick(f); }}
-                  className="block w-full text-sm mt-1.5 file:mr-3 file:py-2 file:px-3 file:rounded file:border file:bg-white" />
+                  className="block w-full text-sm mt-1.5 file:mr-3 file:py-2 file:px-3 file:rounded file:border file:bg-surface" />
               </div>
               <div>
                 <label className="text-sm font-semibold tracking-tight">…or paste JSON</label>

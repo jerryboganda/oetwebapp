@@ -299,7 +299,7 @@ function FlagDot({ enabled }: { enabled: boolean }) {
   return (
     <span
       aria-label={enabled ? 'enabled' : 'disabled'}
-      className={`inline-block h-3 w-3 rounded-full ${enabled ? 'bg-[#D4A44F] ring-2 ring-[#D4A44F]/30' : 'bg-slate-200'}`}
+      className={`inline-block h-3 w-3 rounded-full ${enabled ? 'bg-[#D4A44F] ring-2 ring-[#D4A44F]/30' : 'bg-muted'}`}
     />
   );
 }

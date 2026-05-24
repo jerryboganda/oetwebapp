@@ -98,6 +98,9 @@ services:
       Conversation__ChatTtsDefaultVoice: ${CONVERSATION__CHATTTSDEFAULTVOICE}
       MaxUploadBytes: '${MAX_UPLOAD_BYTES}'
       Features__EnableSwagger: 'true'
+      # OET 2026 27-SKU catalog — seed on startup + on admin reseed button.
+      Content__Oet2026Catalog__Enabled: 'true'
+      Content__Oet2026Catalog__CreateContentPackages: 'true'
     ports:
       - '8080:8080'
     volumes:

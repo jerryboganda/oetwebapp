@@ -157,7 +157,7 @@ export default function ExpertListeningAttemptsPage() {
                     <td className="px-4 py-3">
                       <Button
                         size="sm"
-                        variant={item.hasFeedback ? 'outline' : 'default'}
+                        variant={item.hasFeedback ? 'outline' : 'primary'}
                         onClick={() =>
                           router.push(
                             `/expert/review/listening/${item.attemptId}`,

@@ -2,7 +2,7 @@
 
 import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Activity, AlertTriangle, CreditCard, DollarSign, FileSearch, FileText, History as HistoryIcon, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
+import { Activity, AlertTriangle, CreditCard, DollarSign, FileSearch, FileText, History as HistoryIcon, Package, Receipt, Search, Ticket, Trash2, Users } from 'lucide-react';
 import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -23,6 +23,8 @@ import {
   createAdminBillingAddOn,
   createAdminBillingCoupon,
   createAdminBillingPlan,
+  deleteAdminBillingAddOn,
+  deleteAdminBillingPlan,
   updateAdminBillingAddOn,
   updateAdminBillingCoupon,
   updateAdminBillingPlan,
@@ -113,6 +115,8 @@ interface BillingPlanFormState {
   isDraft: boolean;
   extensionAllowed: boolean;
   recallUpdatesEnabled: boolean;
+  // "What's included" — one bullet per line; persisted on the linked ContentPackage.
+  comparisonFeaturesText: string;
 }
 
 interface BillingAddOnFormState {
@@ -196,6 +200,7 @@ const defaultPlanForm: BillingPlanFormState = {
   isDraft: false,
   extensionAllowed: true,
   recallUpdatesEnabled: false,
+  comparisonFeaturesText: '',
 };
 
 const defaultAddOnForm: BillingAddOnFormState = {
@@ -448,6 +453,14 @@ function jsonList(value: string): string {
   return JSON.stringify(splitList(value));
 }
 
+function jsonLineList(value: string): string {
+  const items = value
+    .split('\n')
+    .map((line) => line.trim().replace(/^[•\-*]\s*/, ''))
+    .filter(Boolean);
+  return JSON.stringify(items);
+}
+
 function safeJsonObject(value: string, fallback: string = '{}'): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -501,6 +514,7 @@ function toPlanForm(plan: AdminBillingPlan): BillingPlanFormState {
     isDraft: plan.isDraft ?? false,
     extensionAllowed: plan.extensionAllowed ?? true,
     recallUpdatesEnabled: plan.recallUpdatesEnabled ?? false,
+    comparisonFeaturesText: (plan.comparisonFeatures ?? []).join('\n'),
   };
 }
 
@@ -629,6 +643,53 @@ export default function BillingPage() {
     | { kind: 'expire-coupon'; status: 'archived' };
   const [pendingDestructive, setPendingDestructive] = useState<DestructiveAction | null>(null);
   const [destructiveConfirmInput, setDestructiveConfirmInput] = useState('');
+
+  // Hard-delete state — separate from archive (status=archived). Hard-delete
+  // removes the row + versions + linked ContentPackage. Backend returns 409
+  // when the row still has references (active subscribers, historical
+  // subscriptions/quotes/items); the dialog surfaces that as "archive instead".
+  type HardDeleteTarget =
+    | { kind: 'plan'; id: string; name: string; code: string; activeSubscribers: number }
+    | { kind: 'add-on'; id: string; name: string; code: string };
+  const [hardDeleteTarget, setHardDeleteTarget] = useState<HardDeleteTarget | null>(null);
+  const [hardDeleteConfirmInput, setHardDeleteConfirmInput] = useState('');
+  const [isHardDeleting, setIsHardDeleting] = useState(false);
+
+  async function confirmHardDelete() {
+    if (!hardDeleteTarget) return;
+    if (hardDeleteConfirmInput.trim().toLowerCase() !== hardDeleteTarget.code.toLowerCase()) {
+      setToast({ variant: 'error', message: `Type "${hardDeleteTarget.code}" to confirm.` });
+      return;
+    }
+    setIsHardDeleting(true);
+    try {
+      if (hardDeleteTarget.kind === 'plan') {
+        await deleteAdminBillingPlan(hardDeleteTarget.id);
+        setToast({ variant: 'success', message: `Plan "${hardDeleteTarget.name}" hard-deleted.` });
+      } else {
+        await deleteAdminBillingAddOn(hardDeleteTarget.id);
+        setToast({ variant: 'success', message: `Add-on "${hardDeleteTarget.name}" hard-deleted.` });
+      }
+      setHardDeleteTarget(null);
+      setHardDeleteConfirmInput('');
+      await reloadBilling();
+    } catch (error) {
+      console.error(error);
+      const message = error instanceof Error ? error.message : 'Delete failed.';
+      // 409 from the server means: there are live references; archive instead.
+      const looksConflict = message.toLowerCase().includes('in use')
+        || message.toLowerCase().includes('archive')
+        || message.toLowerCase().includes('subscriber');
+      setToast({
+        variant: 'error',
+        message: looksConflict
+          ? `${message} Use the Edit dialog to set Status = Archived instead.`
+          : message,
+      });
+    } finally {
+      setIsHardDeleting(false);
+    }
+  }
 
   // Subscription lifecycle action modal — single component drives all six manual
   // admin actions (create, change-plan, extend, cancel, reactivate, set-status).
@@ -1027,6 +1088,26 @@ export default function BillingPage() {
           <Button variant="outline" size="sm" onClick={() => openPlanEditor(plan)} disabled={!canWriteCatalog}>
             Edit
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300"
+            aria-label={`Delete plan ${plan.name}`}
+            disabled={!canWriteCatalog}
+            onClick={() => {
+              setHardDeleteTarget({
+                kind: 'plan',
+                id: plan.id,
+                name: plan.name,
+                code: plan.code ?? plan.id,
+                activeSubscribers: plan.activeSubscribers ?? 0,
+              });
+              setHardDeleteConfirmInput('');
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </Button>
         </div>
       ),
     },
@@ -1085,6 +1166,25 @@ export default function BillingPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => openAddOnEditor(addOn)} disabled={!canWriteCatalog}>
             Edit
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300"
+            aria-label={`Delete add-on ${addOn.name}`}
+            disabled={!canWriteCatalog}
+            onClick={() => {
+              setHardDeleteTarget({
+                kind: 'add-on',
+                id: addOn.id,
+                name: addOn.name,
+                code: addOn.code,
+              });
+              setHardDeleteConfirmInput('');
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
           </Button>
         </div>
       ),
@@ -2135,6 +2235,7 @@ export default function BillingPage() {
         isDraft: planForm.isDraft,
         extensionAllowed: planForm.extensionAllowed,
         recallUpdatesEnabled: planForm.recallUpdatesEnabled,
+        comparisonFeaturesJson: jsonLineList(planForm.comparisonFeaturesText),
       };
 
       if (editingPlanId) {
@@ -2419,7 +2520,7 @@ export default function BillingPage() {
 
                   <div className="space-y-3">
                     {diagnosticsWarningChecks.map((check) => (
-                      <div key={check.key} className="rounded-lg border border-border bg-white px-4 py-3 shadow-sm">
+                      <div key={check.key} className="rounded-lg border border-border bg-surface px-4 py-3 shadow-sm">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex items-center gap-2">
                             <AlertTriangle className={check.severity === 'danger' ? 'h-4 w-4 text-red-600' : 'h-4 w-4 text-amber-600'} aria-hidden="true" />
@@ -2698,7 +2799,7 @@ export default function BillingPage() {
                   return (
                     <div key={version.id} className="relative border-l border-border pl-4">
                       <span className="absolute -left-1.5 top-2 h-3 w-3 rounded-full border-2 border-white bg-primary" aria-hidden="true" />
-                      <div className="space-y-3 rounded-lg border border-border bg-white p-4 shadow-sm">
+                      <div className="space-y-3 rounded-lg border border-border bg-surface p-4 shadow-sm">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
@@ -3033,6 +3134,15 @@ export default function BillingPage() {
                 ]}
               />
               <Input label="Dashboard modules" value={planForm.dashboardModulesText} onChange={(event) => setPlanForm((current) => ({ ...current, dashboardModulesText: event.target.value }))} hint="Comma-separated module slugs unlocked on dashboard." />
+            </div>
+            <div className="mt-3">
+              <Textarea
+                label={`What's included (${planForm.comparisonFeaturesText.split('\n').filter((line) => line.trim()).length} bullets)`}
+                value={planForm.comparisonFeaturesText}
+                onChange={(event) => setPlanForm((current) => ({ ...current, comparisonFeaturesText: event.target.value }))}
+                rows={6}
+                hint="One bullet per line. Shown as the public product card's feature list. Persisted on the linked ContentPackage."
+              />
             </div>
             <div className="mt-4 rounded-md border border-amber-300/40 bg-white/60 p-3 dark:border-amber-700/40 dark:bg-amber-950/20">
               <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">Three add-on eligibility flags</p>
@@ -3480,6 +3590,33 @@ export default function BillingPage() {
         onCancel={() => {
           setPendingDestructive(null);
           setDestructiveConfirmInput('');
+        }}
+      />
+
+      <BillingConfirmDialog
+        open={hardDeleteTarget !== null}
+        title={
+          hardDeleteTarget?.kind === 'plan' ? 'Hard-delete this plan?'
+          : hardDeleteTarget?.kind === 'add-on' ? 'Hard-delete this add-on?'
+          : 'Confirm delete'
+        }
+        description={
+          hardDeleteTarget?.kind === 'plan'
+            ? `Permanently removes "${hardDeleteTarget.name}" (${hardDeleteTarget.code}) — the plan row, all its version history, and the linked content package. This cannot be undone.${hardDeleteTarget.activeSubscribers > 0 ? ` ⚠ ${hardDeleteTarget.activeSubscribers} active subscriber(s) — the server will refuse and ask you to archive instead.` : ''}`
+          : hardDeleteTarget?.kind === 'add-on'
+            ? `Permanently removes "${hardDeleteTarget.name}" (${hardDeleteTarget.code}) — the add-on row, all its version history, and the linked content package. This cannot be undone. If the add-on has any historical subscription items or quotes, the server will refuse and ask you to archive instead.`
+            : ''
+        }
+        confirmPhrase={hardDeleteTarget?.code ?? ''}
+        confirmInput={hardDeleteConfirmInput}
+        onConfirmInputChange={setHardDeleteConfirmInput}
+        confirmLabel="Permanently delete"
+        variant="danger"
+        loading={isHardDeleting}
+        onConfirm={() => { void confirmHardDelete(); }}
+        onCancel={() => {
+          setHardDeleteTarget(null);
+          setHardDeleteConfirmInput('');
         }}
       />
     </AdminRouteWorkspace>

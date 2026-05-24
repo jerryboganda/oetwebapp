@@ -102,7 +102,7 @@ export function MockVocabularyReview({
           </div>
           <Link
             href="/vocabulary"
-            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-primary shadow-sm hover:bg-primary/10"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface px-3 py-1.5 text-xs font-semibold text-primary shadow-sm hover:bg-primary/10"
           >
             View bank
           </Link>

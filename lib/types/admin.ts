@@ -368,6 +368,8 @@ export interface AdminBillingPlan {
   isDraft?: boolean;
   extensionAllowed?: boolean;
   recallUpdatesEnabled?: boolean;
+  // "What's included" bullet list — sourced from the linked ContentPackage.
+  comparisonFeatures?: string[];
 }
 
 export interface AdminBillingInvoice {

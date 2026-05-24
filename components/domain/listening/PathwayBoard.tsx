@@ -125,7 +125,7 @@ function StatusBadge({ status }: { status: PathwayStageView['status'] }) {
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-muted">
+    <span className="inline-flex items-center gap-1 rounded-lg bg-muted px-2 py-1 text-xs font-bold text-muted">
       <Lock className="h-3.5 w-3.5" aria-hidden /> Locked
     </span>
   );

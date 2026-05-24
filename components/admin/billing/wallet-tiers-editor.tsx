@@ -282,7 +282,7 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
                 <th scope="col" className="px-3 py-3 sr-only">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border bg-white">
+            <tbody className="divide-y divide-border bg-surface">
               {drafts.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-8 text-center text-muted">
@@ -373,7 +373,7 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
                           checked={row.isPopular}
                           disabled={!canWrite}
                           onChange={(e) => updateRow(row.key, { isPopular: e.target.checked })}
-                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                         />
                         {row.isPopular ? <Badge variant="info" className="ml-2">Popular</Badge> : null}
                       </td>
@@ -384,7 +384,7 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
                           checked={row.isActive}
                           disabled={!canWrite}
                           onChange={(e) => updateRow(row.key, { isActive: e.target.checked })}
-                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                         />
                       </td>
                       <td className="px-3 py-3 text-right">

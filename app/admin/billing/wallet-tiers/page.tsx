@@ -98,7 +98,7 @@ export default function AdminWalletTiersPage() {
           <div className="flex flex-wrap gap-2">
             <Link
               href="/admin/audit-logs?search=wallet_tier"
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-sm font-medium text-navy hover:bg-background-light"
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium text-navy hover:bg-background-light"
               data-testid="wallet-tiers-audit-log-link"
             >
               <FileText className="h-4 w-4" />

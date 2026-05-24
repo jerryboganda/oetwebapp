@@ -277,7 +277,7 @@ export function ListeningExtractionPanel({ paperId, onApplied }: ListeningExtrac
                 type="checkbox"
                 checked={showDecided}
                 onChange={(e) => setShowDecided(e.target.checked)}
-                className="rounded border-gray-300"
+                className="rounded border-border"
               />
               Show decided
             </label>
@@ -420,7 +420,7 @@ export function ListeningExtractionPanel({ paperId, onApplied }: ListeningExtrac
 
 function EmptyState({ onPropose, disabled }: { onPropose: () => void; disabled: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-gray-300 bg-background-light px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border bg-background-light px-6 py-12 text-center">
       <Sparkles className="h-8 w-8 text-primary" aria-hidden="true" />
       <div className="space-y-1">
         <p className="text-base font-semibold text-navy">No AI proposals yet</p>
@@ -501,7 +501,7 @@ function diffKindForRow(row: DiffRow): 'unchanged' | 'changed' | 'added' | 'remo
 }
 
 const DIFF_TONE: Record<ReturnType<typeof diffKindForRow>, string> = {
-  unchanged: 'bg-white',
+  unchanged: 'bg-surface',
   changed: 'bg-emerald-50',
   added: 'bg-blue-50',
   removed: 'bg-red-50',
@@ -518,7 +518,7 @@ const DIFF_LABEL: Record<ReturnType<typeof diffKindForRow>, string> = {
 
 function DiffTable({ rows }: { rows: DiffRow[] }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-gray-200">
+    <div className="overflow-x-auto rounded-2xl border border-border">
       <div className="flex flex-wrap gap-2 border-b border-gray-100 bg-background-light px-3 py-2 text-xs text-muted">
         {(['changed', 'added', 'removed', 'unchanged'] as const).map((kind) => (
           <span key={kind} className={cn('rounded px-2 py-1', DIFF_TONE[kind])}>{DIFF_LABEL[kind]}</span>

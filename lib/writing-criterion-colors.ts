@@ -65,9 +65,9 @@ const PALETTE: Record<WritingCriterionKey, CriterionPalette> = {
     short: 'O',
   },
   language: {
-    bgClass: 'bg-slate-100',
-    borderClass: 'border-slate-300',
-    textClass: 'text-slate-800',
+    bgClass: 'bg-muted',
+    borderClass: 'border-border',
+    textClass: 'text-foreground',
     label: 'Language',
     short: 'L',
   },

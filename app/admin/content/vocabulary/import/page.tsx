@@ -485,7 +485,7 @@ export default function AdminVocabularyImportPage() {
                     type="file"
                     accept=".csv,text/csv"
                     onChange={(e) => { setManifestFile(e.target.files?.[0] ?? null); setReconciliation(null); }}
-                    className="text-sm text-navy file:mr-3 file:rounded-lg file:border file:border-border file:bg-surface file:px-3 file:py-2 file:text-xs file:font-semibold file:text-navy hover:file:bg-white"
+                    className="text-sm text-navy file:mr-3 file:rounded-lg file:border file:border-border file:bg-surface file:px-3 file:py-2 file:text-xs file:font-semibold file:text-navy hover:file:bg-muted"
                   />
                 </label>
                 <div className="flex flex-wrap items-center gap-2">

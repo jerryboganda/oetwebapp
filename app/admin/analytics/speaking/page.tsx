@@ -75,7 +75,7 @@ function RowsTable({ payload, emptyLabel }: { payload: Json; emptyLabel: string 
         </thead>
         <tbody>
           {rows.map((row, idx) => (
-            <tr key={idx} className="border-t border-slate-100">
+            <tr key={idx} className="border-t border-border">
               {columns.map((c) => {
                 const v = row[c];
                 let display: string;
@@ -172,7 +172,7 @@ export default function AdminSpeakingAnalyticsPage() {
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
         <Card>
-          <header className="flex items-center justify-between border-b border-slate-100 p-4">
+          <header className="flex items-center justify-between border-b border-border p-4">
             <h2 className="font-semibold text-foreground">Cohort performance</h2>
             <span className="text-xs text-muted-foreground">{summarise(classData)}</span>
           </header>
@@ -184,7 +184,7 @@ export default function AdminSpeakingAnalyticsPage() {
         </Card>
 
         <Card>
-          <header className="flex items-center justify-between border-b border-slate-100 p-4">
+          <header className="flex items-center justify-between border-b border-border p-4">
             <h2 className="font-semibold text-foreground">Tutor consistency</h2>
             <span className="text-xs text-muted-foreground">{summarise(tutorData)}</span>
           </header>
@@ -196,7 +196,7 @@ export default function AdminSpeakingAnalyticsPage() {
         </Card>
 
         <Card>
-          <header className="flex items-center justify-between border-b border-slate-100 p-4">
+          <header className="flex items-center justify-between border-b border-border p-4">
             <h2 className="font-semibold text-foreground">Content difficulty</h2>
             <span className="text-xs text-muted-foreground">{summarise(contentData)}</span>
           </header>

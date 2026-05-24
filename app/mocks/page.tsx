@@ -677,7 +677,7 @@ export default function MockCenter() {
                                         <CheckCircle2 className="h-6 w-6 text-emerald-500" />
                                       ) : locked ? (
                                         <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-border">
-                                          <div className="h-2 w-2 rounded-full bg-gray-300" />
+                                          <div className="h-2 w-2 rounded-full bg-border" />
                                         </div>
                                       ) : (
                                         <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-primary">

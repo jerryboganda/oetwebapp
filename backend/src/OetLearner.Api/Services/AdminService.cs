@@ -1280,7 +1280,7 @@ public partial class AdminService(
                     couponPointers[group.Key].LatestVersionId));
     }
 
-    private static object MapBillingPlan(BillingPlan plan, BillingCatalogVersionMetadata? versionMetadata = null) => new
+    private static object MapBillingPlan(BillingPlan plan, BillingCatalogVersionMetadata? versionMetadata = null, string? comparisonFeaturesJson = null) => new
     {
         plan.Id,
         code = plan.Code,
@@ -1324,7 +1324,9 @@ public partial class AdminService(
         bundledBasicEnglish = plan.BundledBasicEnglish,
         isDraft = plan.IsDraft,
         extensionAllowed = plan.ExtensionAllowed,
-        recallUpdatesEnabled = plan.RecallUpdatesEnabled
+        recallUpdatesEnabled = plan.RecallUpdatesEnabled,
+        // "What's included" — loaded from the linked ContentPackage.
+        comparisonFeatures = JsonSupport.Deserialize<List<string>>(comparisonFeaturesJson ?? "[]", [])
     };
 
     private static object MapBillingAddOn(BillingAddOn addOn, BillingCatalogVersionMetadata? versionMetadata = null) => new
@@ -3763,9 +3765,19 @@ public partial class AdminService(
         }
 
         var versionMetadata = await GetBillingPlanVersionMetadataAsync(plans, ct);
+
+        // Pre-fetch "what's included" bullet lists from the linked ContentPackages,
+        // keyed by Code (same on both entities). Plans without a matching package
+        // surface an empty list.
+        var planCodes = plans.Select(p => p.Code).ToList();
+        var packageFeatures = await db.ContentPackages.AsNoTracking()
+            .Where(p => planCodes.Contains(p.Code))
+            .ToDictionaryAsync(p => p.Code, p => p.ComparisonFeaturesJson, ct);
+
         return plans.Select(plan => MapBillingPlan(
             plan,
-            versionMetadata.TryGetValue(plan.Id, out var metadata) ? metadata : EmptyBillingCatalogVersionMetadata));
+            versionMetadata.TryGetValue(plan.Id, out var metadata) ? metadata : EmptyBillingCatalogVersionMetadata,
+            packageFeatures.TryGetValue(plan.Code, out var features) ? features : null));
     }
 
     public async Task<object> CreateBillingPlanAsync(string adminId, string adminName,
@@ -3814,7 +3826,11 @@ public partial class AdminService(
         if (db.ChangeTracker.HasChanges()) await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Created", "BillingPlan", id, $"Created plan: {validated.Name}", ct);
-        return MapBillingPlan(plan);
+        var freshFeatures = await db.ContentPackages.AsNoTracking()
+            .Where(p => p.Code == plan.Code)
+            .Select(p => p.ComparisonFeaturesJson)
+            .FirstOrDefaultAsync(ct);
+        return MapBillingPlan(plan, null, freshFeatures);
     }
 
     public async Task<object> UpdateBillingPlanAsync(string adminId, string adminName, string planId, AdminBillingPlanUpdateRequest request, CancellationToken ct)
@@ -3857,7 +3873,11 @@ public partial class AdminService(
         if (db.ChangeTracker.HasChanges()) await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Updated", "BillingPlan", plan.Id, $"Updated plan: {validated.Name}", ct);
-        return MapBillingPlan(plan);
+        var freshFeatures = await db.ContentPackages.AsNoTracking()
+            .Where(p => p.Code == plan.Code)
+            .Select(p => p.ComparisonFeaturesJson)
+            .FirstOrDefaultAsync(ct);
+        return MapBillingPlan(plan, null, freshFeatures);
     }
 
     public async Task<object> GetBillingAddOnsAsync(string? status, CancellationToken ct)

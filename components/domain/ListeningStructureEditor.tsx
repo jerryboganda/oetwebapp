@@ -326,7 +326,7 @@ function SectionBlock({
 }) {
   const ok = items.length === expectedCount;
   return (
-    <section className="rounded-xl border border-gray-200 p-4">
+    <section className="rounded-xl border border-border p-4">
       <header className="flex items-center justify-between mb-3">
         <h3 className="font-semibold">{label}</h3>
         <Badge variant={ok ? 'success' : 'warning'}>{items.length}/{expectedCount}</Badge>

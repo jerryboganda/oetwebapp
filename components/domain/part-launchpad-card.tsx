@@ -258,7 +258,7 @@ export function PartLaunchpadCard(props: PartLaunchpadCardProps) {
       {/* Title + description */}
       <div>
         <h3 className={cn('text-base font-bold leading-snug', tokens.textStrong)}>{copy.title}</h3>
-        <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{copy.description}</p>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{copy.description}</p>
       </div>
 
       {/* Status pill */}
@@ -273,7 +273,7 @@ export function PartLaunchpadCard(props: PartLaunchpadCardProps) {
       </div>
 
       {/* Item-count + options metadata (kept) */}
-      <div className="flex items-center gap-3 text-xs text-slate-500">
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1">
           <Target className="h-3.5 w-3.5" aria-hidden />
           {copy.itemCount} items
@@ -283,8 +283,8 @@ export function PartLaunchpadCard(props: PartLaunchpadCardProps) {
       </div>
 
       {/* Tactical micro-tip */}
-      <p className="text-xs italic text-slate-500">
-        <span className="not-italic font-semibold text-slate-600">Tip:</span> {copy.tip}
+      <p className="text-xs italic text-muted-foreground">
+        <span className="not-italic font-semibold text-foreground">Tip:</span> {copy.tip}
       </p>
 
       {/* Footer — primary CTA + secondary link */}
