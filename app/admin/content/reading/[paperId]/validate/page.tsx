@@ -32,7 +32,7 @@ export default function ReadingValidatePublishPage() {
   const [loading, setLoading] = useState(true);
   const [validating, setValidating] = useState(false);
   const [publishState, setPublishState] = useState<PublishState>('idle');
-  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'danger' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
   const fetchData = async () => {
     if (!paperId) return;
@@ -45,7 +45,7 @@ export default function ReadingValidatePublishPage() {
       setReport(validationResult);
       setStructure(structureResult);
     } catch {
-      setToast({ message: 'Failed to load validation data.', variant: 'danger' });
+      setToast({ message: 'Failed to load validation data.', variant: 'error' });
     } finally {
       setLoading(false);
     }
@@ -64,7 +64,7 @@ export default function ReadingValidatePublishPage() {
       setReport(result);
       setToast({ message: 'Validation refreshed.', variant: 'success' });
     } catch {
-      setToast({ message: 'Re-validation failed.', variant: 'danger' });
+      setToast({ message: 'Re-validation failed.', variant: 'error' });
     } finally {
       setValidating(false);
     }
@@ -83,7 +83,7 @@ export default function ReadingValidatePublishPage() {
         setToast({ message: 'Paper published successfully!', variant: 'success' });
       } catch {
         setPublishState('error');
-        setToast({ message: 'Failed to publish paper. Please try again.', variant: 'danger' });
+        setToast({ message: 'Failed to publish paper. Please try again.', variant: 'error' });
       }
     }
   };
@@ -186,7 +186,7 @@ export default function ReadingValidatePublishPage() {
               {report?.isPublishReady ? (
                 <div className="flex items-center gap-3">
                   <CheckCircle2 className="h-8 w-8 text-emerald-500" />
-                  <Badge variant="primary" className="text-base px-4 py-1">
+                  <Badge variant="emerald" className="text-base px-4 py-1">
                     Ready to Publish
                   </Badge>
                 </div>
@@ -234,7 +234,7 @@ export default function ReadingValidatePublishPage() {
               </Button>
 
               {publishState === 'published' ? (
-                <Badge variant="primary" className="text-base px-4 py-2">
+                <Badge variant="emerald" className="text-base px-4 py-2">
                   <CheckCircle2 className="h-4 w-4 mr-2" />
                   Published!
                 </Badge>

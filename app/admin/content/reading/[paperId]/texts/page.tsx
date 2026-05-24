@@ -74,7 +74,7 @@ export default function ReadingTextsEditorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingForm, setEditingForm] = useState<TextFormData | null>(null);
-  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'danger' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
   const fetchStructure = useCallback(async () => {
     if (!paperId) return;
@@ -83,7 +83,7 @@ export default function ReadingTextsEditorPage() {
       setParts(data.parts);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load structure';
-      setToast({ message, variant: 'danger' });
+      setToast({ message, variant: 'error' });
     } finally {
       setLoading(false);
     }
@@ -122,18 +122,18 @@ export default function ReadingTextsEditorPage() {
       await fetchStructure();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to delete text';
-      setToast({ message, variant: 'danger' });
+      setToast({ message, variant: 'error' });
     }
   };
 
   const handleSaveText = async () => {
     if (!editingForm) return;
     if (!editingForm.title.trim()) {
-      setToast({ message: 'Title is required', variant: 'danger' });
+      setToast({ message: 'Title is required', variant: 'error' });
       return;
     }
     if (!editingForm.bodyHtml.trim()) {
-      setToast({ message: 'Body text is required', variant: 'danger' });
+      setToast({ message: 'Body text is required', variant: 'error' });
       return;
     }
 
@@ -154,7 +154,7 @@ export default function ReadingTextsEditorPage() {
       await fetchStructure();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save text';
-      setToast({ message, variant: 'danger' });
+      setToast({ message, variant: 'error' });
     } finally {
       setSaving(false);
     }
@@ -170,7 +170,7 @@ export default function ReadingTextsEditorPage() {
       await fetchStructure();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to reorder';
-      setToast({ message, variant: 'danger' });
+      setToast({ message, variant: 'error' });
     }
   };
 
@@ -184,7 +184,7 @@ export default function ReadingTextsEditorPage() {
       await fetchStructure();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to reorder';
-      setToast({ message, variant: 'danger' });
+      setToast({ message, variant: 'error' });
     }
   };
 
@@ -282,7 +282,7 @@ export default function ReadingTextsEditorPage() {
                     )}
                   </div>
 
-                  <Badge variant="secondary" className="shrink-0">
+                  <Badge variant="muted" className="shrink-0">
                     {text.wordCount} words
                   </Badge>
 

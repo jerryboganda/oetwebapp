@@ -386,11 +386,8 @@ export default function ReadingQuestionsEditorPage() {
             label="Question Type"
             value={form.questionType}
             onChange={(e) => handleTypeChange(e.target.value as ReadingQuestionType)}
-          >
-            {allowedTypes.map((t) => (
-              <option key={t} value={t}>{TYPE_LABELS[t]}</option>
-            ))}
-          </Select>
+            options={allowedTypes.map((t) => ({ value: t, label: TYPE_LABELS[t] }))}
+          />
         </div>
 
         {/* Associated Text */}
@@ -399,14 +396,14 @@ export default function ReadingQuestionsEditorPage() {
             label="Associated Text"
             value={form.readingTextId ?? ''}
             onChange={(e) => setForm({ ...form, readingTextId: e.target.value || null })}
-          >
-            <option value="">— None —</option>
-            {activePart.texts.map((txt: ReadingTextDto) => (
-              <option key={txt.id} value={txt.id}>
-                {txt.displayOrder}. {txt.title}
-              </option>
-            ))}
-          </Select>
+            options={[
+              { value: '', label: '— None —' },
+              ...activePart.texts.map((txt: ReadingTextDto) => ({
+                value: txt.id,
+                label: `${txt.displayOrder}. ${txt.title}`,
+              })),
+            ]}
+          />
         </div>
 
         {/* Stem */}
@@ -459,14 +456,14 @@ export default function ReadingQuestionsEditorPage() {
               label="Correct Answer"
               value={form.correctAnswer}
               onChange={(e) => setForm({ ...form, correctAnswer: e.target.value })}
-            >
-              <option value="">— Select correct answer —</option>
-              {form.options.map((opt, idx) => (
-                <option key={idx} value={opt || optionLabels[idx]}>
-                  {optionLabels[idx]}: {opt || '(empty)'}
-                </option>
-              ))}
-            </Select>
+              options={[
+                { value: '', label: '— Select correct answer —' },
+                ...form.options.map((opt, idx) => ({
+                  value: opt || optionLabels[idx],
+                  label: `${optionLabels[idx]}: ${opt || '(empty)'}`,
+                })),
+              ]}
+            />
           </div>
         )}
 

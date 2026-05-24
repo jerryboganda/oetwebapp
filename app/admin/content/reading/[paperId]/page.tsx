@@ -98,7 +98,7 @@ export default function AdminReadingPaperOverviewPage() {
         )}
 
         {error && (
-          <InlineAlert variant="danger" className="mt-4">
+          <InlineAlert variant="error" className="mt-4">
             {error}
           </InlineAlert>
         )}
