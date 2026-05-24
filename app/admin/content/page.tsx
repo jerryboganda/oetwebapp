@@ -66,6 +66,13 @@ const hubSections: HubSection[] = [
         badge: 'Canonical',
       },
       {
+        href: '/admin/content/reading',
+        label: 'Reading Authoring',
+        description: 'Dedicated workspace for OET Reading papers (20+6+16 = 42 items). Create, edit, validate, and publish reading structure.',
+        icon: <BookOpenText className="h-5 w-5" />,
+        badge: 'Module',
+      },
+      {
         href: '/admin/content/listening',
         label: 'Listening Authoring',
         description: 'Dedicated workspace for OET Listening papers (24+6+12 = 42 items, audio + 3 PDFs).',

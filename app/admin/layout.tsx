@@ -246,6 +246,10 @@ function getAdminPageTitle(pathname: string | null) {
     return 'Listening Authoring';
   }
 
+  if (pathname.startsWith('/admin/content/reading')) {
+    return 'Reading Authoring';
+  }
+
   if (pathname.startsWith('/admin/content/grammar')) {
     return 'Grammar CMS';
   }
