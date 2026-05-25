@@ -158,7 +158,14 @@ public enum JobType
 
     // ── Expert review auto-assignment (Phase 4) ──
     ExpertReviewAutoAssign,              // Load-balance writing review requests to experts
-    ExpertReviewSlaEscalation            // Release stale assignments past SLA, re-pool for assigner
+    ExpertReviewSlaEscalation,           // Release stale assignments past SLA, re-pool for assigner
+
+    // ── Live Classes ──
+    LiveClassRecordingDownload,          // Download Zoom cloud recording after session ends
+    LiveClassRecordingTranscribe,        // Transcribe downloaded recording audio
+    LiveClassRecordingSummarize,         // Summarize transcript into learner-facing notes
+    LiveClassSessionReminderDispatch,    // Send session reminders to enrolled learners
+    LiveClassWaitlistPromotion           // Promote waitlisted learner when a slot opens (fallback; handled inline on cancellation)
 }
 
 public enum ConfidenceBand

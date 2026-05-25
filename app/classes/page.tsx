@@ -38,6 +38,12 @@ function seatsLabel(session: LiveClassSessionSummary) {
   return remaining === 0 ? 'Waitlist' : `${remaining} seats left`;
 }
 
+function isJoinAvailable(session: LiveClassSessionSummary, now: number) {
+  return session.isEnrolled
+    && new Date(session.scheduledStartAt).getTime() <= now + 30 * 60 * 1000
+    && new Date(session.scheduledEndAt).getTime() >= now - 15 * 60 * 1000;
+}
+
 export default function LiveClassesPage() {
   const [classes, setClasses] = useState<LiveClassListItem[]>([]);
   const [upcoming, setUpcoming] = useState<LiveClassListItem[]>([]);
@@ -45,6 +51,12 @@ export default function LiveClassesPage() {
   const [enrollingSessionId, setEnrollingSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('All');
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,6 +155,7 @@ export default function LiveClassesPage() {
                 ) : upcoming.slice(0, 3).map((item) => {
                   const session = nextSession(item);
                   if (!session) return null;
+                  const canJoin = isJoinAvailable(session, now);
                   return (
                     <Link key={`${item.id}-${session.id}`} href={`/classes/${item.slug}`} className="rounded-xl border border-border bg-background p-4 transition-colors hover:border-primary/50">
                       <div className="flex items-start justify-between gap-3">
@@ -150,7 +163,7 @@ export default function LiveClassesPage() {
                           <p className="text-sm font-semibold text-navy">{item.title}</p>
                           <p className="mt-1 flex items-center gap-1 text-xs text-muted"><CalendarDays className="h-3.5 w-3.5" /> {formatDate(session.scheduledStartAt)}</p>
                         </div>
-                        <Badge variant={session.isJoinAvailable ? 'success' : 'info'}>{session.isJoinAvailable ? 'Join now' : session.status}</Badge>
+                        <Badge variant={canJoin ? 'success' : 'info'}>{canJoin ? 'Join now' : session.status}</Badge>
                       </div>
                     </Link>
                   );
@@ -172,6 +185,7 @@ export default function LiveClassesPage() {
                   </div>
                 ) : visibleClasses.map((item) => {
                   const session = nextSession(item);
+                  const canJoin = session ? isJoinAvailable(session, now) : false;
                   return (
                     <article key={item.id} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -203,9 +217,15 @@ export default function LiveClassesPage() {
                           Details
                         </Link>
                         {session?.isEnrolled ? (
-                          <Link href={`/classes/${item.slug}/sessions/${session.id}/join`} className={buttonClassName({ variant: session.isJoinAvailable ? 'primary' : 'secondary', size: 'sm' })}>
-                            <PlayCircle className="h-4 w-4" /> {session.isJoinAvailable ? 'Join class' : 'Reserved'}
-                          </Link>
+                          canJoin ? (
+                            <Link href={`/classes/${item.slug}/sessions/${session.id}/join`} className={buttonClassName({ variant: 'primary', size: 'sm' })}>
+                              <PlayCircle className="h-4 w-4" /> Join class
+                            </Link>
+                          ) : (
+                            <Button type="button" variant="secondary" size="sm" disabled>
+                              <PlayCircle className="h-4 w-4" /> Opens 30m before
+                            </Button>
+                          )
                         ) : session ? (
                           <Button type="button" size="sm" onClick={() => handleEnroll(session.id)} loading={enrollingSessionId === session.id}>
                             <RotateCcw className="h-4 w-4" /> Reserve seat

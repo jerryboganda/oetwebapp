@@ -42,6 +42,10 @@
     <PackageReference Include="QuestPDF" Version="2024.10.3" />
     <!-- Windows-1252 / Latin-1 fallback for CSV imports from legacy Excel exports. -->
     <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.0" />
+    <!-- Stripe.net — official Stripe SDK. Used by StripeService for Checkout Sessions,
+         Billing Portal, Subscriptions, Coupons and Webhook signature verification.
+         Inactive until Billing:Stripe:SecretKey is configured at runtime. -->
+    <PackageReference Include="Stripe.net" Version="47.*" />
     <!-- UglyToad.PdfPig — pure-managed PDF text extraction (no native deps).
          Used by PdfPigPdfTextExtractor / AutoPdfTextExtractor to feed
          IContentTextExtractionService and the AI Listening extraction

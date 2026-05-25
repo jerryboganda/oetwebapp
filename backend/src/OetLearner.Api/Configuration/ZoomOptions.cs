@@ -25,9 +25,6 @@ public sealed class ZoomOptions
     /// <summary>Zoom user email or ID used to create meetings (central platform account).</summary>
     public string? HostUserId { get; set; }
 
-    /// <summary>Webhook verification token for Zoom webhooks.</summary>
-    public string? WebhookVerificationToken { get; set; }
-
     /// <summary>Zoom Meeting SDK key exposed to the browser for embedded joins.</summary>
     public string? MeetingSdkKey { get; set; }
 
@@ -38,5 +35,5 @@ public sealed class ZoomOptions
     public string? WebhookSecretToken { get; set; }
 
     /// <summary>Allow sandbox/mock responses when credentials are not configured.</summary>
-    public bool AllowSandboxFallback { get; set; } = true;
+    public bool AllowSandboxFallback { get; set; } = false;
 }

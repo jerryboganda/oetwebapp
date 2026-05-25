@@ -801,6 +801,10 @@ builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingMetricsServic
 builder.Services.AddHostedService<OetLearner.Api.Services.Billing.BillingMetricsRollupWorker>();
 builder.Services.AddScoped<WalletService>();
 builder.Services.AddScoped<EngagementService>();
+
+// ── Billing V2 — Stripe catalog, cart, checkout, subscription ──
+builder.Services.AddSingleton<OetLearner.Api.Services.Billing.IStripeService, OetLearner.Api.Services.Billing.StripeService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingCatalogService, OetLearner.Api.Services.Billing.BillingCatalogService>();
 builder.Services.AddHostedService<BackgroundJobProcessor>();
 
 // ── Phase 1 new services ──
@@ -1174,6 +1178,18 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingGradingServic
     OetLearner.Api.Services.Reading.ReadingGradingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAttemptService,
     OetLearner.Api.Services.Reading.ReadingAttemptService>();
+// Reading Pathway subsystem (Reading Module Pathway Plan).
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingLearnerPathwayService, OetLearner.Api.Services.Reading.ReadingLearnerPathwayService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.ISkillScoringService, OetLearner.Api.Services.Reading.SkillScoringService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IDailyPlanService, OetLearner.Api.Services.Reading.DailyPlanService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IPracticeSelectionService, OetLearner.Api.Services.Reading.PracticeSelectionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReviewQueueService, OetLearner.Api.Services.Reading.ReviewQueueService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingVocabularyService, OetLearner.Api.Services.Reading.ReadingVocabularyService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExplanationService, OetLearner.Api.Services.Reading.ReadingExplanationService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IStreakService, OetLearner.Api.Services.Reading.StreakService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IXpService, OetLearner.Api.Services.Reading.XpService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.ILessonService, OetLearner.Api.Services.Reading.LessonService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IStrategyService, OetLearner.Api.Services.Reading.StrategyService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningLearnerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningStructureService,
     OetLearner.Api.Services.Listening.ListeningStructureService>();
@@ -1289,6 +1305,7 @@ builder.Services.AddHttpClient("ZoomAuth");
 builder.Services.AddSingleton<ZoomMeetingService>();
 builder.Services.AddScoped<PrivateSpeakingService>();
 builder.Services.AddScoped<LiveClassService>();
+builder.Services.AddScoped<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
 
 var app = builder.Build();
 
@@ -1622,6 +1639,7 @@ app.MapBillingRegionEndpoints();
 app.MapBillingExpansionEndpoints();
 app.MapBillingExpansionV2Endpoints();
 app.MapOet2026CatalogEndpoints();
+app.MapBillingCatalogEndpoints();
 app.MapTutorBookEndpoints();
 app.MapAffiliatePortalEndpoints();
 app.MapAiAnalyticsEndpoints();
@@ -1662,6 +1680,7 @@ app.MapWritingAnalyticsAdminEndpoints();
 app.MapListeningAuthoringAdminEndpoints();
 app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
+app.MapReadingPathwayEndpoints();
 app.MapListeningLearnerEndpoints();
 app.MapListeningV2Endpoints();
 app.MapListeningExpertEndpoints();

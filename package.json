@@ -92,6 +92,7 @@
     "@tanstack/react-query-devtools": "^5.100.1",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.24",
+    "@zoom/meetingsdk": "^6.0.2",
     "autoprefixer": "^10.4.21",
     "capacitor-secure-storage-plugin": "^0.10.0",
     "capacitor-voice-recorder": "^6.0.3",

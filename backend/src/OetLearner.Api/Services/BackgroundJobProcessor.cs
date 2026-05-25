@@ -314,6 +314,40 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 await services.GetRequiredService<OetLearner.Api.Services.Expert.IExpertAutoAssignmentService>()
                     .ProcessSlaEscalationsAsync(cancellationToken);
                 break;
+
+            // ── Live Classes ──
+            case JobType.LiveClassRecordingDownload:
+            {
+                var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
+                await svc.ProcessDownloadAsync(job.ResourceId!, cancellationToken);
+                break;
+            }
+            case JobType.LiveClassRecordingTranscribe:
+            {
+                var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
+                await svc.ProcessTranscribeAsync(job.ResourceId!, cancellationToken);
+                break;
+            }
+            case JobType.LiveClassRecordingSummarize:
+            {
+                var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
+                await svc.ProcessSummarizeAsync(job.ResourceId!, cancellationToken);
+                break;
+            }
+            case JobType.LiveClassSessionReminderDispatch:
+            {
+                var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
+                await svc.ProcessReminderDispatchAsync(job.ResourceId!, cancellationToken);
+                break;
+            }
+
+            case JobType.LiveClassWaitlistPromotion:
+                services.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger<BackgroundJobProcessor>()
+                    .LogInformation(
+                        "Live class waitlist promotion job {JobId} — handled inline on cancellation.",
+                        job.Id);
+                break;
         }
     }
 

@@ -51,6 +51,9 @@ public class ApplicationUserAccount
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
+    [MaxLength(64)]
+    public string? StripeCustomerId { get; set; }
+
     public ICollection<RefreshTokenRecord> RefreshTokens { get; set; } = new List<RefreshTokenRecord>();
     public ICollection<EmailOtpChallenge> EmailOtpChallenges { get; set; } = new List<EmailOtpChallenge>();
     public ICollection<MfaRecoveryCode> RecoveryCodes { get; set; } = new List<MfaRecoveryCode>();

@@ -16,7 +16,7 @@ public interface IDunningCampaignService
     Task RecoverAsync(string campaignId, CancellationToken ct);
 }
 
-public sealed class DunningCampaignService : IDunningCampaignService
+public sealed class DunningCampaignService : IDunningCampaignService, IDunningService
 {
     /// <summary>Days from campaign start when each step fires.</summary>
     public static readonly (int Day, string Code)[] Schedule = new[]
@@ -120,6 +120,87 @@ public sealed class DunningCampaignService : IDunningCampaignService
         campaign.Status = "recovered";
         campaign.RecoveredAt = DateTimeOffset.UtcNow;
         campaign.UpdatedAt = campaign.RecoveredAt.Value;
+        await _db.SaveChangesAsync(ct);
+    }
+
+    // ── IDunningService ──────────────────────────────────────────────────────────────
+
+    public async Task OnInvoicePaymentFailedAsync(
+        string stripeSubscriptionId, string userId, CancellationToken ct = default)
+    {
+        var sub = await _db.CustomerSubscriptions
+            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == stripeSubscriptionId, ct);
+
+        if (sub is not null)
+        {
+            sub.Status = "past_due";
+            sub.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        _db.BillingEvents.Add(new OetLearner.Api.Domain.BillingEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            UserId = userId,
+            SubscriptionId = stripeSubscriptionId,
+            EventType = "invoice.payment_failed",
+            EntityType = "subscription",
+            EntityId = stripeSubscriptionId,
+            OccurredAt = DateTimeOffset.UtcNow
+        });
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task OnInvoicePaymentSucceededAsync(
+        string stripeSubscriptionId, string userId, CancellationToken ct = default)
+    {
+        var sub = await _db.CustomerSubscriptions
+            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == stripeSubscriptionId, ct);
+
+        if (sub is not null)
+        {
+            sub.Status = "active";
+            sub.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        _db.BillingEvents.Add(new OetLearner.Api.Domain.BillingEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            UserId = userId,
+            SubscriptionId = stripeSubscriptionId,
+            EventType = "invoice.payment_succeeded",
+            EntityType = "subscription",
+            EntityId = stripeSubscriptionId,
+            OccurredAt = DateTimeOffset.UtcNow
+        });
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task OnSubscriptionCanceledAsync(
+        string stripeSubscriptionId, string userId, CancellationToken ct = default)
+    {
+        var sub = await _db.CustomerSubscriptions
+            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == stripeSubscriptionId, ct);
+
+        if (sub is not null)
+        {
+            sub.Status = "canceled";
+            sub.CanceledAt = DateTimeOffset.UtcNow;
+            sub.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        _db.BillingEvents.Add(new OetLearner.Api.Domain.BillingEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            UserId = userId,
+            SubscriptionId = stripeSubscriptionId,
+            EventType = "customer.subscription.deleted",
+            EntityType = "subscription",
+            EntityId = stripeSubscriptionId,
+            OccurredAt = DateTimeOffset.UtcNow
+        });
+
         await _db.SaveChangesAsync(ct);
     }
 }

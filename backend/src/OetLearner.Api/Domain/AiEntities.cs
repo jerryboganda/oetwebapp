@@ -269,6 +269,10 @@ public static class AiFeatureCodes
     public const string AiAssistantExpert = "ai_assistant.expert";
     public const string AiAssistantLearner = "ai_assistant.learner";
 
+    // Reading Module — WS4 (learner-facing, non-scoring, BYOK-eligible)
+    public const string ReadingExplanation = "reading.explanation.v1";
+    public const string ReadingVocabularyCard = "reading.vocabulary.card";
+
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.
     public const string Unclassified = "unclassified";

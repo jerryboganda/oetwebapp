@@ -40,6 +40,12 @@ function statusVariant(status: string): 'success' | 'warning' | 'danger' | 'info
   return 'muted';
 }
 
+function isJoinAvailable(session: LiveClassSessionSummary, now: number) {
+  return session.isEnrolled
+    && new Date(session.scheduledStartAt).getTime() <= now + 30 * 60 * 1000
+    && new Date(session.scheduledEndAt).getTime() >= now - 15 * 60 * 1000;
+}
+
 export default function LiveClassDetailPage() {
   const params = useParams();
   const id = typeof params?.id === 'string' ? params.id : null;
@@ -48,6 +54,12 @@ export default function LiveClassDetailPage() {
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -145,7 +157,9 @@ export default function LiveClassDetailPage() {
         <section className="space-y-4">
           <LearnerSurfaceSectionHeader eyebrow="Schedule" title="Sessions" description="Reserve, join, cancel, or open class recordings from one place." />
           <div className="space-y-3">
-            {detail.sessions.map((session) => (
+            {detail.sessions.map((session) => {
+              const canJoin = isJoinAvailable(session, now);
+              return (
               <article key={session.id} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-2">
@@ -163,9 +177,15 @@ export default function LiveClassDetailPage() {
                   <div className="flex flex-col gap-2 sm:flex-row">
                     {session.isEnrolled ? (
                       <>
-                        <Link href={`/classes/${detail.slug}/sessions/${session.id}/join`} className={buttonClassName({ variant: session.isJoinAvailable ? 'primary' : 'secondary', size: 'sm' })}>
-                          <PlayCircle className="h-4 w-4" /> {session.isJoinAvailable ? 'Join class' : 'Open join page'}
-                        </Link>
+                        {canJoin ? (
+                          <Link href={`/classes/${detail.slug}/sessions/${session.id}/join`} className={buttonClassName({ variant: 'primary', size: 'sm' })}>
+                            <PlayCircle className="h-4 w-4" /> Join class
+                          </Link>
+                        ) : (
+                          <Button type="button" variant="secondary" size="sm" disabled>
+                            <PlayCircle className="h-4 w-4" /> Opens 30m before
+                          </Button>
+                        )}
                         <Button type="button" variant="outline" size="sm" onClick={() => loadRecording(session.id)}>
                           <FileText className="h-4 w-4" /> Recording
                         </Button>
@@ -181,7 +201,8 @@ export default function LiveClassDetailPage() {
                   </div>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         </section>
 

@@ -120,7 +120,13 @@ public enum NotificationEventKey
     AdminOverdueFeedbackSpikeAlert,
     AdminFailedPaymentSpikeAlert,
     AdminCouponAbuseAlert,
-    AdminContentFlaggedAlert
+    AdminContentFlaggedAlert,
+    LearnerLiveClassCancelled,
+    LearnerLiveClassReminder,
+    LearnerLiveClassRecordingReady,
+    ExpertLiveClassAssigned,
+    ExpertLiveClassReminder,
+    AdminLiveClassSessionAlert
 }
 
 public enum NotificationChannel

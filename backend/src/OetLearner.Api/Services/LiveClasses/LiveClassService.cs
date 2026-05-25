@@ -1,3 +1,4 @@
+using System.Data;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -6,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.LiveClasses;
 
@@ -13,6 +15,7 @@ public sealed class LiveClassService(
     LearnerDbContext db,
     ZoomMeetingService zoomMeetingService,
     NotificationService notificationService,
+    IFileStorage fileStorage,
     TimeProvider timeProvider,
     ILogger<LiveClassService> logger)
 {
@@ -76,13 +79,24 @@ public sealed class LiveClassService(
             .FirstOrDefaultAsync(item => item.Id == idOrSlug || item.Slug == idOrSlug, ct)
             ?? throw ApiException.NotFound("live_class_not_found", "Live class not found.");
 
-        if (liveClass.Status != LiveClassStatus.Published && string.IsNullOrWhiteSpace(learnerUserId))
+        if (liveClass.Status != LiveClassStatus.Published)
         {
             throw ApiException.NotFound("live_class_not_found", "Live class not found.");
         }
 
         var enrolledSessionIds = await GetActiveEnrollmentSessionIdsAsync(learnerUserId, ct);
         return MapDetail(liveClass, enrolledSessionIds, now);
+    }
+
+    public async Task<AdminLiveClassDetailDto> GetAdminClassDetailAsync(string idOrSlug, CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow();
+        var liveClass = await db.LiveClasses
+            .AsNoTracking()
+            .Include(lc => lc.Sessions)
+            .FirstOrDefaultAsync(lc => lc.Id == idOrSlug || lc.Slug == idOrSlug, ct)
+            ?? throw ApiException.NotFound("live_class_not_found", "Live class not found.");
+        return MapAdminDetail(liveClass, now);
     }
 
     public async Task<IReadOnlyList<LiveClassListItemDto>> ListAdminClassesAsync(LiveClassListQuery query, CancellationToken ct)
@@ -174,6 +188,8 @@ public sealed class LiveClassService(
         db.LiveClassSessions.Add(session);
         WriteAudit(adminId, adminName, "LiveClassCreated", "LiveClass", classId, new { liveClass.Title, sessionId });
         await db.SaveChangesAsync(ct);
+        await QueueSessionReminderJobAsync(session, now, ct);
+        await db.SaveChangesAsync(ct);
 
         await ProvisionZoomMeetingAsync(session.Id, ct);
 
@@ -185,11 +201,17 @@ public sealed class LiveClassService(
     {
         var liveClass = await db.LiveClasses.Include(item => item.Sessions).FirstOrDefaultAsync(item => item.Id == liveClassId, ct)
             ?? throw ApiException.NotFound("live_class_not_found", "Live class not found.");
+        var now = timeProvider.GetUtcNow();
         liveClass.Status = LiveClassStatus.Published;
-        liveClass.UpdatedAt = timeProvider.GetUtcNow();
+        liveClass.UpdatedAt = now;
+        foreach (var session in liveClass.Sessions.Where(item => item.Status == LiveClassSessionStatus.Scheduled))
+        {
+            await QueueSessionReminderJobAsync(session, now, ct);
+        }
+
         WriteAudit(adminId, adminName, "LiveClassPublished", "LiveClass", liveClass.Id, new { liveClass.Title });
         await db.SaveChangesAsync(ct);
-        return MapDetail(liveClass, [], timeProvider.GetUtcNow());
+        return MapDetail(liveClass, [], now);
     }
 
     public async Task<LiveClassDetailDto> UpdateSessionAsync(string sessionId, AdminLiveClassSessionUpdateRequest request, string adminId, string adminName, CancellationToken ct)
@@ -215,9 +237,30 @@ public sealed class LiveClassService(
         {
             var start = request.ScheduledStartAt ?? session.ScheduledStartAt;
             var duration = Math.Clamp(request.DurationMinutes ?? (int)(session.ScheduledEndAt - session.ScheduledStartAt).TotalMinutes, 15, 360);
+            var previousZoomMeetingId = session.ZoomMeetingId;
             session.ScheduledStartAt = start;
             session.ScheduledEndAt = start.AddMinutes(duration);
             session.DurationMinutes = duration;
+            session.ZoomMeetingId = null;
+            session.ZoomMeetingNumber = null;
+            session.ZoomJoinUrl = null;
+            session.ZoomStartUrl = null;
+            session.ZoomPasscode = null;
+            session.ZoomError = null;
+            await QueueSessionReminderJobAsync(session, timeProvider.GetUtcNow(), ct);
+
+            if (previousZoomMeetingId.HasValue)
+            {
+                try
+                {
+                    await zoomMeetingService.DeleteMeetingAsync(previousZoomMeetingId.Value, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to delete replaced Zoom meeting for live class session {SessionId}", session.Id);
+                }
+            }
+
             await ProvisionZoomMeetingAsync(session.Id, ct);
         }
 
@@ -243,7 +286,7 @@ public sealed class LiveClassService(
             return MapEnrollment(existing);
         }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var session = await db.LiveClassSessions
             .Include(item => item.LiveClass)
             .FirstOrDefaultAsync(item => item.Id == sessionId, ct)
@@ -267,6 +310,13 @@ public sealed class LiveClassService(
             throw ApiException.Conflict("live_class_full", "This class is full. You have been added to the waitlist.");
         }
 
+        var enrollment = await db.LiveClassEnrollments
+            .FirstOrDefaultAsync(item => item.ClassSessionId == sessionId && item.UserId == learnerUserId, ct);
+        if (enrollment is not null && enrollment.Status == LiveClassEnrollmentStatus.Active)
+        {
+            return MapEnrollment(enrollment);
+        }
+
         var cost = Math.Max(0, session.LiveClass.CreditCost);
         Guid? debitTransactionId = null;
         if (cost > 0)
@@ -274,21 +324,28 @@ public sealed class LiveClassService(
             debitTransactionId = await DebitWalletForEnrollmentAsync(learnerUserId, cost, session, normalizedIdempotencyKey, now, ct);
         }
 
-        var enrollment = new LiveClassEnrollment
+        if (enrollment is null)
         {
-            Id = $"LCE-{Guid.NewGuid():N}",
-            ClassSessionId = session.Id,
-            UserId = learnerUserId,
-            EnrolledAt = now,
-            CreditsCharged = cost,
-            WalletTransactionId = debitTransactionId,
-            Status = LiveClassEnrollmentStatus.Active,
-            IdempotencyKey = normalizedIdempotencyKey,
-        };
+            enrollment = new LiveClassEnrollment
+            {
+                Id = $"LCE-{Guid.NewGuid():N}",
+                ClassSessionId = session.Id,
+                UserId = learnerUserId,
+            };
+            db.LiveClassEnrollments.Add(enrollment);
+        }
+
+        enrollment.EnrolledAt = now;
+        enrollment.CancelledAt = null;
+        enrollment.CancellationReason = null;
+        enrollment.CreditsCharged = cost;
+        enrollment.WalletTransactionId = debitTransactionId;
+        enrollment.RefundWalletTransactionId = null;
+        enrollment.Status = LiveClassEnrollmentStatus.Active;
+        enrollment.IdempotencyKey = normalizedIdempotencyKey;
 
         session.EnrolledCount++;
         session.UpdatedAt = now;
-        db.LiveClassEnrollments.Add(enrollment);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 
@@ -298,7 +355,7 @@ public sealed class LiveClassService(
 
     public async Task<LiveClassEnrollmentDto> CancelEnrollmentAsync(string sessionId, string learnerUserId, string? reason, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var enrollment = await db.LiveClassEnrollments
             .Include(item => item.ClassSession)
             .ThenInclude(session => session.LiveClass)
@@ -331,8 +388,12 @@ public sealed class LiveClassService(
                 ct);
         }
 
+        // Slot has opened — promote the next waitlisted learner if any.
+        await PromoteFromWaitlistAsync(sessionId, enrollment.ClassSession, now, ct);
+
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        await NotifyLearnerCancellationAsync(enrollment, enrollment.ClassSession, refundCredits, ct);
         return MapEnrollment(enrollment);
     }
 
@@ -344,6 +405,12 @@ public sealed class LiveClassService(
             .ThenInclude(session => session.LiveClass)
             .FirstOrDefaultAsync(item => item.ClassSessionId == sessionId && item.UserId == learnerUserId && item.Status == LiveClassEnrollmentStatus.Active, ct)
             ?? throw ApiException.Forbidden("live_class_not_enrolled", "You must be enrolled before joining this class.");
+
+        var now = timeProvider.GetUtcNow();
+        if (!IsJoinWindowOpen(enrollment.ClassSession, now))
+        {
+            throw ApiException.Conflict("live_class_join_window_closed", "Live class joins open 30 minutes before start and close 15 minutes after the scheduled end.");
+        }
 
         var learner = await db.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == learnerUserId, ct)
             ?? throw ApiException.NotFound("learner_not_found", "Learner profile not found.");
@@ -395,7 +462,7 @@ public sealed class LiveClassService(
         var hasAccess = await db.LiveClassEnrollments.AsNoTracking().AnyAsync(enrollment =>
             enrollment.ClassSessionId == sessionId
             && enrollment.UserId == learnerUserId
-            && enrollment.Status != LiveClassEnrollmentStatus.Cancelled, ct);
+            && (enrollment.Status == LiveClassEnrollmentStatus.Active || enrollment.Status == LiveClassEnrollmentStatus.Attended), ct);
         if (!hasAccess)
         {
             throw ApiException.Forbidden("live_class_recording_forbidden", "Recording access is limited to enrolled learners.");
@@ -433,26 +500,39 @@ public sealed class LiveClassService(
         }
 
         var payloadHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawBody))).ToLowerInvariant();
-        var existing = await db.LiveClassWebhookEvents.AsNoTracking().FirstOrDefaultAsync(item => item.PayloadHash == payloadHash, ct);
-        if (existing is not null)
+        using var document = JsonDocument.Parse(rawBody);
+        var root = document.RootElement;
+        var eventType = root.TryGetProperty("event", out var eventProperty) ? eventProperty.GetString() ?? "unknown" : "unknown";
+        var now = timeProvider.GetUtcNow();
+        var webhookEvent = await db.LiveClassWebhookEvents.FirstOrDefaultAsync(item => item.PayloadHash == payloadHash, ct);
+        if (webhookEvent is not null && webhookEvent.Status == LiveClassWebhookStatus.Processed)
         {
             return new { ok = true, duplicate = true };
         }
 
-        using var document = JsonDocument.Parse(rawBody);
-        var root = document.RootElement;
-        var eventType = root.TryGetProperty("event", out var eventProperty) ? eventProperty.GetString() ?? "unknown" : "unknown";
-        var webhookEvent = new LiveClassWebhookEvent
+        if (webhookEvent is not null && webhookEvent.Status == LiveClassWebhookStatus.Processing && webhookEvent.ReceivedAt > now.AddMinutes(-10))
         {
-            Id = $"LCW-{Guid.NewGuid():N}",
-            EventType = eventType,
-            PayloadHash = payloadHash,
-            RawPayload = rawBody,
-            Status = LiveClassWebhookStatus.Processing,
-            ReceivedAt = timeProvider.GetUtcNow(),
-        };
-        db.LiveClassWebhookEvents.Add(webhookEvent);
+            throw ApiException.ServiceUnavailable("zoom_webhook_processing", "Zoom webhook is already being processed and should be retried later.");
+        }
 
+        if (webhookEvent is null)
+        {
+            webhookEvent = new LiveClassWebhookEvent
+            {
+                Id = $"LCW-{Guid.NewGuid():N}",
+                PayloadHash = payloadHash,
+            };
+            db.LiveClassWebhookEvents.Add(webhookEvent);
+        }
+
+        webhookEvent.EventType = eventType;
+        webhookEvent.RawPayload = BuildWebhookReceipt(root, payloadHash);
+        webhookEvent.Status = LiveClassWebhookStatus.Processing;
+        webhookEvent.ErrorMessage = null;
+        webhookEvent.ReceivedAt = now;
+        webhookEvent.ProcessedAt = null;
+
+        Exception? processingException = null;
         try
         {
             await ApplyZoomWebhookAsync(eventType, root, ct);
@@ -461,18 +541,24 @@ public sealed class LiveClassService(
         }
         catch (Exception ex)
         {
+            processingException = ex;
             webhookEvent.Status = LiveClassWebhookStatus.Failed;
             webhookEvent.ErrorMessage = ex.Message.Length > 1000 ? ex.Message[..1000] : ex.Message;
             logger.LogWarning(ex, "Failed to process Zoom webhook {EventType}", eventType);
         }
 
         await db.SaveChangesAsync(ct);
+        if (processingException is not null)
+        {
+            throw ApiException.ServiceUnavailable("zoom_webhook_processing_failed", "Zoom webhook could not be processed and should be retried.");
+        }
+
         return new { ok = true };
     }
 
     public async Task CancelSessionAsync(string sessionId, string adminId, string adminName, string? reason, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var session = await db.LiveClassSessions
             .Include(item => item.LiveClass)
             .Include(item => item.Enrollments)
@@ -488,12 +574,14 @@ public sealed class LiveClassService(
         session.Status = LiveClassSessionStatus.Cancelled;
         session.CancellationReason = NormalizeOptional(reason);
         session.UpdatedAt = now;
+        var cancelledEnrollments = new List<LiveClassEnrollment>();
 
         foreach (var enrollment in session.Enrollments.Where(item => item.Status == LiveClassEnrollmentStatus.Active))
         {
             enrollment.Status = enrollment.CreditsCharged > 0 ? LiveClassEnrollmentStatus.Refunded : LiveClassEnrollmentStatus.Cancelled;
             enrollment.CancelledAt = now;
             enrollment.CancellationReason = "Class cancelled by admin.";
+            cancelledEnrollments.Add(enrollment);
             if (enrollment.CreditsCharged > 0)
             {
                 enrollment.RefundWalletTransactionId = await CreditWalletRefundAsync(enrollment.UserId, enrollment.CreditsCharged, session, $"live-class-admin-cancel:{enrollment.Id}", now, ct);
@@ -504,6 +592,11 @@ public sealed class LiveClassService(
         WriteAudit(adminId, adminName, "LiveClassSessionCancelled", "LiveClassSession", session.Id, new { reason });
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+
+        foreach (var enrollment in cancelledEnrollments)
+        {
+            await NotifyLearnerCancellationAsync(enrollment, session, enrollment.CreditsCharged, ct);
+        }
 
         if (session.ZoomMeetingId.HasValue)
         {
@@ -516,6 +609,72 @@ public sealed class LiveClassService(
                 logger.LogWarning(ex, "Failed to delete Zoom meeting for cancelled live class session {SessionId}", session.Id);
             }
         }
+    }
+
+    public async Task<LiveClassSessionSummaryDto> AddSessionAsync(
+        string liveClassId,
+        AdminLiveClassSessionAddRequest request,
+        string adminId,
+        string adminName,
+        CancellationToken ct)
+    {
+        var liveClass = await db.LiveClasses.FirstOrDefaultAsync(item => item.Id == liveClassId, ct)
+            ?? throw ApiException.NotFound("live_class_not_found", "Live class not found.");
+
+        if (liveClass.Status == LiveClassStatus.Archived)
+        {
+            throw ApiException.Conflict("live_class_archived", "Sessions cannot be added to an archived class.");
+        }
+
+        if (request.ScheduledStartAt <= DateTimeOffset.UtcNow.AddMinutes(-5))
+        {
+            throw ApiException.Validation("live_class_start_in_past", "Session start time must be in the future.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var durationMinutes = Math.Clamp(request.DurationMinutes ?? liveClass.DefaultDurationMinutes, 15, 360);
+        var scheduledEnd = request.ScheduledStartAt.AddMinutes(durationMinutes);
+        var capacity = Math.Max(1, request.Capacity ?? liveClass.DefaultCapacity);
+
+        var session = new LiveClassSession
+        {
+            Id = $"LCS-{Guid.NewGuid():N}",
+            LiveClassId = liveClass.Id,
+            ScheduledStartAt = request.ScheduledStartAt,
+            ScheduledEndAt = scheduledEnd,
+            Capacity = capacity,
+            Status = LiveClassSessionStatus.Scheduled,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        db.LiveClassSessions.Add(session);
+        WriteAudit(adminId, adminName, "LiveClassSessionAdded", "LiveClassSession", session.Id, new { liveClassId, session.ScheduledStartAt, session.Capacity });
+        await QueueSessionReminderJobAsync(session, now, ct);
+        await db.SaveChangesAsync(ct);
+
+        await ProvisionZoomMeetingAsync(session.Id, ct);
+
+        return MapSessionSummary(liveClass, session, false, now);
+    }
+
+    public async Task RetryZoomProvisioningAsync(string sessionId, string adminId, string adminName, CancellationToken ct)
+    {
+        var session = await db.LiveClassSessions.FirstOrDefaultAsync(item => item.Id == sessionId, ct)
+            ?? throw ApiException.NotFound("live_class_session_not_found", "Live class session not found.");
+
+        if (session.ZoomMeetingId.HasValue && session.ZoomError is null)
+        {
+            throw ApiException.Validation("zoom_already_provisioned", "Session already has a Zoom meeting.");
+        }
+
+        session.ZoomRetryCount = 0;
+        session.ZoomError = null;
+        session.UpdatedAt = timeProvider.GetUtcNow();
+        WriteAudit(adminId, adminName, "ZoomRetryRequested", "LiveClassSession", session.Id, new { session.ZoomRetryCount });
+        await db.SaveChangesAsync(ct);
+
+        await ProvisionZoomMeetingAsync(sessionId, ct);
     }
 
     private async Task ProvisionZoomMeetingAsync(string sessionId, CancellationToken ct)
@@ -617,8 +776,70 @@ public sealed class LiveClassService(
             session.EnrolledCount,
             session.Status.ToString(),
             isEnrolled,
-            isEnrolled && session.ScheduledStartAt <= now.AddMinutes(30) && session.ScheduledEndAt >= now.AddMinutes(-15),
+            isEnrolled && IsJoinWindowOpen(session, now),
             liveClass.CreditCost);
+
+    private static bool IsJoinWindowOpen(LiveClassSession session, DateTimeOffset now)
+        => session.ScheduledStartAt <= now.AddMinutes(30) && session.ScheduledEndAt >= now.AddMinutes(-15);
+
+    private static string BuildWebhookReceipt(JsonElement root, string payloadHash)
+    {
+        var eventType = root.TryGetProperty("event", out var eventProperty) ? eventProperty.GetString() ?? "unknown" : "unknown";
+        string? objectId = null;
+        string? objectUuid = null;
+        if (root.TryGetProperty("payload", out var payload)
+            && payload.TryGetProperty("object", out var payloadObject))
+        {
+            objectId = payloadObject.TryGetProperty("id", out var idProperty) ? idProperty.ToString() : null;
+            objectUuid = payloadObject.TryGetProperty("uuid", out var uuidProperty) ? uuidProperty.GetString() : null;
+        }
+
+        return JsonSerializer.Serialize(new
+        {
+            eventType,
+            objectId,
+            objectUuid,
+            payloadHash,
+        });
+    }
+
+    private static AdminLiveClassSessionSummaryDto MapAdminSessionSummary(LiveClass liveClass, LiveClassSession session, DateTimeOffset now)
+        => new(
+            session.Id,
+            session.ScheduledStartAt,
+            session.ScheduledEndAt,
+            session.Capacity,
+            session.EnrolledCount,
+            session.Status.ToString(),
+            false,
+            false,
+            liveClass.CreditCost,
+            session.ZoomMeetingId,
+            session.ZoomError);
+
+    private static AdminLiveClassDetailDto MapAdminDetail(LiveClass liveClass, DateTimeOffset now)
+        => new(
+            liveClass.Id,
+            liveClass.Slug,
+            liveClass.Title,
+            liveClass.TitleAr,
+            liveClass.Description,
+            liveClass.DescriptionAr,
+            liveClass.Type.ToString(),
+            liveClass.ProfessionTrack,
+            liveClass.Level,
+            liveClass.TutorProfileId,
+            liveClass.TutorDisplayName,
+            liveClass.DefaultDurationMinutes,
+            liveClass.DefaultCapacity,
+            liveClass.CreditCost,
+            liveClass.Status.ToString(),
+            liveClass.CoverImageUrl,
+            DeserializeStringArray(liveClass.TagsJson),
+            liveClass.Sessions
+                .OrderBy(session => session.ScheduledStartAt)
+                .Select(session => MapAdminSessionSummary(liveClass, session, now))
+                .ToList());
 
     private static LiveClassEnrollmentDto MapEnrollment(LiveClassEnrollment enrollment)
         => new(
@@ -631,13 +852,13 @@ public sealed class LiveClassService(
             enrollment.CancelledAt,
             enrollment.CancellationReason);
 
-    private static LiveClassRecordingDto MapRecording(LiveClassRecording recording)
+    private LiveClassRecordingDto MapRecording(LiveClassRecording recording)
         => new(
             recording.Id,
             recording.ClassSessionId,
             recording.Status.ToString(),
-            recording.S3VideoKey,
-            recording.S3TranscriptKey,
+            ResolveRecordingReadUrl(recording.S3VideoKey),
+            ResolveRecordingReadUrl(recording.S3TranscriptKey),
             recording.TranscriptText,
             recording.AiSummary,
             recording.AiSummaryAr,
@@ -645,11 +866,22 @@ public sealed class LiveClassService(
             DeserializeStringArray(recording.ActionItemsJson),
             recording.ExpiresAt);
 
+    private string? ResolveRecordingReadUrl(string? storageKey)
+    {
+        if (string.IsNullOrWhiteSpace(storageKey))
+        {
+            return null;
+        }
+
+        return fileStorage.ResolveReadUrl(storageKey, TimeSpan.FromHours(2))?.ToString();
+    }
+
     private LiveClassJoinTokenResponse CreateJoinToken(LiveClassSession session, string displayName, string? email, int role)
     {
         var meetingNumber = session.ZoomMeetingNumber ?? session.ZoomMeetingId?.ToString(CultureInfo.InvariantCulture)
             ?? throw ApiException.ServiceUnavailable("zoom_meeting_not_ready", "Zoom meeting is not ready yet.");
-        var expiresAt = timeProvider.GetUtcNow().AddHours(2);
+        var now = timeProvider.GetUtcNow();
+        var expiresAt = Min(now.AddHours(2), session.ScheduledEndAt.AddMinutes(15));
         var signature = zoomMeetingService.GenerateMeetingSdkSignature(meetingNumber, role, expiresAt);
         return new LiveClassJoinTokenResponse(
             "zoom",
@@ -664,6 +896,9 @@ public sealed class LiveClassService(
             role == 0 ? session.ZoomJoinUrl : session.ZoomStartUrl,
             expiresAt);
     }
+
+    private static DateTimeOffset Min(DateTimeOffset left, DateTimeOffset right)
+        => left <= right ? left : right;
 
     private async Task<Guid> DebitWalletForEnrollmentAsync(
         string learnerUserId,
@@ -752,6 +987,73 @@ public sealed class LiveClassService(
         return walletTransaction.Id;
     }
 
+    private async Task PromoteFromWaitlistAsync(string sessionId, LiveClassSession session, DateTimeOffset now, CancellationToken ct)
+    {
+        var waitlistEntry = await db.LiveClassWaitlistEntries
+            .Where(item => item.ClassSessionId == sessionId && !item.NotifiedOfOpening)
+            .OrderBy(item => item.Position)
+            .FirstOrDefaultAsync(ct);
+
+        if (waitlistEntry is null)
+        {
+            return;
+        }
+
+        // Check if the promoted learner has sufficient credits; skip them if not.
+        var cost = session.LiveClass.CreditCost;
+        if (cost > 0)
+        {
+            var wallet = await db.Wallets.FirstOrDefaultAsync(item => item.UserId == waitlistEntry.UserId, ct);
+            if (wallet is null || wallet.CreditBalance < cost)
+            {
+                waitlistEntry.NotifiedOfOpening = true;
+                return;
+            }
+        }
+
+        // Create the enrollment.
+        var enrollment = new LiveClassEnrollment
+        {
+            Id = $"LCE-{Guid.NewGuid():N}",
+            ClassSessionId = session.Id,
+            UserId = waitlistEntry.UserId,
+            EnrolledAt = now,
+            CreditsCharged = cost,
+            Status = LiveClassEnrollmentStatus.Active,
+            IdempotencyKey = $"waitlist-promote:{waitlistEntry.Id}",
+        };
+
+        // Deduct credits if required.
+        if (cost > 0)
+        {
+            enrollment.WalletTransactionId = await DebitWalletForEnrollmentAsync(
+                waitlistEntry.UserId,
+                cost,
+                session,
+                enrollment.IdempotencyKey,
+                now,
+                ct);
+        }
+
+        db.LiveClassEnrollments.Add(enrollment);
+        session.EnrolledCount++;
+        session.UpdatedAt = now;
+
+        // Mark this waitlist entry as processed and compact positions for those still waiting.
+        var promotedPosition = waitlistEntry.Position;
+        waitlistEntry.NotifiedOfOpening = true;
+
+        var remaining = await db.LiveClassWaitlistEntries
+            .Where(item => item.ClassSessionId == sessionId && item.Position > promotedPosition && !item.NotifiedOfOpening)
+            .ToListAsync(ct);
+        foreach (var entry in remaining)
+        {
+            entry.Position--;
+        }
+
+        await NotifyLearnerEnrollmentAsync(enrollment, session, ct);
+    }
+
     private async Task AddToWaitlistAsync(string sessionId, string learnerUserId, DateTimeOffset now, CancellationToken ct)
     {
         var exists = await db.LiveClassWaitlistEntries.AnyAsync(item => item.ClassSessionId == sessionId && item.UserId == learnerUserId, ct);
@@ -771,6 +1073,50 @@ public sealed class LiveClassService(
         });
     }
 
+    private async Task QueueSessionReminderJobAsync(LiveClassSession session, DateTimeOffset now, CancellationToken ct)
+    {
+        if (session.Status != LiveClassSessionStatus.Scheduled || session.ScheduledEndAt <= now)
+        {
+            return;
+        }
+
+        var availableAt = session.ScheduledStartAt.AddMinutes(-30);
+        if (availableAt < now)
+        {
+            availableAt = now;
+        }
+
+        var existing = await db.BackgroundJobs.FirstOrDefaultAsync(job =>
+            job.Type == JobType.LiveClassSessionReminderDispatch
+            && job.ResourceId == session.Id
+            && job.State == AsyncState.Queued,
+            ct);
+
+        if (existing is not null)
+        {
+            existing.AvailableAt = availableAt;
+            existing.LastTransitionAt = now;
+            existing.PayloadJson = JsonSerializer.Serialize(new { sessionId = session.Id }, JsonOptions);
+            existing.StatusReasonCode = "queued";
+            existing.StatusMessage = "Live class reminder queued.";
+            return;
+        }
+
+        db.BackgroundJobs.Add(new BackgroundJobItem
+        {
+            Id = $"bg-{Guid.NewGuid():N}",
+            Type = JobType.LiveClassSessionReminderDispatch,
+            State = AsyncState.Queued,
+            ResourceId = session.Id,
+            PayloadJson = JsonSerializer.Serialize(new { sessionId = session.Id }, JsonOptions),
+            StatusReasonCode = "queued",
+            StatusMessage = "Live class reminder queued.",
+            CreatedAt = now,
+            AvailableAt = availableAt,
+            LastTransitionAt = now,
+        });
+    }
+
     private async Task NotifyLearnerEnrollmentAsync(LiveClassEnrollment enrollment, LiveClassSession session, CancellationToken ct)
     {
         await notificationService.CreateForLearnerAsync(
@@ -785,6 +1131,26 @@ public sealed class LiveClassService(
                 ["sessionTime"] = session.ScheduledStartAt.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture),
                 ["classId"] = session.LiveClassId,
                 ["sessionId"] = session.Id,
+            },
+            ct);
+    }
+
+    private async Task NotifyLearnerCancellationAsync(LiveClassEnrollment enrollment, LiveClassSession session, int refundCredits, CancellationToken ct)
+    {
+        await notificationService.CreateForLearnerAsync(
+            NotificationEventKey.LearnerLiveClassCancelled,
+            enrollment.UserId,
+            "live_class_enrollment",
+            enrollment.Id,
+            enrollment.CancelledAt?.ToString("yyyyMMdd", CultureInfo.InvariantCulture) ?? timeProvider.GetUtcNow().ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+            new Dictionary<string, object?>
+            {
+                ["classTitle"] = session.LiveClass.Title,
+                ["sessionTime"] = session.ScheduledStartAt.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture),
+                ["classId"] = session.LiveClassId,
+                ["sessionId"] = session.Id,
+                ["refundCredits"] = refundCredits,
+                ["reason"] = enrollment.CancellationReason,
             },
             ct);
     }
@@ -839,7 +1205,22 @@ public sealed class LiveClassService(
 
     private async Task UpsertRecordingPlaceholderAsync(LiveClassSession session, JsonElement zoomObject, DateTimeOffset now, CancellationToken ct)
     {
-        var recordingId = TryReadString(zoomObject, "uuid") ?? TryReadString(zoomObject, "recording_play_passcode") ?? $"zoom-{session.ZoomMeetingId}";
+        // Prefer the opaque MP4 recording file id from recording_files; never persist raw Zoom download URLs.
+        string? mp4RecordingId = null;
+        if (zoomObject.TryGetProperty("recording_files", out var recordingFiles) && recordingFiles.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var file in recordingFiles.EnumerateArray())
+            {
+                var fileType = TryReadString(file, "file_type");
+                if (string.Equals(fileType, "MP4", StringComparison.OrdinalIgnoreCase))
+                {
+                    mp4RecordingId = TryReadString(file, "id") ?? TryReadString(file, "recording_id");
+                    break;
+                }
+            }
+        }
+
+        var recordingId = mp4RecordingId ?? TryReadString(zoomObject, "uuid") ?? $"zoom-{session.ZoomMeetingId}";
         var existing = await db.LiveClassRecordings.FirstOrDefaultAsync(item => item.ClassSessionId == session.Id, ct);
         if (existing is null)
         {
@@ -857,9 +1238,23 @@ public sealed class LiveClassService(
         }
         else
         {
-            existing.ZoomRecordingId ??= recordingId;
+            existing.ZoomRecordingId = mp4RecordingId ?? existing.ZoomRecordingId ?? recordingId;
             existing.Status = existing.Status == LiveClassRecordingStatus.Ready ? existing.Status : LiveClassRecordingStatus.Pending;
         }
+
+        // Queue a background job to download the recording from Zoom cloud storage.
+        db.BackgroundJobs.Add(new BackgroundJobItem
+        {
+            Id = $"bg-{Guid.NewGuid():N}",
+            Type = JobType.LiveClassRecordingDownload,
+            State = AsyncState.Queued,
+            ResourceId = existing.Id,
+            PayloadJson = JsonSerializer.Serialize(new { recordingId = existing.Id, sessionId = session.Id }, JsonOptions),
+            StatusReasonCode = "queued",
+            StatusMessage = "Recording download queued.",
+            CreatedAt = now,
+            AvailableAt = now,
+        });
     }
 
     private async Task UpsertAttendanceAsync(LiveClassSession session, JsonElement zoomObject, DateTimeOffset now, bool joined, CancellationToken ct)

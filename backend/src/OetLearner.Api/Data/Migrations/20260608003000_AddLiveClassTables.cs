@@ -167,6 +167,14 @@ namespace OetLearner.Api.Data.Migrations
 
                 CREATE UNIQUE INDEX IF NOT EXISTS ""IX_LiveClassWebhookEvents_PayloadHash"" ON ""LiveClassWebhookEvents"" (""PayloadHash"");
                 CREATE INDEX IF NOT EXISTS ""IX_LiveClassWebhookEvents_EventType_ReceivedAt"" ON ""LiveClassWebhookEvents"" (""EventType"", ""ReceivedAt"");
+
+                INSERT INTO ""WalletTopUpTierConfigs""
+                    (""Id"", ""Slug"", ""Amount"", ""Credits"", ""Bonus"", ""Label"", ""IsPopular"", ""DisplayOrder"", ""IsActive"", ""Currency"", ""CreatedAt"", ""UpdatedAt"", ""CreatedBy"", ""UpdatedBy"")
+                VALUES
+                    ('11111111-1111-4111-8111-111111111111', 'live-class-starter-pack', 29, 5, 1, 'Live class starter pack', false, 410, true, 'AUD', NOW(), NOW(), 'system:live-class-migration', 'system:live-class-migration'),
+                    ('22222222-2222-4222-8222-222222222222', 'live-class-focused-pack', 69, 15, 1, 'Live class focused pack', true, 420, true, 'AUD', NOW(), NOW(), 'system:live-class-migration', 'system:live-class-migration'),
+                    ('33333333-3333-4333-8333-333333333333', 'live-class-intensive-pack', 99, 24, 1, 'Live class intensive pack', false, 430, true, 'AUD', NOW(), NOW(), 'system:live-class-migration', 'system:live-class-migration')
+                ON CONFLICT DO NOTHING;
             ");
         }
 
@@ -180,6 +188,8 @@ namespace OetLearner.Api.Data.Migrations
                 DROP TABLE IF EXISTS ""LiveClassEnrollments"";
                 DROP TABLE IF EXISTS ""LiveClassSessions"";
                 DROP TABLE IF EXISTS ""LiveClasses"";
+                DELETE FROM ""WalletTopUpTierConfigs""
+                WHERE ""Slug"" IN ('live-class-starter-pack', 'live-class-focused-pack', 'live-class-intensive-pack');
             ");
         }
     }

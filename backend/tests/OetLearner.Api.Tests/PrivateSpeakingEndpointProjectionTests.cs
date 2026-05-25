@@ -53,7 +53,7 @@ public sealed class PrivateSpeakingEndpointProjectionTests
             LearnerTimezone = "UTC",
             PriceMinorUnits = 6900,
             Currency = "USD",
-            PaymentStatus = PrivateSpeakingPaymentStatus.Paid,
+            PaymentStatus = PrivateSpeakingPaymentStatus.Succeeded,
             ZoomStatus = PrivateSpeakingZoomStatus.Created,
             ZoomJoinUrl = "https://zoom.us/j/learner",
             ZoomStartUrl = "https://zoom.us/s/host-secret",

@@ -123,6 +123,67 @@ public sealed partial class ZoomMeetingService(
         }
     }
 
+    public async Task CopyRecordingFileAsync(long meetingId, string? recordingFileId, Stream destination, CancellationToken ct)
+    {
+        if (_opts.AllowSandboxFallback && string.IsNullOrEmpty(_opts.ClientId))
+        {
+            throw new InvalidOperationException("Zoom recording download requires Zoom credentials.");
+        }
+
+        var token = await GetAccessTokenAsync(ct);
+        var client = httpClientFactory.CreateClient("ZoomApi");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var metadataResponse = await client.GetAsync($"{_opts.ApiBaseUrl}/meetings/{meetingId}/recordings", ct);
+        if (!metadataResponse.IsSuccessStatusCode)
+        {
+            var errorBody = await metadataResponse.Content.ReadAsStringAsync(ct);
+            throw new InvalidOperationException($"Zoom recording metadata returned {(int)metadataResponse.StatusCode}: {SanitizeProviderErrorBody(errorBody)}");
+        }
+
+        var metadataJson = await metadataResponse.Content.ReadAsStringAsync(ct);
+        using var document = JsonDocument.Parse(metadataJson);
+        if (!document.RootElement.TryGetProperty("recording_files", out var files) || files.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException("Zoom recording metadata did not include recording files.");
+        }
+
+        string? downloadUrl = null;
+        foreach (var file in files.EnumerateArray())
+        {
+            var fileType = file.TryGetProperty("file_type", out var typeProperty) ? typeProperty.GetString() : null;
+            if (!string.Equals(fileType, "MP4", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var fileId = file.TryGetProperty("id", out var idProperty) ? idProperty.ToString() : null;
+            if (!string.IsNullOrWhiteSpace(recordingFileId) && !string.Equals(fileId, recordingFileId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            downloadUrl = file.TryGetProperty("download_url", out var urlProperty) ? urlProperty.GetString() : null;
+            break;
+        }
+
+        if (string.IsNullOrWhiteSpace(downloadUrl))
+        {
+            throw new InvalidOperationException("Zoom recording metadata did not include a downloadable MP4 file.");
+        }
+
+        using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
+        downloadRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var downloadResponse = await client.SendAsync(downloadRequest, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (!downloadResponse.IsSuccessStatusCode)
+        {
+            var errorBody = await downloadResponse.Content.ReadAsStringAsync(ct);
+            throw new InvalidOperationException($"Zoom recording download returned {(int)downloadResponse.StatusCode}: {SanitizeProviderErrorBody(errorBody)}");
+        }
+
+        await downloadResponse.Content.CopyToAsync(destination, ct);
+    }
+
     public string? GenerateMeetingSdkSignature(string meetingNumber, int role, DateTimeOffset expiresAt)
     {
         if (string.IsNullOrWhiteSpace(_opts.MeetingSdkKey) || string.IsNullOrWhiteSpace(_opts.MeetingSdkSecret))
@@ -157,7 +218,7 @@ public sealed partial class ZoomMeetingService(
     {
         if (string.IsNullOrWhiteSpace(_opts.WebhookSecretToken))
         {
-            return _opts.AllowSandboxFallback;
+            return false;
         }
 
         if (!headers.TryGetValue("x-zm-request-timestamp", out var timestampValues)

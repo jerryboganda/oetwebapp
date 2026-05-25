@@ -39,10 +39,27 @@ import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import { useReadingProfile } from '@/hooks/useReadingProfile';
+import { useDailyPlan } from '@/hooks/useDailyPlan';
+import { DashboardHero } from '@/components/reading/DashboardHero';
+import { TodayPlan } from '@/components/reading/TodayPlan';
+import { StreakBadge } from '@/components/reading/StreakBadge';
+import type { DailyPlanItemDto } from '@/lib/reading-pathway-api';
 
 
 export default function ReadingHome() {
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { profile } = useReadingProfile();
+  const { plan } = useDailyPlan();
+
+  function handleStartPlanItem(_item: DailyPlanItemDto) {
+    // Navigate to appropriate page based on item type — extend as routes are added
+    // For now, just navigate to the practice hub
+    if (typeof window !== 'undefined') {
+      window.location.href = '/reading/practice';
+    }
+  }
+
   const [home, setHome] = useState<ReadingHomeDto | null>(null);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
   const [partErrorCounts, setPartErrorCounts] = useState<Record<PartCode, number>>({ A: 0, B: 0, C: 0 });
@@ -129,9 +146,59 @@ export default function ReadingHome() {
     },
   ]), [activeAttempts, papers.length, latestResult, loading]);
 
+  // Compute daysToExam from profile.examDate
+  const daysToExam: number | null = useMemo(() => {
+    if (!profile?.examDate) return null;
+    const diff = new Date(profile.examDate).getTime() - Date.now();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  }, [profile]);
+
   return (
     <LearnerDashboardShell pageTitle="Reading">
       <main className="space-y-10">
+        {/* Stage-gated banners */}
+        {profile?.currentStage === 'onboarding' ? (
+          <Link
+            href="/reading/profile-setup"
+            className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20 px-5 py-3 text-sm font-medium text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+          >
+            <span>Complete your profile setup to unlock your personalised study plan</span>
+            <span aria-hidden="true">→</span>
+          </Link>
+        ) : null}
+
+        {profile?.currentStage === 'diagnostic' ? (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20 px-5 py-4">
+            <p className="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-1">
+              Start with your diagnostic test
+            </p>
+            <p className="text-xs text-blue-700/70 dark:text-blue-300/70 mb-3">
+              A 20-minute diagnostic will calibrate your starting point and generate a personalised pathway.
+            </p>
+            <Link
+              href="/reading/diagnostic"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+            >
+              Take your diagnostic test →
+            </Link>
+          </div>
+        ) : null}
+
+        {/* Pathway dashboard cards — shown when profile is loaded and past onboarding */}
+        {profile && profile.currentStage !== 'onboarding' ? (
+          <div className="space-y-4">
+            <DashboardHero
+              readinessScore={0}
+              predictedScore={0}
+              daysToExam={daysToExam}
+              streak={0}
+            />
+            {plan ? (
+              <TodayPlan plan={plan} onStartItem={handleStartPlanItem} />
+            ) : null}
+          </div>
+        ) : null}
+
         <LearnerPageHero
           eyebrow="Module Focus"
           icon={BookOpen}
@@ -156,7 +223,11 @@ export default function ReadingHome() {
           </div>
         ) : null}
 
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* Streak badge — shown whenever we have any streak data */}
+          {plan && plan.streak > 0 ? (
+            <StreakBadge streak={plan.streak} />
+          ) : <span />}
           <Link
             href="/reading/practice"
             className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"

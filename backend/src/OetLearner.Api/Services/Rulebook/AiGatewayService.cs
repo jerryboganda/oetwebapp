@@ -1366,6 +1366,18 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("```");
                 sb.AppendLine("Hard requirements: exactly 42 questions, contiguous numbers 1..42, exactly 24 in Part A (12 in A1 + 12 in A2), exactly 6 in Part B, exactly 12 in Part C (6 in C1 + 6 in C2), every MCQ has exactly 3 options + correctAnswer in {A,B,C}, every appliedRuleIds value exists in the rulebook above. No answer keys outside the structure above.");
                 break;
+            case AiTaskMode.GenerateReadingExplanation:
+                sb.AppendLine("Return a SINGLE JSON object explaining the correct answer and the distractor trap. No extra text outside the JSON block.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"whyCorrect\": \"≤ 40 words: evidence from the passage for the correct answer\",");
+                sb.AppendLine("  \"whyWrong\": \"≤ 40 words: why the student's choice is a trap\",");
+                sb.AppendLine("  \"trapName\": \"Opposite|DistortedDetail|NotInText|TooGeneral|TooSpecific|ReusedKeyword|WrongSpeaker\",");
+                sb.AppendLine("  \"avoidTip\": \"≤ 25 words: one actionable tip to avoid this trap\"");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                sb.AppendLine("Never invent passage content. Base every claim on the question stem or passage text supplied by the caller.");
+                break;
             case AiTaskMode.GenerateReadingStructure:
                 sb.AppendLine("Return a SINGLE JSON object in the exact ReadingStructureManifest shape. Canonical Reading shape: Part A 20 items across 4 texts, Part B 6 three-option MCQ items across 6 texts, Part C 16 four-option MCQ items across 2 texts. Every question MUST cite ≥1 reading rule ID in `skillTag` or explanation text. Never invent a rule ID.");
                 sb.AppendLine("```json");
@@ -1469,6 +1481,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             RuleKind.Reading => ctx.Task switch
             {
                 AiTaskMode.GenerateReadingStructure => "Task: extract the 42-item OET Reading authored structure (Part A 20 + Part B 6 + Part C 16) from the supplied Reading source text and answer key. Every question must cite ≥1 reading rule ID. Never invent rule IDs. Validate the canonical shape before responding.",
+                AiTaskMode.GenerateReadingExplanation => "Task: explain why the correct answer is correct and why the learner's selected option is a distractor trap. Ground findings in reading rules. Advisory only — do not re-score.",
                 _ => "Task: respond according to the reply format above."
             },
             _ => "Task: respond according to the reply format above."
@@ -1493,7 +1506,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 // Types
 // ---------------------------------------------------------------------------
 
-public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure, GenerateReadingStructure }
+public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure, GenerateReadingStructure, GenerateReadingExplanation }
 
 public sealed class AiGroundingContext
 {

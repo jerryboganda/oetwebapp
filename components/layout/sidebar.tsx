@@ -70,6 +70,7 @@ export const mainNavItems: NavItem[] = [
 
 export const learnNavItems: NavItem[] = [
   { href: '/grammar', label: 'Grammar', icon: <BookMarked className="w-5 h-5" />, matchPrefix: '/grammar' },
+  { href: '/classes', label: 'Live Classes', icon: <CalendarCheck className="w-5 h-5" />, matchPrefix: '/classes' },
   { href: '/lessons', label: 'Video Lessons', icon: <Video className="w-5 h-5" />, matchPrefix: '/lessons', featureFlag: 'video_lessons' },
   { href: '/strategies', label: 'Strategies', icon: <Lightbulb className="w-5 h-5" />, matchPrefix: '/strategies', featureFlag: 'strategy_guides' },
   // Per PRD Phase 2 §2 the dedicated /pronunciation tab is removed and the

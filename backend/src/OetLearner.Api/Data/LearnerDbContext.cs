@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Domain.Billing;
 
 namespace OetLearner.Api.Data;
 
@@ -165,6 +166,16 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<PrivateSpeakingBooking> PrivateSpeakingBookings => Set<PrivateSpeakingBooking>();
     public DbSet<PrivateSpeakingAuditLog> PrivateSpeakingAuditLogs => Set<PrivateSpeakingAuditLog>();
 
+    // Billing V2 — Stripe-synced product catalog, cart, checkout, and subscription management.
+    public DbSet<BillingProduct> BillingProducts => Set<BillingProduct>();
+    public DbSet<BillingPrice> BillingPrices => Set<BillingPrice>();
+    public DbSet<Cart> Carts => Set<Cart>();
+    public DbSet<CartItem> CartItems => Set<CartItem>();
+    public DbSet<AppliedPromoCode> AppliedPromoCodes => Set<AppliedPromoCode>();
+    public DbSet<CheckoutSession> CheckoutSessions => Set<CheckoutSession>();
+    public DbSet<CustomerSubscription> CustomerSubscriptions => Set<CustomerSubscription>();
+    public DbSet<CrossSellRule> CrossSellRules => Set<CrossSellRule>();
+
     // Zoom-backed live classes
     public DbSet<LiveClass> LiveClasses => Set<LiveClass>();
     public DbSet<LiveClassSession> LiveClassSessions => Set<LiveClassSession>();
@@ -265,6 +276,27 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<ReadingErrorBankEntry> ReadingErrorBankEntries => Set<ReadingErrorBankEntry>();
     public DbSet<ReadingQuestionReviewLog> ReadingQuestionReviewLogs => Set<ReadingQuestionReviewLog>();
     public DbSet<ReadingExtractionDraft> ReadingExtractionDrafts => Set<ReadingExtractionDraft>();
+
+    // Reading Pathway subsystem (Reading Module Pathway Plan).
+    // New 5-stage learning pathway: onboarding, diagnostic, foundation, practice, mastery.
+    public DbSet<LearnerReadingProfile> LearnerReadingProfiles => Set<LearnerReadingProfile>();
+    public DbSet<LearnerReadingPathway> LearnerReadingPathways => Set<LearnerReadingPathway>();
+    public DbSet<LearnerSkillScore> LearnerSkillScores => Set<LearnerSkillScore>();
+    public DbSet<ReadingDailyPlanItem> ReadingDailyPlanItems => Set<ReadingDailyPlanItem>();
+    public DbSet<ReadingLesson> ReadingLessons => Set<ReadingLesson>();
+    public DbSet<LearnerLessonProgress> LearnerLessonProgresses => Set<LearnerLessonProgress>();
+    public DbSet<ReadingStrategy> ReadingStrategies => Set<ReadingStrategy>();
+    public DbSet<ReadingStrategyProgress> ReadingStrategyProgresses => Set<ReadingStrategyProgress>();
+    public DbSet<VocabularyWord> VocabularyWords => Set<VocabularyWord>();
+    public DbSet<LearnerVocabularyItem> LearnerVocabularyItems => Set<LearnerVocabularyItem>();
+    public DbSet<VocabularyList> VocabularyLists => Set<VocabularyList>();
+    public DbSet<ReadingPracticeSession> ReadingPracticeSessions => Set<ReadingPracticeSession>();
+    public DbSet<ReadingQuestionAttempt> ReadingQuestionAttempts => Set<ReadingQuestionAttempt>();
+    public DbSet<ReadingMockTemplate> ReadingMockTemplates => Set<ReadingMockTemplate>();
+    public DbSet<StreakRecord> StreakRecords => Set<StreakRecord>();
+    public DbSet<LearnerXp> LearnerXps => Set<LearnerXp>();
+    public DbSet<LearnerBadge> LearnerBadges => Set<LearnerBadge>();
+    public DbSet<ReadingQuestionDiscussionComment> ReadingQuestionDiscussionComments => Set<ReadingQuestionDiscussionComment>();
 
     // Listening Module subsystem (Phase 2 of LISTENING-MODULE-PLAN.md).
     // Additive to the existing JSON-backed ContentPaper.ExtractedTextJson
@@ -1052,6 +1084,21 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // matching the project-wide convention) — leaves cascade implicit and
         // safe under account-anonymisation. The unique (UserId, StageCode)
         // index already exists via the [Index] attribute on the entity.
+
+        // Reading Pathway subsystem indexes
+        modelBuilder.Entity<LearnerSkillScore>().HasIndex(x => new { x.UserId, x.SkillCode }).IsUnique();
+        modelBuilder.Entity<ReadingDailyPlanItem>().HasIndex(x => new { x.UserId, x.PlanDate });
+        modelBuilder.Entity<LearnerVocabularyItem>().HasIndex(x => new { x.UserId, x.NextReviewAt });
+        modelBuilder.Entity<LearnerVocabularyItem>().HasIndex(x => new { x.UserId, x.VocabularyWordId }).IsUnique();
+        modelBuilder.Entity<ReadingQuestionAttempt>().HasIndex(x => new { x.UserId, x.AttemptedAt });
+        modelBuilder.Entity<ReadingQuestionAttempt>().HasIndex(x => new { x.UserId, x.InReviewQueue, x.NextReviewAt });
+        modelBuilder.Entity<StreakRecord>().HasIndex(x => new { x.UserId, x.Date }).IsUnique();
+        modelBuilder.Entity<ReadingQuestionDiscussionComment>().HasIndex(x => x.ReadingQuestionId);
+        modelBuilder.Entity<LearnerReadingProfile>().HasIndex(x => x.UserId).IsUnique();
+        modelBuilder.Entity<LearnerLessonProgress>().HasIndex(x => new { x.UserId, x.LessonId }).IsUnique();
+        modelBuilder.Entity<ReadingStrategyProgress>().HasIndex(x => new { x.UserId, x.StrategyId }).IsUnique();
+        modelBuilder.Entity<LearnerXp>().HasIndex(x => x.UserId).IsUnique();
+        modelBuilder.Entity<LearnerBadge>().HasIndex(x => new { x.UserId, x.BadgeCode }).IsUnique();
 
         // Scoring Policy table (partial; see LearnerDbContext.ScoringPolicy.cs).
         OnModelCreatingScoringPolicy(modelBuilder);

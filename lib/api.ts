@@ -10283,6 +10283,10 @@ export interface LiveClassSessionSummary {
   isEnrolled: boolean;
   isJoinAvailable: boolean;
   creditCost: number;
+  /** Only present on admin endpoints */
+  zoomMeetingId?: number | null;
+  /** Only present on admin endpoints */
+  zoomError?: string | null;
 }
 
 export interface LiveClassListItem {
@@ -10467,6 +10471,26 @@ export async function cancelAdminLiveClassSession(sessionId: string, reason?: st
 
 export async function fetchAdminLiveClassAnalytics() {
   return apiRequest('/v1/admin/live-classes/analytics');
+}
+
+export async function fetchAdminLiveClassDetail(idOrSlug: string): Promise<LiveClassDetail> {
+  return apiRequest<LiveClassDetail>(`/v1/admin/live-classes/${encodeURIComponent(idOrSlug)}`);
+}
+
+export async function addAdminLiveClassSession(
+  classId: string,
+  payload: { scheduledStartAt: string; durationMinutes?: number; capacity?: number },
+): Promise<LiveClassSessionSummary> {
+  return apiRequest<LiveClassSessionSummary>(`/v1/admin/live-classes/${encodeURIComponent(classId)}/sessions`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function retryAdminLiveClassSessionZoom(sessionId: string): Promise<void> {
+  await apiRequest(`/v1/admin/live-classes/sessions/${encodeURIComponent(sessionId)}/retry-zoom`, {
+    method: 'POST',
+  });
 }
 
 // ── Orphan Endpoint Wiring ────────────────────────────

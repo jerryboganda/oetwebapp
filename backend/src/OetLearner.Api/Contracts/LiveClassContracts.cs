@@ -20,6 +20,20 @@ public sealed record LiveClassSessionSummaryDto(
     bool IsJoinAvailable,
     int CreditCost);
 
+/// <summary>Admin-only session summary with Zoom provisioning fields.</summary>
+public sealed record AdminLiveClassSessionSummaryDto(
+    string Id,
+    DateTimeOffset ScheduledStartAt,
+    DateTimeOffset ScheduledEndAt,
+    int Capacity,
+    int EnrolledCount,
+    string Status,
+    bool IsEnrolled,
+    bool IsJoinAvailable,
+    int CreditCost,
+    long? ZoomMeetingId,
+    string? ZoomError);
+
 public sealed record LiveClassListItemDto(
     string Id,
     string Slug,
@@ -99,6 +113,27 @@ public sealed record LiveClassRecordingDto(
 
 public sealed record LiveClassRecordingChapterDto(int StartSeconds, string Title, string Summary);
 
+/// <summary>Admin-only class detail that includes Zoom fields on each session.</summary>
+public sealed record AdminLiveClassDetailDto(
+    string Id,
+    string Slug,
+    string Title,
+    string? TitleAr,
+    string Description,
+    string? DescriptionAr,
+    string Type,
+    string ProfessionTrack,
+    string Level,
+    string? TutorProfileId,
+    string? TutorDisplayName,
+    int DefaultDurationMinutes,
+    int DefaultCapacity,
+    int CreditCost,
+    string Status,
+    string? CoverImageUrl,
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<AdminLiveClassSessionSummaryDto> Sessions);
+
 public sealed record AdminLiveClassUpsertRequest(
     string Title,
     string? TitleAr,
@@ -115,6 +150,11 @@ public sealed record AdminLiveClassUpsertRequest(
     string? CoverImageUrl,
     IReadOnlyList<string>? Tags,
     bool AutoPublish = false);
+
+public sealed record AdminLiveClassSessionAddRequest(
+    DateTimeOffset ScheduledStartAt,
+    int? DurationMinutes,
+    int? Capacity);
 
 public sealed record AdminLiveClassSessionUpdateRequest(
     DateTimeOffset? ScheduledStartAt,
